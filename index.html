@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Operations Library</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- CORE VARIABLES / THEME -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/cards.css">
+
+  <!-- BASE UI COMPONENTS -->
+  <link rel="stylesheet" href="css/components/buttons.css">
+  <link rel="stylesheet" href="css/components/inputs.css">
+  <link rel="stylesheet" href="css/components/icons.css">
+  <link rel="stylesheet" href="css/components/pills.css">
+
+  <!-- UI SECTIONS -->
+  <link rel="stylesheet" href="css/sections/sidebar.css">
+  <link rel="stylesheet" href="css/sections/topbar.css">
+
+  <!-- APPS UI -->
+  <link rel="stylesheet" href="css/apps/apps.modals.css">
+  <link rel="stylesheet" href="css/apps/apps.legend.css">
+
+  <!-- FUNCTIONS UI -->
+  <link rel="stylesheet" href="css/functions/functions.pills.css">
+  <link rel="stylesheet" href="css/functions/functions.modals.css">
+
+  <!-- INTEGRATIONS UI -->
+  <link rel="stylesheet" href="css/integrations/integrations.cards.css">
+  <link rel="stylesheet" href="css/integrations/integrations.arrows.css">
+  <link rel="stylesheet" href="css/integrations/integrations.modals.css">
+  <link rel="stylesheet" href="css/integrations/integrations.legend.css">
+
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">⚙️ Operations Library</div>
+      <div class="divider"></div>
+
+      <nav class="menu" id="nav">
+        <div class="group-title">Apps</div>
+        <a href="#/apps" data-route>Apps</a>
+        <a href="#/analyze" data-route>Analyze</a>
+
+        <div class="divider"></div>
+        <div class="group-title">Resources</div>
+        <a href="#/resources/documents" data-route>Documents and PDFs</a>
+        <a href="#/resources/email-templates" data-route>Email Templates</a>
+        <a href="#/resources/forms" data-route>Forms</a>
+        <a href="#/resources/scheduling" data-route>Scheduling</a>
+        <a href="#/resources/zaps" data-route>Zaps</a>
+        <a href="#/resources/email-campaigns" data-route>Email Campaigns</a>
+        <a href="#/resources/workflows" data-route>Workflows</a>
+
+        <div class="divider"></div>
+        <div class="group-title">Settings</div>
+        <a href="#/settings/team" data-route>Team</a>
+        <a href="#/settings/segments" data-route>Segments</a>
+        <a href="#/settings/datapoints" data-route>Datapoints</a>
+        <a href="#/settings/folder-hierarchy" data-route>Folder Hierarchy</a>
+        <a href="#/settings/naming-conventions" data-route>Naming Conventions</a>
+      </nav>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs" id="crumbs">/</div>
+        <div class="row">
+          <button class="btn small" id="exportAll">Export</button>
+          <button class="btn small ghost" id="importAll">Import</button>
+          <button class="btn small" id="resetAll">Reset</button>
+        </div>
+      </header>
+
+      <section class="content" id="view">
+      
+        <!-- Apps pages -->
+        <div id="view-apps" class="view"></div>
+        
+        <!-- Functions pages -->
+        <div id="view-functions" class="view"></div>
+      
+        <!-- Integrations pages -->
+        <div id="view-integrations" class="view"></div>
+      
+        <!-- Zaps -->
+        <div id="view-zaps" class="view"></div>
+      
+        <!-- Forms -->
+        <div id="view-forms" class="view"></div>
+      
+        <!-- Workflows -->
+        <div id="view-workflows" class="view"></div>
+      
+        <!-- Scheduling -->
+        <div id="view-scheduling" class="view"></div>
+      
+        <!-- Email Campaigns -->
+        <div id="view-email" class="view"></div>
+      
+        <!-- Settings: Team -->
+        <div id="view-team" class="view"></div>
+      
+        <!-- Settings: Segments -->
+        <div id="view-segments" class="view"></div>
+      
+        <!-- Settings: Datapoints -->
+        <div id="view-datapoints" class="view"></div>
+      
+        <!-- Settings: Folder Hierarchy -->
+        <div id="view-folders" class="view"></div>
+      
+        <!-- Settings: Naming Conventions -->
+        <div id="view-naming" class="view"></div>
+
+      </section>
+    </main>
+  </div>
+
+  <!-- MODALS LIVE HERE -->
+  <div id="modal-layer"></div>
+
+  <!-- MASTER ORDER OF JS LOAD -->
+  <script src="js/app-core.js?v=1"></script>
+  <script src="js/ui-routing.js"></script>
+  <script src="js/ui-modal.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/apps.js"></script>
+  <script src="js/apps-modal.js"></script>
+  <script src="js/functions.js"></script>
+  <script src="js/integrations.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/workflows.js"></script>
+
+</body>
+</html>
