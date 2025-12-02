@@ -27,7 +27,22 @@
   // ------------------------------------------------------------
   // UTILS
   // ------------------------------------------------------------
-  OL.utils = {
+  function fuzzyMatch(str, pattern) {
+  str = str.toLowerCase();
+  pattern = pattern.toLowerCase();
+
+  // exact or substring match
+  if (str.includes(pattern)) return true;
+
+  // fuzzy character match
+  let j = 0;
+  for (let i = 0; i < str.length && j < pattern.length; i++) {
+    if (str[i] === pattern[j]) j++;
+  }
+  return j === pattern.length;
+}
+
+OL.utils = {
     uid() {
       return "id_" + Math.random().toString(36).slice(2, 10);
     },
@@ -204,6 +219,24 @@
     },
   ];
 
+  const defaultDatapoints = [
+    {
+      id: uid(),
+      name: "Client Email",
+      description: "Primary client contact email address"
+    },
+    {
+      id: uid(),
+      name: "Client Name",
+      description: "Full concatenated name of client"
+    },
+    {
+      id: uid(),
+      name: "Household ID",
+      description: "Unique household entity identifier"
+    }
+  ];
+
   const defaultResources = [
     {
       id: uid(),
@@ -223,6 +256,7 @@
     functions: OL.store.get("functions", defaultFunctions),
     integrations: OL.store.get("integrations", defaultIntegrations),
     resources: OL.store.get("resources", defaultResources),
+    datapoints: OL.store.get("datapoints", defaultDatapoints),
   };
 
   const state = OL.state;
@@ -235,6 +269,7 @@
     OL.store.set("functions", state.functions);
     OL.store.set("integrations", state.integrations);
     OL.store.set("resources", state.resources);
+    OL.store.set("datapoints", state.datapoints);
   }, 200);
 
   // ------------------------------------------------------------
@@ -306,6 +341,7 @@
     renderAppsGrid();
     renderFunctionsGrid();
     renderIntegrationsGrid();
+    renderDatapointsGrid();
   };
 
   // ------------------------------------------------------------
@@ -398,6 +434,18 @@
               </div>
               <div id="integrationsGrid" class="cards-grid"></div>
             </section>
+
+            <section class="section" id="section-datapoints">
+              <div class="section-header">
+                <h2>Datapoints</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddDatapointGlobal">+ Add Datapoint</button>
+                </div>
+              </div>
+              <div id="datapointsGrid" class="cards-grid"></div>
+            </section>
+
           </main>
         </div>
       </div>
@@ -733,6 +781,39 @@
     });
   }
 
+  //-------------------------------------------------------------
+  // DATAPOINTS GRID
+  //-------------------------------------------------------------
+  function renderDatapointsGrid() {
+    const grid = document.getElementById("datapointsGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    [...state.datapoints]
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .forEach((dp) => {
+      grid.insertAdjacentHTML("beforeend", `
+        <div class="card" data-dp-id="${dp.id}" onclick="OL.openDatapointModal('${dp.id}')">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-title">${esc(dp.name)}</div>
+            </div>
+            <div
+              class="card-close"
+              onclick="event.stopPropagation(); OL.deleteDatapoint('${dp.id}')"
+            >×</div>
+          </div>
+          <div class="card-body">
+            <div class="card-section">
+              <div class="card-section-title">Description</div>
+              <div class="card-section-content">${esc(dp.description || "")}</div>
+            </div>
+          </div>
+        </div>
+      `);
+    });
+  }
+
   // ------------------------------------------------------------
   // TOP BUTTONS
   // ------------------------------------------------------------
@@ -740,6 +821,7 @@
     const btnAddApp = document.getElementById("btnAddApp");
     const btnAddFn = document.getElementById("btnAddFunction");
     const btnAddInt = document.getElementById("btnAddIntegration");
+    const btnAddDpGlobal = document.getElementById("btnAddDatapointGlobal");
 
     if (btnAddApp) {
       btnAddApp.onclick = () => {
@@ -777,6 +859,18 @@
       btnAddInt.onclick = () => {
         // Keep this simple and not broken.
         alert('To add an integration, open an App card and use "+ Add Integration" in the modal.');
+      };
+    }
+    if (btnAddDpGlobal) {
+      btnAddDpGlobal.onclick = () => {
+        const dp = {
+          id: uid(),
+          name: "New Datapoint",
+          description: ""
+        };
+        state.datapoints.push(dp);
+        OL.persist();
+        renderDatapointsGrid();
       };
     }
   }
@@ -950,28 +1044,26 @@
 
     (app.datapointMappings || []).forEach((dp) => {
       const row = document.createElement("div");
-
-      const del = document.createElement("div");
-      del.className = "card-close";
-      del.textContent = "×";
-      del.title = "Remove datapoint";
-
-      del.onclick = (e) => {
-        e.stopPropagation();
-        if (!confirm("Delete this datapoint?")) return;
-
-        app.datapointMappings = app.datapointMappings.filter((x) => x !== dp);
-        OL.persist();
-        renderDatapoints(container, app);
-      };
-      row.appendChild(del);
-
       row.className = "datapoint-row";
 
-      ["master", "inbound", "outbound"].forEach((field) => {
+      // Canonical datapoint dropdown
+      const select = document.createElement("input");
+      select.type = "text";
+      select.className = "dp-select";
+      select.placeholder = "Select datapoint…";
+      select.value = getDatapointName(dp.datapointId);
+
+      select.onclick = (e) => {
+        e.stopPropagation();
+        showDatapointDropdown(select, dp, app);
+      };
+
+      row.appendChild(select);
+
+      // inbound/outbound remain as text
+      ["inbound", "outbound"].forEach((field) => {
         const inp = document.createElement("input");
-        inp.placeholder =
-          field[0].toUpperCase() + field.slice(1); // Master / Inbound / Outbound
+        inp.placeholder = field[0].toUpperCase() + field.slice(1); 
         inp.value = dp[field] || "";
         inp.oninput = debounce(() => {
           dp[field] = inp.value;
@@ -979,6 +1071,18 @@
         }, 200);
         row.appendChild(inp);
       });
+
+      // delete button
+      const del = document.createElement("div");
+      del.className = "card-close";
+      del.textContent = "×";
+      del.onclick = (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this datapoint?")) return;
+        app.datapointMappings = app.datapointMappings.filter((x) => x !== dp);
+        OL.persist();
+        renderDatapoints(container, app);
+      };
       row.appendChild(del);
 
       container.appendChild(row);
@@ -987,6 +1091,66 @@
     if (!(app.datapointMappings || []).length) {
       container.innerHTML = `<div class="empty-hint">No datapoints yet.</div>`;
     }
+  }
+  
+  function showDatapointDropdown(select, dpMapping, app) {
+    closeAllDatapointDropdowns();
+    const used = new Set(
+      app.datapointMappings
+        .map(m => m.datapointId)
+        .filter(Boolean)
+    );
+
+    const dropdown = document.createElement("div");
+    dropdown.className = "dp-dropdown";
+
+    dropdown.innerHTML = `
+      <input class="dp-search" placeholder="Search…">
+      <div class="dp-options"></div>
+    `;
+
+    document.body.appendChild(dropdown);
+
+    const rect = select.getBoundingClientRect();
+    dropdown.style.left = rect.left + "px";
+    dropdown.style.top = rect.bottom + "px";
+
+    const search = dropdown.querySelector(".dp-search");
+    const options = dropdown.querySelector(".dp-options");
+
+    function renderList() {
+      const q = (search.value || "").toLowerCase();
+      options.innerHTML = "";
+
+      state.datapoints
+        .filter(d => !used.has(d.id))           // remove used
+        .filter(d => fuzzyMatch(d.name, q))     // use fuzzy search
+        .forEach((d) => {
+          const opt = document.createElement("div");
+          opt.className = "dp-option";
+          opt.textContent = d.name;
+          opt.onclick = () => {
+            dpMapping.datapointId = d.id;
+            select.value = d.name;
+            OL.persist();
+            closeAllDatapointDropdowns();
+          };
+          options.appendChild(opt);
+        });
+    }
+
+    search.oninput = renderList;
+    search.focus();
+    renderList();
+  }
+
+  function getDatapointName(dpId) {
+    const dp = state.datapoints.find(d => d.id === dpId);
+    return dp ? dp.name : "";
+  }
+
+  function closeAllDatapointDropdowns() {
+    document.querySelectorAll(".dp-dropdown").forEach(e => e.remove());
   }
 
   function renderAppModalIntegrations(container, app) {
@@ -1188,7 +1352,11 @@
 
     if (addDpBtn) {
       addDpBtn.onclick = () => {
-        app.datapointMappings.push({ master: "", inbound: "", outbound: "" });
+        app.datapointMappings.push({
+          datapointId: null,
+          inbound: "",
+          outbound: ""
+        });
         OL.persist();
         renderDatapoints(dpWrap, app);
       };
@@ -1534,8 +1702,95 @@
     OL.refreshAllUI();
   };
 
+  //-------------------------------------------------------------
+  // DATAPOINT MODAL
+  //-------------------------------------------------------------
+  function getAppMappingsForDatapoint(dpId) {
+    const rows = [];
+    state.apps.forEach(app => {
+      (app.datapointMappings || []).forEach(m => {
+        if (m.datapointId === dpId) {
+          rows.push({
+            app,
+            inbound: m.inbound || "",
+            outbound: m.outbound || ""
+          });
+        }
+      });
+    });
+    return rows;
+  }
+
+  function renderDatapointModalTable(dp) {
+    const rows = getAppMappingsForDatapoint(dp.id);
+    if (!rows.length) return `<div class="empty-hint">No mappings in any apps.</div>`;
+
+    return `
+      <div class="dp-table">
+        <div class="dp-table-header">
+          <span>Application</span>
+          <span>Inbound</span>
+          <span>Outbound</span>
+        </div>
+        ${rows.map(r => `
+          <div class="dp-table-row">
+            <span class="dp-link-app" data-app-id="${r.app.id}">${esc(r.app.name)}</span>
+            <span>${esc(r.inbound)}</span>
+            <span>${esc(r.outbound)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  OL.openDatapointModal = function (dpId) {
+    const dp = state.datapoints.find(d => d.id === dpId);
+    if (!dp) return;
+
+    openModal(`
+      <div class="modal-head">
+        <div class="modal-title-text" id="dpName" contenteditable="true">${esc(dp.name)}</div>
+        <div class="spacer"></div>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+      <div class="modal-body">
+
+        <label class="modal-section-label">Description</label>
+        <textarea id="dpDesc" class="modal-textarea">${esc(dp.description || "")}</textarea>
+
+        <label class="modal-section-label">Used in applications</label>
+        <div id="dpMappingsTable">
+          ${renderDatapointModalTable(dp)}
+        </div>
+
+      </div>
+    `);
+
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    layer.querySelector("#dpName").onblur = () => {
+      dp.name = layer.querySelector("#dpName").textContent.trim();
+      OL.persist();
+      renderDatapointsGrid();
+    };
+
+    layer.querySelector("#dpDesc").oninput = debounce(() => {
+      dp.description = layer.querySelector("#dpDesc").value;
+      OL.persist();
+    }, 200);
+
+    layer.querySelectorAll(".dp-link-app").forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        OL.closeModal();
+        OL.openAppModal(el.getAttribute("data-app-id"));
+      };
+    });
+  };
+
   // ------------------------------------------------------------
-  // DELETE APPS / FUNCTIONS / INTEGRATIONS
+  // DELETE APPS / FUNCTIONS / INTEGRATIONS / DATAPOINTS
   // ------------------------------------------------------------
   OL.deleteApp = function (appId) {
     const app = findAppById(appId);
@@ -1590,6 +1845,21 @@
         renderAppModalIntegrations(intWrap, appObj);
       }
     }
+  };
+
+  OL.deleteDatapoint = function(dpId) {
+    if (!confirm("Delete this datapoint?")) return;
+    state.datapoints = state.datapoints.filter(d => d.id !== dpId);
+
+    // remove mappings that reference it
+    state.apps.forEach(app => {
+      app.datapointMappings = (app.datapointMappings || []).filter(
+        m => m.datapointId !== dpId
+      );
+    });
+
+    OL.persist();
+    OL.refreshAllUI();
   };
 
   // ------------------------------------------------------------
@@ -1818,8 +2088,41 @@
     if (intList && !intList.contains(e.target)) intList.remove();
   });
 
+  document.addEventListener("click", (e) => {
+    const inDropdown = e.target.closest(".dp-dropdown");
+    const inTrigger  = e.target.closest(".dp-select");
+    if (inDropdown || inTrigger) return; // let the dropdown work
+
+    closeAllDatapointDropdowns();
+  });
+
+  function handleRoute() {
+    const hash = location.hash;
+
+    const showAppsSet =
+      hash.startsWith("#/apps") ||
+      hash.startsWith("#/functions") ||
+      hash.startsWith("#/integrations") ||
+      hash === "" ||
+      hash === "#";
+
+    document.getElementById("section-apps").style.display =
+      showAppsSet ? "block" : "none";
+    document.getElementById("section-functions").style.display =
+      showAppsSet ? "block" : "none";
+    document.getElementById("section-integrations").style.display =
+      showAppsSet ? "block" : "none";
+
+    document.getElementById("section-datapoints").style.display =
+      hash.startsWith("#/settings/datapoints") ? "block" : "none";
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     buildLayout();
     OL.refreshAllUI();
+    handleRoute();
   });
+
+  window.addEventListener("hashchange", handleRoute);
+
 })();
