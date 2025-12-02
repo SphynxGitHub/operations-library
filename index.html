@@ -11,9 +11,7 @@
 </head>
 
 <body>
-  <div class="app">
-
-    <!-- SIDEBAR -->
+      <!-- SIDEBAR -->
     <aside class="sidebar">
       <div class="brand">⚙️ Operations Library</div>
       <div class="divider"></div>
@@ -45,7 +43,7 @@
     </aside>
 
     <!-- MAIN CONTENT AREA -->
-    <main class="main">
+    <main class="main" id ="app-root"> <!--Rendered by app.js-->
       <header class="topbar">
         <div class="crumbs" id="crumbs">/</div>
         <div class="row">
@@ -54,6 +52,10 @@
           <button class="btn small" id="resetAll">Reset</button>
         </div>
       </header>
+
+       <!-- Shared modal layer (used by ALL modals) -->
+      <div id="modal-layer" class="modal-overlay" style="display:none;"></div>
+      <div class="app">
 
       <section class="content" id="view">
       
