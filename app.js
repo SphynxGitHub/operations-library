@@ -316,60 +316,91 @@
     if (!root) return;
 
     root.innerHTML = `
-      <section class="section" id="section-apps">
-        <div class="section-header">
-          <h2>Applications</h2>
-          <div class="spacer"></div>
-          <div class="section-actions">
-            <button class="btn small" id="btnAddApp">+ Add Application</button>
-          </div>
-        </div>
-        <div id="appsGrid" class="cards-grid"></div>
-      </section>
+      <div class="app">
+        <aside class="sidebar">
+            <nav class="menu" id="nav">
+              <div class="group-title">Apps</div>
+              <a href="#/apps" data-route>Apps</a>
+              <a href="#/analyze" data-route>Triggers & Actions Library</a>
+              <a href="#/analyze" data-route>Analyze</a>
 
-      <section class="section" id="section-functions">
-        <div class="section-header">
-          <h2>Functions</h2>
-          <div class="spacer"></div>
-          <div class="section-actions">
-            <button class="btn small" id="btnAddFunction">+ Add Function</button>
-          </div>
-        </div>
-        <!-- Status pill key -->
-        <div class="pill-key-row">
-          <div class="pill-key">
-            <span class="pill fn status-primary">Primary</span>
-            <span class="pill fn status-evaluating">Evaluating</span>
-            <span class="pill fn status-available">Available</span>
-            <span class="pill-key-help">
-              Left-click a pill to cycle status; right-click to remove the mapping.
-            </span>
-          </div>
-        </div>
-        <div id="functionsGrid" class="cards-grid"></div>
-      </section>
+              <div class="divider"></div>
+              <div class="group-title">Resources</div>
+              <a href="#/resources/documents" data-route>Documents and PDFs</a>
+              <a href="#/resources/email-templates" data-route>Email Templates</a>
+              <a href="#/resources/forms" data-route>Forms</a>
+              <a href="#/resources/scheduling" data-route>Scheduling</a>
+              <a href="#/resources/zaps" data-route>Zaps</a>
+              <a href="#/resources/email-campaigns" data-route>Email Campaigns</a>
+              <a href="#/resources/workflows" data-route>Workflows</a>
 
-      <section class="section" id="section-integrations">
-        <div class="section-header">
-          <h2>Integrations</h2>
-          <div class="spacer"></div>
-          <div class="section-actions">
-            <button class="btn small soft" id="btnAddIntegration">+ Add Integration</button>
-          </div>
+              <div class="divider"></div>
+              <div class="group-title">Settings</div>
+              <a href="#/settings/team" data-route>Team</a>
+              <a href="#/settings/segments" data-route>Segments</a>
+              <a href="#/settings/datapoints" data-route>Datapoints</a>
+              <a href="#/settings/folder-hierarchy" data-route>Folder Hierarchy</a>
+              <a href="#/settings/naming-conventions" data-route>Naming Conventions</a>
+            </nav>
+          </aside>
+          <main id="mainContent">
+            <section class="section" id="section-apps">
+              <div class="section-header">
+                <h2>Applications</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddApp">+ Add Application</button>
+                </div>
+              </div>
+              <div id="appsGrid" class="cards-grid"></div>
+            </section>
+
+            <section class="section" id="section-functions">
+              <div class="section-header">
+                <h2>Functions</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddFunction">+ Add Function</button>
+                </div>
+              </div>
+              <!-- Status pill key -->
+              <div class="pill-key-row">
+                <div class="pill-key">
+                  <span class="pill fn status-primary">Primary</span>
+                  <span class="pill fn status-evaluating">Evaluating</span>
+                  <span class="pill fn status-available">Available</span>
+                  <span class="pill-key-help">
+                    Left-click a pill to cycle status; right-click to remove the mapping.
+                  </span>
+                </div>
+              </div>
+              <div id="functionsGrid" class="cards-grid"></div>
+            </section>
+
+            <section class="section" id="section-integrations">
+              <div class="section-header">
+                <h2>Integrations</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small soft" id="btnAddIntegration">+ Add Integration</button>
+                </div>
+              </div>
+              <!-- Status pill key -->
+              <div class="pill-key-row">
+                <div class="pill-key">
+                  <span class="pill integr" data-type="direct">Direct</span>
+                  <span class="pill integr" data-type="zapier">Zapier</span>
+                  <span class="pill integr" data-type="both">Both</span>
+                  <span class="pill-key-help">
+                    Left-click a pill to cycle directionality; right-click to cycle integration type.
+                  </span>
+                </div>
+              </div>
+              <div id="integrationsGrid" class="cards-grid"></div>
+            </section>
+          </main>
         </div>
-        <!-- Status pill key -->
-        <div class="pill-key-row">
-          <div class="pill-key">
-            <span class="pill integr" data-type="direct">Direct</span>
-            <span class="pill integr" data-type="zapier">Zapier</span>
-            <span class="pill integr" data-type="both">Both</span>
-            <span class="pill-key-help">
-              Left-click a pill to cycle directionality; right-click to cycle integration type.
-            </span>
-          </div>
-        </div>
-        <div id="integrationsGrid" class="cards-grid"></div>
-      </section>
+      </div>
     `;
 
     wireTopButtons();
