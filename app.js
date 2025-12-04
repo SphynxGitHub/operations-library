@@ -1,4 +1,4 @@
-;(() => {
+(() => {
   // ------------------------------------------------------------
   // CORE NAMESPACE
   // ------------------------------------------------------------
@@ -28,21 +28,21 @@
   // UTILS
   // ------------------------------------------------------------
   function fuzzyMatch(str, pattern) {
-  str = str.toLowerCase();
-  pattern = pattern.toLowerCase();
+    str = str.toLowerCase();
+    pattern = pattern.toLowerCase();
 
-  // exact or substring match
-  if (str.includes(pattern)) return true;
+    // exact or substring match
+    if (str.includes(pattern)) return true;
 
-  // fuzzy character match
-  let j = 0;
-  for (let i = 0; i < str.length && j < pattern.length; i++) {
-    if (str[i] === pattern[j]) j++;
+    // fuzzy character match
+    let j = 0;
+    for (let i = 0; i < str.length && j < pattern.length; i++) {
+      if (str[i] === pattern[j]) j++;
+    }
+    return j === pattern.length;
   }
-  return j === pattern.length;
-}
 
-OL.utils = {
+  OL.utils = {
     uid() {
       return "id_" + Math.random().toString(36).slice(2, 10);
     },
@@ -204,15 +204,13 @@ OL.utils = {
       appB: defaultApps[1].id,
       type: "zapier",
       direction: "AtoB",
-
+      capabilities: [],
       countTriggersDirect: 0,
       countTriggersZapier: 0,
       countTriggersBoth: 0,
-
       countSearchesDirect: 0,
       countSearchesZapier: 0,
       countSearchesBoth: 0,
-
       countActionsDirect: 0,
       countActionsZapier: 0,
       countActionsBoth: 0,
@@ -223,18 +221,18 @@ OL.utils = {
     {
       id: uid(),
       name: "Client Email",
-      description: "Primary client contact email address"
+      description: "Primary client contact email address",
     },
     {
       id: uid(),
       name: "Client Name",
-      description: "Full concatenated name of client"
+      description: "Full concatenated name of client",
     },
     {
       id: uid(),
       name: "Household ID",
-      description: "Unique household entity identifier"
-    }
+      description: "Unique household entity identifier",
+    },
   ];
 
   const defaultResources = [
@@ -248,6 +246,9 @@ OL.utils = {
     },
   ];
 
+  const defaultCapabilities = [];
+  const defaultCanonicalCapabilities = [];
+
   // ------------------------------------------------------------
   // STATE
   // ------------------------------------------------------------
@@ -257,9 +258,39 @@ OL.utils = {
     integrations: OL.store.get("integrations", defaultIntegrations),
     resources: OL.store.get("resources", defaultResources),
     datapoints: OL.store.get("datapoints", defaultDatapoints),
+    capabilities: OL.store.get("capabilities", defaultCapabilities),
+    canonicalCapabilities: OL.store.get(
+      "canonicalCapabilities",
+      defaultCanonicalCapabilities,
+    ),
   };
 
+  // Seed canonical library from existing capabilities if empty (legacy)
+  (function seedCanonicalCapsFromCapabilities() {
+    const st = OL.state;
+    if (!Array.isArray(st.canonicalCapabilities)) st.canonicalCapabilities = [];
+
+    if (!st.canonicalCapabilities.length && Array.isArray(st.capabilities)) {
+      const seen = new Set();
+      st.capabilities.forEach((cap) => {
+        const key = (cap.canonical || "").trim();
+        if (!key) return;
+        const lower = key.toLowerCase();
+        if (seen.has(lower)) return;
+        seen.add(lower);
+        st.canonicalCapabilities.push({
+          id: uid(),
+          key,
+          type: cap.type || "trigger",
+          notes: "",
+          group: "",
+        });
+      });
+    }
+  })();
+
   const state = OL.state;
+  let capViewMode = "by-app"; // "by-app" or "by-type"
 
   // ------------------------------------------------------------
   // PERSIST
@@ -270,6 +301,8 @@ OL.utils = {
     OL.store.set("integrations", state.integrations);
     OL.store.set("resources", state.resources);
     OL.store.set("datapoints", state.datapoints);
+    OL.store.set("capabilities", state.capabilities);
+    OL.store.set("canonicalCapabilities", state.canonicalCapabilities);
   }, 200);
 
   // ------------------------------------------------------------
@@ -335,6 +368,62 @@ OL.utils = {
   }
 
   // ------------------------------------------------------------
+  // CANONICAL CAPABILITIES HELPERS
+  // ------------------------------------------------------------
+  function findCanonicalById(id) {
+    return (state.canonicalCapabilities || []).find((c) => c.id === id) || null;
+  }
+
+  function findCanonicalByKey(key) {
+    if (!key) return null;
+    const k = key.trim().toLowerCase();
+    return (
+      (state.canonicalCapabilities || []).find(
+        (c) => (c.key || "").trim().toLowerCase() === k,
+      ) || null
+    );
+  }
+
+  function canonicalLabelForCap(cap) {
+    if (!cap) return "";
+    if (cap.canonicalId) {
+      const canon = findCanonicalById(cap.canonicalId);
+      if (canon) return canon.key || "";
+    }
+    // legacy fallback
+    return cap.canonical || cap.name || "";
+  }
+
+  function ensureCanonicalForCap(cap) {
+    if (!cap) return;
+    if (cap.canonicalId) return;
+
+    const rawKey = (cap.canonical || cap.name || "").trim();
+    if (!rawKey) return;
+
+    let canon = findCanonicalByKey(rawKey);
+    if (!canon) {
+      canon = {
+        id: uid(),
+        key: rawKey,
+        type: cap.type || "action",
+        notes: "",
+        group: "",
+      };
+      state.canonicalCapabilities = state.canonicalCapabilities || [];
+      state.canonicalCapabilities.push(canon);
+    }
+
+    cap.canonicalId = canon.id;
+  }
+
+  function migrateCanonicalFromLegacy() {
+    (state.capabilities || []).forEach((cap) => {
+      ensureCanonicalForCap(cap);
+    });
+  }
+
+  // ------------------------------------------------------------
   // GLOBAL UI REFRESH (does NOT rebuild layout)
   // ------------------------------------------------------------
   OL.refreshAllUI = function () {
@@ -342,7 +431,78 @@ OL.utils = {
     renderFunctionsGrid();
     renderIntegrationsGrid();
     renderDatapointsGrid();
+    renderCanonicalCapsGrid();
+    renderCapabilitiesGrid();
   };
+
+  // ------------------------------------------------------------
+  // ZAPIER / CAPABILITY HELPERS
+  // ------------------------------------------------------------
+  function appHasZapierCapability(appId) {
+    return state.capabilities.some(
+      (c) =>
+        c.appId === appId &&
+        (c.integrationType === "zapier" || c.integrationType === "both"),
+    );
+  }
+
+  function updateIntegrationTypeFromCapabilities(int) {
+    const refs = int.capabilities || [];
+    let hasDirect = false;
+    let hasZapier = false;
+
+    refs.forEach((ref) => {
+      const cap = state.capabilities.find((c) => c.id === ref.capabilityId);
+      if (!cap) return;
+      const it = cap.integrationType || "zapier";
+      if (it === "direct") hasDirect = true;
+      else if (it === "zapier") hasZapier = true;
+      else if (it === "both") {
+        hasDirect = true;
+        hasZapier = true;
+      }
+    });
+
+    if (hasDirect && hasZapier) int.type = "both";
+    else if (hasDirect) int.type = "direct";
+    else if (hasZapier) int.type = "zapier";
+  }
+
+  function syncZapierIntegrationsFromCapabilities() {
+    const zapAppIds = state.apps
+      .filter((app) => appHasZapierCapability(app.id))
+      .map((a) => a.id);
+
+    for (let i = 0; i < zapAppIds.length; i++) {
+      for (let j = i + 1; j < zapAppIds.length; j++) {
+        const a = zapAppIds[i];
+        const b = zapAppIds[j];
+
+        let int = state.integrations.find(
+          (i2) =>
+            (i2.appA === a && i2.appB === b) ||
+            (i2.appA === b && i2.appB === a),
+        );
+
+        if (!int) {
+          int = {
+            id: uid(),
+            appA: a,
+            appB: b,
+            type: "zapier",
+            direction: "AtoB",
+            capabilities: [],
+          };
+          state.integrations.push(int);
+        } else {
+          if (int.type === "direct") int.type = "both";
+          else if (!int.type) int.type = "zapier";
+        }
+      }
+    }
+
+    state.integrations.forEach(updateIntegrationTypeFromCapabilities);
+  }
 
   // ------------------------------------------------------------
   // LAYOUT (built once)
@@ -357,7 +517,7 @@ OL.utils = {
             <nav class="menu" id="nav">
               <div class="group-title">Apps</div>
               <a href="#/apps" data-route>Apps</a>
-              <a href="#/analyze" data-route>Triggers & Actions Library</a>
+              <a href="#/triggers-actions" data-route>Triggers & Actions Library</a>
               <a href="#/analyze" data-route>Analyze</a>
 
               <div class="divider"></div>
@@ -375,6 +535,7 @@ OL.utils = {
               <a href="#/settings/team" data-route>Team</a>
               <a href="#/settings/segments" data-route>Segments</a>
               <a href="#/settings/datapoints" data-route>Datapoints</a>
+              <a href="#/settings/canonical-capabilities" data-route>Canonical Capabilities</a>
               <a href="#/settings/folder-hierarchy" data-route>Folder Hierarchy</a>
               <a href="#/settings/naming-conventions" data-route>Naming Conventions</a>
             </nav>
@@ -399,7 +560,6 @@ OL.utils = {
                   <button class="btn small" id="btnAddFunction">+ Add Function</button>
                 </div>
               </div>
-              <!-- Status pill key -->
               <div class="pill-key-row">
                 <div class="pill-key">
                   <span class="pill fn status-primary">Primary</span>
@@ -421,7 +581,6 @@ OL.utils = {
                   <button class="btn small soft" id="btnAddIntegration">+ Add Integration</button>
                 </div>
               </div>
-              <!-- Status pill key -->
               <div class="pill-key-row">
                 <div class="pill-key">
                   <span class="pill integr" data-type="direct">Direct</span>
@@ -446,6 +605,32 @@ OL.utils = {
               <div id="datapointsGrid" class="cards-grid"></div>
             </section>
 
+            <section class="section" id="section-capabilities">
+              <div class="section-header">
+                <h2>Triggers / Searches / Actions Library</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddCapability">+ Add Item</button>
+                </div>
+              </div>
+              <div class="cap-view-toggle">
+                <button class="btn xsmall soft" data-capview="by-app">By App</button>
+                <button class="btn xsmall soft" data-capview="by-type">By Type</button>
+              </div>
+              <div id="capabilitiesGrid" class="cards-grid"></div>
+            </section>
+
+            <section class="section" id="section-canonical-caps">
+              <div class="section-header">
+                <h2>Canonical Capabilities</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddCanonicalCap">+ Add Canonical Capability</button>
+                </div>
+              </div>
+              <div id="canonicalCapsGrid" class="cards-grid"></div>
+            </section>
+
           </main>
         </div>
       </div>
@@ -463,7 +648,7 @@ OL.utils = {
     grid.innerHTML = "";
 
     const appsSorted = [...state.apps].sort((a, b) =>
-      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase()),
     );
 
     appsSorted.forEach((app) => {
@@ -476,9 +661,10 @@ OL.utils = {
       .slice()
       .sort((a, b) => {
         const order = { primary: 0, evaluating: 1, available: 2 };
-        return order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)];
+        return (
+          order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)]
+        );
       })
-
       .map((ref) => {
         const fn = findFunctionById(ref.fnId);
         if (!fn) return "";
@@ -496,9 +682,11 @@ OL.utils = {
       })
       .join("");
 
-    const ints = state.integrations.filter(
-      (i) => i.appA === app.id || i.appB === app.id
-    );
+    const ints = state.integrations.filter((i) => {
+      if (i.appA !== app.id && i.appB !== app.id) return false;
+      const t = i.type || "direct";
+      return t === "direct" || t === "both";
+    });
 
     const intPills = ints.length
       ? ints
@@ -550,7 +738,7 @@ OL.utils = {
           </div>
 
           <div class="card-section">
-            <div class="card-section-title">Integrations</div>
+            <div class="card-section-title">Direct Integrations</div>
             <div class="card-section-content">
               <div class="pills-row">
                 ${intPills}
@@ -571,7 +759,7 @@ OL.utils = {
     grid.innerHTML = "";
 
     const fns = [...state.functions].sort((a, b) =>
-      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase()),
     );
 
     fns.forEach((fn) => {
@@ -583,7 +771,9 @@ OL.utils = {
     const links = OL.functionAssignments(fn.id);
     links.sort((a, b) => {
       const order = { primary: 0, evaluating: 1, available: 2 };
-      return order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)];
+      return (
+        order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)]
+      );
     });
 
     const appPills = links.length
@@ -637,9 +827,31 @@ OL.utils = {
       </div>
     `;
   }
+
   // ------------------------------------------------------------
   // INTEGRATIONS GRID
   // ------------------------------------------------------------
+  function summarizeIntegrationCapabilities(int) {
+    const caps = int.capabilities || [];
+    const summary = {
+      trigger: { direct: 0, zapier: 0, both: 0 },
+      search: { direct: 0, zapier: 0, both: 0 },
+      action: { direct: 0, zapier: 0, both: 0 },
+    };
+
+    caps.forEach((ref) => {
+      const cap = state.capabilities.find((c) => c.id === ref.capabilityId);
+      if (!cap) return;
+      const type = cap.type || "action";
+      let it = cap.integrationType || "zapier";
+      if (!["direct", "zapier", "both"].includes(it)) it = "zapier";
+      if (!summary[type]) return;
+      summary[type][it]++;
+    });
+
+    return summary;
+  }
+
   function renderIntegrationsGrid() {
     const grid = document.getElementById("integrationsGrid");
     if (!grid) return;
@@ -654,7 +866,6 @@ OL.utils = {
       return a < b ? [a, b] : [b, a];
     }
 
-    // dedupe logical pair representation
     const seen = new Set();
     const uniqueInts = [];
 
@@ -670,11 +881,12 @@ OL.utils = {
     uniqueInts.forEach((int) => {
       const appA = findAppById(int.appA);
       const appB = findAppById(int.appB);
+      const summary = summarizeIntegrationCapabilities(int);
 
       grid.insertAdjacentHTML(
         "beforeend",
         `
-        <div class="card" data-int-id="${int.id}">
+        <div class="card" data-int-id="${int.id}" onclick="OL.openIntegrationModal('${int.id}')">
           <div class="card-header">
             <div class="card-header-left">
               <span class="card-app-name">${esc(appA?.name || "")}</span>
@@ -691,59 +903,43 @@ OL.utils = {
           </div>
           <div class="card-body">
             <div class="card-section">
-              <div class="card-section-title">
-                ${esc(appA?.name || "")} Triggers: 
-                ${(int.countTriggersDirect || 0)
-                  + (int.countTriggersZapier || 0)
-                  + (int.countTriggersBoth || 0)}
-              </div>
+              <div class="card-section-title">Triggers</div>
               <div class="pills-row">
                 <div class="count-line">
-                  <span class="dot-direct"></span><span>${int.countTriggersDirect || 0}</span>
-                  <span class="dot-zapier"></span><span>${int.countTriggersZapier || 0}</span>
-                  <span class="dot-both"></span><span>${int.countTriggersBoth || 0}</span>
+                  <span class="dot-direct"></span><span>${summary.trigger.direct}</span>
+                  <span class="dot-zapier"></span><span>${summary.trigger.zapier}</span>
+                  <span class="dot-both"></span><span>${summary.trigger.both}</span>
                 </div>
               </div>
             </div>
 
             <div class="card-section">
-              <div class="card-section-title">
-                ${esc(appB?.name || "")} Searches: 
-                ${(int.countSearchesDirect || 0)
-                  + (int.countSearchesZapier || 0)
-                  + (int.countSearchesBoth || 0)}
-              </div>
+              <div class="card-section-title">Searches</div>
               <div class="pills-row">
                 <div class="count-line">
-                  <span class="dot-direct"></span><span>${int.countSearchesDirect || 0}</span>
-                  <span class="dot-zapier"></span><span>${int.countSearchesZapier || 0}</span>
-                  <span class="dot-both"></span><span>${int.countSearchesBoth || 0}</span>
+                  <span class="dot-direct"></span><span>${summary.search.direct}</span>
+                  <span class="dot-zapier"></span><span>${summary.search.zapier}</span>
+                  <span class="dot-both"></span><span>${summary.search.both}</span>
                 </div>
               </div>
             </div>
 
             <div class="card-section">
-              <div class="card-section-title">
-                ${esc(appB?.name || "")} Actions: 
-                ${(int.countActionsDirect || 0)
-                  + (int.countActionsZapier || 0)
-                  + (int.countActionsBoth || 0)}
-              </div>
+              <div class="card-section-title">Actions</div>
               <div class="pills-row">
                 <div class="count-line">
-                  <span class="dot-direct"></span><span>${int.countActionsDirect || 0}</span>
-                  <span class="dot-zapier"></span><span>${int.countActionsZapier || 0}</span>
-                  <span class="dot-both"></span><span>${int.countActionsBoth || 0}</span>
+                  <span class="dot-direct"></span><span>${summary.action.direct}</span>
+                  <span class="dot-zapier"></span><span>${summary.action.zapier}</span>
+                  <span class="dot-both"></span><span>${summary.action.both}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      `
+      `,
       );
     });
 
-    // clicking the ↔ swaps appA / appB
     grid.querySelectorAll(".arrow-switch").forEach((el) => {
       el.onclick = (e) => {
         e.preventDefault();
@@ -761,24 +957,6 @@ OL.utils = {
         renderIntegrationsGrid();
       };
     });
-
-    // right-click on Type pill changes the integration type
-    grid.querySelectorAll(".pill.integr-type").forEach((el) => {
-      el.oncontextmenu = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const id = el.getAttribute("data-int-id");
-        const int = state.integrations.find((i) => i.id === id);
-        if (!int) return;
-
-        const order = ["zapier", "direct", "both"];
-        const idx = order.indexOf(int.type || "zapier");
-        int.type = order[(idx + 1) % order.length];
-
-        OL.persist();
-        renderIntegrationsGrid();
-      };
-    });
   }
 
   //-------------------------------------------------------------
@@ -790,9 +968,11 @@ OL.utils = {
     grid.innerHTML = "";
 
     [...state.datapoints]
-    .sort((a,b)=>a.name.localeCompare(b.name))
-    .forEach((dp) => {
-      grid.insertAdjacentHTML("beforeend", `
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach((dp) => {
+        grid.insertAdjacentHTML(
+          "beforeend",
+          `
         <div class="card" data-dp-id="${dp.id}" onclick="OL.openDatapointModal('${dp.id}')">
           <div class="card-header">
             <div class="card-header-left">
@@ -810,7 +990,488 @@ OL.utils = {
             </div>
           </div>
         </div>
-      `);
+      `,
+        );
+      });
+  }
+
+  // ------------------------------------------------------------
+  // CANONICAL CAPABILITIES GRID
+  // ------------------------------------------------------------
+  function renderCanonicalCapsGrid() {
+    const grid = document.getElementById("canonicalCapsGrid");
+    if (!grid) return;
+
+    const list = (state.canonicalCapabilities || [])
+      .slice()
+      .sort((a, b) =>
+        (a.key || "").toLowerCase().localeCompare((b.key || "").toLowerCase())
+      );
+
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-hint">No canonical capabilities yet.</div>`;
+      return;
+    }
+
+    grid.innerHTML = "";
+    list.forEach((canon) => {
+      const label = canon.label || canon.key || "(Unnamed canonical capability)";
+      const type = canon.type || "";
+      const notes = canon.notes || "";
+
+      // how many concrete capabilities use this canonical id?
+      const usageCount = (state.capabilities || []).filter(
+        (cap) => cap.canonicalId === canon.id
+      ).length;
+
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div class="card" data-canon-id="${canon.id}" onclick="OL.openCanonicalCapModal('${canon.id}')">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-title">${esc(label)}</div>
+            </div>
+            <div
+              class="card-close"
+              onclick="event.stopPropagation(); OL.deleteCanonicalCapability('${canon.id}')"
+            >×</div>
+          </div>
+          <div class="card-body">
+            <div class="card-section">
+              <div class="card-section-title">Key</div>
+              <div class="card-section-content single-line-text">
+                ${esc(canon.key || "")}
+              </div>
+            </div>
+            <div class="card-section">
+              <div class="card-section-title">Type</div>
+              <div class="card-section-content single-line-text">
+                ${esc(type)}
+              </div>
+            </div>
+            <div class="card-section">
+              <div class="card-section-title">Notes</div>
+              <div class="card-section-content single-line-text ${notes ? "" : "muted"}">
+                ${esc(notes || "No notes")}
+              </div>
+            </div>
+            <div class="card-section">
+              <div class="card-section-title">Used By</div>
+              <div class="card-section-content single-line-text">
+                ${usageCount} capabilities
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+      );
+    });
+  }
+
+  // show all capabilities that reference this canonical
+  function renderCanonicalUsageTable(canon) {
+    const rows = (state.capabilities || []).filter(
+      (cap) => cap.canonicalId === canon.id
+    );
+
+    if (!rows.length) {
+      return `<div class="empty-hint">No capabilities currently linked.</div>`;
+    }
+
+    return `
+      <div class="dp-table">
+        <div class="dp-table-header">
+          <span>Capability</span>
+          <span>App</span>
+          <span>Type</span>
+          <span>Integration</span>
+        </div>
+        ${rows
+          .map((cap) => {
+            const app = findAppById(cap.appId);
+            return `
+            <div class="dp-table-row">
+              <span class="dp-link-cap" data-cap-id="${cap.id}">${esc(cap.name || canonicalLabelForCap(cap) || "(unnamed)")}</span>
+              <span class="dp-link-app" data-app-id="${app?.id || ""}">${esc(
+                app?.name || ""
+              )}</span>
+              <span>${esc(cap.type || "")}</span>
+              <span>${esc(cap.integrationType || "")}</span>
+            </div>
+          `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  OL.openCanonicalCapModal = function (canonId) {
+    const canon = (state.canonicalCapabilities || []).find((c) => c.id === canonId);
+    if (!canon) return;
+
+    openModal(`
+      <div class="modal-head">
+        <div class="modal-title-text" id="canonLabel" contenteditable="true">
+          ${esc(canon.label || canon.key || "Canonical Capability")}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-section-label">Key (unique identifier)</label>
+        <input id="canonKey" class="modal-textarea" style="min-height:auto;height:auto;"
+          value="${esc(canon.key || "")}">
+
+        <label class="modal-section-label">Type</label>
+        <select id="canonType" class="modal-textarea" style="min-height:auto;height:auto;">
+          <option value="trigger" ${(canon.type || "trigger") === "trigger" ? "selected" : ""}>Trigger</option>
+          <option value="search" ${(canon.type || "") === "search" ? "selected" : ""}>Search</option>
+          <option value="action" ${(canon.type || "") === "action" ? "selected" : ""}>Action</option>
+        </select>
+
+        <label class="modal-section-label">Notes</label>
+        <textarea id="canonNotes" class="modal-textarea">${esc(canon.notes || "")}</textarea>
+
+        <label class="modal-section-label">Used by capabilities</label>
+        <div id="canonUsageTable">
+          ${renderCanonicalUsageTable(canon)}
+        </div>
+      </div>
+    `);
+
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    const labelEl = layer.querySelector("#canonLabel");
+    const keyEl = layer.querySelector("#canonKey");
+    const typeEl = layer.querySelector("#canonType");
+    const notesEl = layer.querySelector("#canonNotes");
+
+    if (labelEl) {
+      labelEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          labelEl.blur();
+        }
+      });
+      labelEl.addEventListener("blur", () => {
+        canon.label = labelEl.textContent.trim() || canon.key || "";
+        OL.persist();
+        renderCanonicalCapsGrid();
+        renderCapabilitiesGrid();
+      });
+    }
+
+    if (keyEl) {
+      keyEl.addEventListener(
+        "input",
+        debounce(() => {
+          const newKey = keyEl.value.trim();
+          if (!newKey) return;
+          canon.key = newKey;
+          OL.persist();
+          renderCanonicalCapsGrid();
+          renderCapabilitiesGrid();
+        }, 200)
+      );
+    }
+
+    if (typeEl) {
+      typeEl.onchange = () => {
+        canon.type = typeEl.value;
+        OL.persist();
+        renderCanonicalCapsGrid();
+        renderCapabilitiesGrid();
+      };
+    }
+
+    if (notesEl) {
+      notesEl.addEventListener(
+        "input",
+        debounce(() => {
+          canon.notes = notesEl.value;
+          OL.persist();
+          renderCanonicalCapsGrid();
+        }, 200)
+      );
+    }
+
+    // usage links → open capability or app modal
+    layer.querySelectorAll(".dp-link-cap").forEach((el) => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute("data-cap-id");
+        if (id) {
+          OL.closeModal();
+          OL.openCapabilityModal(id);
+        }
+      };
+    });
+
+    layer.querySelectorAll(".dp-link-app").forEach((el) => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute("data-app-id");
+        if (id) {
+          OL.closeModal();
+          OL.openAppModal(id);
+        }
+      };
+    });
+  };
+
+  OL.deleteCanonicalCapability = function (canonId) {
+    const canon = (state.canonicalCapabilities || []).find((c) => c.id === canonId);
+    if (!canon) return;
+
+    const inUse = (state.capabilities || []).some((cap) => cap.canonicalId === canonId);
+    const msg = inUse
+      ? `This canonical capability is used by one or more capabilities. Delete anyway? The capabilities will keep their current labels but lose the canonical link.`
+      : `Delete this canonical capability?`;
+
+    if (!confirm(msg)) return;
+
+    // strip canonical link from concrete capabilities
+    (state.capabilities || []).forEach((cap) => {
+      if (cap.canonicalId === canonId) {
+        cap.canonicalId = null;
+        // leave cap.canonical / cap.name alone
+      }
+    });
+
+    state.canonicalCapabilities = (state.canonicalCapabilities || []).filter(
+      (c) => c.id !== canonId
+    );
+
+    OL.persist();
+    renderCanonicalCapsGrid();
+    renderCapabilitiesGrid();
+  };
+
+
+  // ------------------------------------------------------------
+  // CAPABILITIES GRID (Triggers / Searches / Actions)
+  // ------------------------------------------------------------
+  function renderCapabilitiesGrid() {
+    const grid = document.getElementById("capabilitiesGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    if (!state.capabilities.length) {
+      grid.innerHTML = `<div class="empty-hint">No capabilities yet.</div>`;
+      return;
+    }
+
+    if (capViewMode === "by-type") {
+      renderCapabilitiesByType(grid);
+    } else {
+      renderCapabilitiesByApp(grid);
+    }
+
+    wireCapabilityClicks(grid);
+  }
+
+  // ------------------------------------------------------------
+  // VIEW: BY APP
+  // ------------------------------------------------------------
+  function renderCapabilitiesByApp(grid) {
+    const appCaps = state.apps
+      .map((app) => ({
+        app,
+        caps: state.capabilities.filter((c) => c.appId === app.id),
+      }))
+      .filter((x) => x.caps.length);
+
+    if (!appCaps.length) {
+      grid.innerHTML = `<div class="empty-hint">No capabilities yet.</div>`;
+      return;
+    }
+
+    appCaps
+      .sort((a, b) =>
+        (a.app.name || "")
+          .toLowerCase()
+          .localeCompare((b.app.name || "").toLowerCase()),
+      )
+      .forEach(({ app, caps }) => {
+        const triggers = caps.filter((c) => c.type === "trigger");
+        const searches = caps.filter((c) => c.type === "search");
+        const actions = caps.filter((c) => c.type === "action");
+
+        const cardHtml = `
+          <div class="card cap-app-card" data-app-id="${app.id}">
+            <div class="card-header">
+              <div class="card-header-left">
+                <div class="card-icon">${OL.iconHTML(app)}</div>
+                <div class="card-title cap-app-title"
+                    data-open-app-id="${app.id}">
+                    ${esc(app.name || "")}
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              ${renderCapListColumn("Triggers", triggers)}
+              ${renderCapListColumn("Searches", searches)}
+              ${renderCapListColumn("Actions", actions)}
+            </div>
+          </div>
+        `;
+        grid.insertAdjacentHTML("beforeend", cardHtml);
+      });
+  }
+
+  function renderCapListColumn(title, items) {
+    if (!items.length) return "";
+    return `
+      <div class="card-section">
+        <div class="card-section-title">${title}</div>
+        <div class="card-section-content">
+          ${items
+            .map((cap) => {
+              const it = cap.integrationType || "zapier";
+              const label = canonicalLabelForCap(cap) || "(Unnamed capability)";
+              return `
+                <div class="cap-row" data-cap-id="${cap.id}">
+                  <span class="dot-${esc(it)}"></span>
+                  <span class="cap-name-link">${esc(label)}</span>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // ------------------------------------------------------------
+  // VIEW: BY TYPE
+  // ------------------------------------------------------------
+  function renderCapabilitiesByType(grid) {
+    const groupsByType = {
+      trigger: new Map(),
+      search: new Map(),
+      action: new Map(),
+    };
+
+    state.capabilities.forEach((cap) => {
+      const type = cap.type || "action";
+      const map = groupsByType[type];
+      if (!map) return;
+
+      const canon = cap.canonicalId ? findCanonicalById(cap.canonicalId) : null;
+      const keyBase = (canon?.key || cap.canonical || cap.name || "").trim();
+      const key = keyBase.toLowerCase() || `cap:${cap.id}`;
+
+      let group = map.get(key);
+      if (!group) {
+        group = {
+          canonical:
+            canon?.key || cap.canonical || cap.name || "(Unnamed capability)",
+          integrationTypes: new Set(),
+          caps: [],
+        };
+        map.set(key, group);
+      }
+
+      group.caps.push(cap);
+      group.integrationTypes.add(cap.integrationType || "zapier");
+    });
+
+    const typeOrder = ["trigger", "search", "action"];
+    const labels = {
+      trigger: "Triggers",
+      search: "Searches",
+      action: "Actions",
+    };
+
+    typeOrder.forEach((type) => {
+      const map = groupsByType[type];
+      if (!map || !map.size) return;
+
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `<h3 class="cap-type-heading">${labels[type]}</h3>`,
+      );
+
+      const cards = Array.from(map.values())
+        .sort((a, b) =>
+          a.canonical.toLowerCase().localeCompare(b.canonical.toLowerCase()),
+        )
+        .map((group) => {
+          const apps = group.caps
+            .map((cap) => findAppById(cap.appId))
+            .filter(Boolean)
+            .map((app) => app.name);
+          const uniqueApps = [...new Set(apps)];
+
+          const types = group.integrationTypes;
+          let integLabel = "zapier";
+          if (types.has("both")) integLabel = "both";
+          else if (types.has("direct") && types.has("zapier"))
+            integLabel = "both";
+          else if (types.has("direct")) integLabel = "direct";
+
+          return `
+            <div class="card cap-type-card" data-cap-id="${group.caps[0].id}">
+              <div class="card-header">
+                <div class="card-title">${esc(group.canonical)}</div>
+              </div>
+              <div class="card-body">
+                <div class="card-section">
+                  <div class="card-section-title">Apps</div>
+                  <div class="card-section-content">
+                    ${
+                      uniqueApps.length
+                        ? uniqueApps
+                            .map(
+                              (name) =>
+                                `<span class="pill integr">${esc(name)}</span>`,
+                            )
+                            .join("")
+                        : '<span class="pill muted">No apps linked</span>'
+                    }
+                  </div>
+                </div>
+                <div class="card-section">
+                  <div class="card-section-title">Integration Type</div>
+                  <div class="card-section-content">
+                    <span class="pill integr">${esc(integLabel)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `<div class="cards-grid">${cards}</div>`,
+      );
+    });
+  }
+
+  // ------------------------------------------------------------
+  // CLICK HANDLING — universal, applied once
+  // ------------------------------------------------------------
+  function wireCapabilityClicks(grid) {
+    grid.querySelectorAll("[data-cap-id]").forEach((el) => {
+      el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = el.getAttribute("data-cap-id");
+        if (id) OL.openCapabilityModal(id);
+      };
+    });
+
+    grid.querySelectorAll("[data-open-app-id]").forEach((el) => {
+      el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const appId = el.getAttribute("data-open-app-id");
+        if (appId) OL.openAppModal(appId);
+      };
     });
   }
 
@@ -822,6 +1483,8 @@ OL.utils = {
     const btnAddFn = document.getElementById("btnAddFunction");
     const btnAddInt = document.getElementById("btnAddIntegration");
     const btnAddDpGlobal = document.getElementById("btnAddDatapointGlobal");
+    const btnAddCapability = document.getElementById("btnAddCapability");
+    const btnAddCanonicalCap = document.getElementById("btnAddCanonicalCap");
 
     if (btnAddApp) {
       btnAddApp.onclick = () => {
@@ -857,22 +1520,77 @@ OL.utils = {
 
     if (btnAddInt) {
       btnAddInt.onclick = () => {
-        // Keep this simple and not broken.
-        alert('To add an integration, open an App card and use "+ Add Integration" in the modal.');
+        alert(
+          'To add an integration, open an App card and use "+ Add Integration" in the modal.',
+        );
       };
     }
+
     if (btnAddDpGlobal) {
       btnAddDpGlobal.onclick = () => {
         const dp = {
           id: uid(),
           name: "New Datapoint",
-          description: ""
+          description: "",
         };
         state.datapoints.push(dp);
         OL.persist();
         renderDatapointsGrid();
       };
     }
+
+    if (btnAddCapability) {
+      btnAddCapability.onclick = () => {
+        const cap = {
+          id: uid(),
+          name: "New Capability",
+          appId: state.apps[0]?.id || null,
+          type: "trigger",
+          integrationType: "zapier",
+          canonical: "",
+          notes: "",
+          source: "manual",
+        };
+        state.capabilities.push(cap);
+        syncZapierIntegrationsFromCapabilities();
+        OL.persist();
+        OL.refreshAllUI();
+        OL.openCapabilityModal(cap.id);
+      };
+    }
+
+    if (btnAddCanonicalCap) {
+      btnAddCanonicalCap.onclick = () => {
+        const canon = {
+          id: uid(),
+          key: "new_canonical_capability",
+          label: "New canonical capability",
+          type: "trigger",
+          notes: "",
+        };
+        state.canonicalCapabilities = state.canonicalCapabilities || [];
+        state.canonicalCapabilities.push(canon);
+        OL.persist();
+        renderCanonicalCapsGrid();
+        OL.openCanonicalCapModal(canon.id);
+      };
+    }
+
+  }
+
+  function wireCapabilityViewToggle() {
+    const section = document.getElementById("section-capabilities");
+    if (!section) return;
+
+    section.querySelectorAll("[data-capview]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const mode = btn.getAttribute("data-capview");
+        if (!mode) return;
+        capViewMode = mode;
+        renderCapabilitiesGrid();
+      };
+    });
   }
 
   // ------------------------------------------------------------
@@ -940,7 +1658,6 @@ OL.utils = {
   };
 
   function renderAppModalHTML(app) {
-    const dpMappings = app.datapointMappings || [];
     const usedResources = getResourcesForApp(app.id);
 
     const resourcesHTML = usedResources.length
@@ -1014,7 +1731,9 @@ OL.utils = {
     let fnAssignments = app.functions || [];
     fnAssignments = [...fnAssignments].sort((a, b) => {
       const order = { primary: 0, evaluating: 1, available: 2 };
-      return order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)];
+      return (
+        order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)]
+      );
     });
 
     if (!fnAssignments.length) {
@@ -1046,7 +1765,6 @@ OL.utils = {
       const row = document.createElement("div");
       row.className = "datapoint-row";
 
-      // Canonical datapoint dropdown
       const select = document.createElement("input");
       select.type = "text";
       select.className = "dp-select";
@@ -1060,10 +1778,9 @@ OL.utils = {
 
       row.appendChild(select);
 
-      // inbound/outbound remain as text
       ["inbound", "outbound"].forEach((field) => {
         const inp = document.createElement("input");
-        inp.placeholder = field[0].toUpperCase() + field.slice(1); 
+        inp.placeholder = field[0].toUpperCase() + field.slice(1);
         inp.value = dp[field] || "";
         inp.oninput = debounce(() => {
           dp[field] = inp.value;
@@ -1072,7 +1789,6 @@ OL.utils = {
         row.appendChild(inp);
       });
 
-      // delete button
       const del = document.createElement("div");
       del.className = "card-close";
       del.textContent = "×";
@@ -1092,13 +1808,11 @@ OL.utils = {
       container.innerHTML = `<div class="empty-hint">No datapoints yet.</div>`;
     }
   }
-  
+
   function showDatapointDropdown(select, dpMapping, app) {
     closeAllDatapointDropdowns();
     const used = new Set(
-      app.datapointMappings
-        .map(m => m.datapointId)
-        .filter(Boolean)
+      app.datapointMappings.map((m) => m.datapointId).filter(Boolean),
     );
 
     const dropdown = document.createElement("div");
@@ -1123,8 +1837,8 @@ OL.utils = {
       options.innerHTML = "";
 
       state.datapoints
-        .filter(d => !used.has(d.id))           // remove used
-        .filter(d => fuzzyMatch(d.name, q))     // use fuzzy search
+        .filter((d) => !used.has(d.id))
+        .filter((d) => fuzzyMatch(d.name, q))
         .forEach((d) => {
           const opt = document.createElement("div");
           opt.className = "dp-option";
@@ -1145,19 +1859,19 @@ OL.utils = {
   }
 
   function getDatapointName(dpId) {
-    const dp = state.datapoints.find(d => d.id === dpId);
+    const dp = state.datapoints.find((d) => d.id === dpId);
     return dp ? dp.name : "";
   }
 
   function closeAllDatapointDropdowns() {
-    document.querySelectorAll(".dp-dropdown").forEach(e => e.remove());
+    document.querySelectorAll(".dp-dropdown").forEach((e) => e.remove());
   }
 
   function renderAppModalIntegrations(container, app) {
     if (!container) return;
 
     const ints = state.integrations.filter(
-      (i) => i.appA === app.id || i.appB === app.id
+      (i) => i.appA === app.id || i.appB === app.id,
     );
 
     if (!ints.length) {
@@ -1213,7 +1927,7 @@ OL.utils = {
           const exists = state.integrations.some(
             (i) =>
               (i.appA === app.id && i.appB === a.id) ||
-              (i.appA === a.id && i.appB === app.id)
+              (i.appA === a.id && i.appB === app.id),
           );
 
           const row = document.createElement("label");
@@ -1231,6 +1945,7 @@ OL.utils = {
                 appB: a.id,
                 type: "zapier",
                 direction: "AtoB",
+                capabilities: [],
               });
             } else if (!cb.checked && exists) {
               state.integrations = state.integrations.filter(
@@ -1238,13 +1953,13 @@ OL.utils = {
                   !(
                     (i.appA === app.id && i.appB === a.id) ||
                     (i.appA === a.id && i.appB === app.id)
-                  )
+                  ),
               );
             }
             OL.persist();
             renderAppModalIntegrations(
               getModalLayer().querySelector("#appIntPills"),
-              app
+              app,
             );
             renderIntegrationsGrid();
             renderList();
@@ -1274,7 +1989,6 @@ OL.utils = {
     const intWrap = layer.querySelector("#appIntPills");
     const intAddBtn = layer.querySelector("#appIntAddBtn");
 
-    // Name
     if (nameEl) {
       nameEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -1291,7 +2005,6 @@ OL.utils = {
       });
     }
 
-    // Icon
     if (iconBtn) {
       iconBtn.onclick = (e) => {
         e.stopPropagation();
@@ -1302,7 +2015,6 @@ OL.utils = {
       };
     }
 
-    // Notes
     function renderNotes() {
       notesDisplay.textContent =
         (app.notes || "").trim() || "Click Edit to add notes…";
@@ -1334,19 +2046,15 @@ OL.utils = {
       };
     }
 
-    // Functions assign
     renderAppModalFunctionPills(app);
 
     if (fnAssignBtn) {
-      fnAssignBtn.onclick = () => openAppFunctionAssignUI(app);
+      fnAssignBtn.onclick = (e) => {
+        e.stopPropagation();
+        openAppFunctionAssignUI(app);
+      };
     }
 
-    fnAssignBtn.onclick = (e) => {
-      e.stopPropagation();
-      openAppFunctionAssignUI(app);
-    };
-
-    // Datapoints
     if (!app.datapointMappings) app.datapointMappings = [];
     renderDatapoints(dpWrap, app);
 
@@ -1355,32 +2063,26 @@ OL.utils = {
         app.datapointMappings.push({
           datapointId: null,
           inbound: "",
-          outbound: ""
+          outbound: "",
         });
         OL.persist();
         renderDatapoints(dpWrap, app);
       };
     }
 
-    // Integrations
     renderAppModalIntegrations(intWrap, app);
 
     if (intAddBtn) {
-      intAddBtn.onclick = () => openModalIntegrationSelectUI(app);
+      intAddBtn.onclick = (e) => {
+        e.stopPropagation();
+        openModalIntegrationSelectUI(app);
+      };
     }
-
-    intAddBtn.onclick = (e) => {
-      e.stopPropagation();
-      openModalIntegrationSelectUI(app);
-    };
-
   }
 
   function openAppFunctionAssignUI(app) {
     const layer = getModalLayer();
     if (!layer) return;
-    const modal = layer.querySelector(".modal-box");
-    if (!modal) return;
     const container = layer.querySelector("#appFnPills");
     if (!container) return;
 
@@ -1426,7 +2128,6 @@ OL.utils = {
 
               app.functions.push({ fnId: fn.id, status });
 
-              // CRITICAL: also reflect on function-side view
               OL.persist();
               renderFunctionModalPills(fn);
               renderAppModalFunctionPills(app);
@@ -1434,11 +2135,12 @@ OL.utils = {
               renderFunctionsGrid();
             } else {
               OL.unlinkFunctionAndApp(app.id, fn.id);
+              OL.persist();
+              renderFunctionModalPills(fn);
+              renderAppModalFunctionPills(app);
+              renderAppsGrid();
+              renderFunctionsGrid();
             }
-            OL.persist();
-            renderAppModalFunctionPills(app);
-            renderAppsGrid();
-            renderFunctionsGrid();
           };
 
           row.appendChild(cb);
@@ -1477,7 +2179,7 @@ OL.utils = {
         <div>
           <label class="modal-section-label">Notes</label>
           <textarea id="fnNotes" class="modal-textarea">${esc(
-            fn.notes || ""
+            fn.notes || "",
           )}</textarea>
         </div>
         <div>
@@ -1506,7 +2208,9 @@ OL.utils = {
     const links = OL.functionAssignments(fn.id);
     links.sort((a, b) => {
       const order = { primary: 0, evaluating: 1, available: 2 };
-      return order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)];
+      return (
+        order[normalizeStatus(a.status)] - order[normalizeStatus(b.status)]
+      );
     });
     if (!links.length) {
       box.innerHTML = `<span class="pill muted">No apps mapped</span>`;
@@ -1571,20 +2275,18 @@ OL.utils = {
         debounce(() => {
           fn.notes = notesEl.value;
           OL.persist();
-        }, 200)
+        }, 200),
       );
     }
 
     renderFunctionModalPills(fn);
 
     if (assignBtn) {
-      assignBtn.onclick = () => openFunctionAppAssignUI(fn);
+      assignBtn.onclick = (e) => {
+        e.stopPropagation();
+        openFunctionAppAssignUI(fn);
+      };
     }
-
-    assignBtn.onclick = (e) => {
-      e.stopPropagation();
-      openFunctionAppAssignUI(fn);
-    };
   }
 
   function openFunctionAppAssignUI(fn) {
@@ -1628,7 +2330,8 @@ OL.utils = {
             if (cb.checked) {
               app.functions = app.functions || [];
 
-              const isFirstForThisFunction = OL.functionAssignments(fn.id).length === 0;
+              const isFirstForThisFunction =
+                OL.functionAssignments(fn.id).length === 0;
               const status = isFirstForThisFunction ? "primary" : "available";
 
               app.functions.push({ fnId: fn.id, status });
@@ -1640,11 +2343,12 @@ OL.utils = {
               renderFunctionsGrid();
             } else {
               OL.unlinkFunctionAndApp(app.id, fn.id);
+              OL.persist();
+              renderFunctionModalPills(fn);
+              renderAppModalFunctionPills(app);
+              renderAppsGrid();
+              renderFunctionsGrid();
             }
-            OL.persist();
-            renderFunctionModalPills(fn);
-            renderAppsGrid();
-            renderFunctionsGrid();
           };
 
           row.appendChild(cb);
@@ -1683,7 +2387,7 @@ OL.utils = {
     const exists = state.integrations.find(
       (i) =>
         (i.appA === appId && i.appB === target.id) ||
-        (i.appA === target.id && i.appB === appId)
+        (i.appA === target.id && i.appB === appId),
     );
     if (exists) {
       alert("Integration already exists.");
@@ -1696,24 +2400,254 @@ OL.utils = {
       appB: target.id,
       type: "zapier",
       direction: "AtoB",
+      capabilities: [],
     });
 
     OL.persist();
     OL.refreshAllUI();
   };
 
+  // ------------------------------------------------------------
+  // INTEGRATION MODAL (capabilities mapping)
+  // ------------------------------------------------------------
+  OL.openIntegrationModal = function (intId) {
+    const int = state.integrations.find((i) => i.id === intId);
+    if (!int) return;
+
+    const appA = findAppById(int.appA);
+    const appB = findAppById(int.appB);
+
+    openModal(renderIntegrationModalHTML(int, appA, appB));
+    bindIntegrationModal(int);
+  };
+
+  function renderIntegrationModalHTML(int, appA, appB) {
+    const dirLabel =
+      int.type === "both"
+        ? "Direct & Zapier"
+        : int.type === "direct"
+          ? "Direct"
+          : int.type === "zapier"
+            ? "Zapier"
+            : "Unspecified";
+
+    return `
+      <div class="modal-head">
+        <div class="modal-title-text">
+          ${esc(appA?.name || "")} ⇄ ${esc(appB?.name || "")}
+        </div>
+        <div class="spacer"></div>
+        <span class="pill integr">${esc(dirLabel)}</span>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label class="modal-section-label">Capabilities</label>
+          <div id="intCapList">
+            ${renderIntegrationCapabilitiesHTML(int)}
+          </div>
+          <button class="btn small soft" id="intAddCapability">+ Add Capability</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderIntegrationCapabilitiesHTML(int) {
+    const refs = (int.capabilities || [])
+      .map((ref) => {
+        const cap = state.capabilities.find((c) => c.id === ref.capabilityId);
+        return cap ? { ref, cap } : null;
+      })
+      .filter(Boolean);
+
+    if (!refs.length) {
+      return `<div class="empty-hint">No capabilities linked to this integration yet.</div>`;
+    }
+
+    const groups = { trigger: [], search: [], action: [] };
+    refs.forEach(({ ref, cap }) => {
+      const type = cap.type || "action";
+      if (!groups[type]) groups[type] = [];
+      groups[type].push({ ref, cap });
+    });
+
+    const typeOrder = ["trigger", "search", "action"];
+    const labels = {
+      trigger: "Triggers",
+      search: "Searches",
+      action: "Actions",
+    };
+
+    return typeOrder
+      .map((type) => {
+        const items = groups[type];
+        if (!items || !items.length) return "";
+        return `
+          <div class="modal-subsection">
+            <div class="modal-section-label">${labels[type]}</div>
+            <div class="int-cap-table">
+              ${items
+                .map(({ ref, cap }) => {
+                  const it = cap.integrationType || "zapier";
+                  const canon = cap.canonicalId
+                    ? findCanonicalById(cap.canonicalId)
+                    : null;
+                  const canonicalLabel =
+                    canon?.key ||
+                    cap.canonical ||
+                    cap.name ||
+                    "(Unnamed capability)";
+                  return `
+                    <div class="int-cap-row" data-cap-ref-id="${ref.id}">
+                      <span class="dot-${esc(it)}"></span>
+                      <span class="int-cap-canonical">${esc(
+                        canonicalLabel,
+                      )}</span>
+                      <input
+                        class="int-cap-label"
+                        placeholder="App capability name…"
+                        value="${esc(ref.appLabel || "")}"
+                      >
+                      <div class="card-close int-cap-delete">×</div>
+                    </div>
+                  `;
+                })
+                .join("")}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function bindIntegrationModal(int) {
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    const listEl = layer.querySelector("#intCapList");
+    const addBtn = layer.querySelector("#intAddCapability");
+
+    function rerenderList() {
+      listEl.innerHTML = renderIntegrationCapabilitiesHTML(int);
+      wireRows();
+      updateIntegrationTypeFromCapabilities(int);
+      OL.persist();
+      renderIntegrationsGrid();
+    }
+
+    function wireRows() {
+      listEl.querySelectorAll(".int-cap-row").forEach((row) => {
+        const refId = row.getAttribute("data-cap-ref-id");
+        const input = row.querySelector(".int-cap-label");
+        const del = row.querySelector(".int-cap-delete");
+        if (!input || !del) return;
+
+        input.oninput = debounce(() => {
+          const ref = (int.capabilities || []).find((r) => r.id === refId);
+          if (!ref) return;
+          ref.appLabel = input.value;
+          OL.persist();
+        }, 200);
+
+        del.onclick = (e) => {
+          e.stopPropagation();
+          if (!confirm("Remove this capability from the integration?")) return;
+          int.capabilities = (int.capabilities || []).filter(
+            (r) => r.id !== refId,
+          );
+          rerenderList();
+        };
+      });
+    }
+
+    wireRows();
+
+    if (addBtn) {
+      addBtn.onclick = (e) => {
+        e.stopPropagation();
+        openIntegrationAddCapabilityUI(int, rerenderList);
+      };
+    }
+  }
+
+  function openIntegrationAddCapabilityUI(int, onDone) {
+    const layer = getModalLayer();
+    if (!layer) return;
+    const existing = layer.querySelector("#intCapAddRow");
+    if (existing) existing.remove();
+
+    const container = layer.querySelector(".modal-body");
+    if (!container) return;
+
+    const row = document.createElement("div");
+    row.id = "intCapAddRow";
+    row.className = "int-cap-add-row";
+    row.innerHTML = `
+      <select id="intCapCanonicalSelect" class="modal-textarea" style="min-height:auto;height:auto;">
+        <option value="">Select canonical capability…</option>
+          ${state.capabilities
+            .slice()
+            .sort((a, b) =>
+              canonicalLabelForCap(a)
+                .toLowerCase()
+                .localeCompare(canonicalLabelForCap(b).toLowerCase()),
+            )
+            .map((cap) => {
+              const label = canonicalLabelForCap(cap) || "(Unnamed capability)";
+              const appName = findAppById(cap.appId)?.name || "";
+              return `
+          <option value="${cap.id}">
+            ${esc(label)} — ${esc(appName)}
+          </option>`;
+            })
+            .join("")}
+      </select>
+      <input id="intCapAppLabel" class="modal-textarea" style="min-height:auto;height:auto;"
+        placeholder="App capability name (e.g. 'New Contact in App')">
+      <button id="intCapSave" class="btn small">Add</button>
+    `;
+
+    container.appendChild(row);
+
+    const select = row.querySelector("#intCapCanonicalSelect");
+    const labelInput = row.querySelector("#intCapAppLabel");
+    const saveBtn = row.querySelector("#intCapSave");
+
+    if (saveBtn) {
+      saveBtn.onclick = (e) => {
+        e.stopPropagation();
+        const capId = select.value;
+        const label = (labelInput.value || "").trim();
+        if (!capId) {
+          alert("Select a canonical capability first.");
+          return;
+        }
+        int.capabilities = int.capabilities || [];
+        int.capabilities.push({
+          id: uid(),
+          capabilityId: capId,
+          appLabel: label,
+        });
+        updateIntegrationTypeFromCapabilities(int);
+        OL.persist();
+        row.remove();
+        if (typeof onDone === "function") onDone();
+      };
+    }
+  }
+
   //-------------------------------------------------------------
   // DATAPOINT MODAL
   //-------------------------------------------------------------
   function getAppMappingsForDatapoint(dpId) {
     const rows = [];
-    state.apps.forEach(app => {
-      (app.datapointMappings || []).forEach(m => {
+    state.apps.forEach((app) => {
+      (app.datapointMappings || []).forEach((m) => {
         if (m.datapointId === dpId) {
           rows.push({
             app,
             inbound: m.inbound || "",
-            outbound: m.outbound || ""
+            outbound: m.outbound || "",
           });
         }
       });
@@ -1723,7 +2657,8 @@ OL.utils = {
 
   function renderDatapointModalTable(dp) {
     const rows = getAppMappingsForDatapoint(dp.id);
-    if (!rows.length) return `<div class="empty-hint">No mappings in any apps.</div>`;
+    if (!rows.length)
+      return `<div class="empty-hint">No mappings in any apps.</div>`;
 
     return `
       <div class="dp-table">
@@ -1732,19 +2667,23 @@ OL.utils = {
           <span>Inbound</span>
           <span>Outbound</span>
         </div>
-        ${rows.map(r => `
+        ${rows
+          .map(
+            (r) => `
           <div class="dp-table-row">
             <span class="dp-link-app" data-app-id="${r.app.id}">${esc(r.app.name)}</span>
             <span>${esc(r.inbound)}</span>
             <span>${esc(r.outbound)}</span>
           </div>
-        `).join("")}
+        `,
+          )
+          .join("")}
       </div>
     `;
   }
 
   OL.openDatapointModal = function (dpId) {
-    const dp = state.datapoints.find(d => d.id === dpId);
+    const dp = state.datapoints.find((d) => d.id === dpId);
     if (!dp) return;
 
     openModal(`
@@ -1780,13 +2719,345 @@ OL.utils = {
       OL.persist();
     }, 200);
 
-    layer.querySelectorAll(".dp-link-app").forEach(el => {
+    layer.querySelectorAll(".dp-link-app").forEach((el) => {
       el.onclick = (e) => {
         e.stopPropagation();
         OL.closeModal();
         OL.openAppModal(el.getAttribute("data-app-id"));
       };
     });
+  };
+
+  // ------------------------------------------------------------
+  // CAPABILITY MODAL
+  // ------------------------------------------------------------
+  OL.openCapabilityModal = function (capId) {
+    const cap = state.capabilities.find((c) => c.id === capId);
+    if (!cap) return;
+
+    openModal(renderCapabilityModalHTML(cap));
+    bindCapabilityModal(cap);
+  };
+
+  function renderCapabilityModalHTML(cap) {
+    const appOptions = state.apps
+      .map(
+        (a) => `
+          <option value="${a.id}" ${a.id === cap.appId ? "selected" : ""}>
+            ${esc(a.name || "")}
+          </option>`,
+      )
+      .join("");
+
+    const type = cap.type || "trigger";
+    const integrationType = cap.integrationType || "zapier";
+    const source = cap.source || "manual";
+
+    return `
+      <div class="modal-head">
+        <div class="modal-title-text">
+          ${esc(cap.name || "Capability")}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+      <div class="modal-body">
+
+        <div>
+          <label class="modal-section-label">Name (App Label)</label>
+          <input
+            id="capName"
+            class="modal-textarea"
+            style="min-height:auto;height:auto;"
+            value="${esc(cap.name || "")}"
+          >
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-section-label">Canonical Key</label>
+          <div class="canon-wrapper">
+            <input id="canonInput" class="canon-input" placeholder="Search or add…" autocomplete="off">
+
+            <div id="canonDropdown" class="canon-dropdown hidden">
+              <input id="canonSearch" class="canon-search" placeholder="Search…" autocomplete="off">
+              <div id="canonOptions" class="canon-options"></div>
+              <div id="canonAddNew" class="canon-add">+ Add New</div>
+            </div>
+          </div>
+          <div class="modal-notes-display muted">
+            Canonical capabilities are app-agnostic definitions like “New Contact Created” or “Meeting Scheduled”.
+          </div>
+        </div>
+
+        <div class="modal-row">
+          <div style="flex:1;min-width:0;">
+            <label class="modal-section-label">Integration Type</label>
+            <select
+              id="capIntegrationType"
+              class="modal-textarea"
+              style="min-height:auto;height:auto;"
+            >
+              <option value="direct" ${
+                integrationType === "direct" ? "selected" : ""
+              }>Direct</option>
+              <option value="zapier" ${
+                integrationType === "zapier" ? "selected" : ""
+              }>Zapier</option>
+              <option value="both" ${
+                integrationType === "both" ? "selected" : ""
+              }>Both</option>
+            </select>
+          </div>
+
+          <div style="flex:1;min-width:0;">
+            <label class="modal-section-label">Type</label>
+            <select
+              id="capType"
+              class="modal-textarea"
+              style="min-height:auto;height:auto;"
+            >
+              <option value="trigger" ${
+                type === "trigger" ? "selected" : ""
+              }>Trigger</option>
+              <option value="search" ${
+                type === "search" ? "selected" : ""
+              }>Search</option>
+              <option value="action" ${
+                type === "action" ? "selected" : ""
+              }>Action</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="modal-section-label">App</label>
+          <select
+            id="capApp"
+            class="modal-textarea"
+            style="min-height:auto;height:auto;"
+          >
+            <option value="">Unassigned</option>
+            ${appOptions}
+          </select>
+        </div>
+
+        <div>
+          <label class="modal-section-label">Notes</label>
+          <textarea id="capNotes" class="modal-textarea">${esc(
+            cap.notes || "",
+          )}</textarea>
+        </div>
+
+        <div>
+          <label class="modal-section-label">Source</label>
+          <div class="modal-notes-display muted">
+            ${esc(source)}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindCapabilityModal(cap) {
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    const nameEl = layer.querySelector("#capName");
+    const appEl = layer.querySelector("#capApp");
+    const typeEl = layer.querySelector("#capType");
+    const integEl = layer.querySelector("#capIntegrationType");
+    const notesEl = layer.querySelector("#capNotes");
+
+    const canonInput = layer.querySelector("#canonInput");
+    const canonDropdown = layer.querySelector("#canonDropdown");
+    const canonSearch = layer.querySelector("#canonSearch");
+    const canonOptions = layer.querySelector("#canonOptions");
+    const canonAddNew = layer.querySelector("#canonAddNew");
+
+    ensureCanonicalForCap(cap);
+
+    function syncCanonInput() {
+      if (canonInput) {
+        canonInput.value = canonicalLabelForCap(cap);
+      }
+    }
+    syncCanonInput();
+
+    function renderCanonOptions(filterText) {
+      if (!canonOptions) return;
+      const q = (filterText || "").toLowerCase();
+      const list = (state.canonicalCapabilities || [])
+        .slice()
+        .filter((c) => (c.key || "").toLowerCase().includes(q))
+        .sort((a, b) =>
+          (a.key || "").toLowerCase().localeCompare((b.key || "").toLowerCase()),
+        );
+
+      canonOptions.innerHTML = list.length
+        ? list
+            .map(
+              (c) =>
+                `<div class="canon-option" data-id="${c.id}">${esc(
+                  c.key || "",
+                )}</div>`,
+            )
+            .join("")
+        : `<div class="canon-option muted">(No matches)</div>`;
+
+      canonOptions
+        .querySelectorAll(".canon-option[data-id]")
+        .forEach((opt) => {
+          opt.onclick = (e) => {
+            e.stopPropagation();
+            const id = opt.getAttribute("data-id");
+            const canon = findCanonicalById(id);
+            if (!canon) return;
+            cap.canonicalId = canon.id;
+            cap.canonical = canon.key;
+            syncCanonInput();
+            hideCanonDropdown();
+            OL.persist();
+            renderCapabilitiesGrid();
+          };
+        });
+    }
+
+    function showCanonDropdown() {
+      if (!canonDropdown) return;
+      canonDropdown.classList.remove("hidden");
+      renderCanonOptions(canonSearch ? canonSearch.value : "");
+      document.addEventListener("click", outsideCanonHandler, true);
+    }
+
+    function hideCanonDropdown() {
+      if (!canonDropdown) return;
+      canonDropdown.classList.add("hidden");
+      document.removeEventListener("click", outsideCanonHandler, true);
+    }
+
+    function outsideCanonHandler(evt) {
+      if (!layer.contains(evt.target)) {
+        hideCanonDropdown();
+      }
+    }
+
+    if (canonInput && canonDropdown && canonSearch) {
+      canonInput.addEventListener("click", (e) => {
+        e.stopPropagation();
+        showCanonDropdown();
+      });
+      canonInput.addEventListener("focus", (e) => {
+        e.stopPropagation();
+        showCanonDropdown();
+      });
+      canonInput.addEventListener("input", () => {
+        if (canonSearch) canonSearch.value = canonInput.value;
+        renderCanonOptions(canonInput.value);
+      });
+
+      canonSearch.addEventListener("input", (e) => {
+        renderCanonOptions(e.target.value);
+      });
+
+      if (canonAddNew) {
+        canonAddNew.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const raw =
+            (canonSearch && canonSearch.value.trim()) ||
+            (canonInput && canonInput.value.trim()) ||
+            "";
+          if (!raw) return;
+
+          let canon = findCanonicalByKey(raw);
+          if (!canon) {
+            canon = {
+              id: uid(),
+              key: raw,
+              type:
+                (typeEl && typeEl.value) ||
+                cap.type ||
+                "trigger",
+              notes: "",
+              group: "",
+            };
+            state.canonicalCapabilities =
+              state.canonicalCapabilities || [];
+            state.canonicalCapabilities.push(canon);
+          }
+
+          cap.canonicalId = canon.id;
+          cap.canonical = canon.key;
+          syncCanonInput();
+          hideCanonDropdown();
+          OL.persist();
+          renderCapabilitiesGrid();
+        };
+      }
+
+      canonDropdown.addEventListener("click", (e) =>
+        e.stopPropagation(),
+      );
+    }
+
+    if (nameEl) {
+      nameEl.addEventListener(
+        "input",
+        debounce(() => {
+          cap.name = nameEl.value.trim();
+          OL.persist();
+          renderCapabilitiesGrid();
+        }, 200),
+      );
+    }
+
+    if (appEl) {
+      appEl.onchange = () => {
+        cap.appId = appEl.value || null;
+        OL.persist();
+        renderCapabilitiesGrid();
+      };
+    }
+
+    if (typeEl) {
+      typeEl.onchange = () => {
+        cap.type = typeEl.value;
+        // keep canonical type roughly aligned if we just created it
+        OL.persist();
+        renderCapabilitiesGrid();
+      };
+    }
+
+    if (integEl) {
+      integEl.onchange = () => {
+        cap.integrationType = integEl.value;
+        syncZapierIntegrationsFromCapabilities();
+        OL.persist();
+        renderCapabilitiesGrid();
+      };
+    }
+
+    if (notesEl) {
+      notesEl.addEventListener(
+        "input",
+        debounce(() => {
+          cap.notes = notesEl.value;
+          OL.persist();
+          renderCapabilitiesGrid();
+        }, 200),
+      );
+    }
+  }
+
+  OL.deleteCapability = function (capId) {
+    const cap = state.capabilities.find((c) => c.id === capId);
+    if (!cap) return;
+    if (!confirm(`Delete "${cap.name || "this capability"}"?`)) return;
+
+    state.capabilities = state.capabilities.filter((c) => c.id !== capId);
+    syncZapierIntegrationsFromCapabilities();
+    OL.persist();
+    OL.refreshAllUI();
   };
 
   // ------------------------------------------------------------
@@ -1799,7 +3070,7 @@ OL.utils = {
 
     state.apps = state.apps.filter((a) => a.id !== appId);
     state.integrations = state.integrations.filter(
-      (i) => i.appA !== appId && i.appB !== appId
+      (i) => i.appA !== appId && i.appB !== appId,
     );
 
     OL.persist();
@@ -1813,9 +3084,7 @@ OL.utils = {
 
     state.functions = state.functions.filter((f) => f.id !== fnId);
     state.apps.forEach((app) => {
-      app.functions = (app.functions || []).filter(
-        (ref) => ref.fnId !== fnId
-      );
+      app.functions = (app.functions || []).filter((ref) => ref.fnId !== fnId);
     });
 
     OL.persist();
@@ -1833,7 +3102,6 @@ OL.utils = {
     state.integrations = state.integrations.filter((i) => i.id !== intId);
     OL.persist();
 
-    // Update integrations grid and app modal if open
     renderIntegrationsGrid();
 
     const layer = getModalLayer();
@@ -1847,14 +3115,13 @@ OL.utils = {
     }
   };
 
-  OL.deleteDatapoint = function(dpId) {
+  OL.deleteDatapoint = function (dpId) {
     if (!confirm("Delete this datapoint?")) return;
-    state.datapoints = state.datapoints.filter(d => d.id !== dpId);
+    state.datapoints = state.datapoints.filter((d) => d.id !== dpId);
 
-    // remove mappings that reference it
-    state.apps.forEach(app => {
+    state.apps.forEach((app) => {
       app.datapointMappings = (app.datapointMappings || []).filter(
-        m => m.datapointId !== dpId
+        (m) => m.datapointId !== dpId,
       );
     });
 
@@ -1884,11 +3151,9 @@ OL.utils = {
     const app = findAppById(appId);
     const fn = findFunctionById(fnId);
 
-    // Update cards
     renderAppsGrid();
     renderFunctionsGrid();
 
-    // Update modals if open
     if (app) renderAppModalFunctionPills(app);
     if (fn) renderFunctionModalPills(fn);
   };
@@ -1914,11 +3179,9 @@ OL.utils = {
 
     const fn = findFunctionById(fnId);
 
-    // Update cards
     renderAppsGrid();
     renderFunctionsGrid();
 
-    // Update modals if open
     if (app) renderAppModalFunctionPills(app);
     if (fn) renderFunctionModalPills(fn);
   };
@@ -2000,7 +3263,6 @@ OL.utils = {
       if (e.target === overlay) closeIconPicker();
     };
 
-    // emoji
     picker.querySelectorAll(".picker-option.emoji").forEach((el) => {
       el.onclick = (ev) => {
         ev.stopPropagation();
@@ -2011,7 +3273,6 @@ OL.utils = {
       };
     });
 
-    // reset
     picker.querySelector("#autoIconReset").onclick = (ev) => {
       ev.stopPropagation();
       obj.icon = null;
@@ -2020,7 +3281,6 @@ OL.utils = {
       if (onDone) onDone();
     };
 
-    // URL
     picker.querySelector("#iconUrlApply").onclick = (ev) => {
       ev.stopPropagation();
       const url = picker.querySelector("#iconUrlInput").value.trim();
@@ -2031,7 +3291,6 @@ OL.utils = {
       if (onDone) onDone();
     };
 
-    // upload
     picker.querySelector("#uploadIconInput").onchange = async (ev) => {
       ev.stopPropagation();
       const file = ev.target.files[0];
@@ -2043,7 +3302,6 @@ OL.utils = {
       if (onDone) onDone();
     };
 
-    // remove
     picker.querySelector("#removeIconBtn").onclick = (ev) => {
       ev.stopPropagation();
       obj.icon = null;
@@ -2075,54 +3333,58 @@ OL.utils = {
     const layer = document.getElementById("modal-layer");
     if (!layer || layer.style.display !== "flex") return;
 
-    // close function dropdown
     const fnList = layer.querySelector("#appFnChecklist");
     if (fnList && !fnList.contains(e.target)) fnList.remove();
 
-    // close app dropdown
     const appList = layer.querySelector("#fnAppChecklist");
     if (appList && !appList.contains(e.target)) appList.remove();
 
-    // close integration dropdown
     const intList = layer.querySelector("#appIntChecklist");
     if (intList && !intList.contains(e.target)) intList.remove();
   });
 
   document.addEventListener("click", (e) => {
     const inDropdown = e.target.closest(".dp-dropdown");
-    const inTrigger  = e.target.closest(".dp-select");
-    if (inDropdown || inTrigger) return; // let the dropdown work
-
+    const inTrigger = e.target.closest(".dp-select");
+    if (inDropdown || inTrigger) return;
     closeAllDatapointDropdowns();
   });
 
   function handleRoute() {
-    const hash = location.hash;
+    const hash = location.hash || "";
 
-    const showAppsSet =
-      hash.startsWith("#/apps") ||
-      hash.startsWith("#/functions") ||
-      hash.startsWith("#/integrations") ||
-      hash === "" ||
-      hash === "#";
+    const isDatapoints = hash.startsWith("#/settings/datapoints");
+    const isCanonicalCaps = hash.startsWith("#/settings/canonical-capabilities");
+    const isCapabilities = hash.startsWith("#/triggers-actions");
 
-    document.getElementById("section-apps").style.display =
-      showAppsSet ? "block" : "none";
-    document.getElementById("section-functions").style.display =
-      showAppsSet ? "block" : "none";
-    document.getElementById("section-integrations").style.display =
-      showAppsSet ? "block" : "none";
+    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities;
 
-    document.getElementById("section-datapoints").style.display =
-      hash.startsWith("#/settings/datapoints") ? "block" : "none";
+    const appsSection = document.getElementById("section-apps");
+    const fnsSection = document.getElementById("section-functions");
+    const intsSection = document.getElementById("section-integrations");
+    const capsSection = document.getElementById("section-capabilities");
+    const dpsSection = document.getElementById("section-datapoints");
+    const canonSection = document.getElementById("section-canonical-caps");
+
+    if (appsSection) appsSection.style.display = showAppsSet ? "block" : "none";
+    if (fnsSection) fnsSection.style.display = showAppsSet ? "block" : "none";
+    if (intsSection) intsSection.style.display = showAppsSet ? "block" : "none";
+
+    if (capsSection)
+      capsSection.style.display = isCapabilities ? "block" : "none";
+    if (dpsSection) dpsSection.style.display = isDatapoints ? "block" : "none";
+    if (canonSection)
+      canonSection.style.display = isCanonicalCaps ? "block" : "none";
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     buildLayout();
+    wireCapabilityViewToggle();
+    migrateCanonicalFromLegacy();
+    syncZapierIntegrationsFromCapabilities();
     OL.refreshAllUI();
     handleRoute();
   });
 
   window.addEventListener("hashchange", handleRoute);
-
 })();
