@@ -959,40 +959,83 @@
     });
   }
 
-  //-------------------------------------------------------------
-  // DATAPOINTS GRID
-  //-------------------------------------------------------------
+  // ------------------------------------------------------------
+  // DATAPOINTS GRID (clean + hardened)
+  // ------------------------------------------------------------
   function renderDatapointsGrid() {
     const grid = document.getElementById("datapointsGrid");
     if (!grid) return;
     grid.innerHTML = "";
 
-    [...state.datapoints]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .forEach((dp) => {
-        grid.insertAdjacentHTML(
-          "beforeend",
-          `
-        <div class="card" data-dp-id="${dp.id}" onclick="OL.openDatapointModal('${dp.id}')">
+    const data = Array.isArray(state.datapoints) ? state.datapoints : [];
+    if (!data.length) {
+      grid.innerHTML = `<div class="empty-hint">No datapoints yet.</div>`;
+      return;
+    }
+
+    // Safe normalization util
+    const norm = (v) => (typeof v === "string" ? v : v ? String(v) : "");
+
+    // Sort safely
+    const sorted = [...data].sort((a, b) => {
+      const aKey = norm(a.fieldName).toLowerCase();
+      const bKey = norm(b.fieldName).toLowerCase();
+      return aKey.localeCompare(bKey);
+    });
+
+    sorted.forEach((dp) => {
+      const app = findAppById(dp.appId);
+      const appName = norm(app?.name);
+      const field = norm(dp.fieldName);
+
+      const cardHtml = `
+        <div class="card datapoint-card" data-dp-id="${dp.id}">
           <div class="card-header">
             <div class="card-header-left">
-              <div class="card-title">${esc(dp.name)}</div>
+              <div class="card-icon">${app ? OL.iconHTML(app) : ""}</div>
+              <div class="card-title">${field || "(Unnamed Field)"}</div>
             </div>
-            <div
-              class="card-close"
-              onclick="event.stopPropagation(); OL.deleteDatapoint('${dp.id}')"
-            >×</div>
+            <div class="card-close"
+                onclick="event.stopPropagation(); OL.deleteDatapoint('${dp.id}')">×</div>
           </div>
+
           <div class="card-body">
             <div class="card-section">
-              <div class="card-section-title">Description</div>
-              <div class="card-section-content">${esc(dp.description || "")}</div>
+              <div class="card-section-title">Application</div>
+              <div class="card-section-content">
+                ${appName || "(Unknown App)"}
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Inbound Mapping</div>
+              <div class="card-section-content single-line-text">
+                ${norm(dp.inbound) || "<span class='muted'>None</span>"}
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Outbound Mapping</div>
+              <div class="card-section-content single-line-text">
+                ${norm(dp.outbound) || "<span class='muted'>None</span>"}
+              </div>
             </div>
           </div>
         </div>
-      `,
-        );
-      });
+      `;
+
+      grid.insertAdjacentHTML("beforeend", cardHtml);
+    });
+
+    // Wire click → modal
+    grid.querySelectorAll("[data-dp-id]").forEach((el) => {
+      el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = el.getAttribute("data-dp-id");
+        if (id) OL.openDatapointModal(id);
+      };
+    });
   }
 
   // ------------------------------------------------------------
