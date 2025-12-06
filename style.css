@@ -914,7 +914,7 @@ body {
   color: var(--text);
 }
 
-.canon-dropdown {
+.canon-dropdown, .mapping-dropdown {
   position: absolute;
   top: 36px;
   left: 0;
@@ -934,7 +934,7 @@ body {
   display: none;
 }
 
-.canon-search {
+.canon-search, .mapping-search {
   width: 100%;
   font-size: 12px;
   padding: 4px 6px;
@@ -944,14 +944,14 @@ body {
   color: var(--text);
 }
 
-.canon-options {
+.canon-options, .mapping-options {
   max-height: 140px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
-.canon-option {
+.canon-option, .mapping-option {
   padding: 5px 6px;
   cursor: pointer;
   font-size: 12px;
@@ -973,4 +973,13 @@ body {
 
 .canon-add:hover {
   background: rgba(56,189,248,0.08);
+}
+
+.mapping-multi-label.checked {
+  font-weight: 600;
+  opacity: 1;
+}
+
+.mapping-multi-label {
+  opacity: 0.75;
 }
