@@ -386,7 +386,7 @@
     return generate();
   })();
 
-  const defaultFolderHierarchies = (() => {
+  const defaultFolderHierarchy = (() => {
     // Investment Mgmt Client Hierarchy
     const clientRootId = uid();
     const clientFolderId = uid();
@@ -489,6 +489,20 @@
     ];
   })();
 
+  const defaultNamingConventions = {
+    household: {
+      single: "{primaryLast}, {primaryFirst}",
+      jointSame: "{sharedLast}, {primaryFirst} & {partnerFirst}",
+      jointDiff: "{primaryLast}, {primaryFirst} + {partnerLast}, {partnerFirst}",
+      unknown: "{primaryLast}, {primaryFirst}", // A: fallback behaves like single
+    },
+    lifecycle: {
+      prospect: "{household} – Prospect",
+      active: "{household}",
+      former: "{household} – Former",
+      annual: "{household} – Annual Review {year}",
+    },
+  };
 
   // ------------------------------------------------------------
   // STATE
@@ -508,9 +522,8 @@
     teamRoles: OL.store.get("teamRoles", defaultTeamRoles),
     segmentCategories: OL.store.get("segmentCategories", defaultSegmentCategories.categories),
     segments: OL.store.get("segments", defaultSegmentCategories.defaultSegments),
-    folderHierarchies: OL.store.get("folderHierarchies", defaultFolderHierarchies),
-
-
+    folderHierarchy: OL.store.get("folderHierarchy", defaultFolderHierarchy),
+    namingConventions: OL.store.get("namingConventions", defaultNamingConventions),
   };
 
   // Seed canonical library from existing capabilities if empty (legacy)
@@ -555,7 +568,8 @@
     OL.store.set("teamRoles", state.teamRoles);
     OL.store.set("segmentCategories", state.segmentCategories);
     OL.store.set("segments", state.segments);
-    OL.store.set("folderHierarchies", state.folderHierarchies);
+    OL.store.set("folderHierarchy", state.folderHierarchy);
+    OL.store.set("namingConventions", state.namingConventions);
   }, 200);
 
   // ------------------------------------------------------------
@@ -711,7 +725,8 @@
     renderTeamRolesGrid();
     renderSegmentCategoriesGrid();
     renderSegmentsGrid();
-    renderFolderHierarchiesGrid();
+    renderFolderHierarchyGrid();
+    renderNamingConventions();
   };
 
   // ------------------------------------------------------------
@@ -953,16 +968,28 @@
               </div>
             </section>
 
-            <section class="section" id="section-folder-hierarchies">
+            <section class="section" id="section-folder-hierarchy">
               <div class="section-header">
-                <h2>Folder Hierarchies</h2>
+                <h2>Folder Hierarchy</h2>
                 <div class="spacer"></div>
                 <div class="section-actions">
                   <button class="btn small" id="btnAddFolderHierarchy">+ Add Hierarchy</button>
                 </div>
               </div>
-              <div id="folderHierarchiesGrid" class="cards-grid"></div>
+              <div id="folderHierarchyGrid" class="cards-grid"></div>
             </section>
+
+            <section class="section" id="section-naming-conventions">
+              <div class="section-header">
+                <h2>Naming Conventions</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddNamingConvention">+ Add Naming Convention</button>
+                </div>
+              </div>
+              <div id="namingGrid" class="cards-grid"></div>
+            </section>
+
 
           </main>
         </div>
@@ -2299,7 +2326,7 @@
     });
   }
   // ------------------------------------------------------------
-  // FOLDER HIERARCHIES
+  // FOLDER Hierarchy
   // ------------------------------------------------------------
 
   // helper: children by parent
@@ -2372,16 +2399,16 @@
 
   let folderDragState = null;
 
-  function renderFolderHierarchiesGrid() {
-    const grid = document.getElementById("folderHierarchiesGrid");
+  function renderFolderHierarchyGrid() {
+    const grid = document.getElementById("folderHierarchyGrid");
     if (!grid) return;
 
-    const list = Array.isArray(state.folderHierarchies)
-      ? state.folderHierarchies
+    const list = Array.isArray(state.folderHierarchy)
+      ? state.folderHierarchy
       : [];
 
     if (!list.length) {
-      grid.innerHTML = `<div class="empty-hint">No folder hierarchies defined yet.</div>`;
+      grid.innerHTML = `<div class="empty-hint">No folder hierarchy defined yet.</div>`;
       return;
     }
 
@@ -2434,7 +2461,7 @@
     // wiring
     grid.querySelectorAll(".folder-hierarchy-card").forEach(card => {
       const hierId = card.getAttribute("data-hier-id");
-      const hier = (state.folderHierarchies || []).find(h => h.id === hierId);
+      const hier = (state.folderHierarchy || []).find(h => h.id === hierId);
       if (!hier) return;
 
       const nameEl = card.querySelector("[data-hier-name]");
@@ -2444,7 +2471,7 @@
           if (!newName) return;
           hier.name = newName;
           OL.persist();
-          renderFolderHierarchiesGrid();
+          renderFolderHierarchyGrid();
         });
       }
 
@@ -2469,11 +2496,11 @@
             )
           )
             return;
-          state.folderHierarchies = (state.folderHierarchies || []).filter(
+          state.folderHierarchy = (state.folderHierarchy || []).filter(
             h => h.id !== hierId
           );
           OL.persist();
-          renderFolderHierarchiesGrid();
+          renderFolderHierarchyGrid();
         };
       }
 
@@ -2498,7 +2525,7 @@
             sort: maxSort,
           });
           OL.persist();
-          renderFolderHierarchiesGrid();
+          renderFolderHierarchyGrid();
         };
       }
 
@@ -2522,7 +2549,7 @@
             if (!next || next.trim() === current) return;
             node.name = next.trim();
             OL.persist();
-            renderFolderHierarchiesGrid();
+            renderFolderHierarchyGrid();
           };
         }
 
@@ -2534,7 +2561,7 @@
             if (!next || next.trim() === current) return;
             node.name = next.trim();
             OL.persist();
-            renderFolderHierarchiesGrid();
+            renderFolderHierarchyGrid();
           };
         }
 
@@ -2558,7 +2585,7 @@
               sort: maxSort,
             });
             OL.persist();
-            renderFolderHierarchiesGrid();
+            renderFolderHierarchyGrid();
           };
         }
 
@@ -2573,7 +2600,7 @@
               return;
             deleteFolderNode(hier, node.id);
             OL.persist();
-            renderFolderHierarchiesGrid();
+            renderFolderHierarchyGrid();
           };
         }
 
@@ -2647,9 +2674,144 @@
           });
 
           OL.persist();
-          renderFolderHierarchiesGrid();
+          renderFolderHierarchyGrid();
         });
       });
+    });
+  }
+
+  // ------------------------------------------------------------
+  // NAMING CONVENTIONS
+  // ------------------------------------------------------------
+  function formatNamingPreview(pattern) {
+    const sample = {
+      primaryFirst: "Jane",
+      primaryLast: "Doe",
+      partnerFirst: "Alex",
+      partnerLast: "Smith",
+      sharedLast: "Doe",
+      household: "Doe, Jane & Alex",
+      year: new Date().getFullYear(),
+    };
+
+    return String(pattern || "")
+      .replace(/{primaryFirst}/g, sample.primaryFirst)
+      .replace(/{primaryLast}/g, sample.primaryLast)
+      .replace(/{partnerFirst}/g, sample.partnerFirst)
+      .replace(/{partnerLast}/g, sample.partnerLast)
+      .replace(/{sharedLast}/g, sample.sharedLast)
+      .replace(/{household}/g, sample.household)
+      .replace(/{year}/g, sample.year);
+  }
+
+  function renderNamingConventions() {
+    const grid = document.getElementById("namingGrid");
+    if (!grid) return;
+
+    const nc = state.namingConventions || defaultNamingConventions;
+    if (!state.namingConventions) state.namingConventions = JSON.parse(JSON.stringify(defaultNamingConventions));
+
+    const household = nc.household || {};
+    const lifecycle = nc.lifecycle || {};
+
+    grid.innerHTML = "";
+
+    // Household names card
+    grid.insertAdjacentHTML("beforeend", `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-left">
+            <div class="card-title">Household Name Patterns</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-section">
+            <div class="card-section-title">Patterns</div>
+            <div class="card-section-content naming-fields">
+              ${[
+                { key: "single", label: "Single" },
+                { key: "jointSame", label: "Joint – Same Last Name" },
+                { key: "jointDiff", label: "Joint – Different Last Names" },
+                { key: "unknown", label: "Unknown / Fallback" },
+              ]
+                .map(row => {
+                  const val = household[row.key] || "";
+                  const preview = formatNamingPreview(val);
+                  return `
+                    <div class="naming-row" data-group="household" data-key="${row.key}">
+                      <div class="naming-label">${esc(row.label)}</div>
+                      <input class="naming-input" type="text" value="${esc(val)}"
+                        placeholder="{primaryLast}, {primaryFirst}">
+                      <div class="naming-preview muted">
+                        Example: <span class="naming-preview-text">${esc(preview)}</span>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join("")}
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    // Lifecycle / engagement card
+    grid.insertAdjacentHTML("beforeend", `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-left">
+            <div class="card-title">Lifecycle / Engagement Patterns</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-section">
+            <div class="card-section-title">Patterns</div>
+            <div class="card-section-content naming-fields">
+              ${[
+                { key: "prospect", label: "Prospect" },
+                { key: "active", label: "Active" },
+                { key: "former", label: "Former" },
+                { key: "annual", label: "Annual Review" },
+              ]
+                .map(row => {
+                  const val = lifecycle[row.key] || "";
+                  const preview = formatNamingPreview(val || "{household}");
+                  return `
+                    <div class="naming-row" data-group="lifecycle" data-key="${row.key}">
+                      <div class="naming-label">${esc(row.label)}</div>
+                      <input class="naming-input" type="text" value="${esc(val)}"
+                        placeholder="{household} – ${esc(row.label)}{${row.key === "annual" ? "year" : ""}}">
+                      <div class="naming-preview muted">
+                        Example: <span class="naming-preview-text">${esc(preview)}</span>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join("")}
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    // Wire inputs
+    grid.querySelectorAll(".naming-row").forEach(row => {
+      const group = row.getAttribute("data-group");
+      const key = row.getAttribute("data-key");
+      const input = row.querySelector(".naming-input");
+      const previewSpan = row.querySelector(".naming-preview-text");
+
+      if (!input) return;
+
+      input.addEventListener("input", debounce(() => {
+        const val = input.value || "";
+        if (!state.namingConventions[group]) state.namingConventions[group] = {};
+        state.namingConventions[group][key] = val;
+        if (previewSpan) {
+          previewSpan.textContent = formatNamingPreview(val);
+        }
+        OL.persist();
+      }, 200));
     });
   }
 
@@ -2690,6 +2852,7 @@
     const btnAddTeamRole = document.getElementById("btnAddTeamRole");
     const btnAddSegment = document.getElementById("btnAddSegment");
     const btnAddFolderHierarchy = document.getElementById("btnAddFolderHierarchy");
+    const btnAddNamingConvention = document.getElementById("btnAddNamingConvention");
     
     if (btnAddApp) {
       btnAddApp.onclick = () => {
@@ -2842,13 +3005,36 @@
           description: "",
           nodes: [],
         };
-        state.folderHierarchies = state.folderHierarchies || [];
-        state.folderHierarchies.push(hier);
+        state.folderHierarchy = state.folderHierarchy || [];
+        state.folderHierarchy.push(hier);
         OL.persist();
-        renderFolderHierarchiesGrid();
+        renderFolderHierarchyGrid();
       };
     }
+    
+    if (btnAddNamingConvention) {
+      btnAddNamingConvention.onclick = () => {
+        const conv = {
+          id: uid(),
+          name: "New Naming Convention",
+          description: "",
+          formatSingle: "",
+          formatJointSameLast: "",
+          formatJointDifferentLast: "",
+          formatUnknown: "",
+          formatProspect: "",
+          formatActive: "",
+          formatFormer: "",
+          formatAnnualReview: "",
+        };
 
+        state.namingConventions = state.namingConventions || [];
+        state.namingConventions.push(conv);
+
+        OL.persist();
+        renderNamingConventionsGrid();
+      };
+    }
   }
 
   function wireCapabilityViewToggle() {
@@ -5004,8 +5190,9 @@
     const isTeam = hash.startsWith("#/settings/team");
     const isSegments = hash.startsWith("#/settings/segments");
     const isFolders = hash.startsWith("#/settings/folder-hierarchy");
+    const isNaming = hash.startsWith("#/settings/naming-conventions");
 
-    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities && !isTeam && !isSegments && !isFolders;
+    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities && !isTeam && !isSegments && !isFolders && !isNaming;
     const showTeamSet = isTeam;
 
     const appsSection = document.getElementById("section-apps");
@@ -5017,7 +5204,9 @@
     const teamMembersSection = document.getElementById("section-team-members");
     const teamRolesSection = document.getElementById("section-team-roles");
     const segSection = document.getElementById("section-segments");
-    const folderSection = document.getElementById("section-folder-hierarchies");
+    const folderSection = document.getElementById("section-folder-hierarchy");
+    const namingSection = document.getElementById("section-naming-conventions");
+
 
     if (appsSection) appsSection.style.display = showAppsSet ? "block" : "none";
     if (fnsSection) fnsSection.style.display = showAppsSet ? "block" : "none";
@@ -5038,7 +5227,9 @@
       segSection.style.display = isSegments ? "block" : "none";
 
     if (folderSection)
-      folderSection.style.display = isSegments ? "block" : "none";
+      folderSection.style.display = isFolders ? "block" : "none";
+
+    if (namingSection) namingSection.style.display = isNaming ? "block" : "none";
   }
 
   document.addEventListener("DOMContentLoaded", () => {
