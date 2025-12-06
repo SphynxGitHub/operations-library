@@ -5017,6 +5017,7 @@
     const teamMembersSection = document.getElementById("section-team-members");
     const teamRolesSection = document.getElementById("section-team-roles");
     const segSection = document.getElementById("section-segments");
+    const folderSection = document.getElementById("section-folder-hierarchies");
 
     if (appsSection) appsSection.style.display = showAppsSet ? "block" : "none";
     if (fnsSection) fnsSection.style.display = showAppsSet ? "block" : "none";
@@ -5035,6 +5036,10 @@
     
     if (segSection)
       segSection.style.display = isSegments ? "block" : "none";
+  }
+
+  if (folderSection)
+      folderSection.style.display = isSegments ? "block" : "none";
   }
 
   document.addEventListener("DOMContentLoaded", () => {
