@@ -975,7 +975,7 @@ body {
 
 /*----------Folders------------*/
 
-/* Folder hierarchies */
+/* Folder hierarchy */
 .folder-hierarchy-card .card-body {
   display: flex;
   flex-direction: column;
@@ -1030,6 +1030,40 @@ body {
   margin-top: 8px;
 }
 
-#section-folder-hierarchies .cards-grid {
+#section-folder-hierarchy .cards-grid {
   grid-template-columns: 1fr;
+}
+
+.naming-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.naming-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.naming-label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.naming-input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #111827;
+  background: #020617;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 12px;
+}
+
+.naming-preview {
+  font-size: 11px;
+  opacity: 0.8;
 }
