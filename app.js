@@ -249,6 +249,247 @@
   const defaultCapabilities = [];
   const defaultCanonicalCapabilities = [];
 
+  const defaultTeamMembers = [
+    {
+      id: uid(),
+      name: "Sample Team Member",
+      email: "",
+      title: "",
+      notes: "",
+      icon: null,
+      roles: [],
+    },
+  ]
+  const defaultTeamRoles= [
+    {
+      id: uid(),
+      name: "Advisor",
+      description: "Primary client-facing advisor",
+      notes: "",
+    },
+    {
+      id: uid(),
+      name: "Operations",
+      description: "Back-office and process management",
+      notes: "",
+    },
+  ]
+  // ------------------------------------------------------------
+  // DEFAULT SEGMENT CATEGORIES + SEGMENTS
+  // ------------------------------------------------------------
+  const defaultSegmentCategories = (() => {
+    const generate = () => {
+      const uidValue = OL.utils.uid;
+
+      const makeCat = (name, description, labels) => ({
+        id: uidValue(),
+        name,
+        description,
+        values: labels.map(label => ({ id: uidValue(), label })),
+      });
+
+      const lifecycle = makeCat("Lifecycle", "Where they are in the relationship lifecycle.", [
+        "Lead",
+        "Prospect",
+        "Client",
+        "Former Client",
+      ]);
+
+      const status = makeCat("Status", "Whether the relationship is currently active.", [
+        "Active",
+        "Inactive",
+        "Dormant",
+      ]);
+
+      const engagement = makeCat("Engagement Type", "How you work with them.", [
+        "Ongoing (AUM / Retainer)",
+        "Ongoing (Subscription)",
+        "One-time / Project",
+        "Legacy / Dormant",
+        "Pre-engagement / Prospect",
+      ]);
+
+      const income = makeCat("Income / Wealth Level", "Financial profile.", [
+        "HENRY / Upper",
+        "Mass affluent / Mid",
+        "Varies",
+      ]);
+
+      const responsiveness = makeCat(
+        "Responsiveness",
+        "How quickly and reliably they respond.",
+        ["Highly responsive", "Normal", "Low responsiveness"]
+      );
+
+      const cats = [lifecycle, status, engagement, income, responsiveness];
+
+      const byId = Object.fromEntries(cats.map(c => [c.id, c]));
+      const byName = Object.fromEntries(cats.map(c => [c.name, c]));
+
+      const valId = (catName, label) => {
+        const cat = byName[catName];
+        if (!cat) return null;
+        const v = cat.values.find(v => v.label === label);
+        return v ? v.id : null;
+      };
+
+      const defaultSegments = [
+        {
+          id: uidValue(),
+          name: "A – Ideal Ongoing Client",
+          description: "High-fit, highly profitable ongoing client with strong engagement.",
+          rules: [
+            { categoryId: lifecycle.id, valueId: valId("Lifecycle", "Client") },
+            { categoryId: status.id, valueId: valId("Status", "Active") },
+            { categoryId: engagement.id, valueId: valId("Engagement Type", "Ongoing (AUM / Retainer)") },
+            { categoryId: income.id, valueId: valId("Income / Wealth Level", "HENRY / Upper") },
+            { categoryId: responsiveness.id, valueId: valId("Responsiveness", "Highly responsive") },
+          ],
+        },
+        {
+          id: uidValue(),
+          name: "B – Core Ongoing Client",
+          description: "Good-fit ongoing client with solid profitability and engagement.",
+          rules: [
+            { categoryId: lifecycle.id, valueId: valId("Lifecycle", "Client") },
+            { categoryId: status.id, valueId: valId("Status", "Active") },
+            { categoryId: engagement.id, valueId: valId("Engagement Type", "Ongoing (AUM / Retainer)") },
+            { categoryId: income.id, valueId: valId("Income / Wealth Level", "Mass affluent / Mid") },
+            { categoryId: responsiveness.id, valueId: valId("Responsiveness", "Normal") },
+          ],
+        },
+        {
+          id: uidValue(),
+          name: "Prospect – Qualified Lead",
+          description: "Qualified prospect with clear need and reasonable fit.",
+          rules: [
+            { categoryId: lifecycle.id, valueId: valId("Lifecycle", "Prospect") },
+            { categoryId: status.id, valueId: valId("Status", "Active") },
+            { categoryId: engagement.id, valueId: valId("Engagement Type", "Pre-engagement / Prospect") },
+          ],
+        },
+        {
+          id: uidValue(),
+          name: "Dormant / Inactive Client",
+          description: "Client with minimal recent activity; may need re-engagement or offboarding.",
+          rules: [
+            { categoryId: lifecycle.id, valueId: valId("Lifecycle", "Client") },
+            { categoryId: status.id, valueId: valId("Status", "Inactive") },
+            { categoryId: engagement.id, valueId: valId("Engagement Type", "Legacy / Dormant") },
+          ],
+        },
+      ];
+
+      return { categories: cats, defaultSegments };
+    };
+
+    return generate();
+  })();
+
+  const defaultFolderHierarchies = (() => {
+    // Investment Mgmt Client Hierarchy
+    const clientRootId = uid();
+    const clientFolderId = uid();
+
+    const clientNodes = [
+      {
+        id: clientRootId,
+        name: "Clients",
+        parentId: null,
+        sort: 0,
+      },
+      {
+        id: clientFolderId,
+        name: "{Client Name}",
+        parentId: clientRootId,
+        sort: 0,
+      },
+      {
+        id: uid(),
+        name: "01 – Onboarding",
+        parentId: clientFolderId,
+        sort: 0,
+      },
+      {
+        id: uid(),
+        name: "02 – Taxes",
+        parentId: clientFolderId,
+        sort: 1,
+      },
+      {
+        id: uid(),
+        name: "03 – Estate",
+        parentId: clientFolderId,
+        sort: 2,
+      },
+      {
+        id: uid(),
+        name: "04 – Insurance",
+        parentId: clientFolderId,
+        sort: 3,
+      },
+    ];
+
+    // Prospect Hierarchy
+    const prospectRootId = uid();
+    const prospectNameId = uid();
+
+    const prospectNodes = [
+      {
+        id: prospectRootId,
+        name: "Prospects",
+        parentId: null,
+        sort: 0,
+      },
+      {
+        id: prospectNameId,
+        name: "{Prospect Name}",
+        parentId: prospectRootId,
+        sort: 0,
+      },
+      {
+        id: uid(),
+        name: "01 – Inquiry",
+        parentId: prospectNameId,
+        sort: 0,
+      },
+      {
+        id: uid(),
+        name: "02 – Discovery / Data Gathering",
+        parentId: prospectNameId,
+        sort: 1,
+      },
+      {
+        id: uid(),
+        name: "03 – Proposal / Plan Drafts",
+        parentId: prospectNameId,
+        sort: 2,
+      },
+      {
+        id: uid(),
+        name: "04 – Signed Documents",
+        parentId: prospectNameId,
+        sort: 3,
+      },
+    ];
+
+    return [
+      {
+        id: uid(),
+        name: "Investment Management Client Folder Hierarchy",
+        description: "Standard client structure for ongoing investment management relationships.",
+        nodes: clientNodes,
+      },
+      {
+        id: uid(),
+        name: "Prospect Folder Hierarchy",
+        description: "Structure for prospects from first inquiry through proposal/signature.",
+        nodes: prospectNodes,
+      },
+    ];
+  })();
+
+
   // ------------------------------------------------------------
   // STATE
   // ------------------------------------------------------------
@@ -263,6 +504,13 @@
       "canonicalCapabilities",
       defaultCanonicalCapabilities,
     ),
+    teamMembers: OL.store.get("teamMembers", defaultTeamMembers),
+    teamRoles: OL.store.get("teamRoles", defaultTeamRoles),
+    segmentCategories: OL.store.get("segmentCategories", defaultSegmentCategories.categories),
+    segments: OL.store.get("segments", defaultSegmentCategories.defaultSegments),
+    folderHierarchies: OL.store.get("folderHierarchies", defaultFolderHierarchies),
+
+
   };
 
   // Seed canonical library from existing capabilities if empty (legacy)
@@ -303,6 +551,11 @@
     OL.store.set("datapoints", state.datapoints);
     OL.store.set("capabilities", state.capabilities);
     OL.store.set("canonicalCapabilities", state.canonicalCapabilities);
+    OL.store.set("teamMembers", state.teamMembers);
+    OL.store.set("teamRoles", state.teamRoles);
+    OL.store.set("segmentCategories", state.segmentCategories);
+    OL.store.set("segments", state.segments);
+    OL.store.set("folderHierarchies", state.folderHierarchies);
   }, 200);
 
   // ------------------------------------------------------------
@@ -351,6 +604,27 @@
     });
     return out;
   }
+
+  function findTeamMemberById(id) {
+    return (state.teamMembers || []).find(m => m.id === id) || null;
+  }
+
+  function findTeamRoleById(id) {
+    return (state.teamRoles || []).find(r => r.id === id) || null;
+  }
+
+  function teamAssignmentsForRole(roleId) {
+    const out = [];
+    (state.teamMembers || []).forEach(member => {
+      (member.roles || []).forEach(r => {
+        if (r.roleId === roleId) {
+          out.push({ member });
+        }
+      });
+    });
+    return out;
+  }
+
 
   function normalizeStatus(s) {
     if (s === "primary" || s === "evaluating" || s === "available") return s;
@@ -433,6 +707,11 @@
     renderDatapointsGrid();
     renderCanonicalCapsGrid();
     renderCapabilitiesGrid();
+    renderTeamMembersGrid();
+    renderTeamRolesGrid();
+    renderSegmentCategoriesGrid();
+    renderSegmentsGrid();
+    renderFolderHierarchiesGrid();
   };
 
   // ------------------------------------------------------------
@@ -629,6 +908,60 @@
                 </div>
               </div>
               <div id="canonicalCapsGrid" class="cards-grid"></div>
+            </section>
+
+            <section class="section" id="section-team-members">
+              <div class="section-header">
+                <h2>Team Members</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddTeamMember">+ Add Team Member</button>
+                </div>
+              </div>
+              <div id="teamMembersGrid" class="cards-grid"></div>
+            </section>
+
+            <section class="section" id="section-team-roles">
+              <div class="section-header">
+                <h2>Team Roles</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddTeamRole">+ Add Role</button>
+                </div>
+              </div>
+              <div id="teamRolesGrid" class="cards-grid"></div>
+            </section>
+
+            <section id="section-segments">
+              <div class="section-header">
+                <h2>Segments</h2>
+              </div>
+
+              <div class="segments-page">
+
+                <div class="segments-block">
+                  <div class="block-title">Segment Categories</div>
+                  <button class="btn small" id="btnAddSegmentCategory">+ Category</button>
+                  <div id="segmentCategoriesGrid" class="cards-grid stacked"></div>
+                </div>
+
+                <div class="segments-block">
+                  <div class="block-title">Segments</div>
+                  <button class="btn small" id="btnAddSegment">+ Segment</button>
+                  <div id="segmentsGrid" class="cards-grid stacked"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section" id="section-folder-hierarchies">
+              <div class="section-header">
+                <h2>Folder Hierarchies</h2>
+                <div class="spacer"></div>
+                <div class="section-actions">
+                  <button class="btn small" id="btnAddFolderHierarchy">+ Add Hierarchy</button>
+                </div>
+              </div>
+              <div id="folderHierarchiesGrid" class="cards-grid"></div>
             </section>
 
           </main>
@@ -1292,6 +1625,477 @@
     renderCapabilitiesGrid();
   };
 
+  //------------------------------------------------------------
+  // TEAM MEMBERS AND Roles
+  //------------------------------------------------------------
+  function renderTeamMembersGrid() {
+    const grid = document.getElementById("teamMembersGrid");
+    if (!grid) return;
+
+    const members = Array.isArray(state.teamMembers) ? state.teamMembers.slice() : [];
+    if (!members.length) {
+      grid.innerHTML = `<div class="empty-hint">No team members yet.</div>`;
+      return;
+    }
+
+    members.sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+
+    grid.innerHTML = "";
+    members.forEach(member => {
+      grid.insertAdjacentHTML("beforeend", renderTeamMemberCard(member));
+    });
+  }
+
+  function renderTeamMemberCard(member) {
+    const roles = (member.roles || [])
+      .map(r => findTeamRoleById(r.roleId))
+      .filter(Boolean);
+
+    const rolePills = roles.length
+      ? roles
+          .map(role => `
+            <span
+              class="pill fn"
+              oncontextmenu="OL.removeRoleFromMember(event, '${member.id}', '${role.id}')"
+            >
+              ${esc(role.name || "")}
+            </span>
+          `)
+          .join("")
+      : `<span class="pill muted">No roles assigned</span>`;
+
+    const subtitleParts = [];
+    if (member.title) subtitleParts.push(member.title);
+    if (member.email) subtitleParts.push(member.email);
+    const subtitle = subtitleParts.join(" • ");
+
+    return `
+      <div class="card" data-team-member-id="${member.id}" onclick="OL.openTeamMemberModal('${member.id}')">
+        <div class="card-header">
+          <div class="card-header-left">
+            <div class="card-icon">${OL.iconHTML(member)}</div>
+            <div>
+              <div class="card-title">${esc(member.name || "")}</div>
+              ${
+                subtitle
+                  ? `<div class="card-subtitle single-line-text">${esc(subtitle)}</div>`
+                  : ""
+              }
+            </div>
+          </div>
+          <div
+            class="card-close"
+            onclick="event.stopPropagation(); OL.deleteTeamMember('${member.id}')"
+          >×</div>
+        </div>
+        <div class="card-body">
+          <div class="card-section">
+            <div class="card-section-title">Roles</div>
+            <div class="card-section-content">
+              <div class="pills-row">
+                ${rolePills}
+              </div>
+            </div>
+          </div>
+          <div class="card-section">
+            <div class="card-section-title">Notes</div>
+            <div class="card-section-content single-line-text ${
+              member.notes ? "" : "muted"
+            }">
+              ${esc(member.notes || "No notes")}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTeamRolesGrid() {
+    const grid = document.getElementById("teamRolesGrid");
+    if (!grid) return;
+
+    const roles = Array.isArray(state.teamRoles) ? state.teamRoles.slice() : [];
+    if (!roles.length) {
+      grid.innerHTML = `<div class="empty-hint">No roles yet.</div>`;
+      return;
+    }
+
+    roles.sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+
+    grid.innerHTML = "";
+    roles.forEach(role => {
+      grid.insertAdjacentHTML("beforeend", renderTeamRoleCard(role));
+    });
+  }
+
+  function renderTeamRoleCard(role) {
+    const assignments = teamAssignmentsForRole(role.id);
+    const memberPills = assignments.length
+      ? assignments
+          .map(({ member }) => `
+            <span
+              class="pill fn"
+              onclick="OL.openTeamMemberModal('${member.id}')"
+            >
+              ${esc(member.name || "")}
+            </span>
+          `)
+          .join("")
+      : `<span class="pill muted">No members with this role</span>`;
+
+    return `
+      <div class="card" data-team-role-id="${role.id}" onclick="OL.openTeamRoleModal('${role.id}')">
+        <div class="card-header">
+          <div class="card-header-left">
+            <div class="card-title">${esc(role.name || "")}</div>
+          </div>
+          <div
+            class="card-close"
+            onclick="event.stopPropagation(); OL.deleteTeamRole('${role.id}')"
+          >×</div>
+        </div>
+        <div class="card-body">
+          <div class="card-section">
+            <div class="card-section-title">Description</div>
+            <div class="card-section-content single-line-text ${
+              role.description ? "" : "muted"
+            }">
+              ${esc(role.description || "No description")}
+            </div>
+          </div>
+          <div class="card-section">
+            <div class="card-section-title">Members</div>
+            <div class="card-section-content">
+              <div class="pills-row">
+                ${memberPills}
+              </div>
+            </div>
+          </div>
+          <div class="card-section">
+            <div class="card-section-title">Notes</div>
+            <div class="card-section-content single-line-text ${
+              role.notes ? "" : "muted"
+            }">
+              ${esc(role.notes || "No notes")}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+    // ------------------------------------------------------------
+  // SEGMENT CATEGORIES GRID
+  // ------------------------------------------------------------
+  function renderSegmentCategoriesGrid() {
+    const grid = document.getElementById("segmentCategoriesGrid");
+    if (!grid) return;
+    const cats = Array.isArray(state.segmentCategories) ? state.segmentCategories : [];
+    if (!cats.length) {
+      grid.innerHTML = `<div class="empty-hint">No categories defined yet.</div>`;
+      return;
+    }
+
+    grid.innerHTML = "";
+    const sorted = [...cats].sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+
+    sorted.forEach(cat => {
+      const values = Array.isArray(cat.values) ? cat.values : [];
+      const valuesHTML = values.length
+        ? values.map(v => `
+            <div class="seg-cat-value-row" data-cat-id="${cat.id}" data-val-id="${v.id}">
+              <span class="seg-cat-value-label">${esc(v.label || "")}</span>
+              <span class="card-close seg-cat-value-delete">×</span>
+            </div>
+          `).join("")
+        : `<div class="empty-hint">No values yet.</div>`;
+
+      grid.insertAdjacentHTML("beforeend", `
+        <div class="card" data-cat-id="${cat.id}">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-title" contenteditable="true" data-cat-name>${esc(cat.name || "")}</div>
+            </div>
+            <div class="card-close seg-cat-delete">×</div>
+          </div>
+          <div class="card-body">
+            <div class="card-section">
+              <div class="card-section-title">Description</div>
+              <div class="card-section-content">
+                <textarea class="modal-textarea seg-cat-desc">${esc(cat.description || "")}</textarea>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Values</div>
+              <div class="card-section-content seg-cat-values">
+                ${valuesHTML}
+              </div>
+              <button class="btn xsmall soft seg-cat-add-value">+ Add Value</button>
+            </div>
+          </div>
+        </div>
+      `);
+    });
+
+    // wire events
+    grid.querySelectorAll(".card[data-cat-id]").forEach(card => {
+      const catId = card.getAttribute("data-cat-id");
+      const cat = (state.segmentCategories || []).find(c => c.id === catId);
+      if (!cat) return;
+
+      const nameEl = card.querySelector("[data-cat-name]");
+      if (nameEl) {
+        nameEl.addEventListener("blur", () => {
+          const newName = nameEl.textContent.trim();
+          if (!newName) return;
+          cat.name = newName;
+          OL.persist();
+          renderSegmentCategoriesGrid();
+          renderSegmentsGrid(); // keep labels in sync
+        });
+      }
+
+      const descEl = card.querySelector(".seg-cat-desc");
+      if (descEl) {
+        descEl.addEventListener("input", debounce(() => {
+          cat.description = descEl.value;
+          OL.persist();
+        }, 200));
+      }
+
+      const addValBtn = card.querySelector(".seg-cat-add-value");
+      if (addValBtn) {
+        addValBtn.onclick = (e) => {
+          e.stopPropagation();
+          const label = prompt("New value label?");
+          if (!label) return;
+          cat.values = cat.values || [];
+          cat.values.push({ id: uid(), label: label.trim() });
+          OL.persist();
+          renderSegmentCategoriesGrid();
+          renderSegmentsGrid();
+        };
+      }
+
+      const deleteCatBtn = card.querySelector(".seg-cat-delete");
+      if (deleteCatBtn) {
+        deleteCatBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (!confirm("Delete this category? This will remove it from all segments.")) return;
+          state.segmentCategories = (state.segmentCategories || []).filter(c => c.id !== catId);
+          // strip rules from segments
+          (state.segments || []).forEach(seg => {
+            seg.rules = (seg.rules || []).filter(r => r.categoryId !== catId);
+          });
+          OL.persist();
+          renderSegmentCategoriesGrid();
+          renderSegmentsGrid();
+        };
+      }
+
+      card.querySelectorAll(".seg-cat-value-row").forEach(row => {
+        const valId = row.getAttribute("data-val-id");
+        const labelEl = row.querySelector(".seg-cat-value-label");
+        const delEl = row.querySelector(".seg-cat-value-delete");
+
+        if (labelEl) {
+          labelEl.onclick = (e) => {
+            e.stopPropagation();
+            const current = labelEl.textContent.trim();
+            const next = prompt("Edit value label:", current);
+            if (!next || next.trim() === current) return;
+            const v = (cat.values || []).find(x => x.id === valId);
+            if (!v) return;
+            v.label = next.trim();
+            OL.persist();
+            renderSegmentCategoriesGrid();
+            renderSegmentsGrid();
+          };
+        }
+
+        if (delEl) {
+          delEl.onclick = (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this value? Segments using it will be cleared for this category.")) return;
+            cat.values = (cat.values || []).filter(v => v.id !== valId);
+            (state.segments || []).forEach(seg => {
+              seg.rules = (seg.rules || []).filter(r => r.valueId !== valId);
+            });
+            OL.persist();
+            renderSegmentCategoriesGrid();
+            renderSegmentsGrid();
+          };
+        }
+      });
+    });
+  }
+
+  // helpers for segments
+  function getSegmentRule(seg, categoryId) {
+    const rules = seg.rules || [];
+    return rules.find(r => r.categoryId === categoryId) || null;
+  }
+
+  function setSegmentRule(seg, categoryId, valueId) {
+    if (!seg.rules) seg.rules = [];
+    const existing = seg.rules.find(r => r.categoryId === categoryId);
+    if (!valueId) {
+      // clear
+      if (existing) {
+        seg.rules = seg.rules.filter(r => r.categoryId !== categoryId);
+      }
+      return;
+    }
+    if (existing) {
+      existing.valueId = valueId;
+    } else {
+      seg.rules.push({ categoryId, valueId });
+    }
+  }
+
+  // ------------------------------------------------------------
+  // SEGMENTS GRID
+  // ------------------------------------------------------------
+  function renderSegmentsGrid() {
+    const grid = document.getElementById("segmentsGrid");
+    if (!grid) return;
+    const segments = Array.isArray(state.segments) ? state.segments : [];
+    const cats = Array.isArray(state.segmentCategories) ? state.segmentCategories : [];
+
+    if (!segments.length) {
+      grid.innerHTML = `<div class="empty-hint">No segments defined yet.</div>`;
+      return;
+    }
+
+    grid.innerHTML = "";
+    const sortedSegs = [...segments].sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+
+    sortedSegs.forEach(seg => {
+      const rulesRows = cats.length
+        ? cats.map(cat => {
+            const rule = getSegmentRule(seg, cat.id);
+            const values = Array.isArray(cat.values) ? cat.values : [];
+            const currentLabel = (() => {
+            const v = values.find(v => rule && rule.valueId === v.id);
+            return v ? v.label : "(None)";
+          })();
+
+          return `
+            <div class="segment-rule-row">
+              <div class="segment-rule-label">${esc(cat.name || "")}</div>
+              <div class="segment-rule-control">
+                <button class="btn xsmall soft segment-rule-btn"
+                        data-seg-id="${seg.id}"
+                        data-cat-id="${cat.id}">
+                  ${esc(currentLabel)}
+                </button>
+              </div>
+            </div>
+          `;
+          }).join("")
+        : `<div class="empty-hint">No categories defined yet. Add categories first.</div>`;
+
+      grid.insertAdjacentHTML("beforeend", `
+        <div class="card" data-seg-id="${seg.id}">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-title" contenteditable="true" data-seg-name>${esc(seg.name || "")}</div>
+            </div>
+            <div class="card-close seg-delete">×</div>
+          </div>
+          <div class="card-body">
+            <div class="card-section">
+              <div class="card-section-title">Description</div>
+              <div class="card-section-content">
+                <textarea class="modal-textarea seg-desc">${esc(seg.description || "")}</textarea>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Category Rules</div>
+              <div class="card-section-content segment-rules-wrap">
+                ${rulesRows}
+              </div>
+            </div>
+          </div>
+        </div>
+      `);
+    });
+
+    // wiring
+    grid.querySelectorAll(".card[data-seg-id]").forEach(card => {
+      const segId = card.getAttribute("data-seg-id");
+      const seg = (state.segments || []).find(s => s.id === segId);
+      if (!seg) return;
+
+      const nameEl = card.querySelector("[data-seg-name]");
+      if (nameEl) {
+        nameEl.addEventListener("blur", () => {
+          const newName = nameEl.textContent.trim();
+          if (!newName) return;
+          seg.name = newName;
+          OL.persist();
+          renderSegmentsGrid();
+        });
+      }
+
+      const descEl = card.querySelector(".seg-desc");
+      if (descEl) {
+        descEl.addEventListener("input", debounce(() => {
+          seg.description = descEl.value;
+          OL.persist();
+        }, 200));
+      }
+
+      const delBtn = card.querySelector(".seg-delete");
+      if (delBtn) {
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete segment "${seg.name || "this segment"}"?`)) return;
+          state.segments = (state.segments || []).filter(s => s.id !== segId);
+          OL.persist();
+          renderSegmentsGrid();
+        };
+      }
+      card.querySelectorAll(".segment-rule-btn").forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const catId = btn.getAttribute("data-cat-id");
+          const cat = (state.segmentCategories || []).find(c => c.id === catId);
+          if (!cat) return;
+
+          const rule = getSegmentRule(seg, catId);
+          const values = Array.isArray(cat.values) ? cat.values : [];
+
+          const opts = values.map(v => ({
+            id: v.id,
+            label: v.label,
+            checked: rule && rule.valueId === v.id
+          }));
+
+          openMappingDropdown({
+            anchorEl: btn,
+            options: opts,
+            allowMultiple: false,
+            onSelect: (valId) => {
+              setSegmentRule(seg, catId, valId);
+              OL.persist();
+              OL.refreshAllUI();
+            }
+          });
+        };
+      });
+    });
+  }
 
   // ------------------------------------------------------------
   // CAPABILITIES GRID (Triggers / Searches / Actions)
@@ -1494,6 +2298,360 @@
       );
     });
   }
+  // ------------------------------------------------------------
+  // FOLDER HIERARCHIES
+  // ------------------------------------------------------------
+
+  // helper: children by parent
+  function folderChildren(nodes, parentId) {
+    return (nodes || [])
+      .filter(n => n.parentId === parentId)
+      .sort((a, b) => {
+        const sa = typeof a.sort === "number" ? a.sort : 0;
+        const sb = typeof b.sort === "number" ? b.sort : 0;
+        if (sa !== sb) return sa - sb;
+        return (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase());
+      });
+  }
+
+  function deleteFolderNode(hier, nodeId) {
+    const nodes = hier.nodes || [];
+    const toDelete = new Set([nodeId]);
+
+    // collect descendants
+    let changed = true;
+    while (changed) {
+      changed = false;
+      nodes.forEach(n => {
+        if (n.parentId && toDelete.has(n.parentId) && !toDelete.has(n.id)) {
+          toDelete.add(n.id);
+          changed = true;
+        }
+      });
+    }
+
+    hier.nodes = nodes.filter(n => !toDelete.has(n.id));
+  }
+
+  // Build HTML for the tree
+  function renderFolderNodesHTML(hier) {
+    const nodes = Array.isArray(hier.nodes) ? hier.nodes : [];
+    if (!nodes.length) {
+      return `<div class="empty-hint">No folders yet. Use “+ Top-Level Folder” to start.</div>`;
+    }
+
+    function walk(parentId, depth) {
+      const children = folderChildren(nodes, parentId);
+      if (!children.length) return "";
+
+      return children
+        .map(n => {
+          const indent = 8 + depth * 18;
+          return `
+            <div class="folder-node-row"
+                 draggable="true"
+                 data-hier-id="${hier.id}"
+                 data-node-id="${n.id}">
+              <div class="folder-node-main" style="padding-left:${indent}px;">
+                <span class="folder-node-icon">📁</span>
+                <span class="folder-node-label">${esc(n.name || "")}</span>
+                <span class="spacer"></span>
+                <button class="btn xsmall soft folder-add-child">+ Subfolder</button>
+                <button class="btn xsmall soft folder-rename">Rename</button>
+                <span class="card-close folder-delete">×</span>
+              </div>
+            </div>
+            ${walk(n.id, depth + 1)}
+          `;
+        })
+        .join("");
+    }
+
+    return walk(null, 0);
+  }
+
+  let folderDragState = null;
+
+  function renderFolderHierarchiesGrid() {
+    const grid = document.getElementById("folderHierarchiesGrid");
+    if (!grid) return;
+
+    const list = Array.isArray(state.folderHierarchies)
+      ? state.folderHierarchies
+      : [];
+
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-hint">No folder hierarchies defined yet.</div>`;
+      return;
+    }
+
+    grid.innerHTML = "";
+
+    const sorted = [...list].sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+
+    sorted.forEach(hier => {
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div class="card folder-hierarchy-card" data-hier-id="${hier.id}">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-title" contenteditable="true" data-hier-name>${esc(
+                hier.name || ""
+              )}</div>
+            </div>
+            <div class="card-close folder-hier-delete">×</div>
+          </div>
+          <div class="card-body">
+            <div class="card-section">
+              <div class="card-section-title">Description</div>
+              <div class="card-section-content">
+                <textarea class="modal-textarea folder-hier-desc">${esc(
+                  hier.description || ""
+                )}</textarea>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Folder Tree</div>
+              <div class="card-section-content">
+                <div class="folder-tree">
+                  ${renderFolderNodesHTML(hier)}
+                </div>
+                <button class="btn xsmall soft folder-add-root">
+                  + Top-Level Folder
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+      );
+    });
+
+    // wiring
+    grid.querySelectorAll(".folder-hierarchy-card").forEach(card => {
+      const hierId = card.getAttribute("data-hier-id");
+      const hier = (state.folderHierarchies || []).find(h => h.id === hierId);
+      if (!hier) return;
+
+      const nameEl = card.querySelector("[data-hier-name]");
+      if (nameEl) {
+        nameEl.addEventListener("blur", () => {
+          const newName = nameEl.textContent.trim();
+          if (!newName) return;
+          hier.name = newName;
+          OL.persist();
+          renderFolderHierarchiesGrid();
+        });
+      }
+
+      const descEl = card.querySelector(".folder-hier-desc");
+      if (descEl) {
+        descEl.addEventListener(
+          "input",
+          debounce(() => {
+            hier.description = descEl.value;
+            OL.persist();
+          }, 200)
+        );
+      }
+
+      const delBtn = card.querySelector(".folder-hier-delete");
+      if (delBtn) {
+        delBtn.onclick = e => {
+          e.stopPropagation();
+          if (
+            !confirm(
+              `Delete folder hierarchy "${hier.name || "this hierarchy"}"?`
+            )
+          )
+            return;
+          state.folderHierarchies = (state.folderHierarchies || []).filter(
+            h => h.id !== hierId
+          );
+          OL.persist();
+          renderFolderHierarchiesGrid();
+        };
+      }
+
+      const addRootBtn = card.querySelector(".folder-add-root");
+      if (addRootBtn) {
+        addRootBtn.onclick = e => {
+          e.stopPropagation();
+          const label = prompt("New top-level folder name?");
+          if (!label) return;
+          hier.nodes = hier.nodes || [];
+          const siblings = hier.nodes.filter(n => n.parentId == null);
+          const maxSort =
+            siblings.reduce(
+              (m, n) =>
+                typeof n.sort === "number" && n.sort > m ? n.sort : m,
+              -1
+            ) + 1;
+          hier.nodes.push({
+            id: uid(),
+            name: label.trim(),
+            parentId: null,
+            sort: maxSort,
+          });
+          OL.persist();
+          renderFolderHierarchiesGrid();
+        };
+      }
+
+      // Node-level wiring
+      card.querySelectorAll(".folder-node-row").forEach(row => {
+        const nodeId = row.getAttribute("data-node-id");
+        const node = (hier.nodes || []).find(n => n.id === nodeId);
+        if (!node) return;
+
+        const labelEl = row.querySelector(".folder-node-label");
+        const addChildBtn = row.querySelector(".folder-add-child");
+        const renameBtn = row.querySelector(".folder-rename");
+        const deleteBtn = row.querySelector(".folder-delete");
+
+        if (labelEl && !renameBtn) {
+          // fallback rename on label click if button missing
+          labelEl.onclick = e => {
+            e.stopPropagation();
+            const current = node.name || "";
+            const next = prompt("Rename folder:", current);
+            if (!next || next.trim() === current) return;
+            node.name = next.trim();
+            OL.persist();
+            renderFolderHierarchiesGrid();
+          };
+        }
+
+        if (renameBtn) {
+          renameBtn.onclick = e => {
+            e.stopPropagation();
+            const current = node.name || "";
+            const next = prompt("Rename folder:", current);
+            if (!next || next.trim() === current) return;
+            node.name = next.trim();
+            OL.persist();
+            renderFolderHierarchiesGrid();
+          };
+        }
+
+        if (addChildBtn) {
+          addChildBtn.onclick = e => {
+            e.stopPropagation();
+            const label = prompt("New subfolder name?");
+            if (!label) return;
+            hier.nodes = hier.nodes || [];
+            const siblings = hier.nodes.filter(n => n.parentId === node.id);
+            const maxSort =
+              siblings.reduce(
+                (m, n) =>
+                  typeof n.sort === "number" && n.sort > m ? n.sort : m,
+                -1
+              ) + 1;
+            hier.nodes.push({
+              id: uid(),
+              name: label.trim(),
+              parentId: node.id,
+              sort: maxSort,
+            });
+            OL.persist();
+            renderFolderHierarchiesGrid();
+          };
+        }
+
+        if (deleteBtn) {
+          deleteBtn.onclick = e => {
+            e.stopPropagation();
+            if (
+              !confirm(
+                "Delete this folder and all subfolders in this hierarchy?"
+              )
+            )
+              return;
+            deleteFolderNode(hier, node.id);
+            OL.persist();
+            renderFolderHierarchiesGrid();
+          };
+        }
+
+        // drag/drop
+        row.addEventListener("dragstart", e => {
+          folderDragState = {
+            hierId,
+            nodeId,
+          };
+          e.dataTransfer.effectAllowed = "move";
+        });
+
+        row.addEventListener("dragover", e => {
+          if (
+            !folderDragState ||
+            folderDragState.hierId !== hierId ||
+            folderDragState.nodeId === nodeId
+          )
+            return;
+          e.preventDefault();
+          row.classList.add("folder-node-drop-target");
+        });
+
+        row.addEventListener("dragleave", () => {
+          row.classList.remove("folder-node-drop-target");
+        });
+
+        row.addEventListener("drop", e => {
+          e.preventDefault();
+          row.classList.remove("folder-node-drop-target");
+          if (!folderDragState || folderDragState.hierId !== hierId) return;
+
+          const dragged = (hier.nodes || []).find(
+            n => n.id === folderDragState.nodeId
+          );
+          const target = node;
+          if (!dragged || !target || dragged.id === target.id) return;
+
+          // Reorder dragged next to target, sharing target's parent
+          const nodes = hier.nodes || [];
+          dragged.parentId = target.parentId;
+
+          const siblings = nodes
+            .filter(n => n.parentId === target.parentId && n.id !== dragged.id)
+            .sort((a, b) => {
+              const sa = typeof a.sort === "number" ? a.sort : 0;
+              const sb = typeof b.sort === "number" ? b.sort : 0;
+              if (sa !== sb) return sa - sb;
+              return (a.name || "")
+                .toLowerCase()
+                .localeCompare((b.name || "").toLowerCase());
+            });
+
+          const reordered = [];
+          siblings.forEach(sib => {
+            reordered.push(sib);
+            if (sib.id === target.id) {
+              reordered.push(dragged);
+            }
+          });
+
+          // If target was last sibling, dragged might not have been pushed
+          if (!reordered.includes(dragged)) {
+            reordered.push(dragged);
+          }
+
+          // write back sorts
+          let idx = 0;
+          reordered.forEach(n => {
+            n.sort = idx++;
+          });
+
+          OL.persist();
+          renderFolderHierarchiesGrid();
+        });
+      });
+    });
+  }
 
   // ------------------------------------------------------------
   // CLICK HANDLING — universal, applied once
@@ -1528,7 +2686,11 @@
     const btnAddDpGlobal = document.getElementById("btnAddDatapointGlobal");
     const btnAddCapability = document.getElementById("btnAddCapability");
     const btnAddCanonicalCap = document.getElementById("btnAddCanonicalCap");
-
+    const btnAddTeamMember = document.getElementById("btnAddTeamMember");
+    const btnAddTeamRole = document.getElementById("btnAddTeamRole");
+    const btnAddSegment = document.getElementById("btnAddSegment");
+    const btnAddFolderHierarchy = document.getElementById("btnAddFolderHierarchy");
+    
     if (btnAddApp) {
       btnAddApp.onclick = () => {
         const app = {
@@ -1616,6 +2778,74 @@
         OL.persist();
         renderCanonicalCapsGrid();
         OL.openCanonicalCapModal(canon.id);
+      };
+    }
+
+    if (btnAddTeamMember) {
+      btnAddTeamMember.onclick = () => {
+        const member = {
+          id: uid(),
+          name: "New Team Member",
+          email: "",
+          title: "",
+          notes: "",
+          icon: null,
+          roles: [],
+        };
+        state.teamMembers = state.teamMembers || [];
+        state.teamMembers.push(member);
+        OL.persist();
+        OL.refreshAllUI();
+        OL.openTeamMemberModal(member.id);
+      };
+    }
+
+    if (btnAddTeamRole) {
+      btnAddTeamRole.onclick = () => {
+        const role = {
+          id: uid(),
+          name: "New Role",
+          description: "",
+          notes: "",
+        };
+        state.teamRoles = state.teamRoles || [];
+        state.teamRoles.push(role);
+        OL.persist();
+        OL.refreshAllUI();
+        OL.openTeamRoleModal(role.id);
+      };
+    }
+    if (btnAddSegment) {
+      btnAddSegment.onclick = () => {
+        const seg = {
+          id: uid(),
+          name: "New Segment",
+          description: "",
+          lifecycle: "",
+          status: "",
+          engagementType: "",
+          incomeLevel: "",
+          responsiveness: "",
+        };
+        state.segments = state.segments || [];
+        state.segments.push(seg);
+        OL.persist();
+        renderSegmentsGrid();
+      };
+    }
+
+    if (btnAddFolderHierarchy) {
+      btnAddFolderHierarchy.onclick = () => {
+        const hier = {
+          id: uid(),
+          name: "New Folder Hierarchy",
+          description: "",
+          nodes: [],
+        };
+        state.folderHierarchies = state.folderHierarchies || [];
+        state.folderHierarchies.push(hier);
+        OL.persist();
+        renderFolderHierarchiesGrid();
       };
     }
 
@@ -1941,81 +3171,67 @@
 
   function openModalIntegrationSelectUI(app) {
     const layer = getModalLayer();
-    if (!layer) return;
-    const modal = layer.querySelector(".modal-box");
-    if (!modal) return;
+    const btn = layer.querySelector("#appIntAddBtn");
+    if (!btn) return;
 
-    const existing = layer.querySelector("#appIntChecklist");
-    if (existing) existing.remove();
+    const opts = state.apps
+      //.filter(a => a.id !== app.id) // filter current app out directly
+      .map(a => {
+        const isChecked = state.integrations.some(i =>
+          (i.appA === app.id && i.appB === a.id) ||
+          (i.appA === a.id && i.appB === app.id)
+        );
+        return {
+          id: a.id,
+          label: a.name,
+          checked: isChecked,
+        };
+      });
 
-    const box = document.createElement("div");
-    box.id = "appIntChecklist";
-    box.innerHTML = `
-      <input type="text" class="modal-search" id="appIntSearch" placeholder="Search apps…">
-      <div class="modal-checklist" id="appIntList"></div>
-    `;
-    modal.querySelector(".modal-body").appendChild(box);
+      openMappingDropdown({
+        anchorEl: btn,
+        options: opts,
+        allowMultiple: true,
+        onSelect: (otherId, isChecked) => {
+          const o = opts.find(x => x.id === otherId);
+          if (o) o.checked = isChecked;
 
-    const searchInput = layer.querySelector("#appIntSearch");
-    const listDiv = layer.querySelector("#appIntList");
 
-    function renderList() {
-      const q = (searchInput.value || "").toLowerCase();
-      listDiv.innerHTML = "";
+        if (isChecked) {
+          // add integration
+          state.integrations.push({
+            id: uid(),
+            appA: app.id,
+            appB: otherId,
+            type: "zapier",
+            direction: "AtoB",
+            capabilities: []
+          });
 
-      state.apps
-        .filter((a) => a.id !== app.id)
-        .filter((a) => (a.name || "").toLowerCase().includes(q))
-        .forEach((a) => {
-          const exists = state.integrations.some(
-            (i) =>
-              (i.appA === app.id && i.appB === a.id) ||
-              (i.appA === a.id && i.appB === app.id),
+        } else {
+          // remove integration
+          state.integrations = state.integrations.filter(
+            i =>
+              !(
+                (i.appA === app.id && i.appB === otherId) ||
+                (i.appA === otherId && i.appB === app.id)
+              )
           );
+        }
 
-          const row = document.createElement("label");
-          row.className = "modal-checkrow";
-
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = exists;
-
-          cb.onchange = () => {
-            if (cb.checked && !exists) {
-              state.integrations.push({
-                id: uid(),
-                appA: app.id,
-                appB: a.id,
-                type: "zapier",
-                direction: "AtoB",
-                capabilities: [],
-              });
-            } else if (!cb.checked && exists) {
-              state.integrations = state.integrations.filter(
-                (i) =>
-                  !(
-                    (i.appA === app.id && i.appB === a.id) ||
-                    (i.appA === a.id && i.appB === app.id)
-                  ),
-              );
-            }
-            OL.persist();
-            renderAppModalIntegrations(
-              getModalLayer().querySelector("#appIntPills"),
-              app,
-            );
-            renderIntegrationsGrid();
-            renderList();
-          };
-
-          row.appendChild(cb);
-          row.appendChild(document.createTextNode(" " + a.name));
-          listDiv.appendChild(row);
-        });
-    }
-
-    searchInput.oninput = renderList;
-    renderList();
+        // persistence + refresh
+        OL.persist();
+        renderAppModalIntegrations(
+          layer.querySelector("#appIntPills"),
+          app
+        );
+        renderIntegrationsGrid();
+        
+        // live update list
+        const dd = document.querySelector(".mapping-dropdown");
+        if (dd && dd.refresh) dd.refresh();
+      }
+    });
   }
 
   function bindAppModal(app) {
@@ -2128,11 +3344,15 @@
     const fnAssignBtn = layer.querySelector("#appFnAssignBtn");
     if (!fnAssignBtn) return;
 
-    const opts = state.functions.map(fn => ({
-      id: fn.id,
-      label: fn.name,
-      checked: !!(app.functions || []).find(r => r.fnId === fn.id)
-    }));
+    const opts = state.functions.map(fn => {
+      const isChecked = (app.functions || []).some(r => r.fnId === fn.id);
+
+      return {
+        id: fn.id,
+        label: fn.name,
+        checked: isChecked,
+      };
+    });
 
     openMappingDropdown({
       anchorEl: fnAssignBtn,
@@ -2171,7 +3391,7 @@
 
     activeOnClose = null;
     openModal(renderFunctionModalHTML(fn));
-    bindFunctionModal(fn);
+    setTimeout(() => bindFunctionModal(fn), 0);
   };
 
   function renderFunctionModalHTML(fn) {
@@ -2303,11 +3523,15 @@
     const assignBtn = layer.querySelector("#fnAssignBtn");
     if (!assignBtn) return;
 
-    const opts = state.apps.map(app => ({
-      id: app.id,
-      label: app.name,
-      checked: !!(app.functions || []).find(r => r.fnId === fn.id)
-    }));
+    const opts = state.apps.map(appObj => {
+      const isChecked = (appObj.functions || []).some(r => r.fnId === fn.id);
+
+      return {
+        id: appObj.id,
+        label: appObj.name,
+        checked: isChecked,
+      };
+    });
 
     openMappingDropdown({
       anchorEl: assignBtn,
@@ -2338,6 +3562,365 @@
       }
     });
   }
+    // ------------------------------------------------------------
+  // TEAM MEMBER MODAL
+  // ------------------------------------------------------------
+  OL.openTeamMemberModal = function (memberId) {
+    const member = findTeamMemberById(memberId);
+    if (!member) return;
+
+    activeOnClose = null;
+    openModal(renderTeamMemberModalHTML(member));
+    setTimeout(() => bindTeamMemberModal(member), 0);
+  };
+
+  function renderTeamMemberModalHTML(member) {
+    return `
+      <div class="modal-head">
+        <button class="icon-edit-btn" id="teamMemberIconBtn">${OL.iconHTML(member)}</button>
+        <div class="modal-title-text" id="teamMemberName" contenteditable="true">
+          ${esc(member.name || "")}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label class="modal-section-label">Title</label>
+          <input id="teamMemberTitle" class="modal-textarea" style="min-height:auto;height:auto;"
+            value="${esc(member.title || "")}">
+        </div>
+        <div>
+          <label class="modal-section-label">Email</label>
+          <input id="teamMemberEmail" class="modal-textarea" style="min-height:auto;height:auto;"
+            value="${esc(member.email || "")}">
+        </div>
+        <div>
+          <label class="modal-section-label">Notes</label>
+          <textarea id="teamMemberNotes" class="modal-textarea">${esc(member.notes || "")}</textarea>
+        </div>
+        <div>
+          <label class="modal-section-label">Roles</label>
+          <div class="modal-pill-box" id="teamMemberRolePills"></div>
+          <button class="btn small soft" id="teamMemberAssignRoleBtn">+ Assign Roles</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTeamMemberRolePills(member) {
+    const layer = getModalLayer();
+    if (!layer) return;
+    const box = layer.querySelector("#teamMemberRolePills");
+    if (!box) return;
+
+    const roles = (member.roles || [])
+      .map(r => findTeamRoleById(r.roleId))
+      .filter(Boolean);
+
+    if (!roles.length) {
+      box.innerHTML = `<span class="pill muted">No roles assigned</span>`;
+      return;
+    }
+
+    box.innerHTML = roles
+      .map(role => `
+        <span
+          class="pill fn"
+          oncontextmenu="OL.removeRoleFromMember(event, '${member.id}', '${role.id}')"
+        >
+          ${esc(role.name || "")}
+        </span>
+      `)
+      .join("");
+  }
+
+  function bindTeamMemberModal(member) {
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    const nameEl = layer.querySelector("#teamMemberName");
+    const iconBtn = layer.querySelector("#teamMemberIconBtn");
+    const titleEl = layer.querySelector("#teamMemberTitle");
+    const emailEl = layer.querySelector("#teamMemberEmail");
+    const notesEl = layer.querySelector("#teamMemberNotes");
+    const assignBtn = layer.querySelector("#teamMemberAssignRoleBtn");
+
+    if (nameEl) {
+      nameEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          nameEl.blur();
+        }
+      });
+      nameEl.addEventListener("blur", () => {
+        const newName = nameEl.textContent.trim();
+        if (!newName) return;
+        member.name = newName;
+        OL.persist();
+        renderTeamMembersGrid();
+        renderTeamRolesGrid();
+      });
+    }
+
+    if (iconBtn) {
+      iconBtn.onclick = (e) => {
+        e.stopPropagation();
+        openIconPicker(member, () => {
+          renderTeamMembersGrid();
+          OL.openTeamMemberModal(member.id);
+        });
+      };
+    }
+
+    if (titleEl) {
+      titleEl.addEventListener(
+        "input",
+        debounce(() => {
+          member.title = titleEl.value.trim();
+          OL.persist();
+          renderTeamMembersGrid();
+        }, 200),
+      );
+    }
+
+    if (emailEl) {
+      emailEl.addEventListener(
+        "input",
+        debounce(() => {
+          member.email = emailEl.value.trim();
+          OL.persist();
+          renderTeamMembersGrid();
+        }, 200),
+      );
+    }
+
+    if (notesEl) {
+      notesEl.addEventListener(
+        "input",
+        debounce(() => {
+          member.notes = notesEl.value;
+          OL.persist();
+          renderTeamMembersGrid();
+        }, 200),
+      );
+    }
+
+    renderTeamMemberRolePills(member);
+
+    if (assignBtn) {
+      assignBtn.onclick = (e) => {
+        e.stopPropagation();
+        openTeamMemberRoleAssignUI(member);
+      };
+    }
+  }
+
+  function openTeamMemberRoleAssignUI(member) {
+    const layer = getModalLayer();
+    const anchor = layer.querySelector("#teamMemberAssignRoleBtn");
+    if (!anchor) return;
+
+    const opts = (state.teamRoles || []).map(role => {
+      const isChecked = (member.roles || []).some(r => r.roleId === role.id);
+      return {
+        id: role.id,
+        label: role.name || "",
+        checked: isChecked,
+      };
+    });
+
+    openMappingDropdown({
+      anchorEl: anchor,
+      options: opts,
+      allowMultiple: true,
+      onSelect: (roleId, isChecked) => {
+        member.roles = member.roles || [];
+
+        if (isChecked) {
+          if (!member.roles.find(r => r.roleId === roleId)) {
+            member.roles.push({ roleId });
+          }
+        } else {
+          member.roles = member.roles.filter(r => r.roleId !== roleId);
+        }
+
+        OL.persist();
+        renderTeamMemberRolePills(member);
+        renderTeamMembersGrid();
+        renderTeamRolesGrid();
+
+        const dd = document.querySelector(".mapping-dropdown");
+        if (dd && dd.refresh) dd.refresh();
+      }
+    });
+  }
+
+  OL.removeRoleFromMember = function (e, memberId, roleId) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const member = findTeamMemberById(memberId);
+    if (!member) return;
+
+    member.roles = (member.roles || []).filter(r => r.roleId !== roleId);
+    OL.persist();
+    renderTeamMembersGrid();
+    renderTeamRolesGrid();
+
+    const layer = getModalLayer();
+    if (layer && layer.style.display === "flex") {
+      renderTeamMemberRolePills(member);
+    }
+  };
+
+  OL.deleteTeamMember = function (memberId) {
+    const member = findTeamMemberById(memberId);
+    if (!member) return;
+    if (!confirm(`Delete team member "${member.name || ""}"?`)) return;
+
+    state.teamMembers = (state.teamMembers || []).filter(m => m.id !== memberId);
+    OL.persist();
+    renderTeamMembersGrid();
+    renderTeamRolesGrid();
+  };
+
+  // ------------------------------------------------------------
+  // TEAM ROLE MODAL
+  // ------------------------------------------------------------
+  OL.openTeamRoleModal = function (roleId) {
+    const role = findTeamRoleById(roleId);
+    if (!role) return;
+
+    activeOnClose = null;
+    openModal(renderTeamRoleModalHTML(role));
+    setTimeout(() => bindTeamRoleModal(role), 0);
+  };
+
+  function renderTeamRoleModalHTML(role) {
+    const assignments = teamAssignmentsForRole(role.id);
+
+    const usageHTML = assignments.length
+      ? `
+        <div class="dp-table">
+          <div class="dp-table-header">
+            <span>Team Member</span>
+          </div>
+          ${assignments
+            .map(({ member }) => `
+              <div class="dp-table-row">
+                <span class="dp-link-team-member" data-member-id="${member.id}">
+                  ${esc(member.name || "")}
+                </span>
+              </div>
+            `)
+            .join("")}
+        </div>
+      `
+      : `<div class="empty-hint">No team members currently have this role.</div>`;
+
+    return `
+      <div class="modal-head">
+        <div class="modal-title-text" id="teamRoleName" contenteditable="true">
+          ${esc(role.name || "")}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label class="modal-section-label">Description</label>
+          <textarea id="teamRoleDesc" class="modal-textarea">${esc(role.description || "")}</textarea>
+        </div>
+        <div>
+          <label class="modal-section-label">Notes</label>
+          <textarea id="teamRoleNotes" class="modal-textarea">${esc(role.notes || "")}</textarea>
+        </div>
+        <div>
+          <label class="modal-section-label">Used by team members</label>
+          <div id="teamRoleUsage">
+            ${usageHTML}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindTeamRoleModal(role) {
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    const nameEl = layer.querySelector("#teamRoleName");
+    const descEl = layer.querySelector("#teamRoleDesc");
+    const notesEl = layer.querySelector("#teamRoleNotes");
+
+    if (nameEl) {
+      nameEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          nameEl.blur();
+        }
+      });
+      nameEl.addEventListener("blur", () => {
+        const newName = nameEl.textContent.trim();
+        if (!newName) return;
+        role.name = newName;
+        OL.persist();
+        renderTeamRolesGrid();
+        renderTeamMembersGrid();
+      });
+    }
+
+    if (descEl) {
+      descEl.addEventListener(
+        "input",
+        debounce(() => {
+          role.description = descEl.value;
+          OL.persist();
+          renderTeamRolesGrid();
+        }, 200),
+      );
+    }
+
+    if (notesEl) {
+      notesEl.addEventListener(
+        "input",
+        debounce(() => {
+          role.notes = notesEl.value;
+          OL.persist();
+          renderTeamRolesGrid();
+        }, 200),
+      );
+    }
+
+    layer.querySelectorAll(".dp-link-team-member").forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute("data-member-id");
+        if (id) {
+          OL.closeModal();
+          OL.openTeamMemberModal(id);
+        }
+      };
+    });
+  }
+
+  OL.deleteTeamRole = function (roleId) {
+    const role = findTeamRoleById(roleId);
+    if (!role) return;
+    if (!confirm(`Delete role "${role.name || ""}"?`)) return;
+
+    // strip role from all members
+    (state.teamMembers || []).forEach(member => {
+      member.roles = (member.roles || []).filter(r => r.roleId !== roleId);
+    });
+
+    state.teamRoles = (state.teamRoles || []).filter(r => r.id !== roleId);
+    OL.persist();
+    renderTeamRolesGrid();
+    renderTeamMembersGrid();
+  };
+
 
   // ------------------------------------------------------------
   // INTEGRATION HELPERS (simple)
@@ -3336,7 +4919,6 @@
       optionsBox.innerHTML = "";
 
       options
-        .filter(o => !o.checked)                // <— hides already-selected!
         .filter(o => (o.label || "").toLowerCase().includes(q))
         .forEach(o => {
           const row = document.createElement("div");
@@ -3352,11 +4934,16 @@
 
           row.onclick = (e) => {
             e.stopPropagation();
+
             if (allowMultiple) {
               const checked = !o.checked;
               o.checked = checked;
+
+              // 1) update the mapping
               onSelect(o.id, checked);
-              row.classList.toggle("checked", checked);
+
+              // 2) THEN refresh list after callback has mutated state
+              setTimeout(() => dropdown.refresh(), 0);
             } else {
               onSelect(o.id);
               closeMappingDropdown();
@@ -3414,8 +5001,12 @@
     const isDatapoints = hash.startsWith("#/settings/datapoints");
     const isCanonicalCaps = hash.startsWith("#/settings/canonical-capabilities");
     const isCapabilities = hash.startsWith("#/triggers-actions");
+    const isTeam = hash.startsWith("#/settings/team");
+    const isSegments = hash.startsWith("#/settings/segments");
+    const isFolders = hash.startsWith("#/settings/folder-hierarchy");
 
-    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities;
+    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities && !isTeam && !isSegments && !isFolders;
+    const showTeamSet = isTeam;
 
     const appsSection = document.getElementById("section-apps");
     const fnsSection = document.getElementById("section-functions");
@@ -3423,6 +5014,9 @@
     const capsSection = document.getElementById("section-capabilities");
     const dpsSection = document.getElementById("section-datapoints");
     const canonSection = document.getElementById("section-canonical-caps");
+    const teamMembersSection = document.getElementById("section-team-members");
+    const teamRolesSection = document.getElementById("section-team-roles");
+    const segSection = document.getElementById("section-segments");
 
     if (appsSection) appsSection.style.display = showAppsSet ? "block" : "none";
     if (fnsSection) fnsSection.style.display = showAppsSet ? "block" : "none";
@@ -3433,6 +5027,14 @@
     if (dpsSection) dpsSection.style.display = isDatapoints ? "block" : "none";
     if (canonSection)
       canonSection.style.display = isCanonicalCaps ? "block" : "none";
+
+    if (teamMembersSection)
+      teamMembersSection.style.display = showTeamSet ? "block" : "none";
+    if (teamRolesSection)
+      teamRolesSection.style.display = showTeamSet ? "block" : "none";
+    
+    if (segSection)
+      segSection.style.display = isSegments ? "block" : "none";
   }
 
   document.addEventListener("DOMContentLoaded", () => {
