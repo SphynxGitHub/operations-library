@@ -726,7 +726,7 @@
     renderSegmentCategoriesGrid();
     renderSegmentsGrid();
     renderFolderHierarchyGrid();
-    renderNamingConventions();
+    renderNamingConventions();      // core object fields
   };
 
   // ------------------------------------------------------------
@@ -989,7 +989,6 @@
               </div>
               <div id="namingGrid" class="cards-grid"></div>
             </section>
-
 
           </main>
         </div>
@@ -2709,109 +2708,152 @@
     if (!grid) return;
 
     const nc = state.namingConventions || defaultNamingConventions;
-    if (!state.namingConventions) state.namingConventions = JSON.parse(JSON.stringify(defaultNamingConventions));
+    if (!state.namingConventions)
+      state.namingConventions = JSON.parse(JSON.stringify(defaultNamingConventions));
 
     const household = nc.household || {};
     const lifecycle = nc.lifecycle || {};
+    const scenarios = nc.scenarios || [];
+    state.namingConventions.scenarios = scenarios;
 
     grid.innerHTML = "";
 
-    // Household names card
+    // HOUSEHOLD
     grid.insertAdjacentHTML("beforeend", `
-      <div class="card">
-        <div class="card-header">
-          <div class="card-header-left">
-            <div class="card-title">Household Name Patterns</div>
-          </div>
-        </div>
+      <div class="card naming-section">
+        <div class="card-header"><div class="card-title">Household Name Patterns</div></div>
         <div class="card-body">
-          <div class="card-section">
-            <div class="card-section-title">Patterns</div>
-            <div class="card-section-content naming-fields">
-              ${[
-                { key: "single", label: "Single" },
-                { key: "jointSame", label: "Joint – Same Last Name" },
-                { key: "jointDiff", label: "Joint – Different Last Names" },
-                { key: "unknown", label: "Unknown / Fallback" },
-              ]
-                .map(row => {
-                  const val = household[row.key] || "";
-                  const preview = formatNamingPreview(val);
-                  return `
-                    <div class="naming-row" data-group="household" data-key="${row.key}">
-                      <div class="naming-label">${esc(row.label)}</div>
-                      <input class="naming-input" type="text" value="${esc(val)}"
-                        placeholder="{primaryLast}, {primaryFirst}">
-                      <div class="naming-preview muted">
-                        Example: <span class="naming-preview-text">${esc(preview)}</span>
-                      </div>
-                    </div>
-                  `;
-                })
-                .join("")}
-            </div>
-          </div>
+          ${renderNamingRows("household", household, [
+            ["single", "Single"],
+            ["jointSame", "Joint – Same Last Name"],
+            ["jointDiff", "Joint – Different Last Names"],
+            ["unknown", "Unknown / Fallback"],
+          ])}
         </div>
       </div>
     `);
 
-    // Lifecycle / engagement card
+    // LIFECYCLE
     grid.insertAdjacentHTML("beforeend", `
-      <div class="card">
-        <div class="card-header">
-          <div class="card-header-left">
-            <div class="card-title">Lifecycle / Engagement Patterns</div>
-          </div>
-        </div>
+      <div class="card naming-section">
+        <div class="card-header"><div class="card-title">Lifecycle / Engagement</div></div>
         <div class="card-body">
-          <div class="card-section">
-            <div class="card-section-title">Patterns</div>
-            <div class="card-section-content naming-fields">
-              ${[
-                { key: "prospect", label: "Prospect" },
-                { key: "active", label: "Active" },
-                { key: "former", label: "Former" },
-                { key: "annual", label: "Annual Review" },
-              ]
-                .map(row => {
-                  const val = lifecycle[row.key] || "";
-                  const preview = formatNamingPreview(val || "{household}");
-                  return `
-                    <div class="naming-row" data-group="lifecycle" data-key="${row.key}">
-                      <div class="naming-label">${esc(row.label)}</div>
-                      <input class="naming-input" type="text" value="${esc(val)}"
-                        placeholder="{household} – ${esc(row.label)}{${row.key === "annual" ? "year" : ""}}">
-                      <div class="naming-preview muted">
-                        Example: <span class="naming-preview-text">${esc(preview)}</span>
-                      </div>
-                    </div>
-                  `;
-                })
-                .join("")}
-            </div>
-          </div>
+          ${renderNamingRows("lifecycle", lifecycle, [
+            ["prospect", "Prospect"],
+            ["active", "Active"],
+            ["former", "Former"],
+            ["annual", "Annual Review"],
+          ])}
         </div>
       </div>
     `);
 
-    // Wire inputs
-    grid.querySelectorAll(".naming-row").forEach(row => {
-      const group = row.getAttribute("data-group");
+    // CUSTOM SCENARIOS
+    scenarios.forEach((sc, idx) => {
+      const scenHouse = sc.household || {};
+      const scenLife  = sc.lifecycle || {};
+
+      grid.insertAdjacentHTML("beforeend", `
+        <div class="card naming-section" data-scen="${idx}">
+          <div class="card-header">
+            <div class="card-title" contenteditable="true" data-scen-name>${esc(sc.name || "New Scenario")}</div>
+            <div class="card-close" data-scen-del>×</div>
+          </div>
+
+          <div class="card-body">
+
+            <div class="card-section">
+              <div class="card-section-title">Household</div>
+              ${renderNamingRows(`scenario.household.${idx}`, scenHouse, [
+                ["single","Single"],
+                ["jointSame","Joint – Same Last Name"],
+                ["jointDiff","Joint – Different Last Names"],
+                ["unknown","Unknown"]
+              ])}
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Lifecycle</div>
+              ${renderNamingRows(`scenario.lifecycle.${idx}`, scenLife, [
+                ["prospect","Prospect"],
+              ])}
+            </div>
+
+          </div>
+        </div>
+      `);
+    });
+    wireNamingEvents();
+  }
+  function renderNamingRows(namespace, data, rows) {
+    return rows.map(([key,label])=>{
+      const val = data[key] || "";
+      const preview = formatNamingPreview(val);
+      return `
+        <div class="naming-row"
+            data-ns="${namespace}"
+            data-key="${key}">
+          <div class="naming-label">${esc(label)}</div>
+          <input type="text" class="naming-input"
+            value="${esc(val)}">
+          <div class="naming-preview muted">
+            Example: <span class="naming-preview-text">${esc(preview)}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function wireNamingEvents() {
+    document.querySelectorAll(".naming-row").forEach(row=>{
+      const ns = row.getAttribute("data-ns");
       const key = row.getAttribute("data-key");
       const input = row.querySelector(".naming-input");
       const previewSpan = row.querySelector(".naming-preview-text");
 
-      if (!input) return;
+      if(!input) return;
 
-      input.addEventListener("input", debounce(() => {
-        const val = input.value || "";
-        if (!state.namingConventions[group]) state.namingConventions[group] = {};
-        state.namingConventions[group][key] = val;
-        if (previewSpan) {
-          previewSpan.textContent = formatNamingPreview(val);
-        }
+      input.addEventListener("input", debounce(()=>{
+        const val = input.value;
+
+        // dot path support
+        const parts = ns.split(".");
+        let target = state.namingConventions;
+
+        parts.forEach((p,i)=>{
+          if(p==="scenario"){
+            const idx = Number(parts[2]);
+            const sub = parts[3]; // household or lifecycle
+            target = state.namingConventions.scenarios[idx][sub];
+          }else if (i>0 && parts[0]!=="scenario") {
+            target = target[p];
+          }
+        });
+
+        target[key] = val;
+
+        if(previewSpan) previewSpan.textContent = formatNamingPreview(val);
         OL.persist();
-      }, 200));
+      },200));
+    });
+
+    // delete scenario
+    document.querySelectorAll("[data-scen-del]").forEach(del=>{
+      del.onclick=(e)=>{
+        const idx = Number(del.closest("[data-scen]").getAttribute("data-scen"));
+        state.namingConventions.scenarios.splice(idx,1);
+        OL.persist();
+        renderNamingConventions();
+      }
+    });
+
+    // rename
+    document.querySelectorAll("[data-scen-name]").forEach(nameEl=>{
+      nameEl.onblur=()=>{
+        const idx=Number(nameEl.closest("[data-scen]").getAttribute("data-scen"));
+        state.namingConventions.scenarios[idx].name = nameEl.textContent.trim();
+        OL.persist();
+      }
     });
   }
 
@@ -3014,25 +3056,16 @@
     
     if (btnAddNamingConvention) {
       btnAddNamingConvention.onclick = () => {
-        const conv = {
-          id: uid(),
-          name: "New Naming Convention",
-          description: "",
-          formatSingle: "",
-          formatJointSameLast: "",
-          formatJointDifferentLast: "",
-          formatUnknown: "",
-          formatProspect: "",
-          formatActive: "",
-          formatFormer: "",
-          formatAnnualReview: "",
-        };
+        state.namingConventions.scenarios = state.namingConventions.scenarios || [];
 
-        state.namingConventions = state.namingConventions || [];
-        state.namingConventions.push(conv);
+        state.namingConventions.scenarios.push({
+          name:"New Scenario",
+          household:{},
+          lifecycle:{},
+        });
 
         OL.persist();
-        renderNamingConventionsGrid();
+        renderNamingConventions();
       };
     }
   }
