@@ -5036,9 +5036,8 @@
     
     if (segSection)
       segSection.style.display = isSegments ? "block" : "none";
-  }
 
-  if (folderSection)
+    if (folderSection)
       folderSection.style.display = isSegments ? "block" : "none";
   }
 
