@@ -51,7 +51,7 @@
         .replace(/&/g, "&")
         .replace(/</g, "<")
         .replace(/>/g, ">")
-        .replace(/"/g, """);
+        .replace(/"/g, "\"");
     },
     debounce(fn, ms) {
       let t;
