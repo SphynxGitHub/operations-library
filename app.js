@@ -48,10 +48,10 @@
     },
     esc(s) {
       return String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+        .replace(/&/g, "&")
+        .replace(/</g, "<")
+        .replace(/>/g, ">")
+        .replace(/"/g, """);
     },
     debounce(fn, ms) {
       let t;
@@ -2125,75 +2125,41 @@
 
   function openAppFunctionAssignUI(app) {
     const layer = getModalLayer();
-    if (!layer) return;
-    const container = layer.querySelector("#appFnPills");
-    if (!container) return;
+    const fnAssignBtn = layer.querySelector("#appFnAssignBtn");
+    if (!fnAssignBtn) return;
 
-    const existing = layer.querySelector("#appFnChecklist");
-    if (existing) existing.remove();
+    const opts = state.functions.map(fn => ({
+      id: fn.id,
+      label: fn.name,
+      checked: !!(app.functions || []).find(r => r.fnId === fn.id)
+    }));
 
-    const checklist = document.createElement("div");
-    checklist.id = "appFnChecklist";
+    openMappingDropdown({
+      anchorEl: fnAssignBtn,
+      options: opts,
+      allowMultiple: true,
+      onSelect: (fnId, isChecked) => {
+        if (isChecked) {
+          app.functions = app.functions || [];
+          // add it if not already there
+          if (!app.functions.find(r => r.fnId === fnId)) {
+            const isFirst = OL.functionAssignments(fnId).length === 0;
+            const status = isFirst ? "primary" : "available";
+            app.functions.push({ fnId, status });
+          }
+        } else {
+          app.functions = (app.functions || []).filter(r => r.fnId !== fnId);
+        }
 
-    checklist.innerHTML = `
-      <input type="text" class="modal-search" id="appFnSearch" placeholder="Search functions…">
-      <div class="modal-checklist" id="appFnList"></div>
-    `;
+        OL.persist();
+        renderAppModalFunctionPills(app);
+        renderAppsGrid();
+        renderFunctionsGrid();
 
-    container.insertAdjacentElement("afterend", checklist);
-
-    const searchInput = layer.querySelector("#appFnSearch");
-    const listDiv = layer.querySelector("#appFnList");
-
-    function renderList() {
-      const q = (searchInput.value || "").toLowerCase();
-      listDiv.innerHTML = "";
-
-      state.functions
-        .filter((fn) => (fn.name || "").toLowerCase().includes(q))
-        .forEach((fn) => {
-          const existing = (app.functions || []).find((r) => r.fnId === fn.id);
-          const row = document.createElement("label");
-          row.className = "modal-checkrow";
-
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.dataset.fnId = fn.id;
-          cb.dataset.appId = app.id;
-          cb.checked = !!existing;
-
-          cb.onchange = () => {
-            if (cb.checked) {
-              app.functions = app.functions || [];
-
-              const isFirst = OL.functionAssignments(fn.id).length === 0;
-              const status = isFirst ? "primary" : "available";
-
-              app.functions.push({ fnId: fn.id, status });
-
-              OL.persist();
-              renderFunctionModalPills(fn);
-              renderAppModalFunctionPills(app);
-              renderAppsGrid();
-              renderFunctionsGrid();
-            } else {
-              OL.unlinkFunctionAndApp(app.id, fn.id);
-              OL.persist();
-              renderFunctionModalPills(fn);
-              renderAppModalFunctionPills(app);
-              renderAppsGrid();
-              renderFunctionsGrid();
-            }
-          };
-
-          row.appendChild(cb);
-          row.appendChild(document.createTextNode(" " + fn.name));
-          listDiv.appendChild(row);
-        });
-    }
-
-    searchInput.oninput = renderList;
-    renderList();
+        const dd = document.querySelector(".mapping-dropdown");
+        if (dd && dd.refresh) dd.refresh();
+      }
+    });
   }
 
   // ------------------------------------------------------------
@@ -2334,74 +2300,43 @@
 
   function openFunctionAppAssignUI(fn) {
     const layer = getModalLayer();
-    if (!layer) return;
-    const modal = layer.querySelector(".modal-box");
-    if (!modal) return;
+    const assignBtn = layer.querySelector("#fnAssignBtn");
+    if (!assignBtn) return;
 
-    const existing = layer.querySelector("#fnAppChecklist");
-    if (existing) existing.remove();
+    const opts = state.apps.map(app => ({
+      id: app.id,
+      label: app.name,
+      checked: !!(app.functions || []).find(r => r.fnId === fn.id)
+    }));
 
-    const box = document.createElement("div");
-    box.id = "fnAppChecklist";
-    box.innerHTML = `
-      <input type="text" class="modal-search" id="fnAppSearch" placeholder="Search apps…">
-      <div class="modal-checklist" id="fnAppList"></div>
-    `;
-    modal.querySelector(".modal-body").appendChild(box);
+    openMappingDropdown({
+      anchorEl: assignBtn,
+      options: opts,
+      allowMultiple: true,
+      onSelect: (appId, isChecked) => {
+        const app = findAppById(appId);
+        if (!app) return;
 
-    const searchInput = layer.querySelector("#fnAppSearch");
-    const listDiv = layer.querySelector("#fnAppList");
+        if (isChecked) {
+          app.functions = app.functions || [];
+          const isFirstForThisFunction =
+            OL.functionAssignments(fn.id).length === 0;
+          const status = isFirstForThisFunction ? "primary" : "available";
+          app.functions.push({ fnId: fn.id, status });
+        } else {
+          app.functions = (app.functions || []).filter(r => r.fnId !== fn.id);
+        }
 
-    function renderList() {
-      const q = (searchInput.value || "").toLowerCase();
-      listDiv.innerHTML = "";
+        OL.persist();
+        renderFunctionModalPills(fn);
+        renderAppModalFunctionPills(app);
+        renderAppsGrid();
+        renderFunctionsGrid();
 
-      state.apps
-        .filter((a) => (a.name || "").toLowerCase().includes(q))
-        .forEach((app) => {
-          const existing = (app.functions || []).find((r) => r.fnId === fn.id);
-          const row = document.createElement("label");
-          row.className = "modal-checkrow";
-
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.dataset.fnId = fn.id;
-          cb.dataset.appId = app.id;
-          cb.checked = !!existing;
-
-          cb.onchange = () => {
-            if (cb.checked) {
-              app.functions = app.functions || [];
-
-              const isFirstForThisFunction =
-                OL.functionAssignments(fn.id).length === 0;
-              const status = isFirstForThisFunction ? "primary" : "available";
-
-              app.functions.push({ fnId: fn.id, status });
-
-              OL.persist();
-              renderFunctionModalPills(fn);
-              renderAppModalFunctionPills(app);
-              renderAppsGrid();
-              renderFunctionsGrid();
-            } else {
-              OL.unlinkFunctionAndApp(app.id, fn.id);
-              OL.persist();
-              renderFunctionModalPills(fn);
-              renderAppModalFunctionPills(app);
-              renderAppsGrid();
-              renderFunctionsGrid();
-            }
-          };
-
-          row.appendChild(cb);
-          row.appendChild(document.createTextNode(" " + app.name));
-          listDiv.appendChild(row);
-        });
-    }
-
-    searchInput.oninput = renderList;
-    renderList();
+        const dd = document.querySelector(".mapping-dropdown");
+        if (dd && dd.refresh) dd.refresh();
+      }
+    });
   }
 
   // ------------------------------------------------------------
@@ -2979,9 +2914,11 @@
     }
 
     function outsideCanonHandler(evt) {
-      if (!layer.contains(evt.target)) {
-        hideCanonDropdown();
-      }
+      const wrapper = layer.querySelector(".canon-wrapper");
+      if (!wrapper) return;
+
+      const clickedInside = wrapper.contains(evt.target);
+      if (!clickedInside) hideCanonDropdown();
     }
 
     if (canonInput && canonDropdown && canonSearch) {
@@ -3367,6 +3304,84 @@
       reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(file);
     });
+  }
+  // ------------------------------------------------------------
+  // GENERIC MAPPING DROPDOWN (reusable)
+  // ------------------------------------------------------------
+  function openMappingDropdown({ anchorEl, options, allowMultiple, onSelect }) {
+    // close any existing
+    let existing = document.querySelector(".mapping-dropdown");
+    if (existing) existing.remove();
+
+    const dropdown = document.createElement("div");
+    dropdown.className = "mapping-dropdown";
+
+    dropdown.innerHTML = `
+      <input class="mapping-search" placeholder="Search…">
+      <div class="mapping-options"></div>
+    `;
+
+    document.body.appendChild(dropdown);
+
+    // position
+    const rect = anchorEl.getBoundingClientRect();
+    dropdown.style.left = rect.left + "px";
+    dropdown.style.top = rect.bottom + "px";
+
+    const search = dropdown.querySelector(".mapping-search");
+    const optionsBox = dropdown.querySelector(".mapping-options");
+
+    function renderList() {
+      const q = (search.value || "").toLowerCase();
+      optionsBox.innerHTML = "";
+
+      options
+        .filter(o => !o.checked)                // <— hides already-selected!
+        .filter(o => (o.label || "").toLowerCase().includes(q))
+        .forEach(o => {
+          const row = document.createElement("div");
+          row.className = "mapping-option";
+
+          if (allowMultiple) {
+            row.innerHTML = `<span class="mapping-multi-label ${o.checked ? "checked" : ""}">
+              ${o.label}
+            </span>`;
+          } else {
+            row.innerHTML = `<span>${o.label}</span>`;
+          }
+
+          row.onclick = (e) => {
+            e.stopPropagation();
+            if (allowMultiple) {
+              const checked = !o.checked;
+              o.checked = checked;
+              onSelect(o.id, checked);
+              row.classList.toggle("checked", checked);
+            } else {
+              onSelect(o.id);
+              closeMappingDropdown();
+            }
+          };
+
+          optionsBox.appendChild(row);
+        });
+    }
+    dropdown.refresh = () => renderList();
+    search.oninput = renderList;
+    renderList();
+
+    function closeMappingDropdown() {
+      document.removeEventListener("click", outside, true);
+      dropdown.remove();
+    }
+
+    function outside(evt) {
+      if (!dropdown.contains(evt.target)) {
+        closeMappingDropdown();
+      }
+    }
+
+    document.addEventListener("click", outside, true);
   }
 
   // ------------------------------------------------------------
