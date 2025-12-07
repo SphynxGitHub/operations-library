@@ -562,6 +562,7 @@ body {
 
 .muted {
   color: var(--muted);
+  font-size: 11px;
 }
 
 .empty-hint {
@@ -1066,4 +1067,92 @@ body {
 .naming-preview {
   font-size: 11px;
   opacity: 0.8;
+}
+
+/* Align the filter buttons in a row */
+
+section-resources {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.section-header {
+  display: flex;
+  width: 100%;
+}
+#filterButtons {
+  display: flex;
+  flex-wrap: wrap;  /* Allows buttons to wrap on smaller screens */
+  gap: 8px;  /* Adds space between the buttons */
+  margin-top: 10px;  /* Adds space between the title and filter buttons */
+  margin-bottom: 20px;  /* Adds space between filter buttons and the grid */
+  margin-right: 5px;
+}
+
+/* Ensure the "Add Resource" button has appropriate size and appearance */
+/* Style the Add Resource button to match the other add buttons */
+
+/* Hover effect to match other buttons */
+#btnAddResource:hover {
+  background-color: #0056b3; /* Darken the blue for hover effect */
+}
+
+/* Optional: If you want to remove the background for the 'x' type buttons */
+button.btn.xsmall.soft {
+  background-color: transparent;
+  border: 1px solid #ccc; /* Adds a subtle border to match button styles */
+}
+
+/* Focus and active states (optional, depending on your design needs) */
+#btnAddResource:focus {
+  outline: none;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+/* Ensure that the resource grid looks good and adjusts with the layout */
+#resourcesGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));  /* Adjusts the grid layout based on screen size */
+  margin-top: 20px;
+}
+
+/* Additional styling for the card content */
+.resource-detail input,
+.resource-detail textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.resource-detail .resource-section {
+  margin-bottom: 15px;
+}
+
+.resource-detail .card-body {
+  padding: 20px;
+  background-color: #3a3a3a;
+  border-radius: 8px;
+}
+/* Align the filter buttons to the left */
+.resource-filters {
+  display: flex;
+  flex-wrap: wrap; /* Allow wrapping if there are too many buttons */
+  gap: 10px; /* Add some space between buttons */
+  justify-content: flex-start; /* Align buttons to the left */
+  margin-top: 10px; /* Add some space above the filter buttons */
+}
+
+/* Ensure filter buttons stay inline and not squished */
+.resource-filters button {
+  white-space: nowrap; /* Prevent text from wrapping */
+}
+/* Ensure section-actions has space for both buttons */
+.section-actions {
+  display: flex;
+  justify-content: space-between; /* Align buttons on opposite ends */
+  width: 100%; /* Ensure the actions take up the full width */
 }
