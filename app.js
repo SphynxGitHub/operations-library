@@ -526,6 +526,30 @@
     namingConventions: OL.store.get("namingConventions", defaultNamingConventions),
   };
 
+  // normalize legacy resources into richer shape
+  (function normalizeResources() {
+    const list = Array.isArray(OL.state.resources) ? OL.state.resources : [];
+    OL.state.resources = list.map(r => {
+      // legacy style from defaultResources
+      const refs = r.references || {};
+      return {
+        id: r.id || uid(),
+        name: r.name || "Untitled Resource",
+        type: r.type || "doc", // doc|pdf|form|scheduler|emailTemplate|emailCampaign|zap
+        description: r.description || "",
+        link: r.link || "",
+        appIds: Array.isArray(r.appIds)
+          ? r.appIds
+          : Array.isArray(refs.apps)
+            ? refs.apps.slice()
+            : [],
+        ownerIds: Array.isArray(r.ownerIds) ? r.ownerIds : [],
+        tags: Array.isArray(r.tags) ? r.tags : [],
+        resourcesUsed: Array.isArray(r.resourcesUsed) ? r.resourcesUsed : [],
+        // NOTE: backlinks (used in) are derived at render-time, not stored
+      };
+    });
+  })();
   // Seed canonical library from existing capabilities if empty (legacy)
   (function seedCanonicalCapsFromCapabilities() {
     const st = OL.state;
@@ -552,6 +576,8 @@
 
   const state = OL.state;
   let capViewMode = "by-app"; // "by-app" or "by-type"
+  let currentResourceFilter = "all"; // all|doc|form|scheduler|emailTemplate|emailCampaign|zap
+
 
   // ------------------------------------------------------------
   // PERSIST
@@ -726,7 +752,8 @@
     renderSegmentCategoriesGrid();
     renderSegmentsGrid();
     renderFolderHierarchyGrid();
-    renderNamingConventions();      // core object fields
+    renderNamingConventions();
+    renderResourcesGrid();
   };
 
   // ------------------------------------------------------------
@@ -748,7 +775,7 @@
     refs.forEach((ref) => {
       const cap = state.capabilities.find((c) => c.id === ref.capabilityId);
       if (!cap) return;
-      const it = cap.integrationType || "zapier";
+      const it = cap.type || "zapier";
       if (it === "direct") hasDirect = true;
       else if (it === "zapier") hasZapier = true;
       else if (it === "both") {
@@ -990,6 +1017,23 @@
               <div id="namingGrid" class="cards-grid"></div>
             </section>
 
+            <section class="section" id="section-resources">
+              <div class="section-header">
+                <h2>Resources</h2>
+                <button class="btn small" id="btnAddResource">+ Add Resource</button>
+              </div>
+              <div class="resource-filters" id="filterButtons">
+                <button class="btn xsmall soft" data-res-type="all" onclick="OL.setResourceFilter('all')">All</button>
+                <button class="btn xsmall soft" data-res-type="doc" onclick="OL.setResourceFilter('doc')">Docs / PDFs</button>
+                <button class="btn xsmall soft" data-res-type="form" onclick="OL.setResourceFilter('form')">Forms</button>
+                <button class="btn xsmall soft" data-res-type="scheduler" onclick="OL.setResourceFilter('scheduler')">Scheduler</button>
+                <button class="btn xsmall soft" data-res-type="emailTemplate" onclick="OL.setResourceFilter('emailTemplate')">Email Templates</button>
+                <button class="btn xsmall soft" data-res-type="emailCampaign" onclick="OL.setResourceFilter('emailCampaign')">Email Campaigns</button>
+                <button class="btn xsmall soft" data-res-type="zap" onclick="OL.setResourceFilter('zap')">Zaps</button>
+              </div>
+              <div id="resourcesGrid" class="cards-grid"></div>
+            </section>
+
           </main>
         </div>
       </div>
@@ -1064,6 +1108,10 @@
           })
           .join("")
       : `<span class="pill muted">None</span>`;
+      
+    // Count datapoints for display
+    const dpCount = (app.datapointMappings || []).length;
+
 
     return `
       <div class="card" data-app-id="${app.id}" onclick="OL.openAppModal('${app.id}')">
@@ -1092,6 +1140,15 @@
             <div class="card-section-content">
               <div class="pills-row">
                 ${fnPills || '<span class="pill muted">No functions</span>'}
+              </div>
+            </div>
+          </div>
+          
+          <div class="card-section">
+            <div class="card-section-title">Datapoints (${dpCount})</div>
+            <div class="card-section-content">
+              <div class="pills-row">
+                <span class="pill muted">View in modal</span>
               </div>
             </div>
           </div>
@@ -1337,22 +1394,31 @@
 
     // Sort safely
     const sorted = [...data].sort((a, b) => {
-      const aKey = norm(a.fieldName).toLowerCase();
-      const bKey = norm(b.fieldName).toLowerCase();
+      const aKey = norm(a.name).toLowerCase(); // Changed from fieldName to name
+      const bKey = norm(b.name).toLowerCase(); // Changed from fieldName to name
       return aKey.localeCompare(bKey);
     });
 
     sorted.forEach((dp) => {
-      const app = findAppById(dp.appId);
+      // Find one app that uses this datapoint to display context
+      const mappings = state.apps.flatMap(app => 
+        (app.datapointMappings || [])
+          .filter(m => m.datapointId === dp.id)
+          .map(m => ({ app, mapping: m }))
+      );
+      
+      const firstMapping = mappings[0];
+      const app = firstMapping ? firstMapping.app : null;
       const appName = norm(app?.name);
-      const field = norm(dp.fieldName);
+      
+      const mappedCount = mappings.length;
 
       const cardHtml = `
         <div class="card datapoint-card" data-dp-id="${dp.id}">
           <div class="card-header">
             <div class="card-header-left">
-              <div class="card-icon">${app ? OL.iconHTML(app) : ""}</div>
-              <div class="card-title">${field || "(Unnamed Field)"}</div>
+              <div class="card-icon">${app ? OL.iconHTML(app) : "📝"}</div>
+              <div class="card-title">${norm(dp.name) || "(Unnamed Datapoint)"}</div>
             </div>
             <div class="card-close"
                 onclick="event.stopPropagation(); OL.deleteDatapoint('${dp.id}')">×</div>
@@ -1360,23 +1426,16 @@
 
           <div class="card-body">
             <div class="card-section">
-              <div class="card-section-title">Application</div>
-              <div class="card-section-content">
-                ${appName || "(Unknown App)"}
+              <div class="card-section-title">Description</div>
+              <div class="card-section-content single-line-text ${!dp.description ? "muted" : ""}">
+                ${norm(dp.description) || "No description"}
               </div>
             </div>
 
             <div class="card-section">
-              <div class="card-section-title">Inbound Mapping</div>
+              <div class="card-section-title">App Mappings</div>
               <div class="card-section-content single-line-text">
-                ${norm(dp.inbound) || "<span class='muted'>None</span>"}
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">Outbound Mapping</div>
-              <div class="card-section-content single-line-text">
-                ${norm(dp.outbound) || "<span class='muted'>None</span>"}
+                ${mappedCount > 0 ? `${mappedCount} applications mapped` : "<span class='muted'>Not yet mapped</span>"}
               </div>
             </div>
           </div>
@@ -2011,9 +2070,9 @@
             const rule = getSegmentRule(seg, cat.id);
             const values = Array.isArray(cat.values) ? cat.values : [];
             const currentLabel = (() => {
-            const v = values.find(v => rule && rule.valueId === v.id);
-            return v ? v.label : "(None)";
-          })();
+              const v = values.find(v => rule && rule.valueId === v.id);
+              return v ? v.label : "(None)";
+            })();
 
           return `
             <div class="segment-rule-row">
@@ -2179,7 +2238,7 @@
                 <div class="card-icon">${OL.iconHTML(app)}</div>
                 <div class="card-title cap-app-title"
                     data-open-app-id="${app.id}">
-                    ${esc(app.name || "")}
+                      ${esc(app.name || "")}
                 </div>
               </div>
             </div>
@@ -2375,9 +2434,9 @@
           const indent = 8 + depth * 18;
           return `
             <div class="folder-node-row"
-                 draggable="true"
-                 data-hier-id="${hier.id}"
-                 data-node-id="${n.id}">
+                draggable="true"
+                data-hier-id="${hier.id}"
+                data-node-id="${n.id}">
               <div class="folder-node-main" style="padding-left:${indent}px;">
                 <span class="folder-node-icon">📁</span>
                 <span class="folder-node-label">${esc(n.name || "")}</span>
@@ -2751,7 +2810,7 @@
     // CUSTOM SCENARIOS
     scenarios.forEach((sc, idx) => {
       const scenHouse = sc.household || {};
-      const scenLife  = sc.lifecycle || {};
+      const scenLife = sc.lifecycle || {};
 
       grid.insertAdjacentHTML("beforeend", `
         <div class="card naming-section" data-scen="${idx}">
@@ -2880,6 +2939,552 @@
     });
   }
 
+    // ------------------------------------------------------------
+  // RESOURCES GRID
+  // ------------------------------------------------------------
+  function resourceTypeLabel(t) {
+    switch (t) {
+      case "doc":
+        return "Document / PDF";
+      case "form":
+        return "Form";
+      case "scheduler":
+        return "Scheduler Event";
+      case "emailTemplate":
+        return "Email Template";
+      case "emailCampaign":
+        return "Email Campaign";
+      case "zap":
+        return "Zap";
+      default:
+        return "Resource";
+    }
+  }
+
+  function getTeamMemberById(id) {
+    return (state.teamMembers || []).find(m => m.id === id) || null;
+  }
+
+  function getResourceById(id) {
+    return (state.resources || []).find(r => r.id === id) || null;
+  }
+
+  function renderResourcesGrid() {
+    const grid = document.getElementById("resourcesGrid");
+    if (!grid) return;
+
+    const all = Array.isArray(state.resources) ? state.resources : [];
+
+    // highlight active filter button
+    const filterWrap = document.getElementById("resourcesFilters");
+    if (filterWrap) {
+      filterWrap.querySelectorAll("[data-res-type]").forEach(btn => {
+        const t = btn.getAttribute("data-res-type");
+        if (t === currentResourceFilter) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      });
+    }
+
+    let list = all;
+    if (currentResourceFilter !== "all") {
+      list = all.filter(r => (r.type || "doc") === currentResourceFilter);
+    }
+
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-hint">No resources yet for this view.</div>`;
+      return;
+    }
+
+    // sort by name
+    list = list.slice().sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+
+    grid.innerHTML = "";
+
+    list.forEach(r => {
+      const type = r.type || "doc";
+      const typeLabel = resourceTypeLabel(type);
+
+      const apps = (r.appIds || [])
+        .map(id => findAppById(id))
+        .filter(Boolean);
+
+      const owners = (r.ownerIds || [])
+        .map(id => getTeamMemberById(id))
+        .filter(Boolean);
+
+      const resourcesUsed = (r.resourcesUsed || [])
+        .map(id => getResourceById(id))
+        .filter(Boolean);
+
+      // backlinks: other resources that reference this one
+      const usedInResources = all.filter(other =>
+        Array.isArray(other.resourcesUsed) && other.resourcesUsed.includes(r.id)
+      );
+
+      const linkLabel = r.link
+        ? (r.link.length > 60 ? r.link.slice(0, 60) + "…" : r.link)
+        : "";
+
+      const appsHtml = apps.length
+        ? apps.map(a => `<span class="pill integr">${esc(a.name || "")}</span>`).join("")
+        : `<span class="pill muted">No app mapped</span>`;
+
+      const ownersHtml = owners.length
+        ? owners.map(m => `
+            <span class="pill fn"
+                  onclick="event.stopPropagation(); OL.openTeamMemberModal('${m.id}')">
+              ${esc(m.name || "")}
+            </span>
+          `).join("")
+        : `<span class="pill muted">No owners</span>`;
+
+      const tagsHtml = (r.tags || []).length
+        ? (r.tags || []).map(t => `<span class="pill xsmall">${esc(t)}</span>`).join("")
+        : `<span class="pill muted">No tags</span>`;
+
+      const usedHtml = resourcesUsed.length
+        ? resourcesUsed.map(rr => `
+            <span class="pill xsmall"
+                  onclick="event.stopPropagation(); OL.openResourceModal('${rr.id}')">
+              ${esc(rr.name || "")}
+            </span>
+          `).join("")
+        : `<span class="pill muted">None</span>`;
+
+      const usedInHtml = usedInResources.length
+        ? usedInResources.map(rr => `
+            <span class="pill xsmall"
+                  onclick="event.stopPropagation(); OL.openResourceModal('${rr.id}')">
+              ${esc(rr.name || "")}
+            </span>
+          `).join("")
+        : `<span class="pill muted">None yet</span>`;
+
+      grid.insertAdjacentHTML("beforeend", `
+        <div class="card resource-card" data-res-id="${r.id}">
+          <div class="card-header">
+            <div class="card-header-left">
+              <div class="card-title single-line-text">${esc(r.name || "")}</div>
+              <span class="pill xsmall soft">${esc(typeLabel)}</span>
+            </div>
+            <div class="card-close"
+                 onclick="event.stopPropagation(); OL.deleteResource('${r.id}')">×</div>
+          </div>
+          <div class="card-body">
+
+            <div class="card-section">
+              <div class="card-section-title">Description</div>
+              <div class="card-section-content single-line-text ${r.description ? "" : "muted"}">
+                ${esc(r.description || "No description")}
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Primary Link</div>
+              <div class="card-section-content single-line-text">
+                ${
+                  r.link
+                    ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">Open</a>`
+                    : `<span class="muted">No link</span>`
+                }
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">App</div>
+              <div class="card-section-content">
+                <div class="pills-row">${appsHtml}</div>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Owners</div>
+              <div class="card-section-content">
+                <div class="pills-row">${ownersHtml}</div>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Tags</div>
+              <div class="card-section-content">
+                <div class="pills-row">${tagsHtml}</div>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Resources Used</div>
+              <div class="card-section-content">
+                <div class="pills-row">${usedHtml}</div>
+              </div>
+            </div>
+
+            <div class="card-section">
+              <div class="card-section-title">Used In (Resources)</div>
+              <div class="card-section-content">
+                <div class="pills-row">${usedInHtml}</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      `);
+    });
+
+    // wire card click → modal
+    grid.querySelectorAll(".resource-card").forEach(card => {
+      card.onclick = e => {
+        e.preventDefault();
+        const id = card.getAttribute("data-res-id");
+        if (id) OL.openResourceModal(id);
+      };
+    });
+  }
+
+  OL.setResourceFilter = function(type) {
+    currentResourceFilter = type || "all";
+    renderResourcesGrid();
+  };
+
+  OL.deleteResource = function(id) {
+    const res = getResourceById(id);
+    if (!res) return;
+    if (!confirm(`Delete resource "${res.name || "this resource"}"?`)) return;
+
+    // remove from list
+    state.resources = (state.resources || []).filter(r => r.id !== id);
+
+    // strip from other resources' resourcesUsed
+    (state.resources || []).forEach(r => {
+      if (Array.isArray(r.resourcesUsed)) {
+        r.resourcesUsed = r.resourcesUsed.filter(rid => rid !== id);
+      }
+    });
+
+    OL.persist();
+    renderResourcesGrid();
+  };
+
+    // ------------------------------------------------------------
+  // RESOURCE MODAL
+  // ------------------------------------------------------------
+  OL.openResourceModal = function(resourceId) {
+    let res = resourceId ? getResourceById(resourceId) : null;
+
+    if (!res) {
+      // create new with sensible defaults
+      res = {
+        id: uid(),
+        name: "New Resource",
+        type: currentResourceFilter !== "all" ? currentResourceFilter : "doc",
+        description: "",
+        link: "",
+        appIds: [],
+        ownerIds: [],
+        tags: [],
+        resourcesUsed: [],
+      };
+      state.resources = state.resources || [];
+      state.resources.push(res);
+      OL.persist();
+    }
+
+    const typeOptions = `
+      <option value="doc" ${res.type === "doc" ? "selected" : ""}>Document / PDF</option>
+      <option value="form" ${res.type === "form" ? "selected" : ""}>Form</option>
+      <option value="scheduler" ${res.type === "scheduler" ? "selected" : ""}>Scheduler Event</option>
+      <option value="emailTemplate" ${res.type === "emailTemplate" ? "selected" : ""}>Email Template</option>
+      <option value="emailCampaign" ${res.type === "emailCampaign" ? "selected" : ""}>Email Campaign</option>
+      <option value="zap" ${res.type === "zap" ? "selected" : ""}>Zap</option>
+    `;
+
+    const apps = (state.apps || []).slice().sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+    const appNames = apps.map(a => ({
+      id: a.id,
+      label: a.name || "(unnamed app)",
+    }));
+
+    const members = (state.teamMembers || []).slice().sort((a, b) =>
+      (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase())
+    );
+    const memberNames = members.map(m => ({
+      id: m.id,
+      label: m.name || "(unnamed)",
+    }));
+
+    const resources = (state.resources || []).filter(r2 => r2.id !== res.id);
+    const resourceNames = resources.map(r2 => ({
+      id: r2.id,
+      label: r2.name || "(unnamed resource)",
+    }));
+
+    const tagsText = (res.tags || []).join(", ");
+
+    const iframeHtml = res.link
+      ? `<iframe src="${esc(res.link)}" class="resource-iframe" style="width:100%;min-height:260px;border:1px solid #ddd;border-radius:8px;"></iframe>`
+      : `<div class="empty-hint">Add a link to preview this resource here.</div>`;
+
+    openModal(`
+      <div class="modal-head">
+        <div class="modal-title-text" id="resName" contenteditable="true">
+          ${esc(res.name || "Resource")}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+      </div>
+
+      <div class="modal-body">
+
+        <div class="modal-row">
+          <div class="modal-column">
+            <label class="modal-section-label">Type</label>
+            <select id="resType" class="modal-textarea" style="min-height:auto;height:auto;">
+              ${typeOptions}
+            </select>
+          </div>
+          <div class="modal-column">
+            <label class="modal-section-label">Tags (comma separated)</label>
+            <input id="resTags" class="modal-textarea" style="min-height:auto;height:auto;"
+                   value="${esc(tagsText)}">
+          </div>
+        </div>
+
+        <label class="modal-section-label">Description</label>
+        <textarea id="resDesc" class="modal-textarea">${esc(res.description || "")}</textarea>
+
+        <label class="modal-section-label">Primary Link (viewed in iframe + open in new tab)</label>
+        <input id="resLink" class="modal-textarea" style="min-height:auto;height:auto;"
+               value="${esc(res.link || "")}">
+        <div class="small muted" style="margin:4px 0 12px;">
+          Note: some external tools block iframe embedding; in that case, use the "Open" link on the card.
+        </div>
+
+        <div id="resPreviewBlock">
+          ${iframeHtml}
+        </div>
+
+        <div class="modal-row">
+          <div class="modal-column">
+            <label class="modal-section-label">App</label>
+            <button class="btn xsmall soft" id="resAppPicker">Assign App</button>
+            <div id="resAppPills" class="pills-row" style="margin-top:6px;"></div>
+          </div>
+          <div class="modal-column">
+            <label class="modal-section-label">Owners</label>
+            <button class="btn xsmall soft" id="resOwnerPicker">Assign Owners</button>
+            <div id="resOwnerPills" class="pills-row" style="margin-top:6px;"></div>
+          </div>
+        </div>
+
+        <label class="modal-section-label">Resources Used</label>
+        <button class="btn xsmall soft" id="resResourcePicker">Add / Edit</button>
+        <div id="resResourcePills" class="pills-row" style="margin-top:6px;"></div>
+
+      </div>
+    `);
+
+    const layer = getModalLayer();
+    if (!layer) return;
+
+    const nameEl = layer.querySelector("#resName");
+    const typeEl = layer.querySelector("#resType");
+    const descEl = layer.querySelector("#resDesc");
+    const linkEl = layer.querySelector("#resLink");
+    const tagsEl = layer.querySelector("#resTags");
+
+    const previewBlock = layer.querySelector("#resPreviewBlock");
+    const appPillsEl = layer.querySelector("#resAppPills");
+    const ownerPillsEl = layer.querySelector("#resOwnerPills");
+    const resourcePillsEl = layer.querySelector("#resResourcePills");
+
+    function refreshPills() {
+      // apps
+      const appsHtml = (res.appIds || [])
+        .map(id => {
+          const a = findAppById(id);
+          if (!a) return "";
+          return `
+            <span class="pill integr"
+                  data-app-id="${a.id}">
+              ${esc(a.name || "")}
+            </span>
+          `;
+        })
+        .join("");
+      if (appPillsEl) {
+        appPillsEl.innerHTML = appsHtml || `<span class="pill muted">No app mapped</span>`;
+      }
+
+      // owners
+      const ownersHtml = (res.ownerIds || [])
+        .map(id => {
+          const m = getTeamMemberById(id);
+          if (!m) return "";
+          return `
+            <span class="pill fn"
+                  data-owner-id="${m.id}">
+              ${esc(m.name || "")}
+            </span>
+          `;
+        })
+        .join("");
+      if (ownerPillsEl) {
+        ownerPillsEl.innerHTML = ownersHtml || `<span class="pill muted">No owners</span>`;
+      }
+
+      // resources used
+      const usedHtml = (res.resourcesUsed || [])
+        .map(id => {
+          const r2 = getResourceById(id);
+          if (!r2) return "";
+          return `
+            <span class="pill xsmall"
+                  data-used-res-id="${r2.id}">
+              ${esc(r2.name || "")}
+            </span>
+          `;
+        })
+        .join("");
+      if (resourcePillsEl) {
+        resourcePillsEl.innerHTML = usedHtml || `<span class="pill muted">None</span>`;
+      }
+    }
+
+    refreshPills();
+
+    if (nameEl) {
+      nameEl.addEventListener("keydown", e => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          nameEl.blur();
+        }
+      });
+      nameEl.addEventListener("blur", () => {
+        res.name = nameEl.textContent.trim() || "Untitled Resource";
+        OL.persist();
+        renderResourcesGrid();
+      });
+    }
+
+    if (typeEl) {
+      typeEl.onchange = () => {
+        res.type = typeEl.value || "doc";
+        OL.persist();
+        renderResourcesGrid();
+      };
+    }
+
+    if (descEl) {
+      descEl.addEventListener("input", debounce(() => {
+        res.description = descEl.value;
+        OL.persist();
+        renderResourcesGrid();
+      }, 200));
+    }
+
+    if (linkEl) {
+      linkEl.addEventListener("input", debounce(() => {
+        res.link = linkEl.value.trim();
+        if (previewBlock) {
+          previewBlock.innerHTML = res.link
+            ? `<iframe src="${esc(res.link)}" class="resource-iframe" style="width:100%;min-height:260px;border:1px solid #ddd;border-radius:8px;"></iframe>`
+            : `<div class="empty-hint">Add a link to preview this resource here.</div>`;
+        }
+        OL.persist();
+        renderResourcesGrid();
+      }, 300));
+    }
+
+    if (tagsEl) {
+      tagsEl.addEventListener("input", debounce(() => {
+        const raw = tagsEl.value || "";
+        res.tags = raw
+          .split(",")
+          .map(t => t.trim())
+          .filter(Boolean);
+        OL.persist();
+        renderResourcesGrid();
+      }, 250));
+    }
+
+    // mapping dropdowns – we reuse openMappingDropdown like segments
+    const appBtn = layer.querySelector("#resAppPicker");
+    if (appBtn) {
+      appBtn.onclick = e => {
+        e.stopPropagation();
+        const options = appNames.map(a => ({
+          id: a.id,
+          label: a.label,
+          checked: (res.appIds || []).includes(a.id),
+        }));
+        openMappingDropdown({
+          anchorEl: appBtn,
+          options,
+          allowMultiple: false,
+          onSelect: (id) => {
+            res.appIds = id ? [id] : [];
+            OL.persist();
+            renderResourcesGrid();
+            refreshPills();
+          },
+        });
+      };
+    }
+
+    const ownerBtn = layer.querySelector("#resOwnerPicker");
+    if (ownerBtn) {
+      ownerBtn.onclick = e => {
+        e.stopPropagation();
+        const options = memberNames.map(m => ({
+          id: m.id,
+          label: m.label,
+          checked: (res.ownerIds || []).includes(m.id),
+        }));
+        openMappingDropdown({
+          anchorEl: ownerBtn,
+          options,
+          allowMultiple: true,
+          onSelect: (ids) => {
+            res.ownerIds = Array.isArray(ids) ? ids.slice() : (ids ? [ids] : []);
+            OL.persist();
+            renderResourcesGrid();
+            refreshPills();
+          },
+        });
+      };
+    }
+
+    const resBtn = layer.querySelector("#resResourcePicker");
+    if (resBtn) {
+      resBtn.onclick = e => {
+        e.stopPropagation();
+        const options = resourceNames.map(r2 => ({
+          id: r2.id,
+          label: r2.label,
+          checked: (res.resourcesUsed || []).includes(r2.id),
+        }));
+        openMappingDropdown({
+          anchorEl: resBtn,
+          options,
+          allowMultiple: true,
+          onSelect: (ids) => {
+            res.resourcesUsed = Array.isArray(ids) ? ids.slice() : (ids ? [ids] : []);
+            OL.persist();
+            renderResourcesGrid();
+            refreshPills();
+          },
+        });
+      };
+    }
+  };
+
+
   // ------------------------------------------------------------
   // TOP BUTTONS
   // ------------------------------------------------------------
@@ -2895,6 +3500,7 @@
     const btnAddSegment = document.getElementById("btnAddSegment");
     const btnAddFolderHierarchy = document.getElementById("btnAddFolderHierarchy");
     const btnAddNamingConvention = document.getElementById("btnAddNamingConvention");
+    const btnAddResource = document.getElementById("btnAddResource");
     
     if (btnAddApp) {
       btnAddApp.onclick = () => {
@@ -3066,6 +3672,13 @@
 
         OL.persist();
         renderNamingConventions();
+      };
+    }
+
+    if (btnAddResource) {
+      btnAddResource.onclick = () => {
+        // create and immediately open modal (type defaults based on current filter)
+        OL.openResourceModal(null);
       };
     }
   }
@@ -3248,6 +3861,70 @@
       })
       .join("");
   }
+  
+  // =========================================================================
+  // *** CORRECTED DATAPOINT DROPDOWN FILTER LOGIC ***
+  // =========================================================================
+  function showDatapointDropdown(select, dpMapping, app) {
+    // 1. Get the ID of the current mapping row being edited.
+    const currentMappingId = dpMapping.id;
+    
+    // 2. Identify all Datapoint IDs currently used in other mappings in this app.
+    const mappedIds = new Set(
+      (app.datapointMappings || [])
+        // Filter OUT the current mapping row so its DatapointId is not considered 'taken' by itself.
+        .filter(m => m.id !== currentMappingId)
+        .map(m => m.datapointId)
+        .filter(Boolean)
+    );
+    
+    // Identify the ID of the Datapoint currently mapped in the row we are editing.
+    const currentDpId = dpMapping.datapointId;
+
+    // 3. Prepare options list from all global Datapoints.
+    const options = (state.datapoints || [])
+      .map(dp => {
+        // Is this Datapoint the one currently selected in the row we are editing?
+        const isCurrentSelection = dp.id === currentDpId;
+        
+        // If the Datapoint ID is NOT the current selection AND it's found in the mappedIds set, 
+        // it means another row is using it, so we mark it as disabled/unavailable.
+        const isUnavailable = !isCurrentSelection && mappedIds.has(dp.id);
+
+        return {
+          id: dp.id,
+          label: dp.name,
+          checked: isCurrentSelection, // Only the currently selected item is checked
+          disabled: isUnavailable,     // Mark as disabled for filtering
+        };
+      })
+      // FINAL FILTER: Only include options that are NOT disabled. 
+      // This removes all items used elsewhere. The current selection remains.
+      .filter(o => !o.disabled)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    openMappingDropdown({
+      anchorEl: select,
+      options: options, 
+      allowMultiple: false, 
+      onSelect: (datapointId) => {
+        // Update the underlying state
+        dpMapping.datapointId = datapointId;
+        
+        // Update the input field display manually
+        select.value = getDatapointName(datapointId);
+
+        OL.persist();
+        
+        // Re-render the Datapoint list in the modal to update all dropdowns simultaneously
+        const dpWrap = document.querySelector("#appDatapoints");
+        const appRef = findAppById(app.id); 
+        if (dpWrap && appRef) renderDatapoints(dpWrap, appRef); 
+        
+        OL.refreshAllUI();
+      }
+    });
+  }
 
   function renderDatapoints(container, app) {
     if (!container) return;
@@ -3257,19 +3934,26 @@
       const row = document.createElement("div");
       row.className = "datapoint-row";
 
+      // Datapoint selector - kept as an interactive input
       const select = document.createElement("input");
       select.type = "text";
       select.className = "dp-select";
       select.placeholder = "Select datapoint…";
+      // This line MUST reflect the current selection
       select.value = getDatapointName(dp.datapointId);
 
+      // *** CORRECTED: Re-enabling the click handler for the dropdown ***
       select.onclick = (e) => {
         e.stopPropagation();
         showDatapointDropdown(select, dp, app);
       };
+      
+      // We do NOT want it disabled if it is meant to be clicked
+      select.disabled = false; 
+      
+      row.appendChild(select); 
 
-      row.appendChild(select);
-
+      // Inbound/Outbound fields
       ["inbound", "outbound"].forEach((field) => {
         const inp = document.createElement("input");
         inp.placeholder = field[0].toUpperCase() + field.slice(1);
@@ -3281,15 +3965,17 @@
         row.appendChild(inp);
       });
 
+      // Delete button
       const del = document.createElement("div");
       del.className = "card-close";
       del.textContent = "×";
       del.onclick = (e) => {
         e.stopPropagation();
-        if (!confirm("Delete this datapoint?")) return;
+        if (!confirm("Delete this datapoint mapping from this app?")) return;
         app.datapointMappings = app.datapointMappings.filter((x) => x !== dp);
         OL.persist();
         renderDatapoints(container, app);
+        renderAppsGrid(); // Refresh app card to update count
       };
       row.appendChild(del);
 
@@ -3297,57 +3983,8 @@
     });
 
     if (!(app.datapointMappings || []).length) {
-      container.innerHTML = `<div class="empty-hint">No datapoints yet.</div>`;
+      container.innerHTML = `<div class="empty-hint">No datapoints yet. Click '+ Add Datapoint' below to start.</div>`;
     }
-  }
-
-  function showDatapointDropdown(select, dpMapping, app) {
-    closeAllDatapointDropdowns();
-    const used = new Set(
-      app.datapointMappings.map((m) => m.datapointId).filter(Boolean),
-    );
-
-    const dropdown = document.createElement("div");
-    dropdown.className = "dp-dropdown";
-
-    dropdown.innerHTML = `
-      <input class="dp-search" placeholder="Search…">
-      <div class="dp-options"></div>
-    `;
-
-    document.body.appendChild(dropdown);
-
-    const rect = select.getBoundingClientRect();
-    dropdown.style.left = rect.left + "px";
-    dropdown.style.top = rect.bottom + "px";
-
-    const search = dropdown.querySelector(".dp-search");
-    const options = dropdown.querySelector(".dp-options");
-
-    function renderList() {
-      const q = (search.value || "").toLowerCase();
-      options.innerHTML = "";
-
-      state.datapoints
-        .filter((d) => !used.has(d.id))
-        .filter((d) => fuzzyMatch(d.name, q))
-        .forEach((d) => {
-          const opt = document.createElement("div");
-          opt.className = "dp-option";
-          opt.textContent = d.name;
-          opt.onclick = () => {
-            dpMapping.datapointId = d.id;
-            select.value = d.name;
-            OL.persist();
-            closeAllDatapointDropdowns();
-          };
-          options.appendChild(opt);
-        });
-    }
-
-    search.oninput = renderList;
-    search.focus();
-    renderList();
   }
 
   function getDatapointName(dpId) {
@@ -3450,7 +4087,7 @@
         const dd = document.querySelector(".mapping-dropdown");
         if (dd && dd.refresh) dd.refresh();
       }
-    });
+      });
   }
 
   function bindAppModal(app) {
@@ -3537,14 +4174,20 @@
     renderDatapoints(dpWrap, app);
 
     if (addDpBtn) {
+      // *** CORRECTED: Re-enabling the modal button functionality ***
+      addDpBtn.style.display = 'block'; 
       addDpBtn.onclick = () => {
+        // Create a temporary mapping entry. The user MUST then click 
+        // the input in the new row to map it to a global Datapoint.
         app.datapointMappings.push({
+          id: uid(), // Must have a unique ID to filter correctly against self
           datapointId: null,
           inbound: "",
           outbound: "",
         });
         OL.persist();
         renderDatapoints(dpWrap, app);
+        renderAppsGrid(); // Refresh app card count
       };
     }
 
@@ -3600,6 +4243,60 @@
       }
     });
   }
+  
+  // ------------------------------------------------------------
+  // NEW DATAPOINT DROPDOWN FUNCTION (Not used directly by modal, keeping for completeness)
+  // ------------------------------------------------------------
+  OL.openAppCardDatapointDropdown = function(anchorEl, appId) {
+    const app = findAppById(appId);
+    if (!app) return;
+
+    const mappedIds = new Set((app.datapointMappings || []).map(m => m.datapointId).filter(Boolean));
+    
+    // Prepare options from all global datapoints that are NOT yet mapped to this app
+    const options = (state.datapoints || [])
+      .filter(dp => !mappedIds.has(dp.id))
+      .map(dp => ({
+        id: dp.id,
+        label: dp.name,
+        checked: false, 
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    if (options.length === 0) {
+      // If there are no global datapoints at all, direct the user
+      if ((state.datapoints || []).length === 0) {
+          alert("No global datapoints available to map. Add some in Settings > Datapoints first.");
+      } else {
+          // All existing datapoints are already mapped
+          alert(`All ${mappedIds.size} existing datapoints are already mapped to ${app.name}.`);
+      }
+      return;
+    }
+
+    openMappingDropdown({
+      anchorEl: anchorEl,
+      options: options,
+      allowMultiple: false, 
+      onSelect: (datapointId) => {
+        // 1. Create the new mapping object
+        const newMapping = {
+          id: uid(),
+          datapointId: datapointId,
+          inbound: "", // Defaults to empty, user can fill in modal
+          outbound: "", // Defaults to empty, user can fill in modal
+        };
+        
+        // 2. Add it to the app's mappings
+        app.datapointMappings = app.datapointMappings || [];
+        app.datapointMappings.push(newMapping);
+
+        // 3. Persist and refresh the grids/card
+        OL.persist();
+        OL.refreshAllUI();
+      }
+    });
+  };
 
   // ------------------------------------------------------------
   // FUNCTION MODAL
@@ -3781,7 +4478,8 @@
       }
     });
   }
-    // ------------------------------------------------------------
+  
+  // ------------------------------------------------------------
   // TEAM MEMBER MODAL
   // ------------------------------------------------------------
   OL.openTeamMemberModal = function (memberId) {
@@ -4285,7 +4983,7 @@
                       )}</span>
                       <input
                         class="int-cap-label"
-                        placeholder="App capability name…"
+                        placeholder="App capability name (e.g. 'New Contact in App')"
                         value="${esc(ref.appLabel || "")}"
                       >
                       <div class="card-close int-cap-delete">×</div>
@@ -4854,6 +5552,11 @@
     state.integrations = state.integrations.filter(
       (i) => i.appA !== appId && i.appB !== appId,
     );
+    // Also remove datapoint mappings for this app
+    state.datapoints.forEach(dp => {
+      dp.appMappings = (dp.appMappings || []).filter(m => m.appId !== appId);
+    });
+
 
     OL.persist();
     OL.refreshAllUI();
@@ -4898,9 +5601,13 @@
   };
 
   OL.deleteDatapoint = function (dpId) {
-    if (!confirm("Delete this datapoint?")) return;
+    const dp = state.datapoints.find((d) => d.id === dpId);
+    if (!dp) return;
+    if (!confirm(`Delete global datapoint "${dp.name}"? This will remove all associated app mappings.`)) return;
+    
     state.datapoints = state.datapoints.filter((d) => d.id !== dpId);
 
+    // Remove all mappings that reference this deleted Datapoint ID
     state.apps.forEach((app) => {
       app.datapointMappings = (app.datapointMappings || []).filter(
         (m) => m.datapointId !== dpId,
@@ -5137,9 +5844,18 @@
       const q = (search.value || "").toLowerCase();
       optionsBox.innerHTML = "";
 
-      options
-        .filter(o => (o.label || "").toLowerCase().includes(q))
+      // Filter by search query
+      const searchableOptions = options.filter(o => (o.label || "").toLowerCase().includes(q));
+
+      searchableOptions
         .forEach(o => {
+          // === CRITICAL FIX: Hide the currently selected item in single-select mode.
+          // The selected item is shown in the input box, not in the list of alternatives.
+          if (!allowMultiple && o.checked) {
+              return; // Skip rendering the current selection
+          }
+          // =========================================================================
+          
           const row = document.createElement("div");
           row.className = "mapping-option";
 
@@ -5148,11 +5864,21 @@
               ${o.label}
             </span>`;
           } else {
+            // For single-select, simply show the label
             row.innerHTML = `<span>${o.label}</span>`;
+          }
+
+          // Apply visual cues for disabled state if necessary
+          if (o.disabled) {
+             row.classList.add('disabled');
+             row.style.opacity = '0.5';
+             row.style.cursor = 'default';
           }
 
           row.onclick = (e) => {
             e.stopPropagation();
+            
+            if (o.disabled) return; 
 
             if (allowMultiple) {
               const checked = !o.checked;
@@ -5171,8 +5897,15 @@
 
           optionsBox.appendChild(row);
         });
+      
+      // If no options remain after filtering, provide a message
+      if (optionsBox.children.length === 0) {
+        optionsBox.innerHTML = `<div class="mapping-option muted" style="cursor:default;">No unmapped options.</div>`;
+      }
     }
+    // Expose refresh function
     dropdown.refresh = () => renderList();
+    
     search.oninput = renderList;
     renderList();
 
@@ -5208,10 +5941,13 @@
   });
 
   document.addEventListener("click", (e) => {
-    const inDropdown = e.target.closest(".dp-dropdown");
+    // We now check if the click is outside the dropdown AND the trigger input
+    const inDropdown = e.target.closest(".mapping-dropdown");
     const inTrigger = e.target.closest(".dp-select");
     if (inDropdown || inTrigger) return;
-    closeAllDatapointDropdowns();
+    
+    // We rely on the global listener attached in openMappingDropdown to close itself.
+    // We don't need a custom closeAllDatapointDropdowns here anymore, but keeping the name check for safety.
   });
 
   function handleRoute() {
@@ -5224,8 +5960,9 @@
     const isSegments = hash.startsWith("#/settings/segments");
     const isFolders = hash.startsWith("#/settings/folder-hierarchy");
     const isNaming = hash.startsWith("#/settings/naming-conventions");
+    const isResources = hash.startsWith('#/resources')
 
-    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities && !isTeam && !isSegments && !isFolders && !isNaming;
+    const showAppsSet = !isDatapoints && !isCanonicalCaps && !isCapabilities && !isTeam && !isSegments && !isFolders && !isNaming && !isResources;
     const showTeamSet = isTeam;
 
     const appsSection = document.getElementById("section-apps");
@@ -5239,7 +5976,7 @@
     const segSection = document.getElementById("section-segments");
     const folderSection = document.getElementById("section-folder-hierarchy");
     const namingSection = document.getElementById("section-naming-conventions");
-
+    const resourcesSection = document.getElementById("section-resources");
 
     if (appsSection) appsSection.style.display = showAppsSet ? "block" : "none";
     if (fnsSection) fnsSection.style.display = showAppsSet ? "block" : "none";
@@ -5263,6 +6000,8 @@
       folderSection.style.display = isFolders ? "block" : "none";
 
     if (namingSection) namingSection.style.display = isNaming ? "block" : "none";
+
+    if (resourcesSection) resourcesSection.style.display = isResources ? "block" : "none";
   }
 
   document.addEventListener("DOMContentLoaded", () => {
