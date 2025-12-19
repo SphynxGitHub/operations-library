@@ -845,8 +845,6 @@ document.addEventListener("selectionchange", () => {
       workflows: OL.store.get("workflows", []), 
   };
 
-  // Immediately define this constant after state is set
-  const analysisState = OL.state.analysis;
   const state = OL.state;
 
   // normalize legacy resources into richer shape
@@ -921,8 +919,8 @@ document.addEventListener("selectionchange", () => {
     OL.store.set("folderHierarchy", state.folderHierarchy);
     OL.store.set("namingCategories", state.namingCategories);
     OL.store.set("namingConventions", state.namingConventions);
-    OL.store.set("analysis", state.analysis);
-    OL.store.set("analysis", state.activeAnalysis);
+    OL.store.set("analysis", window.OL.state.analysis);
+    OL.store.set("analyses", window.OL.state.analyses);
   }, 200);
 
   const statusOrder = {
@@ -1846,48 +1844,50 @@ document.addEventListener("selectionchange", () => {
 // START: CORRECTED ANALYSIS FUNCTIONS BLOCK
 // ========================================================================
 
+  // Ensure state structure is correct on boot
+  if (!window.OL.state.analyses) window.OL.state.analyses = [];
+  if (!window.OL.state.analysis) window.OL.state.analysis = { apps: [], features: [], scores: {} };
+  OL.analysisMenuMode = OL.analysisMenuMode || "builder";
+
   function renderAnalysisMatrix() {
+      const data = window.OL.state.analysis; 
       const container = document.getElementById('analysisMatrixContainer');
-      if (!container) {
-      console.error("Analysis Matrix container not found!");
-          return;
-      }
+
+      if (!container || !data || !data.apps) return; 
 
       // We will structure the matrix based on features (rows) and apps (columns)
-      const features = analysisState.features || [];
-      const apps = analysisState.apps || [];
-
-      // Calculate totals for summary/weight distribution validation
+      const features =data.features || [];
+      const apps = data.apps || [];
       const totalWeight = features.reduce((sum, f) => sum + (f.weight || 0), 0);
 
       let matrixHTML = `
-              <table class="analysis-matrix">
-                  <thead>
-                      <tr>
-                          <th class="matrix-feature-header">Feature / Function (Total Weight: ${totalWeight}%)</th>
-                          <th class="matrix-weight-header">Weight</th>
-                          ${apps.map(app => `
-                              <th class="matrix-app-header" data-app-id="${app.appId}">
-                                  <div class="app-header-content">
-                                      <div>${OL.iconHTML(findAppById(app.appId) || app)}</div>
-                                      <div>${OL.utils.esc(app.name)}</div>
-                                      <div class="app-header-actions">
-                                          <span class="app-remove-btn"
-                                                onclick="OL.removeAppColumn('${app.appId}')">×</span>
-                                      </div>
-                                  </div>
-                              </th>
-                          `).join('')}
-                      </tr>
-                  </thead>
-                  <tbody>
-                      ${features.map(f => renderFeatureRow(f, apps)).join('')}
-                  </tbody>
-                  <tfoot>
-                      ${renderAnalysisSummary(apps, features)}
-                  </tfoot>
-              </table>
-          `;
+        <table class="analysis-matrix">
+          <thead>
+            <tr>
+              <th class="matrix-feature-header">Feature / Function (Total Weight: ${totalWeight}%)</th>
+              <th class="matrix-weight-header">Weight</th>
+              ${apps.map(app => `
+                  <th class="matrix-app-header" data-app-id="${app.appId}">
+                      <div class="app-header-content">
+                          <div>${OL.iconHTML(findAppById(app.appId) || app)}</div>
+                          <div>${OL.utils.esc(app.name)}</div>
+                          <div class="app-header-actions">
+                              <span class="app-remove-btn"
+                                onclick="OL.removeAppColumn('${app.appId}')">×</span>
+                          </div>
+                      </div>
+                  </th>
+              `).join('')}
+            </tr>
+          </thead>
+            <tbody>
+                ${features.map(f => renderFeatureRow(f, apps)).join('')}
+            </tbody>
+            <tfoot>
+                ${renderAnalysisSummary(apps, features)}
+            </tfoot>
+        </table>
+    `;
 
       container.innerHTML = matrixHTML;
       OL.wireAnalysisMatrixEvents();
@@ -1895,12 +1895,12 @@ document.addEventListener("selectionchange", () => {
 
     // Add this function near your other analysis helper functions:
   OL.removeAppColumn = function(appIdToRemove) {
-
-      analysisState.apps = analysisState.apps.filter(a => a.appId !== appIdToRemove);
+      const data = window.OL.state.analysis;
+      data.apps = data.apps.filter(a => a.appId !== appIdToRemove);
       // Clean up scores for the removed app
 
-      Object.keys(analysisState.scores).forEach(featureId => {
-          delete analysisState.scores[featureId][appIdToRemove];
+      Object.keys(data.scores).forEach(featureId => {
+          delete data.scores[featureId][appIdToRemove];
       });
 
       OL.persist();
@@ -1910,14 +1910,14 @@ document.addEventListener("selectionchange", () => {
   OL.renderAnalysisMatrix = renderAnalysisMatrix;
 
   function renderAnalysisSummary(apps, features) {
-
+      const data = window.OL.state.analysis;
       // 1. Calculate the weighted average score for each app (This calculation remains the same)
       const weightedAverages = apps.map(app => {
           let weightedSum = 0;
           let totalWeight = 0;
 
           features.forEach(f => {
-              const score = analysisState.scores[f.id]?.[app.appId] || 0;
+              const score = data.scores[f.id]?.[app.appId] || 0;
               const weight = f.weight || 0;
               weightedSum += score * weight;
               totalWeight += weight;
@@ -1990,11 +1990,12 @@ document.addEventListener("selectionchange", () => {
   }
 
   function renderFeatureRow(feature, apps) {
+      const data = window.OL.state.analysis;
       const currentWeight = feature.weight || 0;
       let scoreCells = apps.map(app => {
 
           // CRITICAL: Use feature.id instead of canonicalId for score lookup
-          const score = analysisState.scores[feature.id]?.[app.appId] || '';
+          const score = data.scores[feature.id]?.[app.appId] || '';
 
           return `
               <td class="matrix-score-cell">
@@ -2029,7 +2030,9 @@ document.addEventListener("selectionchange", () => {
           </tr>
       `;
   }
+
   OL.updateFeatureScore = function (inputElement) {
+      const data = window.OL.state.analysis;
       const featureId = inputElement.getAttribute('data-feature-id');
       const appId = inputElement.getAttribute('data-app-id');
       const newScore = parseFloat(inputElement.value) || 0;
@@ -2037,8 +2040,8 @@ document.addEventListener("selectionchange", () => {
       // Ensure score is within a sensible range (e.g., 1-5)
       const sanitizedScore = Math.max(1, Math.min(5, newScore));
       inputElement.value = sanitizedScore;
-      analysisState.scores[featureId] = analysisState.scores[featureId] || {};
-      analysisState.scores[featureId][appId] = sanitizedScore;
+      data.scores[featureId] = data.scores[featureId] || {};
+      data.scores[featureId][appId] = sanitizedScore;
 
       OL.persist();
       // Re-render the matrix to update the summary/weighted average score
@@ -2046,12 +2049,13 @@ document.addEventListener("selectionchange", () => {
   }
 
   OL.openAppColumnDropdown = function() {
+      const data = window.OL.state.analysis;
       const anchorEl = document.getElementById('btnAddAppColumn');
 
       if (!anchorEl) return;
 
       // 1. Identify which apps are already in the analysis
-      const existingAppIds = new Set(analysisState.apps.map(a => a.appId));
+      const existingAppIds = new Set(data.apps.map(a => a.appId));
 
       // 2. Filter all available apps based on inclusion in the analysis
 
@@ -2076,19 +2080,19 @@ document.addEventListener("selectionchange", () => {
               if (isChecked) {
                   // Add the app to the analysis apps array
                   if (!existingAppIds.has(appId)) {
-                      analysisState.apps.push({
+                      data.apps.push({
                           appId: app.id,
                           name: app.name // Include name/icon for simpler rendering
                       });
                   }
               } else {
                   // Remove the app from the analysis apps array
-                  analysisState.apps = analysisState.apps.filter(a => a.appId !== appId);
+                  data.apps = data.apps.filter(a => a.appId !== appId);
 
                   // Clean up any scores associated with the removed app (optional, but clean)
 
-                  Object.keys(analysisState.scores).forEach(featureId => {
-                      delete analysisState.scores[featureId][appId];
+                  Object.keys(data.scores).forEach(featureId => {
+                      delete data.scores[featureId][appId];
                   });
               }
 
@@ -2110,22 +2114,13 @@ document.addEventListener("selectionchange", () => {
 // 1. Adds a single feature row to the analysis matrix
 OL.addFeatureToAnalysis = function (featureId) {
     const feature = findFeatureById(featureId);
-    if (!feature) return;
-
-    // Use feature ID as the row identifier
-    const featureExists = analysisState.features.some(f => f.id === featureId);
-    if (featureExists) {
-        console.warn(`Feature ${feature.name} already in analysis.`);
-        return;
-    }
-    
+    const data = window.OL.state.analysis;
+    if (!feature || data.features.some(f => f.id === featureId)) return;
     // --- Auto-weight logic (remains the same as fixed earlier) ---
-    const currentFeatureCount = analysisState.features.length;
+    const currentFeatureCount = data.features.length;
     const equalWeight = Math.round(100 / (currentFeatureCount + 1));
     
-    analysisState.features.forEach(f => {
-        f.weight = equalWeight;
-    });
+    data.features.forEach(f => {f.weight = equalWeight;});
 
     const newFeature = {
         id: feature.id,
@@ -2135,11 +2130,11 @@ OL.addFeatureToAnalysis = function (featureId) {
         weight: equalWeight,
     };
     
-    analysisState.features.push(newFeature);
+    data.features.push(newFeature);
     
-    const totalCurrentWeight = analysisState.features.reduce((sum, f) => sum + f.weight, 0);
-    if (totalCurrentWeight !== 100 && analysisState.features.length > 0) {
-        analysisState.features[0].weight += (100 - totalCurrentWeight);
+    const totalCurrentWeight = data.features.reduce((sum, f) => sum + f.weight, 0);
+    if (totalCurrentWeight !== 100 && data.features.length > 0) {
+        data.features[0].weight += (100 - totalCurrentWeight);
     }
     
     OL.persist();
@@ -2169,20 +2164,21 @@ OL.addFeaturesByCategory = function (category) {
 
 // 3. Removes a feature row from the analysis matrix
 OL.removeFeatureFromAnalysis = function (featureId) {
-    analysisState.features = analysisState.features.filter(f => f.id !== featureId);
-    delete analysisState.scores[featureId];
+    const data = window.OL.state.analysis;
+    data.features = data.features.filter(f => f.id !== featureId);
+    delete data.scores[featureId];
 
-    const remainingFeatures = analysisState.features.length;
+    const remainingFeatures = data.features.length;
     if (remainingFeatures > 0) {
         const newEqualWeight = Math.round(100 / remainingFeatures);
         
-        analysisState.features.forEach(f => {
+        data.features.forEach(f => {
             f.weight = newEqualWeight;
         });
         
-        const totalWeight = analysisState.features.reduce((sum, f) => sum + f.weight, 0);
+        const totalWeight = data.features.reduce((sum, f) => sum + f.weight, 0);
         if (totalWeight !== 100) {
-            analysisState.features[0].weight += (100 - totalWeight);
+            data.features[0].weight += (100 - totalWeight);
         }
     }
     
@@ -2192,10 +2188,11 @@ OL.removeFeatureFromAnalysis = function (featureId) {
 
 // 4. Update Inputs (Exposed directly to OL)
 OL.updateFeatureWeight = function (inputElement) {
+    const data = window.OL.state.analysis;
     const featureId = inputElement.getAttribute('data-feature-id');
     let newWeight = parseInt(inputElement.value) || 0;
 
-    const feature = analysisState.features.find(f => f.id === featureId); // analysisState must be defined early
+    const feature = data.features.find(f => f.id === featureId); // data must be defined early
     if (feature) {
         feature.weight = Math.max(0, Math.min(100, newWeight));
         inputElement.value = feature.weight; 
@@ -2239,15 +2236,22 @@ function renderAnalysisLeftMenu() {
         } else {
             analyses.forEach(anly => {
                 html += `
-                    <div class="sidebar-item saved-file-row" 
-                         style="display:flex; justify-content:space-between; align-items:center; padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05);"
-                         onclick="OL.loadSavedAnalysis('${anly.id}')">
-                        <div style="flex:1;">
-                            <div class="sidebar-item-title" style="font-size:13px;">📄 ${OL.utils.esc(anly.name)}</div>
-                            <div class="sidebar-item-meta" style="font-size:10px; opacity:0.5;">${new Date(anly.date).toLocaleDateString()}</div>
+                  <div class="sidebar-item saved-file-row" 
+                    style="display:flex; justify-content:space-between; align-items:center; padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05);"
+                    onclick="OL.loadSavedAnalysis('${anly.id}')">
+                    <div style="flex:1; overflow:hidden;">
+                        <div class="sidebar-item-title" style="font-size:13px; display:flex; align-items:center; gap:6px;">
+                            📄 <span class="anly-name-text">${OL.utils.esc(anly.name)}</span>
                         </div>
-                        <span class="card-close" onclick="event.stopPropagation(); OL.deleteSavedAnalysis('${anly.id}')" style="font-size:16px; padding-left:10px;">×</span>
+                        <div class="sidebar-item-meta" style="font-size:10px; opacity:0.5;">${new Date(anly.date).toLocaleDateString()}</div>
                     </div>
+                    
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <span onclick="event.stopPropagation(); OL.renameSavedAnalysis('${anly.id}')" title="Rename">✏️</span>
+                        <span onclick="event.stopPropagation(); OL.cloneSavedAnalysis('${anly.id}')" title="Clone/Duplicate">👯</span>
+                        <span class="card-close" onclick="event.stopPropagation(); OL.deleteSavedAnalysis('${anly.id}')" style="font-size:16px;">×</span>
+                    </div>
+                </div>
                 `;
             });
         }
@@ -2271,12 +2275,20 @@ function renderAnalysisLeftMenu() {
             `;
             fnFeatures.forEach(feature => {
                 html += `
-                    <div class="analysis-feature-row" data-feature-id="${feature.id}" onclick="OL.addFeatureToAnalysis('${feature.id}')"> 
-                        <div class="analysis-feature-name" contenteditable="true" onclick="event.stopPropagation()"
-                             onblur="OL.renameFeatureInline(this, '${feature.id}')" onkeydown="OL.handleFeatureRenameKey(event)">
-                            ${OL.utils.esc(feature.name)}
+                    <div class="analysis-feature-row" data-feature-id="${feature.id}"> 
+                        <div class="analysis-feature-add-icon" 
+                          onclick="OL.addFeatureToAnalysis('${feature.id}')"
+                          title="Add to Matrix">→</div>
+
+                        <div class="analysis-feature-name" 
+                          contenteditable="true" 
+                          onblur="OL.renameFeatureInline(this, '${feature.id}')" 
+                          onkeydown="OL.handleFeatureRenameKey(event)">
+                          ${OL.utils.esc(feature.name)}
                         </div>
-                        <span class="analysis-feature-delete" onclick="OL.removeFeatureInline(event, '${feature.id}')">×</span>
+
+                        <span class="analysis-feature-delete" 
+                          onclick="OL.removeFeatureInline(event, '${feature.id}')">×</span>
                     </div>
                 `;
             });
@@ -2325,50 +2337,83 @@ function renderAnalysisLeftMenu() {
             `;
         }
     }
-
     fnList.innerHTML = html;
 }
 OL.renderAnalysisLeftMenu = renderAnalysisLeftMenu;
 
-OL.setAnalysisMenuMode = function(mode) {
-    OL.analysisMenuMode = mode;
-    OL.renderAnalysisLeftMenu();
+OL.renameSavedAnalysis = function(id) {
+    // 1. Find the snapshot in the library
+    const saved = window.OL.state.analyses.find(a => a.id === id);
+    if (!saved) return;
+
+    // 2. Prompt for new name
+    const newName = prompt("Rename snapshot:", saved.name);
+    
+    // 3. Update and persist
+    if (newName && newName.trim() && newName !== saved.name) {
+        saved.name = newName.trim();
+        OL.persist();
+        
+        // 4. Refresh the menu to show the change
+        OL.renderAnalysisLeftMenu();
+    }
+};
+
+OL.cloneSavedAnalysis = function(id) {
+    const original = window.OL.state.analyses.find(a => a.id === id);
+    if (!original) return;
+
+    // Create a new object that is a copy of the original
+    const clone = {
+        id: 'anly-' + Date.now(),
+        name: original.name + " (Copy)",
+        date: new Date().toISOString(),
+        // Deep clone the grid data so they remain independent
+        gridData: JSON.parse(JSON.stringify(original.gridData))
+    };
+
+    window.OL.state.analyses.unshift(clone);
+    OL.persist();
+    OL.renderAnalysisLeftMenu(); // Refresh the sidebar
+    alert(`Cloned "${original.name}"`);
+};
+
+OL.setAnalysisMenuMode = (mode) => { 
+  OL.analysisMenuMode = mode; 
+  renderAnalysisLeftMenu(); 
 };
 
 OL.saveCurrentAnalysis = function() {
-    // 1. Get the current active data directly from state
-    const currentData = window.OL.state.analysis;
+    // Force the browser to look at the current live state
+    const data = window.OL.state.analysis;
 
-    // 2. Safety Check: If for some reason state isn't ready, don't crash
-    if (!currentData || !currentData.apps) {
-        console.error("Save failed: Active analysis data is missing.");
-        alert("Cannot save: No active analysis found.");
+    if (!data || !Array.isArray(data.apps)) {
+        console.error("Save Error: Analysis data structure is invalid.", currentData);
+        alert("Error: Analysis data not found. Try adding an app or feature first.");
         return;
     }
 
-    const name = prompt("Name this analysis snapshot:", 
-     `Analysis ${new Date().toLocaleDateString()}`);
-    
+    const name = prompt("Name this analysis snapshot:", `Analysis ${new Date().toLocaleDateString()}`);
     if (!name || !name.trim()) return;
 
-    // 3. Create the Snapshot
+    // Create the Snapshot
     const snapshot = {
         id: 'anly-' + Date.now(),
         name: name.trim(),
         date: new Date().toISOString(),
-        // Use JSON methods to create a 'Deep Clone' so future 
-        // sandbox edits don't change this saved version.
-        gridData: JSON.parse(JSON.stringify(currentData)) 
-    }
+        // Deep clone the object so the save is "frozen"
+        gridData: JSON.parse(JSON.stringify(data)) 
+    };
 
-    // 4. Push to the library and Save
+    // Push to library
+    if (!Array.isArray(window.OL.state.analyses)) window.OL.state.analyses = [];
     window.OL.state.analyses.unshift(snapshot);
-    OL.persist();
     
-    // 5. Update UI
-    OL.analysisMenuMode = "library"; 
+    // Save to LocalStorage and flip the UI
+    OL.persist();
+    OL.analysisMenuMode = "library";
     OL.renderAnalysisLeftMenu();
-    alert(`Snapshot "${name}" saved to library.`);
+    alert(`Snapshot "${name}" saved to library!`);
 };
 
 OL.loadSavedAnalysis = function(id) {
@@ -2377,14 +2422,11 @@ OL.loadSavedAnalysis = function(id) {
 
     if (confirm(`Load "${saved.name}"? This will replace your current working grid.`)) {
         // Replace the active sandbox with the saved snapshot
-        OL.state.analysis = JSON.parse(JSON.stringify(saved.gridData));
-        
-        // Re-assign the global constant reference if needed, 
-        // but since we updated OL.state.analysis, 
-        // renderAnalysisMatrix() will pick it up on next call.
+        window.OL.state.analysis = JSON.parse(JSON.stringify(saved.gridData));
         OL.persist();
         OL.renderAnalysisMatrix();
-        alert(`Loaded: ${saved.name}`);
+        OL.analysisMenuMode = "builder";
+        renderAnalysisLeftMenu();
     }
 };
 
@@ -2393,20 +2435,6 @@ OL.deleteSavedAnalysis = function(id) {
     state.analyses = state.analyses.filter(a => a.id !== id);
     OL.persist();
     OL.renderAnalysisLeftMenu();
-};
-
-OL.loadSavedAnalysis = function(id) {
-    const saved = state.analyses.find(a => a.id === id);
-    if (!saved) return;
-
-    // We swap the 'analysisState' reference to the saved one
-    // and re-render the matrix
-    renderAnalysisMatrix(saved); 
-    
-    // Add a visual indicator that you are viewing a "Read Only" or "Snapshot"
-    const header = document.querySelector("#section-analyze h2");
-    header.innerHTML = `Viewing Snapshot: ${OL.utils.esc(saved.name)} 
-                        <button class="btn xsmall soft" onclick="OL.renderAnalysisMatrix(state.activeAnalysis)">Return to Draft</button>`;
 };
 
 OL.quickAddFeatureToFunction = function(e, functionId) {
@@ -2467,28 +2495,6 @@ OL.removeFeatureInline = function(e, featureId) {
     state.features = state.features.filter(f => f.id !== featureId);
     OL.persist();
     renderAnalysisLeftMenu(); // Must re-render to remove the row
-};
-
-OL.saveCurrentAnalysis = function() {
-    const name = prompt("Enter a name for this saved analysis:", 
-      `Analysis ${new Date().toLocaleDateString()}`);
-    
-    if (!name) return;
-
-    const snapshot = {
-        id: 'anly-' + Date.now(),
-        name: name,
-        date: new Date().toISOString(),
-        // Clone the current sandbox data
-        apps: JSON.parse(JSON.stringify(state.activeAnalysis.apps)),
-        features: JSON.parse(JSON.stringify(state.activeAnalysis.features)),
-        scores: JSON.parse(JSON.stringify(state.activeAnalysis.scores))
-    };
-
-    state.analyses.unshift(snapshot);
-    OL.persist();
-    alert("Analysis saved to library!");
-    OL.renderAnalysisLeftMenu(); // Refresh the list of saved files in the sidebar
 };
 
   // ------------------------------------------------------------
