@@ -1,4 +1,24 @@
 :root {
+  --color-1: #371d31;
+  --color-2: #563c50;
+  --color-3: #f95950;
+  --color-4: #edd1cb;
+}
+
+
+body {
+  background: linear-gradient(90deg, var(--color-1) 0%, var(--color-1) 25%, var(--color-2) 25%, var(--color-2) 50%, var(--color-3) 50%, var(--color-3) 75%, var(--color-4) 75%, var(--color-4) 100%);
+}:root {
+  --bg: #073036;
+  --color-2: #1fbfbf;
+  --color-3: #d7d7d7;
+  --color-4: #c2c2c2;
+}
+
+
+body {
+  background: linear-gradient(90deg, var(--color-1) 0%, var(--color-1) 25%, var(--color-2) 25%, var(--color-2) 50%, var(--color-3) 50%, var(--color-3) 75%, var(--color-4) 75%, var(--color-4) 100%);
+}:root {
   --bg: #050816;
   --panel: #0b1020;
   --panel-soft: #111827;
@@ -13,15 +33,17 @@
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+
 * {
   box-sizing: border-box;
 }
 
-html,
-body {
+
+html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  height: auto !important;
+  overflow: visible !important;
   background: radial-gradient(
     circle at top,
     #111827 0,
@@ -46,11 +68,13 @@ body {
   z-index: 10;
 }
 
+
 .top-bar h1 {
   margin: 0;
   font-size: 18px;
   letter-spacing: 0.03em;
 }
+
 
 #app-root {
   padding: 16px 24px 40px;
@@ -59,8 +83,8 @@ body {
   gap: 24px;
 }
 
-/* Sections */
 
+/* Sections */
 .section {
   background: radial-gradient(circle at top left, #111827, #020617);
   border: 1px solid #111827;
@@ -68,36 +92,73 @@ body {
   padding: 16px 18px 18px;
 }
 
+
 .section-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
 }
+
+
+.section-header-actions {
+    display: flex;
+    gap: 10px;
+}
+
 
 .section-header h2 {
   margin: 0;
   font-size: 16px;
 }
 
+
 .section-header .spacer {
   flex: 1;
 }
 
+
+/* 1. Collapse the empty bar and spacer */
+.section-controls-bar {
+  height: 0 !important;
+    display: flex;
+    align-items: center;
+    /* Remove any default height or padding if they exist */
+    min-height: 0 !important;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+
+.section-controls-bar .spacer {
+    /* If the spacer has a fixed height, it pushes content down.
+       We only want it to take space if there are actions on the right. */
+    height: 0;
+    min-height: 0;
+    flex: 0 0 0 !important;
+}
+
+
 .section-actions {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 12px;
+  height: auto;
+  min-height: 0;
+  margin: 0;
 }
+
 
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
+  margin-top: 10px;
 }
 
-/* Cards */
 
+/* Cards */
 .card {
   background: rgba(15, 23, 42, 0.9);
   border-radius: 12px;
@@ -107,12 +168,14 @@ body {
   overflow: hidden;
 }
 
+
 .card-header {
   padding: 10px 12px;
   display: flex;
   align-items: center;
   border-bottom: 1px solid #111827;
 }
+
 
 .card-header-left {
   display: flex;
@@ -121,14 +184,17 @@ body {
   cursor: pointer;
 }
 
+
 .card-header-left:hover .card-title {
   text-decoration: underline;
 }
+
 
 .card-title {
   font-size: 14px;
   font-weight: 500;
 }
+
 
 .card-close {
   margin-left: auto;
@@ -139,10 +205,12 @@ body {
   color: var(--muted);
 }
 
+
 .card-close:hover {
   background: rgba(148, 163, 184, 0.1);
   color: #fca5a5;
 }
+
 
 .card-icon {
   width: 28px;
@@ -157,20 +225,24 @@ body {
   overflow: hidden;
 }
 
+
 .icon-emoji {
   font-size: 18px;
 }
+
 
 .icon-fallback {
   font-size: 13px;
   font-weight: 600;
 }
 
+
 .icon-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+
 
 .card-body {
   padding: 8px 12px 10px;
@@ -179,9 +251,11 @@ body {
   gap: 6px;
 }
 
+
 .card-section {
   margin-top: 4px;
 }
+
 
 .card-section-title {
   font-size: 11px;
@@ -191,17 +265,19 @@ body {
   margin-bottom: 2px;
 }
 
+
 .card-section-content {
   font-size: 12px;
 }
 
-/* Pills */
 
+/* Pills */
 .pills-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
+
 
 .pill {
   font-size: 11px;
@@ -215,49 +291,60 @@ body {
   gap: 4px;
 }
 
+
 .pill.muted {
   color: #6b7280;
   border-style: dashed;
 }
 
+
 .pill.fn {
   cursor: default;
 }
 
+
 .pill.fn.status-primary {
-  border-color: #a855f7;
+  border-color: #a855f7 !important;
   background: rgba(34, 197, 94, 0.08);
 }
 
+
 .pill.fn.status-evaluating {
-  border-color: #eab308;
+  border-color: #eab308 !important;
   background: rgba(234, 179, 8, 0.08);
 }
 
+
 .pill.fn.status-available {
-  border-color: #4b5563;
+  border-color: #4b5563 !important;
   background: rgba(31, 41, 55, 0.7);
 }
+
 
 .pill.integr {
   cursor: pointer;
 }
 
+
 .pill.integr[data-type="direct"] {
   border-color: #22c55e;
 }
+
 
 .pill.integr[data-type="zapier"] {
   border-color: #f7931a;
 }
 
+
 .pill.integr[data-type="both"] {
   border-color: #38bdf8;
 }
 
+
 .pill.resource {
   border-color: #38bdf8;
 }
+
 
 .flip-arrow {
   display: inline-flex;
@@ -266,15 +353,16 @@ body {
   margin-left: 2px;
 }
 
+
 .flip-arrow .arrow {
   font-size: 11px;
 }
 
-/* Buttons */
 
+/* Buttons */
 .btn {
   border-radius: 999px;
-  border: 1px solid #1f2937;
+  border: 1px solid #073036;
   background: linear-gradient(to bottom, #0ea5e9, #0369a1);
   color: white;
   font-size: 12px;
@@ -283,27 +371,31 @@ body {
   margin: 20px auto;
 }
 
+
 .btn.small {
   font-size: 11px;
   padding: 3px 8px;
 }
+
 
 .btn.soft {
   background: #111827;
   color: #e5e7eb;
 }
 
+
 .btn.warn {
   background: #7f1d1d;
   border-color: #b91c1c;
 }
 
+
 .btn:hover {
   filter: brightness(1.05);
 }
 
-/* Modal */
 
+/* Modal */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -314,6 +406,7 @@ body {
   justify-content: center;
   z-index: 100;
 }
+
 
 .modal-box {
   width: 680px;
@@ -327,6 +420,7 @@ body {
   box-shadow: 0 24px 55px rgba(0, 0, 0, 0.85);
 }
 
+
 .modal-head {
   padding: 10px 14px;
   border-bottom: 1px solid #111827;
@@ -334,6 +428,7 @@ body {
   align-items: center;
   gap: 10px;
 }
+
 
 .modal-title-text {
   font-size: 15px;
@@ -343,10 +438,12 @@ body {
   border-radius: 8px;
 }
 
+
 .modal-title-text[contenteditable="true"] {
   border: 1px solid #1f2937;
   background: rgba(15, 23, 42, 0.9);
 }
+
 
 .modal-body {
   padding: 10px 14px 12px;
@@ -356,12 +453,14 @@ body {
   gap: 10px;
 }
 
+
 .modal-section-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
 }
+
 
 .modal-notes-display {
   font-size: 12px;
@@ -373,13 +472,16 @@ body {
   white-space: pre-wrap;
 }
 
+
 .modal-notes-display.muted {
   color: #6b7280;
 }
 
+
 .modal-textarea {
   width: 100%;
-  min-height: 80px;
+  height: 40px;
+  min-height: 40px;
   font-size: 12px;
   border-radius: 8px;
   border: 1px solid #111827;
@@ -388,6 +490,7 @@ body {
   padding: 6px 8px;
   resize: vertical;
 }
+
 
 .text-link {
   background: none;
@@ -398,9 +501,11 @@ body {
   cursor: pointer;
 }
 
+
 .text-link.small {
   margin-top: 3px;
 }
+
 
 .modal-row {
   display: flex;
@@ -408,14 +513,15 @@ body {
   gap: 6px;
 }
 
+
 .modal-pill-box {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-/* Icon button */
 
+/* Icon button */
 .icon-edit-btn {
   width: 30px;
   height: 30px;
@@ -429,8 +535,8 @@ body {
   margin-right: 4px;
 }
 
-/* Icon picker */
 
+/* Icon picker */
 .icon-picker-overlay {
   position: fixed;
   inset: 0;
@@ -441,6 +547,7 @@ body {
   justify-content: center;
   z-index: 110;
 }
+
 
 .icon-picker {
   width: 360px;
@@ -456,17 +563,20 @@ body {
   gap: 8px;
 }
 
+
 .picker-section {
   border-top: 1px solid #111827;
   padding-top: 6px;
   margin-top: 4px;
 }
 
+
 .picker-section:first-child {
   border-top: none;
   padding-top: 0;
   margin-top: 0;
 }
+
 
 .picker-title {
   font-size: 11px;
@@ -476,11 +586,13 @@ body {
   margin-bottom: 4px;
 }
 
+
 .picker-row {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
+
 
 .picker-option.emoji {
   cursor: pointer;
@@ -489,10 +601,12 @@ body {
   border: 1px solid transparent;
 }
 
+
 .picker-option.emoji:hover {
   border-color: #1f2937;
   background: #020617;
 }
+
 
 #iconUrlInput {
   flex: 1;
@@ -505,18 +619,82 @@ body {
   color: var(--text);
 }
 
+
 #uploadIconInput {
   font-size: 11px;
 }
 
-/* Datapoints */
+/*---------------------Datapoints -------------------*/
+/* Force side-by-side behavior */
+#section-datapoints .unified-row-layout {
+    display: flex;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    min-height: 100vh;
+}
+
+/* Sidebar behavior */
+#section-datapoints .category-sidebar {
+    width: 220px !important;
+    flex: 0 0 220px !important;
+    position: sticky !important;
+    top: 0;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.25) !important;
+    border-right: 1px solid var(--line);
+    padding: 20px 0;
+}
+
+/* Ensure headings stand out for scrolling */
+.group-heading {
+    padding-top: 20px;
+    margin-top: 40px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    scroll-margin-top: 20px; /* Offset for smooth scroll */
+}
 
 .datapoint-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  margin-bottom: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 0;
 }
+
+/* Datapoint Type Badge Styling */
+.datapoint-card .card-header-left {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    flex: 1;
+}
+
+.datapoint-card {
+    flex: 0 0 380px !important; /* Grow: 0, Shrink: 0, Basis: 380px */
+    width: 380px !important;
+    max-width: 380px !important;
+    min-width: 380px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    height: fit-content;
+}
+
+.dp-type-badge {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid var(--line) !important;
+    color: var(--muted) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    padding: 2px 8px !important;
+    border-radius: 4px !important;
+    letter-spacing: 0.03em !important;
+    white-space: nowrap !important;
+}
+
+/* Optional: Subtle color coding per type */
+.datapoint-card[data-object-type="Contact"] .dp-type-badge { border-color: rgba(56, 189, 248, 0.3) !important; }
+.datapoint-card[data-object-type="Account"] .dp-type-badge { border-color: rgba(34, 197, 94, 0.3) !important; }
+
 
 .datapoint-row input {
   font-size: 11px;
@@ -527,8 +705,8 @@ body {
   color: var(--text);
 }
 
-/* Checklist */
 
+/* Checklist */
 .modal-checklist {
   max-height: 150px;
   overflow-y: auto;
@@ -539,6 +717,7 @@ body {
   margin-top: 4px;
 }
 
+
 .modal-checkrow {
   display: flex;
   align-items: center;
@@ -546,6 +725,7 @@ body {
   font-size: 12px;
   padding: 2px 0;
 }
+
 
 .modal-search {
   width: 100%;
@@ -558,21 +738,46 @@ body {
   margin-bottom: 4px;
 }
 
-/* Small bits */
+.modal-select {
+    width: 100%;
+    padding: 10px;
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    appearance: none; /* Modern look */
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 1em;
+}
 
+.modal-select:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+
+/* Small bits */
 .muted {
   color: var(--muted);
   font-size: 11px;
 }
+
 
 .empty-hint {
   font-size: 12px;
   color: var(--muted);
 }
 
+
 .pill-key-row {
   margin: 6px 0 12px;
 }
+
 
 .pill-key {
   display: inline-flex;
@@ -581,6 +786,7 @@ body {
   align-items: center;
 }
 
+
 .pill-key-help {
   flex-basis: 100%;
   font-size: 11px;
@@ -588,6 +794,7 @@ body {
   margin-top: 2px;
   padding-left: 2px;
 }
+
 
 .modal-dot-key {
   display: inline-flex;
@@ -600,23 +807,28 @@ body {
   font-size: 11px;
 }
 
+
 .modal-dot-key .dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
 }
 
+
 .modal-dot-key .dot.primary {
   background: var(--pill-primary-color, #a855f7);
 }
+
 
 .modal-dot-key .dot.evaluating {
   background: var(--pill-eval-color, #eab308);
 }
 
+
 .modal-dot-key .dot.available {
   background: var(--pill-avail-color, #4b5563);
 }
+
 
 .modal-dot-help {
   flex-basis: 100%;
@@ -625,6 +837,7 @@ body {
   margin: 2px auto 6px auto;
   padding-left: 2px;
 }
+
 
 .arrow-switch {
   display: flex;
@@ -635,18 +848,22 @@ body {
   width: 16px;
 }
 
+
 .arrow-layer {
   font-size: 14px;
   line-height: 8px;
 }
 
+
 .arrow-top {
   color: #007aff; /* blue */
 }
 
+
 .arrow-bottom {
   color: #888; /* grey */
 }
+
 
 .count-line {
   display: flex;
@@ -657,12 +874,14 @@ body {
   padding: 2px 0;
 }
 
+
 .dot-direct {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: #22c55e; /* green */
 }
+
 
 .dot-zapier {
   width: 10px;
@@ -671,12 +890,14 @@ body {
   background: #f7931a; /* orange */
 }
 
+
 .dot-both {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: #38bdf8; /* blue */
 }
+
 
 .dp-delete {
   margin-left: 6px;
@@ -686,32 +907,30 @@ body {
   border-radius: 4px;
 }
 
-.datapoint-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 3px 0;
-}
-
 /* =========================================
    SIDEBAR NAV
 ========================================= */
-
 .brand {
   font-weight: 700;
   letter-spacing: 0.4px;
   margin-bottom: 12px;
 }
+
+
 .divider {
   height: 1px;
   background: var(--line);
   margin: 10px 0;
 }
+
+
 .menu .group-title {
   font-size: 11px;
   color: var(--muted);
   margin: 10px 10px 6px;
 }
+
+
 .menu a {
   display: block;
   padding: 8px 10px;
@@ -720,21 +939,27 @@ body {
   font-size: 11px;
   text-decoration: none;
 }
+
+
 .menu a.active {
   background: var(--soft);
   color: var(--accent);
   border: 1px solid var(--line);
 }
+
+
 .menu a:hover {
   background: var(--soft);
   color: #0ea5e9;
 }
+
 
 .app {
   display: grid;
   grid-template-columns: 260px 1fr;
   height: 100%;
 }
+
 
 .sidebar {
   background: var(--panel);
@@ -743,12 +968,17 @@ body {
   overflow: auto;
 }
 
+.sidebar-header {
+  font-size: 13px;
+}
+
 .main {
   display: flex;
   flex-direction: column;
   min-width: 0;
   height: 100%;
 }
+
 
 .topbar {
   display: flex;
@@ -764,20 +994,24 @@ body {
   );
 }
 
+
 .content {
   padding: 16px;
   overflow: auto;
 }
+
 
 .crumbs {
   font-size: 11px;
   color: var(--muted);
 }
 
+
 #layoutContainer {
   display: flex;
   height: calc(100vh - 0px);
 }
+
 
 #sidebarNav {
   width: 20%;
@@ -788,6 +1022,7 @@ body {
   background: #1f2938;
 }
 
+
 .sidebar-item {
   padding: 5px 5px;
   font-size: 11px;
@@ -795,20 +1030,25 @@ body {
   color: #fff;
 }
 
+
 .sidebar-item:hover {
   background: #e4e7ea;
   color: #1f2938;
 }
+
 
 .sidebar-item.active {
   background: #d0d4d9;
   font-weight: 600;
 }
 
+
 #mainContent {
   flex: 1;
   overflow-y: auto;
 }
+
+
 .dp-dropdown {
   position: absolute;
   z-index: 9999;
@@ -823,6 +1063,7 @@ body {
   overflow: hidden;
 }
 
+
 .dp-search {
   border: none;
   border-bottom: 1px solid #111827;
@@ -834,9 +1075,11 @@ body {
   border-radius: 0;
 }
 
+
 .dp-options {
   overflow-y: auto;
 }
+
 
 .dp-option {
   padding: 7px 10px;
@@ -849,19 +1092,23 @@ body {
   border-bottom: 1px solid rgba(31, 41, 55, 0.3);
 }
 
+
 .dp-option:hover {
   background: rgba(56, 189, 248, 0.08);
 }
 
+
 .dp-option:last-child {
   border-bottom: none;
 }
+
 
 .dp-table {
   display: grid;
   gap: 4px;
   font-size: 11px;
 }
+
 
 .dp-table-header,
 .dp-table-row {
@@ -870,15 +1117,18 @@ body {
   gap: 6px;
 }
 
+
 .dp-table-header {
   font-weight: bold;
   opacity: 0.7;
 }
 
+
 .dp-link-app {
   cursor: pointer;
   color: var(--accent);
 }
+
 
 /* --- Shared dropdown styles (untouched) ------------------- */
 .dp-link-app:hover { text-decoration: underline; }
@@ -887,7 +1137,10 @@ body {
   text-decoration: underline;
   color: var(--primary,#4a7aff);
 }
+
+
 .cap-name-link { cursor:pointer; }
+
 
 /* --- Canon + mapping dropdowns ------------------------------- */
 .canon-wrapper { position:relative; }
@@ -896,6 +1149,8 @@ body {
   border-radius:8px; background:#020617;
   border:1px solid #111827; color:var(--text);
 }
+
+
 .canon-dropdown,
 .mapping-dropdown {
   position:absolute;
@@ -909,8 +1164,21 @@ body {
   gap:6px;
   box-shadow:0 10px 25px rgba(0,0,0,.6);
 }
-.mapping-dropdown { position:fixed; } /* allow repositioning on scroll */
+
+
+.mapping-dropdown {
+  position:fixed !important;
+  z-index: 10000 !important;
+  background: #0b1020;
+  border: 1px solid #1f2937;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  padding: 6px;
+  width: 240px;
+}
+
+
 .canon-dropdown.hidden { display:none; }
+
 
 .canon-search,
 .mapping-search {
@@ -921,6 +1189,8 @@ body {
   background:#020617;
   color:var(--text);
 }
+
+
 .canon-options,
 .mapping-options {
   max-height:140px;
@@ -928,21 +1198,28 @@ body {
   display:flex;
   flex-direction:column;
 }
+
+
 .canon-option,
 .mapping-option {
   padding:5px 6px;
   cursor:pointer; font-size:12px;
   border-radius:6px;
 }
+
+
 .canon-option:hover { background:rgba(148,163,184,.15); }
 .canon-add {
   padding:6px; text-align:center; font-size:12px;
   color:var(--accent); cursor:pointer;
   border-top:1px solid #1f2937;
 }
+
+
 .canon-add:hover { background:rgba(56,189,248,.08); }
 .mapping-multi-label.checked { font-weight:600; opacity:1; }
 .mapping-multi-label { opacity:.75; }
+
 
 /* --- Segments ---------------------------------------------- */
 .segments-page {
@@ -952,6 +1229,7 @@ body {
   padding-right:20px;
 }
 
+
 /* section headings */
 .segments-block .block-title {
   font-size:1.2rem;
@@ -959,12 +1237,14 @@ body {
   margin-bottom:10px;
 }
 
+
 /* responsive cards (like apps/functions) */
 .cards-grid.stacked {
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
   gap:24px;
 }
+
 
 /* card breathing room */
 #segmentCategoriesGrid .card,
@@ -974,14 +1254,15 @@ body {
   width:100%;
 }
 
-/*----------Folders------------*/
 
+/*----------Folders------------*/
 /* Folder hierarchy */
 .folder-hierarchy-card .card-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
+
 
 .folder-tree {
   border-radius: 8px;
@@ -993,9 +1274,11 @@ body {
   font-size: 13px;
 }
 
+
 .folder-node-row {
   margin-bottom: 2px;
 }
+
 
 .folder-node-main {
   display: flex;
@@ -1006,81 +1289,63 @@ body {
   cursor: grab;
 }
 
+
 .folder-node-main:hover {
   background: rgba(148, 163, 184, 0.14);
 }
 
+
 .folder-node-icon {
   font-size: 13px;
 }
+
 
 .folder-node-label {
   font-size: 13px;
   white-space: nowrap;
 }
 
+
 .folder-node-drop-target .folder-node-main {
   outline: 1px dashed var(--accent, #38bdf8);
 }
+
 
 .folder-hier-desc {
   min-height: 48px;
 }
 
+
 .folder-hierarchy-card .btn.xsmall {
   margin-top: 8px;
 }
+
 
 #section-folder-hierarchy .cards-grid {
   grid-template-columns: 1fr;
 }
 
-.naming-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.naming-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.naming-label {
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-.naming-input {
-  width: 100%;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid #111827;
-  background: #020617;
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-  font-size: 12px;
-}
-
-.naming-preview {
-  font-size: 11px;
-  opacity: 0.8;
-}
-
 /* Align the filter buttons in a row */
+/* 1. Prevent the section from stretching based on body height */
+#section-features {
+    height: auto !important;
+    min-height: 0 !important;
+}
 
-section-resources {
+
+.section-resources {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
+
 .section-header {
   display: flex;
   width: 100%;
 }
+
+
 #filterButtons {
   display: flex;
   flex-wrap: wrap;  /* Allows buttons to wrap on smaller screens */
@@ -1090,13 +1355,16 @@ section-resources {
   margin-right: 5px;
 }
 
+
 /* Ensure the "Add Resource" button has appropriate size and appearance */
 /* Style the Add Resource button to match the other add buttons */
+
 
 /* Hover effect to match other buttons */
 #btnAddResource:hover {
   background-color: #0056b3; /* Darken the blue for hover effect */
 }
+
 
 /* Optional: If you want to remove the background for the 'x' type buttons */
 button.btn.xsmall.soft {
@@ -1104,11 +1372,13 @@ button.btn.xsmall.soft {
   border: 1px solid #ccc; /* Adds a subtle border to match button styles */
 }
 
+
 /* Focus and active states (optional, depending on your design needs) */
 #btnAddResource:focus {
   outline: none;
   box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
+
 
 /* Ensure that the resource grid looks good and adjusts with the layout */
 #resourcesGrid {
@@ -1117,6 +1387,7 @@ button.btn.xsmall.soft {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));  /* Adjusts the grid layout based on screen size */
   margin-top: 20px;
 }
+
 
 /* Additional styling for the card content */
 .resource-detail input,
@@ -1128,15 +1399,19 @@ button.btn.xsmall.soft {
   border-radius: 5px;
 }
 
+
 .resource-detail .resource-section {
   margin-bottom: 15px;
 }
+
 
 .resource-detail .card-body {
   padding: 20px;
   background-color: #3a3a3a;
   border-radius: 8px;
 }
+
+
 /* Align the filter buttons to the left */
 .resource-filters {
   display: flex;
@@ -1146,13 +1421,1504 @@ button.btn.xsmall.soft {
   margin-top: 10px; /* Add some space above the filter buttons */
 }
 
+
 /* Ensure filter buttons stay inline and not squished */
 .resource-filters button {
   white-space: nowrap; /* Prevent text from wrapping */
 }
+
+
 /* Ensure section-actions has space for both buttons */
 .section-actions {
   display: flex;
   justify-content: space-between; /* Align buttons on opposite ends */
   width: 100%; /* Ensure the actions take up the full width */
+}
+
+
+/* reliable editable placeholder */
+[contenteditable][data-placeholder][data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: #999;
+  pointer-events: none;
+}
+
+
+#datapointsGrid > .datapoint-group {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+
+/* Example CSS that must be present in your application styles: */
+.dp-dropdown {
+    position: absolute;
+    z-index: 1000; /* Ensure it floats above other content */
+    border: 1px solid #ccc;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    min-width: 200px;
+    padding: 4px 0;
+}
+
+
+.dp-option {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+
+.dp-option:hover {
+    background: #f0f0f0;
+}
+
+.datapoint-pill {
+  font-size: 11px;
+}
+
+.datapoint-pill-preview {
+    /* Style for the token inside the dropdown */
+    display: inline-block;
+    padding: 2px 6px;
+    background-color: #e0f7fa; /* Light blue */
+    border: 1px solid #b2ebf2;
+    border-radius: 12px;
+    font-size: 0.9em;
+}
+
+
+/* Add this CSS to your application's stylesheet */
+.datapoint-pill-inserted {
+    /* Visual Styling */
+    display: inline-block;
+    padding: 3px 8px;
+    margin: 0 2px;
+    border-radius: 14px;
+   
+    /* Color Scheme (adjust to match your application's colors) */
+    background-color: #e0f7fa; /* Light Blue */
+    border: 1px solid #b2ebf2;
+    color: #0b1020; /* Dark blue text */
+    font-weight: 500;
+   
+    /* Ensure it behaves like a single, unbreakable token */
+    white-space: nowrap;
+    user-select: none; /* Prevents selecting only half the pill */
+   
+    /* Important for contenteditable fields */
+    cursor: default;
+}
+
+
+/* This CSS targets the container wrapping all the folder hierarchy cards (the main grid view).
+ * This will make the cards flow horizontally like your App/Function cards.
+ */
+#folderHierarchyGrid.cards-grid {
+    display: flex;             /* Enable flex container */
+    flex-direction: row;       /* Arrange cards horizontally */
+    flex-wrap: wrap;           /* Allow cards to wrap to the next line */
+    gap: 20px;                 /* Space between cards (adjust as needed) */
+    align-items: stretch;      /* Ensure all cards stretch to the same height */
+    padding: 10px 0;           /* Add some padding */
+}
+
+
+/* * This ensures individual cards take up a reasonable portion of the screen
+ * (e.g., 30% for three cards across, allowing for the 20px gap).
+ */
+.folder-hierarchy-card {
+    flex: 0 1 calc(33.333% - 20px); /* Grow: 0, Shrink: 1, Basis: 1/3 width minus gap */
+    min-width: 280px;               /* Ensure readability on small screens */
+    box-sizing: border-box;         /* Include padding and border in the element's total width and height */
+}
+
+
+/* Styles for the individual folder row in the modal tree */
+.folder-node-main {
+    display: flex;       /* Use flex layout */
+    align-items: center; /* Vertically center the elements */
+    gap: 10px;           /* Add space between elements */
+    width: 100%;
+}
+
+
+/* Ensure the main label takes up remaining space */
+.folder-node-label {
+    flex-grow: 1;
+    min-width: 50px;
+}
+
+/* Target only the folder hierarchy grid for these specific sizes */
+#folderHierarchyGrid .card {
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;      /* Force a minimum height */
+    max-height: 180px;      /* Prevent stretching */
+    min-width: 300px;
+    max-width: 300px;
+    overflow: hidden;       /* Keep everything tidy */
+    justify-content: space-between;
+}
+
+/* Ensure the description area handles long text with an ellipsis */
+#folderHierarchyGrid .card-section-content {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;  /* Show max 3 lines of description */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Fix the grid layout to prevent vertical gaps */
+#folderHierarchyGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    align-items: start;
+}
+
+/* Analysis Component CSS (Add this to your stylesheet) */
+/* 1. Main Analysis Container: Enables the two-column view */
+.analysis-wrapper {
+    display: flex;
+    gap: 20px; /* Space between the left menu and the matrix table */
+    min-height: 80vh; /* Ensures the wrapper has height even if content is sparse */
+}
+
+
+/* 2. Left Menu Panel: Fixed width for selection/features */
+.analysis-left-menu-panel {
+    flex-shrink: 0; /* Prevents it from shrinking */
+    width: 300px; /* Set a specific width */
+    border-right: 1px solid #333; /* Visual separation from the matrix */
+    padding-right: 15px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+}
+
+.analysis-feature-add-btn {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    opacity: 0.7;
+    font-weight: 600;
+    border-top: 1px dashed rgba(255,255,255,0.1);
+    transition: opacity 0.2s;
+}
+
+.analysis-feature-add-btn:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.analysis-feature-list {
+    margin-bottom: 15px;
+    background: rgba(0,0,0,0.1);
+    border-radius: 4px;
+}
+
+/* 3. Main Matrix Container: Takes up the remaining space */
+.analysis-matrix-container {
+    flex-grow: 1; /* Takes all available space */
+    overflow-x: auto; /* Allows horizontal scrolling for wide tables */
+}
+
+
+/* 4. Menu Headers/Items: Ensure styling makes items look clickable */
+.analysis-left-menu-header {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #444;
+}
+
+.analysis-feature-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    position: relative;
+}
+
+.analysis-feature-name {
+    flex: 1;
+    outline: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.analysis-feature-name:focus {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.analysis-feature-delete {
+    display: none; /* Hidden by default */
+    color: var(--danger);
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-left: 8px;
+    padding: 0 4px;
+}
+
+.analysis-feature-row:hover .analysis-feature-delete {
+    display: inline-block; /* Show on hover */
+}
+
+.analysis-feature-delete:hover {
+    color: #ff4d4d;
+    transform: scale(1.2);
+}
+
+.analysis-fn-group,
+.analysis-feature-row {
+    padding: 6px 0;
+    cursor: default;
+    transition: background-color 0.1s;
+    font-size: 0.9em;
+}
+
+
+.clickable:hover {
+    background-color: #2a2a2a; /* Highlight on hover for clickable items */
+    cursor: pointer;
+}
+
+
+.analysis-fn-name {
+    font-weight: bold;
+    margin-top: 5px;
+    padding: 2px 0;
+}
+
+
+.analysis-fn-features-label {
+    font-size: 0.75em;
+    color: #999;
+}
+
+
+.analysis-feature-list {
+    padding-left: 15px; /* Indent the features list */
+    margin-bottom: 10px;
+    font-size: 11px;
+}
+
+
+/* 5. Matrix Table Basics */
+.analysis-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+
+.analysis-matrix th {
+    background-color: #222;
+    padding: 10px 8px;
+    text-align: left;
+    border: 1px solid #333;
+}
+.analysis-matrix td {
+    padding: 8px;
+    border: 1px solid #333;
+    text-align: center;
+}
+
+
+/* Analysis Matrix Specific Icon Styling */
+.analysis-matrix .matrix-app-header .card-icon,
+.analysis-matrix .matrix-app-header .icon-fallback,
+.analysis-matrix .matrix-app-header .icon-emoji,
+.analysis-matrix .matrix-app-header .icon-img {
+    width: 20px;      /* Set a fixed width */
+    height: 20px;     /* Set a fixed height */
+    font-size: 11px;  /* Adjust font size for text fallback */
+    line-height: 30px;
+    margin: 0 auto 5px auto; /* Center it and add bottom margin */
+}
+
+
+.analysis-matrix .matrix-app-header .app-header-content {
+    /* Ensure content centers within the column */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+
+/* --- Flex-Wrap Dashboard Layout --- */
+#workflowsGrid {
+    display: flex;
+    flex-wrap: wrap; /* This allows them to stack when they run out of space */
+    align-items: flex-start;
+    gap: 24px;
+    padding: 20px;
+    background: transparent;
+    border-radius: 12px;
+}
+
+
+.workflow-stage-block {
+    flex: 1 1 350px; /* Grow and shrink, but aim for 350px width */
+    background: #ebedf0;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    cursor: default !important;
+}
+
+
+.workflow-stage-block:active {
+    cursor: grabbing;
+}
+
+
+.workflow-stage-block.dragging-stage {
+    opacity: 0.4;
+    border: 2px dashed #0052cc;
+    background: #f0f7ff;
+}
+
+
+/* Hover effect for the drop target area */
+.stage-drop-zone {
+    border-left: 4px solid #0052cc;
+    margin-left: -4px;
+}
+
+
+/* Ensure the placeholder button block matches the others */
+.add-stage-placeholder {
+    flex: 0 0 250px;
+    border: 2px dashed #ccc;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+}
+
+
+.stage-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 0 4px;
+    user-select:none;
+}
+
+
+.stage-block-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #172b4d;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+
+.process-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 50px; /* Ensures you can drop into an empty stage */
+    transition: background 0.2s;
+}
+
+
+.process-list:hover {
+    background: rgba(0, 82, 204, 0.02);
+}
+
+
+.process-street-row {
+    background: #ffffff;
+    border-radius: 6px;
+    padding: 0;
+    border: 1px solid #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    transition: all 0.2s ease;
+    cursor: default !important;
+    position: relative;
+    user-select: none;
+    pointer-events: auto; /* Re-enable for the row itself */
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+
+.handle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    background: #f8f9fa; /* Slight background to see the handle lane */
+    border-right: 1px solid #eee;
+}
+
+
+.process-street-row:hover {
+    border-color: #0052cc;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+
+.process-street-row:active {
+    cursor: grabbing;
+}
+
+
+.process-street-row.dragging-workflow {
+    opacity: 0.3;
+    background: #e1e4e8;
+    border: 1px dashed #0052cc;
+}
+
+
+/* Container highlight when dragging a workflow over it */
+.process-list.drag-over-list {
+    background-color: rgba(0, 82, 204, 0.05);
+    outline: 2px dashed #0052cc;
+    outline-offset: -2px;
+    min-height: 60px;
+    border-radius: 4px;
+}
+
+
+/* Row-level indicator for insertion */
+.process-street-row.drop-before {
+    border-top: 3px solid #0052cc !important;
+}
+
+
+.process-street-row.drop-after {
+    border-bottom: 3px solid #0052cc !important;
+}
+
+
+/* Visual indicator for where the workflow will land */
+.workflow-drop-indicator {
+    border-top: 3px solid #0052cc !important;
+    padding-top: 8px !important;
+}
+
+
+/* Stage Handle (Header) */
+.stage-drag-handle {
+    cursor: grab;
+    padding: 8px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 6px 6px 0 0;
+    user-select: none;
+    -webkit-user-drag: element;
+}
+
+
+/* Workflow Handle (Icon) */
+.workflow-drag-handle {
+    cursor: grab !important;
+    padding-right: 10px;
+    color: #ccc;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    user-select:none;
+    -webkit-user-drag: element;
+    z-index: 20;
+}
+
+
+.workflow-drag-handle:hover {
+    color: #0052cc;
+}
+
+
+.process-name {
+    font-weight: 600;
+    font-size: 11px;
+    color: #091e42;
+    margin-bottom: 2px;
+    pointer-events: none !important;
+}
+
+
+.process-meta {
+    font-size: 0.75rem;
+    color: #6b778c;
+    pointer-events: none !important;
+}
+
+
+.actions-container {
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+}
+
+
+/* Modal specific vertical list styling */
+.process-steps-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+
+.ps-step-card {
+    border-left: 4px solid #0052cc;
+    margin-bottom: 15px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+
+.ps-step-card.ps-resource {
+    border-left-color: #36b37e; /* Green for resources */
+}
+/* --- Drag and Drop Feedback --- */
+.ps-step-wrapper.dragging {
+    opacity: 0.5;
+    background: #f0f7ff;
+    border: 2px dashed #0052cc;
+}
+
+
+.workflow-stage-block.drop-target {
+    background: #ebf5ff;
+    border-color: #0052cc;
+}
+
+
+.process-steps-container {
+    transition: all 0.2s ease;
+}
+
+
+.process-info {
+    flex-grow: 1;
+    min-height: 40px; /* Ensure there is a vertical area to click */
+    z-index: 10;    /* Force it to sit on top of everything else */
+    position: relative;
+    background: transparent; /* Makes the whole area "solid" for clicks */
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 12px;
+}
+
+
+/* 2. Fix the handle cursor */
+.workflow-drag-handle, .stage-drag-handle {
+    cursor: grab !important;
+    padding: 0 10px;
+}
+
+
+.workflow-drag-handle:active {
+    cursor: grabbing !important;
+}
+
+
+/* 3. Ensure the Modal target is the boss of the row */
+.process-info.js-open-modal {
+    flex-grow: 1;
+    z-index: 5;
+    position: relative;
+    user-select: none; /* Prevents text selection from triggering a drag */
+}
+
+
+.process-info.js-open-modal:hover {
+    background: rgba(0, 82, 204, 0.03);
+}
+
+
+.visualizer-list-body {
+    background: var(--bg);
+    padding: 0; /* Let rows touch the edges */
+}
+
+
+.visualizer-mirror-body {
+    background: #020617;
+    padding: 20px;
+    overflow-x: auto;
+}
+
+
+.visualizer-grid {
+    display: flex;
+    flex-direction: row !important;
+    gap: 16px;
+    align-items: flex-start;
+    min-height: 400px;
+    padding: 10px;
+}
+
+
+.workflow-phase-column {
+    flex: 0 0 280px;
+    background: #0f172a;
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+}
+
+
+.phase-header {
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #1f2937;
+}
+
+
+.node-list {
+    padding: 8px;
+    min-height: 50px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+
+.workflow-node-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-soft);
+    min-height: 50px;
+}
+
+
+.workflow-node-row:hover {
+    background: #161d2b;
+}
+
+
+.workflow-node-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    padding: 0;
+    overflow: hidden;
+}
+
+
+.workflow-node-row.dragging-node {
+    opacity: 0.2;
+    background: var(--accent) !important;
+    border: 2px dashed var(--accent);
+}
+
+
+.visualizer-vertical-list {
+    min-height:300px !important;
+    padding-bottom: 100px !important; /* Landing pad for dropping at the bottom */
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    transition: all 0.2s ease;
+}
+
+
+.node-handle {
+    padding: 10px;
+    background: rgba(255,255,255,0.03);
+    cursor: grab;
+    color: #475569;
+}
+
+
+.node-handle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    background: rgba(255,255,255,0.02);
+    border-right: 1px solid var(--line);
+}
+
+
+* Prevent internal text from intercepting the drag event */
+.node-number,
+.node-label,
+.node-type-icon {
+    pointer-events: none !important;
+}
+
+
+/* Keep the containers active to receive the hover/over events */
+.workflow-node-row,
+.node-info-lane,
+.node-handle-container {
+    pointer-events: auto !important;
+}
+
+
+.node-drag-handle {
+    cursor: grab !important;
+    color: var(--muted);
+    padding: 10px;
+}
+
+
+/* Give the handle a bit more prominence on hover */
+.node-drag-handle:hover {
+    color: var(--accent);
+    transform: scale(1.1);
+}
+
+
+.node-number {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: monospace;
+    border-right: 1px solid var(--line);
+}
+
+
+.node-info-lane {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    cursor: pointer;
+}
+
+
+.node-label {
+    font-size: 14px;
+    color: var(--text);
+}
+
+
+.node-actions-lane {
+    display: flex;
+    align-items: center;
+    padding-right: 10px;
+}
+
+
+.ps-add-controls {
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+
+.node-content {
+    flex: 1;
+    padding: 10px;
+    display: flex;
+    gap: 8px;
+    cursor: pointer;
+}
+
+
+.add-phase-column {
+    flex: 0 0 200px;
+    height: 50px;
+    border: 2px dashed #334155;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: all 0.2s;
+}
+
+
+.add-phase-column:hover {
+    background: rgba(56, 189, 248, 0.05);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+
+.node-owner-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    flex-shrink: 0;
+    margin-left: 10px;
+}
+
+
+.node-owner-avatar.unassigned {
+    border-style: dashed;
+    color: var(--muted);
+    opacity: 0.5;
+}
+
+
+/* Ensure icons inside the avatar lane scale correctly */
+.node-owner-avatar .icon-fallback,
+.node-owner-avatar .icon-emoji {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+}
+
+
+.node-owner-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+
+.avatar-trigger-zone {
+    display: flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.03);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+
+.avatar-trigger-zone:hover {
+    background: rgba(56, 189, 248, 0.1);
+}
+
+
+.mini-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--panel-soft);
+    border: 1px solid var(--bg); /* Creates the "cutout" look */
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    margin-left: 1px; /* Overlap */
+    flex-shrink: 0;
+}
+
+
+.mini-avatar:first-child {
+    margin-left: 0;
+}
+
+
+.mini-avatar.unassigned {
+    border-style: dashed;
+    color: var(--muted);
+    opacity: 0.5;
+}
+
+
+.visualizer-filter-bar {
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+
+.owner-filter-list {
+    display: flex;
+    gap: 6px;
+}
+
+
+.owner-filter-pill {
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+
+.owner-filter-pill:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+
+.owner-filter-pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+}
+
+
+.due-config-trigger {
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+}
+
+
+.due-config-trigger:hover {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.05);
+}
+
+
+.due-icon {
+    font-size: 14px;
+}
+
+
+.cal-dropdown { width: 220px !important; padding: 10px !important; }
+
+
+.mini-cal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+
+.cal-nav {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; padding: 4px;
+}
+
+
+.mini-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+
+.cal-day-name {
+    font-size: 10px; color: var(--muted);
+    text-align: center; padding-bottom: 4px;
+}
+
+
+.cal-date {
+    font-size: 11px; text-align: center;
+    padding: 4px 0; cursor: pointer;
+    border-radius: 4px;
+}
+
+
+.cal-date:hover { background: rgba(56, 189, 248, 0.2); }
+.cal-date.selected { background: var(--accent); color: #000; font-weight: bold; }
+.cal-empty { pointer-events: none; }
+
+
+.outcome-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+
+.pill.outcome-pill {
+    background: rgba(168, 85, 247, 0.1);
+    border-color: #a855f7;
+    color: #e9d5ff;
+    padding: 4px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+
+.pill-remove {
+    cursor: pointer;
+    opacity: 0.6;
+    font-weight: bold;
+}
+
+
+.pill-remove:hover {
+    opacity: 1;
+    color: var(--danger);
+}
+
+
+.node-outcome-triggers {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    padding-left: 28px; /* Align with text, not icon */
+}
+
+
+.outcome-trigger-btn {
+    background: var(--bg);
+    border: 1px solid #a855f7; /* Purple to indicate logic/automation */
+    color: #e9d5ff;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+
+.outcome-trigger-btn:hover {
+    background: #a855f7;
+    color: #fff;
+}
+
+
+.pill.outcome-pill.pill-jump {
+    cursor: pointer;
+    position: relative;
+    padding-right: 28px; /* Extra room for the X */
+}
+
+
+.pill.outcome-pill.pill-jump:hover {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: var(--accent);
+}
+
+
+.pill.outcome-pill.pill-jump::after {
+    content: '↗';
+    font-size: 10px;
+    margin-left: 5px;
+    opacity: 0.5;
+}
+
+
+.pill.outcome-pill.pill-jump:hover::after {
+    opacity: 1;
+    color: var(--accent);
+}
+
+
+/* Force the pointer and prevent the text cursor */
+.nav-zone {
+    cursor: pointer !important;
+    user-select: none !important;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+}
+
+
+.nav-zone:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+
+/* Ensure the pill itself doesn't allow the text cursor */
+.pill.outcome-pill {
+    cursor: default;
+}
+
+
+/* Target both the old div class and the new button tags */
+.nav-zone, .nav-zone-btn, .remove-zone-btn {
+    cursor: pointer !important;
+    user-select: none !important;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    outline: none;
+}
+
+
+/* Ensure the button doesn't have default browser "gray" styling */
+.nav-zone-btn, .remove-zone-btn {
+    background: none;
+    border: none;
+    font-family: inherit;
+}
+
+
+.pill.outcome-pill {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    background: var(--panel-soft);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 2px;
+}
+
+
+.nav-zone-btn:hover {
+    background: rgba(56, 189, 248, 0.1) !important;
+}
+
+
+.remove-zone-btn:hover {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #ef4444 !important;
+}
+
+
+/* Styling for labels that contain group keywords to help differentiate them */
+.node-label:contains("Pre-Meeting"),
+.node-label:contains("Request Client") {
+    border-left: 3px solid var(--accent);
+    padding-left: 8px;
+}
+
+
+.node-text-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+
+.node-meta-preview {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+
+.meta-item {
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+
+/* Highlight items that have actual automated logic applied */
+.meta-item.logic-active {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+
+.workflow-node-row .node-label {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+
+.pill-implicit {
+    border-style: dashed !important;
+    opacity: 0.8;
+    background: rgba(31, 41, 55, 0.4) !important;
+}
+
+
+.implicit-tag {
+    font-size: 9px;
+    margin-left: 4px;
+    filter: grayscale(1);
+}
+
+
+.pill.resource:hover, .pill.fn:hover {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.1);
+    cursor: pointer;
+}
+
+
+/* Constrain icons inside pills specifically */
+.pill .card-icon,
+.pill .icon-fallback,
+.pill .icon-emoji {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    font-size: 10px !important;
+    line-height: 16px !important;
+}
+
+
+.pill .icon-img {
+    width: 16px;
+    height: 16px;
+}
+
+
+/* Ensure the button content aligns nicely */
+.nav-zone-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+
+/* Ensure modal pills behave like the workflow pills */
+.modal-body .pill.outcome-pill {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    background: var(--panel-soft);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 2px;
+}
+
+
+.modal-body .nav-zone-btn:hover {
+    background: rgba(56, 189, 248, 0.1);
+}
+
+
+.modal-body .remove-zone-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
+/*----------Segments-----------------*/
+/* Only triggers when Segments is active */
+/* 1. The Container: Force Horizontal Row */
+#section-unified-segments {
+    display: flex;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    gap: 0;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* 2. The Sidebar: Rigid Width & Sticky */
+.category-sidebar {
+    width: 200px !important;
+    flex: 0 0 200px !important; /* No shrinking */
+    background: rgba(0, 0, 0, 0.2);
+    border-right: 1px solid var(--line);
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding-left: 1%;
+}
+
+/* 3. The Main Content: Flexible Width */
+.segment-main-content {
+    flex: 1 !important;
+    min-width: 0;
+    padding: 24px 40px;
+}
+
+/* 4. The Persona Grid: Flex Wrap (Anti-Stacking) */
+.persona-flex-grid {
+    display: flex;
+    flex-wrap: wrap !important;
+    gap: 20px !important;
+    width: 100% !important;
+    margin-top: 20px;
+    align-items: flex-start !important;
+}
+
+/* Individual Persona Cards */
+/* --- High-Density Persona Cards --- */
+
+.segment-persona-card {
+    background: var(--panel) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+    transition: transform 0.2s, border-color 0.2s !important;
+    flex: 0 0 380px !important; 
+    margin: 0 !important;
+    box-sizing: border-box !important;
+}
+
+.segment-persona-card:hover {
+    border-color: var(--accent) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Card Header Refinement */
+.segment-persona-card .card-header {
+    border-bottom: 1px solid var(--line) !important;
+    margin-bottom: 16px !important;
+    padding-bottom: 12px !important;
+}
+
+.segment-persona-card .card-title {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: var(--text) !important;
+}
+
+/* Logic Rule Rows */
+.rule-pill {
+    display: flex;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 8px 0 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+}
+
+.rule-pill:last-child {
+    border-bottom: none !important;
+}
+
+.rule-pill-label {
+    color: var(--muted) !important;
+    font-size: 11px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    font-weight: 500 !important;
+}
+
+.rule-pill-value {
+    color: var(--accent) !important;
+    font-weight: 600 !important;
+    font-size: 11px !important;
+    cursor: pointer !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    transition: background 0.2s !important;
+}
+
+.rule-pill-value:hover {
+    background: rgba(56, 189, 248, 0.1) !important;
+    text-decoration: none !important;
+}
+
+.rule-pill-remove {
+    margin-left: 8px !important;
+    color: var(--muted) !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    opacity: 0.4 !important;
+}
+
+.rule-pill-remove:hover {
+    color: var(--danger) !important;
+    opacity: 1 !important;
+}
+
+/* Add Filter Button Style */
+.btn-add-pill {
+    width: 100% !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px dashed var(--line) !important;
+    color: var(--muted) !important;
+    margin-top: 15px !important;
+    padding: 10px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+}
+
+.btn-add-pill:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: rgba(56, 189, 248, 0.05) !important;
+}
+
+.access-table-header {
+    display: flex;
+    gap: 10px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px 4px 0 0;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.access-table-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s;
+}
+
+.access-table-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.access-app-pill {
+    width: 120px;
+    background: var(--accent);
+    color: #000;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.access-cell-level {
+    width: 100px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.access-cell-notes {
+    flex: 1;
+    font-size: 12px;
+    font-family: monospace; /* Better for API keys */
+    color: #888;
 }
