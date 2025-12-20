@@ -41,7 +41,7 @@
 
           const btn = document.createElement("button");
           btn.id = "modalHeaderAddDp";
-          btn.className = "btn xsmall soft";
+          btn.className = "btn small soft";
           btn.style.marginRight = "12px";
           btn.innerHTML = "+ Datapoint";
           
@@ -907,6 +907,7 @@ document.addEventListener("selectionchange", () => {
     OL.store.set("features", state.features);
     OL.store.set("integrations", state.integrations);
     OL.store.set("resources", state.resources);
+    OL.store.set("howToLibrary", window.OL.state.howToLibrary);
     OL.store.set("workflowStages", state.workflowStages);
     OL.store.set("workflows", state.workflows);
     OL.store.set("datapoints", state.datapoints);
@@ -1231,6 +1232,7 @@ document.addEventListener("selectionchange", () => {
             <div class="group-title">Resources</div>
             <a href="#/resources/documents" data-route>Resources</a>
             <a href="#/workflows" data-route>Workflows Visualizer</a>
+            <a href="#/howto" data-route>How-To Library</a>
 
             <div class="divider"></div>
             <div class="group-title">Settings</div>
@@ -1304,7 +1306,7 @@ document.addEventListener("selectionchange", () => {
                     <aside class="category-sidebar">
                         <div class="sidebar-header">
                             <h3>Object Types</h3>
-                            <button class="btn xsmall soft" id="btnNewDatapointGroup">+ New Type</button>
+                            <button class="btn small soft" id="btnNewDatapointGroup">+ New Type</button>
                         </div>
                         <div id="datapointSidebarList"></div>
                     </aside>
@@ -1325,8 +1327,8 @@ document.addEventListener("selectionchange", () => {
                 <button class="btn small" id="btnAddCapability">+ Add Item</button>
               </div>
               <div class="pill-key">
-                <button class="btn xsmall soft" data-capview="by-app">By App</button>
-                <button class="btn xsmall soft" data-capview="by-type">By Type</button>
+                <button class="btn small soft" data-capview="by-app">By App</button>
+                <button class="btn small soft" data-capview="by-type">By Type</button>
               </div>
               <div class="spacer"></div>
               <div class="section-actions"></div>
@@ -1373,7 +1375,7 @@ document.addEventListener("selectionchange", () => {
                 <aside class="category-sidebar">
                     <div class="sidebar-header">
                         <h3>Logic Categories</h3>
-                        <button class="btn xsmall soft" id="btnUnifiedAddCategory">+ New</button>
+                        <button class="btn small soft" id="btnUnifiedAddCategory">+ New</button>
                     </div>
                     <div id="sidebarCategoryList"></div>
                 </aside>
@@ -1417,13 +1419,13 @@ document.addEventListener("selectionchange", () => {
                 <button class="btn small" id="btnAddResource">+ Add Resource</button>
               </div>
               <div class="pill-key">
-                <button class="btn xsmall soft" data-res-type="all" onclick="OL.setResourceFilter('all')">All</button>
-                <button class="btn xsmall soft" data-res-type="doc" onclick="OL.setResourceFilter('doc')">Docs / PDFs</button>
-                <button class="btn xsmall soft" data-res-type="form" onclick="OL.setResourceFilter('form')">Forms</button>
-                <button class="btn xsmall soft" data-res-type="scheduler" onclick="OL.setResourceFilter('scheduler')">Scheduler</button>
-                <button class="btn xsmall soft" data-res-type="emailTemplate" onclick="OL.setResourceFilter('emailTemplate')">Email Templates</button>
-                <button class="btn xsmall soft" data-res-type="emailCampaign" onclick="OL.setResourceFilter('emailCampaign')">Email Campaigns</button>
-                <button class="btn xsmall soft" data-res-type="zap" onclick="OL.setResourceFilter('zap')">Zaps</button>
+                <button class="btn small soft" data-res-type="all" onclick="OL.setResourceFilter('all')">All</button>
+                <button class="btn small soft" data-res-type="doc" onclick="OL.setResourceFilter('doc')">Docs / PDFs</button>
+                <button class="btn small soft" data-res-type="form" onclick="OL.setResourceFilter('form')">Forms</button>
+                <button class="btn small soft" data-res-type="scheduler" onclick="OL.setResourceFilter('scheduler')">Scheduler</button>
+                <button class="btn small soft" data-res-type="emailTemplate" onclick="OL.setResourceFilter('emailTemplate')">Email Templates</button>
+                <button class="btn small soft" data-res-type="emailCampaign" onclick="OL.setResourceFilter('emailCampaign')">Email Campaigns</button>
+                <button class="btn small soft" data-res-type="zap" onclick="OL.setResourceFilter('zap')">Zaps</button>
               </div>
               <div class="spacer"></div>
               <div class="section-actions"></div>
@@ -1456,6 +1458,8 @@ document.addEventListener("selectionchange", () => {
                     <div id="analysisMatrixContainer" class="analysis-matrix-container"></div>
                 </div>
             </section>
+
+            <section class="section" id="section-howto"></section>
 
           </main>
         </div>
@@ -2219,9 +2223,9 @@ function renderAnalysisLeftMenu() {
                 💾 Save Current Snapshot
             </button>
             <div class="toggle-bar" style="display:flex; background:rgba(0,0,0,0.2); border-radius:4px; padding:2px;">
-                <button class="btn xsmall ${OL.analysisMenuMode === 'builder' ? 'active' : 'soft'}" 
+                <button class="btn small ${OL.analysisMenuMode === 'builder' ? 'active' : 'soft'}" 
                         style="flex:1;" onclick="OL.setAnalysisMenuMode('builder')">Builder</button>
-                <button class="btn xsmall ${OL.analysisMenuMode === 'library' ? 'active' : 'soft'}" 
+                <button class="btn small ${OL.analysisMenuMode === 'library' ? 'active' : 'soft'}" 
                         style="flex:1;" onclick="OL.setAnalysisMenuMode('library')">Library (${analyses.length})</button>
             </div>
         </div>
@@ -2536,8 +2540,8 @@ OL.removeFeatureInline = function(e, featureId) {
                   
                   <h3 class="stage-block-title">${esc(stage.name)}</h3>
                   <div class="stage-block-actions">
-                      <button class="btn xsmall soft" onclick="OL.addNewWorkflowToStage('${stage.id}')">+</button>
-                      <button class="btn xsmall soft warn" onclick="OL.deleteStage('${stage.id}')">×</button>
+                      <button class="btn small soft" onclick="OL.addNewWorkflowToStage('${stage.id}')">+</button>
+                      <button class="btn small soft warn" onclick="OL.deleteStage('${stage.id}')">×</button>
                   </div>
               </div>
               <div class="process-list">
@@ -3415,8 +3419,6 @@ OL.deleteWorkflow = function(workflowId) {
     renderWorkflowsGrid();
 };
 
-  // Add these functions after your existing workflow logic (OL.deleteStageFromWorkflow, etc.)
-
   // Helper function to find a Team Member (assuming you have a state.team array)
   function findTeamMemberById(id) {
       // Assuming state.team is an array of { id, name } objects
@@ -3873,7 +3875,7 @@ function renderNodeModalHTML(workflow, node, isNew) {
                             <div id="modalOwnerPills" class="pills-row">
                                 ${assignedNames || '<span class="pill muted">Unassigned</span>'}
                             </div>
-                            <button class="btn xsmall soft" id="btnModalAssign">Edit Assignees</button>
+                            <button class="btn small soft" id="btnModalAssign">Edit Assignees</button>
                         </div>
                     </div>
                     <div class="modal-column">
@@ -3889,7 +3891,7 @@ function renderNodeModalHTML(workflow, node, isNew) {
                     <div id="modalAppList" class="pills-row" style="margin: 8px 0;">
                         ${renderNodeAppPills(node)}
                     </div>
-                    <button class="btn xsmall soft" id="btnStepAddApp">+ Map App</button>
+                    <button class="btn small soft" id="btnStepAddApp">+ Map App</button>
                 </div>
 
                 <div class="modal-section" style="margin-top:15px;">
@@ -3897,7 +3899,7 @@ function renderNodeModalHTML(workflow, node, isNew) {
                     <div id="modalResourceList" class="pills-row" style="margin: 8px 0;">
                         ${renderNodeResourcePills(node)}
                     </div>
-                    <button class="btn xsmall soft" id="btnStepAddResource">+ Map Resource</button>
+                    <button class="btn small soft" id="btnStepAddResource">+ Map Resource</button>
                 </div>
                 <div class="modal-section" style="margin-top:15px;">
                   <label class="modal-section-label">Automated Outcomes</label>
@@ -3905,7 +3907,7 @@ function renderNodeModalHTML(workflow, node, isNew) {
                       ${(node.outcomes || []).map((oc, i) => {
                           const hasTarget = oc.targetNodeId || oc.targetWorkflowId;
                           return `
-                              <div class="pill outcome-pill" 
+                              <div class="pill fn" 
                                   style="display: inline-flex; align-items: stretch; border: 1px solid var(--line); background: var(--panel-soft); border-radius: 4px; overflow: hidden; margin: 2px;">
                                   
                                   <button class="outcome-jump-trigger" 
@@ -3923,7 +3925,7 @@ function renderNodeModalHTML(workflow, node, isNew) {
                       }).join('')}
                   </div>
                   </div>
-                  <button class="btn xsmall soft" id="btnAddOutcome">+ Add Outcome</button>
+                  <button class="btn small soft" id="btnAddOutcome">+ Add Outcome</button>
               </div>
             ` : `
                 <label class="modal-section-label">Link to Existing Resource</label>
@@ -3973,15 +3975,14 @@ function renderSingleAppPill(appId, nodeId, isImplicit) {
     if (!app) return '';
     
     return `
-        <div class="pill outcome-pill ${isImplicit ? 'pill-implicit' : ''}" 
+        <div class="pill fn ${isImplicit ? 'pill-implicit' : ''}" 
              title="${isImplicit ? 'Inherited from linked resource' : ''}">
-            <button class="nav-zone-btn" 
+            <span 
                  onclick="event.stopPropagation(); OL.closeModal(); setTimeout(() => OL.openAppModal('${appId}'), 50)">
                 ${OL.iconHTML(app)} <span style="margin-left:6px;">${esc(app.name)}</span>
                 ${isImplicit ? '<span class="implicit-tag">🔗</span>' : ''}
             </button>
             ${!isImplicit ? `
-                <button class="remove-zone-btn" onclick="event.stopPropagation(); OL.removeAppFromNode('${nodeId}', '${appId}')">×</button>
             ` : ''}
         </div>`;
 }
@@ -4008,16 +4009,11 @@ function renderNodeResourcePills(node) {
         const res = getResourceById(id);
         if (!res) return '';
         return `
-            <div class="pill outcome-pill" style="display: inline-flex; align-items: stretch; border: 1px solid var(--line); background: var(--panel-soft); border-radius: 4px; overflow: hidden; margin: 2px;">
+            <div class="pill fn" style="display: inline-flex; align-items: stretch; border: 1px solid var(--line); background: var(--panel-soft); border-radius: 4px; overflow: hidden; margin: 2px;">
                 <button class="nav-zone-btn" 
                      style="background: none; border: none; padding: 4px 10px; font-size: 11px; font-family: inherit; cursor: pointer; color: var(--accent); display: flex; align-items: center;"
                      onclick="event.stopPropagation(); OL.closeModal(); setTimeout(() => OL.openResourceModal('${id}'), 50)">
                     <span>📄 ${esc(res.name)}</span>
-                </button>
-                <button class="remove-zone-btn" 
-                     style="background: none; border: none; padding: 4px 8px; border-left: 1px solid var(--line); cursor: pointer; color: var(--muted); font-family: inherit;"
-                     onclick="event.stopPropagation(); OL.removeResourceFromNode('${node.id}', '${id}')">
-                    ×
                 </button>
             </div>`;
     }).join('');
@@ -5669,9 +5665,8 @@ function autoRenumberStages() {
       if (!cat) return;
 
       const valuesHTML = (cat.values || []).map(v => `
-          <div class="pill outcome-pill" style="margin: 4px;">
+          <div class="pill fn" style="margin: 4px;">
               <span contenteditable="true" onblur="OL.renameCategoryValue('${cat.id}', '${v.id}', this.textContent)">${esc(v.label)}</span>
-              <span class="remove-zone-btn" onclick="OL.deleteCategoryValue('${cat.id}', '${v.id}')">×</span>
           </div>
       `).join('');
 
@@ -6054,11 +6049,11 @@ return children
             <span class="spacer"></span>
             
             <div class="folder-actions">
-              <button class="btn xsmall soft folder-outdent" ${!canMoveUp ? 'disabled' : ''}><</button>
+              <button class="btn small soft folder-outdent" ${!canMoveUp ? 'disabled' : ''}><</button>
               
-              <button class="btn xsmall soft folder-indent" disabled>></button>
+              <button class="btn small soft folder-indent" disabled>></button>
               
-              <button class="btn xsmall soft folder-add-child">+ Subfolder</button>
+              <button class="btn small soft folder-add-child">+ Subfolder</button>
             </div>
             
             <span class="card-close folder-delete">×</span>
@@ -6182,9 +6177,9 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                         <span class="spacer"></span>
                         
                         <div class="folder-actions">
-                            <button class="btn xsmall soft folder-outdent" ${!canMoveUp ? 'disabled' : ''}><</button>
-                            <button class="btn xsmall soft folder-indent" data-prev-sibling="${canMoveDown ? siblings[targetIndex-1].id : ''}" ${!canMoveDown ? 'disabled' : ''}>></button>
-                            <button class="btn xsmall soft folder-add-child">+ Subfolder</button>
+                            <button class="btn small soft folder-outdent" ${!canMoveUp ? 'disabled' : ''}><</button>
+                            <button class="btn small soft folder-indent" data-prev-sibling="${canMoveDown ? siblings[targetIndex-1].id : ''}" ${!canMoveDown ? 'disabled' : ''}>></button>
+                            <button class="btn small soft folder-add-child">+ Subfolder</button>
                         </div>
                         
                         <span class="card-close folder-delete">×</span>
@@ -6866,6 +6861,69 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   // ------------------------------------------------------------
   // RESOURCES GRID
   // ------------------------------------------------------------
+  window.OL.state.resources = OL.store.get("resources", defaultResources);
+  // Inside your default data or initialization
+  const resourceStatuses = ["Do Now", "Do Later", "Don’t Do", "In Process", "Done"];
+  const parties = ["Sphynx", "Joint", "Client"];
+
+  // New universal constructor
+  function createBlankResource(type) {
+      return {
+          id: OL.utils.uid(),
+          name: "",
+          type: type, // 'doc', 'emailTemplate', 'form', 'zap', 'emailCampaign'
+          category: (type === 'zap' || type === 'emailCampaign') ? 'multi-step' : 'single-step',
+          status: "Do Now",
+          responsibleParty: "Sphynx",
+          creator: "Sphynx",
+          createdDate: new Date().toISOString(),
+          description: "",
+          link: "",
+          appIds: [],
+          ownerIds: [],
+          implementationResources: [], // Links to "How-To" library IDs
+          activityLog: [
+              { date: new Date().toISOString(), note: "Resource created." }
+          ],
+          steps: [] // Only used for multi-step (Zaps/Campaigns)
+      };
+  }
+
+  OL.handleAddResource = function() {
+      const btn = event.currentTarget;
+      openMappingDropdown({
+          anchorEl: btn,
+          options: [
+              { id: 'doc', label: '📄 Single: Document / PDF' },
+              { id: 'emailTemplate', label: '📧 Single: Email Template' },
+              { id: 'form', label: '📝 Single: Form Template' },
+              { id: 'zap_step', label: '⚡ Single: Zap Step' },
+              { id: 'zap', label: '⛓️ Multi: Zap / Automation' },
+              { id: 'emailCampaign', label: '✉️ Multi: Email Campaign' }
+          ],
+          onSelect: (typeId) => {
+              const newRes = {
+                  id: 'res-' + Date.now(),
+                  name: "New " + typeId,
+                  type: typeId,
+                  category: (typeId === 'zap' || typeId === 'emailCampaign') ? 'multi-step' : 'single-step',
+                  status: "Do Now",
+                  responsibleParty: "Sphynx",
+                  creator: "Sphynx",
+                  createdDate: new Date().toISOString(),
+                  activityLog: [{ date: new Date().toISOString(), note: "Resource created." }],
+                  tags: [],
+                  steps: [],
+                  implementationResources: []
+              };
+              window.OL.state.resources.push(newRes);
+              OL.persist();
+              renderResourcesGrid();
+              OL.openResourceModal(newRes.id);
+          }
+      });
+  };
+  
   function resourceTypeLabel(t) {
     switch (t) {
       case "doc":
@@ -6894,213 +6952,129 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   }
 
   function renderResourcesGrid() {
-    const grid = document.getElementById("resourcesGrid");
-    if (!grid) return;
+      const grid = document.getElementById("resourcesGrid");
+      if (!grid) return;
 
-    const all = Array.isArray(state.resources) ? state.resources : [];
-
-    // highlight active filter button
-    const filterWrap = document.getElementById("resourcesFilters");
-    if (filterWrap) {
-      filterWrap.querySelectorAll("[data-res-type]").forEach((btn) => {
-        const t = btn.getAttribute("data-res-type");
-        if (t === currentResourceFilter) {
-          btn.classList.add("active");
-        } else {
-          btn.classList.remove("active");
-        }
+      const allResources = Array.isArray(state.resources) ? state.resources : [];
+      const searchQuery = (document.getElementById("resSearch")?.value || "").toLowerCase();
+      
+      // 1. Unified Filtering Logic (Search + Type + Status)
+      const filtered = allResources.filter(r => {
+          const matchesSearch = (r.name + r.description + (r.tags || []).join(" ")).toLowerCase().includes(searchQuery);
+          const matchesType = currentResourceFilter === "all" || r.type === currentResourceFilter;
+          const matchesStatus = (window.OL.resFilterStatus || "All") === "All" || r.status === window.OL.resFilterStatus;
+          return matchesSearch && matchesType && matchesStatus;
       });
-    }
 
-    let list = all;
-    if (currentResourceFilter !== "all") {
-      list = all.filter((r) => (r.type || "doc") === currentResourceFilter);
-    }
+      // 2. Toolbar & Layout Header
+      grid.innerHTML = `
+          <div class="resource-toolbar" style="grid-column: 1/-1; display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; align-items: center; background: var(--panel-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--line);">
+              <div style="flex: 2; min-width: 200px;">
+                  <label class="modal-section-label" style="margin-top:0">Search</label>
+                  <input type="text" id="resSearch" class="access-input" placeholder="Search by name, description, or tags..." 
+                        oninput="OL.renderResourcesGrid()" value="${OL.utils.esc(searchQuery)}">
+              </div>
+              
+              <div style="flex: 1; min-width: 150px;">
+                  <label class="modal-section-label" style="margin-top:0">Filter Status</label>
+                  <select onchange="window.OL.resFilterStatus = this.value; OL.renderResourcesGrid()" class="modal-select">
+                      <option value="All">All Statuses</option>
+                      ${["Do Now", "Do Later", "Don’t Do", "In Process", "Done"].map(s => 
+                          `<option value="${s}" ${window.OL.resFilterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+                  </select>
+              </div>
 
-    if (!list.length) {
-      grid.innerHTML = `<div class="empty-hint">No resources yet for this view.</div>`;
-      return;
-    }
-
-    // sort by name
-    list = list
-      .slice()
-      .sort((a, b) =>
-        (a.name || "")
-          .toLowerCase()
-          .localeCompare((b.name || "").toLowerCase()),
-      );
-
-    grid.innerHTML = "";
-
-    list.forEach((r) => {
-      const type = r.type || "doc";
-      const typeLabel = resourceTypeLabel(type);
-
-      const apps = (r.appIds || [])
-        .map((id) => findAppById(id))
-        .filter(Boolean);
-
-      const owners = (r.ownerIds || [])
-        .map((id) => getTeamMemberById(id))
-        .filter(Boolean);
-
-      const resourcesUsed = (r.resourcesUsed || [])
-        .map((id) => getResourceById(id))
-        .filter(Boolean);
-
-      // backlinks: other resources that reference this one
-      const usedInResources = all.filter(
-        (other) =>
-          Array.isArray(other.resourcesUsed) &&
-          other.resourcesUsed.includes(r.id),
-      );
-
-      const linkLabel = r.link
-        ? r.link.length > 60
-          ? r.link.slice(0, 60) + "…"
-          : r.link
-        : "";
-
-      const appsHtml = apps.length
-        ? apps
-            .map((a) => `<span class="pill integr"
-            onclick="event.stopPropagation(); OL.openAppModal('${a.id}')">
-            ${esc(a.name || "")}</span>`)
-            .join("")
-        : `<span class="pill muted">No app mapped</span>`;
-
-      const ownersHtml = owners.length
-        ? owners
-            .map(
-              (m) => `
-            <span class="pill fn"
-                  onclick="event.stopPropagation(); OL.openTeamMemberModal('${m.id}')">
-              ${esc(m.name || "")}
-            </span>
-          `,
-            )
-            .join("")
-        : `<span class="pill muted">No owners</span>`;
-
-      const tagsHtml = (r.tags || []).length
-        ? (r.tags || [])
-            .map((t) => `<span class="pill xsmall">${esc(t)}</span>`)
-            .join("")
-        : `<span class="pill muted">No tags</span>`;
-
-      const usedHtml = resourcesUsed.length
-        ? resourcesUsed
-            .map(
-              (rr) => `
-            <span class="pill xsmall"
-                  onclick="event.stopPropagation(); OL.openResourceModal('${rr.id}')">
-              ${esc(rr.name || "")}
-            </span>
-          `,
-            )
-            .join("")
-        : `<span class="pill muted">None</span>`;
-
-      const usedInHtml = usedInResources.length
-        ? usedInResources
-            .map(
-              (rr) => `
-            <span class="pill xsmall"
-                  onclick="event.stopPropagation(); OL.openResourceModal('${rr.id}')">
-              ${esc(rr.name || "")}
-            </span>
-          `,
-            )
-            .join("")
-        : `<span class="pill muted">None yet</span>`;
-
-      grid.insertAdjacentHTML(
-        "beforeend",
-        `
-        <div class="card resource-card" data-res-id="${r.id}">
-          <div class="card-header">
-            <div class="card-header-left">
-              <div class="card-title single-line-text">${esc(r.name || "")}</div>
-              <span class="pill xsmall soft">${esc(typeLabel)}</span>
-            </div>
-            <div class="card-close"
-                 onclick="event.stopPropagation(); OL.deleteResource('${r.id}')">×</div>
+              <div style="display:flex; align-items: flex-end; height: 100%; padding-top: 18px;">
+                  <button class="btn primary" onclick="OL.handleAddResource()">+ Add Resource</button>
+              </div>
           </div>
-          <div class="card-body">
 
-            <div class="card-section">
-              <div class="card-section-title">Description</div>
-              <div class="card-section-content single-line-text ${r.description ? "" : "muted"}">
-                ${esc(r.description || "No description")}
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">Primary Link</div>
-              <div class="card-section-content single-line-text">
-                ${
-                  r.link
-                    ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">Open</a>`
-                    : `<span class="muted">No link</span>`
-                }
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">App</div>
-              <div class="card-section-content">
-                <div class="pills-row">${appsHtml}</div>
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">Owners</div>
-              <div class="card-section-content">
-                <div class="pills-row">${ownersHtml}</div>
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">Tags</div>
-              <div class="card-section-content">
-                <div class="pills-row">${tagsHtml}</div>
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">Resources Used</div>
-              <div class="card-section-content">
-                <div class="pills-row">${usedHtml}</div>
-              </div>
-            </div>
-
-            <div class="card-section">
-              <div class="card-section-title">Used In (Resources)</div>
-              <div class="card-section-content">
-                <div class="pills-row">${usedInHtml}</div>
-              </div>
-            </div>
-
+          <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; width: 100%;">
+              ${filtered.length ? filtered.map(r => renderBusinessResourceCard(r)).join('') : `<div class="empty-hint" style="grid-column: 1/-1;">No resources found matching these filters.</div>`}
           </div>
-        </div>
-      `,
-      );
-    });
-
-    // wire card click → modal
-    grid.querySelectorAll(".resource-card").forEach((card) => {
-      card.onclick = (e) => {
-        e.preventDefault();
-        const id = card.getAttribute("data-res-id");
-        if (id) OL.openResourceModal(id);
-      };
-    });
+      `;
   }
+
+  function renderBusinessResourceCard(r) {
+      const statusClass = (r.status || 'do-now').toLowerCase().replace(/\s/g, '-');
+      const isMultiStep = r.category === 'multi-step';
+      
+      return `
+          <div class="card resource-card clickable" data-res-id="${r.id}" onclick="OL.openResourceModal('${r.id}')">
+              <div class="card-header">
+                  <div class="card-header-left">
+                      <span class="type-icon" title="${r.type}">${isMultiStep ? '⛓️' : '📄'}</span>
+                      <div class="card-title single-line-text">${OL.utils.esc(r.name || "Untitled Resource")}</div>
+                  </div>
+                  <div class="status-badge status-${statusClass}">${r.status || 'Do Now'}</div>
+              </div>
+              
+              <div class="card-body">
+                  <div class="card-meta" style="margin-bottom: 10px; font-size: 11px;">
+                      <span class="muted">Resp:</span> <strong>${r.responsibleParty || 'Sphynx'}</strong>
+                      <span class="muted" style="margin-left:8px;">By:</span> <strong>${r.creator || 'Sphynx'}</strong>
+                  </div>
+
+                  <p class="muted small" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 12px; height: 32px;">
+                      ${OL.utils.esc(r.description || "No description provided.")}
+                  </p>
+
+                  <div class="pill-stack">
+                      ${(r.tags || []).map(t => `<span class="pill small">${OL.utils.esc(t)}</span>`).join('')}
+                      ${isMultiStep ? `<span class="pill small soft">⚡ ${(r.steps || []).length} steps</span>` : ''}
+                  </div>
+              </div>
+
+              <div class="card-footer muted" style="font-size: 10px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; display: flex; justify-content: space-between;">
+                  <span>Created: ${new Date(r.createdDate).toLocaleDateString()}</span>
+                  <span>${(r.activityLog || []).length} Log Entries</span>
+              </div>
+          </div>
+      `;
+  }
+  OL.logResourceActivity = function(resource, note) {
+      if (!resource.activityLog) resource.activityLog = [];
+      resource.activityLog.unshift({
+          date: new Date().toISOString(),
+          note: note
+      });
+  };
+
+  OL.updateResourceValue = function(id, field, value) {
+      const res = getResourceById(id);
+      if (!res) return;
+
+      // 1. Check if value actually changed
+      if (res[field] === value) return;
+
+      const oldVal = res[field];
+      res[field] = value;
+
+      // 2. Auto-log major changes
+      if (field === 'status' || field === 'responsibleParty' || field === 'name') {
+          OL.logResourceActivity(res, `Updated ${field} from "${oldVal}" to "${value}"`);
+      }
+
+      // 3. Save to LocalStorage
+      OL.persist();
+
+      // 4. Update card face immediately
+      renderResourcesGrid();
+  };
+
+  // Example update trigger
+  OL.updateResourceStatus = function(resId, newStatus) {
+      const r = getResourceById(resId);
+      if (r && r.status !== newStatus) {
+          const oldStatus = r.status;
+          r.status = newStatus;
+          OL.logResourceActivity(r, `Status changed from "${oldStatus}" to "${newStatus}"`);
+          OL.persist();
+      }
+  };
 
   OL.setResourceFilter = function (type) {
     currentResourceFilter = type || "all";
-    renderResourcesGrid();
   };
 
   OL.deleteResource = function (id) {
@@ -7126,6 +7100,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   // RESOURCE MODAL (draft-safe)
   // ------------------------------------------------------------
   function renderResourceModalHTML(r, isNew = false) {
+    const isMultiStep = r.category === 'multi-step';
     const typeOptions = `
       <option value="doc"  ${r.type === "doc" ? "selected" : ""}>Document / PDF</option>
       <option value="form" ${r.type === "form" ? "selected" : ""}>Form</option>
@@ -7160,7 +7135,8 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           <div class="modal-title-text"
               id="resName"
               contenteditable="true"
-              data-placeholder="New Resource">
+              data-placeholder="New Resource"
+              onblur="OL.updateResourceValue('${r.id}', 'name', this.textContent)">
               ${esc(r.name || "")}
           </div>
           <div class="spacer"></div>
@@ -7168,14 +7144,72 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         </div>
 
         <div class="modal-body">
+          <div class="modal-row" style="gap:15px;">
+              <div class="modal-column">
+                  <label class="modal-section-label">Status</label>
+                  <select onchange="OL.updateResourceValue('${r.id}', 'status', this.value)" class="modal-select">
+                      ${["Do Now", "Do Later", "Don’t Do", "In Process", "Done"].map(s => 
+                          `<option value="${s}" ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                  </select>
+              </div>
+              <div class="modal-column">
+                  <label class="modal-section-label">Responsible Party</label>
+                  <select onchange="OL.updateResourceValue('${r.id}', 'responsibleParty', this.value)" class="modal-select">
+                      ${["Sphynx", "Joint", "Client"].map(p => 
+                          `<option value="${p}" ${r.responsibleParty === p ? 'selected' : ''}>${p}</option>`).join('')}
+                  </select>
+              </div>
+              <div class="modal-column">
+                  <label class="modal-section-label">Creator</label>
+                  <select onchange="OL.updateResourceValue('${r.id}', 'creator', this.value)" class="modal-select">
+                      ${["Sphynx", "Joint", "Client"].map(p => 
+                          `<option value="${p}" ${r.creator === p ? 'selected' : ''}>${p}</option>`).join('')}
+                  </select>
+              </div>
+          </div>
+
+          <div class="modal-section">
+              <label class="modal-section-label">Implementation Resources (How-To)</label>
+              <div id="resHowToPills" class="pills-row"></div>
+              <button class="btn small soft" onclick="OL.openHowToPicker('${r.id}')">+ Link How-To</button>
+          </div>
+
+          ${isMultiStep ? `
+              <div class="modal-section">
+                  <label class="modal-section-label">Process Steps (${r.type === 'zap' ? 'Zap Steps' : 'Campaign Sequence'})</label>
+                  <div id="resStepListContainer" class="visualizer-vertical-list">
+                    ${renderResourceStepsList(r)}
+                      </div>
+                  <button class="btn small soft" onclick="OL.addStepToResource('${r.id}')">+ Add Step</button>
+              </div>
+          ` : ''}
+
+          <div class="modal-section">
+              <label class="modal-section-label">Activity Log</label>
+              <div class="activity-log-container" style="max-height:150px; overflow:auto; background:rgba(0,0,0,0.1); padding:10px; border-radius:4px;">
+                  ${(r.activityLog || []).map(entry => `
+                      <div style="font-size:11px; margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                          <span class="muted">${new Date(entry.date).toLocaleDateString()}</span>: ${OL.utils.esc(entry.note)}
+                      </div>
+                  `).join('')}
+              </div>
+              <div style="display:flex; gap:5px; margin-top:5px;">
+                  <input type="text" id="newLogNote" placeholder="Add note..." class="access-input" style="flex:1;">
+                  <button class="btn small primary" onclick="OL.addLogEntry('${r.id}')">Add</button>
+              </div>
+          </div>
           <div class="modal-row">
             <div class="modal-column">
               <label class="modal-section-label">Type</label>
-              <select id="resType" class="modal-textarea" style="min-height:auto;height:auto;">${typeOptions}</select>
+              <select id="resType" class="modal-textarea" style="min-height:auto;height:auto;"
+              onchange="OL.updateResourceType('${r.id}', this.value)"
+              >${typeOptions}</select>
             </div>
             <div class="modal-column">
               <label class="modal-section-label">Tags</label>
-              <input id="resTags" class="modal-textarea" style="min-height:auto;height:auto;" value="${esc((r.tags || []).join(', '))}">
+              <input id="resTags" class="modal-textarea" style="min-height:auto;height:auto;" 
+              value="${esc((r.tags || []).join(', '))}"
+              onchange="OL.updateResourceType('${r.id}', this.value)">
             </div>
           </div>
 
@@ -7183,12 +7217,12 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
             <div class="modal-column">
               <label class="modal-section-label">App</label>
               <div id="resAppPills" class="pills-row" style="margin-bottom:6px;"></div>
-              <button class="btn xsmall soft" id="resAppPicker">+ Map App</button>
+              <button class="btn small soft" id="resAppPicker">+ Map App</button>
             </div>
             <div class="modal-column">
               <label class="modal-section-label">Owners</label>
               <div id="resOwnerPills" class="pills-row" style="margin-bottom:6px;"></div>
-              <button class="btn xsmall soft" id="resOwnerPicker">+ Map Owner</button>
+              <button class="btn small soft" id="resOwnerPicker">+ Map Owner</button>
             </div>
           </div>
 
@@ -7196,7 +7230,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
             <div class="modal-column">
               <label class="modal-section-label">Resources Used (Upstream)</label>
               <div id="resResourcePills" class="pills-row" style="margin-bottom:6px;"></div>
-              <button class="btn xsmall soft" id="resResourcePicker">+ Link Dependency</button>
+              <button class="btn small soft" id="resResourcePicker">+ Link Dependency</button>
             </div>
             <div class="modal-column">
               <label class="modal-section-label">Used In (Downstream)</label>
@@ -7207,15 +7241,181 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           </div>
 
           <label class="modal-section-label">Description</label>
-          <textarea id="resDesc" class="modal-textarea" style="min-height:60px;">${esc(r.description || "")}</textarea>
+          <textarea id="resDesc" class="modal-textarea" 
+          style="min-height:60px;"
+          onblur="OL.updateResourceValue('${r.id}', 'link', this.value)"
+          >${esc(r.description || "")}</textarea>
 
           <label class="modal-section-label">Primary Link</label>
-          <input id="resLink" class="modal-textarea" style="min-height:auto;height:auto;" value="${esc(r.link || "")}">
+          <input id="resLink" class="modal-textarea" 
+          style="min-height:auto;height:auto;" 
+          value="${esc(r.link || "")}"
+          onblur="OL.updateResourceValue('${r.id}', 'link', this.value)">
 
           <div id="resPreviewBlock" style="margin-top:10px;">${iframeHtml}</div>
         </div>
       `;
   }
+
+  /**
+   * Handles Resource Type changes and switches between Single/Multi-step logic
+   */
+  OL.updateResourceType = function(id, newType) {
+      const res = getResourceById(id);
+      if (!res) return;
+
+      const oldType = res.type;
+      res.type = newType;
+
+      // 1. Auto-assign Category based on Type
+      if (newType === 'zap' || newType === 'emailCampaign') {
+          res.category = 'multi-step';
+          if (!res.steps) res.steps = []; 
+      } else {
+          res.category = 'single-step';
+      }
+
+      // 2. Log the change for history tracking
+      if (typeof OL.logResourceActivity === 'function') {
+          OL.logResourceActivity(res, `Changed type from ${oldType} to ${newType}`);
+      }
+
+      // 3. Persist to LocalStorage
+      OL.persist();
+
+      // 4. Refresh UI
+      // We re-open the modal because the layout needs to change (show/hide steps)
+      OL.openResourceModal(id); 
+      renderResourcesGrid();
+  };
+
+  /**
+   * Persists the tag array from a comma-separated string
+   */
+  OL.updateResourceTags = function(id, tagString) {
+      const res = getResourceById(id);
+      if (!res) return;
+
+      res.tags = tagString.split(',')
+          .map(t => t.trim())
+          .filter(t => t !== "");
+      
+      OL.persist();
+      renderResourcesGrid();
+  };
+
+  // 1. Add new step logic
+  OL.addStepToResource = function(resId) {
+      const res = getResourceById(resId);
+      if (!res) return;
+
+      const stepName = prompt("Enter the name for this step (e.g., 'Filter: Only if Email exists'):");
+      if (!stepName) return;
+
+      res.steps = res.steps || [];
+      res.steps.push({
+          id: OL.utils.uid(),
+          name: stepName.trim(),
+          description: "",
+          sortIndex: res.steps.length
+      });
+
+      OL.logResourceActivity(res, `Added process step: ${stepName}`);
+      OL.persist();
+      OL.openResourceModal(res.id); // Refresh modal view
+  };
+
+  OL.updateResourceStep = function(resId, stepId, field, value) {
+      const res = getResourceById(resId);
+      const step = (res.steps || []).find(s => s.id === stepId);
+      if (step) {
+          step[field] = value;
+          OL.persist();
+      }
+  };
+
+  OL.addLogEntry = function(resId) {
+      const input = document.getElementById('newLogNote');
+      const note = input ? input.value.trim() : "";
+      const res = getResourceById(resId);
+
+      if (res && note) {
+          res.activityLog = res.activityLog || [];
+          res.activityLog.unshift({
+              date: new Date().toISOString(),
+              note: note
+          });
+          
+          input.value = ""; // Clear input
+          OL.persist();
+          OL.openResourceModal(resId); // Refresh modal to show new entry
+      }
+  };
+
+  // 2. Update the Modal content rendering
+  // Ensure this part is included in your renderResourceModalHTML logic
+  function renderResourceStepsList(res) {
+      if (!res.steps || res.steps.length === 0) return '<div class="empty-hint">No steps defined.</div>';
+      
+      return res.steps.map((step, idx) => `
+          <div class="workflow-node-row">
+              <div class="node-number">${idx + 1}</div>
+              <div class="node-text-group" style="flex:1;">
+                  <div class="node-label" contenteditable="true" 
+                      onblur="OL.updateResourceStep('${res.id}', '${step.id}', 'name', this.textContent)">
+                      ${esc(step.name)}
+                  </div>
+                  <textarea class="modal-textarea small" placeholder="Step instructions..." 
+                            onblur="OL.updateResourceStep('${res.id}', '${step.id}', 'description', this.value)">${esc(step.description || "")}</textarea>
+              </div>
+              <button class="card-close" onclick="OL.removeStepFromResource('${res.id}', '${step.id}')">×</button>
+          </div>
+      `).join("");
+  }
+  
+  OL.removeStepFromResource = function(resId, stepId) {
+      const res = getResourceById(resId);
+      if (!res) return;
+
+      if (!confirm("Delete this process step?")) return;
+
+      res.steps = (res.steps || []).filter(s => s.id !== stepId);
+      
+      // Re-index remaining steps
+      res.steps.forEach((s, idx) => s.sortIndex = idx);
+
+      OL.logResourceActivity(res, `Removed a process step.`);
+      OL.persist();
+      OL.openResourceModal(resId); // Refresh modal
+  };
+
+  // Initialize How-To State
+  OL.state.howToLibrary = OL.store.get("howToLibrary", [
+      { id: 'ht-01', name: 'Zapier Setup Guide', link: '...', visibility: 'Internal' },
+      { id: 'ht-02', name: 'Client Onboarding Form Manual', link: '...', visibility: 'Client Facing' }
+  ]);
+
+  OL.updateResource = function(id, field, value) {
+      const r = getResourceById(id);
+      if (r) {
+          r[field] = value;
+          // Auto-log changes
+          r.activityLog.push({ date: new Date().toISOString(), note: `Updated ${field} to ${value}` });
+          OL.persist();
+      }
+  };
+
+  OL.addLogEntry = function(resId) {
+      const input = document.getElementById('newLogNote');
+      const r = getResourceById(resId);
+      if (r && input.value.trim()) {
+          r.activityLog.push({ date: new Date().toISOString(), note: input.value.trim() });
+          input.value = "";
+          OL.persist();
+          OL.openResourceModal(resId);
+      }
+  };
+
   function getResourceUsageConnections(resId) {
       // 1. Upstream: What resources does THIS one use? (Directly stored in resourcesUsed)
       const upstream = (state.resources || []).filter(r => 
@@ -7323,7 +7523,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       if (appPillsBox) {
           appPillsBox.innerHTML = apps.length
               ? apps.map((a) => `
-                  <span class="pill integr"
+                  <div class="pill fn"
                         onclick="event.stopPropagation(); OL.openAppModal('${a.id}')">
                       ${OL.utils.esc(a.name || "")}
                   </span>`).join("")
@@ -7350,11 +7550,10 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         if (appBox) {
             const apps = (resource.appIds || []).map(id => findAppById(id)).filter(Boolean);
             appBox.innerHTML = apps.map(a => `
-                <div class="pill outcome-pill">
-                    <button class="nav-zone-btn" onclick="OL.closeModal(); setTimeout(() => OL.openAppModal('${a.id}'), 50)">
+                <div class="pill fn">
+                    <span onclick="OL.closeModal(); setTimeout(() => OL.openAppModal('${a.id}'), 50)">
                         ${OL.iconHTML(a)} ${esc(a.name)}
-                    </button>
-                    <button class="remove-zone-btn" onclick="OL.removeAppFromResource('${resource.id}', '${a.id}')">×</button>
+                    </span>
                 </div>
             `).join("") || '<span class="pill muted">None</span>';
         }
@@ -7364,11 +7563,10 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         if (resBox) {
             const deps = (resource.resourcesUsed || []).map(id => getResourceById(id)).filter(Boolean);
             resBox.innerHTML = deps.map(d => `
-                <div class="pill outcome-pill">
-                    <button class="nav-zone-btn" onclick="OL.closeModal(); setTimeout(() => OL.openResourceModal('${d.id}'), 50)">
+                <div class="pill fn">
+                    <span onclick="OL.closeModal(); setTimeout(() => OL.openResourceModal('${d.id}'), 50)">
                         📄 ${esc(d.name)}
-                    </button>
-                    <button class="remove-zone-btn" onclick="OL.removeDependencyFromResource('${resource.id}', '${d.id}')">×</button>
+                    </span>
                 </div>
             `).join("") || '<span class="pill muted">None</span>';
         }
@@ -7553,6 +7751,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     }
 
     renderResourceModalPills(resource);
+    renderResourceHowToPills(resource);
   }
 
   // Remove an App from a Resource
@@ -7572,6 +7771,708 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       OL.persist();
       renderResourceModalPills(res);
   };
+
+  // ------------------------------------------------------------
+  // HOW TO LIBRARY
+  //-------------------------------------------------------------
+  // 1. Force initialize if missing
+  if (!window.OL.state.howToLibrary) {
+      window.OL.state.howToLibrary = OL.store.get("howToLibrary", []);
+  }
+
+  // 2. Add the Creator function
+  OL.addNewHowTo = function() {
+      const newGuide = {
+          id: 'ht-' + Date.now(),
+          name: "New SOP Guide",
+          visibility: "Internal Use Only",
+          content: "",
+          tags: [],
+          createdDate: new Date().toISOString()
+      };
+      
+      window.OL.state.howToLibrary.unshift(newGuide);
+      OL.persist();
+      OL.renderHowToLibrary(); // Refresh the grid
+      OL.openHowToModal(newGuide.id); // Open immediately for editing
+  };
+
+  // Universal How-To Object Structure
+  function createBlankHowTo() {
+      return {
+          id: 'ht-' + Date.now(),
+          name: "New SOP Guide",
+          resourceCategory: "Internal Business", // "Internal Business" or "Client Project"
+          businessCategory: "Admin", // Admin, Project Management, Business Initiatives, Marketing, Team Management
+          lifecycleStage: "New Leads", // New Leads, Introductory Call, etc.
+          functionIds: [],
+          appIds: [],
+          createdDate: new Date().toISOString(),
+          createdBy: null, // Team Member ID
+          updatedDate: new Date().toISOString(),
+          updatedBy: null, // Team Member ID
+          updateSummary: "",
+          limitations: "",
+          clientItemsNeeded: [], // Mapping to Datapoints or Resources
+          prework: [], // Mapping to other How-Tos or Resources
+          additionalResources: [], // Mapping to Resources
+          instructions: "", // HTML content for images/text
+          status: "Pending", // Pending, In Progress, Complete
+          assignedTo: null, // Team Member ID
+          dueDate: null,
+          updatesNeeded: [] // Array of tags: Create documents, Add snapshots, etc.
+      };
+  }
+
+  function renderLinkedHowToResources(targetId) {
+      // Find all guides where this App/Function ID is in the mapping arrays
+      const linkedGuides = state.howToLibrary.filter(ht => 
+          (ht.appIds || []).includes(targetId) || 
+          (ht.functionIds || []).includes(targetId)
+      );
+
+      if (linkedGuides.length === 0) return "";
+
+      return `
+          <div class="card-section">
+              <label class="modal-section-label">How To Resources</label>
+              <div class="pills-row">
+                  ${linkedGuides.map(ht => `
+                      <div class="pill resource-pill" onclick="OL.openHowToModal('${ht.id}')">
+                          📖 ${OL.utils.esc(ht.name)}
+                          <span class="pill-status-dot ${ht.status.toLowerCase().replace(' ', '-')}"></span>
+                      </div>
+                  `).join('')}
+              </div>
+          </div>
+      `;
+  }
+
+  OL.renderHowToLibrary = function() {
+     const section = document.getElementById("section-howto");
+      if (!section) return;
+
+      const list = window.OL.state.howToLibrary || [];
+      const searchQuery = (document.getElementById("howToSearch")?.value || "").toLowerCase();
+      
+      const filtered = list.filter(ht => 
+          (ht.name + (ht.tags || []).join(" ")).toLowerCase().includes(searchQuery)
+      );
+
+      section.innerHTML = `
+          <div class="section-header">
+              <h2>How-To Library</h2>
+              <div class="toolbar" style="display:flex; gap:10px;">
+                  <input type="text" id="howToSearch" class="access-input" 
+                        placeholder="Search SOPs..." oninput="OL.renderHowToLibrary()" 
+                        value="${OL.utils.esc(searchQuery)}">
+                  <button class="btn primary" onclick="OL.addNewHowTo()">+ New SOP</button>
+              </div>
+          </div>
+
+          <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+              ${filtered.length > 0 ? filtered.map(ht => `
+                  <div class="card clickable" onclick="OL.openHowToModal('${ht.id}')">
+                      <div class="card-header">
+                          <div class="badge ${ht.visibility === 'Client Facing' ? 'face-client' : 'face-internal'}">
+                              ${ht.visibility === 'Client Facing' ? '🌍' : '🔒'}
+                          </div>
+                          <div class="card-title">${OL.utils.esc(ht.name || "")}</div>
+                      </div>
+                      <div class="card-body">
+                          <p class="muted small">${ht.content ? 'Content inside...' : 'Empty guide'}</p>
+                          <div class="pill-stack">
+                              ${(ht.tags || []).map(t => `<span class="pill small">${t}</span>`).join('')}
+                          </div>
+                      </div>
+                  </div>
+              `).join('') : `
+                  <div class="empty-placeholder" style="grid-column: 1/-1; text-align: center; padding: 50px; border: 2px dashed var(--line);">
+                      <p class="muted">Your instructional library is empty.</p>
+                      <button class="btn soft" onclick="OL.addNewHowTo()">Create Your First SOP</button>
+                  </div>
+              `}
+          </div>
+      `;
+  };
+
+  function renderHowToMappings(ht) {
+      const layer = getModalLayer();
+      if (!layer) return;
+
+      // 1. Render Function Pills
+      const fnBox = layer.querySelector("#htFnPills");
+      if (fnBox) {
+          const functions = (ht.functionIds || [])
+              .map(id => findFunctionById(id))
+              .filter(Boolean);
+          
+          fnBox.innerHTML = functions.map(fn => `
+              <div class="pill fn">
+                  <span onclick="OL.closeModal(); setTimeout(() => OL.openFunctionModal('${fn.id}'), 50)">
+                      ⚙️ ${OL.utils.esc(fn.name)}
+                  </span>
+              </div>
+          `).join('') || '<span class="pill muted">None mapped</span>';
+      }
+
+      // 2. Render App Pills
+      const appBox = layer.querySelector("#htAppPills");
+      if (appBox) {
+          const apps = (ht.appIds || [])
+              .map(id => findAppById(id))
+              .filter(Boolean);
+          
+          appBox.innerHTML = apps.map(app => `
+              <div class="pill fn">
+                  <span onclick="OL.closeModal(); setTimeout(() => OL.openAppModal('${app.id}'), 50)">
+                      ${OL.iconHTML(app)} ${OL.utils.esc(app.name)}
+                  </span>
+              </div>
+          `).join('') || '<span class="pill muted">None mapped</span>';
+      }
+  }
+
+  OL.unmapFromHowTo = function(htId, field, targetId) {
+      const ht = window.OL.state.howToLibrary.find(h => h.id === htId);
+      if (!ht) return;
+
+      ht[field] = (ht[field] || []).filter(id => id !== targetId);
+      
+      // Track update metadata
+      ht.updatedDate = new Date().toISOString();
+      
+      OL.persist();
+      renderHowToMappings(ht); // Refresh the pills
+  };
+
+  // Attach to OL so it can be called from internal logic if needed
+  OL.renderHowToMappings = renderHowToMappings;
+  OL.openHowToModal = function(id) {
+      const ht = window.OL.state.howToLibrary.find(i => i.id === id);
+      if (!ht) return;
+
+      const teamOptions = state.teamMembers.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+
+      // 1. For Mapped Functions
+      const assignedFns = (ht.functionIds || []).map(id => findFunctionById(id)).filter(Boolean);
+
+      // 2. For Mapped Apps
+      const assignedApps = (ht.appIds || []).map(id => findAppById(id)).filter(Boolean);
+
+      // 3. For the Updates Needed Checklist
+      const checklistHTML = [
+          "Create additional resource documents",
+          "Add snapshots / videos walkthroughs",
+          "Add additional details / clarification",
+          "Update formatting",
+          "Update header info"
+      ].map(tag => `
+          <label class="check-item">
+              <input type="checkbox" 
+                    ${(ht.updatesNeeded || []).includes(tag) ? 'checked' : ''} 
+                    onchange="OL.toggleHowToUpdateNeeded('${ht.id}', '${tag}')"> 
+              ${tag}
+          </label>
+      `).join('');
+
+      const html = `
+        <div class="modal-head">
+            <div class="modal-title-text" 
+              contenteditable="true"
+              data-placeholder="New How To" 
+              onblur="OL.updateHowTo('${id}', 'name', this.textContent)"
+              onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }"
+              >${esc(ht.name || "")}
+            </div>
+            <div class="spacer"></div>
+            <div class="status-pill ${ht.status === 'Complete' ? 'done' : 'progress'}">${ht.status}</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-row">
+                <div class="modal-column">
+                    <label class="modal-section-label">Resource Category</label>
+                    <select onchange="OL.updateHowTo('${id}', 'resourceCategory', this.value); OL.openHowToModal('${id}')" class="modal-select">
+                        <option value="Internal Business" ${ht.resourceCategory === 'Internal Business' ? 'selected' : ''}>Internal Business</option>
+                        <option value="Client Project" ${ht.resourceCategory === 'Client Project' ? 'selected' : ''}>Client Project</option>
+                    </select>
+                </div>
+                <div class="modal-column">
+                    <label class="modal-section-label">Status</label>
+                    <select onchange="OL.updateHowTo('${id}', 'status', this.value); OL.openHowToModal('${id}')" class="modal-select">
+                        <option value="Pending" ${ht.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                        <option value="In Progress" ${ht.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+                        <option value="Complete" ${ht.status === 'Complete' ? 'selected' : ''}>Complete</option>
+                    </select>
+                </div>
+            </div>
+
+            ${ht.status === 'In Progress' ? `
+              <div class="modal-row highlight-row modal-section">
+                  <div class="modal-column modal-section">
+                      <label class="modal-section-label">Assign To</label>
+                      <button class="btn small soft btn-dropdown" onclick="OL.mapToHowTo('${id}', 'assignedTo')">
+                          👤 ${findTeamMemberById(ht.assignedTo)?.name || 'Select Member'}
+                      </button>
+                  </div>
+                  <div class="modal-column">
+                      <label class="modal-section-label">Due Date</label>
+                      <div class="due-config-trigger" onclick="OL.openHowToCalendar(this, '${id}')">
+                          <span class="due-icon">🕒</span>
+                          <span id="ht-date-display-${id}">${ht.dueDate || 'Set Date'}</span>
+                      </div>
+                  </div>
+              </div>
+          ` : ''}
+
+            <div class="modal-row modal-section">
+                <div class="modal-column modal-section">
+                    <label class="modal-section-label">Business/Lifecycle</label>
+                    ${ht.resourceCategory === 'Internal Business' ? `
+                        <select onchange="OL.updateHowTo('${id}', 'businessCategory', this.value)" class="modal-select">
+                            ${["Admin","Project Management","Business Initiatives","Marketing","Team Management"].map(c => `<option ${ht.businessCategory === c ? 'selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                    ` : `
+                        <select onchange="OL.updateHowTo('${id}', 'lifecycleStage', this.value)" class="modal-select">
+                            ${["New Leads","Introductory Call","Project Preparation","Project Implementation","Project Conclusion","Ongoing Maintenance","Project Cancellation","Coaching","Other"].map(s => `<option ${ht.lifecycleStage === s ? 'selected' : ''}>${s}</option>`).join('')}
+                        </select>
+                    `}
+                </div>
+                <div class="modal-column modal-section">
+                    <label class="modal-section-label">Created By</label>
+                    <button class="btn small soft btn-dropdown" onclick="OL.mapToHowTo('${id}', 'createdBy')">
+                        ${findTeamMemberById(ht.createdBy)?.name || 'System'}
+                    </button>
+                </div>
+            </div>
+
+            <div class="modal-row modal-section">
+                <div class="modal-column modal-section">
+                    <label class="modal-section-label">Mapped Functions</label>
+                    <div id="htFnPills" class="pills-row"></div>
+                    <button class="btn small soft" onclick="OL.mapToHowTo('${id}', 'functionIds')">+ Map Function</button>
+                </div>
+                <div class="modal-column modal-section">
+                    <label class="modal-section-label">Mapped Apps</label>
+                    <div id="htAppPills" class="pills-row"></div>
+                    <button class="btn small soft" onclick="OL.mapToHowTo('${id}', 'appIds')">+ Map App</button>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <label class="modal-section-label">Items Needed from Client (Datapoints)</label>
+                <div id="htClientNeededBox" class="pills-row"></div>
+                <button class="btn small soft" onclick="OL.mapRequirementsToHowTo('${id}', 'clientItemsNeeded', 'datapoints')">+ Map Datapoint</button>
+            </div>
+
+            <div class="modal-section">
+                <label class="modal-section-label">Prework & Related Resources</label>
+                <div id="htPreworkBox" class="pills-row"></div>
+                <button class="btn small soft" onclick="OL.mapRequirementsToHowTo('${id}', 'preworkIds', 'resources')">+ Map Resource</button>
+            </div>
+
+            <label class="modal-section-label">Update Summary</label>
+            <textarea class="modal-textarea small" onblur="OL.updateHowTo('${id}', 'updateSummary', this.value)">${esc(ht.updateSummary || "")}</textarea>
+
+            <label class="modal-section-label">Limitations & Reminders</label>
+            <textarea class="modal-textarea small" onblur="OL.updateHowTo('${id}', 'limitations', this.value)">${esc(ht.limitations || "")}</textarea>
+
+            <label class="modal-section-label">Instructions (Drag/Paste Images)</label>
+            <div id="htEditor" class="how-to-editor rich-text" contenteditable="true" onblur="OL.updateHowTo('${id}', 'instructions', this.innerHTML)">
+                ${ht.instructions || "Enter instructions..."}
+            </div>
+            
+            </div>
+    `;
+      openModal(html);
+      renderHowToMappings(ht);
+  };
+
+  OL.openHowToCalendar = function(anchorEl, htId) {
+      const ht = window.OL.state.howToLibrary.find(i => i.id === htId);
+      if (!ht) return;
+
+      // Use current date as fallback if no date is set
+      const initialDate = ht.dueDate || new Date().toISOString().split('T')[0];
+
+      // Call your existing mini-calendar logic
+      OL.openMiniCalendar(anchorEl, initialDate, (selectedDate) => {
+          // 1. Update the Data
+          ht.dueDate = selectedDate;
+          ht.updatedDate = new Date().toISOString();
+
+          // 2. Persist
+          OL.persist();
+
+          // 3. UI Update: Update the display text immediately without full re-render
+          const label = document.getElementById(`ht-date-display-${htId}`);
+          if (label) label.textContent = selectedDate;
+          
+          // 4. Update the card face in the background
+          OL.renderHowToLibrary();
+          
+          console.log(`Due date for ${ht.name} set to ${selectedDate}`);
+      });
+  };
+
+  function getSphynxTasks() {
+      return state.howToLibrary
+          .filter(ht => ht.status === "In Progress")
+          .map(ht => ({
+              title: ht.name,
+              tag: "Resource Guides",
+              assignedTo: ht.assignedTo,
+              dueDate: ht.dueDate,
+              originalId: ht.id
+          }));
+  }
+
+  /**
+   * Unified mapper for How-To guides (Apps, Functions, Team Members, etc.)
+   */
+  OL.mapToHowTo = function(htId, field) {
+      const ht = window.OL.state.howToLibrary.find(h => h.id === htId);
+      if (!ht) return;
+
+      const anchor = event.currentTarget;
+      let options = [];
+
+      // Determine which list to show based on the field being mapped
+      if (field === 'appIds') {
+          options = state.apps.map(a => ({ 
+              id: a.id, 
+              label: a.name, 
+              checked: (ht.appIds || []).includes(a.id) 
+          }));
+      } else if (field === 'functionIds') {
+          options = state.functions.map(f => ({ 
+              id: f.id, 
+              label: f.name, 
+              checked: (ht.functionIds || []).includes(f.id) 
+          }));
+      } else if (field === 'assignedTo' || field === 'updatedBy' || field === 'createdBy') {
+          options = state.teamMembers.map(m => ({ 
+              id: m.id, 
+              label: m.name, 
+              checked: ht[field] === m.id 
+          }));
+      }
+
+      openMappingDropdown({
+          anchorEl: anchor,
+          options: options,
+          allowMultiple: field !== 'assignedTo' && field !== 'updatedBy' && field !== 'createdBy',
+          onSelect: (selectedId, isChecked) => {
+              if (field === 'appIds' || field === 'functionIds') {
+                  // Multi-select handling
+                  ht[field] = ht[field] || [];
+                  if (isChecked) {
+                      if (!ht[field].includes(selectedId)) ht[field].push(selectedId);
+                  } else {
+                      ht[field] = ht[field].filter(id => id !== selectedId);
+                  }
+              } else {
+                  // Single-select handling (Assigned To / Updated By)
+                  ht[field] = selectedId;
+              }
+
+              // Update Metadata automatically
+              ht.updatedDate = new Date().toISOString();
+              
+              OL.persist();
+              
+              // Trigger the renderer we built in the last step to update the UI
+              if (typeof renderHowToMappings === "function") {
+                  renderHowToMappings(ht);
+              }
+              
+              // Keep dropdown open if multi-select
+              const dd = document.querySelector(".mapping-dropdown");
+              if (dd && dd.refresh) dd.refresh();
+          }
+      });
+  };
+
+  OL.toggleHowToTag = function(id, tag) {
+      const ht = window.OL.state.howToLibrary.find(i => i.id === id);
+      if (!ht) return;
+
+      // 1. Initialize array if missing (safety guard)
+      if (!ht.updatesNeeded) ht.updatesNeeded = [];
+
+      // 2. Toggle logic
+      if (ht.updatesNeeded.includes(tag)) {
+          ht.updatesNeeded = ht.updatesNeeded.filter(t => t !== tag);
+      } else {
+          ht.updatesNeeded.push(tag);
+      }
+
+      // 3. Update Metadata
+      ht.updatedDate = new Date().toISOString();
+      
+      // 4. Save and Update UI
+      OL.persist();
+      console.log(`Update required: ${tag} for guide ${ht.name}`);
+  };
+
+  OL.toggleHowToUpdateNeeded = function(id, tag) {
+      const ht = window.OL.state.howToLibrary.find(i => i.id === id);
+      if (!ht) return;
+
+      // Initialize if undefined
+      if (!ht.updatesNeeded) ht.updatesNeeded = [];
+
+      if (ht.updatesNeeded.includes(tag)) {
+          ht.updatesNeeded = ht.updatesNeeded.filter(t => t !== tag);
+      } else {
+          ht.updatesNeeded.push(tag);
+      }
+
+      // Auto-update the "Updated Date" metadata
+      ht.updatedDate = new Date().toISOString();
+      
+      OL.persist();
+      // Re-render modal to show changes
+      OL.openHowToModal(id);
+  };
+
+  OL.mapRequirementsToHowTo = function(htId, field, type) {
+      const ht = window.OL.state.howToLibrary.find(h => h.id === htId);
+      if (!ht) return;
+
+      const anchor = event.currentTarget;
+      let options = [];
+
+      // Map different source data based on the requirement type
+      if (type === 'datapoints') {
+          options = state.datapoints.map(dp => ({ 
+              id: dp.id, label: `👤 ${dp.name}`, checked: (ht[field] || []).includes(dp.id) 
+          }));
+      } else if (type === 'resources') {
+          options = state.resources.map(r => ({ 
+              id: r.id, label: `📄 ${r.name}`, checked: (ht[field] || []).includes(r.id) 
+          }));
+      }
+
+      openMappingDropdown({
+          anchorEl: anchor,
+          options: options,
+          allowMultiple: true,
+          onSelect: (selectedId, isChecked) => {
+              ht[field] = ht[field] || [];
+              if (isChecked) {
+                  if (!ht[field].includes(selectedId)) ht[field].push(selectedId);
+              } else {
+                  ht[field] = ht[field].filter(id => id !== selectedId);
+              }
+              OL.persist();
+              OL.renderHowToMappings(ht); // Refresh the pills in the modal
+          }
+      });
+  };
+
+  function markHowToUpdated(ht) {
+      ht.updatedDate = new Date().toISOString();
+      // Use the active user if available, otherwise default to System/Sphynx
+      ht.updatedBy = "Sphynx"; 
+      OL.persist();
+  }
+
+  (function migrateHowToGuides() {
+      (window.OL.state.howToLibrary || []).forEach(ht => {
+          if (!ht.functionIds) ht.functionIds = [];
+          if (!ht.appIds) ht.appIds = [];
+          if (!ht.updatesNeeded) ht.updatesNeeded = [];
+          if (!ht.clientItemsNeeded) ht.clientItemsNeeded = [];
+          if (!ht.prework) ht.prework = [];
+          if (!ht.additionalResources) ht.additionalResources = [];
+          if (!ht.status) ht.status = "In Progress";
+      });
+  })();
+
+  function renderHowToManager() {
+      const container = document.getElementById('mainContent');
+      // Ensure section exists
+      let section = document.getElementById('section-howto');
+      if (!section) {
+          container.insertAdjacentHTML('beforeend', `<section class="section" id="section-howto"></section>`);
+          section = document.getElementById('section-howto');
+      }
+
+      const library = window.OL.state.howToLibrary || [];
+
+      section.innerHTML = `
+          <div class="section-header">
+              <h2>How-To & Implementation Library</h2>
+              <button class="btn primary" onclick="OL.createNewHowTo()">+ Add Guide</button>
+          </div>
+          <div class="card-grid">
+              ${library.map(item => `
+                  <div class="card">
+                      <div class="card-header">
+                          <div class="card-title" contenteditable="true" onblur="OL.updateHowTo('${item.id}', 'name', this.textContent)">
+                              ${OL.utils.esc(item.name)}
+                          </div>
+                          <div class="card-close" onclick="OL.deleteHowTo('${item.id}')">×</div>
+                      </div>
+                      <div class="card-body">
+                          <label class="modal-section-label">Visibility</label>
+                          <select onchange="OL.updateHowTo('${item.id}', 'visibility', this.value)" class="modal-select">
+                              <option value="Internal Use Only" ${item.visibility === 'Internal Use Only' ? 'selected' : ''}>🔒 Internal Use Only</option>
+                              <option value="Client Facing" ${item.visibility === 'Client Facing' ? 'selected' : ''}>🌍 Client Facing</option>
+                          </select>
+                          
+                          <label class="modal-section-label">Link (Jotform/Doc)</label>
+                          <input type="text" class="access-input" value="${OL.utils.esc(item.link)}" 
+                                onblur="OL.updateHowTo('${item.id}', 'link', this.value)" placeholder="https://...">
+                      </div>
+                  </div>
+              `).join('')}
+          </div>
+      `;
+  }
+
+  function renderSphynxToDo() {
+      const container = document.getElementById('mainContent');
+      const todos = state.howToLibrary.filter(ht => ht.status === "In Progress");
+
+      container.innerHTML = `
+          <div class="section-header">
+              <h2>Sphynx To-Do: SOP Updates</h2>
+          </div>
+          <div class="todo-list">
+              ${todos.map(todo => `
+                  <div class="todo-item card" onclick="OL.openHowToModal('${todo.id}')">
+                      <div class="todo-main">
+                          <span class="pill small warn">Resource Guide</span>
+                          <strong>${esc(todo.name)}</strong>
+                          <div class="small muted">Assigned to: ${findTeamMemberById(todo.assignedTo)?.name || 'Unassigned'}</div>
+                      </div>
+                      <div class="todo-tags">
+                          ${todo.updatesNeeded.map(tag => `<span class="pill small soft">${tag}</span>`).join('')}
+                      </div>
+                      <div class="todo-due ${todo.dueDate < new Date().toISOString() ? 'overdue' : ''}">
+                          ${todo.dueDate ? new Date(todo.dueDate).toLocaleDateString() : 'No Due Date'}
+                      </div>
+                  </div>
+              `).join('')}
+          </div>
+      `;
+  }
+
+  OL.createNewHowTo = function() {
+      const newItem = {
+          id: 'ht-' + Date.now(),
+          name: "New Setup Guide",
+          link: "",
+          visibility: "Internal Use Only"
+      };
+      window.OL.state.howToLibrary.push(newItem);
+      OL.persist();
+      renderHowToManager();
+  };
+
+  OL.updateHowTo = function(id, field, value) {
+      const item = window.OL.state.howToLibrary.find(i => i.id === id);
+      if (item) {
+          const oldVal = item[field];
+          item[field] = value;
+          
+          // Auto-log the change if it's a major field
+          if (field === 'visibility' || field === 'name') {
+              console.log(`How-To updated: ${field} changed to ${value}`);
+          }
+          
+          OL.persist();
+          OL.renderHowToLibrary();
+      }
+  };
+
+  OL.updateHowToTags = function(id, tagString) {
+      const item = window.OL.state.howToLibrary.find(i => i.id === id);
+      if (item) {
+          // Convert comma-string to clean array
+          item.tags = tagString.split(',')
+              .map(t => t.trim())
+              .filter(t => t !== "");
+          OL.persist();
+          // Refresh the background grid to show new tags
+          OL.renderHowToLibrary();
+      }
+  };
+
+  OL.deleteHowTo = function(id) {
+      if (!confirm("Delete this guide from the library?")) return;
+      window.OL.state.howToLibrary = window.OL.state.howToLibrary.filter(i => i.id !== id);
+      OL.persist();
+      renderHowToManager();
+  };
+
+  OL.openHowToPicker = function(resourceId) {
+      // 1. Correct the path to the resource
+      const res = OL.state.resources.find(r => r.id === resourceId);
+      if (!res) return;
+
+      const anchor = event.currentTarget;
+      
+      // 2. Map options from the library
+      const options = (window.OL.state.howToLibrary || []).map(ht => ({
+          id: ht.id,
+          label: `${ht.visibility === 'Client Facing' ? '🌍' : '🔒'} ${ht.name}`,
+          checked: (res.implementationResources || []).includes(ht.id)
+      }));
+
+      openMappingDropdown({
+          anchorEl: anchor,
+          options: options,
+          allowMultiple: true,
+          onSelect: (howToId, isChecked) => {
+              res.implementationResources = res.implementationResources || [];
+              if (isChecked) {
+                  if (!res.implementationResources.includes(howToId)) res.implementationResources.push(howToId);
+              } else {
+                  res.implementationResources = res.implementationResources.filter(id => id !== howToId);
+              }
+
+              OL.persist();
+              
+              // 3. CRITICAL: Refresh the pills inside the open modal
+              renderResourceHowToPills(res);
+
+              // Keep the dropdown open for more selections
+              const dd = document.querySelector(".mapping-dropdown");
+              if (dd && dd.refresh) dd.refresh();
+          }
+      });
+  };
+
+  function renderResourceHowToPills(res) {
+      const container = document.getElementById('resHowToPills');
+      if (!container) return;
+      
+      const linked = (res.implementationResources || []).map(id => 
+          window.OL.state.howToLibrary.find(ht => ht.id === id)).filter(Boolean);
+          
+      container.innerHTML = linked.map(ht => `
+          <div class="pill fn">
+              <a href="${ht.link}" target="_blank" style="text-decoration:none; color:inherit;">
+                  📖 ${OL.utils.esc(ht.name)}
+              </a>
+          </div>
+      `).join('') || '<span class="pill muted">No guides linked</span>';
+  }
+
+  OL.unlinkHowTo = function(resourceId, howToId) {
+      const res = OL.state.resources.find(r => r.id === resourceId);
+      if (!res) return;
+
+      res.implementationResources = (res.implementationResources || []).filter(id => id !== howToId);
+      
+      OL.persist();
+      renderResourceHowToPills(res); // Refresh the UI
+  };
+
   // ------------------------------------------------------------
   // TOP BUTTONS
   // ------------------------------------------------------------
@@ -7942,7 +8843,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     const usage = getDeepAppUsage(app.id);
 
     const resourcesHTML = usage.resources.map(r => `
-        <button class="pill resource" onclick="OL.closeModal(); setTimeout(() => OL.openResourceModal('${r.id}'), 50)">
+        <button class="pill fn" onclick="OL.closeModal(); setTimeout(() => OL.openResourceModal('${r.id}'), 50)">
             📄 ${esc(r.name)}
         </button>`).join("");
 
@@ -7966,14 +8867,14 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         <button class="btn small soft" onclick="OL.closeModal()">Close</button>
       </div>
       <div class="modal-body">
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Notes</label>
           <textarea id="appNotesDisplay" class="modal-textarea">${esc(
             app.notes || "",
           )}</textarea>
         </div>
 
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Functions</label>
           <div class="modal-dot-key">
             <div class="dot primary"></div><span>Primary</span>
@@ -7987,16 +8888,16 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           <button class="btn small soft" id="appFnAssignBtn">+ Assign Functions</button>
         </div>
 
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Datapoints</label>
           <div id="appDatapoints"></div>
           <button class="btn small soft" id="appAddDatapoint">+ Add Datapoint</button>
         </div>
 
-        <div>
+        <div class="card-section">
           <div style="display:flex; justify-content:space-between; align-items:center;">
              <label class="modal-section-label">User Access & Credentials</label>
-             <button class="btn xsmall soft" id="appAddAccessBtn">+ Add Member</button>
+             <button class="btn small soft" id="appAddAccessBtn">+ Add Member</button>
           </div>
           <div id="appAccessContainer" style="margin-top:8px;">
             <div class="access-table-header">
@@ -8009,18 +8910,21 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           </div>
         </div>
 
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Used in Resources</label>
-          <div class="modal-pill-box" style="margin-top:8px;">
+          <div class="modal-pill-box">
             ${(resourcesHTML || workflowsHTML) ? (resourcesHTML + workflowsHTML) : '<div class="empty-hint">Not mapped to any workflows or resources.</div>'}
           </div>
         </div>
 
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Integrations</label>
           <div id="appIntPills" class="modal-pill-box"></div>
           <button class="btn small soft" id="appIntAddBtn">+ Add Integration</button>
         </div>
+
+        ${renderLinkedHowToResources(app.id)}
+
       </div>
     `;
   }
@@ -8032,7 +8936,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           <div class="modal-section" style="margin-top: 20px; border-top: 1px solid var(--line); padding-top: 15px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                   <label class="modal-section-label">User Access & Credentials</label>
-                  <button class="btn xsmall soft" onclick="OL.openMemberAccessDropdown(event, '${app.id}')">+ Add Member</button>
+                  <button class="btn small soft" onclick="OL.openMemberAccessDropdown(event, '${app.id}')">+ Add Member</button>
               </div>
               
               <div id="app-access-list-${app.id}" class="access-list">
@@ -8817,12 +9721,9 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     const features = getFeaturesForFunction(fn.id);
     const featuresHTML = features.length
     ? features.map(f => `
-        <div class="pill outcome-pill">
-            <button class="nav-zone-btn" onclick="OL.closeModal(); setTimeout(() => OL.openFeatureModal('${f.id}'), 50)">
-                ✨ ${esc(f.name)}
-            </button>
-            <button class="remove-zone-btn" onclick="OL.removeFeatureFromFunction('${f.id}')">×</button>
-        </div>`).join("")
+           <button class="pill fn" onclick="OL.closeModal(); setTimeout(() => OL.openFeatureModal('${f.id}'), 50)">
+            ✨ ${esc(f.name)}
+        </button>`).join("")
     : `<div class="empty-hint">No features assigned to this function group.</div>`;
 
     return `
@@ -8838,13 +9739,13 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         <button class="btn small soft" onclick="OL.closeModal()">Close</button>
       </div>
       <div class="modal-body">
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Notes</label>
           <textarea id="fnNotes" class="modal-textarea">${esc(
             fn.notes || "",
           )}</textarea>
         </div>
-        <div>
+        <div class="card-section">
           <label class="modal-section-label">Apps</label>
           <div class="modal-dot-key">
             <div class="dot primary"></div><span>Primary</span>
@@ -8858,11 +9759,14 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           <button class="btn small soft" id="fnAssignBtn">+ Assign Apps</button>
         </div>
         <div>
+            ${renderLinkedHowToResources(fn.id)}
+        </div>
+        <div class="card-section">
             <label class="modal-section-label">Associated Features</label>
             <div id="fnFeaturePills" class="modal-pill-box">
                 ${featuresHTML}
             </div>
-            <button class="btn xsmall soft" id="btnFnAddFeature">+ Add Feature</button>
+            <button class="btn small soft" id="btnFnAddFeature">+ Add Feature</button>
         </div>
       </div>
     `;
@@ -9254,7 +10158,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           <div class="modal-section"">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                   <label class="modal-section-label">Application Access Profile</label>
-                  <button class="btn xsmall soft" onclick="OL.openAppAccessDropdown(event, '${member.id}')">+ Add App Access</button>
+                  <button class="btn small soft" onclick="OL.openAppAccessDropdown(event, '${member.id}')">+ Add App Access</button>
               </div>
               <div class="access-table-header">
                   <div style="width: 120px;">Application</div>
@@ -11085,122 +11989,113 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     // We don't need a custom closeAllDatapointDropdowns here anymore, but keeping the name check for safety.
   });
 
-  function handleRoute() {
-
+function handleRoute() {
     const hash = location.hash || "";
+    const main = document.getElementById("mainContent");
+    
+    if (!main) return;
 
-    const isDatapoints = hash.startsWith("#/settings/datapoints");
-    const isCanonicalCaps = hash.startsWith(
-      "#/settings/canonical-capabilities",
-    );
+    // 1. Identify all routes
+    const isApps = hash === "" || hash === "#/apps" || hash === "#/";
     const isFunctions = hash.startsWith("#/functions");
+    const isFeatures = hash.startsWith("#/settings/features");
+    const isAnalyze = hash.startsWith("#/analyze");
     const isIntegrations = hash.startsWith("#/integrations");
     const isCapabilities = hash.startsWith("#/triggers-actions");
+    const isCanonicalCaps = hash.startsWith("#/settings/canonical-capabilities");
+    const isResources = hash.startsWith("#/resources");
+    const isWorkflows = hash.startsWith("#/workflows");
+    const isHowTo = hash.startsWith("#/howto");
     const isTeam = hash.startsWith("#/settings/team");
     const isSegments = hash.startsWith("#/settings/segments");
+    const isDatapoints = hash.startsWith("#/settings/datapoints");
     const isFolders = hash.startsWith("#/settings/folder-hierarchy");
     const isNaming = hash.startsWith("#/settings/naming-conventions");
-    const isResources = hash.startsWith("#/resources");
-    const isAnalyze = hash.startsWith("#/analyze");
-    const isFeatures = hash.startsWith("#/settings/features");
-    const isWorkflows = hash.startsWith("#/workflows");
 
-    const showAppsSet =
-      !isDatapoints &&
-      !isFunctions &&
-      !isIntegrations &&
-      !isCanonicalCaps &&
-      !isCapabilities &&
-      !isTeam &&
-      !isSegments &&
-      !isFolders &&
-      !isNaming &&
-      !isResources &&
-      !isAnalyze &&
-      !isFeatures &&
-      !isWorkflows;
+    // 2. Clear stage: Hide ALL sections
+    const allSections = main.querySelectorAll(".section");
+    allSections.forEach(s => s.style.display = "none");
 
-    const showTeamSet = isTeam;
-
-    const appsSection = document.getElementById("section-apps");
-    const fnsSection = document.getElementById("section-functions");
-    const intsSection = document.getElementById("section-integrations");
-    const capsSection = document.getElementById("section-capabilities");
-    const analyzeSection = document.getElementById("section-analyze");
-    const dpsSection = document.getElementById("section-datapoints");
-    const canonSection = document.getElementById("section-canonical-caps");
-    const teamMembersSection = document.getElementById("section-team-members");
-    const teamRolesSection = document.getElementById("section-team-roles");
-    const unifiedSection = document.getElementById("section-unified-segments");
-    const folderSection = document.getElementById("section-folder-hierarchy");
-    const namingSection = document.getElementById("section-naming-conventions");
-    const resourcesSection = document.getElementById("section-resources");
-    const featuresSection = document.getElementById("section-features");
-    const workflowsSection = document.getElementById("section-workflows");
-
-    if (appsSection) appsSection.style.display = showAppsSet ? "block" : "none";
-    if (fnsSection) fnsSection.style.display = isFunctions ? "block" : "none";
-    if (featuresSection)
-      featuresSection.style.display = isFeatures ? "block" : "none";
-    if (intsSection) intsSection.style.display = isIntegrations ? "block" : "none";
-
-    if (capsSection)
-      capsSection.style.display = isCapabilities ? "block" : "none";
-    if (dpsSection) dpsSection.style.display = isDatapoints ? "block" : "none";
-    if (canonSection)
-      canonSection.style.display = isCanonicalCaps ? "block" : "none";
-
-    if (teamMembersSection)
-      teamMembersSection.style.display = showTeamSet ? "block" : "none";
-    if (teamRolesSection)
-      teamRolesSection.style.display = showTeamSet ? "block" : "none";
-
-    if (unifiedSection) {
-        unifiedSection.style.display = isSegments ? "block" : "none";
+    // 3. SHOW logic
+    if (isApps) {
+        document.getElementById("section-apps").style.display = "block";
+        renderAppsGrid();
+    } 
+    else if (isHowTo) {
+        // Find or create the how-to section dynamically
+        let hSection = document.getElementById("section-howto");
+        if (!hSection) {
+            hSection = document.createElement("section");
+            hSection.className = "section";
+            hSection.id = "section-howto";
+            main.appendChild(hSection);
+        }
+        hSection.style.display = "block";
+        OL.renderHowToLibrary(); 
     }
-
-    if (folderSection)
-      folderSection.style.display = isFolders ? "block" : "none";
-
-    if (namingSection)
-      namingSection.style.display = isNaming ? "block" : "none";
-
-    if (resourcesSection)
-      resourcesSection.style.display = isResources ? "block" : "none";
-
-    if (workflowsSection)
-      workflowsSection.style.display = isWorkflows ? "block" : "none";
-
-    if (analyzeSection)
-      analyzeSection.style.display = isAnalyze ? "block" : "none";
-    if (isAnalyze) {
-      OL.renderAnalysisLeftMenu();
-      OL.renderAnalysisMatrix();
-      // Since the matrix is empty on init, render it immediately
+    else if (isFunctions) {
+        document.getElementById("section-functions").style.display = "block";
+        renderFunctionsGrid();
     }
-    if (isFeatures) renderFeaturesGrid();
-    if (isWorkflows) renderWorkflowsGrid();
-
-    if (isSegments) {
-        // 1. Activate the CSS reset
+    else if (isResources) {
+        document.getElementById("section-resources").style.display = "block";
+        renderResourcesGrid();
+    }
+    else if (isAnalyze) {
+        document.getElementById("section-analyze").style.display = "block";
+        OL.renderAnalysisLeftMenu();
+        OL.renderAnalysisMatrix();
+    }
+    else if (isFeatures) {
+        document.getElementById("section-features").style.display = "block";
+        renderFeaturesGrid();
+    }
+    else if (isIntegrations) {
+        document.getElementById("section-integrations").style.display = "block";
+        renderIntegrationsGrid();
+    }
+    else if (isCapabilities) {
+        document.getElementById("section-capabilities").style.display = "block";
+        renderCapabilitiesGrid();
+    }
+    else if (isCanonicalCaps) {
+        document.getElementById("section-canonical-caps").style.display = "block";
+        renderCanonicalCapsGrid();
+    }
+    else if (isWorkflows) {
+        document.getElementById("section-workflows").style.display = "block";
+        renderWorkflowsGrid();
+    }
+    else if (isTeam) {
+        document.getElementById("section-team-members").style.display = "block";
+        document.getElementById("section-team-roles").style.display = "block";
+        renderTeamMembersGrid();
+        renderTeamRolesGrid();
+    }
+    else if (isSegments) {
         document.body.classList.add("is-segments-page");
-        
-        // 2. Hide old sections and render the builder
-        const oldSeg = document.getElementById("section-segments");
-        const oldCat = document.getElementById("section-segment-categories");
-        if (oldSeg) oldSeg.style.display = "none";
-        if (oldCat) oldCat.style.display = "none";
-        
-        renderUnifiedSegmentBuilder();
-    } else {
-        // 3. Deactivate the reset so other pages scroll normally
-        document.body.classList.remove("is-segments-page");
-        
-        // 4. Hide the builder
-        const unifiedSection = document.getElementById("section-unified-segments");
-        if (unifiedSection) unifiedSection.style.display = "none";
+        const unified = document.getElementById("section-unified-segments");
+        if (unified) {
+            unified.style.display = "flex";
+            renderUnifiedSegmentBuilder();
+        }
     }
-  }
+    else if (isDatapoints) {
+        document.getElementById("section-datapoints").style.display = "block";
+        renderDatapointsGrid();
+    }
+    else if (isFolders) {
+        document.getElementById("section-folder-hierarchy").style.display = "block";
+        renderFolderHierarchyGrid();
+    }
+    else if (isNaming) {
+        document.getElementById("section-naming-conventions").style.display = "block";
+        renderNamingConventions();
+    }
+
+    // Toggle scroll resets
+    if (!isSegments) document.body.classList.remove("is-segments-page");
+}
     window.addEventListener("hashchange", () => {
     localStorage.setItem("olLastPage", location.hash);
   });
