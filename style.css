@@ -5,20 +5,22 @@
   --color-4: #edd1cb;
 }
 
-
 body {
   background: linear-gradient(90deg, var(--color-1) 0%, var(--color-1) 25%, var(--color-2) 25%, var(--color-2) 50%, var(--color-3) 50%, var(--color-3) 75%, var(--color-4) 75%, var(--color-4) 100%);
-}:root {
+}
+
+:root {
   --bg: #073036;
   --color-2: #1fbfbf;
   --color-3: #d7d7d7;
   --color-4: #c2c2c2;
 }
 
-
 body {
   background: linear-gradient(90deg, var(--color-1) 0%, var(--color-1) 25%, var(--color-2) 25%, var(--color-2) 50%, var(--color-3) 50%, var(--color-3) 75%, var(--color-4) 75%, var(--color-4) 100%);
-}:root {
+}
+
+:root {
   --bg: #050816;
   --panel: #0b1020;
   --panel-soft: #111827;
@@ -33,11 +35,9 @@ body {
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-
 * {
   box-sizing: border-box;
 }
-
 
 html, body {
   margin: 0;
@@ -68,13 +68,11 @@ body {
   z-index: 10;
 }
 
-
 .top-bar h1 {
   margin: 0;
   font-size: 18px;
   letter-spacing: 0.03em;
 }
-
 
 #app-root {
   padding: 16px 24px 40px;
@@ -82,7 +80,6 @@ body {
   flex-direction: column;
   gap: 24px;
 }
-
 
 /* Sections */
 .section {
@@ -92,7 +89,6 @@ body {
   padding: 16px 18px 18px;
 }
 
-
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -101,23 +97,19 @@ body {
   margin-bottom: 10px;
 }
 
-
 .section-header-actions {
     display: flex;
     gap: 10px;
 }
-
 
 .section-header h2 {
   margin: 0;
   font-size: 16px;
 }
 
-
 .section-header .spacer {
   flex: 1;
 }
-
 
 /* 1. Collapse the empty bar and spacer */
 .section-controls-bar {
@@ -131,7 +123,6 @@ body {
     overflow: hidden;
 }
 
-
 .section-controls-bar .spacer {
     /* If the spacer has a fixed height, it pushes content down.
        We only want it to take space if there are actions on the right. */
@@ -139,7 +130,6 @@ body {
     min-height: 0;
     flex: 0 0 0 !important;
 }
-
 
 .section-actions {
   display: flex;
@@ -149,14 +139,12 @@ body {
   margin: 0;
 }
 
-
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
   margin-top: 10px;
 }
-
 
 /* Cards */
 .card {
@@ -168,14 +156,12 @@ body {
   overflow: hidden;
 }
 
-
 .card-header {
   padding: 10px 12px;
   display: flex;
   align-items: center;
   border-bottom: 1px solid #111827;
 }
-
 
 .card-header-left {
   display: flex;
@@ -184,17 +170,14 @@ body {
   cursor: pointer;
 }
 
-
 .card-header-left:hover .card-title {
   text-decoration: underline;
 }
-
 
 .card-title {
   font-size: 14px;
   font-weight: 500;
 }
-
 
 .card-close {
   margin-left: auto;
@@ -205,12 +188,10 @@ body {
   color: var(--muted);
 }
 
-
 .card-close:hover {
   background: rgba(148, 163, 184, 0.1);
   color: #fca5a5;
 }
-
 
 .card-icon {
   width: 28px;
@@ -225,24 +206,22 @@ body {
   overflow: hidden;
 }
 
-
 .icon-emoji {
   font-size: 18px;
+  display: inline-flex;
+  align-items: center;
 }
-
 
 .icon-fallback {
   font-size: 13px;
   font-weight: 600;
 }
 
-
 .icon-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 
 .card-body {
   padding: 8px 12px 10px;
@@ -251,12 +230,10 @@ body {
   gap: 6px;
 }
 
-
 .card-section {
   margin-top: 8px;
   margin-bottom: 8px;
 }
-
 
 .card-section-title {
   font-size: 11px;
@@ -266,11 +243,9 @@ body {
   margin-bottom: 2px;
 }
 
-
 .card-section-content {
   font-size: 12px;
 }
-
 
 /* Pills */
 .pills-row {
@@ -279,7 +254,6 @@ body {
   gap: 6px;
   margin-top: 8px;
 }
-
 
 .pill {
   font-size: 11px;
@@ -293,60 +267,49 @@ body {
   gap: 4px;
 }
 
-
 .pill.muted {
   color: #6b7280;
   border-style: dashed;
 }
 
-
 .pill.fn {
   cursor: default;
 }
-
 
 .pill.fn.status-primary {
   border-color: #a855f7 !important;
   background: rgba(34, 197, 94, 0.08);
 }
 
-
 .pill.fn.status-evaluating {
   border-color: #eab308 !important;
   background: rgba(234, 179, 8, 0.08);
 }
-
 
 .pill.fn.status-available {
   border-color: #4b5563 !important;
   background: rgba(31, 41, 55, 0.7);
 }
 
-
 .pill.integr {
   cursor: pointer;
 }
-
 
 .pill.integr[data-type="direct"] {
   border-color: #22c55e;
 }
 
-
 .pill.integr[data-type="zapier"] {
   border-color: #f7931a;
 }
-
 
 .pill.integr[data-type="both"] {
   border-color: #38bdf8;
 }
 
-
 .pill.resource {
   border-color: #38bdf8;
 }
-
 
 .flip-arrow {
   display: inline-flex;
@@ -355,11 +318,9 @@ body {
   margin-left: 2px;
 }
 
-
 .flip-arrow .arrow {
   font-size: 11px;
 }
-
 
 /* Buttons */
 .btn {
@@ -373,29 +334,24 @@ body {
   margin: 8px auto;
 }
 
-
 .btn.small {
   font-size: 11px;
   padding: 3px 8px;
 }
-
 
 .btn.soft {
   background: #111827;
   color: #e5e7eb;
 }
 
-
 .btn.warn {
   background: #7f1d1d;
   border-color: #b91c1c;
 }
 
-
 .btn:hover {
   filter: brightness(1.05);
 }
-
 
 /* Modal */
 .modal-overlay {
@@ -409,7 +365,6 @@ body {
   z-index: 100;
 }
 
-
 .modal-box {
   width: 680px;
   max-height: 82vh;
@@ -422,7 +377,6 @@ body {
   box-shadow: 0 24px 55px rgba(0, 0, 0, 0.85);
 }
 
-
 .modal-head {
   padding: 10px 14px;
   border-bottom: 1px solid #111827;
@@ -430,7 +384,6 @@ body {
   align-items: center;
   gap: 10px;
 }
-
 
 .modal-title-text {
   font-size: 15px;
@@ -440,12 +393,10 @@ body {
   border-radius: 8px;
 }
 
-
 .modal-title-text[contenteditable="true"] {
   border: 1px solid #1f2937;
   background: rgba(15, 23, 42, 0.9);
 }
-
 
 .modal-body {
   padding: 10px 14px 12px;
@@ -468,7 +419,6 @@ body {
   margin-bottom: 8px;
 }
 
-
 .modal-notes-display {
   font-size: 12px;
   padding: 6px 8px;
@@ -479,11 +429,9 @@ body {
   white-space: pre-wrap;
 }
 
-
 .modal-notes-display.muted {
   color: #6b7280;
 }
-
 
 .modal-textarea, #newLogNote {
   width: 100%;
@@ -498,7 +446,6 @@ body {
   resize: vertical;
 }
 
-
 .text-link {
   background: none;
   border: none;
@@ -508,11 +455,9 @@ body {
   cursor: pointer;
 }
 
-
 .text-link.small {
   margin-top: 3px;
 }
-
 
 .modal-row {
   display: flex;
@@ -520,14 +465,12 @@ body {
   gap: 6px;
 }
 
-
 .modal-pill-box {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
 }
-
 
 /* Icon button */
 .icon-edit-btn {
@@ -543,7 +486,6 @@ body {
   margin-right: 4px;
 }
 
-
 /* Icon picker */
 .icon-picker-overlay {
   position: fixed;
@@ -555,7 +497,6 @@ body {
   justify-content: center;
   z-index: 110;
 }
-
 
 .icon-picker {
   width: 360px;
@@ -571,20 +512,17 @@ body {
   gap: 8px;
 }
 
-
 .picker-section {
   border-top: 1px solid #111827;
   padding-top: 6px;
   margin-top: 4px;
 }
 
-
 .picker-section:first-child {
   border-top: none;
   padding-top: 0;
   margin-top: 0;
 }
-
 
 .picker-title {
   font-size: 11px;
@@ -594,13 +532,11 @@ body {
   margin-bottom: 4px;
 }
 
-
 .picker-row {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
-
 
 .picker-option.emoji {
   cursor: pointer;
@@ -609,12 +545,10 @@ body {
   border: 1px solid transparent;
 }
 
-
 .picker-option.emoji:hover {
   border-color: #1f2937;
   background: #020617;
 }
-
 
 #iconUrlInput {
   flex: 1;
@@ -626,7 +560,6 @@ body {
   background: #020617;
   color: var(--text);
 }
-
 
 #uploadIconInput {
   font-size: 11px;
@@ -703,7 +636,6 @@ body {
 .datapoint-card[data-object-type="Contact"] .dp-type-badge { border-color: rgba(56, 189, 248, 0.3) !important; }
 .datapoint-card[data-object-type="Account"] .dp-type-badge { border-color: rgba(34, 197, 94, 0.3) !important; }
 
-
 .datapoint-row input {
   font-size: 11px;
   padding: 4px 6px;
@@ -712,7 +644,6 @@ body {
   background: #020617;
   color: var(--text);
 }
-
 
 /* Checklist */
 .modal-checklist {
@@ -725,7 +656,6 @@ body {
   margin-top: 4px;
 }
 
-
 .modal-checkrow {
   display: flex;
   align-items: center;
@@ -733,7 +663,6 @@ body {
   font-size: 12px;
   padding: 2px 0;
 }
-
 
 .modal-search {
   width: 100%;
@@ -768,24 +697,20 @@ body {
     outline: none;
 }
 
-
 /* Small bits */
 .muted {
   color: var(--muted);
   font-size: 11px;
 }
 
-
 .empty-hint {
   font-size: 12px;
   color: var(--muted);
 }
 
-
 .pill-key-row {
   margin: 6px 0 12px;
 }
-
 
 .pill-key {
   display: inline-flex;
@@ -794,7 +719,6 @@ body {
   align-items: center;
 }
 
-
 .pill-key-help {
   flex-basis: 100%;
   font-size: 11px;
@@ -802,7 +726,6 @@ body {
   margin-top: 2px;
   padding-left: 2px;
 }
-
 
 .modal-dot-key {
   display: inline-flex;
@@ -815,28 +738,23 @@ body {
   font-size: 11px;
 }
 
-
 .modal-dot-key .dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
 }
 
-
 .modal-dot-key .dot.primary {
   background: var(--pill-primary-color, #a855f7);
 }
-
 
 .modal-dot-key .dot.evaluating {
   background: var(--pill-eval-color, #eab308);
 }
 
-
 .modal-dot-key .dot.available {
   background: var(--pill-avail-color, #4b5563);
 }
-
 
 .modal-dot-help {
   flex-basis: 100%;
@@ -845,7 +763,6 @@ body {
   margin: 2px auto 6px auto;
   padding-left: 2px;
 }
-
 
 .arrow-switch {
   display: flex;
@@ -856,22 +773,18 @@ body {
   width: 16px;
 }
 
-
 .arrow-layer {
   font-size: 14px;
   line-height: 8px;
 }
 
-
 .arrow-top {
   color: #007aff; /* blue */
 }
 
-
 .arrow-bottom {
   color: #888; /* grey */
 }
-
 
 .count-line {
   display: flex;
@@ -882,14 +795,12 @@ body {
   padding: 2px 0;
 }
 
-
 .dot-direct {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: #22c55e; /* green */
 }
-
 
 .dot-zapier {
   width: 10px;
@@ -898,14 +809,12 @@ body {
   background: #f7931a; /* orange */
 }
 
-
 .dot-both {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: #38bdf8; /* blue */
 }
-
 
 .dp-delete {
   margin-left: 6px;
@@ -924,20 +833,17 @@ body {
   margin-bottom: 12px;
 }
 
-
 .divider {
   height: 1px;
   background: var(--line);
   margin: 10px 0;
 }
 
-
 .menu .group-title {
   font-size: 11px;
   color: var(--muted);
   margin: 10px 10px 6px;
 }
-
 
 .menu a {
   display: block;
@@ -948,26 +854,22 @@ body {
   text-decoration: none;
 }
 
-
 .menu a.active {
   background: var(--soft);
   color: var(--accent);
   border: 1px solid var(--line);
 }
 
-
 .menu a:hover {
   background: var(--soft);
   color: #0ea5e9;
 }
-
 
 .app {
   display: grid;
   grid-template-columns: 260px 1fr;
   height: 100%;
 }
-
 
 .sidebar {
   background: var(--panel);
@@ -987,7 +889,6 @@ body {
   height: 100%;
 }
 
-
 .topbar {
   display: flex;
   gap: 10px;
@@ -1002,24 +903,20 @@ body {
   );
 }
 
-
 .content {
   padding: 16px;
   overflow: auto;
 }
-
 
 .crumbs {
   font-size: 11px;
   color: var(--muted);
 }
 
-
 #layoutContainer {
   display: flex;
   height: calc(100vh - 0px);
 }
-
 
 #sidebarNav {
   width: 20%;
@@ -1030,7 +927,6 @@ body {
   background: #1f2938;
 }
 
-
 .sidebar-item {
   padding: 5px 5px;
   font-size: 11px;
@@ -1038,24 +934,20 @@ body {
   color: #fff;
 }
 
-
 .sidebar-item:hover {
   background: #e4e7ea;
   color: #1f2938;
 }
-
 
 .sidebar-item.active {
   background: #d0d4d9;
   font-weight: 600;
 }
 
-
 #mainContent {
   flex: 1;
   overflow-y: auto;
 }
-
 
 .dp-dropdown {
   position: absolute;
@@ -1071,7 +963,6 @@ body {
   overflow: hidden;
 }
 
-
 .dp-search {
   border: none;
   border-bottom: 1px solid #111827;
@@ -1083,11 +974,9 @@ body {
   border-radius: 0;
 }
 
-
 .dp-options {
   overflow-y: auto;
 }
-
 
 .dp-option {
   padding: 7px 10px;
@@ -1100,23 +989,19 @@ body {
   border-bottom: 1px solid rgba(31, 41, 55, 0.3);
 }
 
-
 .dp-option:hover {
   background: rgba(56, 189, 248, 0.08);
 }
 
-
 .dp-option:last-child {
   border-bottom: none;
 }
-
 
 .dp-table {
   display: grid;
   gap: 4px;
   font-size: 11px;
 }
-
 
 .dp-table-header,
 .dp-table-row {
@@ -1125,18 +1010,15 @@ body {
   gap: 6px;
 }
 
-
 .dp-table-header {
   font-weight: bold;
   opacity: 0.7;
 }
 
-
 .dp-link-app {
   cursor: pointer;
   color: var(--accent);
 }
-
 
 /* --- Shared dropdown styles (untouched) ------------------- */
 .dp-link-app:hover { text-decoration: underline; }
@@ -1146,9 +1028,7 @@ body {
   color: var(--primary,#4a7aff);
 }
 
-
 .cap-name-link { cursor:pointer; }
-
 
 /* --- Canon + mapping dropdowns ------------------------------- */
 .canon-wrapper { position:relative; }
@@ -1158,11 +1038,10 @@ body {
   border:1px solid #111827; color:var(--text);
 }
 
-
 .canon-dropdown,
 .mapping-dropdown,
 .btn-dropdown {
-  position:absolute;
+  position: relative;
   background:var(--panel);
   border:1px solid #1f2937;
   border-radius:8px;
@@ -1174,7 +1053,6 @@ body {
   box-shadow:0 10px 25px rgba(0,0,0,.6);
 }
 
-
 .mapping-dropdown, btn-dropdown {
   position:fixed !important;
   z-index: 10000 !important;
@@ -1185,9 +1063,7 @@ body {
   width: 240px;
 }
 
-
 .canon-dropdown.hidden { display:none; }
-
 
 .canon-search,
 .mapping-search {
@@ -1199,7 +1075,6 @@ body {
   color:var(--text);
 }
 
-
 .canon-options,
 .mapping-options {
   max-height:140px;
@@ -1208,14 +1083,12 @@ body {
   flex-direction:column;
 }
 
-
 .canon-option,
 .mapping-option {
   padding:5px 6px;
   cursor:pointer; font-size:12px;
   border-radius:6px;
 }
-
 
 .canon-option:hover { background:rgba(148,163,184,.15); }
 .canon-add {
@@ -1224,11 +1097,9 @@ body {
   border-top:1px solid #1f2937;
 }
 
-
 .canon-add:hover { background:rgba(56,189,248,.08); }
 .mapping-multi-label.checked { font-weight:600; opacity:1; }
 .mapping-multi-label { opacity:.75; }
-
 
 /* --- Segments ---------------------------------------------- */
 .segments-page {
@@ -1238,7 +1109,6 @@ body {
   padding-right:20px;
 }
 
-
 /* section headings */
 .segments-block .block-title {
   font-size:1.2rem;
@@ -1246,14 +1116,12 @@ body {
   margin-bottom:10px;
 }
 
-
 /* responsive cards (like apps/functions) */
 .cards-grid.stacked {
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
   gap:24px;
 }
-
 
 /* card breathing room */
 #segmentCategoriesGrid .card,
@@ -1263,7 +1131,6 @@ body {
   width:100%;
 }
 
-
 /*----------Folders------------*/
 /* Folder hierarchy */
 .folder-hierarchy-card .card-body {
@@ -1271,7 +1138,6 @@ body {
   flex-direction: column;
   gap: 12px;
 }
-
 
 .folder-tree {
   border-radius: 8px;
@@ -1283,11 +1149,9 @@ body {
   font-size: 13px;
 }
 
-
 .folder-node-row {
   margin-bottom: 2px;
 }
-
 
 .folder-node-main {
   display: flex;
@@ -1298,37 +1162,30 @@ body {
   cursor: grab;
 }
 
-
 .folder-node-main:hover {
   background: rgba(148, 163, 184, 0.14);
 }
 
-
 .folder-node-icon {
   font-size: 13px;
 }
-
 
 .folder-node-label {
   font-size: 13px;
   white-space: nowrap;
 }
 
-
 .folder-node-drop-target .folder-node-main {
   outline: 1px dashed var(--accent, #38bdf8);
 }
-
 
 .folder-hier-desc {
   min-height: 48px;
 }
 
-
 .folder-hierarchy-card .btn.xsmall {
   margin-top: 8px;
 }
-
 
 #section-folder-hierarchy .cards-grid {
   grid-template-columns: 1fr;
@@ -1341,19 +1198,16 @@ body {
     min-height: 0 !important;
 }
 
-
 .section-resources {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
-
 .section-header {
   display: flex;
   width: 100%;
 }
-
 
 #filterButtons {
   display: flex;
@@ -1364,16 +1218,10 @@ body {
   margin-right: 5px;
 }
 
-
-/* Ensure the "Add Resource" button has appropriate size and appearance */
-/* Style the Add Resource button to match the other add buttons */
-
-
 /* Hover effect to match other buttons */
 #btnAddResource:hover {
   background-color: #0056b3; /* Darken the blue for hover effect */
 }
-
 
 /* Optional: If you want to remove the background for the 'x' type buttons */
 button.btn.xsmall.soft {
@@ -1381,13 +1229,11 @@ button.btn.xsmall.soft {
   border: 1px solid #ccc; /* Adds a subtle border to match button styles */
 }
 
-
 /* Focus and active states (optional, depending on your design needs) */
 #btnAddResource:focus {
   outline: none;
   box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
-
 
 /* Ensure that the resource grid looks good and adjusts with the layout */
 #resourcesGrid {
@@ -1396,7 +1242,6 @@ button.btn.xsmall.soft {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));  /* Adjusts the grid layout based on screen size */
   margin-top: 20px;
 }
-
 
 /* Additional styling for the card content */
 .resource-detail input,
@@ -1408,18 +1253,15 @@ button.btn.xsmall.soft {
   border-radius: 5px;
 }
 
-
 .resource-detail .resource-section {
   margin-bottom: 15px;
 }
-
 
 .resource-detail .card-body {
   padding: 20px;
   background-color: #3a3a3a;
   border-radius: 8px;
 }
-
 
 /* Align the filter buttons to the left */
 .resource-filters {
@@ -1430,12 +1272,10 @@ button.btn.xsmall.soft {
   margin-top: 10px; /* Add some space above the filter buttons */
 }
 
-
 /* Ensure filter buttons stay inline and not squished */
 .resource-filters button {
   white-space: nowrap; /* Prevent text from wrapping */
 }
-
 
 /* Ensure section-actions has space for both buttons */
 .section-actions {
@@ -1444,7 +1284,6 @@ button.btn.xsmall.soft {
   width: 100%; /* Ensure the actions take up the full width */
 }
 
-
 /* reliable editable placeholder */
 [contenteditable][data-placeholder][data-empty="true"]::before {
   content: attr(data-placeholder);
@@ -1452,12 +1291,10 @@ button.btn.xsmall.soft {
   pointer-events: none;
 }
 
-
 #datapointsGrid > .datapoint-group {
   grid-column: 1 / -1;
   width: 100%;
 }
-
 
 /* Example CSS that must be present in your application styles: */
 .dp-dropdown {
@@ -1470,12 +1307,10 @@ button.btn.xsmall.soft {
     padding: 4px 0;
 }
 
-
 .dp-option {
     padding: 8px 12px;
     cursor: pointer;
 }
-
 
 .dp-option:hover {
     background: #f0f0f0;
@@ -1494,7 +1329,6 @@ button.btn.xsmall.soft {
     border-radius: 12px;
     font-size: 0.9em;
 }
-
 
 /* Add this CSS to your application's stylesheet */
 .datapoint-pill-inserted {
@@ -1518,7 +1352,6 @@ button.btn.xsmall.soft {
     cursor: default;
 }
 
-
 /* This CSS targets the container wrapping all the folder hierarchy cards (the main grid view).
  * This will make the cards flow horizontally like your App/Function cards.
  */
@@ -1531,7 +1364,6 @@ button.btn.xsmall.soft {
     padding: 10px 0;           /* Add some padding */
 }
 
-
 /* * This ensures individual cards take up a reasonable portion of the screen
  * (e.g., 30% for three cards across, allowing for the 20px gap).
  */
@@ -1541,7 +1373,6 @@ button.btn.xsmall.soft {
     box-sizing: border-box;         /* Include padding and border in the element's total width and height */
 }
 
-
 /* Styles for the individual folder row in the modal tree */
 .folder-node-main {
     display: flex;       /* Use flex layout */
@@ -1549,7 +1380,6 @@ button.btn.xsmall.soft {
     gap: 10px;           /* Add space between elements */
     width: 100%;
 }
-
 
 /* Ensure the main label takes up remaining space */
 .folder-node-label {
@@ -1596,7 +1426,6 @@ button.btn.xsmall.soft {
     min-height: 80vh; /* Ensures the wrapper has height even if content is sparse */
 }
 
-
 /* 2. Left Menu Panel: Fixed width for selection/features */
 .analysis-left-menu-panel {
     flex-shrink: 0; /* Prevents it from shrinking */
@@ -1634,7 +1463,6 @@ button.btn.xsmall.soft {
     flex-grow: 1; /* Takes all available space */
     overflow-x: auto; /* Allows horizontal scrolling for wide tables */
 }
-
 
 /* 4. Menu Headers/Items: Ensure styling makes items look clickable */
 .analysis-left-menu-header {
@@ -1692,12 +1520,10 @@ button.btn.xsmall.soft {
     font-size: 0.9em;
 }
 
-
 .clickable:hover {
     background-color: #2a2a2a; /* Highlight on hover for clickable items */
     cursor: pointer;
 }
-
 
 .analysis-fn-name {
     font-weight: bold;
@@ -1705,12 +1531,10 @@ button.btn.xsmall.soft {
     padding: 2px 0;
 }
 
-
 .analysis-fn-features-label {
     font-size: 0.75em;
     color: #999;
 }
-
 
 .analysis-feature-list {
     padding-left: 15px; /* Indent the features list */
@@ -1718,14 +1542,12 @@ button.btn.xsmall.soft {
     font-size: 11px;
 }
 
-
 /* 5. Matrix Table Basics */
 .analysis-matrix {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
 }
-
 
 .analysis-matrix th {
     background-color: #222;
@@ -1739,7 +1561,6 @@ button.btn.xsmall.soft {
     text-align: center;
 }
 
-
 /* Analysis Matrix Specific Icon Styling */
 .analysis-matrix .matrix-app-header .card-icon,
 .analysis-matrix .matrix-app-header .icon-fallback,
@@ -1752,14 +1573,12 @@ button.btn.xsmall.soft {
     margin: 0 auto 5px auto; /* Center it and add bottom margin */
 }
 
-
 .analysis-matrix .matrix-app-header .app-header-content {
     /* Ensure content centers within the column */
     display: flex;
     flex-direction: column;
     align-items: center;
 }
-
 
 /* --- Flex-Wrap Dashboard Layout --- */
 #workflowsGrid {
@@ -1772,7 +1591,6 @@ button.btn.xsmall.soft {
     border-radius: 12px;
 }
 
-
 .workflow-stage-block {
     flex: 1 1 350px; /* Grow and shrink, but aim for 350px width */
     background: #ebedf0;
@@ -1784,11 +1602,9 @@ button.btn.xsmall.soft {
     cursor: default !important;
 }
 
-
 .workflow-stage-block:active {
     cursor: grabbing;
 }
-
 
 .workflow-stage-block.dragging-stage {
     opacity: 0.4;
@@ -1796,13 +1612,11 @@ button.btn.xsmall.soft {
     background: #f0f7ff;
 }
 
-
 /* Hover effect for the drop target area */
 .stage-drop-zone {
     border-left: 4px solid #0052cc;
     margin-left: -4px;
 }
-
 
 /* Ensure the placeholder button block matches the others */
 .add-stage-placeholder {
@@ -1815,7 +1629,6 @@ button.btn.xsmall.soft {
     min-height: 120px;
 }
 
-
 .stage-block-header {
     display: flex;
     justify-content: space-between;
@@ -1825,7 +1638,6 @@ button.btn.xsmall.soft {
     user-select:none;
 }
 
-
 .stage-block-title {
     font-size: 12px;
     font-weight: 700;
@@ -1833,7 +1645,6 @@ button.btn.xsmall.soft {
     margin: 0;
     text-transform: uppercase;
 }
-
 
 .process-list {
     display: flex;
@@ -1843,11 +1654,9 @@ button.btn.xsmall.soft {
     transition: background 0.2s;
 }
 
-
 .process-list:hover {
     background: rgba(0, 82, 204, 0.02);
 }
-
 
 .process-street-row {
     background: #ffffff;
@@ -1867,7 +1676,6 @@ button.btn.xsmall.soft {
     margin-bottom: 8px;
 }
 
-
 .handle-container {
     display: flex;
     align-items: center;
@@ -1876,7 +1684,6 @@ button.btn.xsmall.soft {
     background: #f8f9fa; /* Slight background to see the handle lane */
     border-right: 1px solid #eee;
 }
-
 
 .process-street-row:hover {
     border-color: #0052cc;
@@ -1889,13 +1696,11 @@ button.btn.xsmall.soft {
     cursor: grabbing;
 }
 
-
 .process-street-row.dragging-workflow {
     opacity: 0.3;
     background: #e1e4e8;
     border: 1px dashed #0052cc;
 }
-
 
 /* Container highlight when dragging a workflow over it */
 .process-list.drag-over-list {
@@ -1906,24 +1711,20 @@ button.btn.xsmall.soft {
     border-radius: 4px;
 }
 
-
 /* Row-level indicator for insertion */
 .process-street-row.drop-before {
     border-top: 3px solid #0052cc !important;
 }
 
-
 .process-street-row.drop-after {
     border-bottom: 3px solid #0052cc !important;
 }
-
 
 /* Visual indicator for where the workflow will land */
 .workflow-drop-indicator {
     border-top: 3px solid #0052cc !important;
     padding-top: 8px !important;
 }
-
 
 /* Stage Handle (Header) */
 .stage-drag-handle {
@@ -1934,7 +1735,6 @@ button.btn.xsmall.soft {
     user-select: none;
     -webkit-user-drag: element;
 }
-
 
 /* Workflow Handle (Icon) */
 .workflow-drag-handle {
@@ -1949,11 +1749,9 @@ button.btn.xsmall.soft {
     z-index: 20;
 }
 
-
 .workflow-drag-handle:hover {
     color: #0052cc;
 }
-
 
 .process-name {
     font-weight: 600;
@@ -1963,13 +1761,11 @@ button.btn.xsmall.soft {
     pointer-events: none !important;
 }
 
-
 .process-meta {
     font-size: 0.75rem;
     color: #6b778c;
     pointer-events: none !important;
 }
-
 
 .actions-container {
     display: flex;
@@ -1977,14 +1773,12 @@ button.btn.xsmall.soft {
     padding-right: 8px;
 }
 
-
 /* Modal specific vertical list styling */
 .process-steps-container {
     max-width: 800px;
     margin: 0 auto;
     padding: 20px;
 }
-
 
 .ps-step-card {
     border-left: 4px solid #0052cc;
@@ -1995,10 +1789,10 @@ button.btn.xsmall.soft {
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-
 .ps-step-card.ps-resource {
     border-left-color: #36b37e; /* Green for resources */
 }
+
 /* --- Drag and Drop Feedback --- */
 .ps-step-wrapper.dragging {
     opacity: 0.5;
@@ -2006,17 +1800,14 @@ button.btn.xsmall.soft {
     border: 2px dashed #0052cc;
 }
 
-
 .workflow-stage-block.drop-target {
     background: #ebf5ff;
     border-color: #0052cc;
 }
 
-
 .process-steps-container {
     transition: all 0.2s ease;
 }
-
 
 .process-info {
     flex-grow: 1;
@@ -2032,18 +1823,15 @@ button.btn.xsmall.soft {
     padding: 10px 12px;
 }
 
-
 /* 2. Fix the handle cursor */
 .workflow-drag-handle, .stage-drag-handle {
     cursor: grab !important;
     padding: 0 10px;
 }
 
-
 .workflow-drag-handle:active {
     cursor: grabbing !important;
 }
-
 
 /* 3. Ensure the Modal target is the boss of the row */
 .process-info.js-open-modal {
@@ -2053,24 +1841,20 @@ button.btn.xsmall.soft {
     user-select: none; /* Prevents text selection from triggering a drag */
 }
 
-
 .process-info.js-open-modal:hover {
     background: rgba(0, 82, 204, 0.03);
 }
-
 
 .visualizer-list-body {
     background: var(--bg);
     padding: 0; /* Let rows touch the edges */
 }
 
-
 .visualizer-mirror-body {
     background: #020617;
     padding: 20px;
     overflow-x: auto;
 }
-
 
 .visualizer-grid {
     display: flex;
@@ -2080,7 +1864,6 @@ button.btn.xsmall.soft {
     min-height: 400px;
     padding: 10px;
 }
-
 
 .workflow-phase-column {
     flex: 0 0 280px;
@@ -2092,7 +1875,6 @@ button.btn.xsmall.soft {
     max-height: 100%;
 }
 
-
 .phase-header {
     padding: 12px;
     display: flex;
@@ -2100,7 +1882,6 @@ button.btn.xsmall.soft {
     gap: 8px;
     border-bottom: 1px solid #1f2937;
 }
-
 
 .node-list {
     padding: 8px;
@@ -2110,7 +1891,6 @@ button.btn.xsmall.soft {
     gap: 8px;
 }
 
-
 .workflow-node-row {
     display: flex;
     align-items: stretch;
@@ -2119,11 +1899,9 @@ button.btn.xsmall.soft {
     min-height: 50px;
 }
 
-
 .workflow-node-row:hover {
     background: #161d2b;
 }
-
 
 .workflow-node-card {
     background: #1e293b;
@@ -2135,13 +1913,11 @@ button.btn.xsmall.soft {
     overflow: hidden;
 }
 
-
 .workflow-node-row.dragging-node {
     opacity: 0.2;
     background: var(--accent) !important;
     border: 2px dashed var(--accent);
 }
-
 
 .visualizer-vertical-list {
     min-height:300px !important;
@@ -2152,14 +1928,12 @@ button.btn.xsmall.soft {
     transition: all 0.2s ease;
 }
 
-
 .node-handle {
     padding: 10px;
     background: rgba(255,255,255,0.03);
     cursor: grab;
     color: #475569;
 }
-
 
 .node-handle-container {
     display: flex;
@@ -2170,14 +1944,12 @@ button.btn.xsmall.soft {
     border-right: 1px solid var(--line);
 }
 
-
 * Prevent internal text from intercepting the drag event */
 .node-number,
 .node-label,
 .node-type-icon {
     pointer-events: none !important;
 }
-
 
 /* Keep the containers active to receive the hover/over events */
 .workflow-node-row,
@@ -2186,20 +1958,17 @@ button.btn.xsmall.soft {
     pointer-events: auto !important;
 }
 
-
 .node-drag-handle {
     cursor: grab !important;
     color: var(--muted);
     padding: 10px;
 }
 
-
 /* Give the handle a bit more prominence on hover */
 .node-drag-handle:hover {
     color: var(--accent);
     transform: scale(1.1);
 }
-
 
 .node-number {
     display: flex;
@@ -2211,7 +1980,6 @@ button.btn.xsmall.soft {
     border-right: 1px solid var(--line);
 }
 
-
 .node-info-lane {
     flex: 1;
     display: flex;
@@ -2221,12 +1989,10 @@ button.btn.xsmall.soft {
     cursor: pointer;
 }
 
-
 .node-label {
     font-size: 14px;
     color: var(--text);
 }
-
 
 .node-actions-lane {
     display: flex;
@@ -2234,13 +2000,11 @@ button.btn.xsmall.soft {
     padding-right: 10px;
 }
 
-
 .ps-add-controls {
     padding: 20px;
     display: flex;
     justify-content: center;
 }
-
 
 .node-content {
     flex: 1;
@@ -2249,7 +2013,6 @@ button.btn.xsmall.soft {
     gap: 8px;
     cursor: pointer;
 }
-
 
 .add-phase-column {
     flex: 0 0 200px;
@@ -2264,13 +2027,11 @@ button.btn.xsmall.soft {
     transition: all 0.2s;
 }
 
-
 .add-phase-column:hover {
     background: rgba(56, 189, 248, 0.05);
     border-color: var(--accent);
     color: var(--accent);
 }
-
 
 .node-owner-avatar {
     width: 24px;
@@ -2288,13 +2049,11 @@ button.btn.xsmall.soft {
     margin-left: 10px;
 }
 
-
 .node-owner-avatar.unassigned {
     border-style: dashed;
     color: var(--muted);
     opacity: 0.5;
 }
-
 
 /* Ensure icons inside the avatar lane scale correctly */
 .node-owner-avatar .icon-fallback,
@@ -2305,13 +2064,11 @@ button.btn.xsmall.soft {
     letter-spacing: -0.5px;
 }
 
-
 .node-owner-avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
-
 
 .avatar-trigger-zone {
     display: flex;
@@ -2323,11 +2080,9 @@ button.btn.xsmall.soft {
     transition: background 0.2s;
 }
 
-
 .avatar-trigger-zone:hover {
     background: rgba(56, 189, 248, 0.1);
 }
-
 
 .mini-avatar {
     width: 24px;
@@ -2345,18 +2100,15 @@ button.btn.xsmall.soft {
     flex-shrink: 0;
 }
 
-
 .mini-avatar:first-child {
     margin-left: 0;
 }
-
 
 .mini-avatar.unassigned {
     border-style: dashed;
     color: var(--muted);
     opacity: 0.5;
 }
-
 
 .visualizer-filter-bar {
     padding: 8px 14px;
@@ -2367,12 +2119,10 @@ button.btn.xsmall.soft {
     gap: 12px;
 }
 
-
 .owner-filter-list {
     display: flex;
     gap: 6px;
 }
-
 
 .owner-filter-pill {
     padding: 2px 8px;
@@ -2386,19 +2136,16 @@ button.btn.xsmall.soft {
     transition: all 0.2s;
 }
 
-
 .owner-filter-pill:hover {
     border-color: var(--accent);
     color: var(--text);
 }
-
 
 .owner-filter-pill.active {
     background: var(--accent);
     border-color: var(--accent);
     color: #000;
 }
-
 
 .due-config-trigger {
     background: var(--panel-soft);
@@ -2412,20 +2159,16 @@ button.btn.xsmall.soft {
     font-size: 12px;
 }
 
-
 .due-config-trigger:hover {
     border-color: var(--accent);
     background: rgba(56, 189, 248, 0.05);
 }
 
-
 .due-icon {
     font-size: 14px;
 }
 
-
 .cal-dropdown { width: 220px !important; padding: 10px !important; }
-
 
 .mini-cal-header {
     display: flex;
@@ -2436,12 +2179,10 @@ button.btn.xsmall.soft {
     margin-bottom: 8px;
 }
 
-
 .cal-nav {
     background: none; border: none; color: var(--accent);
     cursor: pointer; padding: 4px;
 }
-
 
 .mini-cal-grid {
     display: grid;
@@ -2449,19 +2190,16 @@ button.btn.xsmall.soft {
     gap: 2px;
 }
 
-
 .cal-day-name {
     font-size: 10px; color: var(--muted);
     text-align: center; padding-bottom: 4px;
 }
-
 
 .cal-date {
     font-size: 11px; text-align: center;
     padding: 4px 0; cursor: pointer;
     border-radius: 4px;
 }
-
 
 .cal-date:hover { background: rgba(56, 189, 248, 0.2); }
 .cal-date.selected { background: var(--accent); color: #000; font-weight: bold; }
@@ -2475,7 +2213,6 @@ button.btn.xsmall.soft {
     margin: 8px 0;
 }
 
-
 .pill.outcome-pill {
     background: rgba(168, 85, 247, 0.1);
     border-color: #a855f7;
@@ -2486,19 +2223,16 @@ button.btn.xsmall.soft {
     gap: 8px;
 }
 
-
 .pill-remove {
     cursor: pointer;
     opacity: 0.6;
     font-weight: bold;
 }
 
-
 .pill-remove:hover {
     opacity: 1;
     color: var(--danger);
 }
-
 
 .node-outcome-triggers {
     display: flex;
@@ -2506,7 +2240,6 @@ button.btn.xsmall.soft {
     margin-top: 8px;
     padding-left: 28px; /* Align with text, not icon */
 }
-
 
 .outcome-trigger-btn {
     background: var(--bg);
@@ -2519,12 +2252,10 @@ button.btn.xsmall.soft {
     font-weight: 600;
 }
 
-
 .outcome-trigger-btn:hover {
     background: #a855f7;
     color: #fff;
 }
-
 
 .pill.outcome-pill.pill-jump {
     cursor: pointer;
@@ -2532,12 +2263,10 @@ button.btn.xsmall.soft {
     padding-right: 28px; /* Extra room for the X */
 }
 
-
 .pill.outcome-pill.pill-jump:hover {
     background: rgba(168, 85, 247, 0.2);
     border-color: var(--accent);
 }
-
 
 .pill.outcome-pill.pill-jump::after {
     content: '↗';
@@ -2546,12 +2275,10 @@ button.btn.xsmall.soft {
     opacity: 0.5;
 }
 
-
 .pill.outcome-pill.pill-jump:hover::after {
     opacity: 1;
     color: var(--accent);
 }
-
 
 /* Force the pointer and prevent the text cursor */
 .nav-zone {
@@ -2562,17 +2289,14 @@ button.btn.xsmall.soft {
     align-items: center;
 }
 
-
 .nav-zone:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
-
 
 /* Ensure the pill itself doesn't allow the text cursor */
 .pill.outcome-pill {
     cursor: default;
 }
-
 
 /* Target both the old div class and the new button tags */
 .nav-zone, .nav-zone-btn, .remove-zone-btn {
@@ -2585,7 +2309,6 @@ button.btn.xsmall.soft {
     transition: background 0.2s;
     outline: none;
 }
-
 
 /* Ensure the button doesn't have default browser "gray" styling */
 .nav-zone-btn, .remove-zone-btn {
@@ -2604,17 +2327,14 @@ button.btn.xsmall.soft {
     margin: 2px;
 }
 
-
 .nav-zone-btn:hover {
     background: rgba(56, 189, 248, 0.1) !important;
 }
-
 
 .remove-zone-btn:hover {
     background: rgba(239, 68, 68, 0.1) !important;
     color: #ef4444 !important;
 }
-
 
 /* Styling for labels that contain group keywords to help differentiate them */
 .node-label:contains("Pre-Meeting"),
@@ -2623,20 +2343,17 @@ button.btn.xsmall.soft {
     padding-left: 8px;
 }
 
-
 .node-text-group {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
-
 .node-meta-preview {
     display: flex;
     gap: 12px;
     align-items: center;
 }
-
 
 .meta-item {
     font-size: 10px;
@@ -2646,19 +2363,16 @@ button.btn.xsmall.soft {
     gap: 4px;
 }
 
-
 /* Highlight items that have actual automated logic applied */
 .meta-item.logic-active {
     color: var(--accent);
     font-weight: 600;
 }
 
-
 .workflow-node-row .node-label {
     font-size: 13px;
     font-weight: 500;
 }
-
 
 .pill-implicit {
     border-style: dashed !important;
@@ -2666,20 +2380,17 @@ button.btn.xsmall.soft {
     background: rgba(31, 41, 55, 0.4) !important;
 }
 
-
 .implicit-tag {
     font-size: 9px;
     margin-left: 4px;
     filter: grayscale(1);
 }
 
-
 .pill.resource:hover, .pill.fn:hover {
     border-color: var(--accent);
     background: rgba(56, 189, 248, 0.1);
     cursor: pointer;
 }
-
 
 /* Constrain icons inside pills specifically */
 .pill .card-icon,
@@ -2692,12 +2403,10 @@ button.btn.xsmall.soft {
     line-height: 16px !important;
 }
 
-
 .pill .icon-img {
     width: 16px;
     height: 16px;
 }
-
 
 /* Ensure the button content aligns nicely */
 .nav-zone-btn {
@@ -2705,7 +2414,6 @@ button.btn.xsmall.soft {
     align-items: center;
     gap: 6px;
 }
-
 
 /* Ensure modal pills behave like the workflow pills */
 .modal-body .pill.outcome-pill {
@@ -2718,11 +2426,9 @@ button.btn.xsmall.soft {
     margin: 2px;
 }
 
-
 .modal-body .nav-zone-btn:hover {
     background: rgba(56, 189, 248, 0.1);
 }
-
 
 .modal-body .remove-zone-btn:hover {
     background: rgba(239, 68, 68, 0.1);
@@ -2937,4 +2643,368 @@ button.btn.xsmall.soft {
 
 .modal-column {
   min-width: 30%;
+}
+
+/* Standardizing the search inputs to match cards/modals */
+.access-input, #howToSearch, #resSearch {
+    background: var(--panel-soft, #2a2a2a) !important; /* Adjust to match your panel color */
+    border: 1px solid var(--line, #3a3a3a) !important;
+    color: var(--text, #ffffff) !important;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.access-input:focus, #howToSearch:focus {
+    border-color: var(--accent, #3498db) !important;
+    background: var(--panel-bg, #1e1e1e) !important;
+}
+
+/* Ensure the placeholder text isn't too dark or light */
+.access-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.status-indicator-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: help;
+}
+
+/* Optional: Pulse effect for 'Do Now' items */
+.status-indicator-dot[title="Status: Do Now"] {
+    box-shadow: 0 0 0 rgba(217, 242, 208, 0.4);
+    animation: status-pulse 2s infinite;
+}
+
+@keyframes status-pulse {
+    0% { box-shadow: 0 0 0 0px rgba(217, 242, 208, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(217, 242, 208, 0); }
+    100% { box-shadow: 0 0 0 0px rgba(217, 242, 208, 0); }
+}
+
+/* Container for the Status Dot and Delete Button */
+.card-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Space between the color dot and the X */
+    flex-shrink: 0; /* Prevents the icons from squishing if the title is long */
+}
+
+/* Specific styling for the existing .card-close button in this context */
+.card-header-right .card-close {
+    position: static; /* Overrides absolute positioning if previously set */
+    margin: 0;
+    padding: 2px 6px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    color: var(--text-muted, #888);
+    transition: all 0.2s ease;
+}
+
+.card-header-right .card-close:hover {
+    color: #e74c3c; /* Red highlight on hover */
+    background: rgba(231, 76, 60, 0.1);
+    border-radius: 4px;
+}
+
+/* Ensure the left side of the header truncates properly if the title is long */
+.card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0; /* Critical for text-overflow to work in flexbox */
+}
+
+.card-title.single-line-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+    cursor: help;
+}
+
+.status-dot.do-now {
+  background: var(--pill-primary-color, #92ef70);
+}
+
+.status-dot.do-later {
+  background: var(--pill-primary-color, #edde5a);
+}
+
+.status-dot.dont-do {
+  background: var(--pill-primary-color, #728699);
+}
+
+.status-dot.doing {
+  background: var(--pill-primary-color, #1aedb8);
+}
+
+.status-dot.done {
+  background: var(--pill-primary-color, #205565);
+}
+
+.print-only-text, .print-header-meta, .print-row-top {
+    display: none;
+}
+
+.screen-only {
+    display: block; /* Show the editable title while using the app */
+}
+
+@media print {
+    /* 1. HIDE MAIN UI NOISE */
+    .main-menu, .grid-container, .sidebar, .top-nav, .top-bar, 
+    .how-to-library-panel, .section, #app-background, header, nav,
+    .btn, .modal-select, .editor-toolbar, .header-dropdown-group, .spacer {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+    }
+
+    label:contains('Update Summary'), 
+    label:contains('Update Summary') + .modal-textarea {
+        display: none !important;
+    }
+
+    /* 2. GLOBAL COLOR RESET (Dark Mode to Light Mode) */
+    html, body, #modal-layer, .modal-box, .modal-body, .modal-row, 
+    .modal-column, .modal-section, #htEditor, * {
+        background-color: transparent !important;
+        background-image: none !important;
+        color: #000 !important; /* Force black text */
+        opacity: 1 !important;
+        visibility: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* 3. LAYOUT EXPANSION (Span multiple pages) */
+    html, body {
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    #modal-layer {
+        position: static !important; /* Remove fixed/absolute positioning */
+        width: 100% !important;
+        height: auto !important;
+        display: block !important;
+    }
+
+    .modal-box {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        transform: none !important;
+        overflow: visible !important;
+    }
+
+    .modal-body {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin-top: 5px !important;
+        padding: 0 !important;
+    }
+
+    /* 4. CONSOLIDATED HEADER (1/3 Title | 2/3 Categories) */
+    .modal-head {
+        display: block !important;
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        border-bottom: 1px solid #000 !important;
+        margin-bottom: 5px !important;
+        padding-bottom: 10px !important;
+    }
+
+    .modal-section {
+      margin-bottom: 10px !important;
+    }
+
+    .modal-title-text {
+        border: none !important; /* Removes border around the title box */
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 18pt !important;
+    }
+
+    .print-row-top {
+        display: flex !important;
+        width: 100% !important;
+        align-items: flex-start !important;
+    }
+
+    .print-col-title {
+        flex: 1 !important; /* 33.3% */
+        padding-right: 20px !important;
+    }
+
+    .print-col-categories {
+        flex: 1 !important; /* 66.6% */
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 5px !important;
+        text-align: right !important;
+    }
+
+    .modal-title-text {
+        font-size: 18pt !important;
+        font-weight: bold !important;
+        line-height: 1.2 !important;
+        margin: 0 !important;
+        border: none;
+    }
+
+    /* 5. LABELS & METADATA */
+    .print-meta-group {
+        font-size: 11pt !important;
+    }
+
+    .print-label {
+        font-weight: normal !important;
+        color: #555 !important;
+        min-width: 150px !important;
+    }
+
+    .print-value {
+        font-weight: bold !important;
+        color: #000 !important;
+    }
+
+    /* Hide redundant interactive areas */
+    .category-selection-row, .screen-only, .highlight-row {
+        display: none !important;
+    }
+
+    /* 6. CONTENT FORMATTING */
+    .modal-section-label {
+        display: block !important;
+        font-weight: bold !important;
+        margin-top: 15px !important;
+        border-bottom: 1px solid #eee !important;
+    }
+
+    .modal-textarea, .how-to-editor {
+        border: 1px solid #ccc !important;
+        padding: 5px !important;
+        height: auto !important;
+        min-height: 20px !important;
+        overflow: visible !important;
+    }
+
+    /* 7. IMAGES */
+    img {
+        max-width: 100% !important;
+        height: auto !important;
+        display: block;
+        page-break-inside: avoid;
+        margin: 20px 0;
+    }
+}
+
+.scoping-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.scoping-table th {
+    background: var(--nav-bg);
+    padding: 12px;
+    text-align: left;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.scoping-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.inline-input {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-main);
+    padding: 4px 8px;
+    border-radius: 4px;
+    width: 60px;
+}
+
+.resource-picker {
+    display: grid;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.picker-item {
+    padding: 10px;
+    background: var(--nav-bg);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.picker-item:hover {
+    background: var(--line);
+}
+
+.dynamic-input-cell {
+    min-width: 300px;
+}
+
+.input-group-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.form-inputs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    width: 100%;
+}
+
+.mini-input-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.mini-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+input.inline-input.tiny {
+    width: 50px;
+    font-size: 11px;
+    padding: 2px 4px;
 }
