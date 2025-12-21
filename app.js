@@ -843,6 +843,11 @@ document.addEventListener("selectionchange", () => {
           { id: uid(), name: "03 - Ongoing Service", sortIndex: 2 }
       ]),
       workflows: OL.store.get("workflows", []), 
+      scopingSheets: OL.store.get("scopingSheets", [
+          { id: 'initial-scope', lineItems: [] } // Ensures [0] always exists
+      ]),
+      sphynxTasks: OL.store.get("sphynxTasks", []),
+      clientTasks: OL.store.get("clientTasks", [])
   };
 
   const state = OL.state;
@@ -922,6 +927,9 @@ document.addEventListener("selectionchange", () => {
     OL.store.set("namingConventions", state.namingConventions);
     OL.store.set("analysis", window.OL.state.analysis);
     OL.store.set("analyses", window.OL.state.analyses);
+    OL.store.set("scopingSheets", state.scopingSheets);
+    OL.store.set("sphynxTasks", state.sphynxTasks);
+    OL.store.set("clientTasks", state.clientTasks);
   }, 200);
 
   const statusOrder = {
@@ -1125,7 +1133,10 @@ document.addEventListener("selectionchange", () => {
     renderUnifiedSegmentBuilder();
     renderFolderHierarchyGrid();
     renderNamingConventions();
-    renderResourcesGrid();
+    OL.renderResourcesGrid();
+    renderScopingSheets();
+    renderSphynxTasks();
+    renderClientTasks();
   };
 
   // ------------------------------------------------------------
@@ -1219,28 +1230,34 @@ document.addEventListener("selectionchange", () => {
             <div class="group-title">Apps</div>
             <a href="#/apps" data-route>Apps</a>
             <a href="#/functions" data-route>Functions</a>
-            <a href="#/settings/features" data-route>Features</a>
+            <a href="#/features" data-route>Features</a>
             <a href="#/analyze" data-route>Analyze</a>
             <div class="divider"></div>
 
             <div class="group-title">Integrations</div>
             <a href="#/integrations" data-route>Integrations</a>
             <a href="#/triggers-actions" data-route>Triggers & Actions Library</a>
-            <a href="#/settings/canonical-capabilities" data-route>Canonical Capabilities</a>
+            <a href="#/canonical-capabilities" data-route>Canonical Capabilities</a>
             <div class="divider"></div>
             
             <div class="group-title">Resources</div>
             <a href="#/resources/documents" data-route>Resources</a>
             <a href="#/workflows" data-route>Workflows Visualizer</a>
             <a href="#/howto" data-route>How-To Library</a>
-
             <div class="divider"></div>
+
+            <div class="group-title">Scoping</div>
+            <a href="#/scoping-sheet">Scoping Sheet</a>
+            <a href="#/sphynx-tasks">Sphynx Tasks</a>
+            <a href="#/client-tasks">Client Tasks</a>
+            <div class="divider"></div>
+            
             <div class="group-title">Settings</div>
-            <a href="#/settings/team" data-route>Team</a>
-            <a href="#/settings/segments" data-route>Segments</a>
-            <a href="#/settings/datapoints" data-route>Datapoints</a>
-            <a href="#/settings/folder-hierarchy" data-route>Folder Hierarchy</a>
-            <a href="#/settings/naming-conventions" data-route>Naming Conventions</a>
+            <a href="#/team" data-route>Team</a>
+            <a href="#/segments" data-route>Segments</a>
+            <a href="#/datapoints" data-route>Datapoints</a>
+            <a href="#/folder-hierarchy" data-route>Folder Hierarchy</a>
+            <a href="#/naming-conventions" data-route>Naming Conventions</a>
           </nav>
         </aside>
 
@@ -1460,6 +1477,10 @@ document.addEventListener("selectionchange", () => {
             </section>
 
             <section class="section" id="section-howto"></section>
+
+            <section class="section" id="section-scoping-sheet" style="display: none;"></div>
+            <section id="section-sphynx-tasks" class="section" style="display: none;"></div>
+            <section id="section-client-tasks" class="section" style="display: none;"></div>
 
           </main>
         </div>
@@ -5469,7 +5490,7 @@ function autoRenumberStages() {
           wireUnifiedSegmentButtons();
       }
 
-      const isSegments = location.hash.startsWith("#/settings/segments");
+      const isSegments = location.hash.startsWith("#/segments");
       
       if (isSegments) {
           document.body.classList.add("is-segments-page");
@@ -6411,7 +6432,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       const grid = document.getElementById("namingGrid");
       if (!section || !grid) return;
 
-      const isNaming = location.hash.startsWith("#/settings/naming");
+      const isNaming = location.hash.startsWith("#/naming");
 
       if (isNaming) {
           section.style.display = "block";
@@ -6918,7 +6939,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
               };
               window.OL.state.resources.push(newRes);
               OL.persist();
-              renderResourcesGrid();
+              OL.renderResourcesGrid();
               OL.openResourceModal(newRes.id);
           }
       });
@@ -6951,62 +6972,121 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     return (state.resources || []).find((r) => r.id === id) || null;
   }
 
-  function renderResourcesGrid() {
+ OL.renderResourcesGrid = function() {
       const grid = document.getElementById("resourcesGrid");
       if (!grid) return;
+     
+      // 1. Capture CURRENT values from the DOM before we overwrite anything
+      const searchEl = document.getElementById("resSearch");
+      const searchQuery = searchEl ? searchEl.value.toLowerCase().trim() : "";
+
+      // Ensure the global status filter is set (default to "All")
+      const statusFilter = window.OL.resFilterStatus || "All";
+      
+      // Ensure the category filter is set (default to "all")
+      const typeFilter = currentResourceFilter || "all";
 
       const allResources = Array.isArray(state.resources) ? state.resources : [];
-      const searchQuery = (document.getElementById("resSearch")?.value || "").toLowerCase();
       
-      // 1. Unified Filtering Logic (Search + Type + Status)
+      // 2. Perform the Filter
       const filtered = allResources.filter(r => {
-          const matchesSearch = (r.name + r.description + (r.tags || []).join(" ")).toLowerCase().includes(searchQuery);
-          const matchesType = currentResourceFilter === "all" || r.type === currentResourceFilter;
-          const matchesStatus = (window.OL.resFilterStatus || "All") === "All" || r.status === window.OL.resFilterStatus;
+          // 1. Get current search query
+          const searchQuery = (document.getElementById("resSearch")?.value || "").toLowerCase().trim();
+          
+          // 2. Get status filter (Default to "All")
+          const statusFilter = window.OL.resFilterStatus || "All";
+          
+          // 3. Get category filter
+          const typeFilter = currentResourceFilter || "all";
+
+          // SEARCH LOGIC
+          const matchesSearch = !searchQuery || 
+              (r.name || "").toLowerCase().includes(searchQuery) || 
+              (r.description || "").toLowerCase().includes(searchQuery) ||
+              (r.tags || []).some(t => t.toLowerCase().includes(searchQuery));
+
+          // TYPE LOGIC
+          const matchesType = typeFilter === "all" || r.type === typeFilter;
+          
+          // STATUS LOGIC (The Fix)
+          // We trim and lowercase both sides to prevent "Do Now " !== "Do Now"
+          const matchesStatus = statusFilter === "All" || 
+              (r.status || "").trim().toLowerCase() === statusFilter.trim().toLowerCase();
+
           return matchesSearch && matchesType && matchesStatus;
       });
 
-      // 2. Toolbar & Layout Header
+      // 3. Toolbar & Layout Header
       grid.innerHTML = `
           <div class="resource-toolbar" style="grid-column: 1/-1; display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; align-items: center; background: var(--panel-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--line);">
               <div style="flex: 2; min-width: 200px;">
                   <label class="modal-section-label" style="margin-top:0">Search</label>
-                  <input type="text" id="resSearch" class="access-input" placeholder="Search by name, description, or tags..." 
+                  <input type="text" id="resSearch" class="access-input" placeholder="Search resources..." 
                         oninput="OL.renderResourcesGrid()" value="${OL.utils.esc(searchQuery)}">
               </div>
               
               <div style="flex: 1; min-width: 150px;">
                   <label class="modal-section-label" style="margin-top:0">Filter Status</label>
                   <select onchange="window.OL.resFilterStatus = this.value; OL.renderResourcesGrid()" class="modal-select">
-                      <option value="All">All Statuses</option>
-                      ${["Do Now", "Do Later", "Don’t Do", "In Process", "Done"].map(s => 
-                          `<option value="${s}" ${window.OL.resFilterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+                      <option value="All" ${statusFilter === 'All' ? 'selected' : ''}>All Statuses</option>
+                      ${["Do Now", "Do Later", "Don't Do", "In Process", "Done"].map(s => 
+                      `<option value="${s}" ${statusFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
                   </select>
               </div>
-
-              <div style="display:flex; align-items: flex-end; height: 100%; padding-top: 18px;">
-                  <button class="btn primary" onclick="OL.handleAddResource()">+ Add Resource</button>
+              <div class="modal-dot-key">
+                <div class="status-dot do-now"></div><span>Do Now</span>
+                <div class="status-dot do-later"></div><span>Do Later</span>
+                <div class="status-dot dont-do"></div><span>Don't Do</span>
+                <div class="status-dot doing"></div><span>In Process</span>
+                <div class="status-dot done"></div><span>Done</span>
+                <div class="modal-dot-help">
+                    Change status from function card, right-click to remove mapping.
+                </div>
               </div>
           </div>
 
           <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; width: 100%;">
-              ${filtered.length ? filtered.map(r => renderBusinessResourceCard(r)).join('') : `<div class="empty-hint" style="grid-column: 1/-1;">No resources found matching these filters.</div>`}
+              ${filtered.length ? filtered.map(r => renderBusinessResourceCard(r)).join('') : `<div class="empty-hint" style="grid-column: 1/-1;">No resources match these filters.</div>`}
           </div>
       `;
+
+      // 4. MAINTAIN FOCUS: If the user was typing, keep the cursor in the search box
+      if (searchEl && document.activeElement.id !== "resSearch") {
+          const newSearchEl = document.getElementById("resSearch");
+          if (newSearchEl) {
+              newSearchEl.focus();
+              newSearchEl.setSelectionRange(searchQuery.length, searchQuery.length);
+          }
+      }
   }
 
   function renderBusinessResourceCard(r) {
-      const statusClass = (r.status || 'do-now').toLowerCase().replace(/\s/g, '-');
+      const status = r.status || 'Do Now';
       const isMultiStep = r.category === 'multi-step';
+
+      const statusMap = {
+        "Do Now":    "status-dot do-now",
+        "Do Later":  "status-dot do-later",
+        "In Process": "status-dot doing",
+        "Done":       "status-dot done",
+        "Don’t Do":   "status-dot dont-do",
+    };
+      const dotClass = statusMap[status] || "dot do-now";
       
       return `
-          <div class="card resource-card clickable" data-res-id="${r.id}" onclick="OL.openResourceModal('${r.id}')">
+          <div class="card" data-res-id="${r.id}" onclick="OL.openResourceModal('${r.id}')">
               <div class="card-header">
                   <div class="card-header-left">
-                      <span class="type-icon" title="${r.type}">${isMultiStep ? '⛓️' : '📄'}</span>
-                      <div class="card-title single-line-text">${OL.utils.esc(r.name || "Untitled Resource")}</div>
+                      <div class="card-icon" title="${r.type}">${isMultiStep ? '⛓️' : '📄'}</div>
+                      <div class="card-title">${OL.utils.esc(r.name || "Untitled Resource")}</div>
                   </div>
-                  <div class="status-badge status-${statusClass}">${r.status || 'Do Now'}</div>
+                  <div class="card-header-right">
+                      <div class="${dotClass}" title="Status: ${status}"
+                      onclick="event.stopPropagation(); OL.openQuickStatusChange(event, '${r.id}')"></div>
+                      <div class="card-close" 
+                              onclick="event.stopPropagation(); OL.deleteResource('${r.id}')" 
+                              style="position:static; margin:0; padding:2px 6px;">×</div>
+                  </div>
               </div>
               
               <div class="card-body">
@@ -7032,6 +7112,27 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           </div>
       `;
   }
+
+  OL.openQuickStatusChange = function(e, resId) {
+      const res = getResourceById(resId);
+      if (!res) return;
+
+      // Use the same classes we defined in the CSS
+      openMappingDropdown({
+          anchorEl: e.currentTarget,
+          options: [
+              { id: 'Do Now', label: 'Do Now', className: 'status-label do-now' },
+              { id: 'Do Later', label: 'Do Later', className: 'status-label do-later' },
+              { id: 'In Process', label: 'In Process', className: 'status-label in-process' },
+              { id: 'Done', label: 'Done', className: 'status-label done' },
+              { id: 'Don’t Do', label: 'Don’t Do', className: 'status-label dont-do' }
+          ],
+          onSelect: (newStatus) => {
+              OL.updateResourceValue(resId, 'status', newStatus);
+          }
+      });
+  };
+
   OL.logResourceActivity = function(resource, note) {
       if (!resource.activityLog) resource.activityLog = [];
       resource.activityLog.unshift({
@@ -7059,7 +7160,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       OL.persist();
 
       // 4. Update card face immediately
-      renderResourcesGrid();
+      OL.renderResourcesGrid();
   };
 
   // Example update trigger
@@ -7074,7 +7175,16 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   };
 
   OL.setResourceFilter = function (type) {
-    currentResourceFilter = type || "all";
+      // 1. Update the global variable
+      currentResourceFilter = type || "all";
+      
+      // 2. Update the UI buttons active state (Optional CSS)
+      document.querySelectorAll('[data-res-type]').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-res-type') === currentResourceFilter);
+      });
+
+      // 3. Trigger the grid update
+      OL.renderResourcesGrid();
   };
 
   OL.deleteResource = function (id) {
@@ -7093,7 +7203,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     });
 
     OL.persist();
-    renderResourcesGrid();
+    OL.renderResourcesGrid();
   };
 
   // ------------------------------------------------------------
@@ -7184,20 +7294,6 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
               </div>
           ` : ''}
 
-          <div class="modal-section">
-              <label class="modal-section-label">Activity Log</label>
-              <div class="activity-log-container" style="max-height:150px; overflow:auto; background:rgba(0,0,0,0.1); padding:10px; border-radius:4px;">
-                  ${(r.activityLog || []).map(entry => `
-                      <div style="font-size:11px; margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.05);">
-                          <span class="muted">${new Date(entry.date).toLocaleDateString()}</span>: ${OL.utils.esc(entry.note)}
-                      </div>
-                  `).join('')}
-              </div>
-              <div style="display:flex; gap:5px; margin-top:5px;">
-                  <input type="text" id="newLogNote" placeholder="Add note..." class="access-input" style="flex:1;">
-                  <button class="btn small primary" onclick="OL.addLogEntry('${r.id}')">Add</button>
-              </div>
-          </div>
           <div class="modal-row">
             <div class="modal-column">
               <label class="modal-section-label">Type</label>
@@ -7253,6 +7349,21 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           onblur="OL.updateResourceValue('${r.id}', 'link', this.value)">
 
           <div id="resPreviewBlock" style="margin-top:10px;">${iframeHtml}</div>
+          
+          <div class="modal-section">
+              <label class="modal-section-label">Activity Log</label>
+              <div class="activity-log-container" style="max-height:150px; overflow:auto; background:rgba(0,0,0,0.1); padding:10px; border-radius:4px;">
+                  ${(r.activityLog || []).map(entry => `
+                      <div style="font-size:11px; margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                          <span class="muted">${new Date(entry.date).toLocaleDateString()}</span>: ${OL.utils.esc(entry.note)}
+                      </div>
+                  `).join('')}
+              </div>
+              <div style="display:flex; gap:5px; margin-top:5px;">
+                  <input type="text" id="newLogNote" placeholder="Add note..." class="access-input" style="flex:1;">
+                  <button class="btn small primary" onclick="OL.addLogEntry('${r.id}')">Add</button>
+              </div>
+          </div>
         </div>
       `;
   }
@@ -7286,7 +7397,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       // 4. Refresh UI
       // We re-open the modal because the layout needs to change (show/hide steps)
       OL.openResourceModal(id); 
-      renderResourcesGrid();
+      OL.renderResourcesGrid();
   };
 
   /**
@@ -7301,7 +7412,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           .filter(t => t !== "");
       
       OL.persist();
-      renderResourcesGrid();
+      OL.renderResourcesGrid();
   };
 
   // 1. Add new step logic
@@ -7608,7 +7719,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     activeOnClose = () => {
       if (!resource._draft) return;
       state.resources = state.resources.filter((r) => r !== resource);
-      renderResourcesGrid();
+      OL.renderResourcesGrid();
     };
 
     function commitIfNeeded(val) {
@@ -7616,7 +7727,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       created = true;
       delete resource._draft;
       OL.persist();
-      renderResourcesGrid();
+      OL.renderResourcesGrid();
     }
 
     // ⬇️ PLACEHOLDER LOGIC START ⬇️
@@ -7654,7 +7765,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         commitIfNeeded(newName);
         resource.name = newName;
         OL.persist();
-        renderResourcesGrid();
+        OL.renderResourcesGrid();
       });
 
       // clean stray <br>
@@ -7673,7 +7784,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           if (!resource._draft) {
             resource.notes = notesEl.value;
             OL.persist();
-            renderResourcesGrid();
+            OL.renderResourcesGrid();
           }
         }, 200),
       );
@@ -7802,6 +7913,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       return {
           id: 'ht-' + Date.now(),
           name: "New SOP Guide",
+          visibility: "Internal Only", // "Internal Only" or "Client Facing"
           resourceCategory: "Internal Business", // "Internal Business" or "Client Project"
           businessCategory: "Admin", // Admin, Project Management, Business Initiatives, Marketing, Team Management
           lifecycleStage: "New Leads", // New Leads, Introductory Call, etc.
@@ -7871,7 +7983,12 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           </div>
 
           <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
-              ${filtered.length > 0 ? filtered.map(ht => `
+              ${filtered.length > 0 ? filtered.map(ht => {
+                    const visibilityBadge = ht.visibility === 'Client Facing' 
+                    ? '<span class="badge face-client">🌍 Client</span>' 
+                    : '<span class="badge face-internal">🔒 Internal</span>';
+              
+              return `
                   <div class="card clickable" onclick="OL.openHowToModal('${ht.id}')">
                       <div class="card-header">
                           <div class="badge ${ht.visibility === 'Client Facing' ? 'face-client' : 'face-internal'}">
@@ -7886,7 +8003,8 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                           </div>
                       </div>
                   </div>
-              `).join('') : `
+                  `;
+              }).join('') : `
                   <div class="empty-placeholder" style="grid-column: 1/-1; text-align: center; padding: 50px; border: 2px dashed var(--line);">
                       <p class="muted">Your instructional library is empty.</p>
                       <button class="btn soft" onclick="OL.addNewHowTo()">Create Your First SOP</button>
@@ -7948,6 +8066,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
   // Attach to OL so it can be called from internal logic if needed
   OL.renderHowToMappings = renderHowToMappings;
+  
   OL.openHowToModal = function(id) {
       const ht = window.OL.state.howToLibrary.find(i => i.id === id);
       if (!ht) return;
@@ -7978,74 +8097,94 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
       const html = `
         <div class="modal-head">
-            <div class="modal-title-text" 
-              contenteditable="true"
-              data-placeholder="New How To" 
-              onblur="OL.updateHowTo('${id}', 'name', this.textContent)"
-              onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }"
-              >${esc(ht.name || "")}
-            </div>
-            <div class="spacer"></div>
-            <div class="status-pill ${ht.status === 'Complete' ? 'done' : 'progress'}">${ht.status}</div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+          <div class="print-row-top">
+              <div class="print-col-title">
+                  <div class="modal-title-text" contenteditable="true" data-placeholder="New How To" 
+                      onblur="OL.updateHowTo('${id}', 'name', this.textContent)">${esc(ht.name)}</div>
+              </div>
+
+              <div class="print-col-categories">
+                  <div class="print-meta-group">
+                      <span class="print-value">${ht.resourceCategory || 'Not Selected'} -  ${ht.resourceCategory === 'Internal Business' ? (ht.businessCategory || 'Not Selected') : (ht.lifecycleStage || 'Not Selected')}</span>
+                  </div>
+              </div>
+          </div>
+          
+          <div class="modal-title-text screen-only" contenteditable="true" data-placeholder="New How To" 
+            onblur="OL.updateHowTo('${id}', 'name', this.textContent)">${esc(ht.name)}</div>
+          <div class="spacer screen-only"></div>
+
+          <div class="header-dropdown-group" style="display: flex; gap: 10px; align-items: center; margin-right: 15px;">
+              
+              <select onchange="OL.updateHowTo('${id}', 'visibility', this.value); OL.renderHowToLibrary();" class="modal-select xsmall">
+                  <option value="Internal Only" ${ht.visibility === 'Internal Only' ? 'selected' : ''}>🔒 Internal Only</option>
+                  <option value="Client Facing" ${ht.visibility === 'Client Facing' ? 'selected' : ''}>🌍 Client Facing</option>
+              </select>
+
+              <select onchange="OL.updateHowTo('${id}', 'status', this.value); OL.openHowToModal('${id}')" 
+                      class="modal-select xsmall status-select ${(ht.status || 'Pending').toLowerCase().replace(' ', '-')}">
+                  ${["Pending", "In Progress", "Complete"].map(s => `
+                      <option value="${s}" ${ht.status === s ? 'selected' : ''}>${s}</option>
+                  `).join('')}
+              </select>
+          </div>
+
+          <button class="btn small soft" style="margin-right: 8px;" 
+                  onclick="OL.prepareAndPrint()">
+              🖨️ Print to PDF
+          </button>
+          <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <div class="modal-row">
-                <div class="modal-column">
+            <div class="modal-row category-selection-row">
+                <div class="modal-column modal-section">
                     <label class="modal-section-label">Resource Category</label>
                     <select onchange="OL.updateHowTo('${id}', 'resourceCategory', this.value); OL.openHowToModal('${id}')" class="modal-select">
                         <option value="Internal Business" ${ht.resourceCategory === 'Internal Business' ? 'selected' : ''}>Internal Business</option>
                         <option value="Client Project" ${ht.resourceCategory === 'Client Project' ? 'selected' : ''}>Client Project</option>
                     </select>
                 </div>
-                <div class="modal-column">
-                    <label class="modal-section-label">Status</label>
-                    <select onchange="OL.updateHowTo('${id}', 'status', this.value); OL.openHowToModal('${id}')" class="modal-select">
-                        <option value="Pending" ${ht.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                        <option value="In Progress" ${ht.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-                        <option value="Complete" ${ht.status === 'Complete' ? 'selected' : ''}>Complete</option>
-                    </select>
-                </div>
-            </div>
-
-            ${ht.status === 'In Progress' ? `
-              <div class="modal-row highlight-row modal-section">
-                  <div class="modal-column modal-section">
-                      <label class="modal-section-label">Assign To</label>
-                      <button class="btn small soft btn-dropdown" onclick="OL.mapToHowTo('${id}', 'assignedTo')">
-                          👤 ${findTeamMemberById(ht.assignedTo)?.name || 'Select Member'}
-                      </button>
-                  </div>
-                  <div class="modal-column">
-                      <label class="modal-section-label">Due Date</label>
-                      <div class="due-config-trigger" onclick="OL.openHowToCalendar(this, '${id}')">
-                          <span class="due-icon">🕒</span>
-                          <span id="ht-date-display-${id}">${ht.dueDate || 'Set Date'}</span>
-                      </div>
-                  </div>
-              </div>
-          ` : ''}
-
-            <div class="modal-row modal-section">
                 <div class="modal-column modal-section">
                     <label class="modal-section-label">Business/Lifecycle</label>
-                    ${ht.resourceCategory === 'Internal Business' ? `
-                        <select onchange="OL.updateHowTo('${id}', 'businessCategory', this.value)" class="modal-select">
-                            ${["Admin","Project Management","Business Initiatives","Marketing","Team Management"].map(c => `<option ${ht.businessCategory === c ? 'selected' : ''}>${c}</option>`).join('')}
-                        </select>
-                    ` : `
-                        <select onchange="OL.updateHowTo('${id}', 'lifecycleStage', this.value)" class="modal-select">
-                            ${["New Leads","Introductory Call","Project Preparation","Project Implementation","Project Conclusion","Ongoing Maintenance","Project Cancellation","Coaching","Other"].map(s => `<option ${ht.lifecycleStage === s ? 'selected' : ''}>${s}</option>`).join('')}
-                        </select>
-                    `}
+                        ${ht.resourceCategory === 'Internal Business' ? `
+                            <select onchange="OL.updateHowTo('${id}', 'businessCategory', this.value)" class="modal-select">
+                                ${["Admin","Project Management","Business Initiatives","Marketing","Team Management"].map(c => 
+                                    `<option value="${c}" ${ht.businessCategory === c ? 'selected' : ''}>${c}</option>`
+                                ).join('')}
+                            </select>
+                        ` : `
+                            <select onchange="OL.updateHowTo('${id}', 'lifecycleStage', this.value)" class="modal-select">
+                                ${["New Leads","Introductory Call","Project Preparation","Project Implementation","Project Conclusion","Ongoing Maintenance","Project Cancellation","Coaching","Other"].map(s => 
+                                    `<option value="${s}" ${ht.lifecycleStage === s ? 'selected' : ''}>${s}</option>`
+                                ).join('')}
+                            </select>
+                        `}
+                    </div>
                 </div>
-                <div class="modal-column modal-section">
-                    <label class="modal-section-label">Created By</label>
-                    <button class="btn small soft btn-dropdown" onclick="OL.mapToHowTo('${id}', 'createdBy')">
-                        ${findTeamMemberById(ht.createdBy)?.name || 'System'}
-                    </button>
+                <div class="modal-row highlight-row modal-section">
+                    <div class="modal-column modal-section">
+                        <label class="modal-section-label">Created By</label>
+                        <div onclick="OL.mapToHowTo('${id}', 'createdBy')"
+                        class="btn small soft btn-dropdown">
+                            ${findTeamMemberById(ht.createdBy)?.name || 'System'}
+                        </div>
+                    </div>
+                    ${ht.status === 'In Progress' ? `
+                    <div class="modal-column modal-section">
+                        <label class="modal-section-label">Assign To</label>
+                        <div onclick="OL.mapToHowTo('${id}', 'assignedTo')" class="btn small soft btn-dropdown">
+                            👤 ${findTeamMemberById(ht.assignedTo)?.name || 'Select Member'}
+                        </div>
+                    </div>
+                    <div class="modal-column modal-section">
+                        <label class="modal-section-label">Due Date</label>
+                        <div class="due-config-trigger" onclick="OL.openHowToCalendar(this, '${id}')">
+                            <span class="due-icon">🕒</span>
+                            <span id="ht-date-display-${id}">${ht.dueDate || 'Set Date'}</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
+              ` : ''}
 
             <div class="modal-row modal-section">
                 <div class="modal-column modal-section">
@@ -8079,6 +8218,12 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
             <textarea class="modal-textarea small" onblur="OL.updateHowTo('${id}', 'limitations', this.value)">${esc(ht.limitations || "")}</textarea>
 
             <label class="modal-section-label">Instructions (Drag/Paste Images)</label>
+            <div class="editor-toolbar" style="margin-bottom: 8px; display: flex; gap: 8px; background: var(--panel-bg); padding: 5px; border-radius: 4px; border: 1px solid var(--line);">
+                <button class="btn small soft" title="Bold" onclick="document.execCommand('bold', false, null)"><b>B</b></button>
+                <button class="btn small soft" title="Italic" onclick="document.execCommand('italic', false, null)"><i>I</i></button>
+                <button class="btn small soft" title="List" onclick="document.execCommand('insertUnorderedList', false, null)">• List</button>
+                <button class="btn small soft" title="Upload Image" onclick="OL.triggerHowToImageUpload('${id}')">🖼️</button>
+            </div>
             <div id="htEditor" class="how-to-editor rich-text" contenteditable="true" onblur="OL.updateHowTo('${id}', 'instructions', this.innerHTML)">
                 ${ht.instructions || "Enter instructions..."}
             </div>
@@ -8089,6 +8234,61 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       renderHowToMappings(ht);
   };
 
+  OL.prepareAndPrint = function() {
+      // 1. Save any pending changes by blurring the editor
+      const editor = document.getElementById('htEditor');
+      if (editor) editor.blur();
+
+      // 2. Add a helper class to body for the CSS to hook into
+      document.body.classList.add('is-printing');
+
+      // 3. Small delay to allow the DOM to stabilize
+      setTimeout(() => {
+          window.print();
+          // 4. Remove the class after printing/canceling
+          document.body.classList.remove('is-printing');
+      }, 500);
+  };
+
+  // Function to handle manual file selection for images
+  OL.triggerHowToImageUpload = function(id) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = e => {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onload = event => {
+              const img = `<img src="${event.target.result}" style="max-width:100%; border-radius:8px; margin:10px 0; display:block;">`;
+              document.execCommand('insertHTML', false, img);
+              
+              // Auto-save the content immediately
+              const editor = document.getElementById('htEditor');
+              if(editor) OL.updateHowTo(id, 'instructions', editor.innerHTML);
+          };
+          reader.readAsDataURL(file);
+      };
+      input.click();
+  };
+
+  // Global listener for pasting images directly from the clipboard
+  document.addEventListener('paste', function(e) {
+      if (e.target.id === 'htEditor') {
+          const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+          for (const item of items) {
+              if (item.type.indexOf('image') !== -1) {
+                  const blob = item.getAsFile();
+                  const reader = new FileReader();
+                  reader.onload = event => {
+                      const img = `<img src="${event.target.result}" style="max-width:100%; border-radius:8px; margin:10px 0; display:block;">`;
+                      document.execCommand('insertHTML', false, img);
+                  };
+                  reader.readAsDataURL(blob);
+              }
+          }
+      }
+  });
+  
   OL.openHowToCalendar = function(anchorEl, htId) {
       const ht = window.OL.state.howToLibrary.find(i => i.id === htId);
       if (!ht) return;
@@ -8181,6 +8381,8 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
               ht.updatedDate = new Date().toISOString();
               
               OL.persist();
+              OL.openHowToModal(htId);
+              OL.renderHowToLibrary();
               
               // Trigger the renderer we built in the last step to update the UI
               if (typeof renderHowToMappings === "function") {
@@ -8374,17 +8576,19 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   };
 
   OL.updateHowTo = function(id, field, value) {
-      const item = window.OL.state.howToLibrary.find(i => i.id === id);
-      if (item) {
-          const oldVal = item[field];
-          item[field] = value;
-          
-          // Auto-log the change if it's a major field
-          if (field === 'visibility' || field === 'name') {
-              console.log(`How-To updated: ${field} changed to ${value}`);
-          }
-          
-          OL.persist();
+      const ht = window.OL.state.howToLibrary.find(i => i.id === id);
+      if (!ht) return;
+
+      // For the editor, we don't trim as much to preserve HTML whitespace
+      ht[field] = value;
+      
+      // Auto-update metadata
+      ht.updatedDate = new Date().toISOString();
+      
+      OL.persist();
+      
+      // Refresh card face in the background to show 'Content inside...' hint
+      if (field === 'instructions' || field === 'name') {
           OL.renderHowToLibrary();
       }
   };
@@ -8471,6 +8675,513 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       
       OL.persist();
       renderResourceHowToPills(res); // Refresh the UI
+  };
+
+  //--------------------------------------------------------------
+  // SCOPING SHEET
+  //--------------------------------------------------------------
+
+  const saved = OL.store.get("scopingRates") || {}
+
+  OL.state.scopingRates = {
+      baseHourlyRate: saved.baseHourlyRate || 300,
+      zap: { step: 0.5, codeVar: 1.5, ...(saved.zap || {}) },
+      emailCampaign: { email: 1.0, condition: 0.5, ...(saved.emailCampaign || {}) },
+      scheduler: { eventType: 1.0, teamMember: 0.5, ...(saved.scheduler || {}) },
+      form: { 
+          question: 0.2, condition: 0.5, email: 0.5, 
+          pdfPage: 2.0, signature: 0.2, addon: 1.0, 
+          ...(saved.form || {}) 
+      },
+      defaultHours: saved.defaultHours || 1.0
+  };
+
+  OL.openScopingRatesModal = function() {
+      const html = `
+          <div class="modal-head">
+              <div class="modal-title-text">Master Scoping & Pricing Library</div>
+              <div class="spacer"></div>
+              <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+          </div>
+          <div class="modal-body">
+              <div style="margin-bottom: 20px; padding: 15px; background: var(--nav-bg); border-radius: 8px;">
+                  <label class="modal-section-label" style="margin-top:0;">Global Base Hourly Rate ($)</label>
+                  <input type="number" class="access-input" style="font-size: .9rem; font-weight: bold; width: 150px;" 
+                      value="${state.scopingRates.baseHourlyRate}" 
+                      oninput="OL.updateMasterRate('baseHourlyRate', null, this.value)">
+                  <p class="muted small">This rate multiplies the calculated "Time Estimate" to generate the "Fee" column.</p>
+              </div>
+              
+              <div class="rates-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                  <div class="rate-group">
+                      <label class="modal-section-label">⚡ Zap Automation (Hours per unit)</label>
+                      ${renderRateInput('zap', 'step', 'Per Step')}
+                      ${renderRateInput('zap', 'codeVar', 'Per Code Var')}
+                  </div>
+                  <div class="rate-group">
+                      <label class="modal-section-label">✉️ Email Campaigns (Hours per unit)</label>
+                      ${renderRateInput('emailCampaign', 'email', 'Per Email')}
+                      ${renderRateInput('emailCampaign', 'condition', 'Per Condition')}
+                  </div>
+                  <div class="rate-group">
+                      <label class="modal-section-label">📝 Forms & Logic (Hours per unit)</label>
+                      ${renderRateInput('form', 'question', 'Question')}
+                      ${renderRateInput('form', 'condition', 'Condition')}
+                      ${renderRateInput('form', 'email', 'Email')}
+                      ${renderRateInput('form', 'pdfPage', 'PDF Page')}
+                      ${renderRateInput('form', 'signature', 'Signature')}
+                      ${renderRateInput('form', 'addOn', 'Add-On')}
+                  </div>
+                  <div class="rate-group">
+                      <label class="modal-section-label">📅 Schedulers (Hours per unit)</label>
+                      ${renderRateInput('scheduler', 'eventType', 'Event Type')}
+                      ${renderRateInput('scheduler', 'teamMember', 'Team Members')}
+                  </div>
+              </div>
+          </div>
+      `;
+      openModal(html);
+  };
+
+  // Internal Helper for the Modal Inputs
+  function renderRateInput(category, key, label) {
+      const val = state.scopingRates[category][key];
+      return `
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
+              <span class="small">${label}</span>
+              <input type="number" step="0.1" class="inline-input tiny" 
+                  value="${val}" 
+                  oninput="OL.updateMasterRate('${category}', '${key}', this.value)">
+          </div>
+      `;
+  }
+
+  OL.updateMasterRate = function(category, key, value) {
+      const val = parseFloat(value) || 0;
+
+      // 1. Update the state object
+      if (key === null) {
+          state.scopingRates[category] = val;
+      } else {
+          // Ensure the category object exists before assigning
+          if (!state.scopingRates[category]) state.scopingRates[category] = {};
+          state.scopingRates[category][key] = val;
+      }
+
+      // 2. IMMEDIATE PERSISTENCE
+      // We bypass the debounce here to ensure it saves before any potential refresh/crash
+      OL.store.set("scopingRates", state.scopingRates); 
+
+      // 3. AUTO-RECALCULATE UI
+      // This updates the "Calculated Effort" and footer totals while the modal is still open
+      if (typeof renderScopingSheets === "function") {
+          renderScopingSheets(); 
+      }
+  };
+
+  window.renderScopingSheets = function() {
+      const container = document.getElementById("section-scoping-sheet");
+      if (!container) return;
+
+      const activeScope = (state.scopingSheets && state.scopingSheets.length > 0) 
+          ? state.scopingSheets[0] : { lineItems: [] };
+
+      container.innerHTML = `
+          <div class="content-header">
+              <h2>Project Scoping & Financials</h2>
+              <div class="header-actions">
+                  <button class="btn small soft" onclick="OL.openScopingRatesModal()">📋 Pricing Library</button>
+                  <button class="btn primary" onclick="OL.addResourceToScope()">+ Add Resource</button>
+              </div>
+          </div>
+
+          <table class="scoping-table">
+              <thead>
+                  <tr>
+                      <th>Status</th>
+                      <th>Responsible</th>
+                      <th style="width:20%">Notes</th>
+                      <th style="width:25%">Long Description / Units</th>
+                      <th style="text-align:right">Fee ($)</th>
+                      <th style="text-align:right">Time (Hrs)</th>
+                      <th style="text-align:center">×</th>
+                  </tr>
+              </thead>
+              <tbody id="scoping-body">
+                  ${activeScope.lineItems.map((item, index) => renderDetailedScopeRow(item, index)).join('')}
+              </tbody>
+              <tfoot>
+                  <tr class="total-row">
+                      <td colspan="4" style="text-align:right"><strong>Total Project Estimate:</strong></td>
+                      <td id="total-scope-fee" style="text-align:right; color:var(--accent);"><strong>$0.00</strong></td>
+                      <td id="total-scope-hours" style="text-align:right"><strong>0.00 hrs</strong></td>
+                      <td></td>
+                  </tr>
+              </tfoot>
+          </table>
+      `;
+      updateScopeTotals();
+  };
+
+  function calculateRowTotal(item, type) {
+      const getValue = (val) => parseFloat(val) || 0;
+      const rates = state.scopingRates || {}; // Fallback to empty object
+      let hours = 0;
+
+      if (type === 'zap') {
+          hours = (getValue(item.steps) * (rates.zap?.step || 0)) + 
+                  (getValue(item.codeVars) * (rates.zap?.codeVar || 0));
+      } else if (type === 'emailCampaign') {
+          hours = (getValue(item.emails) * (rates.emailCampaign?.email || 0)) + 
+                  (getValue(item.conditions) * (rates.emailCampaign?.condition || 0));
+      } else if (type === 'scheduler') {
+          // FIX: Added optional chaining and default fallback
+          hours = (getValue(item.eventTypes) * (rates.scheduler?.eventType || 0)) + 
+                  (getValue(item.teamMembers) * (rates.scheduler?.teamMember || 0));
+      } else if (type === 'form') {
+          hours = (getValue(item.questions) * (rates.form?.question || 0)) + 
+                  (getValue(item.conditions) * (rates.form?.condition || 0)) + 
+                  (getValue(item.emails) * (rates.form?.email || 0)) + 
+                  (getValue(item.pdfPages) * (rates.form?.pdfPage || 0)) + 
+                  (getValue(item.signatures) * (rates.form?.signature || 0)) + 
+                  (getValue(item.addons) * (rates.form?.addon || 0));
+      } else {
+          hours = getValue(item.estimatedHours);
+      }
+
+      return isNaN(hours) ? "0.00" : parseFloat(hours).toFixed(2);
+  }
+
+  function renderDetailedScopeRow(item, index) {
+      const resource = state.resources.find(r => r.id === item.resourceId) || {};
+      const type = resource.type;
+      const hours = calculateRowTotal(item, type);
+      const fee = (hours * (state.scopingRates.baseHourlyRate || 0)).toFixed(2);
+
+      return `
+          <tr>
+              <td>
+                  <select class="modal-select xsmall" onchange="OL.updateScopeItem(${index}, 'status', this.value)">
+                      ${["Do Now", "Do Later", "Done", "Initial"].map(s => 
+                          `<option value="${s}" ${item.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                  </select>
+              </td>
+              <td>
+                  <select class="modal-select xsmall" onchange="OL.updateScopeItem(${index}, 'responsibleParty', this.value)">
+                      ${["Sphynx", "Client", "Joint"].map(p => 
+                          `<option value="${p}" ${item.responsibleParty === p ? 'selected' : ''}>${p}</option>`).join('')}
+                  </select>
+              </td>
+              <td>
+                  <input type="text" class="access-input small" value="${esc(item.notes || '')}" 
+                      placeholder="Short note..." onblur="OL.updateScopeItem(${index}, 'notes', this.value)">
+              </td>
+              <td>
+                  <div style="font-weight:bold; margin-bottom:5px;">${esc(resource.name)}</div>
+                  <div class="input-group-row">${getInputsForType(type, item, index)}</div>
+              </td>
+              <td style="text-align:right; font-weight:bold;">$${fee}</td>
+              <td id="row-calc-${index}" style="text-align:right;">${hours} hrs</td>
+              <td style="text-align:center;">
+                  <div class="card-close" onclick="OL.removeScopeItem(${index})">×</div>
+              </td>
+          </tr>
+      `;
+  }
+
+  OL.confirmScopeAddition = function(resId) {
+      const resource = state.resources.find(r => r.id === resId);
+      if (!state.scopingSheets[0]) {
+          state.scopingSheets.push({ id: Date.now(), lineItems: [] });
+      }
+      
+      // Pre-initialize fields based on type to prevent NaN immediately
+      const newItem = {
+          resourceId: resId,
+          complexity: 'Medium',
+          estimatedHours: 0,
+          steps: 0, codeVars: 0,       // Zap fields
+          emails: 0, conditions: 0,    // Campaign fields
+          eventTypes: 0, teamMembers: 0, // Scheduler fields
+          questions: 0, pdfPages: 0, signatures: 0, addons: 0 // Form fields
+      };
+      
+      state.scopingSheets[0].lineItems.push(newItem);
+      closeModal();
+      renderScopingSheets();
+      OL.persist();
+  };
+
+  OL.updateScopeItem = function(index, field, value) {
+      const scope = state.scopingSheets[0];
+      if (scope && scope.lineItems[index]) {
+          scope.lineItems[index][field] = parseFloat(value) || 0;
+          OL.persist();
+          
+          // Update the row total and the footer total without a full refresh
+          const type = state.resources.find(r => r.id === scope.lineItems[index].resourceId)?.type;
+          document.getElementById(`row-calc-${index}`).textContent = calculateRowTotal(scope.lineItems[index], type) + " hrs";
+          updateScopeTotals();
+      }
+  };
+
+  // Helper to keep the HTML clean
+  function renderSmallInput(index, key, value, label) {
+      return `
+          <div class="mini-input-wrap">
+              <span class="mini-label">${label}</span>
+              <input type="number" class="inline-input tiny" 
+                  value="${value || 0}" 
+                  oninput="OL.updateScopeItem(${index}, '${key}', this.value)">
+          </div>
+      `;
+  }
+
+  OL.addResourceToScope = function() {
+      // 1. Prepare the picker HTML
+      const pickerHtml = `
+          <div class="modal-section">
+              <label class="modal-section-label">Select Resource to Add</label>
+              <div class="resource-picker" style="display: grid; gap: 10px; max-height: 400px; overflow-y: auto;">
+                  ${state.resources.map(r => `
+                      <div class="picker-item" 
+                          style="padding: 12px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;"
+                          onclick="OL.confirmScopeAddition('${r.id}')">
+                          <div style="font-weight: 600;">${esc(r.name)}</div>
+                          <div class="small muted">${esc(r.type)}</div>
+                      </div>
+                  `).join('')}
+                  ${state.resources.length === 0 ? '<div class="empty-hint">No resources found in your library.</div>' : ''}
+              </div>
+          </div>
+      `;
+
+      // 2. USE openModal INSTEAD OF showModal
+      openModal(`
+          <div class="modal-head">
+              <div class="modal-title-text">Add to Scope</div>
+              <div class="spacer"></div>
+              <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+          </div>
+          <div class="modal-body">
+              ${pickerHtml}
+          </div>
+      `);
+  };
+
+  OL.confirmScopeAddition = function(resId) {
+      if (!state.scopingSheets[0]) {
+          state.scopingSheets.push({ id: Date.now(), lineItems: [] });
+      }
+      
+      state.scopingSheets[0].lineItems.push({
+          resourceId: resId,
+          estimatedHours: 0,
+          complexity: 'Medium'
+      });
+      
+      closeModal();
+      renderScopingSheets();
+      OL.persist();
+  };
+
+  function updateScopeTotals() {
+      const scope = state.scopingSheets[0];
+      if (!scope || !scope.lineItems) return;
+
+      let totalHrs = 0;
+      const rates = state.scopingRates;
+
+      scope.lineItems.forEach(item => {
+          const resource = state.resources.find(r => r.id === item.resourceId);
+          if (resource) {
+              // Re-run the row calculation using current library rates
+              totalHrs += parseFloat(calculateRowTotal(item, resource.type));
+          }
+      });
+
+      const baseRate = parseFloat(rates.baseHourlyRate) || 0;
+      const totalFee = totalHrs * baseRate;
+
+      // Update DOM elements
+      const hrsEl = document.getElementById("total-scope-hours");
+      const feeEl = document.getElementById("total-scope-fee");
+
+      if (hrsEl) hrsEl.innerHTML = `<strong>${totalHrs.toFixed(2)} hrs</strong>`;
+      if (feeEl) feeEl.innerHTML = `<strong>$${totalFee.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>`;
+  }
+
+  OL.updateScopeItem = function(index, field, value) {
+      const scope = state.scopingSheets[0];
+      if (scope && scope.lineItems[index]) {
+          // 1. Update the value in state
+          scope.lineItems[index][field] = parseFloat(value) || 0;
+          
+          // 2. Persist immediately
+          OL.persist();
+          
+          // 3. TARGETED UI UPDATE: Re-calculate just this row's display
+          const resource = state.resources.find(r => r.id === scope.lineItems[index].resourceId);
+          const rowHrs = calculateRowTotal(scope.lineItems[index], resource?.type);
+          const rowFee = (rowHrs * (state.scopingRates.baseHourlyRate || 0)).toFixed(2);
+          
+          const hrsCell = document.getElementById(`row-calc-${index}`);
+          const feeCell = hrsCell?.previousElementSibling; // Finds the Fee cell next to it
+
+          if (hrsCell) hrsCell.textContent = `${rowHrs} hrs`;
+          if (feeCell) feeCell.textContent = `$${rowFee}`;
+
+          // 4. GLOBAL UI UPDATE: Refresh the footer totals
+          updateScopeTotals();
+      }
+  };
+
+  OL.removeScopeItem = function(index) {
+      const scope = state.scopingSheets[0];
+      if (scope && confirm("Remove this resource from the estimate?")) {
+          scope.lineItems.splice(index, 1);
+          OL.persist();
+          renderScopingSheets(); // Full re-render to update indices
+      }
+  };
+
+  function getInputsForType(type, item, index) {
+      // This function returns the specific numeric inputs based on the resource type
+      if (type === 'zap') {
+          return `
+              ${renderSmallInput(index, 'steps', item.steps, '# Steps')}
+              ${renderSmallInput(index, 'codeVars', item.codeVars, '# Code Vars')}
+          `;
+      } else if (type === 'emailCampaign') {
+          return `
+              ${renderSmallInput(index, 'emails', item.emails, '# Emails')}
+              ${renderSmallInput(index, 'conditions', item.conditions, '# Conditions')}
+          `;
+      } else if (type === 'scheduler') {
+          return `
+              ${renderSmallInput(index, 'eventTypes', item.eventTypes, '# Event Types')}
+              ${renderSmallInput(index, 'teamMembers', item.teamMembers, '# Team Members')}
+          `;
+      } else if (type === 'form') {
+          return `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100%;">
+                  ${renderSmallInput(index, 'questions', item.questions, '# Ques')}
+                  ${renderSmallInput(index, 'conditions', item.conditions, '# Cond')}
+                  ${renderSmallInput(index, 'emails', item.emails, '# Emails')}
+                  ${renderSmallInput(index, 'pdfPages', item.pdfPages, '# PDF Pgs')}
+                  ${renderSmallInput(index, 'signatures', item.signatures, '# Sigs')}
+                  ${renderSmallInput(index, 'addons', item.addons, '# Add-ons')}
+              </div>
+          `;
+      } else {
+          // Fallback for docs or anything else
+          return renderSmallInput(index, 'estimatedHours', item.estimatedHours, 'Hours');
+      }
+  }
+
+  function renderSmallInput(index, key, value, label) {
+      // Standardizes the look of the little unit boxes inside the table
+      return `
+          <div class="mini-input-wrap" style="display: flex; flex-direction: column; margin-right: 8px; margin-bottom: 4px;">
+              <span class="mini-label" style="font-size: 9px; text-transform: uppercase; color: var(--text-muted);">${label}</span>
+              <input type="number" class="inline-input tiny" style="width: 55px; font-size: 11px; padding: 2px 4px; background: transparent; border: 1px solid var(--line); color: var(--text-main);"
+                  value="${value || 0}" 
+                  oninput="OL.updateScopeItem(${index}, '${key}', this.value)">
+          </div>
+      `;
+  }
+  //--------------------------------------------------------------
+  // SPHYNX TASKS
+  //--------------------------------------------------------------
+  window.renderSphynxTasks = function() {
+      const container = document.getElementById("section-sphynx-tasks");
+      if (!container) return;
+
+      // Filter SOPs that are "In Progress" or have "Updates Needed"
+      const tasks = state.howToLibrary.filter(ht => 
+          ht.status === "In Progress" || (ht.updatesNeeded && ht.updatesNeeded.length > 0)
+      );
+
+      container.innerHTML = `
+          <div class="content-header">
+              <h2>Sphynx Internal Tasks</h2>
+              <p>SOPs requiring updates or currently in progress.</p>
+          </div>
+          <div class="todo-list">
+              ${tasks.map(ht => `
+                  <div class="todo-item card" onclick="OL.openHowToModal('${ht.id}')">
+                      <div class="todo-main">
+                          <span class="pill small warn">SOP Update</span>
+                          <strong>${esc(ht.name)}</strong>
+                          <div class="small muted">Owner: ${findTeamMemberById(ht.assignedTo)?.name || 'Unassigned'}</div>
+                      </div>
+                      <div class="todo-tags">
+                          ${(ht.updatesNeeded || []).map(tag => `<span class="pill small soft">${tag}</span>`).join('')}
+                      </div>
+                      <div class="todo-due ${ht.dueDate && ht.dueDate < new Date().toISOString() ? 'overdue' : ''}">
+                          ${ht.dueDate ? new Date(ht.dueDate).toLocaleDateString() : 'No Due Date'}
+                      </div>
+                  </div>
+              `).join('')}
+              ${tasks.length === 0 ? '<div class="empty-hint">No pending SOP tasks!</div>' : ''}
+          </div>
+      `;
+  };
+
+  //--------------------------------------------------------------
+  // CLIENT TASKS
+  //--------------------------------------------------------------
+  window.renderClientTasks = function() {
+      const container = document.getElementById("section-client-tasks");
+      if (!container) return;
+
+      // 1. Identify required datapoints from all mapped SOPs/Resources
+      const requiredDpIds = new Set();
+      state.howToLibrary.forEach(ht => {
+          (ht.clientItemsNeeded || []).forEach(id => requiredDpIds.add(id));
+      });
+
+      const clientTasks = Array.from(requiredDpIds).map(id => {
+          const dp = state.datapoints.find(d => d.id === id);
+          return dp || null;
+      }).filter(Boolean);
+
+      container.innerHTML = `
+          <div class="content-header">
+              <div class="header-left">
+                  <h2>Client Requirements Checklist</h2>
+                  <p>Items automatically pulled from mapped SOPs and Resources.</p>
+              </div>
+              <button class="btn small soft" onclick="window.print()">🖨️ Export Client PDF</button>
+          </div>
+
+          <div class="task-list-container">
+              ${clientTasks.map(dp => `
+                  <div class="todo-item card">
+                      <div class="todo-main">
+                          <label class="check-item" style="font-size: 1.1rem;">
+                              <input type="checkbox" onchange="OL.toggleClientTask('${dp.id}')">
+                              <strong>${esc(dp.name)}</strong>
+                          </label>
+                          <div class="small muted" style="margin-left: 28px;">
+                              ${esc(dp.description || 'Please provide this information.')}
+                          </div>
+                      </div>
+                      <div class="todo-tags">
+                          <span class="pill small soft">${esc(dp.objectType || 'General')}</span>
+                      </div>
+                  </div>
+              `).join('')}
+              ${clientTasks.length === 0 ? '<div class="empty-hint">No items currently required from client.</div>' : ''}
+          </div>
+      `;
+  };
+
+  OL.toggleClientTask = function(dpId) {
+      // In a full build, this would update state.clientProjects[0].taskStatuses
+      console.log(`Received item: ${dpId}`);
+      // Optional: Auto-log this in the related Resource activity log
+      OL.persist();
   };
 
   // ------------------------------------------------------------
@@ -8713,7 +9424,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         state.resources = state.resources || [];
         state.resources.push(r);
 
-        renderResourcesGrid();
+        OL.renderResourcesGrid();
 
         // OPEN MODAL — MUST PASS (resource, true)
         OL.openResourceModal(r, true);
@@ -11998,19 +12709,22 @@ function handleRoute() {
     // 1. Identify all routes
     const isApps = hash === "" || hash === "#/apps" || hash === "#/";
     const isFunctions = hash.startsWith("#/functions");
-    const isFeatures = hash.startsWith("#/settings/features");
+    const isFeatures = hash.startsWith("#/features");
     const isAnalyze = hash.startsWith("#/analyze");
     const isIntegrations = hash.startsWith("#/integrations");
     const isCapabilities = hash.startsWith("#/triggers-actions");
-    const isCanonicalCaps = hash.startsWith("#/settings/canonical-capabilities");
+    const isCanonicalCaps = hash.startsWith("#/canonical-capabilities");
     const isResources = hash.startsWith("#/resources");
     const isWorkflows = hash.startsWith("#/workflows");
     const isHowTo = hash.startsWith("#/howto");
-    const isTeam = hash.startsWith("#/settings/team");
-    const isSegments = hash.startsWith("#/settings/segments");
-    const isDatapoints = hash.startsWith("#/settings/datapoints");
-    const isFolders = hash.startsWith("#/settings/folder-hierarchy");
-    const isNaming = hash.startsWith("#/settings/naming-conventions");
+    const isTeam = hash.startsWith("#/team");
+    const isSegments = hash.startsWith("#/segments");
+    const isDatapoints = hash.startsWith("#/datapoints");
+    const isFolders = hash.startsWith("#/folder-hierarchy");
+    const isNaming = hash.startsWith("#/naming-conventions");
+    const isScoping = hash.startsWith("#/scoping-sheet");
+    const isSphynxTasks = hash.startsWith("#/sphynx-tasks");
+    const isClientTasks = hash.startsWith("#/client-tasks");
 
     // 2. Clear stage: Hide ALL sections
     const allSections = main.querySelectorAll(".section");
@@ -12039,7 +12753,7 @@ function handleRoute() {
     }
     else if (isResources) {
         document.getElementById("section-resources").style.display = "block";
-        renderResourcesGrid();
+        OL.renderResourcesGrid();
     }
     else if (isAnalyze) {
         document.getElementById("section-analyze").style.display = "block";
@@ -12091,6 +12805,21 @@ function handleRoute() {
     else if (isNaming) {
         document.getElementById("section-naming-conventions").style.display = "block";
         renderNamingConventions();
+    }
+
+     else if (isScoping) {
+        document.getElementById("section-scoping-sheet").style.display = "block";
+        renderScopingSheets();
+    }
+
+     else if (isSphynxTasks) {
+        document.getElementById("section-sphynx-tasks").style.display = "block";
+        renderSphynxTasks();
+    }
+
+     else if (isClientTasks) {
+        document.getElementById("section-client-tasks").style.display = "block";
+        renderClientTasks();
     }
 
     // Toggle scroll resets
