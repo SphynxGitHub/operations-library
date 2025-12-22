@@ -1,4 +1,4 @@
-(() => {
+ (() => {
   // ------------------------------------------------------------
   // CORE NAMESPACE
   // ------------------------------------------------------------
@@ -1215,50 +1215,46 @@ document.addEventListener("selectionchange", () => {
     const root = document.getElementById("app-root");
     if (!root) return;
 
-              /*<a href="#/resources/email-templates" data-route>Email Templates</a>
-            <a href="#/resources/forms" data-route>Forms</a>
-            <a href="#/resources/scheduling" data-route>Scheduling</a>
-            <a href="#/resources/zaps" data-route>Zaps</a>
-            <a href="#/resources/email-campaigns" data-route>Email Campaigns</a>
-            <a href="#/resources/workflows" data-route>Workflows</a>*/
-
     root.innerHTML = `
-      <div class="app">
-        <aside class="sidebar">
-          <nav class="menu" id="nav">
+      <aside class="sidebar">
+        <div class="sidebar-toggle-area" style="padding: 10px; border-bottom: 1px solid var(--line);">
+          <button id="collapse-btn" class="btn small soft" onclick="OL.toggleSidebar()">
+            <span id="collapse-icon">◀</span>
+          </button>
+        </div>
+        <nav class="menu" id="nav">
+          <div class="group-title">Apps</div>
+            <a href="#/apps" title="Apps"><i>📱</i> <span>Apps</span></a>
+            <a href="#/functions" title="Functions"><i>⚙️</i> <span>Functions</span></a>
+            <a href="#/features" title="Features"><i>✨</i> <span>Features</span></a>
+            <a href="#/analyze" title="Analyze"><i>📈</i> <span>Analyze</span></a>
+          <div class="divider"></div>
 
-            <div class="group-title">Apps</div>
-            <a href="#/apps" data-route>Apps</a>
-            <a href="#/functions" data-route>Functions</a>
-            <a href="#/features" data-route>Features</a>
-            <a href="#/analyze" data-route>Analyze</a>
-            <div class="divider"></div>
+          <div class="group-title">Integrations</div>
+            <a href="#/integrations" title="Integrations"><i>🔗</i> <span>Integrations</span></a>
+            <a href="#/triggers-actions" title="Library"><i>⚡</i> <span>Library</span></a>
+            <a href="#/canonical-capabilities" title="Canonical Capabilities><i>💎</i> <span>Canonical</span></a>
+          <div class="divider"></div>
 
-            <div class="group-title">Integrations</div>
-            <a href="#/integrations" data-route>Integrations</a>
-            <a href="#/triggers-actions" data-route>Triggers & Actions Library</a>
-            <a href="#/canonical-capabilities" data-route>Canonical Capabilities</a>
-            <div class="divider"></div>
-            
-            <div class="group-title">Resources</div>
-            <a href="#/resources/documents" data-route>Resources</a>
-            <a href="#/workflows" data-route>Workflows Visualizer</a>
-            <a href="#/howto" data-route>How-To Library</a>
-            <div class="divider"></div>
+          <div class="group-title">Resources</div>
+            <a href="#/resources/documents" title="Resources><i>📂</i> <span>Resources</span></a>
+            <a href="#/workflows" title="Workflows"><i>🌿</i> <span>Workflows</span></a>
+            <a href="#/howto" title="How-To"><i>📚</i> <span>How-To</span></a>
+          <div class="divider"></div>
 
-            <div class="group-title">Scoping</div>
-            <a href="#/scoping-sheet">Scoping Sheet</a>
-            <a href="#/sphynx-tasks">Sphynx Tasks</a>
-            <a href="#/client-tasks">Client Tasks</a>
-            <div class="divider"></div>
-            
-            <div class="group-title">Settings</div>
-            <a href="#/team" data-route>Team</a>
-            <a href="#/segments" data-route>Segments</a>
-            <a href="#/datapoints" data-route>Datapoints</a>
-            <a href="#/folder-hierarchy" data-route>Folder Hierarchy</a>
-            <a href="#/naming-conventions" data-route>Naming Conventions</a>
-          </nav>
+          <div class="group-title">Scoping</div>
+            <a href="#/scoping-sheet" title="Scoping Sheet"><i>📊</i> <span>Scoping Sheet</span></a>
+            <a href="#/sphynx-tasks" title="Sphynx Tasks"><i>🐝</i> <span>Sphynx Tasks</span></a>
+            <a href="#/client-tasks" title="Client Tasks"><i>📋</i> <span>Client Tasks</span></a>
+          <div class="divider"></div>
+
+          <div class="group-title">Settings</div>
+            <a href="#/team" title="Team"><i>👥</i> <span>Team</span></a>
+            <a href="#/segments" title="Segments"><i>🎯</i> <span>Segments</span></a>
+            <a href="#/datapoints" title="Datapoints"><i>📍</i> <span>Datapoints</span></a>
+            <a href="#/folder-hierarchy" title="Folders"><i>🏗️</i> <span>Folders</span></a>
+            <a href="#/naming-conventions" title="Naming"><i>🏷️</i> <span>Naming</span></a>
+        </nav>
         </aside>
 
         <main id="mainContent">
@@ -1478,9 +1474,9 @@ document.addEventListener("selectionchange", () => {
 
             <section class="section" id="section-howto"></section>
 
-            <section class="section" id="section-scoping-sheet" style="display: none;"></div>
-            <section id="section-sphynx-tasks" class="section" style="display: none;"></div>
-            <section id="section-client-tasks" class="section" style="display: none;"></div>
+            <section class="section" id="section-scoping-sheet" style="display: none;"></section>
+            <section id="section-sphynx-tasks" class="section" style="display: none;"></section>
+            <section id="section-client-tasks" class="section" style="display: none;"></section>
 
           </main>
         </div>
@@ -1489,6 +1485,50 @@ document.addEventListener("selectionchange", () => {
 
     wireTopButtons();
   }
+
+  OL.toggleSidebar = function() {
+      const sidebar = document.querySelector('.sidebar');
+      const main = document.getElementById('mainContent');
+      const icon = document.getElementById('collapse-icon');
+      const labels = document.querySelectorAll('.nav-label');
+
+      if (!sidebar || !main) return;
+
+      // Toggle the class for CSS styling (like hiding text)
+      const isCollapsed = sidebar.classList.toggle('collapsed');
+
+      if (isCollapsed) {
+          // COLLAPSED STATE formatting
+          sidebar.style.width = "60px";
+          main.style.marginLeft = "60px";
+          if (icon) icon.textContent = '▶';
+          labels.forEach(l => l.style.display = 'none');
+      } else {
+          // EXPANDED STATE formatting
+          sidebar.style.width = "240px";
+          main.style.marginLeft = "240px";
+          if (icon) icon.textContent = '◀';
+          labels.forEach(l => l.style.display = 'inline');
+      }
+
+      // Persist the user's preference
+      localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+      // Help the browser recalculate grid layouts for your cards
+      window.dispatchEvent(new Event('resize'));
+  };
+
+  // Apply saved state on load - wrapped in a check
+  window.addEventListener('DOMContentLoaded', (event) => {
+      const saved = localStorage.getItem('sidebarCollapsed') === 'true';
+      const sidebar = document.querySelector('.sidebar');
+      const icon = document.getElementById('collapse-icon');
+
+      if (saved && sidebar) {
+          sidebar.classList.add('collapsed');
+          if (icon) icon.textContent = '▶';
+      }
+  });
   // ------------------------------------------------------------
   // APPS GRID
   // ------------------------------------------------------------
@@ -6884,7 +6924,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   // ------------------------------------------------------------
   window.OL.state.resources = OL.store.get("resources", defaultResources);
   // Inside your default data or initialization
-  const resourceStatuses = ["Do Now", "Do Later", "Don’t Do", "In Process", "Done"];
+  const resourceStatuses = ["Scoping", "Do Now", "Do Later", "Don’t Do", "In Process", "Done"];
   const parties = ["Sphynx", "Joint", "Client"];
 
   // New universal constructor
@@ -7029,11 +7069,12 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                   <label class="modal-section-label" style="margin-top:0">Filter Status</label>
                   <select onchange="window.OL.resFilterStatus = this.value; OL.renderResourcesGrid()" class="modal-select">
                       <option value="All" ${statusFilter === 'All' ? 'selected' : ''}>All Statuses</option>
-                      ${["Do Now", "Do Later", "Don't Do", "In Process", "Done"].map(s => 
+                      ${["Scoping", "Do Now", "Do Later", "Don't Do", "In Process", "Done"].map(s => 
                       `<option value="${s}" ${statusFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
                   </select>
               </div>
               <div class="modal-dot-key">
+                <div class="status-dot scoping"></div><span>Scoping</span>
                 <div class="status-dot do-now"></div><span>Do Now</span>
                 <div class="status-dot do-later"></div><span>Do Later</span>
                 <div class="status-dot dont-do"></div><span>Don't Do</span>
@@ -7065,6 +7106,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       const isMultiStep = r.category === 'multi-step';
 
       const statusMap = {
+        "Scoping":    "status-dot scoping",
         "Do Now":    "status-dot do-now",
         "Do Later":  "status-dot do-later",
         "In Process": "status-dot doing",
@@ -7121,6 +7163,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       openMappingDropdown({
           anchorEl: e.currentTarget,
           options: [
+              { id: 'Scoping', label: 'Scoping', className: 'status-label scoping' },
               { id: 'Do Now', label: 'Do Now', className: 'status-label do-now' },
               { id: 'Do Later', label: 'Do Later', className: 'status-label do-later' },
               { id: 'In Process', label: 'In Process', className: 'status-label in-process' },
@@ -7135,8 +7178,17 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
   OL.logResourceActivity = function(resource, note) {
       if (!resource.activityLog) resource.activityLog = [];
+      
+      const now = new Date();
+      
+      // Create the timestamp: e.g., "12/21/25 @ 4:52 PM"
+      const datePart = now.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: '2-digit' });
+      const timePart = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const fullStamp = `${datePart} @ ${timePart}`;
+
       resource.activityLog.unshift({
-          date: new Date().toISOString(),
+          date: now.toISOString(), // Used for internal sorting
+          displayDate: fullStamp,   // This is what we show in the UI
           note: note
       });
   };
@@ -7258,7 +7310,7 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
               <div class="modal-column">
                   <label class="modal-section-label">Status</label>
                   <select onchange="OL.updateResourceValue('${r.id}', 'status', this.value)" class="modal-select">
-                      ${["Do Now", "Do Later", "Don’t Do", "In Process", "Done"].map(s => 
+                      ${["Scoping", "Do Now", "Do Later", "Don’t Do", "In Process", "Done"].map(s => 
                           `<option value="${s}" ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}
                   </select>
               </div>
@@ -7350,16 +7402,33 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
           <div id="resPreviewBlock" style="margin-top:10px;">${iframeHtml}</div>
           
-          <div class="modal-section">
+         <div class="modal-section">
               <label class="modal-section-label">Activity Log</label>
-              <div class="activity-log-container" style="max-height:150px; overflow:auto; background:rgba(0,0,0,0.1); padding:10px; border-radius:4px;">
-                  ${(r.activityLog || []).map(entry => `
-                      <div style="font-size:11px; margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.05);">
-                          <span class="muted">${new Date(entry.date).toLocaleDateString()}</span>: ${OL.utils.esc(entry.note)}
-                      </div>
-                  `).join('')}
+              <div class="activity-log-container" style="max-height:200px; overflow:auto; background:rgba(0,0,0,0.2); padding:10px; border-radius:4px; border: 1px solid var(--line);">
+                  ${(r.activityLog || []).map(entry => {
+                      // Priority 1: Use our custom displayDate (MM/DD/YY @ HH:MM AM/PM)
+                      // Priority 2: Fallback to a standard string that includes time
+                      const timestamp = entry.displayDate || new Date(entry.date).toLocaleString([], { 
+                          year: '2-digit', 
+                          month: '2-digit', 
+                          day: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                      });
+
+                      return `
+                          <div style="font-size:11px; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                              <div style="color: var(--accent); font-weight: bold; margin-bottom: 2px;">
+                                  ${timestamp}
+                              </div>
+                              <div style="color: var(--text-main); line-height: 1.3;">
+                                  ${OL.utils.esc(entry.note)}
+                              </div>
+                          </div>
+                      `;
+                  }).join('')}
               </div>
-              <div style="display:flex; gap:5px; margin-top:5px;">
+              <div style="display:flex; gap:5px; margin-top:8px;">
                   <input type="text" id="newLogNote" placeholder="Add note..." class="access-input" style="flex:1;">
                   <button class="btn small primary" onclick="OL.addLogEntry('${r.id}')">Add</button>
               </div>
@@ -7447,19 +7516,15 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
   OL.addLogEntry = function(resId) {
       const input = document.getElementById('newLogNote');
-      const note = input ? input.value.trim() : "";
-      const res = getResourceById(resId);
-
-      if (res && note) {
-          res.activityLog = res.activityLog || [];
-          res.activityLog.unshift({
-              date: new Date().toISOString(),
-              note: note
-          });
+      const r = state.resources.find(res => res.id === resId); // Use state search
+      
+      if (r && input.value.trim()) {
+          // Use your centralized logging function to keep formatting identical
+          OL.logResourceActivity(r, input.value.trim());
           
-          input.value = ""; // Clear input
+          input.value = "";
           OL.persist();
-          OL.openResourceModal(resId); // Refresh modal to show new entry
+          OL.openResourceModal(resId);
       }
   };
 
@@ -7513,17 +7578,6 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           // Auto-log changes
           r.activityLog.push({ date: new Date().toISOString(), note: `Updated ${field} to ${value}` });
           OL.persist();
-      }
-  };
-
-  OL.addLogEntry = function(resId) {
-      const input = document.getElementById('newLogNote');
-      const r = getResourceById(resId);
-      if (r && input.value.trim()) {
-          r.activityLog.push({ date: new Date().toISOString(), note: input.value.trim() });
-          input.value = "";
-          OL.persist();
-          OL.openResourceModal(resId);
       }
   };
 
@@ -8697,124 +8751,213 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   };
 
   OL.openScopingRatesModal = function() {
-      const html = `
-          <div class="modal-head">
-              <div class="modal-title-text">Master Scoping & Pricing Library</div>
-              <div class="spacer"></div>
-              <button class="btn small soft" onclick="OL.closeModal()">Close</button>
-          </div>
-          <div class="modal-body">
-              <div style="margin-bottom: 20px; padding: 15px; background: var(--nav-bg); border-radius: 8px;">
-                  <label class="modal-section-label" style="margin-top:0;">Global Base Hourly Rate ($)</label>
-                  <input type="number" class="access-input" style="font-size: .9rem; font-weight: bold; width: 150px;" 
-                      value="${state.scopingRates.baseHourlyRate}" 
-                      oninput="OL.updateMasterRate('baseHourlyRate', null, this.value)">
-                  <p class="muted small">This rate multiplies the calculated "Time Estimate" to generate the "Fee" column.</p>
+        const html = `
+            <div class="modal-head">
+                <div class="modal-title-text">Master Scoping & Pricing Library</div>
+                <div class="spacer"></div>
+                <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px; padding: 15px; background: var(--nav-bg); border-radius: 8px;">
+                    <label class="modal-section-label" style="margin-top:0;">Global Base Hourly Rate ($)</label>
+                    <input type="number" class="access-input" style="font-size: .9rem; font-weight: bold; width: 150px;" 
+                        value="${state.scopingRates.baseHourlyRate}" 
+                        oninput="OL.updateMasterRate('baseHourlyRate', null, this.value)">
+                    <p class="muted small">This rate multiplies the calculated "Time Estimate" to generate the "Fee" column.</p>
+                </div>
+                
+                <div class="rates-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="rate-group">
+                        <label class="modal-section-label">⚡ Zap Automation (Hours per unit)</label>
+                        ${renderRateInput('zap', 'step', 'Per Step')}
+                        ${renderRateInput('zap', 'codeVar', 'Per Code Var')}
+                    </div>
+                    <div class="rate-group">
+                        <label class="modal-section-label">✉️ Email Campaigns (Hours per unit)</label>
+                        ${renderRateInput('emailCampaign', 'email', 'Per Email')}
+                        ${renderRateInput('emailCampaign', 'condition', 'Per Condition')}
+                    </div>
+                    <div class="rate-group">
+                        <label class="modal-section-label">📝 Forms & Logic (Hours per unit)</label>
+                        ${renderRateInput('form', 'question', 'Question')}
+                        ${renderRateInput('form', 'condition', 'Condition')}
+                        ${renderRateInput('form', 'email', 'Email')}
+                        ${renderRateInput('form', 'pdfPage', 'PDF Page')}
+                        ${renderRateInput('form', 'signature', 'Signature')}
+                        ${renderRateInput('form', 'addOn', 'Add-On')}
+                    </div>
+                    <div class="rate-group">
+                        <label class="modal-section-label">📅 Schedulers (Hours per unit)</label>
+                        ${renderRateInput('scheduler', 'eventType', 'Event Type')}
+                        ${renderRateInput('scheduler', 'teamMember', 'Team Members')}
+                    </div>
+                </div>
+            </div>
+        `;
+        openModal(html);
+    };
+
+    OL.toggleGroupByRound = function() {
+        OL.groupByRound = !OL.groupByRound;
+        renderScopingSheets();
+    };
+
+    function renderFilterBarHTML(uniqueRounds) {
+      return `
+          <div class="filter-bar" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap: wrap;">
+              <div class="filter-group">
+                  <span class="mini-label">Round</span>
+                  <select onchange="OL.setScopeFilter('round', this.value)" class="modal-select xsmall">
+                      <option value="all" ${OL.scopeFilters.round === 'all' ? 'selected' : ''}>All Rounds</option>
+                      ${uniqueRounds.map(r => `<option value="${r}" ${String(OL.scopeFilters.round) === String(r) ? 'selected' : ''}>Round ${r}</option>`).join('')}
+                  </select>
               </div>
               
-              <div class="rates-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                  <div class="rate-group">
-                      <label class="modal-section-label">⚡ Zap Automation (Hours per unit)</label>
-                      ${renderRateInput('zap', 'step', 'Per Step')}
-                      ${renderRateInput('zap', 'codeVar', 'Per Code Var')}
-                  </div>
-                  <div class="rate-group">
-                      <label class="modal-section-label">✉️ Email Campaigns (Hours per unit)</label>
-                      ${renderRateInput('emailCampaign', 'email', 'Per Email')}
-                      ${renderRateInput('emailCampaign', 'condition', 'Per Condition')}
-                  </div>
-                  <div class="rate-group">
-                      <label class="modal-section-label">📝 Forms & Logic (Hours per unit)</label>
-                      ${renderRateInput('form', 'question', 'Question')}
-                      ${renderRateInput('form', 'condition', 'Condition')}
-                      ${renderRateInput('form', 'email', 'Email')}
-                      ${renderRateInput('form', 'pdfPage', 'PDF Page')}
-                      ${renderRateInput('form', 'signature', 'Signature')}
-                      ${renderRateInput('form', 'addOn', 'Add-On')}
-                  </div>
-                  <div class="rate-group">
-                      <label class="modal-section-label">📅 Schedulers (Hours per unit)</label>
-                      ${renderRateInput('scheduler', 'eventType', 'Event Type')}
-                      ${renderRateInput('scheduler', 'teamMember', 'Team Members')}
-                  </div>
+              <div class="filter-group">
+                  <span class="mini-label">Type</span>
+                  <select onchange="OL.setScopeFilter('type', this.value)" class="modal-select xsmall">
+                      <option value="all" ${OL.scopeFilters.type === 'all' ? 'selected' : ''}>All Types</option>
+                      <option value="zap" ${OL.scopeFilters.type === 'zap' ? 'selected' : ''}>Zaps</option>
+                      <option value="form" ${OL.scopeFilters.type === 'form' ? 'selected' : ''}>Forms</option>
+                      <option value="emailCampaign" ${OL.scopeFilters.type === 'emailCampaign' ? 'selected' : ''}>Campaigns</option>
+                      <option value="scheduler" ${OL.scopeFilters.type === 'scheduler' ? 'selected' : ''}>Schedulers</option>
+                  </select>
               </div>
-          </div>
-      `;
-      openModal(html);
-  };
 
-  // Internal Helper for the Modal Inputs
-  function renderRateInput(category, key, label) {
-      const val = state.scopingRates[category][key];
-      return `
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
-              <span class="small">${label}</span>
-              <input type="number" step="0.1" class="inline-input tiny" 
-                  value="${val}" 
-                  oninput="OL.updateMasterRate('${category}', '${key}', this.value)">
+              <div class="filter-group">
+                  <span class="mini-label">Status</span>
+                  <select onchange="OL.setScopeFilter('status', this.value)" class="modal-select xsmall">
+                      <option value="all" ${OL.scopeFilters.status === 'all' ? 'selected' : ''}>All Statuses</option>
+                      <option value="Do Now" ${OL.scopeFilters.status === 'Do Now' ? 'selected' : ''}>Do Now</option>
+                      <option value="Do Later" ${OL.scopeFilters.status === 'Do Later' ? 'selected' : ''}>Do Later</option>
+                      <option value="Don't Do" ${OL.scopeFilters.status === "Don't Do" ? "selected" : ""}>Don't Do</option>
+                      <option value="Done" ${OL.scopeFilters.status === 'Done' ? 'selected' : ''}>Done</option>
+                      <option value="In Process" ${OL.scopeFilters.status === 'In Process' ? 'selected' : ''}>In Process</option>
+                  </select>
+              </div>
           </div>
       `;
   }
 
-  OL.updateMasterRate = function(category, key, value) {
-      const val = parseFloat(value) || 0;
+    // Internal Helper for the Modal Inputs
+    function renderRateInput(category, key, label) {
+        const val = state.scopingRates[category][key];
+        return `
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
+                <span class="small">${label}</span>
+                <input type="number" step="0.1" class="inline-input tiny" 
+                    value="${val}" 
+                    oninput="OL.updateMasterRate('${category}', '${key}', this.value)">
+            </div>
+        `;
+    }
 
-      // 1. Update the state object
-      if (key === null) {
-          state.scopingRates[category] = val;
-      } else {
-          // Ensure the category object exists before assigning
-          if (!state.scopingRates[category]) state.scopingRates[category] = {};
-          state.scopingRates[category][key] = val;
-      }
+    OL.updateMasterRate = function(category, key, value) {
+        const val = parseFloat(value) || 0;
 
-      // 2. IMMEDIATE PERSISTENCE
-      // We bypass the debounce here to ensure it saves before any potential refresh/crash
-      OL.store.set("scopingRates", state.scopingRates); 
+        // 1. Update the state object
+        if (key === null) {
+            state.scopingRates[category] = val;
+        } else {
+            // Ensure the category object exists before assigning
+            if (!state.scopingRates[category]) state.scopingRates[category] = {};
+            state.scopingRates[category][key] = val;
+        }
 
-      // 3. AUTO-RECALCULATE UI
-      // This updates the "Calculated Effort" and footer totals while the modal is still open
-      if (typeof renderScopingSheets === "function") {
-          renderScopingSheets(); 
-      }
-  };
+        // 2. IMMEDIATE PERSISTENCE
+        // We bypass the debounce here to ensure it saves before any potential refresh/crash
+        OL.store.set("scopingRates", state.scopingRates); 
 
-  window.renderScopingSheets = function() {
+        // 3. AUTO-RECALCULATE UI
+        // This updates the "Calculated Effort" and footer totals while the modal is still open
+        if (typeof renderScopingSheets === "function") {
+            renderScopingSheets(); 
+        }
+    };
+
+    window.renderScopingSheets = function() {
       const container = document.getElementById("section-scoping-sheet");
       if (!container) return;
 
       const activeScope = (state.scopingSheets && state.scopingSheets.length > 0) 
           ? state.scopingSheets[0] : { lineItems: [] };
 
+      // 1. DYNAMIC ROUNDS: Pull from ALL items before filtering
+      const allRounds = activeScope.lineItems.map(item => parseInt(item.projectRound) || 1);
+      const uniqueRounds = [...new Set(allRounds)].sort((a, b) => a - b);
+
+      // 2. APPLY FILTERS
+      const filteredItems = activeScope.lineItems.filter(item => {
+          const resource = state.resources.find(r => r.id === item.resourceId);       
+          const matchesRound = OL.scopeFilters.round === 'all' || 
+                              String(item.projectRound || 1) === String(OL.scopeFilters.round);      
+          const matchesType = OL.scopeFilters.type === 'all' || 
+                              resource?.type === OL.scopeFilters.type;
+          const matchesStatus = OL.scopeFilters.status === 'all' || 
+                                item.status === OL.scopeFilters.status;
+          return matchesRound && matchesType && matchesStatus;
+      });
+
+      // 3. GROUP BY ROUND LOGIC
+      let tableContentHTML = "";
+      if (OL.groupByRound) {
+          // Render sections by round
+          const roundsToShow = OL.scopeFilters.round === 'all' ? uniqueRounds : [parseInt(OL.scopeFilters.round)];
+          
+          roundsToShow.forEach(r => {
+              const itemsInRound = filteredItems.filter(i => (parseInt(i.projectRound) || 1) === r);
+              if (itemsInRound.length > 0) {
+                  tableContentHTML += `
+                      <tr class="round-header-row">
+                          <td colspan="7" style="background: var(--nav-bg); padding: 10px; font-weight: bold; color: var(--accent);">
+                              PROJECT ROUND ${r}
+                          </td>
+                      </tr>
+                      ${itemsInRound.map((item, idx) => {
+                          const originalIdx = activeScope.lineItems.indexOf(item);
+                          return renderDetailedScopeRow(item, originalIdx);
+                      }).join('')}
+                  `;
+              }
+          });
+      } else {
+          // Standard flat list
+          tableContentHTML = filteredItems.map((item, idx) => {
+            const originalIdx = activeScope.lineItems.findIndex(li => li.resourceId === item.resourceId);
+            return renderDetailedScopeRow(item, originalIdx);
+          }).join('');
+      }
+
+      // 4. INJECT HTML (with new Toggle Button)
       container.innerHTML = `
           <div class="content-header">
               <h2>Project Scoping & Financials</h2>
               <div class="header-actions">
+                  <button class="btn small ${OL.groupByRound ? 'primary' : 'soft'}" 
+                      onclick="OL.toggleGroupByRound()">📦 Group by Round</button>
                   <button class="btn small soft" onclick="OL.openScopingRatesModal()">📋 Pricing Library</button>
                   <button class="btn primary" onclick="OL.addResourceToScope()">+ Add Resource</button>
               </div>
           </div>
-
+          ${renderFilterBarHTML(uniqueRounds)}
           <table class="scoping-table">
               <thead>
                   <tr>
-                      <th>Status</th>
-                      <th>Responsible</th>
-                      <th style="width:20%">Notes</th>
-                      <th style="width:25%">Long Description / Units</th>
-                      <th style="text-align:right">Fee ($)</th>
-                      <th style="text-align:right">Time (Hrs)</th>
-                      <th style="text-align:center">×</th>
+                      <th>Status</th><th>Responsible</th><th>Notes</th>
+                      <th style="width:25%">Description / Units</th>
+                      <th style="text-align:right">Fee</th><th style="text-align:right">Time</th><th>×</th>
                   </tr>
               </thead>
-              <tbody id="scoping-body">
-                  ${activeScope.lineItems.map((item, index) => renderDetailedScopeRow(item, index)).join('')}
-              </tbody>
+              <tbody>${tableContentHTML}</tbody>
               <tfoot>
-                  <tr class="total-row">
-                      <td colspan="4" style="text-align:right"><strong>Total Project Estimate:</strong></td>
-                      <td id="total-scope-fee" style="text-align:right; color:var(--accent);"><strong>$0.00</strong></td>
-                      <td id="total-scope-hours" style="text-align:right"><strong>0.00 hrs</strong></td>
+                  <tr class="total-row" style="border-top: 2px solid var(--line);">
+                      <td colspan="4" style="text-align:right; padding: 15px;">
+                          <strong>Project Totals:</strong>
+                      </td>
+                      <td id="total-scope-fee" style="text-align:right; font-weight:bold;">
+                          </td>
+                      <td id="total-scope-hours" style="text-align:right; font-weight:bold;">
+                          </td>
                       <td></td>
                   </tr>
               </tfoot>
@@ -8852,42 +8995,112 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       return isNaN(hours) ? "0.00" : parseFloat(hours).toFixed(2);
   }
 
-  function renderDetailedScopeRow(item, index) {
+ function renderDetailedScopeRow(item, index) {
+      const isClient = OL.viewMode === 'client';
       const resource = state.resources.find(r => r.id === item.resourceId) || {};
       const type = resource.type;
       const hours = calculateRowTotal(item, type);
       const fee = (hours * (state.scopingRates.baseHourlyRate || 0)).toFixed(2);
 
+      // Filter statuses based on view mode
+      const internalStatuses = ["Scoping", "Initial", "In Process", "Done", "Do Now", "Do Later", "Don't Do"];
+      const clientStatuses = ["Do Now", "Do Later", "Don't Do"];
+      const activeStatusList = isClient ? clientStatuses : internalStatuses;
+
       return `
-          <tr>
+          <tr class="${isClient ? 'client-view-row' : ''}">
               <td>
                   <select class="modal-select xsmall" onchange="OL.updateScopeItem(${index}, 'status', this.value)">
-                      ${["Do Now", "Do Later", "Done", "Initial"].map(s => 
+                      ${activeStatusList.map(s => 
                           `<option value="${s}" ${item.status === s ? 'selected' : ''}>${s}</option>`).join('')}
                   </select>
               </td>
+
               <td>
                   <select class="modal-select xsmall" onchange="OL.updateScopeItem(${index}, 'responsibleParty', this.value)">
                       ${["Sphynx", "Client", "Joint"].map(p => 
                           `<option value="${p}" ${item.responsibleParty === p ? 'selected' : ''}>${p}</option>`).join('')}
                   </select>
               </td>
+
               <td>
                   <input type="text" class="access-input small" value="${esc(item.notes || '')}" 
-                      placeholder="Short note..." onblur="OL.updateScopeItem(${index}, 'notes', this.value)">
+                      placeholder="Short note..." 
+                      onblur="OL.updateScopeItem(${index}, 'notes', this.value, true)">
               </td>
+
               <td>
-                  <div style="font-weight:bold; margin-bottom:5px;">${esc(resource.name)}</div>
-                  <div class="input-group-row">${getInputsForType(type, item, index)}</div>
+                  <div class="row-title" style="font-weight:bold; cursor:pointer; color:var(--accent);" 
+                      onclick="OL.openResourceModal('${resource.id}')">
+                      ${esc(resource.name)}
+                  </div>
+                  ${!isClient ? `
+                      <div class="input-group-row">${getInputsForType(type, item, index)}</div>
+                      <div style="margin-top:8px;">
+                          <span class="mini-label">Project Round</span>
+                          <input type="number" class="inline-input tiny" value="${item.projectRound || 1}" 
+                                oninput="OL.updateScopeItem(${index}, 'projectRound', this.value)">
+                      </div>
+                  ` : `<div class="small muted">${esc(resource.description || 'No description available.')}</div>`}
               </td>
+
               <td style="text-align:right; font-weight:bold;">$${fee}</td>
               <td id="row-calc-${index}" style="text-align:right;">${hours} hrs</td>
+
               <td style="text-align:center;">
-                  <div class="card-close" onclick="OL.removeScopeItem(${index})">×</div>
+                  ${!isClient ? `
+                      <div style="display:flex; flex-direction:column; gap:5px; align-items:center;">
+                          <button class="btn small soft" onclick="OL.openRowTaskMapper(this, '${resource.id}')">📋 Tasks</button>
+                          <div class="card-close" style="position:static" onclick="OL.removeScopeItem(${index})">×</div>
+                      </div>
+                  ` : ''}
               </td>
           </tr>
       `;
   }
+
+  OL.openRowTaskMapper = function(anchorEl, resourceId) {
+      const resource = state.resources.find(r => r.id === resourceId);
+      if (!resource) return;
+
+      // Map all Datapoints into options
+      const options = state.datapoints.map(dp => ({
+          id: dp.id,
+          label: `${dp.objectType || 'General'}: ${dp.name}`,
+          checked: (resource.clientItemsNeeded || []).includes(dp.id)
+      })).sort((a, b) => a.label.localeCompare(b.label));
+
+      openMappingDropdown({
+          anchorEl: anchorEl,
+          options: options,
+          allowMultiple: true,
+          injectOnEmpty: {
+              text: "+ Create Custom Task: '{query}'",
+              onClick: (query) => {
+                  const newDp = {
+                      id: OL.utils.uid(),
+                      name: query.trim(),
+                      objectType: "Custom",
+                      _sortIndex: state.datapoints.length
+                  };
+                  state.datapoints.push(newDp);
+                  resource.clientItemsNeeded = resource.clientItemsNeeded || [];
+                  resource.clientItemsNeeded.push(newDp.id);
+                  OL.persist();
+                  renderScopingSheets();
+              }
+          },
+          onSelect: (dpId, isChecked) => {
+              resource.clientItemsNeeded = resource.clientItemsNeeded || [];
+              if (isChecked) {
+                  if (!resource.clientItemsNeeded.includes(dpId)) resource.clientItemsNeeded.push(dpId);
+              } else {
+                  resource.clientItemsNeeded = resource.clientItemsNeeded.filter(id => id !== dpId);
+              }
+              OL.persist();
+          }
+      });
+  };
 
   OL.confirmScopeAddition = function(resId) {
       const resource = state.resources.find(r => r.id === resId);
@@ -8914,15 +9127,73 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
   OL.updateScopeItem = function(index, field, value) {
       const scope = state.scopingSheets[0];
-      if (scope && scope.lineItems[index]) {
-          scope.lineItems[index][field] = parseFloat(value) || 0;
-          OL.persist();
-          
-          // Update the row total and the footer total without a full refresh
-          const type = state.resources.find(r => r.id === scope.lineItems[index].resourceId)?.type;
-          document.getElementById(`row-calc-${index}`).textContent = calculateRowTotal(scope.lineItems[index], type) + " hrs";
-          updateScopeTotals();
+      if (!scope || !scope.lineItems[index]) return;
+
+      const item = scope.lineItems[index];
+      const oldValue = item[field];
+
+      // 1. Save data correctly (String vs Number)
+      const numericFields = ['projectRound', 'steps', 'codeVars', 'emails', 'conditions', 'questions', 'pdfPages', 'signatures', 'addons', 'eventTypes', 'teamMembers', 'estimatedHours'];
+      scope.lineItems[index][field] = numericFields.includes(field) ? (parseFloat(value) || 0) : value;
+
+      const newValue = numericFields.includes(field) ? (parseFloat(value) || 0) : value;
+
+      // Stop if no actual change occurred
+      if (oldValue === newValue) return;
+
+      // 2. Push to Activity Log if Status or Notes changed
+      if (field === 'status' || field === 'notes') {
+          const resource = state.resources.find(r => r.id === item.resourceId);
+          if (resource) {
+              const logMessage = `[Scoping Sheet] ${field.toUpperCase()} updated: "${newValue}" (was: "${oldValue || 'None'}")`;
+              OL.logResourceActivity(resource, logMessage);
+          }
       }
+
+      // 3. Persist and Refresh
+      OL.persist();
+
+      //4. Smart Refresh: 
+      // If we changed status/responsible/round, we MUST re-render the whole sheet 
+      // because it might affect filtering or grouping.
+      // If we just changed a number, we only update the row and totals.
+      const structuralFields = ['status', 'responsibleParty', 'projectRound'];
+      
+      if (structuralFields.includes(field)) {
+          renderScopingSheets(); // Redraws to handle grouping/filtering correctly
+      } else {
+          const resource = state.resources.find(r => r.id === scope.lineItems[index].resourceId);
+          const rowHrs = calculateRowTotal(scope.lineItems[index], resource?.type);
+          
+          const rowHrsEl = document.getElementById(`row-calc-${index}`);
+          if (rowHrsEl) rowHrsEl.textContent = `${rowHrs} hrs`;
+          
+          updateScopeTotals(); // Update the footer
+      }
+  };
+
+  // 2. IMPROVED ADDITION (Prevents undefined errors)
+  OL.confirmScopeAddition = function(resId) {
+      if (!state.scopingSheets[0]) {
+          state.scopingSheets.push({ id: Date.now(), lineItems: [] });
+      }
+      
+      // Initialize with default strings so the dropdowns have a starting point
+      state.scopingSheets[0].lineItems.push({
+          resourceId: resId,
+          status: 'Scoping',
+          responsibleParty: 'Sphynx',
+          projectRound: 1,
+          estimatedHours: 0,
+          steps: 0, codeVars: 0, 
+          emails: 0, conditions: 0, 
+          eventTypes: 0, teamMembers: 0,
+          questions: 0, pdfPages: 0, signatures: 0, addons: 0
+      });
+      
+      closeModal();
+      renderScopingSheets();
+      OL.persist();
   };
 
   // Helper to keep the HTML clean
@@ -8969,72 +9240,48 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       `);
   };
 
-  OL.confirmScopeAddition = function(resId) {
-      if (!state.scopingSheets[0]) {
-          state.scopingSheets.push({ id: Date.now(), lineItems: [] });
-      }
-      
-      state.scopingSheets[0].lineItems.push({
-          resourceId: resId,
-          estimatedHours: 0,
-          complexity: 'Medium'
-      });
-      
-      closeModal();
-      renderScopingSheets();
-      OL.persist();
-  };
-
   function updateScopeTotals() {
       const scope = state.scopingSheets[0];
       if (!scope || !scope.lineItems) return;
 
-      let totalHrs = 0;
-      const rates = state.scopingRates;
+      let estimateHrs = 0;
+      let approvedHrs = 0;
+      const rates = state.scopingRates || {};
+      const baseRate = parseFloat(rates.baseHourlyRate) || 0;
 
       scope.lineItems.forEach(item => {
           const resource = state.resources.find(r => r.id === item.resourceId);
           if (resource) {
-              // Re-run the row calculation using current library rates
-              totalHrs += parseFloat(calculateRowTotal(item, resource.type));
+              const rowHrs = parseFloat(calculateRowTotal(item, resource.type)) || 0;
+              estimateHrs += rowHrs;
+
+              // VISION LOGIC: Clean string comparison for Approved
+              const isDoNow = String(item.status).trim() === "Do Now";
+              const isSphynx = String(item.responsibleParty).trim() === "Sphynx";
+
+              if (isDoNow && isSphynx) {
+                  approvedHrs += rowHrs;
+              }
           }
       });
 
-      const baseRate = parseFloat(rates.baseHourlyRate) || 0;
-      const totalFee = totalHrs * baseRate;
-
-      // Update DOM elements
+      // Update the DOM
       const hrsEl = document.getElementById("total-scope-hours");
       const feeEl = document.getElementById("total-scope-fee");
 
-      if (hrsEl) hrsEl.innerHTML = `<strong>${totalHrs.toFixed(2)} hrs</strong>`;
-      if (feeEl) feeEl.innerHTML = `<strong>$${totalFee.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>`;
-  }
-
-  OL.updateScopeItem = function(index, field, value) {
-      const scope = state.scopingSheets[0];
-      if (scope && scope.lineItems[index]) {
-          // 1. Update the value in state
-          scope.lineItems[index][field] = parseFloat(value) || 0;
-          
-          // 2. Persist immediately
-          OL.persist();
-          
-          // 3. TARGETED UI UPDATE: Re-calculate just this row's display
-          const resource = state.resources.find(r => r.id === scope.lineItems[index].resourceId);
-          const rowHrs = calculateRowTotal(scope.lineItems[index], resource?.type);
-          const rowFee = (rowHrs * (state.scopingRates.baseHourlyRate || 0)).toFixed(2);
-          
-          const hrsCell = document.getElementById(`row-calc-${index}`);
-          const feeCell = hrsCell?.previousElementSibling; // Finds the Fee cell next to it
-
-          if (hrsCell) hrsCell.textContent = `${rowHrs} hrs`;
-          if (feeCell) feeCell.textContent = `$${rowFee}`;
-
-          // 4. GLOBAL UI UPDATE: Refresh the footer totals
-          updateScopeTotals();
+      if (hrsEl) {
+          hrsEl.innerHTML = `
+              <div style="font-size: 0.8rem; opacity: 0.6;">Est: ${estimateHrs.toFixed(2)} hrs</div>
+              <div style="color: var(--accent); font-weight: bold;">Appr: ${approvedHrs.toFixed(2)} hrs</div>
+          `;
       }
-  };
+      if (feeEl) {
+          feeEl.innerHTML = `
+              <div style="font-size: 0.8rem; opacity: 0.6;">Est: $${(estimateHrs * baseRate).toLocaleString()}</div>
+              <div style="color: var(--accent); font-weight: bold;">Appr: $${(approvedHrs * baseRate).toLocaleString()}</div>
+          `;
+      }
+  }
 
   OL.removeScopeItem = function(index) {
       const scope = state.scopingSheets[0];
@@ -9090,6 +9337,50 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           </div>
       `;
   }
+
+  OL.createNewScopingResource = function() {
+      const name = prompt("Enter name for new scoping item:");
+      if (!name) return;
+
+      // 1. Create real resource in library
+      const newRes = {
+          id: OL.utils.uid(),
+          name: name,
+          type: 'doc', // Default
+          status: 'Initial',
+          responsibleParty: 'Sphynx',
+          createdDate: new Date().toISOString(),
+          activityLog: [{ date: new Date().toISOString(), note: "Created via Scoping Sheet" }]
+      };
+      state.resources.push(newRes);
+
+      // 2. Add to active scoping sheet
+      if (!state.scopingSheets[0]) state.scopingSheets.push({ id: Date.now(), lineItems: [] });
+      state.scopingSheets[0].lineItems.push({
+          resourceId: newRes.id,
+          status: 'Initial',
+          responsibleParty: 'Sphynx',
+          projectRound: 1 // Default round
+      });
+
+      OL.persist();
+      renderScopingSheets();
+  };
+
+  OL.scopeFilters = {
+      round: 'all',
+      type: 'all',
+      status: 'all'
+  };
+
+  OL.setScopeFilter = function(key, value) {
+      // 1. Update the filter state
+      OL.scopeFilters[key] = value;
+      
+      // 2. Refresh the UI
+      // This will re-run renderScopingSheets, which we will update next to respect these filters
+      renderScopingSheets();
+  };
   //--------------------------------------------------------------
   // SPHYNX TASKS
   //--------------------------------------------------------------
@@ -9097,33 +9388,44 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       const container = document.getElementById("section-sphynx-tasks");
       if (!container) return;
 
-      // Filter SOPs that are "In Progress" or have "Updates Needed"
-      const tasks = state.howToLibrary.filter(ht => 
+      // 1. Get SOP Library Tasks (In Progress guides)
+      const sopTasks = state.howToLibrary.filter(ht => 
           ht.status === "In Progress" || (ht.updatesNeeded && ht.updatesNeeded.length > 0)
       );
 
+      // 2. Get Approved Scoping Tasks ("Do Now" + "Sphynx")
+      const scope = state.scopingSheets[0] || { lineItems: [] };
+      const scopingTasks = scope.lineItems.filter(item => 
+          item.status === "Do Now" && item.responsibleParty === "Sphynx"
+      ).map(item => {
+          const res = state.resources.find(r => r.id === item.resourceId);
+          return {
+              id: item.resourceId,
+              name: `Implement: ${res?.name || 'Unknown'}`,
+              type: 'Implementation',
+              tags: [res?.type || 'doc'],
+              notes: item.notes
+          };
+      });
+
+      // 3. Render Combined List
       container.innerHTML = `
-          <div class="content-header">
-              <h2>Sphynx Internal Tasks</h2>
-              <p>SOPs requiring updates or currently in progress.</p>
-          </div>
+          <div class="section-header"><h2>Sphynx Implementation Queue</h2></div>
           <div class="todo-list">
-              ${tasks.map(ht => `
-                  <div class="todo-item card" onclick="OL.openHowToModal('${ht.id}')">
+              ${[...sopTasks, ...scopingTasks].map(task => `
+                  <div class="todo-item card" onclick="${task.type === 'Implementation' ? `OL.openResourceModal('${task.id}')` : `OL.openHowToModal('${task.id}')`}">
                       <div class="todo-main">
-                          <span class="pill small warn">SOP Update</span>
-                          <strong>${esc(ht.name)}</strong>
-                          <div class="small muted">Owner: ${findTeamMemberById(ht.assignedTo)?.name || 'Unassigned'}</div>
+                          <span class="pill small ${task.type === 'Implementation' ? 'accent' : 'warn'}">
+                              ${task.type || 'SOP Update'}
+                          </span>
+                          <strong>${esc(task.name)}</strong>
+                          <p class="small muted">${esc(task.notes || '')}</p>
                       </div>
                       <div class="todo-tags">
-                          ${(ht.updatesNeeded || []).map(tag => `<span class="pill small soft">${tag}</span>`).join('')}
-                      </div>
-                      <div class="todo-due ${ht.dueDate && ht.dueDate < new Date().toISOString() ? 'overdue' : ''}">
-                          ${ht.dueDate ? new Date(ht.dueDate).toLocaleDateString() : 'No Due Date'}
+                          ${(task.tags || []).map(t => `<span class="pill small soft">${t}</span>`).join('')}
                       </div>
                   </div>
               `).join('')}
-              ${tasks.length === 0 ? '<div class="empty-hint">No pending SOP tasks!</div>' : ''}
           </div>
       `;
   };
@@ -9131,6 +9433,24 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
   //--------------------------------------------------------------
   // CLIENT TASKS
   //--------------------------------------------------------------
+  // Add this to your global state object
+  OL.state.clientTaskStatus = OL.store.get("clientTaskStatus", {}); 
+  // Format will be: { "datapoint_id": true/false }
+
+  OL.toggleClientTask = function(dpId) {
+      // 1. Initialize the object if it doesn't exist
+      if (!state.clientTaskStatus) state.clientTaskStatus = {};
+
+      // 2. Toggle the boolean value
+      state.clientTaskStatus[dpId] = !state.clientTaskStatus[dpId];
+
+      // 3. Save to storage
+      OL.persist();
+
+      // 4. Log the action (Optional: helpful for Sphynx audit trail)
+      console.log(`Task ${dpId} marked as ${state.clientTaskStatus[dpId] ? 'Received' : 'Pending'}`);
+  };
+
   window.renderClientTasks = function() {
       const container = document.getElementById("section-client-tasks");
       if (!container) return;
@@ -9156,22 +9476,31 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           </div>
 
           <div class="task-list-container">
-              ${clientTasks.map(dp => `
-                  <div class="todo-item card">
-                      <div class="todo-main">
-                          <label class="check-item" style="font-size: 1.1rem;">
-                              <input type="checkbox" onchange="OL.toggleClientTask('${dp.id}')">
-                              <strong>${esc(dp.name)}</strong>
-                          </label>
-                          <div class="small muted" style="margin-left: 28px;">
-                              ${esc(dp.description || 'Please provide this information.')}
+              ${clientTasks.map(dp => {
+                  // Check if this task is marked as complete in state
+                  const isChecked = state.clientTaskStatus && state.clientTaskStatus[dp.id] ? 'checked' : '';
+                  
+                  return `
+                      <div class="todo-item card ${isChecked ? 'task-complete' : ''}">
+                          <div class="todo-main">
+                              <label class="check-item" style="font-size: 1.1rem; cursor: pointer;">
+                                  <input type="checkbox" 
+                                      ${isChecked} 
+                                      onchange="OL.toggleClientTask('${dp.id}')">
+                                  <strong style="${isChecked ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
+                                      ${esc(dp.name)}
+                                  </strong>
+                              </label>
+                              <div class="small muted" style="margin-left: 28px;">
+                                  ${esc(dp.description || 'Please provide this information.')}
+                              </div>
+                          </div>
+                          <div class="todo-tags">
+                              <span class="pill small soft">${esc(dp.objectType || 'General')}</span>
                           </div>
                       </div>
-                      <div class="todo-tags">
-                          <span class="pill small soft">${esc(dp.objectType || 'General')}</span>
-                      </div>
-                  </div>
-              `).join('')}
+                  `;
+              }).join('')}
               ${clientTasks.length === 0 ? '<div class="empty-hint">No items currently required from client.</div>' : ''}
           </div>
       `;
@@ -12700,132 +13029,134 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     // We don't need a custom closeAllDatapointDropdowns here anymore, but keeping the name check for safety.
   });
 
-function handleRoute() {
-    const hash = location.hash || "";
-    const main = document.getElementById("mainContent");
-    
-    if (!main) return;
+  function handleRoute() {
+      const hash = location.hash || "";
+      const main = document.getElementById("mainContent");
+      
+      if (!main) return;
 
-    // 1. Identify all routes
-    const isApps = hash === "" || hash === "#/apps" || hash === "#/";
-    const isFunctions = hash.startsWith("#/functions");
-    const isFeatures = hash.startsWith("#/features");
-    const isAnalyze = hash.startsWith("#/analyze");
-    const isIntegrations = hash.startsWith("#/integrations");
-    const isCapabilities = hash.startsWith("#/triggers-actions");
-    const isCanonicalCaps = hash.startsWith("#/canonical-capabilities");
-    const isResources = hash.startsWith("#/resources");
-    const isWorkflows = hash.startsWith("#/workflows");
-    const isHowTo = hash.startsWith("#/howto");
-    const isTeam = hash.startsWith("#/team");
-    const isSegments = hash.startsWith("#/segments");
-    const isDatapoints = hash.startsWith("#/datapoints");
-    const isFolders = hash.startsWith("#/folder-hierarchy");
-    const isNaming = hash.startsWith("#/naming-conventions");
-    const isScoping = hash.startsWith("#/scoping-sheet");
-    const isSphynxTasks = hash.startsWith("#/sphynx-tasks");
-    const isClientTasks = hash.startsWith("#/client-tasks");
+      // 1. Identify all routes
+      const isApps = hash === "" || hash === "#/apps" || hash === "#/";
+      const isFunctions = hash.startsWith("#/functions");
+      const isFeatures = hash.startsWith("#/features");
+      const isAnalyze = hash.startsWith("#/analyze");
+      const isIntegrations = hash.startsWith("#/integrations");
+      const isCapabilities = hash.startsWith("#/triggers-actions");
+      const isCanonicalCaps = hash.startsWith("#/canonical-capabilities");
+      const isResources = hash.startsWith("#/resources");
+      const isWorkflows = hash.startsWith("#/workflows");
+      const isHowTo = hash.startsWith("#/howto");
+      const isTeam = hash.startsWith("#/team");
+      const isSegments = hash.startsWith("#/segments");
+      const isDatapoints = hash.startsWith("#/datapoints");
+      const isFolders = hash.startsWith("#/folder-hierarchy");
+      const isNaming = hash.startsWith("#/naming-conventions");
+      const isScoping = hash.startsWith("#/scoping-sheet");
+      const isSphynxTasks = hash.startsWith("#/sphynx-tasks");
+      const isClientTasks = hash.startsWith("#/client-tasks");
 
-    // 2. Clear stage: Hide ALL sections
-    const allSections = main.querySelectorAll(".section");
-    allSections.forEach(s => s.style.display = "none");
+      // 2. Clear stage: Hide ALL sections
+      const allSections = main.querySelectorAll(".section");
+      allSections.forEach(s => s.style.display = "none");
 
-    // 3. SHOW logic
-    if (isApps) {
-        document.getElementById("section-apps").style.display = "block";
-        renderAppsGrid();
-    } 
-    else if (isHowTo) {
-        // Find or create the how-to section dynamically
-        let hSection = document.getElementById("section-howto");
-        if (!hSection) {
-            hSection = document.createElement("section");
-            hSection.className = "section";
-            hSection.id = "section-howto";
-            main.appendChild(hSection);
-        }
-        hSection.style.display = "block";
-        OL.renderHowToLibrary(); 
-    }
-    else if (isFunctions) {
-        document.getElementById("section-functions").style.display = "block";
-        renderFunctionsGrid();
-    }
-    else if (isResources) {
-        document.getElementById("section-resources").style.display = "block";
-        OL.renderResourcesGrid();
-    }
-    else if (isAnalyze) {
-        document.getElementById("section-analyze").style.display = "block";
-        OL.renderAnalysisLeftMenu();
-        OL.renderAnalysisMatrix();
-    }
-    else if (isFeatures) {
-        document.getElementById("section-features").style.display = "block";
-        renderFeaturesGrid();
-    }
-    else if (isIntegrations) {
-        document.getElementById("section-integrations").style.display = "block";
-        renderIntegrationsGrid();
-    }
-    else if (isCapabilities) {
-        document.getElementById("section-capabilities").style.display = "block";
-        renderCapabilitiesGrid();
-    }
-    else if (isCanonicalCaps) {
-        document.getElementById("section-canonical-caps").style.display = "block";
-        renderCanonicalCapsGrid();
-    }
-    else if (isWorkflows) {
-        document.getElementById("section-workflows").style.display = "block";
-        renderWorkflowsGrid();
-    }
-    else if (isTeam) {
-        document.getElementById("section-team-members").style.display = "block";
-        document.getElementById("section-team-roles").style.display = "block";
-        renderTeamMembersGrid();
-        renderTeamRolesGrid();
-    }
-    else if (isSegments) {
-        document.body.classList.add("is-segments-page");
-        const unified = document.getElementById("section-unified-segments");
-        if (unified) {
-            unified.style.display = "flex";
-            renderUnifiedSegmentBuilder();
-        }
-    }
-    else if (isDatapoints) {
-        document.getElementById("section-datapoints").style.display = "block";
-        renderDatapointsGrid();
-    }
-    else if (isFolders) {
-        document.getElementById("section-folder-hierarchy").style.display = "block";
-        renderFolderHierarchyGrid();
-    }
-    else if (isNaming) {
-        document.getElementById("section-naming-conventions").style.display = "block";
-        renderNamingConventions();
-    }
+      // 3. SHOW logic - Use a clean, flat list of 'else if' statements
+      if (isApps) {
+          document.getElementById("section-apps").style.display = "block";
+          renderAppsGrid();
+      } 
+      else if (isHowTo) {
+          let hSection = document.getElementById("section-howto");
+          if (!hSection) {
+              hSection = document.createElement("section");
+              hSection.className = "section";
+              hSection.id = "section-howto";
+              main.appendChild(hSection);
+          }
+          hSection.style.display = "block";
+          OL.renderHowToLibrary(); 
+      }
+      else if (isFunctions) {
+          document.getElementById("section-functions").style.display = "block";
+          renderFunctionsGrid();
+      }
+      else if (isResources) {
+          document.getElementById("section-resources").style.display = "block";
+          OL.renderResourcesGrid();
+      }
+      else if (isAnalyze) {
+          document.getElementById("section-analyze").style.display = "block";
+          OL.renderAnalysisLeftMenu();
+          OL.renderAnalysisMatrix();
+      }
+      else if (isFeatures) {
+          document.getElementById("section-features").style.display = "block";
+          renderFeaturesGrid();
+      }
+      else if (isIntegrations) {
+          document.getElementById("section-integrations").style.display = "block";
+          renderIntegrationsGrid();
+      }
+      else if (isCapabilities) {
+          document.getElementById("section-capabilities").style.display = "block";
+          renderCapabilitiesGrid();
+      }
+      else if (isCanonicalCaps) {
+          document.getElementById("section-canonical-caps").style.display = "block";
+          renderCanonicalCapsGrid();
+      }
+      else if (isWorkflows) {
+          document.getElementById("section-workflows").style.display = "block";
+          renderWorkflowsGrid();
+      }
+      else if (isTeam) {
+          document.getElementById("section-team-members").style.display = "block";
+          document.getElementById("section-team-roles").style.display = "block";
+          renderTeamMembersGrid();
+          renderTeamRolesGrid();
+      }
+      else if (isSegments) {
+          document.body.classList.add("is-segments-page");
+          const unified = document.getElementById("section-unified-segments");
+          if (unified) {
+              unified.style.display = "flex";
+              renderUnifiedSegmentBuilder();
+          }
+      }
+      else if (isDatapoints) {
+          document.getElementById("section-datapoints").style.display = "block";
+          renderDatapointsGrid();
+      }
+      else if (isFolders) {
+          document.getElementById("section-folder-hierarchy").style.display = "block";
+          renderFolderHierarchyGrid();
+      }
+      else if (isNaming) {
+          document.getElementById("section-naming-conventions").style.display = "block";
+          renderNamingConventions();
+      }
+      else if (isScoping) {
+          document.getElementById("section-scoping-sheet").style.display = "block";
+          renderScopingSheets();
+      }
+      else if (isSphynxTasks) {
+          const section = document.getElementById("section-sphynx-tasks");
+          if (section) {
+              section.style.display = "block";
+              renderSphynxTasks();
+          }
+      }
+      else if (isClientTasks) {
+          const section = document.getElementById("section-client-tasks");
+          if (section) {
+              section.style.display = "block";
+              renderClientTasks();
+          }
+      }
 
-     else if (isScoping) {
-        document.getElementById("section-scoping-sheet").style.display = "block";
-        renderScopingSheets();
-    }
-
-     else if (isSphynxTasks) {
-        document.getElementById("section-sphynx-tasks").style.display = "block";
-        renderSphynxTasks();
-    }
-
-     else if (isClientTasks) {
-        document.getElementById("section-client-tasks").style.display = "block";
-        renderClientTasks();
-    }
-
-    // Toggle scroll resets
-    if (!isSegments) document.body.classList.remove("is-segments-page");
-}
-    window.addEventListener("hashchange", () => {
+      // Toggle scroll resets
+      if (!isSegments) document.body.classList.remove("is-segments-page");
+  }
+  window.addEventListener("hashchange", () => {
     localStorage.setItem("olLastPage", location.hash);
   });
 
