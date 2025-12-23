@@ -1233,11 +1233,11 @@ document.addEventListener("selectionchange", () => {
           <div class="group-title">Integrations</div>
             <a href="#/integrations" title="Integrations"><i>🔗</i> <span>Integrations</span></a>
             <a href="#/triggers-actions" title="Library"><i>⚡</i> <span>Library</span></a>
-            <a href="#/canonical-capabilities" title="Canonical Capabilities><i>💎</i> <span>Canonical</span></a>
+            <a href="#/canonical-capabilities" title="Canonical Capabilities"><i>💎</i> <span>Canonical</span></a>
           <div class="divider"></div>
 
           <div class="group-title">Resources</div>
-            <a href="#/resources/documents" title="Resources><i>📂</i> <span>Resources</span></a>
+            <a href="#/resources" title="Resources"><i>📂</i> <span>Resources</span></a>
             <a href="#/workflows" title="Workflows"><i>🌿</i> <span>Workflows</span></a>
             <a href="#/howto" title="How-To"><i>📚</i> <span>How-To</span></a>
           <div class="divider"></div>
@@ -7258,6 +7258,112 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
     OL.renderResourcesGrid();
   };
 
+  // Add these to your OL.state block
+  OL.state.masterItemsNeeded = OL.store.get("masterItemsNeeded", [
+      { id: uid(), name: "Last 2 Years Tax Returns", category: "Tax", defaultDescription: "Full federal and state returns." },
+      { id: uid(), name: "Current Paystub", category: "Income", defaultDescription: "Most recent 30 days." }
+  ]);
+
+  OL.state.masterPrework = OL.store.get("masterPrework", [
+      { id: uid(), name: "Client Logo Upload", category: "Branding", defaultDescription: "SVG or high-res PNG." },
+      { id: uid(), name: "Zapier Folder Creation", category: "Ops", defaultDescription: "Standardize naming in Zapier." }
+  ]);
+
+  OL.renderMasterRequirementsLibrary = function() {
+      const main = document.getElementById("mainContent");
+      main.innerHTML = `
+          <div class="section-header">
+              <h2>Master Requirements & Prework Library</h2>
+              <button class="btn primary" onclick="OL.addMasterRequirement()">+ New Master Item</button>
+          </div>
+          <div class="cards-grid">
+              <div class="card">
+                  <div class="card-header"><div class="card-title">Client: Items Needed</div></div>
+                  <div class="card-body" id="masterItemsNeededList">${renderMasterList('ItemsNeeded')}</div>
+              </div>
+              <div class="card">
+                  <div class="card-header"><div class="card-title">Internal: Prework</div></div>
+                  <div class="card-body" id="masterPreworkList">${renderMasterList('Prework')}</div>
+              </div>
+          </div>
+      `;
+  };
+
+  function renderMasterList(type) {
+      const list = state[`master${type}`];
+      return list.map(item => `
+          <div class="todo-item" style="padding: 8px; border-bottom: 1px solid var(--line);">
+              <div style="font-weight: 600;">${esc(item.name)}</div>
+              <div class="small muted">${esc(item.defaultDescription)}</div>
+          </div>
+      `).join('');
+  }
+
+  OL.addScopingTaskFromMaster = function(itemIndex) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      const btn = event.currentTarget;
+
+      // 1. Prepare combined options
+      const options = [
+          ...(state.masterItemsNeeded || []).map(i => ({ id: `master_need_${i.id}`, label: `📩 ${i.name}` })),
+          ...(state.masterPrework || []).map(p => ({ id: `master_pre_${p.id}`, label: `⚙️ ${p.name}` }))
+      ];
+
+      openMappingDropdown({
+          anchorEl: btn,
+          options: options,
+          allowMultiple: true,
+          onSelect: (choiceId, isChecked) => {
+              // --- FIX START: Define actualId immediately upon selection ---
+              const isNeed = choiceId.includes('_need_');
+              const actualId = choiceId.split('_').pop(); // Extract the ID from the prefix
+              // --- FIX END ---
+
+              const sourceList = isNeed ? state.masterItemsNeeded : state.masterPrework;
+              const masterItem = sourceList.find(i => i.id === actualId);
+
+              if (!masterItem) {
+                  console.error("Master item not found for ID:", actualId);
+                  return;
+              }
+
+              item.tasks = item.tasks || [];
+
+              if (isChecked) {
+                  // Only add if it doesn't exist to prevent duplicates
+                  if (!item.tasks.some(t => t.masterId === actualId)) {
+                      item.tasks.push({
+                          id: uid(),
+                          masterId: actualId, 
+                          name: masterItem.name,
+                          description: masterItem.defaultDescription || "",
+                          status: "Pending",
+                          // Automatically inherit assignees from the scope row
+                          ownerIds: [...(item.appliesTo || [])], 
+                          source: 'master'
+                      });
+                  }
+              } else {
+                  // Remove the task if unchecked
+                  item.tasks = item.tasks.filter(t => t.masterId !== actualId);
+              }
+
+              // 2. Persist and Refresh
+              OL.persist();
+              // Update the open task modal list
+              const listContainer = document.getElementById("scopingTaskList");
+              if (listContainer) listContainer.innerHTML = renderScopingTasks(itemIndex);
+              
+              // Sync with Client Tasks page
+              renderClientTasks();
+
+              // Keep dropdown open for further selections
+              const dd = document.querySelector(".mapping-dropdown");
+              if (dd && dd.refresh) dd.refresh();
+          }
+      });
+  };
+
   // ------------------------------------------------------------
   // RESOURCE MODAL (draft-safe)
   // ------------------------------------------------------------
@@ -8750,6 +8856,8 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       defaultHours: saved.defaultHours || 1.0
   };
 
+  OL.state.scopingRates.teamMemberMultiplier = saved.teamMemberMultiplier || 1.1; // e.g., 10% increase per extra person
+
   OL.openScopingRatesModal = function() {
         const html = `
             <div class="modal-head">
@@ -8791,11 +8899,24 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                         ${renderRateInput('scheduler', 'eventType', 'Event Type')}
                         ${renderRateInput('scheduler', 'teamMember', 'Team Members')}
                     </div>
+                    <div class="rate-group">
+                        <label class="modal-section-label">Team Member Multiplier (per additional person)</label>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="number" step="0.01" class="inline-input small" 
+                                value="${state.scopingRates.teamMemberMultiplier}" 
+                                oninput="OL.updateMasterRate('teamMemberMultiplier', null, this.value)">
+                            <span class="muted small">Example: 1.1 = +10% fee per additional team member selected.</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
         openModal(html);
     };
+
+    // Initialize grouping default
+    OL.groupByRound = true; 
+    OL.scopeFilters = { round: 'all', type: 'all', status: 'all' };
 
     OL.toggleGroupByRound = function() {
         OL.groupByRound = !OL.groupByRound;
@@ -8900,68 +9021,119 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
       // 3. GROUP BY ROUND LOGIC
       let tableContentHTML = "";
+      const baseRate = state.scopingRates.baseHourlyRate || 0;
+
       if (OL.groupByRound) {
-          // Render sections by round
           const roundsToShow = OL.scopeFilters.round === 'all' ? uniqueRounds : [parseInt(OL.scopeFilters.round)];
           
           roundsToShow.forEach(r => {
               const itemsInRound = filteredItems.filter(i => (parseInt(i.projectRound) || 1) === r);
               if (itemsInRound.length > 0) {
+                  // Initialize Round Totals
+                  let roundEstHrs = 0;
+                  let roundApprHrs = 0;
+
+                  const rowsHTML = itemsInRound.map((item) => {
+                      const originalIdx = activeScope.lineItems.indexOf(item);
+                      const resource = state.resources.find(res => res.id === item.resourceId);
+                      const hrs = parseFloat(calculateRowTotal(item, resource?.type)) || 0;
+                      
+                      // Accumulate Round Totals
+                      roundEstHrs += hrs;
+                      if (item.status === "Do Now" && item.responsibleParty === "Sphynx") {
+                          roundApprHrs += hrs;
+                      }
+                      
+                      return renderDetailedScopeRow(item, originalIdx);
+                  }).join('');
+
+                  // Add Round Header
                   tableContentHTML += `
-                      <tr class="round-header-row">
-                          <td colspan="7" style="background: var(--nav-bg); padding: 10px; font-weight: bold; color: var(--accent);">
-                              PROJECT ROUND ${r}
-                          </td>
-                      </tr>
-                      ${itemsInRound.map((item, idx) => {
-                          const originalIdx = activeScope.lineItems.indexOf(item);
-                          return renderDetailedScopeRow(item, originalIdx);
-                      }).join('')}
-                  `;
-              }
-          });
+                  <div class="round-group-header">PROJECT ROUND ${r}</div>
+                  ${rowsHTML}
+                  
+                  <div class="grid-row round-subtotal-row" style="background: rgba(255,255,255,0.02); padding: 12px 0; border-bottom: 2px solid var(--line); align-items: flex-end;">
+                      <div class="col-expand"></div>
+                      
+                      <div style="flex: 2 1 240px; text-align:right; padding-right: 20px; color:var(--muted); font-weight:bold; font-size:11px; text-transform:uppercase;">
+                          Round ${r} Sub-Totals:
+                      </div>
+                      
+                      <div class="col-description"></div>
+                      
+                      <div class="col-applies"></div>
+
+                      <div class="col-numeric"></div>
+                      
+                      <div class="col-numeric" style="display: flex; flex-direction: column; gap: 2px;">
+                          <div style="font-size: 10px; color: var(--muted);">Est: $${(roundEstHrs * baseRate).toLocaleString()}</div>
+                          <div style="color: var(--accent); font-weight: bold;">Appr: $${(roundApprHrs * baseRate).toLocaleString()}</div>
+                      </div>
+
+                      <div class="col-numeric" style="display: flex; flex-direction: column; gap: 2px;">
+                          <div style="font-size: 10px; color: var(--muted);">${roundEstHrs.toFixed(2)}h</div>
+                          <div style="font-weight: bold;">${roundApprHrs.toFixed(2)}h</div>
+                      </div>
+                      
+                      <div class="col-actions"></div>
+                      <div class="col-close-btn"></div>
+                  </div>
+              `;
+            }
+        });
       } else {
-          // Standard flat list
           tableContentHTML = filteredItems.map((item, idx) => {
-            const originalIdx = activeScope.lineItems.findIndex(li => li.resourceId === item.resourceId);
-            return renderDetailedScopeRow(item, originalIdx);
+              const originalIdx = activeScope.lineItems.indexOf(item);
+              return renderDetailedScopeRow(item, originalIdx);
           }).join('');
       }
 
       // 4. INJECT HTML (with new Toggle Button)
-      container.innerHTML = `
+        container.innerHTML = `
           <div class="content-header">
               <h2>Project Scoping & Financials</h2>
               <div class="header-actions">
-                  <button class="btn small ${OL.groupByRound ? 'primary' : 'soft'}" 
-                      onclick="OL.toggleGroupByRound()">📦 Group by Round</button>
                   <button class="btn small soft" onclick="OL.openScopingRatesModal()">📋 Pricing Library</button>
-                  <button class="btn primary" onclick="OL.addResourceToScope()">+ Add Resource</button>
+                  <button class="btn small soft" onclick="OL.addAdHocRow()">+ Add Custom Row</button>
+                  <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
               </div>
           </div>
-          ${renderFilterBarHTML(uniqueRounds)}
-          <table class="scoping-table">
-              <thead>
-                  <tr>
-                      <th>Status</th><th>Responsible</th><th>Notes</th>
-                      <th style="width:25%">Description / Units</th>
-                      <th style="text-align:right">Fee</th><th style="text-align:right">Time</th><th>×</th>
-                  </tr>
-              </thead>
-              <tbody>${tableContentHTML}</tbody>
-              <tfoot>
-                  <tr class="total-row" style="border-top: 2px solid var(--line);">
-                      <td colspan="4" style="text-align:right; padding: 15px;">
-                          <strong>Project Totals:</strong>
-                      </td>
-                      <td id="total-scope-fee" style="text-align:right; font-weight:bold;">
-                          </td>
-                      <td id="total-scope-hours" style="text-align:right; font-weight:bold;">
-                          </td>
-                      <td></td>
-                  </tr>
-              </tfoot>
-          </table>
+
+          <div class="scoping-grid">
+              <div class="grid-row grid-header">
+                  <div class="col-expand">Status</div>
+                  <div class="col-expand">Responsible</div>
+                  <div class="col-expand">Notes</div>
+                  <div class="col-description">Description / Units</div>
+                  <div class="col-applies">Applies To</div>
+                  <div class="col-numeric">Total Fee</div>
+                  <div class="col-numeric">Time</div>
+                  <div class="col-actions">Tasks</div>
+                  <div class="col-close-btn">x</div>
+              </div>
+
+              <div id="scoping-body">
+                  ${tableContentHTML}
+              </div>
+
+              <div class="grid-row grand-total-row" style="background: var(--nav-bg); padding: 20px 0; border-top: 2px solid var(--accent); align-items: flex-end;">
+                  <div class="col-expand"></div>
+                  
+                  <div style="flex: 2 1 240px; text-align:right; font-weight:bold; text-transform:uppercase; letter-spacing:1px; color:var(--accent); padding-right: 20px;">
+                      Project Grand Totals:
+                  </div>
+                  
+                  <div class="col-description"></div>
+                  <div class="col-applies"></div>
+                  <div class="col-numeric"></div>
+                  
+                  <div class="col-numeric" id="total-scope-fee" style="display: flex; flex-direction: column; gap: 4px;"></div>
+                  <div class="col-numeric" id="total-scope-hours" style="display: flex; flex-direction: column; gap: 4px;"></div>
+                  
+                  <div class="col-actions"></div>
+                  <div class="col-close-btn"></div>
+              </div>
+          </div>
       `;
       updateScopeTotals();
   };
@@ -8992,72 +9164,127 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           hours = getValue(item.estimatedHours);
       }
 
+      const extraTeamMembers = Math.max(0, (item.appliesTo || []).length - 1);
+      if (extraTeamMembers > 0) {
+          const multiplier = rates.teamMemberMultiplier || 1;
+          // Calculation: Total Hours * (Multiplier ^ Extra Members)
+          // Example: 10 hrs * (1.1 ^ 2 extra members) = 12.1 hrs
+          hours = hours * Math.pow(multiplier, extraTeamMembers);
+      }
+
       return isNaN(hours) ? "0.00" : parseFloat(hours).toFixed(2);
   }
 
- function renderDetailedScopeRow(item, index) {
+  function renderDetailedScopeRow(item, index) {
       const isClient = OL.viewMode === 'client';
       const resource = state.resources.find(r => r.id === item.resourceId) || {};
       const type = resource.type;
       const hours = calculateRowTotal(item, type);
-      const fee = (hours * (state.scopingRates.baseHourlyRate || 0)).toFixed(2);
+      const baseHourlyRate = state.scopingRates.baseHourlyRate || 0;
+      const fee = (hours * baseHourlyRate).toFixed(2);
 
-      // Filter statuses based on view mode
       const internalStatuses = ["Scoping", "Initial", "In Process", "Done", "Do Now", "Do Later", "Don't Do"];
       const clientStatuses = ["Do Now", "Do Later", "Don't Do"];
       const activeStatusList = isClient ? clientStatuses : internalStatuses;
 
+      // Standardized Title/Description logic
+      const titleHTML = item.isAdHoc 
+          ? `<div style="display:flex; gap:8px; align-items:center;">
+              <span class="pill small warn" style="font-size: 9px; padding: 1px 5px;">DRAFT</span>
+              <input type="text" class="access-input small" value="${esc(item.tempName)}" 
+                  placeholder="Draft Item Name..."
+                  onblur="OL.updateScopeItem(${index}, 'tempName', this.value)">
+              ${item.status === 'Do Now' ? `<button class="btn small primary" onclick="OL.convertItemToResource(${index})" title="Convert to Resource">🚀</button>` : ''}
+            </div>`
+          : `<div class="row-title" style="font-weight:bold; cursor:pointer; color:var(--accent);" 
+                  onclick="OL.openResourceModal('${resource.id}')">${esc(resource.name)}</div>`;
+
+      const appliedMemberIds = item.appliesTo || [];
+      const memberInitials = appliedMemberIds.map(id => {
+          const m = findTeamMemberById(id);
+          return m ? `<span class="pill small soft" style="font-size:9px;">${esc(OL.utils.getInitials(m.name))}</span>` : '';
+      }).join('');
+
+      // Multiplier Calculation
+      const extraTeamMembers = Math.max(0, (item.appliesTo || []).length - 1);
+      const multiplierValue = state.scopingRates.teamMemberMultiplier || 1;
+      const totalMultiplier = Math.pow(multiplierValue, extraTeamMembers);
+      const multiplierBadge = (extraTeamMembers > 0) 
+          ? `<div class="muted" style="font-size: 8px; color: var(--accent);">(x${totalMultiplier.toFixed(2)} Multiplier)</div>` 
+          : '';
+
+      // Return using Grid classes for alignment
       return `
-          <tr class="${isClient ? 'client-view-row' : ''}">
-              <td>
+          <div class="grid-row ${isClient ? 'client-view-row' : ''}">
+              <div class="col-expand">
                   <select class="modal-select xsmall" onchange="OL.updateScopeItem(${index}, 'status', this.value)">
-                      ${activeStatusList.map(s => 
-                          `<option value="${s}" ${item.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                      ${activeStatusList.map(s => `<option value="${s}" ${item.status === s ? 'selected' : ''}>${s}</option>`).join('')}
                   </select>
-              </td>
-
-              <td>
+              </div>
+              <div class="col-expand">
                   <select class="modal-select xsmall" onchange="OL.updateScopeItem(${index}, 'responsibleParty', this.value)">
-                      ${["Sphynx", "Client", "Joint"].map(p => 
-                          `<option value="${p}" ${item.responsibleParty === p ? 'selected' : ''}>${p}</option>`).join('')}
+                      ${["Sphynx", "Client", "Joint"].map(p => `<option value="${p}" ${item.responsibleParty === p ? 'selected' : ''}>${p}</option>`).join('')}
                   </select>
-              </td>
-
-              <td>
+              </div>
+              <div class="col-expand">
                   <input type="text" class="access-input small" value="${esc(item.notes || '')}" 
-                      placeholder="Short note..." 
-                      onblur="OL.updateScopeItem(${index}, 'notes', this.value, true)">
-              </td>
-
-              <td>
-                  <div class="row-title" style="font-weight:bold; cursor:pointer; color:var(--accent);" 
-                      onclick="OL.openResourceModal('${resource.id}')">
-                      ${esc(resource.name)}
+                      placeholder="Notes..." onblur="OL.updateScopeItem(${index}, 'notes', this.value, true)">
+              </div>
+              <div class="col-description">
+                  ${titleHTML} 
+                  ${!isClient ? `<div class="input-group-row">${getInputsForType(type, item, index)}</div>` : `<div class="small muted">${esc(resource.description || '')}</div>`}
+              </div>
+              <div class="col-applies">
+                  <div class="clickable" onclick="OL.openAppliesToPicker(event, ${index})">
+                      <div class="pills-row">${memberInitials || '<span class="muted">Everyone</span>'}</div>
                   </div>
-                  ${!isClient ? `
-                      <div class="input-group-row">${getInputsForType(type, item, index)}</div>
-                      <div style="margin-top:8px;">
-                          <span class="mini-label">Project Round</span>
-                          <input type="number" class="inline-input tiny" value="${item.projectRound || 1}" 
-                                oninput="OL.updateScopeItem(${index}, 'projectRound', this.value)">
-                      </div>
-                  ` : `<div class="small muted">${esc(resource.description || 'No description available.')}</div>`}
-              </td>
-
-              <td style="text-align:right; font-weight:bold;">$${fee}</td>
-              <td id="row-calc-${index}" style="text-align:right;">${hours} hrs</td>
-
-              <td style="text-align:center;">
-                  ${!isClient ? `
-                      <div style="display:flex; flex-direction:column; gap:5px; align-items:center;">
-                          <button class="btn small soft" onclick="OL.openRowTaskMapper(this, '${resource.id}')">📋 Tasks</button>
-                          <div class="card-close" style="position:static" onclick="OL.removeScopeItem(${index})">×</div>
-                      </div>
-                  ` : ''}
-              </td>
-          </tr>
+              </div>
+              <div class="col-numeric" style="font-weight:bold;">
+                  $${parseFloat(fee).toLocaleString()}
+                  ${multiplierBadge}
+              </div>
+              <div class="col-numeric">${hours} hrs</div>
+              <div class="col-actions">
+                  ${!item.isAdHoc ? `<button class="btn tiny soft" onclick="OL.openScopingTaskModal(${index})">📋 Tasks ${(item.tasks || []).length > 0 ? `(${(item.tasks || []).length})` : ''}</button>` : ''}
+              </div>
+              <div class="col-close-btn" onclick="OL.removeScopeItem(${index})">×</div>
+          </div>
       `;
   }
+
+    OL.openAppliesToPicker = function(e, itemIndex) {
+        const item = state.scopingSheets[0].lineItems[itemIndex];
+        item.appliesTo = item.appliesTo || [];
+
+        openMappingDropdown({
+            anchorEl: e.currentTarget,
+            options: state.teamMembers.map(m => ({
+                id: m.id,
+                label: m.name,
+                checked: item.appliesTo.includes(m.id)
+            })),
+            allowMultiple: true,
+            onSelect: (memberId, isChecked) => {
+                // 1. Update the "Applies To" list for the row
+                if (isChecked) {
+                    if (!item.appliesTo.includes(memberId)) item.appliesTo.push(memberId);
+                } else {
+                    item.appliesTo = item.appliesTo.filter(id => id !== memberId);
+                }
+
+                // 2. FORCED SYNC: Overwrite all task owners to match exactly
+                if (item.tasks) {
+                    item.tasks.forEach(task => {
+                        task.ownerIds = [...item.appliesTo];
+                    });
+                }
+
+                OL.persist();
+                renderScopingSheets();
+                renderClientTasks();
+            }
+        });
+    };
 
   OL.openRowTaskMapper = function(anchorEl, resourceId) {
       const resource = state.resources.find(r => r.id === resourceId);
@@ -9102,6 +9329,253 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       });
   };
 
+  OL.openScopingTaskModal = function(itemIndex, focusTaskIndex = null) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      if (!item) return;
+      
+      item.tasks = item.tasks || [];
+      const resource = state.resources.find(r => r.id === item.resourceId);
+      const title = resource ? resource.name : (item.tempName || "Draft Item");
+
+      const html = `
+          <div class="modal-head">
+              <div class="modal-title-text">${focusTaskIndex !== null ? 'Task Detail' : 'Tasks'}: ${esc(title)}</div>
+              <div class="spacer"></div>
+              <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+          </div>
+          <div class="modal-body">
+              ${focusTaskIndex === null ? `
+                  <div class="header-actions" style="margin-bottom: 15px; display: flex; gap: 10px;">
+                      <button class="btn small soft" onclick="OL.addScopingTaskFromLibrary(${itemIndex})">+ From Library</button>
+                      <button class="btn small primary" onclick="OL.addCustomScopingTask(${itemIndex})">+ Custom Task</button>
+                  </div>
+              ` : ''}
+              
+              <div id="scopingTaskList" class="task-list-container">
+                  ${renderScopingTasks(itemIndex, focusTaskIndex)}
+              </div>
+          </div>
+      `;
+      openModal(html);
+  };
+
+  function renderScopingTasks(itemIndex, focusTaskIndex = null) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      
+      // Filter logic for focused view vs full list
+      const displayTasks = focusTaskIndex !== null 
+          ? item.tasks.filter((_, idx) => idx === focusTaskIndex) 
+          : item.tasks;
+
+      if (!displayTasks || displayTasks.length === 0) return '<div class="empty-hint">No tasks assigned yet.</div>';
+
+      return displayTasks.map((task, tIdx) => {
+          const actualIdx = focusTaskIndex !== null ? focusTaskIndex : tIdx;
+          const isChecked = task.status === "Done";
+          const ownerIds = task.ownerIds || [];
+          
+          const avatarStack = ownerIds.map(id => {
+              const m = findTeamMemberById(id);
+              return m ? `<span class="pill small soft">${esc(OL.utils.getInitials(m.name))}</span>` : '';
+          }).join('');
+
+          return `
+              <div class="todo-item card ${isChecked ? 'task-complete' : ''}" style="margin-bottom: 16px; position: relative;">
+                  <div style="display: flex; align-items: flex-start; gap: 12px;">
+                      <input type="checkbox" style="margin-top: 4px;" ${isChecked ? 'checked' : ''} 
+                          onchange="OL.toggleTaskStatus(event, ${itemIndex}, ${actualIdx})">
+                      
+                      <div style="flex: 1;">
+                          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                              <div style="font-weight: 700; font-size: 14px; flex: 1;" contenteditable="true" 
+                                  onblur="OL.updateScopingTask(${itemIndex}, ${actualIdx}, 'name', this.textContent)">${esc(task.name)}</div>
+                              ${(task.linkedItemIds || []).length > 1 ? '<span title="Shared Task" style="cursor:help;">🔗</span>' : ''}
+                          </div>
+
+                          <textarea class="modal-textarea small" 
+                              style="width: 100%; height: 50px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px;"
+                              placeholder="Add internal notes or instructions..."
+                              onblur="OL.updateScopingTask(${itemIndex}, ${actualIdx}, 'description', this.value)">${esc(task.description || "")}</textarea>
+                          
+                          <div class="task-footer-meta" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+                              <div style="display: flex; align-items: center; gap: 8px;">
+                                  <span class="mini-label">Assignees:</span> 
+                                  <div class="avatar-stack">${avatarStack || '<span class="muted small">Inherited</span>'}</div>
+                              </div>
+
+                              <div class="clickable" style="display: flex; align-items: center; gap: 6px;" 
+                                  onclick="OL.openScopingTaskCal(this, ${itemIndex}, ${actualIdx})">
+                                  <span class="mini-label">Due:</span> 
+                                  <strong class="small" style="color: var(--accent);">${task.dueDate || 'Set Date'}</strong>
+                              </div>
+
+                              <div class="clickable" style="display: flex; align-items: center; gap: 6px;" 
+                                  onclick="OL.mapTaskToOtherItems(event, ${itemIndex}, ${actualIdx})">
+                                  <span class="mini-label">Links:</span> 
+                                  <span class="pill tiny soft">🔗 ${(task.linkedItemIds || [itemIndex]).length} Items</span>
+                              </div>
+                          </div>
+
+                          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line);">
+                              <div class="mini-label" style="margin-bottom: 5px;">Linked Resources:</div>
+                              <div id="task-res-pills-${actualIdx}" class="pills-row" style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                  ${(task.attachedResourceIds || []).map(rId => {
+                                      const r = getResourceById(rId);
+                                      return r ? `<span class="pill tiny accent" style="padding: 2px 8px;">📄 ${esc(r.name)} <b class="clickable" onclick="OL.detachResourceFromTask(${itemIndex}, ${actualIdx}, '${rId}')">×</b></span>` : '';
+                                  }).join('')}
+                                  <button class="btn tiny soft" style="padding: 0 6px;" onclick="OL.attachResourceToTask(event, ${itemIndex}, ${actualIdx})">+</button>
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <div class="card-close" style="top: 10px; right: 10px;" onclick="OL.removeScopingTask(${itemIndex}, ${actualIdx})">×</div>
+                  </div>
+              </div>
+          `;
+      }).join('');
+  }
+  
+  OL.mapTaskToOtherItems = function(e, sourceItemIdx, taskIdx) {
+      const scope = state.scopingSheets[0];
+      const task = scope.lineItems[sourceItemIdx].tasks[taskIdx];
+      
+      // Ensure the reference tracking array exists
+      task.linkedItemIds = task.linkedItemIds || [sourceItemIdx];
+
+      const options = scope.lineItems.map((item, idx) => {
+          const res = state.resources.find(r => r.id === item.resourceId);
+          const name = res ? res.name : (item.tempName || "Draft Item");
+          return {
+              id: idx,
+              label: `Round ${item.projectRound || 1}: ${name}`,
+              checked: task.linkedItemIds.includes(idx)
+          };
+      });
+
+      openMappingDropdown({
+        anchorEl: btn,
+        options: options,
+        allowMultiple: true,
+        onSelect: (choiceId, isChecked) => {
+            // --- FIX: Declare actualId at the start of the callback ---
+            const isNeed = choiceId.includes('_need_');
+            const actualId = choiceId.split('_').pop(); 
+            // ---------------------------------------------------------
+
+            const sourceList = isNeed ? state.masterItemsNeeded : state.masterPrework;
+            const masterItem = sourceList.find(i => i.id === actualId);
+
+            if (!masterItem) {
+                console.error("Master item not found:", actualId);
+                return;
+            }
+
+            item.tasks = item.tasks || [];
+
+            if (isChecked) {
+                if (!item.tasks.some(t => t.masterId === actualId)) {
+                    item.tasks.push({
+                        id: uid(),
+                        masterId: actualId, 
+                        name: masterItem.name,
+                        description: masterItem.defaultDescription || "",
+                        status: "Pending",
+                        ownerIds: [...(item.appliesTo || [])], 
+                        source: 'master',
+                        linkedItemIds: [itemIndex] // Reference for shared tasks
+                    });
+                }
+            } else {
+                // Use the now-defined actualId to filter
+                item.tasks = item.tasks.filter(t => t.masterId !== actualId);
+            }
+
+            OL.persist();
+            
+            // Refresh the specific list container if modal is open
+            const listContainer = document.getElementById("scopingTaskList");
+            if (listContainer) listContainer.innerHTML = renderScopingTasks(itemIndex);
+            
+            renderClientTasks();
+        }
+    });
+  };
+
+  OL.addCustomScopingTask = function(itemIndex) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      const name = prompt("Enter custom task name:");
+      if (!name || !item) return;
+      
+      item.tasks.push({
+          id: uid(),
+          name: name,
+          status: "Pending",
+          // CRITICAL: Inherit from "Applies To" immediately
+          ownerIds: [...(item.appliesTo || [])], 
+          dueDate: null,
+          source: 'custom'
+      });
+      
+      OL.persist();
+      OL.openScopingTaskModal(itemIndex);
+      renderClientTasks();
+  };
+
+  OL.updateScopingTask = function(itemIndex, taskIndex, field, value) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      item.tasks[taskIndex][field] = value;
+      
+      OL.persist();
+      if (field === 'status') {
+          OL.openScopingTaskModal(itemIndex);
+      }
+      renderClientTasks(); // Keep Client Task page in sync
+  };
+
+  // 1. Function to add an Ad-hoc Row
+  OL.addAdHocRow = function() {
+      if (!state.scopingSheets[0]) state.scopingSheets.push({ id: Date.now(), lineItems: [] });
+      
+      state.scopingSheets[0].lineItems.push({
+          resourceId: null, // Draft state
+          tempName: "New Item (Draft)",
+          status: 'Scoping',
+          responsibleParty: 'Sphynx',
+          projectRound: 1,
+          estimatedHours: 1.0,
+          isAdHoc: true
+      });
+      
+      renderScopingSheets();
+      OL.persist();
+  };
+
+  OL.convertItemToResource = function(index) {
+      const item = state.scopingSheets[0].lineItems[index];
+      if (!item || !item.isAdHoc) return;
+
+      if (confirm(`Promote "${item.tempName}" to the verified Resource Library?`)) {
+          const newRes = {
+              id: OL.utils.uid(),
+              name: item.tempName,
+              type: 'doc', 
+              status: 'Done', // Mark as Done in library since it's approved
+              createdDate: new Date().toISOString(),
+              activityLog: item.internalLog || []
+          };
+
+          state.resources.push(newRes);
+          item.resourceId = newRes.id;
+          delete item.isAdHoc;
+          delete item.tempName;
+          delete item.internalLog;
+
+          OL.logResourceActivity(newRes, "Converted from Scoping Sheet ad-hoc placeholder.");
+          OL.persist();
+          renderScopingSheets();
+      }
+  };
+
   OL.confirmScopeAddition = function(resId) {
       const resource = state.resources.find(r => r.id === resId);
       if (!state.scopingSheets[0]) {
@@ -9127,48 +9601,46 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
   OL.updateScopeItem = function(index, field, value) {
       const scope = state.scopingSheets[0];
-      if (!scope || !scope.lineItems[index]) return;
+      if (!scope || !scope.lineItems) return;
 
+      // Fix for the ReferenceError: item is now properly scoped
       const item = scope.lineItems[index];
+      if (!item) return;
+
       const oldValue = item[field];
-
-      // 1. Save data correctly (String vs Number)
       const numericFields = ['projectRound', 'steps', 'codeVars', 'emails', 'conditions', 'questions', 'pdfPages', 'signatures', 'addons', 'eventTypes', 'teamMembers', 'estimatedHours'];
-      scope.lineItems[index][field] = numericFields.includes(field) ? (parseFloat(value) || 0) : value;
-
       const newValue = numericFields.includes(field) ? (parseFloat(value) || 0) : value;
-
-      // Stop if no actual change occurred
+      
       if (oldValue === newValue) return;
+      item[field] = newValue;
 
-      // 2. Push to Activity Log if Status or Notes changed
-      if (field === 'status' || field === 'notes') {
+      // Log updates to the proper destination
+      if (field === 'status' || field === 'notes' || field === 'tempName') {
           const resource = state.resources.find(r => r.id === item.resourceId);
+          const logMsg = `[Scope Update] ${field.toUpperCase()}: "${newValue}" (was: "${oldValue || 'None'}")`;
+          
           if (resource) {
-              const logMessage = `[Scoping Sheet] ${field.toUpperCase()} updated: "${newValue}" (was: "${oldValue || 'None'}")`;
-              OL.logResourceActivity(resource, logMessage);
+              OL.logResourceActivity(resource, logMsg);
+          } else if (item.isAdHoc) {
+              item.internalLog = item.internalLog || [];
+              item.internalLog.push({ date: new Date().toISOString(), note: logMsg });
           }
       }
 
-      // 3. Persist and Refresh
-      OL.persist();
+      OL.persist(); 
 
-      //4. Smart Refresh: 
-      // If we changed status/responsible/round, we MUST re-render the whole sheet 
-      // because it might affect filtering or grouping.
-      // If we just changed a number, we only update the row and totals.
+      // Handle Sidebar Layout sync via JS
+      const main = document.getElementById('mainContent');
+      if (main) {
+          const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+          main.style.marginLeft = isCollapsed ? "60px" : "240px";
+      }
+
       const structuralFields = ['status', 'responsibleParty', 'projectRound'];
-      
       if (structuralFields.includes(field)) {
-          renderScopingSheets(); // Redraws to handle grouping/filtering correctly
+          renderScopingSheets(); 
       } else {
-          const resource = state.resources.find(r => r.id === scope.lineItems[index].resourceId);
-          const rowHrs = calculateRowTotal(scope.lineItems[index], resource?.type);
-          
-          const rowHrsEl = document.getElementById(`row-calc-${index}`);
-          if (rowHrsEl) rowHrsEl.textContent = `${rowHrs} hrs`;
-          
-          updateScopeTotals(); // Update the footer
+          updateScopeTotals();
       }
   };
 
@@ -9391,41 +9863,79 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       // 1. Get SOP Library Tasks (In Progress guides)
       const sopTasks = state.howToLibrary.filter(ht => 
           ht.status === "In Progress" || (ht.updatesNeeded && ht.updatesNeeded.length > 0)
-      );
+      ).map(ht => ({
+          id: ht.id,
+          name: ht.name,
+          type: 'SOP Update',
+          tags: ht.tags || [],
+          notes: ht.description || 'Update required for SOP documentation.',
+          dueDate: ht.targetDate || null,
+          ownerIds: ht.assignedTo || []
+      }));
 
       // 2. Get Approved Scoping Tasks ("Do Now" + "Sphynx")
       const scope = state.scopingSheets[0] || { lineItems: [] };
       const scopingTasks = scope.lineItems.filter(item => 
           item.status === "Do Now" && item.responsibleParty === "Sphynx"
-      ).map(item => {
+      ).map((item, idx) => {
           const res = state.resources.find(r => r.id === item.resourceId);
           return {
-              id: item.resourceId,
-              name: `Implement: ${res?.name || 'Unknown'}`,
+              id: item.resourceId || `adhoc-${idx}`,
+              name: `Implement: ${res?.name || item.tempName || 'Unknown'}`,
               type: 'Implementation',
-              tags: [res?.type || 'doc'],
-              notes: item.notes
+              tags: [res?.type || 'adhoc'],
+              notes: item.notes || 'Implementation phase active.',
+              dueDate: item.targetDate || null, // Assuming you track row-level dates
+              ownerIds: item.appliesTo || [] // Matching your "Applies To" logic
           };
       });
 
-      // 3. Render Combined List
+      // 3. Render Combined List with Enhanced Separation
       container.innerHTML = `
           <div class="section-header"><h2>Sphynx Implementation Queue</h2></div>
-          <div class="todo-list">
-              ${[...sopTasks, ...scopingTasks].map(task => `
-                  <div class="todo-item card" onclick="${task.type === 'Implementation' ? `OL.openResourceModal('${task.id}')` : `OL.openHowToModal('${task.id}')`}">
-                      <div class="todo-main">
-                          <span class="pill small ${task.type === 'Implementation' ? 'accent' : 'warn'}">
-                              ${task.type || 'SOP Update'}
-                          </span>
-                          <strong>${esc(task.name)}</strong>
-                          <p class="small muted">${esc(task.notes || '')}</p>
+          <div class="task-list-container" style="display: flex; flex-direction: column; gap: 16px; padding: 10px;">
+              ${[...sopTasks, ...scopingTasks].map(task => {
+              // FIX: Use Array.isArray to safely handle the data
+              const owners = Array.isArray(task.ownerIds) ? task.ownerIds : [];
+              
+              const ownerInitials = owners.map(id => {
+                  const m = findTeamMemberById(id);
+                  return m ? `<span class="pill tiny soft">${esc(OL.utils.getInitials(m.name))}</span>` : '';
+              }).join('');
+
+              const typeClass = task.type === 'Implementation' ? 'accent' : 'warn';
+
+                  return `
+                  <div class="todo-item card clickable-task-row" 
+                      style="border-left: 4px solid ${task.type === 'Implementation' ? 'var(--accent)' : '#8b5cf6'};"
+                      onclick="${task.type === 'Implementation' ? `OL.openResourceModal('${task.id}')` : `OL.openHowToModal('${task.id}')`}">
+                      
+                      <div class="todo-main" style="display:flex; flex-direction:column; gap:10px; width:100%;">
+                          <div style="display:flex; align-items:flex-start; gap:12px;">
+                              <span class="pill small ${typeClass}" style="flex-shrink: 0; font-size: 10px; padding: 2px 8px;">
+                                  ${task.type.toUpperCase()}
+                              </span>
+                              <div style="flex:1;">
+                                  <strong style="font-size: 14px; display: block; margin-bottom: 4px;">${esc(task.name)}</strong>
+                                  <p class="small muted" style="margin: 0; line-height: 1.4;">${esc(task.notes)}</p>
+                              </div>
+                          </div>
+
+                          <div class="task-footer-meta" style="margin-top: 8px; padding-top: 12px; border-top: 1px dashed var(--line);">
+                              <div style="display:flex; gap:6px; flex-wrap: wrap; flex: 1;">
+                                  ${(task.tags || []).map(t => `<span class="pill tiny soft" style="font-size: 9px;">#${t}</span>`).join('')}
+                              </div>
+                              
+                              <div style="display:flex; align-items:center; gap:15px; flex-shrink: 0;">
+                                  <div class="avatar-stack">${ownerInitials || '<span class="muted small">Unassigned</span>'}</div>
+                                  <div class="small ${task.dueDate ? 'accent' : 'muted'}" style="font-weight: 600;">
+                                      📅 ${task.dueDate || 'No Deadline'}
+                                  </div>
+                              </div>
+                          </div>
                       </div>
-                      <div class="todo-tags">
-                          ${(task.tags || []).map(t => `<span class="pill small soft">${t}</span>`).join('')}
-                      </div>
-                  </div>
-              `).join('')}
+                  </div>`;
+              }).join('')}
           </div>
       `;
   };
@@ -9455,55 +9965,215 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       const container = document.getElementById("section-client-tasks");
       if (!container) return;
 
-      // 1. Identify required datapoints from all mapped SOPs/Resources
-      const requiredDpIds = new Set();
-      state.howToLibrary.forEach(ht => {
-          (ht.clientItemsNeeded || []).forEach(id => requiredDpIds.add(id));
+      // 1. Gather ALL task references across the entire scope
+      const allTasks = [];
+      state.scopingSheets[0].lineItems.forEach((item, itemIdx) => {
+          (item.tasks || []).forEach((task, taskIdx) => {
+              allTasks.push({ ...task, parentItemIndex: itemIdx, taskIndex: taskIdx });
+          });
       });
 
-      const clientTasks = Array.from(requiredDpIds).map(id => {
-          const dp = state.datapoints.find(d => d.id === id);
-          return dp || null;
-      }).filter(Boolean);
+      // 2. Filter for unique Task IDs so shared tasks only appear ONCE
+      const uniqueTasks = Array.from(new Map(allTasks.map(t => [t.id, t])).values());
 
       container.innerHTML = `
-          <div class="content-header">
-              <div class="header-left">
-                  <h2>Client Requirements Checklist</h2>
-                  <p>Items automatically pulled from mapped SOPs and Resources.</p>
-              </div>
-              <button class="btn small soft" onclick="window.print()">🖨️ Export Client PDF</button>
-          </div>
-
+          <div class="content-header"><h2>Client Requirements Checklist</h2></div>
           <div class="task-list-container">
-              ${clientTasks.map(dp => {
-                  // Check if this task is marked as complete in state
-                  const isChecked = state.clientTaskStatus && state.clientTaskStatus[dp.id] ? 'checked' : '';
-                  
+              ${uniqueTasks.map(task => {
+                  // Determine all linked project items for the subtitle
+                  const links = task.linkedItemIds || [task.parentItemIndex];
+                  const parentNames = links.map(idx => {
+                      const item = state.scopingSheets[0].lineItems[idx];
+                      if (!item) return null;
+                      const res = state.resources.find(r => r.id === item.resourceId);
+                      return res ? res.name : (item.tempName || "Draft Item");
+                  }).filter(Boolean).join(', ');
+
+                  const ownerInitials = (task.ownerIds || []).map(id => {
+                      const m = findTeamMemberById(id);
+                      return m ? `<span class="pill tiny soft">${esc(OL.utils.getInitials(m.name))}</span>` : '';
+                  }).join('');
+
                   return `
-                      <div class="todo-item card ${isChecked ? 'task-complete' : ''}">
-                          <div class="todo-main">
-                              <label class="check-item" style="font-size: 1.1rem; cursor: pointer;">
-                                  <input type="checkbox" 
-                                      ${isChecked} 
-                                      onchange="OL.toggleClientTask('${dp.id}')">
-                                  <strong style="${isChecked ? 'text-decoration: line-through; opacity: 0.6;' : ''}">
-                                      ${esc(dp.name)}
-                                  </strong>
-                              </label>
-                              <div class="small muted" style="margin-left: 28px;">
-                                  ${esc(dp.description || 'Please provide this information.')}
+                  <div class="todo-item card clickable-task-row ${task.status === 'Done' ? 'task-complete' : ''}" 
+                      onclick="OL.openScopingTaskModal(${task.parentItemIndex}, ${task.taskIndex})">
+                      
+                      <div class="todo-main" style="display:flex; flex-direction:column; gap:8px; width:100%;">
+                          <div style="display:flex; align-items:center; gap:12px;">
+                              <input type="checkbox" ${task.status === 'Done' ? 'checked' : ''} 
+                                  onclick="event.stopPropagation(); OL.toggleTaskStatus(event, ${task.parentItemIndex}, ${task.taskIndex})">
+                              <div style="flex:1;">
+                                  <div style="display:flex; align-items:center; gap:6px;">
+                                      <strong>${esc(task.name)}</strong>
+                                      ${links.length > 1 ? '<span title="Shared Task">🔗</span>' : ''}
+                                  </div>
+                                  <div class="small muted">Applies to: ${esc(parentNames)}</div>
+                              </div>
+                              <span class="pill small ${task.status === 'Done' ? 'accent' : 'warn'}">${task.status}</span>
+                          </div>
+
+                          <div style="display:flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 8px;">
+                              <div class="avatar-stack">${ownerInitials || '<span class="muted small">Unassigned</span>'}</div>
+                              <div class="small ${task.dueDate ? 'accent' : 'muted'}">
+                                  📅 ${task.dueDate || 'No Due Date'}
                               </div>
                           </div>
-                          <div class="todo-tags">
-                              <span class="pill small soft">${esc(dp.objectType || 'General')}</span>
-                          </div>
                       </div>
-                  `;
+                  </div>`;
               }).join('')}
-              ${clientTasks.length === 0 ? '<div class="empty-hint">No items currently required from client.</div>' : ''}
           </div>
       `;
+  };
+
+  OL.toggleTaskStatus = function(e, itemIndex, taskIndex) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      const task = item.tasks[taskIndex];
+      
+      // Toggle logic
+      const newStatus = task.status === "Done" ? "Pending" : "Done";
+      task.status = newStatus;
+
+      OL.persist();
+      
+      // Sync UI across both potential views
+      if (document.getElementById("section-client-tasks")) renderClientTasks();
+      if (document.getElementById("scopingSheetContainer")) renderScopingSheets();
+      
+      // If the modal is open, refresh it
+      const modal = document.querySelector(".modal-body #scopingTaskList");
+      if (modal) modal.innerHTML = renderScopingTasks(itemIndex);
+  };
+
+  OL.addScopingTaskFromLibrary = function(itemIndex) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      const parentRes = state.resources.find(r => r.id === item.resourceId);
+      if (!parentRes) return alert("This item is not linked to a library resource yet.");
+
+      // Pull combined requirements from the parent resource
+      const neededDpIds = parentRes.clientItemsNeeded || [];
+      const preworkResIds = parentRes.resourcesUsed || [];
+
+      const options = [
+          ...neededDpIds.map(id => ({ id: `dp_${id}`, label: `📩 Need: ${state.datapoints.find(d => d.id === id)?.name}` })),
+          ...preworkResIds.map(id => ({ id: `res_${id}`, label: `📄 Prework: ${state.resources.find(r => r.id === id)?.name}` }))
+      ];
+
+      openMappingDropdown({
+          anchorEl: event.currentTarget,
+          options: options,
+          allowMultiple: true,
+          onSelect: (choiceId, isChecked) => {
+              // --- FIX: Extract actualId and name from the choiceId prefix ---
+              const isDP = choiceId.startsWith('dp_');
+              const actualId = choiceId.split('_').pop();
+              
+              // Find the object to get its real name
+              const sourceObj = isDP 
+                  ? state.datapoints.find(d => d.id === actualId)
+                  : state.resources.find(r => r.id === actualId);
+              
+              const taskName = sourceObj ? sourceObj.name : "Unknown Task";
+              // -------------------------------------------------------------
+
+              if (isChecked) {
+                  // Check if this task already exists in the row
+                  if (!item.tasks.some(t => t.originId === actualId)) {
+                      item.tasks.push({
+                          id: uid(),
+                          originId: actualId,
+                          name: taskName,
+                          status: "Pending",
+                          // Auto-inherit row assignees
+                          ownerIds: [...(item.appliesTo || [])], 
+                          source: 'library',
+                          // Track the current row as the primary link
+                          linkedItemIds: [itemIndex] 
+                      });
+                  }
+              } else {
+                  // Use the now-defined actualId to filter out the task
+                  item.tasks = item.tasks.filter(t => t.originId !== actualId);
+              }
+
+              OL.persist();
+              
+              // Refresh modal and global views
+              const listContainer = document.getElementById("scopingTaskList");
+              if (listContainer) listContainer.innerHTML = renderScopingTasks(itemIndex);
+              
+              renderClientTasks();
+          }
+      });
+  };
+
+  // Assign a specific Team Member to a scoping task
+  // Multi-Assignee Toggle
+  OL.assignMultiTaskMembers = function(e, itemIndex, taskIndex) {
+      const task = state.scopingSheets[0].lineItems[itemIndex].tasks[taskIndex];
+      task.ownerIds = task.ownerIds || [];
+
+      openMappingDropdown({
+          anchorEl: e.currentTarget,
+          options: state.teamMembers.map(m => ({
+              id: m.id,
+              label: m.name,
+              checked: task.ownerIds.includes(m.id)
+          })),
+          allowMultiple: true,
+          onSelect: (memberId, isChecked) => {
+              if (isChecked) task.ownerIds.push(memberId);
+              else task.ownerIds = task.ownerIds.filter(id => id !== memberId);
+              
+              OL.persist();
+              OL.openScopingTaskModal(itemIndex);
+          }
+      });
+  };
+
+  // Attach any resource from the library to the task
+  OL.attachResourceToTask = function(e, itemIndex, taskIndex) {
+      const task = state.scopingSheets[0].lineItems[itemIndex].tasks[taskIndex];
+      task.attachedResourceIds = task.attachedResourceIds || [];
+
+      openMappingDropdown({
+          anchorEl: e.currentTarget,
+          options: state.resources.map(r => ({
+              id: r.id,
+              label: r.name,
+              checked: task.attachedResourceIds.includes(r.id)
+          })),
+          allowMultiple: true,
+          onSelect: (resId, isChecked) => {
+              if (isChecked) task.attachedResourceIds.push(resId);
+              else task.attachedResourceIds = task.attachedResourceIds.filter(id => id !== resId);
+              
+              OL.persist();
+              OL.openScopingTaskModal(itemIndex);
+          }
+      });
+  };
+
+  // Set a due date using your existing mini-calendar
+  OL.openScopingTaskCal = function(anchorEl, itemIndex, taskIndex) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      const task = item.tasks[taskIndex];
+      const initialDate = task.dueDate || new Date().toISOString().split('T')[0];
+
+      OL.openMiniCalendar(anchorEl, initialDate, (newDate) => {
+          task.dueDate = newDate;
+          OL.persist();
+          OL.openScopingTaskModal(itemIndex); // Refresh modal
+          renderClientTasks(); // Sync to main page
+      });
+  };
+
+  // Remove a task entirely
+  OL.removeScopingTask = function(itemIndex, taskIndex) {
+      if (!confirm("Remove this task?")) return;
+      state.scopingSheets[0].lineItems[itemIndex].tasks.splice(taskIndex, 1);
+      OL.persist();
+      OL.openScopingTaskModal(itemIndex);
+      renderClientTasks();
   };
 
   OL.toggleClientTask = function(dpId) {
