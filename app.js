@@ -9140,9 +9140,10 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
   function calculateRowTotal(item, type) {
       const getValue = (val) => parseFloat(val) || 0;
-      const rates = state.scopingRates || {}; // Fallback to empty object
+      const rates = state.scopingRates || {}; 
       let hours = 0;
 
+      // 1. Calculate base hours based on type
       if (type === 'zap') {
           hours = (getValue(item.steps) * (rates.zap?.step || 0)) + 
                   (getValue(item.codeVars) * (rates.zap?.codeVar || 0));
@@ -9150,7 +9151,6 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           hours = (getValue(item.emails) * (rates.emailCampaign?.email || 0)) + 
                   (getValue(item.conditions) * (rates.emailCampaign?.condition || 0));
       } else if (type === 'scheduler') {
-          // FIX: Added optional chaining and default fallback
           hours = (getValue(item.eventTypes) * (rates.scheduler?.eventType || 0)) + 
                   (getValue(item.teamMembers) * (rates.scheduler?.teamMember || 0));
       } else if (type === 'form') {
@@ -9164,11 +9164,16 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           hours = getValue(item.estimatedHours);
       }
 
-      const extraTeamMembers = Math.max(0, (item.appliesTo || []).length - 1);
+      // 2. NEW: "Everyone" Multiplier Logic
+      // If appliesTo is empty/null, it means "Everyone". Use state.teamMembers count.
+      const isEveryone = !item.appliesTo || item.appliesTo.length === 0;
+      const effectiveTeamCount = isEveryone ? (state.teamMembers?.length || 1) : item.appliesTo.length;
+      
+      const extraTeamMembers = Math.max(0, effectiveTeamCount - 1);
+      
       if (extraTeamMembers > 0) {
           const multiplier = rates.teamMemberMultiplier || 1;
-          // Calculation: Total Hours * (Multiplier ^ Extra Members)
-          // Example: 10 hrs * (1.1 ^ 2 extra members) = 12.1 hrs
+          // Calculation: hours * (1.1 ^ extra_people)
           hours = hours * Math.pow(multiplier, extraTeamMembers);
       }
 
@@ -9206,11 +9211,17 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       }).join('');
 
       // Multiplier Calculation
-      const extraTeamMembers = Math.max(0, (item.appliesTo || []).length - 1);
+      const isEveryone = !item.appliesTo || item.appliesTo.length === 0;
+      const teamCount = isEveryone ? state.teamMembers.length : item.appliesTo.length;
+      const extraTeamMembers = Math.max(0, teamCount - 1);
+
       const multiplierValue = state.scopingRates.teamMemberMultiplier || 1;
       const totalMultiplier = Math.pow(multiplierValue, extraTeamMembers);
+
       const multiplierBadge = (extraTeamMembers > 0) 
-          ? `<div class="muted" style="font-size: 8px; color: var(--accent);">(x${totalMultiplier.toFixed(2)} Multiplier)</div>` 
+          ? `<div class="muted" style="font-size: 8px; color: var(--accent);">
+              (x${totalMultiplier.toFixed(2)} Multiplier for ${teamCount} ppl)
+            </div>` 
           : '';
 
       // Return using Grid classes for alignment
@@ -9233,6 +9244,12 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
               <div class="col-description">
                   ${titleHTML} 
                   ${!isClient ? `<div class="input-group-row">${getInputsForType(type, item, index)}</div>` : `<div class="small muted">${esc(resource.description || '')}</div>`}
+                  <div class="clickable muted" 
+                    title="Sync parameters from Resource Library"
+                    onclick="OL.autoCalculateScopingParameters(${index})" 
+                    style="margin-left: 8px; font-size: 14px;">
+                    🔄
+                  </div>
               </div>
               <div class="col-applies">
                   <div class="clickable" onclick="OL.openAppliesToPicker(event, ${index})">
@@ -9372,11 +9389,27 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       return displayTasks.map((task, tIdx) => {
           const actualIdx = focusTaskIndex !== null ? focusTaskIndex : tIdx;
           const isChecked = task.status === "Done";
-          const ownerIds = task.ownerIds || [];
+    
+          const ownerIds = (task.ownerIds && task.ownerIds.length > 0) 
+              ? task.ownerIds 
+              : state.teamMembers.map(m => m.id); // Default to all if "Everyone"
           
           const avatarStack = ownerIds.map(id => {
               const m = findTeamMemberById(id);
               return m ? `<span class="pill small soft">${esc(OL.utils.getInitials(m.name))}</span>` : '';
+          }).join('');
+
+          // NEW: Linked Instructions Logic
+          const linkedInstructionsHTML = (task.attachedInstructionIds || []).map(instId => {
+              const inst = state.howToLibrary.find(h => h.id === instId);
+              // FIX: Match the visibility check here too
+              if (inst && inst.visibility === 'Client Facing') {
+                  return `<span class="pill tiny accent" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
+                      📖 ${esc(inst.name)} 
+                      <b class="clickable" onclick="OL.detachInstructionFromTask(${itemIndex}, ${actualIdx}, '${instId}')">×</b>
+                  </span>`;
+              }
+              return '';
           }).join('');
 
           return `
@@ -9417,13 +9450,11 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                           </div>
 
                           <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line);">
-                              <div class="mini-label" style="margin-bottom: 5px;">Linked Resources:</div>
-                              <div id="task-res-pills-${actualIdx}" class="pills-row" style="display: flex; flex-wrap: wrap; gap: 5px;">
-                                  ${(task.attachedResourceIds || []).map(rId => {
-                                      const r = getResourceById(rId);
-                                      return r ? `<span class="pill tiny accent" style="padding: 2px 8px;">📄 ${esc(r.name)} <b class="clickable" onclick="OL.detachResourceFromTask(${itemIndex}, ${actualIdx}, '${rId}')">×</b></span>` : '';
-                                  }).join('')}
-                                  <button class="btn tiny soft" style="padding: 0 6px;" onclick="OL.attachResourceToTask(event, ${itemIndex}, ${actualIdx})">+</button>
+                              <div class="mini-label" style="margin-bottom: 5px;">Linked Instructions (Client-Facing):</div>
+                              <div id="task-inst-pills-${actualIdx}" class="pills-row" style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                  ${linkedInstructionsHTML}
+                                  <button class="btn tiny soft" style="padding: 0 6px;" 
+                                      onclick="OL.attachInstructionToTask(event, ${itemIndex}, ${actualIdx})">+</button>
                               </div>
                           </div>
                       </div>
@@ -9434,8 +9465,22 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
           `;
       }).join('');
   }
+
+  OL.detachInstructionFromTask = function(itemIndex, taskIndex, instId) {
+      const task = state.scopingSheets[0].lineItems[itemIndex].tasks[taskIndex];
+      task.attachedInstructionIds = (task.attachedInstructionIds || []).filter(id => id !== instId);
+
+      OL.persist();
+      
+      // --- FIX: Maintain focus here as well ---
+      OL.openScopingTaskModal(itemIndex, taskIndex);
+      
+      if (document.getElementById("section-client-tasks")) renderClientTasks();
+  };
   
   OL.mapTaskToOtherItems = function(e, sourceItemIdx, taskIdx) {
+      // 1. FIX: Define the anchor element for the dropdown
+      const btn = e.currentTarget; 
       const scope = state.scopingSheets[0];
       const task = scope.lineItems[sourceItemIdx].tasks[taskIdx];
       
@@ -9453,52 +9498,39 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       });
 
       openMappingDropdown({
-        anchorEl: btn,
-        options: options,
-        allowMultiple: true,
-        onSelect: (choiceId, isChecked) => {
-            // --- FIX: Declare actualId at the start of the callback ---
-            const isNeed = choiceId.includes('_need_');
-            const actualId = choiceId.split('_').pop(); 
-            // ---------------------------------------------------------
+          anchorEl: btn,
+          options: options,
+          allowMultiple: true,
+          onSelect: (targetItemIdx, isChecked) => {
+              // targetItemIdx comes back from the dropdown choice
+              const targetItem = scope.lineItems[targetItemIdx];
+              targetItem.tasks = targetItem.tasks || [];
 
-            const sourceList = isNeed ? state.masterItemsNeeded : state.masterPrework;
-            const masterItem = sourceList.find(i => i.id === actualId);
+              if (isChecked) {
+                  if (!task.linkedItemIds.includes(targetItemIdx)) {
+                      // Add this item to the task's reference list
+                      task.linkedItemIds.push(targetItemIdx);
+                      // Add the SAME task object to the target item's task list
+                      if (!targetItem.tasks.find(t => t.id === task.id)) {
+                          targetItem.tasks.push(task); 
+                      }
+                  }
+              } else {
+                  // Remove the link
+                  task.linkedItemIds = task.linkedItemIds.filter(id => id !== targetItemIdx);
+                  targetItem.tasks = targetItem.tasks.filter(t => t.id !== task.id);
+              }
 
-            if (!masterItem) {
-                console.error("Master item not found:", actualId);
-                return;
-            }
-
-            item.tasks = item.tasks || [];
-
-            if (isChecked) {
-                if (!item.tasks.some(t => t.masterId === actualId)) {
-                    item.tasks.push({
-                        id: uid(),
-                        masterId: actualId, 
-                        name: masterItem.name,
-                        description: masterItem.defaultDescription || "",
-                        status: "Pending",
-                        ownerIds: [...(item.appliesTo || [])], 
-                        source: 'master',
-                        linkedItemIds: [itemIndex] // Reference for shared tasks
-                    });
-                }
-            } else {
-                // Use the now-defined actualId to filter
-                item.tasks = item.tasks.filter(t => t.masterId !== actualId);
-            }
-
-            OL.persist();
-            
-            // Refresh the specific list container if modal is open
-            const listContainer = document.getElementById("scopingTaskList");
-            if (listContainer) listContainer.innerHTML = renderScopingTasks(itemIndex);
-            
-            renderClientTasks();
-        }
-    });
+              OL.persist();
+              
+              // Refresh UI components
+              renderClientTasks();
+              renderScopingSheets();
+              
+              // Keep the task modal focused on the single task view
+              OL.openScopingTaskModal(sourceItemIdx, taskIdx);
+          }
+      });
   };
 
   OL.addCustomScopingTask = function(itemIndex) {
@@ -9853,6 +9885,33 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       // This will re-run renderScopingSheets, which we will update next to respect these filters
       renderScopingSheets();
   };
+
+  OL.autoCalculateScopingParameters = function(itemIndex) {
+      const item = state.scopingSheets[0].lineItems[itemIndex];
+      const res = state.resources.find(r => r.id === item.resourceId);
+      
+      if (!res) return;
+
+      // Helper to get count regardless of if it's a number or an array
+      const getCount = (val) => Array.isArray(val) ? val.length : (parseFloat(val) || 0);
+
+      if (res.type === 'zap') {
+          item.steps = getCount(res.steps); // Works for [{},{}] or just the number 5
+          item.codeVars = getCount(res.codeVars);
+      } else if (res.type === 'emailCampaign') {
+          item.emails = getCount(res.steps);
+          item.conditions = getCount(res.conditions);
+      } else if (res.type === 'form') {
+          item.questions = getCount(res.fields); // Note: mapping 'fields' to 'questions'
+          item.emails = getCount(res.autoresponders);
+      }
+
+      // Run the price calculation with the new numbers
+      item.estimatedHours = calculateRowTotal(item, res.type);
+      
+      OL.persist();
+      renderScopingSheets(); 
+  };
   //--------------------------------------------------------------
   // SPHYNX TASKS
   //--------------------------------------------------------------
@@ -9892,7 +9951,8 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
 
       // 3. Render Combined List with Enhanced Separation
       container.innerHTML = `
-          <div class="section-header"><h2>Sphynx Implementation Queue</h2></div>
+          <div class="section-header"><h2>Sphynx Implementation Queue</h2>
+          </div>
           <div class="task-list-container" style="display: flex; flex-direction: column; gap: 16px; padding: 10px;">
               ${[...sopTasks, ...scopingTasks].map(task => {
               // FIX: Use Array.isArray to safely handle the data
@@ -9965,22 +10025,21 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       const container = document.getElementById("section-client-tasks");
       if (!container) return;
 
-      // 1. Gather ALL task references across the entire scope
+      // 1. Gather and De-duplicate tasks (Reference-based)
       const allTasks = [];
       state.scopingSheets[0].lineItems.forEach((item, itemIdx) => {
           (item.tasks || []).forEach((task, taskIdx) => {
               allTasks.push({ ...task, parentItemIndex: itemIdx, taskIndex: taskIdx });
           });
       });
-
-      // 2. Filter for unique Task IDs so shared tasks only appear ONCE
       const uniqueTasks = Array.from(new Map(allTasks.map(t => [t.id, t])).values());
 
       container.innerHTML = `
-          <div class="content-header"><h2>Client Requirements Checklist</h2></div>
-          <div class="task-list-container">
+          <div class="content-header"><h2>Client Requirements Checklist</h2>
+            <button class="btn small primary" onclick="OL.createGlobalTask()">+ Create Task</button>
+          </div>
+          <div class="task-list-container" style="display: flex; flex-direction: column; gap: 16px; padding: 10px;">
               ${uniqueTasks.map(task => {
-                  // Determine all linked project items for the subtitle
                   const links = task.linkedItemIds || [task.parentItemIndex];
                   const parentNames = links.map(idx => {
                       const item = state.scopingSheets[0].lineItems[idx];
@@ -9989,22 +10048,30 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                       return res ? res.name : (item.tempName || "Draft Item");
                   }).filter(Boolean).join(', ');
 
-                  const ownerInitials = (task.ownerIds || []).map(id => {
+                  const owners = Array.isArray(task.ownerIds) ? task.ownerIds : [];
+                  const ownerInitials = owners.map(id => {
                       const m = findTeamMemberById(id);
                       return m ? `<span class="pill tiny soft">${esc(OL.utils.getInitials(m.name))}</span>` : '';
                   }).join('');
 
+                  // Generate the Instruction Buttons
+                  const linkedInstructions = (task.attachedInstructionIds || []).map(instId => {
+                      const inst = state.howToLibrary.find(h => h.id === instId);
+                      return inst ? `<button class="btn tiny primary soft" style="font-size: 10px; padding: 4px 8px;" onclick="event.stopPropagation(); OL.openHowToModal('${inst.id}')">📖 Read: ${esc(inst.name)}</button>` : '';
+                  }).join('');
+
                   return `
                   <div class="todo-item card clickable-task-row ${task.status === 'Done' ? 'task-complete' : ''}" 
+                      style="border-left: 4px solid ${task.status === 'Done' ? '#10b981' : 'var(--accent)'};"
                       onclick="OL.openScopingTaskModal(${task.parentItemIndex}, ${task.taskIndex})">
                       
-                      <div class="todo-main" style="display:flex; flex-direction:column; gap:8px; width:100%;">
+                      <div class="todo-main" style="display:flex; flex-direction:column; gap:10px; width:100%;">
                           <div style="display:flex; align-items:center; gap:12px;">
                               <input type="checkbox" ${task.status === 'Done' ? 'checked' : ''} 
                                   onclick="event.stopPropagation(); OL.toggleTaskStatus(event, ${task.parentItemIndex}, ${task.taskIndex})">
                               <div style="flex:1;">
-                                  <div style="display:flex; align-items:center; gap:6px;">
-                                      <strong>${esc(task.name)}</strong>
+                                  <div style="display:flex; align-items:center; gap:8px;">
+                                      <strong style="font-size: 14px;">${esc(task.name)}</strong>
                                       ${links.length > 1 ? '<span title="Shared Task">🔗</span>' : ''}
                                   </div>
                                   <div class="small muted">Applies to: ${esc(parentNames)}</div>
@@ -10012,9 +10079,17 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
                               <span class="pill small ${task.status === 'Done' ? 'accent' : 'warn'}">${task.status}</span>
                           </div>
 
-                          <div style="display:flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 8px;">
-                              <div class="avatar-stack">${ownerInitials || '<span class="muted small">Unassigned</span>'}</div>
-                              <div class="small ${task.dueDate ? 'accent' : 'muted'}">
+                          ${linkedInstructions ? `
+                          <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0;">
+                              ${linkedInstructions}
+                          </div>` : ''}
+
+                          <div class="task-footer-meta" style="margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--line); display: flex; justify-content: space-between; align-items: center;">
+                              <div style="display: flex; align-items: center; gap: 8px;">
+                                  <span class="mini-label">Sphynx Lead:</span>
+                                  <div class="avatar-stack">${ownerInitials || '<span class="muted small">Unassigned</span>'}</div>
+                              </div>
+                              <div class="small ${task.dueDate ? 'accent' : 'muted'}" style="font-weight: 600;">
                                   📅 ${task.dueDate || 'No Due Date'}
                               </div>
                           </div>
@@ -10044,60 +10119,70 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       if (modal) modal.innerHTML = renderScopingTasks(itemIndex);
   };
 
-  OL.addScopingTaskFromLibrary = function(itemIndex) {
+  OL.addScopingTaskFromLibrary = function(e, itemIndex) {
+      // 1. FIX: Capture the anchor element correctly
+      const btn = e.currentTarget; 
       const item = state.scopingSheets[0].lineItems[itemIndex];
       const parentRes = state.resources.find(r => r.id === item.resourceId);
+      
       if (!parentRes) return alert("This item is not linked to a library resource yet.");
 
-      // Pull combined requirements from the parent resource
+      // Pull requirements from the parent resource
       const neededDpIds = parentRes.clientItemsNeeded || [];
       const preworkResIds = parentRes.resourcesUsed || [];
 
       const options = [
-          ...neededDpIds.map(id => ({ id: `dp_${id}`, label: `📩 Need: ${state.datapoints.find(d => d.id === id)?.name}` })),
-          ...preworkResIds.map(id => ({ id: `res_${id}`, label: `📄 Prework: ${state.resources.find(r => r.id === id)?.name}` }))
+          ...neededDpIds.map(id => ({ 
+              id: `dp_${id}`, 
+              label: `📩 Need: ${state.datapoints.find(d => d.id === id)?.name}`,
+              checked: (item.tasks || []).some(t => t.originId === id)
+          })),
+          ...preworkResIds.map(id => {
+              const r = state.resources.find(res => res.id === id);
+              return { 
+                  id: `res_${id}`, 
+                  label: `📄 Prework: ${r?.name}`,
+                  checked: (item.tasks || []).some(t => t.originId === id)
+              };
+          })
       ];
 
       openMappingDropdown({
-          anchorEl: event.currentTarget,
+          anchorEl: btn,
           options: options,
           allowMultiple: true,
           onSelect: (choiceId, isChecked) => {
-              // --- FIX: Extract actualId and name from the choiceId prefix ---
               const isDP = choiceId.startsWith('dp_');
               const actualId = choiceId.split('_').pop();
               
-              // Find the object to get its real name
               const sourceObj = isDP 
                   ? state.datapoints.find(d => d.id === actualId)
                   : state.resources.find(r => r.id === actualId);
               
               const taskName = sourceObj ? sourceObj.name : "Unknown Task";
-              // -------------------------------------------------------------
 
               if (isChecked) {
-                  // Check if this task already exists in the row
                   if (!item.tasks.some(t => t.originId === actualId)) {
                       item.tasks.push({
                           id: uid(),
                           originId: actualId,
                           name: taskName,
                           status: "Pending",
-                          // Auto-inherit row assignees
+                          description: sourceObj?.description || "",
                           ownerIds: [...(item.appliesTo || [])], 
                           source: 'library',
-                          // Track the current row as the primary link
-                          linkedItemIds: [itemIndex] 
+                          linkedItemIds: [itemIndex],
+                          // NEW: Automatically inherit instructions from the resource if they exist
+                          attachedInstructionIds: sourceObj?.instructionIds || [] 
                       });
                   }
               } else {
-                  // Use the now-defined actualId to filter out the task
                   item.tasks = item.tasks.filter(t => t.originId !== actualId);
               }
 
               OL.persist();
               
-              // Refresh modal and global views
+              // 2. Refresh the modal view to show the new task cards
               const listContainer = document.getElementById("scopingTaskList");
               if (listContainer) listContainer.innerHTML = renderScopingTasks(itemIndex);
               
@@ -10130,25 +10215,68 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       });
   };
 
-  // Attach any resource from the library to the task
-  OL.attachResourceToTask = function(e, itemIndex, taskIndex) {
+  OL.attachInstructionToTask = function(e, itemIndex, taskIndex) {
+      const btn = e.currentTarget;
       const task = state.scopingSheets[0].lineItems[itemIndex].tasks[taskIndex];
-      task.attachedResourceIds = task.attachedResourceIds || [];
+      
+      // 1. Prepare options from client-facing instructions
+      const options = state.howToLibrary
+          .filter(ht => ht.visibility === 'Client Facing')
+          .map(ht => ({
+              id: ht.id,
+              label: `📖 ${ht.name}`,
+              checked: (task.attachedInstructionIds || []).includes(ht.id)
+          }));
 
       openMappingDropdown({
-          anchorEl: e.currentTarget,
-          options: state.resources.map(r => ({
-              id: r.id,
-              label: r.name,
-              checked: task.attachedResourceIds.includes(r.id)
-          })),
+          anchorEl: btn,
+          options: options,
           allowMultiple: true,
-          onSelect: (resId, isChecked) => {
-              if (isChecked) task.attachedResourceIds.push(resId);
-              else task.attachedResourceIds = task.attachedResourceIds.filter(id => id !== resId);
+          searchEnabled: true, // Enables the search bar at the top
+          searchPlaceholder: "Search instructions...",
+          
+          // 2. Footer action to create a new instruction on the fly
+          footerAction: {
+              label: "+ Create New Instruction",
+              onClick: () => {
+                  const newName = prompt("Enter the name for the new Client-Facing Instruction:");
+                  if (newName) {
+                      const newId = 'ht-' + Date.now();
+                      const newInstruction = {
+                          id: newId,
+                          name: newName,
+                          visibility: 'Client Facing',
+                          description: '',
+                          link: ''
+                      };
+                      
+                      // Add to global library and save
+                      state.howToLibrary.push(newInstruction);
+                      
+                      // Automatically link it to the current task
+                      task.attachedInstructionIds = task.attachedInstructionIds || [];
+                      task.attachedInstructionIds.push(newId);
+                      
+                      OL.persist();
+                      OL.openScopingTaskModal(itemIndex, taskIndex);
+                  }
+              }
+          },
+          
+          onSelect: (instId, isChecked) => {
+              task.attachedInstructionIds = task.attachedInstructionIds || [];
               
+              if (isChecked) {
+                  if (!task.attachedInstructionIds.includes(instId)) {
+                      task.attachedInstructionIds.push(instId);
+                  }
+              } else {
+                  task.attachedInstructionIds = task.attachedInstructionIds.filter(id => id !== instId);
+              }
+
               OL.persist();
-              OL.openScopingTaskModal(itemIndex);
+              OL.openScopingTaskModal(itemIndex, taskIndex);
+              if (document.getElementById("section-client-tasks")) renderClientTasks();
           }
       });
   };
@@ -10181,6 +10309,46 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       console.log(`Received item: ${dpId}`);
       // Optional: Auto-log this in the related Resource activity log
       OL.persist();
+  };
+
+  OL.createGlobalTask = function() {
+      // 1. Ensure a "General" scoping item exists to hold global tasks
+      let generalItem = state.scopingSheets[0].lineItems.find(item => item.isGlobal);
+      
+      if (!generalItem) {
+          state.scopingSheets[0].lineItems.unshift({
+              id: 'global-' + Date.now(),
+              isGlobal: true,
+              tempName: "General Project Tasks",
+              status: "Do Now",
+              responsibleParty: "Sphynx",
+              tasks: [],
+              appliesTo: [] // Defaults to "Everyone"
+          });
+          generalItem = state.scopingSheets[0].lineItems[0];
+      }
+
+      const taskName = prompt("Enter Task Name:");
+      if (!taskName) return;
+
+      // 2. Create the task object
+      const newTask = {
+          id: uid(),
+          name: taskName,
+          status: "Pending",
+          description: "",
+          ownerIds: [], // Inherits "Everyone" logic
+          linkedItemIds: [0], // Links to the Global row
+          source: 'manual',
+          attachedInstructionIds: []
+      };
+
+      generalItem.tasks.push(newTask);
+      OL.persist();
+      
+      // 3. Refresh views
+      if (typeof renderClientTasks === 'function') renderClientTasks();
+      if (typeof renderSphynxTasks === 'function') renderSphynxTasks();
   };
 
   // ------------------------------------------------------------
@@ -10607,16 +10775,15 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
         <div class="card-section">
           <div style="display:flex; justify-content:space-between; align-items:center;">
              <label class="modal-section-label">User Access & Credentials</label>
-             <button class="btn small soft" id="appAddAccessBtn">+ Add Member</button>
           </div>
           <div id="appAccessContainer" style="margin-top:8px;">
             <div class="access-table-header">
-                    <div style="width: 120px;">Application</div>
-                    <div style="width: 100px;">Level</div>
+                    <div style="width: 120px;">Team Member</div>
+                    <div style="width: 100px;">Access Level</div>
                     <div style="flex: 1;">Notes / API Credentials</div>
             </div>
-
             ${accessRowsHTML || '<div class="empty-hint">No team members assigned yet.</div>'}
+            <button class="btn small soft" id="appAddAccessBtn">+ Add Member</button>
           </div>
         </div>
 
@@ -11865,42 +12032,50 @@ function renderFolderTreeRecursive(hier, parentId, depth = 0) {
       );
 
       return `
-          <div class="modal-section"">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                  <label class="modal-section-label">Application Access Profile</label>
-                  <button class="btn small soft" onclick="OL.openAppAccessDropdown(event, '${member.id}')">+ Add App Access</button>
-              </div>
-              <div class="access-table-header">
-                  <div style="width: 120px;">Application</div>
-                  <div style="width: 100px;">Level</div>
-                  <div style="flex: 1;">Notes / API Credentials</div>
-              </div>
-              <div class="access-table-body">
-                  ${appsWithAccess.map(app => {
-                      const accessEntry = app.access.find(a => a.memberId === member.id);
-                      return `
-                          <div class="access-table-row">
-                              <div class="access-app-pill"
+          <div class="modal-section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <label class="modal-section-label">Application Access Profile</label>
+                <button class="btn small soft" onclick="OL.openAppAccessDropdown(event, '${member.id}')">+ Add App Access</button>
+            </div>
+
+            <div class="access-table-header" style="display: flex; gap: 12px; padding: 10px 16px; background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                <div style="width: 120px;">Application</div>
+                <div style="width: 100px;">Level</div>
+                <div style="flex: 1;">Notes / API Credentials</div>
+                <div style="width: 20px;"></div>
+            </div>
+
+            <div class="access-table-body">
+                ${appsWithAccess.length > 0 ? appsWithAccess.map(app => {
+                    const accessEntry = app.access.find(a => a.memberId === member.id);
+                    return `
+                        <div class="access-table-row">
+                            <div class="datapoint-pill"
                                 onclick="OL.closeModal(); setTimeout(() => OL.openAppModal('${app.id}'), 50)">
                                 ${OL.utils.esc(app.name)}
-                              </div>
-                              <div class="access-cell-level" 
-                                  contenteditable="true" 
-                                  onblur="OL.updateAccessFromTeam('${app.id}', '${member.id}', 'level', this.textContent)">
-                                  ${OL.utils.esc(accessEntry.level || 'User')}
-                              </div>
-                              <div class="access-cell-notes" 
-                                  contenteditable="true" 
-                                  onblur="OL.updateAccessFromTeam('${app.id}', '${member.id}', 'notes', this.textContent)">
-                                  ${OL.utils.esc(accessEntry.notes || '')}
-                              </div>
-                              <div class="muted clickable" onclick="OL.revokeAccess('${app.id}', '${member.id}')" style="padding:0 5px;">×</div>
-                          </div>
-                      `;
-                  }).join('')}
-                  ${appsWithAccess.length === 0 ? '<div class="empty-hint">No app access assigned.</div>' : ''}
-              </div>
-          </div>
+                            </div>
+                            
+                            <div class="access-cell-level" 
+                                contenteditable="true" 
+                                placeholder="Admin"
+                                onblur="OL.updateAccessFromTeam('${app.id}', '${member.id}', 'level', this.textContent)">
+                                ${OL.utils.esc(accessEntry.level || 'User')}
+                            </div>
+                            
+                            <div class="access-cell-notes" 
+                                contenteditable="true" 
+                                placeholder="Add notes..."
+                                onblur="OL.updateAccessFromTeam('${app.id}', '${member.id}', 'notes', this.textContent)">
+                                ${OL.utils.esc(accessEntry.notes || '')}
+                            </div>
+                            
+                            <div class="muted clickable" style="width: 20px; text-align: center; font-size: 18px;" 
+                                onclick="OL.revokeAccess('${app.id}', '${member.id}')">×</div>
+                        </div>
+                    `;
+                }).join('') : '<div class="empty-hint" style="padding: 20px;">No app access assigned.</div>'}
+            </div>
+        </div>
       `;
   }
 
