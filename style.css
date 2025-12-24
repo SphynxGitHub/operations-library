@@ -3159,3 +3159,108 @@ input.inline-input.tiny {
     justify-content: space-between;
     align-items: center;
 }
+/* Container for the specific row */
+.access-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+}
+
+/* 1. Member/Application Column - Matches 120px header */
+.access-row .datapoint-pill {
+    flex: 0 0 120px; 
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0; /* Reset any default pill margins */
+}
+
+/* 2. Level Column - Matches 100px header */
+.access-row input[placeholder*="Level"] {
+    flex: 0 0 100px;
+    width: 100px; /* Force width for input elements */
+}
+
+/* 3. Notes Column - Matches flex: 1 header */
+.access-row input[placeholder*="Notes"] {
+    flex: 1;
+}
+
+/* 4. Delete Action Column */
+.access-row .muted.clickable {
+    flex: 0 0 20px;
+    text-align: center;
+    font-size: 18px;
+    line-height: 1;
+}
+
+/* Shared input styling for a cleaner look */
+.access-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: var(--text);
+    outline: none;
+}
+
+.access-input:focus {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Unified container for the access table */
+.access-table-body {
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Individual table row with flex alignment */
+.access-table-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+}
+
+.access-table-row:last-child {
+    border-bottom: none;
+}
+
+/* Fixed column widths to match header */
+.access-app-pill {
+    flex: 0 0 120px; /* Matches 120px header */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.access-cell-level {
+    flex: 0 0 100px; /* Matches 100px header */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 8px;
+    min-height: 24px;
+}
+
+.access-cell-notes {
+    flex: 1; /* Fills remaining space */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 8px;
+    min-height: 24px;
+}
+
+/* Active edit state */
+.access-cell-level:focus, .access-cell-notes:focus {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.08);
+    outline: none;
+}
