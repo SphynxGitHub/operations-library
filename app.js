@@ -215,7 +215,7 @@ window.buildLayout = function () {
 
   const clientTabs = [
     {
-      key: "checklist",
+      key: "tasks",
       label: "Tasks",
       icon: "📋",
       href: "#/client-tasks",
