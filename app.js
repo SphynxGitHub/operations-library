@@ -147,6 +147,10 @@ OL.initializeSecurityContext = function() {
 // 4. LAYOUT & ROUTING ENGINE
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
+  if (!root) {
+      console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
+      return; 
+  }
   const client = getActiveClient();
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
