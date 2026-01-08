@@ -15,9 +15,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Inject API Key
+      - name: Inject Keys
         run: |
           echo "window.GOOGLE_API_KEY = '${{ secrets.GOOGLE_API_KEY }}';" > config.js
+          echo "window.ADMIN_ACCESS_ID = '${{ secrets.ADMIN_ACCESS_ID }}';" >> config.js
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
