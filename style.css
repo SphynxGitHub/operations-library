@@ -1,0 +1,2306 @@
+/* ============================================================
+   CORE DESIGN TOKENS
+   ============================================================ */
+:root {
+    /* Backgrounds */
+    --bg: #050816;
+    --panel: #0b1020;
+    --panel-soft: #111827;
+    --panel-border: #1f2937;
+    
+    /* Branding Colors */
+    --accent: #38bdf8;       /* Sphynx Blue */
+    --accent-glow: rgba(56, 189, 248, 0.15);
+    --vault-gold: #fbbf24;   /* Master Library Identifier */
+    --danger: #f87171;
+    --success: #10b981;
+    
+    /* Text */
+    --text-main: #f9fafb;
+    --text-dim: #9ca3af;
+    --text-muted: #6b7280;
+    
+    /* Typography */
+    --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg);
+    color: var(--text-main);
+    font-family: var(--font-main);
+    font-size: 13px; /* Slightly larger base for better legibility */
+    line-height: 1.5;
+}
+
+textarea {
+  font-family: var(--font-main);
+}
+/* ============================================================
+   SYSTEM LAYOUT (Sidebar & Main Container)
+   ============================================================ */
+#app-root {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 240px;
+    background: var(--panel);
+    border-right: 1px solid var(--panel-border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    height: 100vh;
+    z-index: 100;
+    overflow-y: auto;
+}
+
+#mainContent {
+    flex: 1;
+    margin-left: 240px; 
+    padding: 40px;
+    background: radial-gradient(circle at top right, #0f172a, transparent);
+}
+
+/* ============================================================
+   SIDEBAR CATEGORY LABELS (Sphynx Master / Project Workspace)
+   ============================================================ */
+.menu-category-label {
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    padding: 24px 10px 12px 14px; /* Integrated top padding for first section */
+    text-transform: uppercase;
+    user-select: none;
+}
+
+/* Specific zones for admin and client nav */
+.admin-nav-zone {
+    padding-top: 5px;
+}
+
+.client-nav-zone {
+    padding-top: 5px;
+}
+
+.divider {
+    height: 1px;
+    background: var(--panel-border);
+    margin: 10px 14px;
+    opacity: 0.5;
+}
+
+/* ============================================================
+   NAVIGATION MENU & LINKS
+   ============================================================ */
+.menu {
+    padding: 0 12px 20px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.menu a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid transparent; /* Prevents shifting when active */
+}
+
+.menu a i { 
+    font-style: normal; 
+    font-size: 16px; 
+    width: 20px; 
+    text-align: center; 
+}
+
+.menu a:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+.menu a.active {
+    background: var(--panel-soft); /* Darker "inset" blue-grey */
+    color: var(--accent); /* Highlight text blue */
+    border: 1px solid var(--panel-border); /* Subtle border defined in tokens */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    font-weight: 600;
+}
+
+.menu a.active i {
+    color: var(--accent);
+    filter: drop-shadow(0 0 5px var(--accent-glow));
+}
+
+.menu a:not(.active):hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+/* ============================================================
+   CLIENT PROFILE CARD (Inside Project Workspace)
+   ============================================================ */
+.client-profile-trigger {
+    margin: 0 10px 15px 10px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.client-profile-trigger:hover {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+}
+
+.client-avatar {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 12px;
+}
+
+.client-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.client-name {
+    font-weight: 700;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-main);
+}
+
+.client-meta {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.public-container { height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.public-header { 
+    padding: 20px 40px; 
+    background: var(--panel); 
+    border-bottom: 1px solid var(--panel-border);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.public-nav { display: flex; gap: 20px; }
+.public-nav a { text-decoration: none; color: var(--muted); font-weight: 600; padding: 8px 16px; border-radius: 6px; }
+.public-nav a.active { background: var(--accent); color: white; }
+.public-content { padding: 40px; overflow-y: auto; flex: 1; }
+
+/* ============================================================
+   UTILITIES & STATE
+   ============================================================ */
+.lock-icon {
+    font-size: 10px !important;
+    opacity: 0.5;
+    margin-left: auto;
+}
+
+.empty-context-hint {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-style: italic;
+}
+
+/* ============================================================
+   REGISTRY DASHBOARD & CARDS
+   ============================================================ */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 30px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Specific styling for the Sync button to make it feel like a 'System' tool */
+.header-actions .btn.primary {
+    background: var(--accent-glow);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    transition: all 0.2s;
+}
+
+.header-actions .btn.primary:hover {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.section-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0;
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 24px;
+}
+
+.card {
+    background: var(--panel-soft);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    cursor: pointer;
+}
+
+.card-section {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: rgba(255,255,255,0.05); 
+  border-radius: 8px;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+}
+
+.card.active-client {
+    border: 1px solid var(--accent);
+    background: linear-gradient(145deg, var(--panel-soft), #0f172a);
+}
+
+.card.active-client::after {
+    content: "ACTIVE";
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 9px;
+    font-weight: 900;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+}
+
+.card-footer-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto; /* Pushes buttons to the bottom of the card */
+}
+
+.card-delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, transform 0.2s;
+}
+
+.card-delete-btn:hover {
+    color: #ef4444; /* Alert Red */
+    transform: scale(1.2);
+    cursor: pointer;
+}
+
+/* Ensure the header doesn't collapse with the new button */
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.status-pill {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: var(--panel-soft);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--text-muted);
+    border: 1px solid var(--panel-border);
+}
+
+/* Visual feedback for read-only (View) permissions */
+.is-view-only input, 
+.is-view-only select, 
+.is-view-only textarea {
+    cursor: not-allowed;
+    background: transparent !important;
+    border-color: transparent !important;
+    color: var(--text-dim) !important;
+    pointer-events: none;
+}
+
+.is-view-only .col-actions, 
+.is-view-only .header-actions {
+    display: none !important;
+}
+
+.status-dot {
+  width:8px; height:8px; border-radius:50%; 
+}
+
+.status-dot.primary {
+  background: #a855f7 !important; /* Purple */
+}
+
+.status-dot.evaluating {
+  background: #eab308 !important; /* Yellow */
+}
+
+.status-dot.available {
+  border: 1px solid white;
+}
+
+/* ============================================================
+   BUTTONS & INTERACTION
+   ============================================================ */
+.btn {
+    font-family: inherit;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn.primary {
+    background: var(--accent);
+    color: #000;
+}
+
+.btn.soft {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+    border-color: var(--panel-border);
+}
+
+.btn.soft:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.btn.full-width { width: 100%; margin-top: 15px; }
+
+/* Status Indicators */
+.badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.badge.discovery { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); }
+
+/*--------------------------------
+ APPS GRID
+--------------------------------*/
+
+/* Fixed styling for Deployment and Manager rows */
+.dp-manager-row {
+    display: flex;
+    justify-content: flex-start;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
+}
+
+.dp-manager-row:hover {
+    border-color: var(--accent);
+}
+
+.dp-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.card.is-master-template {
+    border-left: 4px solid var(--vault-gold) !important;
+}
+
+.card.is-local-app {
+    border-left: 4px solid var(--accent) !important;
+}
+
+.vault-tag {
+    font-size: 8px;
+    background: var(--vault-gold);
+    color: #000;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 900;
+    margin-left: 8px;
+}
+
+.local-tag {
+    font-size: 8px;
+    background: var(--line);
+    color: var(--text-dim);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 900;
+}
+
+.flex-1 { flex: 1; }
+
+.card-actions .btn:hover {
+    filter: brightness(1.2);
+}
+
+/* ============================================================
+   FUNCTION CARD STYLING
+   ============================================================ */
+
+.card.is-master-template:hover {
+    border-color: var(--vault-gold);
+    box-shadow: 0 8px 20px rgba(251, 191, 36, 0.15);
+}
+
+.card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+/* ============================================================
+   SCOPING GRID SYSTEM
+   ============================================================ */
+:root {
+  --scoping-cols: 
+    minmax(200px, 1.5fr)   /* Deliverable */
+    minmax(180px, 1fr)   /* Status */
+    minmax(200px, 1.5fr)   /* Applies To */
+    minmax(50px, .5fr)  /* Multiplier */
+    minmax(160px, .75fr)   /* Fee */
+    minmax(80px, .75fr)   /* Actions */
+}
+
+.scoping-grid {
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: var(--panel);
+    overflow: hidden;
+}
+
+.scoping-grid .grid-row {
+    padding: 10px 16px;
+    align-items: center;
+}
+
+.scoping-grid .row-title {
+    font-size: 0.85rem;
+}
+
+.scoping-grid .grid-header {
+    display: grid;
+    grid-template-columns: var(--scoping-cols);
+    gap: 10px;
+}
+
+.col-multiplier sup {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+}
+
+.row-title {
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.grid-header {
+    background: linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.04),
+      rgba(255,255,255,0.02)
+    );
+    border-bottom: 1px solid var(--panel-border);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+}
+
+.grid-header .col-numeric {
+    text-align: right;
+    padding-right: 20px;
+}
+
+.footer-row {
+    background: var(--panel-soft);
+    font-weight: 700;
+    border-bottom: none;
+    border-top: 2px solid var(--accent);
+}
+
+/* Unit Tags within Scoping Sheet */
+.unit-tag {
+    display: inline-flex;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: rgba(56, 189, 248, 0.1);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    margin-top: 4px;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+
+/* Scoping Grid alignment fixes */
+.col-multiplier { justify-self: center; align-self: center; }
+.col-numeric { justify-self: end; align-self: center; }
+.col-actions { justify-self: end; align-self: center; }
+
+.unit-box label { font-size: 8px; color: var(--text-muted); text-transform: uppercase; }
+
+.unit-input {
+    width: 60px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    color: var(--accent);
+    font-family: monospace;
+    font-size: 11px;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.unit-input:disabled { opacity: 0.5; color: var(--text-dim); border-style: dashed; }
+
+.round-section {
+    margin-top: 24px;
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+}
+
+.round-grid {
+    display: contents;
+}
+
+.grid-row {
+  display: grid;
+  grid-template-columns: var(--scoping-cols);
+  align-items: start;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.grid-header > div,
+.grid-row > div {
+  text-align: left;
+}
+
+.grid-header,
+.grid-row,
+.grand-totals-bar {
+  display: grid;
+  grid-template-columns: var(--scoping-cols);
+  align-items: start;
+}
+
+
+.round-footer {
+    padding: 12px 16px;
+    text-align: right;
+    background: var(--panel-soft);
+    border-top: 1px solid var(--panel-border);
+}
+
+.row-note {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.line-divider {
+  width: 1px;
+  height: 64px;
+  background: var(--panel-border);
+  justify-self: center;
+}
+
+.grand-final {
+  grid-column: 6;
+  justify-self: end;
+  text-align: right;
+}
+
+.grand-final .final-amount {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+
+.grand-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+
+  .grand-totals {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 220px;
+  }
+
+  .grand-totals .final-amount {
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--accent);
+  }
+
+  .grand-totals .subtle {
+      font-size: 11px;
+      color: var(--text-muted);
+  }
+
+  /* === FORCE GRAND TOTALS LAYOUT === */
+.grand-totals-bar {
+  display: grid !important;
+  grid-template-columns: var(--scoping-cols);
+  align-items: end;
+
+  padding: 24px 16px;
+  margin-top: 8px;
+  background: linear-gradient(
+    to top,
+    rgba(0,0,0,0.35),
+    rgba(0,0,0,0.15)
+  );
+}
+
+.grand-estimates,
+.grand-final {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grand-estimates {
+  grid-column: 5;
+  justify-self: end;
+  text-align: right;
+  color: var(--text-muted);
+  padding-right: 8px;
+}
+
+.grand-estimates .big {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.round-header {
+    padding: 12px 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    color: var(--accent);
+    background: linear-gradient(
+      to right,
+      rgba(56,189,248,0.08),
+      transparent
+    );
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.col-numeric {
+  text-align: right;
+}
+
+.col-actions {
+  text-align: right;
+}
+
+.col-numeric .gross-fee {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.col-numeric .net-fee {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--accent);
+}
+
+/*============================================================
+  DISCOUNTS MODAL
+  ==============================================================*/
+
+  /* Container for the input and toggle buttons */
+.discount-control {
+    display: flex;
+    align-items: center;
+    gap: 0; /* Tighten gap for a single-unit look */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 2px;
+    width: fit-content;
+}
+
+/* The numeric entry box */
+.discount-control .tiny-input {
+    width: 60px !important; /* Force fixed width */
+    height: 24px;
+    background: transparent !important;
+    border: none !important;
+    color: white !important;
+    font-family: monospace;
+    font-size: 12px;
+    text-align: center;
+    outline: none;
+}
+
+/* The toggle buttons group */
+.discount-control .toggle-group {
+    display: flex;
+    border-left: 1px solid var(--line);
+    padding-left: 2px;
+}
+
+.discount-control .toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 2px 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.discount-control .toggle-btn.active {
+    background: var(--accent);
+    color: white;
+    border-radius: 2px;
+}
+
+/* Remove arrows from number input */
+.tiny-input::-webkit-inner-spin-button,
+.tiny-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ============================================================
+   ANALYSIS MATRIX (GRID SPREADSHEET)
+   ============================================================ */
+
+.matrix-container {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    overflow-x: auto;
+}
+
+.matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.matrix-table th, .matrix-table td {
+    padding: 12px 15px;
+    border: 1px solid var(--panel-border);
+    text-align: left;
+}
+
+.matrix-table th {
+    background: var(--panel-soft);
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+/* 1. The Features Column */
+.matrix-table th:first-child, 
+.matrix-table td:first-child {
+    width: 35% !important; /* Reduced from 35-40% */
+    min-width: 150px !important;
+    max-width: 500px !important;
+    white-space: normal;
+    word-break: break-word;
+}
+
+/* 2. The Weight Column */
+.matrix-table th:nth-child(2), 
+.matrix-table td:nth-child(2) {
+    width: 80px !important; /* Fixed tight width for percentages */
+    text-align: center !important;
+}
+
+/* 3. The App Columns */
+.matrix-table th:not(:first-child):not(:nth-child(2)), 
+.matrix-table td:not(:first-child):not(:nth-child(2)) {
+    width: auto !important; /* Allow these to expand into the freed space */
+}
+
+/* Ensure inputs don't bloat the column width */
+.tiny-input {
+    width: 50px !important;
+    text-align: left;
+}
+
+/* Standard UI adjustment to hide scrollbar in web view during preview */
+#activeAnalysisMatrix {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;  /* IE and Edge */
+}
+#activeAnalysisMatrix::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.col-feature { width: 30%; }
+.col-weight { width: 10%; text-align: center; }
+.col-app-score { width: 15%; text-align: center; }
+
+.score-input {
+    width: 50px;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    text-align: center;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.winner-highlight {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid var(--success) !important;
+    color: var(--success);
+    font-weight: 800;
+}
+
+/* 1. Center everything in the score and total columns */
+.matrix-table td:not(:first-child) {
+    text-align: center !important;
+}
+
+/* 2. Force inputs to center their text and fill width */
+.matrix-score-input, .tiny-input {
+    text-align: left !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    margin: 0 auto !important;
+}
+
+/* 3. Total Weighted Score pills centering */
+.matrix-table tfoot td span.pill {
+    display: inline-flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    max-width: 60px; /* Keeps the pill shape professional */
+}
+
+
+/* ============================================================
+   TASK BLUEPRINTS
+   ============================================================ */
+
+/* Styling for the Task Blueprint Title Input */
+.modal-title-input {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-bright);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 8px;
+    width: 100%;
+    margin-left: -8px; /* Aligns text with the label below */
+    transition: all 0.2s ease;
+}
+
+.modal-title-input:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--line);
+}
+
+.modal-title-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
+}
+
+/* ============================================================
+   TASK CHECKLIST UI
+   ============================================================ */
+.task-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+.task-card {
+    background: var(--panel-soft);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.task-card:hover { border-color: var(--accent); }
+
+.task-card.is-done {
+    opacity: 0.5;
+    background: rgba(16, 185, 129, 0.05);
+}
+
+.task-card.is-done .task-name {
+    text-decoration: line-through;
+}
+
+.task-main { display: flex; align-items: center; gap: 15px; flex: 1; }
+
+.task-name { font-weight: 600; font-size: 13px; }
+
+/* The Special SOP Link Button */
+.btn-guide-link {
+    background: var(--accent-glow);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.btn-guide-link:hover {
+    background: var(--accent);
+    color: #000;
+}
+
+/* ============================================================
+   TASK CHECKLIST STYLING
+   ============================================================ */
+.task-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px 16px;
+    background: var(--panel-soft);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+}
+
+.task-row:hover {
+    border-color: var(--accent);
+}
+
+.task-row.is-complete {
+    opacity: 0.6;
+}
+
+.task-row.is-complete .task-title {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.task-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.task-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+    outline: none;
+}
+
+.tiny-select {
+    background: var(--bg);
+    color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.task-meta {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.tiny-select {
+    background: var(--panel-soft);
+    color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    max-width: 180px;
+}
+
+.tiny-select:hover {
+    border-color: var(--accent);
+    color: var(--text-main);
+}
+
+/* ============================================================
+   CREDENTIAL VAULT & REVEAL LOGIC
+   ============================================================ */
+
+.reveal-box {
+    cursor: pointer;
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    display: inline-block;
+    min-width: 100px;
+    transition: background 0.2s;
+}
+
+.reveal-box:hover {
+    background: rgba(56, 189, 248, 0.1);
+}
+
+.reveal-box .visible-val { display: none; }
+.reveal-box .hidden-val { display: inline; color: var(--text-muted); }
+
+.reveal-box.revealed .visible-val { display: inline; color: var(--accent); }
+.reveal-box.revealed .hidden-val { display: none; }
+
+/* Credential specific status colors */
+select.perm-select[value="Verified"] { color: var(--success); }
+select.perm-select[value="Invalid"] { color: var(--danger); }
+
+/* ============================================================
+   HOW-TO LIBRARY SHARING STYLES
+   ============================================================ */
+
+.card.is-shared {
+    border: 1px solid var(--success);
+    background: linear-gradient(145deg, var(--panel-soft), rgba(16, 185, 129, 0.05));
+}
+
+.card.is-private {
+    border: 1px solid var(--panel-border);
+    opacity: 0.9;
+}
+
+.rich-text {
+    line-height: 1.7;
+    font-size: 14px;
+}
+
+.rich-text h3 {
+    color: var(--accent);
+    margin-top: 20px;
+    font-size: 16px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 5px;
+}
+
+/* Make sure images in guides don't break the modal */
+.rich-text img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 15px 0;
+    border: 1px solid var(--line);
+}
+
+/* ============================================================
+   3. SHARED MODAL SYSTEM ENHANCEMENTS
+   ============================================================ */
+
+#modal-layer {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-box {
+    width: 100%;
+    max-width: 640px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    box-shadow: 0 32px 64px rgba(0,0,0,0.5);
+    overflow: hidden;
+    animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalPop {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-head {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+}
+
+.modal-title-text {
+    font-size: 18px;
+    font-weight: 700;
+    outline: none;
+    color: var(--text-main);
+}
+
+.modal-body {
+    padding: 24px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.modal-column {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.spacer { flex: 1; }
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6); /* Dim the background */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    cursor: pointer; /* Hint that clicking here closes it */
+}
+
+.modal-box {
+    cursor: default; /* Prevent the close-click from inside the box */
+    max-width: 600px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+/* ============================================================
+   4. FORM ELEMENTS
+   ============================================================ */
+
+.modal-select, .modal-textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-main);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.modal-select:focus, .modal-textarea:focus {
+    border-color: var(--accent);
+}
+
+.modal-section-label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+}
+
+/* ============================================================
+   VAULT MANAGER STYLING
+   ============================================================ */
+
+.vault-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
+}
+
+.pill.vault-gold {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid var(--vault-gold);
+    color: var(--vault-gold);
+}
+
+/* Vault Header Indicator */
+.active-vault-badge {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid var(--vault-gold);
+    color: var(--vault-gold);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+/* ============================================================
+   MULTI-SELECT PILL STYLING
+   ============================================================ */
+
+.pills-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px; /* Increased gap to account for rounded corners */
+    padding: 4px 0;
+}
+
+.pill, .invisible-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Rounded Shape */
+    border-radius: 20px; 
+    
+    /* Padding: Top/Bottom 4px, Left/Right 12px */
+    padding: 4px 12px; 
+    
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    border: 1px solid;
+    user-select: none;
+}
+
+.tiny {
+    font-size: 10px;
+}
+
+.invisible-pill {
+  border: transparent;
+}
+
+.pill.vault-gold:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+    text-decoration: line-through;
+}
+
+.pill[class*="status-"] {
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    user-select: none; /* Prevents text highlighting while Ctrl+Clicking */
+}
+
+/* STATUS COLOR CODING */
+
+.pill.status-primary {
+    background: #a855f7 !important; /* Purple */
+    color: white;
+    border: 1px solid #7e22ce;
+}
+
+.pill.status-evaluating {
+    background: #eab308 !important; /* Yellow */
+    color: #000;
+    border: 1px solid #ca8a04;
+}
+
+.pill.status-available {
+    background: var(--panel-soft) !important; /* Grey/White */
+    color: var(--text-dim);
+    border: 1px solid var(--panel-border);
+}
+
+/* Interaction Hint */
+.pill[title]:hover {
+    cursor: pointer;
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+/* ============================================================
+   SEARCH-TO-MAP UI
+   ============================================================ */
+.search-map-container {
+    position: relative;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.search-category-label {
+    padding: 8px 12px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.05);
+    font-weight: bold;
+}
+
+.search-map-container .modal-input {
+    background-color: var(--bg) !important; /* Deeper contrast vs the panel */
+    border: 1px solid var(--panel-border);
+    border-radius: 12px; /* Rounded to match the pills */
+    padding: 12px 16px; /* Increased internal padding */
+    color: var(--text-main);
+    width: 100%;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    outline: none;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); /* Subtle inner shadow */
+}
+
+.search-map-container .modal-input:focus {
+    border-color: var(--accent);
+    background-color: var(--panel-soft) !important;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15), 
+                inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Adjusting the placeholder color to be more legible but muted */
+.search-map-container .modal-input::placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* Adjusting the search overlay to match the new input width and style */
+.search-results-overlay {
+    margin-top: 5px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    overflow: hidden; /* Ensures corners clip the results */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.search-result-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.search-result-item:hover {
+    background: var(--panel-soft);
+    color: var(--accent);
+}
+
+.search-result-item.create-action {
+    color: var(--accent);
+    font-weight: bold;
+    background: rgba(56, 189, 248, 0.05);
+}
+
+.tiny-placeholder {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.3);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.tiny-placeholder:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.05);
+}
+
+.ghost-input::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+    font-style: italic;
+}
+
+.module-block-container {
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.module-block-container:hover {
+    border-color: #fff !important;
+    background: rgba(var(--accent-rgb), 0.05) !important;
+}
+
+.module-block-container .dp-manager-row {
+    justify-content: flex-start !important;
+}
+
+.module-nested-steps {
+    user-select: none;
+}
+
+/* Ensure the edit panel doesn't leave ghost spacing when closed */
+.step-group {
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step-group:not(.is-editing) .vis-expanded-editor,
+.step-group:not(.is-editing) .edit-panel-wrap {
+    display: none !important;
+    height: 0;
+    overflow: hidden;
+}
+
+/* Fullscreen Shell */
+#workflow-fs-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #0b0e14; z-index: 99999; display: flex; flex-direction: column;
+    animation: fadeIn 0.2s ease-out;
+}
+
+body.fs-mode-active {
+    overflow: hidden !important;
+    height: 100vh;
+}
+
+.fs-body { 
+    flex: 1; 
+    overflow: auto !important; 
+    position: relative; 
+    display: block; /* Ensure it treats children as a long list */
+    background: #050816; 
+    height: calc(100vh - 60px);
+}
+
+.fs-header {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 15px 30px; display: flex; align-items: center; justify-content: space-between;
+}
+
+.fs-mode-toggle {
+    background: #000; padding: 4px; border-radius: 8px; display: flex; gap: 4px;
+}
+
+.fs-mode-btn {
+    background: transparent; border: none; color: #8b949e; padding: 8px 20px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+
+.fs-mode-btn.active { background: var(--accent); color: #000; }
+
+.fs-body { flex: 1; overflow: auto !important; position: relative; }
+
+/* Visualizer Specifics */
+.vis-workspace {
+    position: relative;
+    overflow: visible !important;
+    display: block;
+    padding: 50px;
+    width: 3500px; 
+    height: 5000px;
+}
+
+.vis-node {
+    position: absolute !important; /* Essential for free movement */
+    margin: 0 !important;
+    cursor: grab;
+    z-index: 10;
+}
+
+.vis-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.vis-meta-pill {
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+}
+
+.vis-resources-list {
+    border-top: 1px solid var(--panel-border);
+    padding: 6px 0;
+    margin-bottom: 6px;
+}
+
+.vis-resource-item {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vis-read-only-text {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-main);
+    margin-bottom: 10px;
+    white-space: pre-wrap;
+}
+
+.vis-outcome-chip {
+    background: rgba(0,0,0,0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--vault-gold);
+    display: inline-block;
+    max-width: 150px;
+}
+
+.vis-port {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.vis-node-header { 
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid #444c56;
+    position: relative;
+    padding: 10px 30px 10px 10px;
+    width: 100%;
+    display: flex;
+    overflow: hidden;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    padding-right: 50px !important; /* Make room for two buttons */
+}
+
+.vis-header-actions {
+    position: absolute;
+    right: 5px;
+    top: 5px;
+    display: flex;
+    gap: 2px;
+    margin-left: 8px;
+}
+
+.subheader {
+  padding: 8px;
+}
+
+.vis-icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    opacity: 0.4;
+}
+
+.vis-node:hover .vis-icon-btn {
+    opacity: 1;
+}
+
+.vis-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.vis-icon-btn.edit:hover {
+    color: var(--accent);
+}
+
+.vis-icon-btn.delete:hover {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.vis-node-delete {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.vis-node:hover .vis-node-delete {
+    opacity: 0.6;
+}
+
+.vis-node-delete:hover {
+    opacity: 1 !important;
+    color: #ef4444; /* Standard Sphynx Danger Red */
+}
+
+.vis-idx { 
+    background: var(--accent); color: #000; width: 22px; height: 22px; 
+    border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+    font-weight: 900; font-size: 10px; 
+}
+
+.vis-node-body { padding: 12px; }
+
+.vis-port { 
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); 
+}
+
+.vis-arrow { font-size: 10px; color: var(--accent); margin-top: 3px; }
+
+.vis-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%; /* SVG now covers the entire scrollable area */
+    pointer-events: none;
+    z-index: 1;
+}
+
+.vis-path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    opacity: 0.4;
+    transition: opacity 0.3s ease;
+}
+
+.vis-path:hover {
+    opacity: 1;
+    stroke-width: 2.5;
+}
+
+.vis-trigger-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 60px; /* Space between triggers and first step */
+    z-index: 2;
+}
+
+.vis-vertical-stack {
+    display: block !important; /* Kill the flexbox */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.trigger-node {
+    border: 2px dashed var(--accent) !important;
+    background: rgba(255, 191, 0, 0.05) !important;
+    width: 260px !important;
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+}
+
+.trigger-header {
+    background: rgba(255, 191, 0, 0.15) !important;
+    border-bottom: 1px solid var(--accent) !important;
+    display: flex;
+    align-items: flex-start;
+    padding: 10px;
+}
+
+.trigger-path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-dasharray: 5, 5; /* Dotted line for trigger entry */
+    opacity: 0.6;
+}
+
+/* Ghost Inputs for Nodes */
+.vis-input-ghost {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    width: 100% !important;
+    outline: none;
+    text-align: left !important;
+    border-bottom: 1px solid transparent;
+    resize: none;
+    overflow: hidden !important;   /* Hides scrollbars as it grows */
+    white-space: pre-wrap !important; /* Forces text to wrap naturally */
+    word-break: break-word !important; /* Breaks long words if necessary */
+    line-height: 1.4 !important;
+    max-width: 100% !important;   /* Prevents textarea from pushing past parent */
+    overflow-wrap: anywhere !important; 
+    word-wrap: break-word !important;
+    display: inline-block !important;
+    flex-grow: 1;
+}
+
+.vis-input-ghost:focus {
+    border-bottom: 1px solid var(--accent);
+}
+
+.vis-input-tiny {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--accent);
+    font-size: 9px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    width: 80px;
+}
+
+/* Floating Action Button inside Node */
+.btn-vis-add {
+    position: absolute;
+    bottom: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #000;
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.vis-node:hover .btn-vis-add {
+    opacity: 1;
+}
+
+.vis-expanded-editor {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 12px;
+    border-bottom: 1px solid var(--panel-border);
+    animation: visExpand 0.2s ease-out;
+}
+
+.vis-section-label {
+    display: block;
+    font-size: 8px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.vis-description-input {
+    width: 100%;
+    min-height: 80px;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-main);
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+    line-height: 1.4;
+}
+
+.vis-description-input:focus {
+    border-color: var(--accent);
+}
+
+.vis-node-footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* 1. Reset Workspace to a high but manageable level */
+#workflow-fs-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: #050816 !important; /* Unified background */
+    z-index: 5000 !important; /* Reduced from 999,999 */
+    display: block;
+    flex-direction: column;
+}
+
+/* 2. Elevate the Modal Layer to beat the Workspace */
+#modal-layer, 
+.modal-overlay, 
+#active-modal-box {
+    z-index: 10000 !important; /* Now double the Workspace index */
+}
+
+/* 3. Helper for when Fullscreen is active */
+body.fs-mode-active #app-root {
+    filter: blur(4px);
+    pointer-events: none;
+}
+
+/* 1. The card being moved (ghost/low opacity) */
+.vis-node.is-dragging-source {
+    opacity: 0.3 !important;
+    border: 1px dashed var(--accent) !important;
+}
+
+/* 2. THE BLUE LIGHT: The card where it will land */
+.vis-node.drop-target-active {
+    border-left: 3px solid #00aaff !important;
+    background: rgba(0, 170, 255, 0.08) !important;
+    box-shadow: -10px 0 20px rgba(0, 170, 255, 0.2);
+    transform: translateX(4px);
+    transition: all 0.1s ease;
+}
+
+/* 3. Prevent children from stealing focus during the drag */
+.vis-vertical-stack:has(.is-dragging-source) .vis-node * {
+    pointer-events: none !important;
+}
+
+#vis-links-layer {
+  position: absolute;
+  top:0;
+  left:0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none !important;
+  z-index: 10000 !important;
+} 
+
+.path-handle {
+    fill: #00aaff;
+    stroke: #ffffff;
+    stroke-width: 2px;
+    opacity: 0; 
+    transition: opacity 0.2s, r 0.2s;
+    pointer-events: auto !important; /* 🚀 CRITICAL: This allows grabbing */
+    cursor: move !important;
+    
+    /* Add a glow so it's visible on dark backgrounds */
+    filter: drop-shadow(0 0 5px rgba(0, 170, 255, 0.8));
+    -webkit-user-drag: none;
+    user-select: none;
+    touch-action: none;
+}
+
+.vis-workspace:hover .path-handle {
+    opacity: 0.5; /* Show faintly on hover */
+}
+
+.path-handle:hover {
+    opacity: 1 !important;
+    r: 8; /* Grow slightly on hover */
+    fill: #ffffff;
+    stroke: #00aaff;
+}
+
+.handle-start { fill: #10b981; } /* Green - Exit */
+.handle-mid   { fill: #38bdf8; } /* Blue - Bend */
+.handle-end   { fill: #f87171; } /* Red - Entry */
+
+.editable-path {
+    transition: none !important; /* Disable transitions during manual drag for performance */
+}
+
+.vis-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none !important; /* Let clicks pass through to cards */
+    z-index: 1000; /* Higher than the nodes */
+}
+
+/* Show anchor points on cards when hovering the workspace */
+.vis-workspace:hover .vis-node::after,
+.vis-workspace:hover .vis-node::before {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    opacity: 0.3;
+    z-index: 5;
+}
+
+/* Show snap points only while dragging a handle */
+.vis-workspace:has(.path-handle:active) .vis-node::after,
+.vis-workspace:has(.path-handle:active) .vis-node::before {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    opacity: 0.4;
+    z-index: 10;
+}
+
+/* Position points at the 4 centers */
+.vis-node::after { top: 50%; right: -5px; transform: translateY(-50%); } /* Right */
+.vis-node::before { top: 50%; left: -5px; transform: translateY(-50%); } /* Left */
+
+/* The background grid */
+.vis-swimlane-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass to cards */
+    z-index: 1;
+}
+
+.vis-lane {
+    height: 100%;
+    border-right: 1px dashed rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.vis-lane-header {
+    position: sticky;
+    background: rgba(11, 14, 20, 0.9);
+    padding: 15px;
+    text-align: center;
+    border-bottom: 2px solid var(--accent);
+    color: var(--accent);
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 11px;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.vis-absolute-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    margin-top: 100px; /* Extra padding for the top row */
+}
+
+/* Optional: Alternate lane backgrounds */
+.vis-lane:nth-child(even) {
+    background: rgba(255, 255, 255, 0.01);
+}
+
+/* Optional: Pulse effect for the indicator */
+@keyframes left-pulse {
+    0% { box-shadow: -5px 0 5px rgba(0, 170, 255, 0.2); }
+    50% { box-shadow: -10px 0 15px rgba(0, 170, 255, 0.4); }
+    100% { box-shadow: -5px 0 5px rgba(0, 170, 255, 0.2); }
+}
+
+@keyframes visExpand {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Optimization for PDF Export */
+
+@media print {
+    /* 0. Wipe UI Noise and Artifacts */
+    .sidebar, .main-header, .app-header, .btn, .card-close, .top-bar, .card-delete-btn, .header-actions,
+    .local-tag, div.cards-grid, .analysis-summary-card, #modal-layer, .fs-mode-toggle, 
+    .btn-vis-add, .vis-node-delete, .vis-header-actions, .vis-detail-toggle, .drag-handle, .vis-idx,
+    .search-map-container{
+        display: none !important;
+    }
+
+    @page {
+        size: auto;
+        margin: 10mm; /* Force a consistent safe margin on all sides */
+    }
+
+    /* 1. Global Reset - Eliminates the Blank Page 1 */
+    html, body, .main-content, #mainContent, .scoping-container, #activeAnalysisMatrix{
+        background: white !important;
+        color: black !important;
+        height: auto !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        filter: none !important; 
+        backdrop-filter: none !important;
+        display: block !important;
+    }
+
+    /* 🚀 CRITICAL: Hide the background app entirely so it doesn't push content down */
+    #mainContent .fs-canvas { 
+        display: none !important; 
+    }
+
+    .card, .matrix-container {
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 auto !important; /* Center horizontally */
+        width: 99% !important; /* Slightly less than 100 to ensure border visibility */
+        max-width: 99% !important;
+        border: none !important;
+    }
+
+    div.dp-manager-row {
+      border-bottom: 1px solid black !important;
+      margin-bottom: 0;
+      padding: 4pt auto;
+    }
+    
+    input, textarea {
+      border: none;
+    }
+
+    .matrix-table {
+        margin: 0 auto !important; /* Center the table */
+        width: 99% !important; 
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+        border: 1px solid #d3d3d3 !important;
+    }
+
+    /* 5. Force Borders on all Cells */
+    .matrix-table th, 
+    .matrix-table td {
+        border: 1px solid #d3d3d3 !important;
+        box-sizing: border-box !important; /* Borders grow inward, not outward */
+        padding: 4px !important;
+    }
+
+    /* 6. Refined Column Widths for Balance */
+    .matrix-table th:first-child, 
+    .matrix-table td:first-child {
+        width: 30% !important; /* Reduced to give more breathing room to right side */
+        word-break: break-word !important;
+    }
+
+    .matrix-table th:nth-child(2), 
+    .matrix-table td:nth-child(2) {
+        width: 65px !important; /* Tighten weight column */
+    }
+
+    /* 7. Input Alignment */
+    .tiny-input, .matrix-score-input {
+        width: 100% !important;
+        text-align: center !important;
+        border: none !important;
+        background: transparent !important;
+        font-family: inherit !important;
+        font-size: 10pt !important;
+    }
+
+    /* 8. Categorization Headers - Ensure they span correctly */
+    .category-header-row td {
+        background-color: #f9f9f9 !important;
+        -webkit-print-color-adjust: exact; /* Ensure background prints */
+    }
+
+    /* 2. Force the Workspace to the very top */
+    #workflow-fs-overlay {
+        position: absolute !important; 
+        top: 0 !important;
+        left: 0 !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        background: white !important;
+        box-shadow: none !important;
+        z-index: 99999 !important;
+    }
+
+    /* 🚀 3. HIDE ALL ARROWS */
+    #vis-links-layer, .vis-path, .trigger-path {
+        display: none !important;
+    }
+
+    .vis-workspace {
+        position: relative !important;
+        display: block !important;
+        background: white !important;
+        padding: 5mm 0 !important;
+        margin: 0 auto .5cm auto !important;
+        width: 100% !important;
+    }
+
+    .vis-trigger-row {
+        display: flex !important;
+        justify-content: center !important;
+        gap: 5mm !important;
+        margin-bottom: 0 !important; /* This controls space below triggers */
+    }
+
+    .vis-vertical-stack {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 0 !important;
+        margin-bottom: 0;
+    }
+
+    .vis-expanded-editor, 
+    .module-nested-steps, 
+    .vis-outcomes-area,
+    .edit-panel-wrap {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .vis-input-ghost, .modal-textarea, .modal-input {
+        border: none !important;
+        padding: 0 !important;
+        background: transparent !important;
+        resize: none !important;
+        overflow: visible !important;
+        color: black !important;
+        font-size: 10pt !important;
+    }
+
+    /* 🚀 4. REFINED CARDS - Centered and Slimmed Down */
+    .vis-node {
+        border: 1px solid #000 !important; 
+        border-radius: 10px; 
+        background: #fff !important;
+        box-shadow: none !important; 
+        filter: none !important; 
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        
+        /* Centering and Width control */
+        margin: 0 auto .5cm auto !important; 
+        width: 50% !important; /* Narrower for a manual/book look */
+        max-width: 500px !important; 
+        position: relative !important;
+    }
+
+    .vis-node-header {
+        background: #f5f5f5 !important;
+        border-radius: 10px 10px 0 0; 
+        border-bottom: 1pt solid #000 !important;
+        -webkit-print-color-adjust: exact;
+    }
+
+    /* 5. TIGHTEN INTERNAL DATA */
+    .vis-node-body {
+        padding: 10px 15px !important;
+        font-size: 10pt;
+        font-family: inherit;
+    }
+
+    .vis-port {
+        padding: 4px 0 !important;
+        border-top: 0.5pt solid #eee !important;
+    }
+
+    .vis-outcome-chip {
+        padding: 2px 6px !important;
+        border: 0.5pt solid #ccc !important;
+        background: transparent !important;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .vis-outcome-label-text {
+        display: block !important;
+        font-size: 10pt !important;
+        text-align: right !important;
+    }
+
+    .step-group, .vis-node {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        border: 1pt solid #eee !important;
+        margin-bottom: 5pt;
+    }
+
+}
