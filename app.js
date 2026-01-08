@@ -695,7 +695,7 @@ OL.onboardNewClient = function () {
       status: "Discovery",
     },
     modules: {
-        tasks: true,      // Usually on by default
+        checklist: true,      // Usually on by default
         apps: false,
         functions: false,
         resources: false,
@@ -744,7 +744,7 @@ OL.openClientProfileModal = function(clientId) {
             <label class="modal-section-label">Active Modules (Client Access)</label>
             <div class="card-section" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 ${[
-                    { id: 'tasks', label: 'Tasks' },
+                    { id: 'checklist', label: 'Tasks' },
                     { id: 'apps', label: 'Apps' },
                     { id: 'functions', label: 'Functions' },
                     { id: 'resources', label: 'Resources' },
