@@ -84,6 +84,8 @@ OL.persist = async function() {
 // 3. CLOUD BOOT (The "Master Key" to opening the app)
 OL.boot = async function() {
     console.log("Sphynx System: Connecting to Cloud...");
+
+    OL.initializeSecurityContext();
     
     try {
         const doc = await db.collection('systems').doc('main_state').get();
