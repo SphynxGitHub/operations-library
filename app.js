@@ -15,8 +15,7 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&").replace(/</g, "<").replace
 const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 
 // 3. Firebase configuration
-require('dotenv').config();
-const apiKey = process.env.GOOGLE_API_KEY;
+const apiKey = window.GOOGLE_API_KEY;
 const firebaseConfig = {
   apiKey: apiKey,
   authDomain: "operations-library-d2fee.firebaseapp.com",
