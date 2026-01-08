@@ -133,16 +133,32 @@ OL.checkPermission = function (tabKey) {
 // Controls what a user can DO
 OL.initializeSecurityContext = function() {
     const params = new URLSearchParams(window.location.search);
-    const publicToken = params.get('share'); // Or whatever your public link param is
+    const clientToken = params.get('access'); 
+    const adminKey = params.get('admin'); 
 
-    if (publicToken) {
-        // 🔒 Public Link: Force Read-Only
-        state.adminMode = false;
-        console.log("👨‍💼 Context: Public Link (Read-Only)");
-    } else {
-        // 🔑 Internal Access: Enable Admin
+    // 1. ADMIN CHECK: If the URL has ?admin=YOUR_SECRET_ID
+    if (adminKey && adminKey === window.ADMIN_ACCESS_ID) {
         state.adminMode = true;
-        console.log("🛠️ Context: Internal Session (Admin Enabled)");
+        console.log("🛠️ Admin Verified: Full Access Enabled");
+        return; // Exit early, they are allowed in
+    }
+
+    // 2. CLIENT CHECK: If the URL has ?access=CLIENT_TOKEN
+    if (clientToken) {
+        state.adminMode = false;
+        console.log("👨‍💼 Client Portal: Restricted View");
+        // Your code already handles filtering based on state.activeClientId
+    } 
+    
+    // 3. LOCKOUT: If neither is correct, kill the app and show a lock screen
+    else {
+        state.adminMode = false;
+        document.body.innerHTML = `
+            <div style="background:#050816; color:white; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif;">
+                <h1 style="color:#38bdf8;">🔒 Secure Portal</h1>
+                <p style="opacity:0.6;">Please use the unique link provided by your administrator.</p>
+            </div>`;
+        throw new Error("Unauthorized Access"); // Stops the rest of the script
     }
 };
 
