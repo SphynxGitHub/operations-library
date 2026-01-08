@@ -305,17 +305,22 @@ window.buildLayout = function () {
 
                     <nav class="menu">
                         ${clientTabs.map(item => {
+                            // 🚀 THE GATEKEEPER LOGIC
+                            // Admin sees everything. Clients see only enabled modules.
+                            const isModuleEnabled = state.adminMode || (client?.modules && client.modules[item.key]);
+                            
+                            if (!isModuleEnabled) return ''; 
+
                             const perm = OL.checkPermission(item.key);
                             if (perm === 'none') return '';
                             
-                            // 4. APPEND ACCESS TOKEN TO NAVIGATION LINKS
                             const linkHref = isPublic ? `${item.href}?access=${token}` : item.href;
                             const isActive = hash.startsWith(item.href);
 
                             return `
                                 <a href="${linkHref}" class="${isActive ? 'active' : ''}">
                                     <i>${item.icon}</i> <span>${item.label}</span>
-                                    ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
+                                    ${perm === 'view' ? '<i class="lock-icon">🔒</i>' : ''}
                                 </a>
                             `;
                         }).join('')}
@@ -689,6 +694,16 @@ OL.onboardNewClient = function () {
       onboarded: new Date().toLocaleDateString(),
       status: "Discovery",
     },
+    modules: {
+        tasks: true,      // Usually on by default
+        apps: false,
+        functions: false,
+        resources: false,
+        scoping: false,
+        analysis: false,
+        howto: false,
+        team: false
+    },
     permissions: {
       apps: "full",
       functions: "full",
@@ -726,10 +741,25 @@ OL.openClientProfileModal = function(clientId) {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <label class="modal-section-label">Quick Actions</label>
-            <div style="display:flex; gap:10px; margin-bottom:20px;">
-                <button class="btn small primary" onclick="OL.setAllPermissions('${clientId}', 'full')">🔓 Grant Full Access</button>
-                <button class="btn small warn" onclick="OL.setAllPermissions('${clientId}', 'view')">🔒 Set to View Only</button>
+            <label class="modal-section-label">Active Modules (Client Access)</label>
+            <div class="card-section" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                ${[
+                    { id: 'tasks', label: 'Tasks' },
+                    { id: 'apps', label: 'Apps' },
+                    { id: 'functions', label: 'Functions' },
+                    { id: 'resources', label: 'Resources' },
+                    { id: 'scoping', label: 'Scoping' },
+                    { id: 'analysis', label: 'Analysis' },
+                    { id: 'howto', label: 'How-To' },
+                    { id: 'team', label: 'Team' }
+                ].map(m => `
+                    <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
+                        <input type="checkbox" 
+                            ${client.modules?.[m.id] ? 'checked' : ''} 
+                            onchange="OL.toggleClientModule('${clientId}', '${m.id}')">
+                        ${m.label}
+                    </label>
+                `).join('')}
             </div>
             
             <label class="modal-section-label">Project Metadata</label>
@@ -760,6 +790,23 @@ OL.openClientProfileModal = function(clientId) {
         </div>
     `;
     openModal(html);
+};
+
+OL.toggleClientModule = function(clientId, moduleId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    // Ensure the modules object exists
+    if (!client.modules) client.modules = {};
+
+    // Toggle the value
+    client.modules[moduleId] = !client.modules[moduleId];
+
+    OL.persist();
+    
+    // 🚀 Refresh the sidebar immediately so you see the change
+    buildLayout(); 
+    console.log(`✅ Module ${moduleId} for ${client.meta.name}: ${client.modules[moduleId] ? 'ENABLED' : 'DISABLED'}`);
 };
 
 OL.copyShareLink = function(token) {
@@ -844,6 +891,13 @@ OL.pushFeaturesToAllClients = function() {
         if (!client.sharedMasterIds) client.sharedMasterIds = [];
 
         updatedCount++;
+
+        if (!client.modules) {
+            client.modules = {
+                tasks: true, apps: true, functions: true, resources: true, 
+                scoping: true, analysis: true, howto: true, team: true
+            };
+        }
     });
 
     OL.persist();
