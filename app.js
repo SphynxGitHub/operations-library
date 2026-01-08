@@ -9308,3 +9308,4 @@ OL.toggleSOPToResource = function(sopId, resId) {
     OL.persist();
     OL.openResourceModal(resId); // Refresh the resource modal to show the new pill
 };
+handleRoute();
