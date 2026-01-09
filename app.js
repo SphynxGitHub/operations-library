@@ -8550,8 +8550,10 @@ OL.openTeamMemberModal = function (memberId, draftObj = null) {
                 </div>
 
                 <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" placeholder="Search roles or type to add new..." 
-                           oninput="OL.filterRoleSearch('${memberId}', this.value)">
+                    <input type="text" class="modal-input tiny" 
+                        placeholder="Search roles or type to add new..." 
+                        onfocus="OL.filterRoleSearch('${memberId}', '')" // 🚀 THE FIX: Trigger on click/focus
+                        oninput="OL.filterRoleSearch('${memberId}', this.value)">
                     <div id="role-search-results" class="search-results-overlay"></div>
                 </div>
             </div>
@@ -8577,55 +8579,61 @@ OL.syncTeamMemberName = function(memberId, newName) {
 
 // 4. TEAM ROLE MANAGEMENT
 OL.filterRoleSearch = function (memberId, query) {
-  const listEl = document.getElementById("role-search-results");
-  if (!listEl) return;
+    const listEl = document.getElementById("role-search-results");
+    if (!listEl) return;
 
-  const q = (query || "").toLowerCase().trim();
-  const client = getActiveClient();
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
+    if (!member) return;
 
-  // Get unique list of all roles currently used in the project
-  const existingRoles = [
-    ...new Set(client.projectData.teamMembers.flatMap((m) => m.roles || [])),
-  ];
-  const matches = existingRoles.filter((r) => r.toLowerCase().includes(q));
-  const exactMatch = existingRoles.find((r) => r.toLowerCase() === q);
+    // 1. Get unique list of every role used in the project
+    const allProjectRoles = [
+        ...new Set(client.projectData.teamMembers.flatMap(m => m.roles || []))
+    ];
 
-  let html = matches
-    .map(
-      (role) => `
-        <div class="search-result-item" onclick="OL.addRoleToMember('${memberId}', '${esc(role)}')">
-            🎭 ${esc(role)} <span class="tiny muted">(Existing)</span>
+    // 2. Filter: Match search AND exclude roles the member already has
+    const memberRoles = member.roles || [];
+    const matches = allProjectRoles.filter(role => 
+        role.toLowerCase().includes(q) && !memberRoles.includes(role)
+    ).sort();
+
+    let html = matches.map(role => `
+        <div class="search-result-item" onmousedown="OL.addRoleToMember('${memberId}', '${esc(role)}')">
+            <span>🎭 ${esc(role)}</span>
+            <span class="tiny muted">Assign</span>
         </div>
-    `,
-    )
-    .join("");
+    `).join("");
 
-  if (!exactMatch) {
-    html += `
-            <div class="search-result-item create-action" onclick="OL.addRoleToMember('${memberId}', '${esc(query)}')">
+    // 3. Add "Create New" option if typing a unique role name
+    if (q.length > 0 && !allProjectRoles.some(r => r.toLowerCase() === q)) {
+        html += `
+            <div class="search-result-item create-action" onmousedown="OL.addRoleToMember('${memberId}', '${esc(query)}')">
                 <span class="pill tiny accent">+ New</span> Create Role "${esc(query)}"
-            </div>
-        `;
-  }
+            </div>`;
+    }
 
-  listEl.innerHTML = html;
+    listEl.innerHTML = html || `<div class="search-result-item muted">No other roles found.</div>`;
 };
 
 OL.addRoleToMember = function (memberId, roleName) {
-  const client = getActiveClient();
-  const member = client?.projectData?.teamMembers.find(
-    (m) => m.id === memberId,
-  );
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
 
-  if (member) {
-    if (!member.roles) member.roles = [];
-    if (!member.roles.includes(roleName)) {
-      member.roles.push(roleName);
-      OL.persist();
-      OL.openTeamMemberModal(memberId); // Refresh modal
-      renderTeamManager(); // Refresh grid
+    if (member) {
+        if (!member.roles) member.roles = [];
+        if (!member.roles.includes(roleName)) {
+            member.roles.push(roleName);
+            OL.persist();
+            
+            // 🚀 THE FIX: Clear the dropdown results immediately
+            const results = document.getElementById("role-search-results");
+            if (results) results.innerHTML = "";
+            
+            OL.openTeamMemberModal(memberId); // Refresh modal to show new pill
+            renderTeamManager(); // Sync background
+        }
     }
-  }
 };
 
 OL.removeRoleFromMember = function (memberId, roleName) {
