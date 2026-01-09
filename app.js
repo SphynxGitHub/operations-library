@@ -3603,6 +3603,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     id="modal-res-name"
                     value="${esc(val(res.name))}" 
                     placeholder="Resource Name..."
+                    style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                     onblur="OL.handleModalSave('${res.id}')">
             </div>
             
