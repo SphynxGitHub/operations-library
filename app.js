@@ -3134,43 +3134,49 @@ if (!state.master.resourceTypes) {
 }
 
 window.renderResourceManager = function () {
-  OL.registerView(renderResourceManager);
-  const container = document.getElementById("mainContent");
-  const client = getActiveClient();
-  const hash = window.location.hash;
+    OL.registerView(renderResourceManager);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    const hash = window.location.hash;
 
-  // 🛡️ THE GATEKEEPER: Determine if we are viewing the Master Vault or a Project
-  const isVaultView = hash.includes('vault') || hash.includes('resource-manager');
+    const isVaultView = hash.includes('vault') || hash.includes('resource-manager');
 
-  // Only pull the resources that belong to THIS view
-  let displayRes = [];
+    let displayRes = [];
     if (isVaultView) {
         displayRes = state.master.resources || [];
     } else if (client) {
-        // Look in localResources, but fallback to sharedMasterIds if you use that for resources too
-        displayRes = client.projectData.localResources || [];
+        // 🚀 THE FIX: Initialize if missing, then assign
+        if (!client.projectData.localResources) {
+            client.projectData.localResources = [];
+        }
+        displayRes = client.projectData.localResources;
     }
 
-  container.innerHTML = `
+    // Alphabetical Sorting
+    displayRes.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+    container.innerHTML = `
         <div class="section-header">
             <div>
                 <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
-                <div class="small muted">${isVaultView ? 'Global Standards' : 'Project-specific tools'}</div>
+                <div class="small muted">${displayRes.length} items found</div>
             </div>
             <div class="header-actions">
                 <button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>
-                
                 <button class="btn small soft" onclick="OL.promptCreateResource()">
                     + Create ${isVaultView ? 'Master' : 'Local'} Resource
                 </button>
-
-                ${!isVaultView ? `
-                    <button class="btn primary" onclick="OL.importFromMaster()">⬇️ Import from Master</button>
-                ` : ''}
+                ${!isVaultView ? `<button class="btn primary" onclick="OL.importFromMaster()">⬇️ Import from Master</button>` : ''}
             </div>
         </div>
         <div class="cards-grid">
-            ${displayRes.map((res) => renderResourceCard(res)).join("")}
+            ${displayRes.length > 0 
+                ? displayRes.map(res => renderResourceCard(res)).join("") 
+                : `<div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
+                    No resources found in this ${isVaultView ? 'Vault' : 'Project'}.<br>
+                    Click "Import from Master" or "Create Local" to begin.
+                   </div>`
+            }
         </div>
     `;
 };
@@ -3947,14 +3953,15 @@ OL.executeResourceImport = function(masterId) {
 
     const newRes = JSON.parse(JSON.stringify(template));
     newRes.id = 'local-prj-' + Date.now();
-    newRes.masterRefId = masterId; // Maintain the link
+    newRes.masterRefId = masterId; 
     
+    // 🚀 Ensure this matches the key in renderResourceManager
     if (!client.projectData.localResources) client.projectData.localResources = [];
     client.projectData.localResources.push(newRes);
 
     OL.persist();
     OL.closeModal();
-    renderResourceManager();
+    renderResourceManager(); // Auto-reload the page view
 };
 
 //======================RESOURCES / TASKS OVERLAP ======================//
