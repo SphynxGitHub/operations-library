@@ -103,19 +103,26 @@ OL.boot = async function() {
         const doc = await db.collection('systems').doc('main_state').get();
         
         if (doc.exists) {
-            state = doc.data();
+            const cloudData = doc.data();
+            
+            // 🛡️ THE FIX: Deep merge cloud data into our local state
+            // This prevents "undefined" errors if a piece of data is missing
+            state = {
+                ...state, 
+                ...cloudData,
+                clients: cloudData.clients || {} // Ensure clients is at least an empty object
+            };
+            
             OL.state = state;
-            console.log("✅ Cloud Data Loaded:", Object.keys(state.clients || {}).length, "clients found.");
+            console.log("✅ Cloud Data Merged. Clients found:", Object.keys(state.clients).length);
         } else {
-            console.warn("🆕 No Cloud Data found.");
+            console.warn("🆕 No Cloud Data found in Firebase.");
         }
 
-        // 🚀 THE FIX: Force the UI to draw after data is confirmed
         handleRoute(); 
         
     } catch (err) {
         console.error("❌ Firebase Connection Error:", err);
-        // If this fires, check your Firebase Console -> Project Settings -> API Key
     }
 };
 
@@ -624,7 +631,7 @@ window.renderClientDashboard = function() {
     if (!container) return;
     
     // 🛡️ Ensure we are pulling from the latest state
-    const clients = Object.values(state.clients || {});
+    const clients = state.clients ? Object.values(state.clients) : [];
 
     container.innerHTML = `
         <div class="setion-header">
