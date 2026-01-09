@@ -1096,9 +1096,9 @@ OL.handleAppSave = function(id, name) {
     const client = getActiveClient();
 
     if (isDraft) {
-        // --- 🚀 CONVERSION: DRAFT TO PERMANENT ---
         const isVault = id.includes('-vlt-');
-        const newId = (isVault ? 'app-vlt-' : 'app-lcl-') + Date.now();
+        // 🚀 FIX: Use 'master-' prefix so the UI recognizes it as a Vault item
+        const newId = (isVault ? 'master-app-' : 'local-app-') + Date.now();
         
         const newApp = {
             id: newId,
@@ -1120,13 +1120,10 @@ OL.handleAppSave = function(id, name) {
         }
 
         OL.persist();
-        
-        // 🔄 Transition: Switch to permanent ID and refresh background
         OL.openAppModal(newId);
         OL.refreshActiveView(); 
         
     } else {
-        // --- ✏️ RENAME: EXISTING APP ---
         OL.updateAppMeta(id, 'name', cleanName);
     }
 };
@@ -1666,26 +1663,25 @@ OL.filterMapList = function(query, mode) {
 
     const mappedIds = (currentItem?.functionIds || currentItem?.appIds || []).map(m => String(m.id || m));
 
-    // 2. Identify source list based on context
+    // 2. Identify source list
     let source = [];
     if (isVaultMode) {
-        // 🚀 ONLY show Master items in Vault mode
         source = (mode === 'functions' ? state.master.functions : state.master.apps);
     } else {
-        // Show both for Project mode
         const localItems = mode === 'functions' ? (client?.projectData?.localFunctions || []) : (client?.projectData?.localApps || []);
         const masterItems = mode === 'functions' ? state.master.functions : state.master.apps;
         source = [...masterItems, ...localItems];
     }
 
-    // 3. Filter results: Match query AND exclude already mapped
+    // 3. Filter results
     const matches = source.filter(item => {
         const nameMatch = item.name.toLowerCase().includes(q);
         const alreadyMapped = mappedIds.includes(String(item.id)) || (item.masterRefId && mappedIds.includes(String(item.masterRefId)));
         return nameMatch && !alreadyMapped;
     });
 
-    listEl.innerHTML = matches.map(item => `
+    // 4. Render HTML
+    let html = matches.map(item => `
         <div class="search-result-item" onmousedown="OL.executeMap('${item.id}', '${mode}')">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
                 <span>${esc(item.name)}</span>
@@ -1694,7 +1690,17 @@ OL.filterMapList = function(query, mode) {
                 </span>
             </div>
         </div>
-    `).join('') || `<div class="search-result-item muted">No unmapped ${mode} found.</div>`;
+    `).join('');
+
+    // 🚀 ADD "QUICK CREATE" OPTION (Uses your existing executeCreateAndMap logic)
+    if (q.length > 0 && !matches.some(m => m.name.toLowerCase() === q)) {
+        html += `
+            <div class="search-result-item create-action" onmousedown="OL.executeCreateAndMap('${esc(query)}', '${mode}')">
+                <span class="pill tiny accent">+ New</span> Create ${mode === 'apps' ? 'App' : 'Function'} "${esc(query)}"
+            </div>`;
+    }
+
+    listEl.innerHTML = html || `<div class="search-result-item muted">No unmapped ${mode} found.</div>`;
 };
 
 OL.executeMap = function(targetId, mode) {
@@ -1746,24 +1752,44 @@ OL.executeMap = function(targetId, mode) {
 OL.executeCreateAndMap = function(name, mode) {
     const client = getActiveClient();
     const contextId = OL.currentOpenModalId;
+    const isVault = window.location.hash.startsWith('#/vault');
 
     if (mode === 'apps') {
+        const newId = (isVault ? 'master-app-' : 'local-app-') + Date.now();
         const newApp = {
-            id: 'local-app-' + Date.now(),
+            id: newId,
             name: name,
-            functionIds: [{ id: contextId, status: 'available' }], // Map it immediately
+            functionIds: [{ id: contextId, status: 'available' }],
             capabilities: []
         };
         
-        if (!client.projectData.localApps) client.projectData.localApps = [];
-        client.projectData.localApps.push(newApp);
+        if (isVault) {
+            state.master.apps.push(newApp);
+        } else if (client) {
+            client.projectData.localApps.push(newApp);
+        }
+    } else {
+        // Handle creating a new Function from an App modal
+        const newId = (isVault ? 'fn-' : 'local-fn-') + Date.now();
+        const newFn = { id: newId, name: name, description: "" };
         
-        OL.persist();
-        OL.openFunctionModal(contextId); // Refresh UI
+        if (isVault) {
+            state.master.functions.push(newFn);
+        } else if (client) {
+            client.projectData.localFunctions.push(newFn);
+        }
+        
+        // Map the new function to the current app
+        OL.toggleAppFunction(contextId, newId);
     }
     
-    document.getElementById("search-results-list").innerHTML = "";
+    OL.persist();
+    OL.refreshActiveView();
+    // Refresh current modal
+    if (mode === 'apps') OL.openFunctionModal(contextId);
+    else OL.openAppModal(contextId);
 };
+
 OL.toggleAppFunction = function(appId, fnId, event) {
     if (event) event.stopPropagation();
     
