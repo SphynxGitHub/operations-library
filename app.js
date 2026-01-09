@@ -85,7 +85,12 @@ OL.persist = async function() {
 OL.boot = async function() {
     console.log("Sphynx System: Connecting to Cloud...");
 
-    OL.initializeSecurityContext();
+    // 🚀 THE FIX: Run the security check and stop if it returns false
+    const isAuthorized = OL.initializeSecurityContext();
+    if (!isAuthorized) {
+        console.warn("🛑 Boot halted: Unauthorized access.");
+        return; 
+    }
     
     try {
         const doc = await db.collection('systems').doc('main_state').get();
@@ -135,32 +140,37 @@ OL.initializeSecurityContext = function() {
     const params = new URLSearchParams(window.location.search);
     const clientToken = params.get('access'); 
     const adminKey = params.get('admin'); 
+    
+    // 🛡️ Access the keys injected by GitHub Actions
     const savedAdminID = window.ADMIN_ACCESS_ID;
 
-    // 1. ADMIN CHECK: If the URL has ?admin=YOUR_SECRET_ID
-    if (adminKey && adminKey === window.ADMIN_ACCESS_ID) {
+    // 1. ADMIN CHECK
+    if (adminKey && adminKey === savedAdminID) {
         state.adminMode = true;
-        console.log("🛠️ Admin Verified: Full Access Enabled");
-        return; // Exit early, they are allowed in
+        console.log("🛠️ Admin Verified");
+        return true; // Return true to signal success
     }
 
-    // 2. CLIENT CHECK: If the URL has ?access=CLIENT_TOKEN
+    // 2. CLIENT CHECK
     if (clientToken) {
         state.adminMode = false;
-        console.log("👨‍💼 Client Portal: Restricted View");
-        // Your code already handles filtering based on state.activeClientId
+        console.log("👨‍💼 Client Portal");
+        return true;
     } 
     
-    // 3. LOCKOUT: If neither is correct, kill the app and show a lock screen
-    else {
+    // 3. SECURE LOCKOUT
+    // Only lock out if we are CERTAIN there is no key in the URL
+    if (!adminKey && !clientToken) {
         state.adminMode = false;
         document.body.innerHTML = `
             <div style="background:#050816; color:white; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif;">
                 <h1 style="color:#38bdf8;">🔒 Secure Portal</h1>
                 <p style="opacity:0.6;">Please use the unique link provided by your administrator.</p>
             </div>`;
-        throw new Error("Unauthorized Access"); // Stops the rest of the script
+        return false;
     }
+    
+    return false;
 };
 
 // 4. LAYOUT & ROUTING ENGINE
