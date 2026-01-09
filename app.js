@@ -2209,50 +2209,53 @@ OL.deleteMasterFunction = function(id) {
 OL.openFunctionModal = function(fnId, draftObj = null) {
     OL.currentOpenModalId = fnId;
     const client = getActiveClient();
+    const hash = window.location.hash;
+    const isVaultMode = hash.startsWith('#/vault');
     
-    // 1. Resolve Data
+    // 1. Resolve Function Data
     let fn = draftObj;
     if (!fn) {
         fn = [...(state.master.functions || []), ...(client?.projectData?.localFunctions || [])]
-             .find(f => f.id === fnId);
+             .find(f => String(f.id) === String(fnId));
     }
     if (!fn) return;
 
-    // 2. Identify Modal Context
-    const isVaultRoute = window.location.hash.startsWith('#/vault');
-    const isModalVisible = document.getElementById("modal-layer")?.style.display === "flex";
+    // 2. Identify Modal Shell for Soft Refresh
+    const modalLayer = document.getElementById("modal-layer");
+    const isModalVisible = modalLayer && modalLayer.style.display === "flex";
     const modalBody = document.querySelector('.modal-body');
 
+    // 🚀 THE FIX: Use a "Safe Client" variable to ensure the renderer 
+    // knows exactly which context to look at for Apps.
+    const safeClient = isVaultMode ? null : client;
+
     // Soft Refresh Logic
-    if (isModalVisible && modalBody && document.querySelector('.modal-title-text')) {
-        modalBody.innerHTML = renderFunctionModalInnerContent(fn, client);
+    if (isModalVisible && modalBody) {
+        modalBody.innerHTML = renderFunctionModalInnerContent(fn, safeClient);
+        // Sync the header name too
+        const titleInput = document.querySelector('.header-editable-input');
+        if (titleInput) titleInput.value = fn.name;
         return;
     }
 
-    // 3. Generate Full HTML
+    // 3. Generate Full HTML (Standard logic)
     const html = `
         <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-size:18px;">⚒️</span>
                 <input type="text" class="header-editable-input" 
                        value="${esc(val(fn.name))}" 
-                       placeholder="Function Name (e.g. CRM)..."
+                       placeholder="Function Name..."
                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                        onblur="OL.handleFunctionSave('${fn.id}', this.value)">
             </div>
-            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            ${renderFunctionModalInnerContent(fn, client)}
+            ${renderFunctionModalInnerContent(fn, safeClient)}
         </div>
     `;
-    openModal(html);
-
-    // Auto-focus name field
-    setTimeout(() => {
-        const input = document.getElementById('modal-fn-name-input');
-        if (input) input.focus();
-    }, 100);
+    window.openModal(html);
 };
 
 function renderFunctionModalInnerContent(fn, client) {
