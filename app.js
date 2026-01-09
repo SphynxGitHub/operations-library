@@ -1348,25 +1348,21 @@ OL.promoteAppToMaster = function(clientId, localAppId) {
 
 OL.pushAppToClient = function(appId, clientId) {
     const client = state.clients[clientId];
-    const masterApp = state.master.apps.find(a => a.id === appId);
+    const masterApp = state.master.apps.find(a => String(a.id) === String(appId));
     if (!client || !masterApp) return;
 
-    // 1. We start with an empty mapping array for the local instance
-    // We will only populate it if the function exists in the project
     const localMappings = [];
+    const activeProjectFns = [
+        ...(client.sharedMasterIds || []),
+        ...(client.projectData.localFunctions || []).map(f => String(f.id))
+    ];
 
-    // 2. Scan Master Mappings to detect intersections
+    // Scan Master Mappings and only bring in those currently "Unlocked" in this project
     (masterApp.functionIds || []).forEach(m => {
-        const fnId = typeof m === 'string' ? m : m.id;
+        const fnId = String(typeof m === 'string' ? m : m.id);
         
-        // Check if this function is already in the project (Local or Shared Master)
-        const isFnInProject = (client.sharedMasterIds || []).includes(fnId) || 
-                             (client.projectData.localFunctions || []).some(lf => lf.id === fnId);
-
-        if (isFnInProject) {
-            // 🚀 INTERSECTION FOUND: Auto-set to available
+        if (activeProjectFns.includes(fnId)) {
             localMappings.push({ id: fnId, status: 'available' });
-            console.log(`✅ Auto-linked: ${masterApp.name} is Available for existing function ${fnId}`);
         }
     });
 
@@ -2370,34 +2366,39 @@ OL.adoptFunctionToMaster = function(clientId, localFnId) {
 
 OL.pushFunctionToClient = function(masterFnId, clientId) {
     const client = state.clients[clientId];
-    const masterFn = state.master.functions.find(f => f.id === masterFnId);
+    const masterFn = state.master.functions.find(f => String(f.id) === String(masterFnId));
     if (!client || !masterFn) return;
 
-    const alreadyCloned = (client.sharedMasterIds || []).includes(masterFnId) || 
-                          (client.projectData.localFunctions || []).some(f => f.masterRefId === masterFnId);
-    
-    if (alreadyCloned) return alert("Function already active.");
+    const alreadyInProject = (client.sharedMasterIds || []).includes(String(masterFnId));
+    if (alreadyInProject) return alert("Function already active in this project.");
 
-    // 1. Add to Shared Master list to make it visible
+    // 1. Unlock the function for the sidebar
     if (!client.sharedMasterIds) client.sharedMasterIds = [];
-    client.sharedMasterIds.push(masterFnId);
+    client.sharedMasterIds.push(String(masterFnId));
 
-    // 🚀 2. THE REVERSE LOOKUP: Check existing apps for intersections
+    // 🚀 2. THE REVERSE LOOKUP (Hardened)
     (client.projectData.localApps || []).forEach(localApp => {
-        // Find the Master version of this local app
-        const masterAppSource = state.master.apps.find(ma => ma.id === localApp.masterRefId);
+        // Find the Master version of this local app using its reference ID
+        const masterAppSource = state.master.apps.find(ma => String(ma.id) === String(localApp.masterRefId));
         
         if (masterAppSource && masterAppSource.functionIds) {
-            // If the Master App is tied to this new Function...
-            const isTiedInMaster = masterAppSource.functionIds.some(m => (m.id || m) === masterFnId);
+            // Check if the Vault says this App performs this Function
+            const isTiedInVault = masterAppSource.functionIds.some(m => {
+                const id = typeof m === 'string' ? m : m.id;
+                return String(id) === String(masterFnId);
+            });
             
-            if (isTiedInMaster) {
-                // ...and it's not already mapped locally
-                const alreadyMappedLocally = localApp.functionIds.some(m => (m.id || m) === masterFnId);
+            if (isTiedInVault) {
+                // Check if we already have a local mapping (prevent duplicates)
+                const alreadyMappedLocally = (localApp.functionIds || []).some(m => {
+                    const id = typeof m === 'string' ? m : m.id;
+                    return String(id) === String(masterFnId);
+                });
                 
                 if (!alreadyMappedLocally) {
-                    localApp.functionIds.push({ id: masterFnId, status: 'available' });
-                    console.log(`🔗 Auto-detected: ${localApp.name} can now perform ${masterFn.name}`);
+                    if (!localApp.functionIds) localApp.functionIds = [];
+                    localApp.functionIds.push({ id: String(masterFnId), status: 'available' });
+                    console.log(`🔗 Auto-mapped: ${localApp.name} is now Available for ${masterFn.name}`);
                 }
             }
         }
@@ -2405,7 +2406,7 @@ OL.pushFunctionToClient = function(masterFnId, clientId) {
 
     OL.persist();
     renderFunctionsGrid();
-    buildLayout(); // Refresh sidebar to show the new function
+    buildLayout();
 };
 
 //======================= TASK CHECKLIST SECTION =======================//
