@@ -3143,9 +3143,13 @@ window.renderResourceManager = function () {
   const isVaultView = hash.includes('vault') || hash.includes('resource-manager');
 
   // Only pull the resources that belong to THIS view
-  const displayRes = isVaultView 
-    ? (state.master.resources || []) 
-    : (client?.projectData?.localResources || []);
+  let displayRes = [];
+    if (isVaultView) {
+        displayRes = state.master.resources || [];
+    } else if (client) {
+        // Look in localResources, but fallback to sharedMasterIds if you use that for resources too
+        displayRes = client.projectData.localResources || [];
+    }
 
   container.innerHTML = `
         <div class="section-header">
@@ -3329,8 +3333,11 @@ OL.closeResourceTypeManager = function() {
 
 // 2. RESOURCE CARD AND MODAL
 window.renderResourceCard = function (res) {
+    if (!res) return "";
     // 🚀 THE FIX: A resource is 'Master' if it has a Vault ID OR a reference to a Master
-    const isMaster = !!res.masterRefId || String(res.id || "").startsWith("res-vlt-");
+    const isVaultItem = String(res.id || "").startsWith("res-vlt-");
+    const isLinkedToMaster = !!res.masterRefId;
+    const isMaster = isVaultItem || isLinkedToMaster;
     
     // UI styling based on status
     const tagLabel = isMaster ? "MASTER" : "LOCAL";
