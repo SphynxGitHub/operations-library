@@ -3447,9 +3447,16 @@ OL.handleResourceHeaderBlur = function(id, name) {
     }
 };
 
-OL.handleModalSave = function(id, name) {
-    const cleanName = name.trim();
-    if (!cleanName) return;
+OL.handleModalSave = function(id, nameOrContext) {
+    // 1. Get the actual name from the DOM input
+    const input = document.getElementById('modal-res-name');
+    const cleanName = input ? input.value.trim() : (typeof nameOrContext === 'string' ? nameOrContext.trim() : "");
+
+    if (!cleanName || cleanName.toLowerCase() === 'vault' || cleanName.toLowerCase() === 'project') {
+        // This guard prevents the "Vault" string from becoming the name
+        // if the function was accidentally called with context as the name.
+        if (!input) return; 
+    }
 
     const isDraft = id.startsWith('draft-');
     const isVault = window.location.hash.includes('vault');
@@ -3457,16 +3464,26 @@ OL.handleModalSave = function(id, name) {
     if (isDraft) {
         const timestamp = Date.now();
         const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
-        const newRes = { id: newId, name: cleanName, type: "General", archetype: "Base", createdDate: new Date().toISOString() };
+        
+        const newRes = { 
+            id: newId, 
+            name: cleanName, // 🚀 Uses the name from the input, not the context string
+            type: "General", 
+            archetype: "Base", 
+            createdDate: new Date().toISOString() 
+        };
 
         if (isVault) {
+            if (!state.master.resources) state.master.resources = [];
             state.master.resources.push(newRes);
         } else {
-            getActiveClient().projectData.localResources.push(newRes);
+            const client = getActiveClient();
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources.push(newRes);
         }
         
         OL.persist();
-        OL.openResourceModal(newId); // Swap draft for real ID
+        OL.openResourceModal(newId); 
         renderResourceManager();
     } else {
         OL.updateResourceMeta(id, 'name', cleanName);
@@ -3583,9 +3600,10 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-size:18px;">🛠️</span>
                 <input type="text" class="header-editable-input" 
-                value="${esc(val(res.name))}" 
-                placeholder="Resource Name..."
-                onblur="OL.handleModalSave('${res.id}', '${res.originContext || (isVaultResource ? 'vault' : 'project')}')">
+                    id="modal-res-name"
+                    value="${esc(val(res.name))}" 
+                    placeholder="Resource Name..."
+                    onblur="OL.handleModalSave('${res.id}')">
             </div>
             
             <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
