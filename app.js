@@ -3380,8 +3380,7 @@ window.renderResourceCard = function (res) {
 // 3. CREATE DRAFT RESOURCE MODAL
 OL.promptCreateResource = function () {
     const hash = window.location.hash;
-    const isVault = hash.includes('vault') || hash.includes('resource-manager');
-    
+    const isVault = hash.startsWith('#/vault');
     const tempId = 'draft-' + Date.now();
     
     const draftRes = {
@@ -3390,17 +3389,12 @@ OL.promptCreateResource = function () {
         type: "General",
         archetype: "Base",
         isDraft: true,
+        // 🚀 THE KEY: Tag the draft with its intended home
         originContext: isVault ? 'vault' : 'project',
-        // ✨ NEW: Store the exact route where the creation started
         returnRoute: hash 
     };
 
     OL.openResourceModal(tempId, draftRes);
-
-    setTimeout(() => {
-        const input = document.getElementById('modal-res-name');
-        if (input) input.focus();
-    }, 100);
 };
 
 // 3a. HANDLE THE FIRST UPDATE / SAVE DRAFT
@@ -3442,16 +3436,17 @@ OL.updateResourceMeta = function (resId, key, value) {
 };
 
 OL.handleModalSave = function(id, context) {
-    console.log("☎️ Switchboard Triggered:", {id, context});
-    
     const input = document.getElementById('modal-res-name');
-    if (!input) return console.error("❌ Could not find name input");
+    if (!input) return;
     
     const name = input.value.trim();
-    if (!name) return console.warn("⚠️ Name is empty, skipping save.");
+    if (!name) return alert("Please enter a name");
 
+    // If ID includes 'draft', we are creating. Otherwise, we are updating.
     if (id.includes('draft-')) {
-        OL.commitDraftToSystem(id, name, context);
+        // Resolve context if it's missing (fallback to hash check)
+        const activeContext = context || (window.location.hash.includes('vault') ? 'vault' : 'project');
+        OL.commitDraftToSystem(id, name, activeContext);
     } else {
         OL.updateResourceMeta(id, 'name', name);
     }
@@ -3464,7 +3459,7 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
 
     const isVault = (context === 'vault');
     const timestamp = Date.now();
-    let newResId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    const newResId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
     const newRes = { 
         id: newResId, 
@@ -3477,8 +3472,8 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
         createdDate: new Date().toISOString() 
     };
 
+    // 🚀 THE FIX: Push directly to the global OL.state arrays
     if (isVault) {
-        // 🚀 CRITICAL: Ensure we hit the global state object
         if (!OL.state.master.resources) OL.state.master.resources = [];
         OL.state.master.resources.push(newRes);
     } else {
@@ -3488,14 +3483,13 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
         client.projectData.localResources.push(newRes);
     }
 
-    // 🚀 Force Sync
+    // Persist and Close
     await OL.persist();
     
     window._savingLock = null;
     OL.closeModal();
     
-    // Refresh UI
-    if (isVault) location.hash = "#/vault/resources";
+    // Force a total UI rebuild of the current view
     renderResourceManager();
 };
 
@@ -3569,7 +3563,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                       value="${esc(val(res.name))}" 
                       placeholder="Resource Name..."
                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                      onblur="OL.updateResourceMeta('${res.id}', 'name', this.value)">
+                      onblur="OL.handleModalSave('${res.id}', '${res.originContext || (isVaultResource ? 'vault' : 'project')}')">
             </div>
             
             <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
