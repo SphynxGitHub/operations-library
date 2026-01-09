@@ -2418,7 +2418,7 @@ OL.pushFunctionToClient = async function(masterFnId, clientId) {
     
     setTimeout(() => {
         buildLayout();
-        renderAppsGrid();
+        renderFunctionsGrid();
     }, 50); // 50ms gives the modal enough time to vanish from the DOM
 };
 
