@@ -7793,19 +7793,24 @@ OL.renderUnitBadges = function (item, res) {
 
 // 5. ADD ITEM TO SCOPING SHEET FROM MASTER LIBRARY
 OL.addResourceToScope = function () {
-  const html = `
+    const html = `
         <div class="modal-head">
             <div class="modal-title-text">🔎 Add Resource to Scope</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
         <div class="modal-body">
-            <input type="text" class="modal-input" placeholder="Search resources (e.g. Zap, Email)..." 
-                   oninput="OL.filterResourceForScope(this.value)" autofocus>
-            <div id="scope-search-results" class="search-results-overlay" style="margin-top:15px;"></div>
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Click to view library or search..." 
+                       onfocus="OL.filterResourceForScope('')"  // 🚀 THE FIX: Opens list immediately
+                       oninput="OL.filterResourceForScope(this.value)" 
+                       autofocus>
+                <div id="scope-search-results" class="search-results-overlay" style="margin-top:15px;"></div>
+            </div>
         </div>
     `;
-  openModal(html);
+    openModal(html);
 };
 
 OL.removeFromScope = function(index) {
