@@ -1352,18 +1352,25 @@ OL.pushAppToClient = function(appId, clientId) {
     if (!client || !masterApp) return;
 
     const localMappings = [];
-    const activeProjectFns = [
-        ...(client.sharedMasterIds || []),
-        ...(client.projectData.localFunctions || []).map(f => String(f.id))
-    ];
-
-    // Scan Master Mappings and only bring in those currently "Unlocked" in this project
+    
+    // 🚀 THE FORWARD LOOKUP: Scan what this App does in the Master Vault
     (masterApp.functionIds || []).forEach(m => {
         const fnId = String(typeof m === 'string' ? m : m.id);
         
-        if (activeProjectFns.includes(fnId)) {
-            localMappings.push({ id: fnId, status: 'available' });
+        // 1. Check if the function is already "Unlocked" or "Local"
+        const isAlreadyVisible = (client.sharedMasterIds || []).includes(fnId) || 
+                                 (client.projectData.localFunctions || []).some(lf => String(lf.id) === fnId);
+
+        // 2. AUTO-UNLOCK: If it's a Master function not yet in the project, unlock it!
+        // This ensures the pill doesn't disappear just because you haven't "Imported" the function yet.
+        if (!isAlreadyVisible && (fnId.startsWith('fn-') || fnId.startsWith('master-'))) {
+            if (!client.sharedMasterIds) client.sharedMasterIds = [];
+            client.sharedMasterIds.push(fnId);
+            console.log(`✨ Auto-unlocked function ${fnId} because ${masterApp.name} requires it.`);
         }
+
+        // 3. Add to the local mappings array
+        localMappings.push({ id: fnId, status: 'available' });
     });
 
     const localInstance = {
@@ -1380,7 +1387,7 @@ OL.pushAppToClient = function(appId, clientId) {
     
     OL.persist();
     renderAppsGrid();
-    buildLayout();
+    buildLayout(); // 🔄 Re-draw sidebar to show newly unlocked functions
 };
 
 OL.cloneMasterToLocal = function(masterAppId, clientId) {
