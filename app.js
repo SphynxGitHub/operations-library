@@ -631,13 +631,15 @@ OL.handlePillInteraction = function(event, appId, fnId) {
 window.renderClientDashboard = function() {
     const container = document.getElementById("mainContent");
     if (!container) return;
+
+    const clients = state.clients ? Object.values(state.clients) : [];
     
-    // 🛡️ Ensure we are pulling from the latest state
-    if (!state.clients || Object.keys(state.clients).length === 0) {
+    // 🛡️ Guard: Show onboarding if no clients exist
+    if (clients.length === 0) {
         container.innerHTML = `
             <div style="padding:40px; text-align:center; opacity:0.5;">
-                <p>⌛ Loading Project Registry...</p>
-                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add First Client</button>
+                <p>Registry is empty.</p>
+                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add First Client Project</button>
             </div>`;
         return;
     }
