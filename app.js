@@ -140,16 +140,21 @@ OL.checkPermission = function (tabKey) {
 OL.initializeSecurityContext = function() {
     const params = new URLSearchParams(window.location.search);
     const clientToken = params.get('access'); 
-    const adminKey = params.get('admin'); 
+    let adminKeyFromUrl = params.get('admin'); 
     
-    // 🛡️ Access the keys injected by GitHub Actions
-    const savedAdminID = window.ADMIN_ACCESS_ID;
+    // 🛡️ Get the key from the window (injected via config.js)
+    let savedAdminID = window.ADMIN_ACCESS_ID;
+
+    // 🚀 THE CLEANER: If the secret accidentally contains "admin=" or "?admin=", strip it
+    if (savedAdminID && savedAdminID.includes('=')) {
+        savedAdminID = savedAdminID.split('=').pop();
+    }
 
     // 1. ADMIN CHECK
-    if (adminKey && adminKey === savedAdminID) {
+    if (adminKeyFromUrl && adminKeyFromUrl === savedAdminID) {
         state.adminMode = true;
         console.log("🛠️ Admin Verified");
-        return true; // Return true to signal success
+        return true; 
     }
 
     // 2. CLIENT CHECK
@@ -160,8 +165,7 @@ OL.initializeSecurityContext = function() {
     } 
     
     // 3. SECURE LOCKOUT
-    // Only lock out if we are CERTAIN there is no key in the URL
-    if (!adminKey && !clientToken) {
+    if (!adminKeyFromUrl && !clientToken) {
         state.adminMode = false;
         document.body.innerHTML = `
             <div style="background:#050816; color:white; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif;">
