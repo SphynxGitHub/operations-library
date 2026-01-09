@@ -3810,7 +3810,8 @@ OL.addRegistryType = function () {
 OL.updateResourcePricingData = function(targetId, varKey, value) {
     const numVal = parseFloat(value);
     const client = getActiveClient();
-    
+    if (!client) return;
+  
     // 1. Identify the Source: Prioritize the project's Scoping Sheet
     const sheet = client?.projectData?.scopingSheets?.[0];
     let targetObj = sheet?.lineItems.find(i => i.id === targetId);
@@ -7938,46 +7939,52 @@ OL.getMultiplierDisplay = function (item) {
 
 // 10. FEE CALCULATION
 OL.calculateRowFee = function (item, resource) {
-    const vars = state.master.rates.variables || {};
-    const data = item.data || {};
-    const typeKey = resource?.typeKey || resource?.type?.toLowerCase().replace(/[^a-z0-9]+/g, "") || "general";
+    if (!item) return 0;
     
-    let base = 0;
-    let hasTech = false;
+    // 1. Get the Master Rates Library
+    const vars = state.master.rates.variables || {};
+    const itemData = item.data || {};
+    
+    let totalVariableFee = 0;
+    let hasVariableData = false;
 
-    // 1. Calculate Technical Variable Costs (e.g., Per Email, Per Zap)
-    Object.entries(data).forEach(([varId, count]) => {
+    // 2. Calculate fees based on variable counts (Technical Scoping)
+    Object.entries(itemData).forEach(([varId, count]) => {
         const v = vars[varId];
-        // Match variables by applyTo (Type Name or Type Key)
-        if (v && (v.applyTo === resource?.type || v.applyTo === typeKey) && count > 0) {
-            base += count * (parseFloat(v.value) || 0);
-            hasTech = true;
+        const numCount = parseFloat(count) || 0;
+        
+        if (v && numCount > 0) {
+            totalVariableFee += numCount * (parseFloat(v.value) || 0);
+            hasVariableData = true;
         }
     });
 
-    // 2. Fallback to Hourly if no variables are set
-    if (!hasTech) {
+    // 3. Fallback: If no variable counts exist, use Hourly Scoping
+    let baseAmount = totalVariableFee;
+    if (!hasVariableData) {
         const baseRate = getActiveClient()?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
-        base = (parseFloat(item.manualHours) || 0) * baseRate;
+        baseAmount = (parseFloat(item.manualHours) || 0) * baseRate;
     }
 
-    // 3. Apply Multiplier (Team/Individual/Global)
-    let mult = 1;
+    // 4. Apply Multiplier (Team/Everyone/Global)
+    let multiplier = 1;
     if (item.teamMode !== "global") {
         const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
-        let count = 0;
+        const incrementalRate = rate - 1;
+        
+        let memberCount = 0;
         if (item.teamMode === "individual") {
-            count = (item.teamIds || []).length;
+            memberCount = (item.teamIds || []).length;
         } else {
-            // Default 'everyone'
-            count = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
+            memberCount = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
         }
-        mult = 1 + (Math.max(0, count - 1) * (rate - 1));
+        
+        multiplier = 1 + (Math.max(0, memberCount - 1) * incrementalRate);
     }
 
-    const gross = Math.round(base * mult);
+    const gross = Math.round(baseAmount * multiplier);
     
-    // 4. Apply Discounts
+    // 5. Apply Line-Item Discounts
     return OL.applyDiscount(gross, item.discountValue, item.discountType);
 };
 
