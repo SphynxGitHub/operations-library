@@ -83,20 +83,19 @@ OL.persist = async function() {
 
 // 3. CLOUD BOOT (The "Master Key" to opening the app)
 OL.boot = async function() {
-    console.log("Sphynx System: Connecting to Cloud...");
+    console.log("🚀 Sphynx System: Booting...");
 
-    // 🚀 NEW: Wait specifically for the config variable to exist
+    // 1. Wait for Config (Increased timeout safety)
     let attempts = 0;
-    while (!window.ADMIN_ACCESS_ID && attempts < 10) {
-        await new Promise(r => setTimeout(r, 100)); // Wait 100ms
+    while (!window.ADMIN_ACCESS_ID && attempts < 20) {
+        await new Promise(r => setTimeout(r, 100));
         attempts++;
     }
 
+    // 2. Run Security Check
     const isAuthorized = OL.initializeSecurityContext();
     if (!isAuthorized) {
         console.warn("🛑 Boot halted: Unauthorized access.");
-        // Double check if it was a timing issue
-        console.log("Debug - Admin Key in Window:", !!window.ADMIN_ACCESS_ID);
         return; 
     }
     
@@ -104,30 +103,19 @@ OL.boot = async function() {
         const doc = await db.collection('systems').doc('main_state').get();
         
         if (doc.exists) {
-            let cloudData = doc.data();
-
-            // 🛡️ DATA SANITIZER: Ensure core objects exist to prevent UI crashes
-            if (!cloudData.master) cloudData.master = { apps: [], functions: [], resources: [], analyses: [], taskBlueprints: [], howToLibrary: []};
-            if (!cloudData.clients) cloudData.clients = {};
-            if (!cloudData.master.rates) cloudData.master.rates = { baseHourlyRate: 300, teamMultiplier: 1.1, variables: {} };
-            if (!cloudData.ui) cloudData.ui = { showCompleted: false };
-            
-            state = cloudData;
+            state = doc.data();
             OL.state = state;
-            console.log("✅ Cloud Data Loaded & Sanitized.");
+            console.log("✅ Cloud Data Loaded:", Object.keys(state.clients || {}).length, "clients found.");
         } else {
-            console.warn("🆕 No Cloud Data found. Initializing new system...");
-            await OL.persist(); 
+            console.warn("🆕 No Cloud Data found.");
         }
 
-        OL.initializeSecurityContext();
-        console.log("✅ Cloud Data Loaded & Security Context Set.");
-
-        // 🚀 Start the App
+        // 🚀 THE FIX: Force the UI to draw after data is confirmed
         handleRoute(); 
+        
     } catch (err) {
-        console.error("❌ Critical Boot Error:", err);
-        // If the error is 'permission-denied', your Rules are not published yet!
+        console.error("❌ Firebase Connection Error:", err);
+        // If this fires, check your Firebase Console -> Project Settings -> API Key
     }
 };
 
@@ -634,7 +622,9 @@ OL.handlePillInteraction = function(event, appId, fnId) {
 window.renderClientDashboard = function() {
     const container = document.getElementById("mainContent");
     if (!container) return;
-    const clients = Object.values(state.clients);
+    
+    // 🛡️ Ensure we are pulling from the latest state
+    const clients = Object.values(state.clients || {});
 
     container.innerHTML = `
         <div class="setion-header">
