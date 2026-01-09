@@ -3143,6 +3143,7 @@ window.renderResourceManager = function () {
     const isVaultView = hash.startsWith('#/vault');
 
     let displayRes = [];
+
     if (isVaultView) {
         displayRes = state.master.resources || [];
     } else if (client) {
@@ -3151,6 +3152,10 @@ window.renderResourceManager = function () {
             client.projectData.localResources = [];
         }
         displayRes = client.projectData.localResources;
+    }
+
+    if (isVaultView && displayRes.length === 0 && state.master.resources) {
+        displayRes = state.master.resources;
     }
 
     // 🚀 SAFE SORT: Create a copy [...displayRes] so we don't mutate the original state in-place
@@ -3453,16 +3458,16 @@ OL.handleModalSave = function(id, context) {
 };
 
 // 3b. COMMIT THE RESOURCE
-OL.commitDraftToSystem = function (tempId, finalName, context) {
+OL.commitDraftToSystem = async function (tempId, finalName, context) {
     if (window._savingLock === tempId) return;
     window._savingLock = tempId;
 
     const isVault = (context === 'vault');
     const timestamp = Date.now();
-    let newResId;
+    let newResId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
     const newRes = { 
-        id: '', // Will set below
+        id: newResId, 
         name: finalName, 
         type: "General", 
         archetype: "Base", 
@@ -3473,26 +3478,25 @@ OL.commitDraftToSystem = function (tempId, finalName, context) {
     };
 
     if (isVault) {
-        newResId = `res-vlt-${timestamp}`;
-        newRes.id = newResId;
-        if (!state.master.resources) state.master.resources = [];
-        state.master.resources.push(newRes);
+        // 🚀 CRITICAL: Ensure we hit the global state object
+        if (!OL.state.master.resources) OL.state.master.resources = [];
+        OL.state.master.resources.push(newRes);
     } else {
         const client = getActiveClient();
         if (!client) { window._savingLock = null; return; }
-        newResId = `local-prj-${timestamp}`;
-        newRes.id = newResId;
         if (!client.projectData.localResources) client.projectData.localResources = [];
         client.projectData.localResources.push(newRes);
     }
 
-    // 🚀 THE SAVE SEQUENCE
-    OL.persist().then(() => {
-        OL.closeModal();
-        renderResourceManager(); // Refresh the grid
-        window._savingLock = null;
-        console.log("✅ Resource Persisted:", newResId);
-    });
+    // 🚀 Force Sync
+    await OL.persist();
+    
+    window._savingLock = null;
+    OL.closeModal();
+    
+    // Refresh UI
+    if (isVault) location.hash = "#/vault/resources";
+    renderResourceManager();
 };
 
 OL.getDraftById = function(id) {
@@ -3507,18 +3511,14 @@ OL.getResourceById = function(id) {
     if (!id) return null;
     const idStr = String(id);
 
-    // Vault Resources MUST have the res-vlt prefix
-    if (idStr.startsWith('res-vlt-')) {
-        return (state.master.resources || []).find(r => r.id === id);
-    } 
-    
-    // Project Resources MUST have the local-prj prefix
-    if (idStr.startsWith('local-prj-')) {
-        const client = getActiveClient();
-        return (client?.projectData?.localResources || []).find(r => r.id === id);
-    }
+    // Check Master
+    const fromMaster = (OL.state.master.resources || []).find(r => String(r.id) === idStr);
+    if (fromMaster) return fromMaster;
 
-    return null; // Reject anything else
+    // Check Active Client
+    const client = getActiveClient();
+    const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === idStr);
+    return fromLocal || null;
 };
 
 // 3c. OPEN RESOURCE MODAL
