@@ -85,10 +85,14 @@ OL.persist = async function() {
 OL.boot = async function() {
     console.log("Sphynx System: Connecting to Cloud...");
 
-    // 🚀 THE FIX: Run the security check and stop if it returns false
+    // 🚀 THE FIX: Give config.js 500ms to register variables if it's slow
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     const isAuthorized = OL.initializeSecurityContext();
     if (!isAuthorized) {
         console.warn("🛑 Boot halted: Unauthorized access.");
+        // Double check if it was a timing issue
+        console.log("Debug - Admin Key in Window:", !!window.ADMIN_ACCESS_ID);
         return; 
     }
     
