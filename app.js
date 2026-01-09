@@ -85,8 +85,12 @@ OL.persist = async function() {
 OL.boot = async function() {
     console.log("Sphynx System: Connecting to Cloud...");
 
-    // 🚀 THE FIX: Give config.js 500ms to register variables if it's slow
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // 🚀 NEW: Wait specifically for the config variable to exist
+    let attempts = 0;
+    while (!window.ADMIN_ACCESS_ID && attempts < 10) {
+        await new Promise(r => setTimeout(r, 100)); // Wait 100ms
+        attempts++;
+    }
 
     const isAuthorized = OL.initializeSecurityContext();
     if (!isAuthorized) {
