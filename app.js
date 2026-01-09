@@ -2263,11 +2263,20 @@ function renderFunctionModalInnerContent(fn, client) {
         ? [...(state.master.apps || []), ...(client.projectData.localApps || [])]
         : (state.master.apps || []);
 
-    // 1. DATA AGGREGATION: Find mapped apps
-    const mappedApps = allRelevantApps.filter(a => 
-        a.functionIds?.some(m => (typeof m === 'string' ? m : m.id) === fn.id)
-    ).map(a => {
-        const mapping = a.functionIds.find(f => (typeof f === 'string' ? f : f.id) === fn.id);
+    // 🚀 THE FIX: Deduplicate Apps by name/ID before rendering
+    const seenAppIds = new Set();
+    const mappedApps = allRelevantApps.filter(a => {
+        const hasFunction = a.functionIds?.some(m => String(m.id || m) === String(fn.id));
+        if (!hasFunction) return false;
+
+        // Ensure we only show the LOCAL version if both exist
+        const appId = String(a.masterRefId || a.id);
+        if (seenAppIds.has(appId)) return false;
+        
+        seenAppIds.add(appId);
+        return true;
+    }).map(a => {
+        const mapping = a.functionIds.find(f => String(f.id || f) === String(fn.id));
         return { ...a, currentStatus: (typeof mapping === 'string' ? 'available' : mapping.status) || 'available' };
     });
 
