@@ -1158,7 +1158,17 @@ function renderAppModalInnerContent(app, client) {
         ? [...(state.master.functions || []), ...(client.projectData.localFunctions || [])]
         : (state.master.functions || []);
 
-    const activeMappings = OL.sortMappings(app.functionIds || []);
+    // 🚀 DEDUPLICATION LOGIC: Ensure each function appears only once
+    const rawMappings = app.functionIds || [];
+    const seenIds = new Set();
+    const uniqueMappings = rawMappings.filter(m => {
+        const id = String(m.id || m);
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+    });
+
+    const activeMappings = OL.sortMappings(uniqueMappings);
 
     return `
         ${isLinkedToMaster && !isVaultRoute ? `
@@ -1199,7 +1209,7 @@ function renderAppModalInnerContent(app, client) {
 
         <div class="card-section" style="margin-top: 20px;">
             <label class="modal-section-label">App Notes & Project Instructions</label>
-            <textarea class="modal-textarea" rows="3" onblur="OL.updateMasterApp('${app.id}', 'notes', this.value); OL.persist();">${esc(app.notes || '')}</textarea>
+            <textarea class="modal-textarea" rows="3" onblur="OL.handleAppSave('${app.id}', this.value, 'notes')">${esc(app.notes || '')}</textarea>
         </div>
 
         <div class="card-section" style="margin-top: 20px;">
@@ -1236,14 +1246,28 @@ OL.openAppModal = function(appId, draftObj = null) {
     OL.currentOpenModalId = appId;
     const client = getActiveClient();
     
-    // 1. Resolve Data: Use draft if provided, otherwise search state
+    // 1. Resolve Data: Context-Aware Lookup
     let app = draftObj;
     if (!app) {
-        app = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])]
-              .find(a => a.id === appId);
+        const hash = window.location.hash;
+        const isVaultMode = hash.startsWith('#/vault');
+
+        if (isVaultMode) {
+            // In Vault, only look at Master
+            app = (state.master.apps || []).find(a => a.id === appId);
+        } else {
+            // In Project, find the LOCAL instance specifically
+            // Even if appId is a master ID, we find the local app that REFERENCES it
+            app = (client?.projectData?.localApps || []).find(a => 
+                a.id === appId || a.masterRefId === appId
+            );
+            
+            // Fallback: If not found in project, check master (e.g. previewing from search)
+            if (!app) {
+                app = (state.master.apps || []).find(a => a.id === appId);
+            }
+        }
     }
-    
-    if (!app) return;
 
     // 2. Identify Modal Shell for Soft Refresh
     const modalLayer = document.getElementById("modal-layer");
