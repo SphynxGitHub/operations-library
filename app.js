@@ -1158,13 +1158,22 @@ function renderAppModalInnerContent(app, client) {
     ? [...(state.master.functions || []), ...(client.projectData.localFunctions || [])]
     : (state.master.functions || []);
 
-    // 1. First, Sort them using your existing rank logic
+    // 🚀 THE FIX: Filter out functions that aren't shared with this project
+    const projectSharedIds = client ? (client.sharedMasterIds || []) : [];
+    const projectLocalIds = client ? (client.projectData.localFunctions || []).map(f => String(f.id)) : [];
+
     const sortedMappings = OL.sortMappings(app.functionIds || []);
 
     // 2. 🚀 THE FINAL FILTER: Deduplicate the sorted list immediately before rendering
     const seenIds = new Set();
     const finalUniqueMappings = sortedMappings.filter(m => {
         const id = String(m.id || m);
+
+        if (client && !isVaultRoute) {
+            const isVisibleInProject = projectSharedIds.includes(id) || projectLocalIds.includes(id);
+            if (!isVisibleInProject) return false;
+        }
+
         if (seenIds.has(id)) return false;
         seenIds.add(id);
         return true;
@@ -1555,13 +1564,17 @@ OL.getEffectiveCapabilities = function(app) {
 OL.sortMappings = function(mappingArray) {
     if (!Array.isArray(mappingArray)) return [];
     
-    const rank = { 'primary': 2, 'evaluating': 1, 'available': 0 };
+    const rank = { 'primary': 3, 'evaluating': 2, 'available': 1 };
     
-    // Create a copy to avoid mutating the original until intended
     return [...mappingArray].sort((a, b) => {
+        // Handle both object {id, status} and string "id" formats
         const statusA = (typeof a === 'string' ? 'available' : a.status) || 'available';
         const statusB = (typeof b === 'string' ? 'available' : b.status) || 'available';
-        return rank[statusB] - rank[statusA];
+        
+        const scoreA = rank[statusA] || 0;
+        const scoreB = rank[statusB] || 0;
+        
+        return scoreB - scoreA;
     });
 };
 
