@@ -3435,6 +3435,22 @@ OL.updateResourceMeta = function (resId, key, value) {
     }
 };
 
+OL.handleResourceHeaderBlur = function(id, name) {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+
+    const isDraft = id.startsWith('draft-');
+    const isVault = window.location.hash.includes('vault');
+
+    if (isDraft) {
+        // Route to the committer for new items
+        OL.commitDraftToSystem(id, cleanName, isVault ? 'vault' : 'project');
+    } else {
+        // Standard meta update for existing items
+        OL.updateResourceMeta(id, 'name', cleanName);
+    }
+};
+
 OL.handleModalSave = function(id, context) {
     const input = document.getElementById('modal-res-name');
     if (!input) return;
@@ -3455,7 +3471,6 @@ OL.handleModalSave = function(id, context) {
 
 // 3b. COMMIT THE RESOURCE
 OL.commitDraftToSystem = async function (tempId, finalName, context) {
-    // 🛡️ Prevent double-taps
     if (window._savingLock === tempId) return;
     window._savingLock = tempId;
 
@@ -3474,36 +3489,27 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
         createdDate: new Date().toISOString() 
     };
 
-    console.log("🚀 Attempting to commit:", newResId, "to", context);
-
-    try {
-        if (isVault) {
-            if (!OL.state.master.resources) OL.state.master.resources = [];
-            OL.state.master.resources.push(newRes);
-        } else {
-            const client = getActiveClient();
-            if (!client) throw new Error("No active client found for project save");
+    // Push to State
+    if (isVault) {
+        if (!state.master.resources) state.master.resources = [];
+        state.master.resources.push(newRes);
+    } else {
+        const client = getActiveClient();
+        if (client) {
             if (!client.projectData.localResources) client.projectData.localResources = [];
             client.projectData.localResources.push(newRes);
         }
-
-        // 💾 CRITICAL: Save to Firebase
-        await OL.persist();
-        
-        console.log("✅ Successfully persisted to Cloud.");
-        
-        // 🧹 Cleanup
-        window._savingLock = null;
-        OL.closeModal();
-        
-        // 🔄 Force Redraw
-        renderResourceManager();
-        
-    } catch (err) {
-        console.error("❌ Save failed:", err);
-        window._savingLock = null;
-        alert("Critical Save Error. Check console.");
     }
+
+    await OL.persist();
+    
+    // UI Cleanup
+    window._savingLock = null;
+    OL.closeModal();
+    renderResourceManager();
+    
+    // Optional: Re-open with permanent ID
+    setTimeout(() => OL.openResourceModal(newResId), 100);
 };
 
 OL.getDraftById = function(id) {
@@ -4345,10 +4351,11 @@ OL.openStepDetailModal = function(resId, stepId) {
                 <div style="display:flex; align-items:center; gap:10px; flex:1;">
                     <span style="font-size:18px;">⚙️</span>
                     <input type="text" class="header-editable-input" 
-                           value="${esc(val(step.name))}" 
-                           placeholder="Step Name..."
-                           style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                           onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
+                    id="modal-res-name"
+                    value="${esc(val(res.name))}" 
+                    placeholder="Resource Name..."
+                    style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                    onblur="OL.handleResourceHeaderBlur('${res.id}', this.value)">
                 </div>
                 <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
             </div>
