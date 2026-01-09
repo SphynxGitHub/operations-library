@@ -1352,17 +1352,22 @@ OL.pushAppToClient = function(appId, clientId) {
 
     if (!client || !masterApp) return;
 
-    // Create a local instance but STRIP the capabilities
+    // 🚀 THE FIX: We use JSON.parse(JSON.stringify()) to create a 
+    // completely independent copy of the mappings array.
+    const independentMappings = JSON.parse(JSON.stringify(masterApp.functionIds || []));
+
     const localInstance = {
         id: 'local-app-' + Date.now(),
-        masterRefId: appId, // The link to pull live capabilities
+        masterRefId: appId, 
         name: masterApp.name,
-        notes: masterApp.notes,
-        functionIds: [...(masterApp.functionIds || [])],
-        capabilities: [] // Keep this empty; we pull live from masterRefId
+        notes: masterApp.notes || "",
+        functionIds: independentMappings, // detached from Master
+        capabilities: [] 
     };
 
+    if (!client.projectData.localApps) client.projectData.localApps = [];
     client.projectData.localApps.push(localInstance);
+    
     OL.persist();
     renderAppsGrid();
 };
@@ -1801,19 +1806,19 @@ OL.toggleAppFunction = function(appId, fnId, event) {
 
     // 1. DATA UPDATE LOGIC
     if (isVaultRoute) {
+        // Only touch state.master
         const masterApp = state.master.apps.find(a => a.id === appId);
         if (masterApp) OL.executeMappingToggle(masterApp, fnId, event);
     } else if (client) {
-        let localApp = client.projectData.localApps?.find(a => a.id === appId || a.masterRefId === appId);
-        if (!localApp) {
-            const masterSource = state.master.apps.find(a => a.id === appId);
-            if (masterSource) {
-                localApp = { ...JSON.parse(JSON.stringify(masterSource)), id: 'local-app-' + Date.now(), masterRefId: masterSource.id, functionIds: [] };
-                if (!client.projectData.localApps) client.projectData.localApps = [];
-                client.projectData.localApps.push(localApp);
-            }
+        // 🚀 THE FIX: Only look for the LOCAL app instance.
+        // Do NOT search state.master.apps here.
+        let localApp = client.projectData.localApps?.find(a => a.id === appId);
+        
+        if (localApp) {
+            OL.executeMappingToggle(localApp, fnId, event);
+        } else {
+            console.error("Attempted to toggle a Master App directly in Project View. Use 'Import' first.");
         }
-        if (localApp) OL.executeMappingToggle(localApp, fnId, event);
     }
 
     OL.persist();
