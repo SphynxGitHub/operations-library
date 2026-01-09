@@ -3145,21 +3145,20 @@ window.renderResourceManager = function () {
     if (isVaultView) {
         displayRes = state.master.resources || [];
     } else if (client) {
-        // 🚀 THE FIX: Initialize if missing, then assign
         if (!client.projectData.localResources) {
             client.projectData.localResources = [];
         }
         displayRes = client.projectData.localResources;
     }
 
-    // Alphabetical Sorting
-    displayRes.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    // 🚀 THE CRITICAL FIX: Create a shallow copy before sorting to prevent state mutation crashes
+    const sortedRes = [...displayRes].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     container.innerHTML = `
         <div class="section-header">
             <div>
                 <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
-                <div class="small muted">${displayRes.length} items found</div>
+                <div class="small muted">${sortedRes.length} items found</div>
             </div>
             <div class="header-actions">
                 <button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>
@@ -3170,8 +3169,8 @@ window.renderResourceManager = function () {
             </div>
         </div>
         <div class="cards-grid">
-            ${displayRes.length > 0 
-                ? displayRes.map(res => renderResourceCard(res)).join("") 
+            ${sortedRes.length > 0 
+                ? sortedRes.map(res => renderResourceCard(res)).join("") 
                 : `<div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
                     No resources found in this ${isVaultView ? 'Vault' : 'Project'}.<br>
                     Click "Import from Master" or "Create Local" to begin.
@@ -3340,12 +3339,12 @@ OL.closeResourceTypeManager = function() {
 // 2. RESOURCE CARD AND MODAL
 window.renderResourceCard = function (res) {
     if (!res) return "";
-    // 🚀 THE FIX: A resource is 'Master' if it has a Vault ID OR a reference to a Master
+    
+    // Check if it's master or local
     const isVaultItem = String(res.id || "").startsWith("res-vlt-");
     const isLinkedToMaster = !!res.masterRefId;
     const isMaster = isVaultItem || isLinkedToMaster;
     
-    // UI styling based on status
     const tagLabel = isMaster ? "MASTER" : "LOCAL";
     const tagStyle = isMaster 
         ? "background: var(--accent); border: none;" 
@@ -3354,7 +3353,7 @@ window.renderResourceCard = function (res) {
     return `
         <div class="card is-clickable" onclick="OL.openResourceModal('${res.id}')">
             <div class="card-header">
-                <div class="card-title">${esc(res.name)}</div>
+                <div class="card-title">${esc(res.name || "Unnamed")}</div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="vault-tag" style="${tagStyle}">
                         ${tagLabel}
@@ -3366,7 +3365,7 @@ window.renderResourceCard = function (res) {
             <div class="card-body">
                 <div class="tiny accent bold uppercase">${esc(res.archetype || "Base")}</div>
                 <div class="tiny muted">${esc(res.type || "General")}</div>
-                ${res.masterRefId ? `<div class="tiny muted" style="margin-top:4px; font-style:italic;">⛓️ Synced to Vault</div>` : ''}
+                ${isLinkedToMaster && !isVaultItem ? `<div class="tiny muted" style="margin-top:4px; font-style:italic;">⛓️ Synced to Vault</div>` : ''}
             </div>
         </div>
     `;
