@@ -3440,11 +3440,12 @@ OL.handleModalSave = function(id, context) {
     if (!input) return;
     
     const name = input.value.trim();
-    if (!name) return alert("Please enter a name");
+    if (!name) return; // Don't save empty names
 
-    // If ID includes 'draft', we are creating. Otherwise, we are updating.
-    if (id.includes('draft-')) {
-        // Resolve context if it's missing (fallback to hash check)
+    console.log(`☎️ Save Switchboard: ID=${id}, Context=${context}, Name=${name}`);
+
+    if (id.startsWith('draft-')) {
+        // Resolve context via fallback if missing
         const activeContext = context || (window.location.hash.includes('vault') ? 'vault' : 'project');
         OL.commitDraftToSystem(id, name, activeContext);
     } else {
@@ -3454,6 +3455,7 @@ OL.handleModalSave = function(id, context) {
 
 // 3b. COMMIT THE RESOURCE
 OL.commitDraftToSystem = async function (tempId, finalName, context) {
+    // 🛡️ Prevent double-taps
     if (window._savingLock === tempId) return;
     window._savingLock = tempId;
 
@@ -3472,25 +3474,36 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
         createdDate: new Date().toISOString() 
     };
 
-    // 🚀 THE FIX: Push directly to the global OL.state arrays
-    if (isVault) {
-        if (!OL.state.master.resources) OL.state.master.resources = [];
-        OL.state.master.resources.push(newRes);
-    } else {
-        const client = getActiveClient();
-        if (!client) { window._savingLock = null; return; }
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        client.projectData.localResources.push(newRes);
-    }
+    console.log("🚀 Attempting to commit:", newResId, "to", context);
 
-    // Persist and Close
-    await OL.persist();
-    
-    window._savingLock = null;
-    OL.closeModal();
-    
-    // Force a total UI rebuild of the current view
-    renderResourceManager();
+    try {
+        if (isVault) {
+            if (!OL.state.master.resources) OL.state.master.resources = [];
+            OL.state.master.resources.push(newRes);
+        } else {
+            const client = getActiveClient();
+            if (!client) throw new Error("No active client found for project save");
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources.push(newRes);
+        }
+
+        // 💾 CRITICAL: Save to Firebase
+        await OL.persist();
+        
+        console.log("✅ Successfully persisted to Cloud.");
+        
+        // 🧹 Cleanup
+        window._savingLock = null;
+        OL.closeModal();
+        
+        // 🔄 Force Redraw
+        renderResourceManager();
+        
+    } catch (err) {
+        console.error("❌ Save failed:", err);
+        window._savingLock = null;
+        alert("Critical Save Error. Check console.");
+    }
 };
 
 OL.getDraftById = function(id) {
@@ -3560,10 +3573,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-size:18px;">🛠️</span>
                 <input type="text" class="header-editable-input" 
-                      value="${esc(val(res.name))}" 
-                      placeholder="Resource Name..."
-                      style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                      onblur="OL.handleModalSave('${res.id}', '${res.originContext || (isVaultResource ? 'vault' : 'project')}')">
+                value="${esc(val(res.name))}" 
+                placeholder="Resource Name..."
+                onblur="OL.handleModalSave('${res.id}', '${res.originContext || (isVaultResource ? 'vault' : 'project')}')">
             </div>
             
             <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
