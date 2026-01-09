@@ -189,9 +189,12 @@ window.buildLayout = function () {
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
 
-  const token = urlParams.get("access");
   const isPublic = urlParams.has("access");
+  const token = urlParams.get("access");
   const isMaster = hash.startsWith("#/vault");
+
+  const effectiveAdminMode = isPublic ? false : state.adminMode;
+
   if (!root) return; // Safety guard
 
   const masterTabs = [
@@ -267,7 +270,7 @@ window.buildLayout = function () {
       href: "#/analyze",
     },
     {
-      key: "how-to",
+      key: "howto",
       label: "How-To Library",
       icon: "👩‍🏫",
       href: "#/how-to",
@@ -321,14 +324,13 @@ window.buildLayout = function () {
 
                     <nav class="menu">
                         ${clientTabs.map(item => {
-                            // 1. RESOLVE PERMISSION: Check if they are locked out via Permissions
+                            // 1. Resolve Permission: Check if they are locked out via Permissions
                             const perm = OL.checkPermission(item.key);
                             if (perm === 'none') return '';
 
-                            // 🚀 2. THE GATEKEEPER: 
-                            // If Admin: Always show. 
-                            // If Client: ONLY show if perm is NOT none AND the module is checked 'true'
-                            const isModuleEnabled = state.adminMode || (client.modules && client.modules[item.key] === true);
+                            // 🚀 THE FIX: Use effectiveAdminMode. 
+                            // Also added a check for the specific module key.
+                            const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
                             
                             if (!isModuleEnabled) return ''; 
 
