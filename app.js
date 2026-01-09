@@ -99,30 +99,31 @@ OL.boot = async function() {
         return; 
     }
     
-    try {
-        const doc = await db.collection('systems').doc('main_state').get();
-        
-        if (doc.exists) {
-            const cloudData = doc.data();
-            
-            // 🛡️ THE FIX: Deep merge cloud data into our local state
-            // This prevents "undefined" errors if a piece of data is missing
-            state = {
-                ...state, 
-                ...cloudData,
-                clients: cloudData.clients || {} // Ensure clients is at least an empty object
-            };
-            
-            OL.state = state;
-            console.log("✅ Cloud Data Merged. Clients found:", Object.keys(state.clients).length);
-        } else {
-            console.warn("🆕 No Cloud Data found in Firebase.");
-        }
+   try {
+    const doc = await db.collection('systems').doc('main_state').get();
+    
+    if (doc.exists) {
+        const cloudData = doc.data();
+        console.log("📡 Firebase Raw Data:", cloudData);
 
-        handleRoute(); 
+        // 🚀 THE FIX: Assign cloudData directly to our global state
+        // We use Object.assign to make sure we keep the reference alive
+        Object.assign(state, cloudData);
+        
+        // Ensure OL.state is also pointing to the filled state
+        OL.state = state;
+
+        console.log("✅ State Hydrated. Clients count:", Object.keys(state.clients || {}).length);
+    } else {
+        console.warn("🆕 No Cloud Data found. Initializing new system...");
+        await OL.persist(); 
+    }
+
+    // 🚀 THE RE-RENDER: Force the app to figure out where to go now that data is in
+    handleRoute(); 
         
     } catch (err) {
-        console.error("❌ Firebase Connection Error:", err);
+        console.error("❌ Critical Connection Error:", err);
     }
 };
 
@@ -631,7 +632,14 @@ window.renderClientDashboard = function() {
     if (!container) return;
     
     // 🛡️ Ensure we are pulling from the latest state
-    const clients = state.clients ? Object.values(state.clients) : [];
+    if (!state.clients || Object.keys(state.clients).length === 0) {
+        container.innerHTML = `
+            <div style="padding:40px; text-align:center; opacity:0.5;">
+                <p>⌛ Loading Project Registry...</p>
+                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add First Client</button>
+            </div>`;
+        return;
+    }
 
     container.innerHTML = `
         <div class="setion-header">
