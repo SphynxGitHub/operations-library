@@ -1946,13 +1946,19 @@ window.renderFunctionsGrid = function() {
         displayFunctions = state.master.functions || [];
     } else if (client) {
         // Project: Show ONLY local functions + Master functions this client has deployed
-        displayFunctions = client.projectData.localFunctions || [];
+        const local = client.projectData.localFunctions || [];
+        const sharedMaster = (state.master.functions || []).filter(f => 
+            (client.sharedMasterIds || []).includes(f.id)
+        );
+        displayFunctions = [...sharedMaster, ...local];
     }
 
     // Get Apps for pill display inside the cards
     const masterApps = state.master.apps || [];
     const clientLocalApps = client?.projectData?.localApps || [];
-    const allRelevantApps = client ? [...masterApps, ...clientLocalApps] : masterApps;
+    const allRelevantApps = isMasterMode 
+        ? (state.master.apps || []) 
+        : (client?.projectData?.localApps || []);
 
     container.innerHTML = `
         <div class="section-header">
