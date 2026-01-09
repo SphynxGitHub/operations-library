@@ -1346,7 +1346,7 @@ OL.promoteAppToMaster = function(clientId, localAppId) {
     renderAppsGrid();
 };
 
-OL.pushAppToClient = function(appId, clientId) {
+OL.pushAppToClient = async function(appId, clientId) {
     const client = state.clients[clientId];
     const masterApp = state.master.apps.find(a => String(a.id) === String(appId));
     if (!client || !masterApp) return;
@@ -1385,9 +1385,12 @@ OL.pushAppToClient = function(appId, clientId) {
     if (!client.projectData.localApps) client.projectData.localApps = [];
     client.projectData.localApps.push(localInstance);
     
-    OL.persist();
-    renderAppsGrid();
-    buildLayout(); // 🔄 Re-draw sidebar to show newly unlocked functions
+    await OL.persist();
+    
+    setTimeout(() => {
+        buildLayout();
+        renderAppsGrid();
+    }, 50); // 50ms gives the modal enough time to vanish from the DOM
 };
 
 OL.cloneMasterToLocal = function(masterAppId, clientId) {
@@ -2371,7 +2374,7 @@ OL.adoptFunctionToMaster = function(clientId, localFnId) {
     renderFunctionsGrid();
 };
 
-OL.pushFunctionToClient = function(masterFnId, clientId) {
+OL.pushFunctionToClient = async function(masterFnId, clientId) {
     const client = state.clients[clientId];
     const masterFn = state.master.functions.find(f => String(f.id) === String(masterFnId));
     if (!client || !masterFn) return;
@@ -2411,9 +2414,12 @@ OL.pushFunctionToClient = function(masterFnId, clientId) {
         }
     });
 
-    OL.persist();
-    renderFunctionsGrid();
-    buildLayout();
+    await OL.persist();
+    
+    setTimeout(() => {
+        buildLayout();
+        renderAppsGrid();
+    }, 50); // 50ms gives the modal enough time to vanish from the DOM
 };
 
 //======================= TASK CHECKLIST SECTION =======================//
