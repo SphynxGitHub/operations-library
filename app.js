@@ -3139,19 +3139,21 @@ window.renderResourceManager = function () {
     const client = getActiveClient();
     const hash = window.location.hash;
 
+    // Use startsWith for a more reliable check
     const isVaultView = hash.startsWith('#/vault');
 
     let displayRes = [];
     if (isVaultView) {
         displayRes = state.master.resources || [];
     } else if (client) {
+        // 🚀 FORCE INITIALIZATION: Ensure the key exists before trying to read it
         if (!client.projectData.localResources) {
             client.projectData.localResources = [];
         }
         displayRes = client.projectData.localResources;
     }
 
-    // 🚀 THE CRITICAL FIX: Create a shallow copy before sorting to prevent state mutation crashes
+    // 🚀 SAFE SORT: Create a copy [...displayRes] so we don't mutate the original state in-place
     const sortedRes = [...displayRes].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     container.innerHTML = `
@@ -3172,8 +3174,7 @@ window.renderResourceManager = function () {
             ${sortedRes.length > 0 
                 ? sortedRes.map(res => renderResourceCard(res)).join("") 
                 : `<div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
-                    No resources found in this ${isVaultView ? 'Vault' : 'Project'}.<br>
-                    Click "Import from Master" or "Create Local" to begin.
+                    No resources found in this ${isVaultView ? 'Vault' : 'Project'}.
                    </div>`
             }
         </div>
@@ -3456,51 +3457,41 @@ OL.commitDraftToSystem = function (tempId, finalName, context) {
     if (window._savingLock === tempId) return;
     window._savingLock = tempId;
 
-    const draft = OL.getDraftById(tempId); 
     const isVault = (context === 'vault');
     const timestamp = Date.now();
-    
     let newResId;
-    if (isVault) {
-        newResId = `res-vlt-${timestamp}`; // 🚀 REQUIRED PREFIX
-        const newRes = { 
-            id: newResId, 
-            name: finalName, 
-            type: "General", 
-            archetype: "Base", 
-            data: {}, 
-            createdDate: new Date().toISOString() 
-        };
-        
-        // 🚀 THE CRITICAL ADDITION:
-        if (!state.master.resources) state.master.resources = [];
-        state.master.resources.push(newRes); 
-        console.log("💎 Added to Master Vault:", newRes);
 
+    const newRes = { 
+        id: '', // Will set below
+        name: finalName, 
+        type: "General", 
+        archetype: "Base", 
+        data: {}, 
+        steps: [],
+        triggers: [],
+        createdDate: new Date().toISOString() 
+    };
+
+    if (isVault) {
+        newResId = `res-vlt-${timestamp}`;
+        newRes.id = newResId;
+        if (!state.master.resources) state.master.resources = [];
+        state.master.resources.push(newRes);
     } else {
         const client = getActiveClient();
         if (!client) { window._savingLock = null; return; }
-        
         newResId = `local-prj-${timestamp}`;
-        const newRes = { 
-            id: newResId, 
-            name: finalName, 
-            type: "General", 
-            archetype: "Base", 
-            data: {}, 
-            createdDate: new Date().toISOString() 
-        };
-        
+        newRes.id = newResId;
         if (!client.projectData.localResources) client.projectData.localResources = [];
         client.projectData.localResources.push(newRes);
-        console.log("📁 Added to Project Library:", newRes);
     }
 
-    // 🚀 SAVE TO FIREBASE
+    // 🚀 THE SAVE SEQUENCE
     OL.persist().then(() => {
         OL.closeModal();
-        renderResourceManager(); // Force redraw
+        renderResourceManager(); // Refresh the grid
         window._savingLock = null;
+        console.log("✅ Resource Persisted:", newResId);
     });
 };
 
