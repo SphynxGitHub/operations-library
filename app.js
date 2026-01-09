@@ -85,38 +85,34 @@ OL.persist = async function() {
 OL.boot = async function() {
     console.log("🚀 Sphynx System: Booting...");
 
-    // 1. Give the browser a moment to register window variables from config.js
+    // 1. Wait for config variables
     let attempts = 0;
     while (!window.ADMIN_ACCESS_ID && attempts < 30) {
         await new Promise(r => setTimeout(r, 100));
         attempts++;
     }
 
-    // 2. Run Security Check
+    // 2. Security Check
     const isAuthorized = OL.initializeSecurityContext();
-    if (!isAuthorized) {
-        // If we get here, it means even after 3 seconds, the key in URL != window key
-        console.warn("🛑 Boot halted: Unauthorized access.");
-        console.log("URL Key:", new URLSearchParams(window.location.search).get('admin'));
-        console.log("Config Key:", window.ADMIN_ACCESS_ID);
-        return; 
-    }
+    if (!isAuthorized) return; 
     
     try {
         const doc = await db.collection('systems').doc('main_state').get();
         
         if (doc.exists) {
             const cloudData = doc.data();
-            // Use Object.assign to maintain the reference to the original state object
-            Object.assign(state, cloudData);
-            OL.state = state;
+            
+            // 🚀 THE FIX: Direct reassignment to restore the working reference chain
+            state = cloudData; 
+            OL.state = state; 
+
             console.log("✅ Data Hydrated. Clients:", Object.keys(state.clients || {}).length);
         } else {
             console.warn("🆕 No Cloud Data. Initializing...");
             await OL.persist(); 
         }
 
-        // 🚀 CRITICAL: Re-run routing now that we have data
+        // 🚀 Ensure routing triggers after data is local
         handleRoute(); 
         
     } catch (err) {
@@ -3451,21 +3447,29 @@ OL.handleResourceHeaderBlur = function(id, name) {
     }
 };
 
-OL.handleModalSave = function(id, context) {
-    const input = document.getElementById('modal-res-name');
-    if (!input) return;
-    
-    const name = input.value.trim();
-    if (!name) return; // Don't save empty names
+OL.handleModalSave = function(id, name) {
+    const cleanName = name.trim();
+    if (!cleanName) return;
 
-    console.log(`☎️ Save Switchboard: ID=${id}, Context=${context}, Name=${name}`);
+    const isDraft = id.startsWith('draft-');
+    const isVault = window.location.hash.includes('vault');
 
-    if (id.startsWith('draft-')) {
-        // Resolve context via fallback if missing
-        const activeContext = context || (window.location.hash.includes('vault') ? 'vault' : 'project');
-        OL.commitDraftToSystem(id, name, activeContext);
+    if (isDraft) {
+        const timestamp = Date.now();
+        const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+        const newRes = { id: newId, name: cleanName, type: "General", archetype: "Base", createdDate: new Date().toISOString() };
+
+        if (isVault) {
+            state.master.resources.push(newRes);
+        } else {
+            getActiveClient().projectData.localResources.push(newRes);
+        }
+        
+        OL.persist();
+        OL.openResourceModal(newId); // Swap draft for real ID
+        renderResourceManager();
     } else {
-        OL.updateResourceMeta(id, 'name', name);
+        OL.updateResourceMeta(id, 'name', cleanName);
     }
 };
 
@@ -4351,11 +4355,10 @@ OL.openStepDetailModal = function(resId, stepId) {
                 <div style="display:flex; align-items:center; gap:10px; flex:1;">
                     <span style="font-size:18px;">⚙️</span>
                     <input type="text" class="header-editable-input" 
-                    id="modal-res-name"
                     value="${esc(val(res.name))}" 
                     placeholder="Resource Name..."
                     style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                    onblur="OL.handleResourceHeaderBlur('${res.id}', this.value)">
+                    onblur="OL.handleModalSave('${res.id}', this.value)">
                 </div>
                 <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
             </div>
