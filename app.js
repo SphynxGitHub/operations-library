@@ -1349,22 +1349,24 @@ OL.promoteAppToMaster = function(clientId, localAppId) {
 OL.pushAppToClient = function(appId, clientId) {
     const client = state.clients[clientId];
     const masterApp = state.master.apps.find(a => a.id === appId);
-
     if (!client || !masterApp) return;
 
-    // 1. Create independent copy of mappings
-    const independentMappings = JSON.parse(JSON.stringify(masterApp.functionIds || []));
+    // 1. We start with an empty mapping array for the local instance
+    // We will only populate it if the function exists in the project
+    const localMappings = [];
 
-    // 🚀 THE FIX: Auto-share linked Master Functions
-    independentMappings.forEach(mapping => {
-        const fnId = typeof mapping === 'string' ? mapping : mapping.id;
-        // If it's a Master Function ID, ensure it's in the client's shared list
-        if (fnId.startsWith('fn-') || fnId.startsWith('master-')) {
-            if (!client.sharedMasterIds) client.sharedMasterIds = [];
-            if (!client.sharedMasterIds.includes(fnId)) {
-                client.sharedMasterIds.push(fnId);
-                console.log(`🔗 Auto-linked Master Function: ${fnId}`);
-            }
+    // 2. Scan Master Mappings to detect intersections
+    (masterApp.functionIds || []).forEach(m => {
+        const fnId = typeof m === 'string' ? m : m.id;
+        
+        // Check if this function is already in the project (Local or Shared Master)
+        const isFnInProject = (client.sharedMasterIds || []).includes(fnId) || 
+                             (client.projectData.localFunctions || []).some(lf => lf.id === fnId);
+
+        if (isFnInProject) {
+            // 🚀 INTERSECTION FOUND: Auto-set to available
+            localMappings.push({ id: fnId, status: 'available' });
+            console.log(`✅ Auto-linked: ${masterApp.name} is Available for existing function ${fnId}`);
         }
     });
 
@@ -1373,7 +1375,7 @@ OL.pushAppToClient = function(appId, clientId) {
         masterRefId: appId, 
         name: masterApp.name,
         notes: masterApp.notes || "",
-        functionIds: independentMappings,
+        functionIds: localMappings,
         capabilities: [] 
     };
 
@@ -1382,7 +1384,7 @@ OL.pushAppToClient = function(appId, clientId) {
     
     OL.persist();
     renderAppsGrid();
-    buildLayout(); // 🔄 Refresh sidebar immediately to show new functions
+    buildLayout();
 };
 
 OL.cloneMasterToLocal = function(masterAppId, clientId) {
@@ -1913,6 +1915,39 @@ OL.executeMappingToggle = function(appObj, fnId, event) {
     }
 };
 
+OL.syncMasterRelationships = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const localApps = client.projectData.localApps || [];
+    const sharedMasterFns = client.sharedMasterIds || [];
+
+    localApps.forEach(app => {
+        // Find the original Master version of this app
+        const masterApp = state.master.apps.find(ma => ma.id === app.masterRefId);
+        if (!masterApp || !masterApp.functionIds) return;
+
+        masterApp.functionIds.forEach(m => {
+            const masterFnId = typeof m === 'string' ? m : m.id;
+
+            // 🚀 THE CONDITION: If this function is already in the project's library...
+            const isFnInProject = sharedMasterFns.includes(masterFnId) || 
+                                 (client.projectData.localFunctions || []).some(lf => lf.id === masterFnId);
+
+            if (isFnInProject) {
+                // ...and the relationship doesn't exist locally yet
+                const alreadyMapped = app.functionIds.some(localM => (localM.id || localM) === masterFnId);
+                
+                if (!alreadyMapped) {
+                    // Set to 'available' as the default local relationship
+                    app.functionIds.push({ id: masterFnId, status: 'available' });
+                    console.log(`🔗 Auto-detected relationship: ${app.name} is now Available for ${masterFnId}`);
+                }
+            }
+        });
+    });
+};
+
 //======================= FUNCTIONS GRID  SECTION =======================//
 
 // 1. RENDER FUNCTIONS GRID
@@ -2336,25 +2371,41 @@ OL.adoptFunctionToMaster = function(clientId, localFnId) {
 OL.pushFunctionToClient = function(masterFnId, clientId) {
     const client = state.clients[clientId];
     const masterFn = state.master.functions.find(f => f.id === masterFnId);
-
     if (!client || !masterFn) return;
 
-    const alreadyCloned = client.projectData.localFunctions?.some(f => f.masterRefId === masterFnId);
+    const alreadyCloned = (client.sharedMasterIds || []).includes(masterFnId) || 
+                          (client.projectData.localFunctions || []).some(f => f.masterRefId === masterFnId);
+    
     if (alreadyCloned) return alert("Function already active.");
 
-    const localClone = {
-        id: 'local-fn-' + Date.now(),
-        masterRefId: masterFnId,
-        name: masterFn.name,
-        description: masterFn.description,
-        blueprint: [] // We pull the actual tasks live from Master
-    };
+    // 1. Add to Shared Master list to make it visible
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    client.sharedMasterIds.push(masterFnId);
 
-    if (!client.projectData.localFunctions) client.projectData.localFunctions = [];
-    client.projectData.localFunctions.push(localClone);
+    // 🚀 2. THE REVERSE LOOKUP: Check existing apps for intersections
+    (client.projectData.localApps || []).forEach(localApp => {
+        // Find the Master version of this local app
+        const masterAppSource = state.master.apps.find(ma => ma.id === localApp.masterRefId);
+        
+        if (masterAppSource && masterAppSource.functionIds) {
+            // If the Master App is tied to this new Function...
+            const isTiedInMaster = masterAppSource.functionIds.some(m => (m.id || m) === masterFnId);
+            
+            if (isTiedInMaster) {
+                // ...and it's not already mapped locally
+                const alreadyMappedLocally = localApp.functionIds.some(m => (m.id || m) === masterFnId);
+                
+                if (!alreadyMappedLocally) {
+                    localApp.functionIds.push({ id: masterFnId, status: 'available' });
+                    console.log(`🔗 Auto-detected: ${localApp.name} can now perform ${masterFn.name}`);
+                }
+            }
+        }
+    });
 
     OL.persist();
     renderFunctionsGrid();
+    buildLayout(); // Refresh sidebar to show the new function
 };
 
 //======================= TASK CHECKLIST SECTION =======================//
