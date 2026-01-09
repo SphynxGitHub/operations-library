@@ -3139,7 +3139,7 @@ window.renderResourceManager = function () {
     const client = getActiveClient();
     const hash = window.location.hash;
 
-    const isVaultView = hash.includes('vault') || hash.includes('resource-manager');
+    const isVaultView = hash.startsWith('#/vault');
 
     let displayRes = [];
     if (isVaultView) {
@@ -3456,54 +3456,52 @@ OL.commitDraftToSystem = function (tempId, finalName, context) {
     if (window._savingLock === tempId) return;
     window._savingLock = tempId;
 
-    // Get the draft object to find the return route
     const draft = OL.getDraftById(tempId); 
     const isVault = (context === 'vault');
     const timestamp = Date.now();
     
-    // 🛡️ Path Logic
     let newResId;
     if (isVault) {
-        newResId = `res-vlt-${timestamp}`;
-        const newRes = { id: newResId, name: finalName, type: "General", archetype: "Base", data: {}, createdDate: new Date().toISOString() };
+        newResId = `res-vlt-${timestamp}`; // 🚀 REQUIRED PREFIX
+        const newRes = { 
+            id: newResId, 
+            name: finalName, 
+            type: "General", 
+            archetype: "Base", 
+            data: {}, 
+            createdDate: new Date().toISOString() 
+        };
+        
+        // 🚀 THE CRITICAL ADDITION:
         if (!state.master.resources) state.master.resources = [];
-        state.master.resources.push(newRes);
+        state.master.resources.push(newRes); 
+        console.log("💎 Added to Master Vault:", newRes);
+
     } else {
         const client = getActiveClient();
         if (!client) { window._savingLock = null; return; }
+        
         newResId = `local-prj-${timestamp}`;
-        const newRes = { id: newResId, name: finalName, type: "General", archetype: "Base", data: {}, createdDate: new Date().toISOString() };
+        const newRes = { 
+            id: newResId, 
+            name: finalName, 
+            type: "General", 
+            archetype: "Base", 
+            data: {}, 
+            createdDate: new Date().toISOString() 
+        };
+        
         if (!client.projectData.localResources) client.projectData.localResources = [];
         client.projectData.localResources.push(newRes);
-        
-        // ONLY link to scoping if we actually started on the scoping sheet
-        if (draft?.returnRoute?.includes('scoping-sheet')) {
-            const lineId = 'line-' + uid();
-            client.projectData.scopingSheets[0].lineItems.push({
-                id: lineId, resourceId: newResId, status: 'Do Now'
-            });
-            // Focus modal on the line item instead of the raw resource
-            newResId = lineId; 
-        }
+        console.log("📁 Added to Project Library:", newRes);
     }
 
-    OL.persist();
-    OL.closeModal();
-
-    // 🚀 THE FIX: Use the returnRoute to decide which render function to call
-    if (draft?.returnRoute?.includes('scoping-sheet')) {
-        renderScopingSheet();
-    } else if (draft?.returnRoute?.includes('resource-manager') || draft?.returnRoute?.includes('vault')) {
-        renderResourceManager();
-    } else {
-        // Generic fallback to rebuild the current view
-        handleRoute(); 
-    }
-
-    setTimeout(() => { 
-        OL.openResourceModal(newResId); 
-        window._savingLock = null; 
-    }, 100);
+    // 🚀 SAVE TO FIREBASE
+    OL.persist().then(() => {
+        OL.closeModal();
+        renderResourceManager(); // Force redraw
+        window._savingLock = null;
+    });
 };
 
 OL.getDraftById = function(id) {
