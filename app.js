@@ -135,6 +135,7 @@ OL.initializeSecurityContext = function() {
     const params = new URLSearchParams(window.location.search);
     const clientToken = params.get('access'); 
     const adminKey = params.get('admin'); 
+    const savedAdminID = window.ADMIN_ACCESS_ID;
 
     // 1. ADMIN CHECK: If the URL has ?admin=YOUR_SECRET_ID
     if (adminKey && adminKey === window.ADMIN_ACCESS_ID) {
