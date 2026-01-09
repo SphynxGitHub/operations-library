@@ -1352,16 +1352,28 @@ OL.pushAppToClient = function(appId, clientId) {
 
     if (!client || !masterApp) return;
 
-    // 🚀 THE FIX: We use JSON.parse(JSON.stringify()) to create a 
-    // completely independent copy of the mappings array.
+    // 1. Create independent copy of mappings
     const independentMappings = JSON.parse(JSON.stringify(masterApp.functionIds || []));
+
+    // 🚀 THE FIX: Auto-share linked Master Functions
+    independentMappings.forEach(mapping => {
+        const fnId = typeof mapping === 'string' ? mapping : mapping.id;
+        // If it's a Master Function ID, ensure it's in the client's shared list
+        if (fnId.startsWith('fn-') || fnId.startsWith('master-')) {
+            if (!client.sharedMasterIds) client.sharedMasterIds = [];
+            if (!client.sharedMasterIds.includes(fnId)) {
+                client.sharedMasterIds.push(fnId);
+                console.log(`🔗 Auto-linked Master Function: ${fnId}`);
+            }
+        }
+    });
 
     const localInstance = {
         id: 'local-app-' + Date.now(),
         masterRefId: appId, 
         name: masterApp.name,
         notes: masterApp.notes || "",
-        functionIds: independentMappings, // detached from Master
+        functionIds: independentMappings,
         capabilities: [] 
     };
 
@@ -1370,6 +1382,7 @@ OL.pushAppToClient = function(appId, clientId) {
     
     OL.persist();
     renderAppsGrid();
+    buildLayout(); // 🔄 Refresh sidebar immediately to show new functions
 };
 
 OL.cloneMasterToLocal = function(masterAppId, clientId) {
@@ -1732,14 +1745,20 @@ OL.executeMap = function(targetId, mode) {
     } 
     // --- 📱 SCENARIO 2: PROJECT MAPPING ---
     else if (client) {
-        // ... (Keep your existing project auto-import logic here) ...
+        const fnId = (mode === 'functions') ? targetId : contextId;
+        
+        // 🚀 THE AUTO-UNLOCK: If mapping a master function, share it with the project
+        if (fnId.startsWith('fn-') || fnId.startsWith('master-')) {
+            if (!client.sharedMasterIds.includes(fnId)) {
+                client.sharedMasterIds.push(fnId);
+            }
+        }
+
         if (mode === 'apps') {
             let app = client.projectData.localApps?.find(a => a.id === targetId || a.masterRefId === targetId);
-            if (!app) { /* auto-import logic */ }
             OL.toggleAppFunction(app ? app.id : targetId, contextId);
         } else {
             let localApp = client.projectData.localApps?.find(a => a.id === contextId || a.masterRefId === contextId);
-            if (!localApp) { /* auto-import logic */ }
             OL.toggleAppFunction(localApp ? localApp.id : contextId, targetId);
         }
     }
