@@ -85,9 +85,9 @@ OL.persist = async function() {
 OL.boot = async function() {
     console.log("🚀 Sphynx System: Booting...");
 
-    // 1. Wait for Config (Increased timeout safety)
+    // 1. Give the browser a moment to register window variables from config.js
     let attempts = 0;
-    while (!window.ADMIN_ACCESS_ID && attempts < 20) {
+    while (!window.ADMIN_ACCESS_ID && attempts < 30) {
         await new Promise(r => setTimeout(r, 100));
         attempts++;
     }
@@ -95,35 +95,32 @@ OL.boot = async function() {
     // 2. Run Security Check
     const isAuthorized = OL.initializeSecurityContext();
     if (!isAuthorized) {
+        // If we get here, it means even after 3 seconds, the key in URL != window key
         console.warn("🛑 Boot halted: Unauthorized access.");
+        console.log("URL Key:", new URLSearchParams(window.location.search).get('admin'));
+        console.log("Config Key:", window.ADMIN_ACCESS_ID);
         return; 
     }
     
-   try {
-    const doc = await db.collection('systems').doc('main_state').get();
-    
-    if (doc.exists) {
-        const cloudData = doc.data();
-        console.log("📡 Firebase Raw Data:", cloudData);
-
-        // 🚀 THE FIX: Assign cloudData directly to our global state
-        // We use Object.assign to make sure we keep the reference alive
-        Object.assign(state, cloudData);
+    try {
+        const doc = await db.collection('systems').doc('main_state').get();
         
-        // Ensure OL.state is also pointing to the filled state
-        OL.state = state;
+        if (doc.exists) {
+            const cloudData = doc.data();
+            // Use Object.assign to maintain the reference to the original state object
+            Object.assign(state, cloudData);
+            OL.state = state;
+            console.log("✅ Data Hydrated. Clients:", Object.keys(state.clients || {}).length);
+        } else {
+            console.warn("🆕 No Cloud Data. Initializing...");
+            await OL.persist(); 
+        }
 
-        console.log("✅ State Hydrated. Clients count:", Object.keys(state.clients || {}).length);
-    } else {
-        console.warn("🆕 No Cloud Data found. Initializing new system...");
-        await OL.persist(); 
-    }
-
-    // 🚀 THE RE-RENDER: Force the app to figure out where to go now that data is in
-    handleRoute(); 
+        // 🚀 CRITICAL: Re-run routing now that we have data
+        handleRoute(); 
         
     } catch (err) {
-        console.error("❌ Critical Connection Error:", err);
+        console.error("❌ Firebase Error:", err);
     }
 };
 
@@ -888,45 +885,26 @@ OL.setAllPermissions = function(clientId, level) {
 
 OL.pushFeaturesToAllClients = function() {
     const clientIds = Object.keys(state.clients);
-    let updatedCount = 0;
-
     clientIds.forEach(id => {
         const client = state.clients[id];
-
-        // 1. Sync Permissions
-        // Ensures the new 'functions' and 'credentials' tabs appear for old clients
-        const requiredPermissions = {
-            apps: 'full',
-            functions: 'full',
-            analysis: 'full',
-            scoping: 'view',
-            checklist: 'full',
-            credentials: 'full',
-            howto: 'view'
-        };
-
-        client.permissions = { ...requiredPermissions, ...client.permissions };
-
-        // 2. Sync Project Data Arrays
-        // Ensures code doesn't crash when looking for .length on new features
-        if (!client.projectData.localApps) client.projectData.localApps = [];
-        if (!client.projectData.credentials) client.projectData.credentials = [];
-        if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
-        if (!client.sharedMasterIds) client.sharedMasterIds = [];
-
-        updatedCount++;
-
+        
+        // Ensure modules exist and the key is 'checklist' to match the sidebar
         if (!client.modules) {
-            client.modules = {
-                tasks: true, apps: true, functions: true, resources: true, 
-                scoping: true, analysis: true, howto: true, team: true
+            client.modules = { 
+                checklist: true, apps: true, functions: true, resources: true, 
+                scoping: true, analysis: true, "how-to": true, team: true 
             };
+        } else {
+            // Fix naming if 'tasks' was used instead of 'checklist'
+            if (client.modules.tasks) {
+                client.modules.checklist = client.modules.tasks;
+                delete client.modules.tasks;
+            }
         }
     });
-
     OL.persist();
-    alert(`Successfully pushed new features to ${updatedCount} clients.`);
-    location.reload(); // Refresh to rebuild the sidebar with new tabs
+    alert("Migration Complete. Refreshing...");
+    location.reload();
 };
 
 //======================= APPS GRID SECTION =======================//
