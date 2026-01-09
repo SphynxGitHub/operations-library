@@ -214,7 +214,7 @@ window.buildLayout = function () {
       href: "#/vault/how-to",
     },
      {
-      key: "tasks",
+      key: "checklist",
       label: "Master Tasks",
       icon: "📋",
       href: "#/vault/tasks",
@@ -230,7 +230,7 @@ window.buildLayout = function () {
 
   const clientTabs = [
     {
-      key: "tasks",
+      key: "checklist",
       label: "Tasks",
       icon: "📋",
       href: "#/client-tasks",
