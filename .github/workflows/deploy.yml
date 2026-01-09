@@ -18,11 +18,13 @@ jobs:
 
       - name: Inject Keys
         run: |
-          # Create the file explicitly in the workspace root
+          # Create config.js exactly where index.html is
           echo "window.GOOGLE_API_KEY = '${{ secrets.GOOGLE_API_KEY }}';" > config.js
           echo "window.ADMIN_ACCESS_ID = '${{ secrets.ADMIN_ACCESS_ID }}';" >> config.js
-          # Verify it exists for the log
-          ls -la config.js
+          
+          # Log location for debugging
+          echo "File created at: $(pwd)/config.js"
+          ls -F
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -30,7 +32,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # This tells GitHub to grab EVERY file in the root, including the config.js we just made
+          # Use the absolute path to the current directory
           path: '.'
 
       - name: Deploy to GitHub Pages
