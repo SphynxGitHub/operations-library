@@ -321,27 +321,29 @@ window.buildLayout = function () {
 
                     <nav class="menu">
                         ${clientTabs.map(item => {
-                            // 🚀 THE GATEKEEPER LOGIC
-                            // Admin sees everything. Clients see only enabled modules.
-                            const isModuleEnabled = state.adminMode || (client?.modules && client.modules[item.key]);
+                            // 1. RESOLVE PERMISSION: Check if they are locked out via Permissions
+                            const perm = OL.checkPermission(item.key);
+                            if (perm === 'none') return '';
+
+                            // 🚀 2. THE GATEKEEPER: 
+                            // If Admin: Always show. 
+                            // If Client: ONLY show if perm is NOT none AND the module is checked 'true'
+                            const isModuleEnabled = state.adminMode || (client.modules && client.modules[item.key] === true);
                             
                             if (!isModuleEnabled) return ''; 
 
-                            const perm = OL.checkPermission(item.key);
-                            if (perm === 'none') return '';
-                            
+                            // 3. Generate Link
                             const linkHref = isPublic ? `${item.href}?access=${token}` : item.href;
                             const isActive = hash.startsWith(item.href);
 
                             return `
                                 <a href="${linkHref}" class="${isActive ? 'active' : ''}">
                                     <i>${item.icon}</i> <span>${item.label}</span>
-                                    ${perm === 'view' ? '<i class="lock-icon">🔒</i>' : ''}
+                                    ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                                 </a>
                             `;
                         }).join('')}
                     </nav>
-                </div>
             ` : `
                 <div class="empty-context-hint"><p>Select a Client or enter Global Vault from Dashboard.</p></div>
             `}
