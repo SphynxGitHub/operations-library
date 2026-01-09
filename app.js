@@ -934,6 +934,7 @@ window.renderAppsGrid = function() {
     
     // Determine which list to show based on view
     const displayApps = isVaultMode ? masterApps : (client?.projectData?.localApps || []);
+    displayApps.sort((a, b) => a.name.localeCompare(b.name));
 
     container.innerHTML = `
       <div class="section-header">
@@ -1041,19 +1042,16 @@ OL.filterMasterAppImport = function(clientId, query) {
     const q = (query || "").toLowerCase().trim();
     const client = state.clients[clientId];
     
-    // 🛡️ Filter: Exclude apps already deployed to this project
-    const deployedRefs = (client?.projectData?.localApps || []).map(a => String(a.masterRefId));
+    // 🛡️ Filter out apps already in the project
+    const existingMasterIds = (client.projectData.localApps || []).map(a => String(a.masterRefId));
     
-    const available = (state.master.apps || []).filter(app => 
-        app.name.toLowerCase().includes(q) && !deployedRefs.includes(String(app.id))
-    );
+    const available = (state.master.apps || [])
+        .filter(app => !existingMasterIds.includes(String(app.id)) && app.name.toLowerCase().includes(q))
+        .sort((a, b) => a.name.localeCompare(b.name)); // 🚀 Sort the list
 
     listEl.innerHTML = available.map(app => `
         <div class="search-result-item" onmousedown="OL.pushAppToClient('${app.id}', '${clientId}'); OL.closeModal();">
-            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                <span>📱 ${esc(app.name)}</span>
-                <span class="tiny muted">Master Vault</span>
-            </div>
+            <span>📱 ${esc(app.name)}</span>
         </div>
     `).join('') || `<div class="search-result-item muted">No new apps found.</div>`;
 };
@@ -1351,25 +1349,20 @@ OL.pushAppToClient = async function(appId, clientId) {
     const masterApp = state.master.apps.find(a => String(a.id) === String(appId));
     if (!client || !masterApp) return;
 
+    // 1. Pre-calculate the local mappings before creating the instance
     const localMappings = [];
-    
-    // 🚀 THE FORWARD LOOKUP: Scan what this App does in the Master Vault
     (masterApp.functionIds || []).forEach(m => {
         const fnId = String(typeof m === 'string' ? m : m.id);
         
-        // 1. Check if the function is already "Unlocked" or "Local"
         const isAlreadyVisible = (client.sharedMasterIds || []).includes(fnId) || 
                                  (client.projectData.localFunctions || []).some(lf => String(lf.id) === fnId);
 
-        // 2. AUTO-UNLOCK: If it's a Master function not yet in the project, unlock it!
-        // This ensures the pill doesn't disappear just because you haven't "Imported" the function yet.
         if (!isAlreadyVisible && (fnId.startsWith('fn-') || fnId.startsWith('master-'))) {
             if (!client.sharedMasterIds) client.sharedMasterIds = [];
             client.sharedMasterIds.push(fnId);
-            console.log(`✨ Auto-unlocked function ${fnId} because ${masterApp.name} requires it.`);
         }
 
-        // 3. Add to the local mappings array
+        // We map it if it's visible now (which it is, thanks to auto-unlock above)
         localMappings.push({ id: fnId, status: 'available' });
     });
 
@@ -1378,19 +1371,27 @@ OL.pushAppToClient = async function(appId, clientId) {
         masterRefId: appId, 
         name: masterApp.name,
         notes: masterApp.notes || "",
-        functionIds: localMappings,
+        functionIds: localMappings, // 🚀 Mappings are born with the object
         capabilities: [] 
     };
 
     if (!client.projectData.localApps) client.projectData.localApps = [];
     client.projectData.localApps.push(localInstance);
     
+    // 2. Persist the change
     await OL.persist();
     
+    // 3. 🚀 THE UI TRIGGER: Ensure we refresh the specific view
+    // buildLayout updates the sidebar (newly unlocked functions)
+    // renderAppsGrid updates the cards (the new app with its pills)
+    buildLayout();
+    renderAppsGrid();
+    
+    // Small delay only for DOM cleanup if needed, but the render calls above do the heavy lifting
     setTimeout(() => {
-        buildLayout();
-        renderAppsGrid();
-    }, 50); // 50ms gives the modal enough time to vanish from the DOM
+        const modal = document.getElementById("modal-layer");
+        if (modal) modal.style.display = "none";
+    }, 50);
 };
 
 OL.cloneMasterToLocal = function(masterAppId, clientId) {
@@ -2012,6 +2013,7 @@ window.renderFunctionsGrid = function() {
         );
         displayFunctions = [...sharedMaster, ...local];
     }
+    displayFunctions.sort((a, b) => a.name.localeCompare(b.name));
 
     // Get Apps for pill display inside the cards
     const masterApps = state.master.apps || [];
@@ -2318,17 +2320,28 @@ OL.filterMasterFunctionImport = function(clientId, query) {
 
     const q = (query || "").toLowerCase().trim();
     const client = state.clients[clientId];
-    const deployedRefs = (client?.projectData?.localFunctions || []).map(f => f.masterRefId);
-
-    const available = (state.master.functions || []).filter(fn => 
-        fn.name.toLowerCase().includes(q) && !deployedRefs.includes(fn.id)
-    );
+    
+    // 🛡️ Get IDs of EVERYTHING already in the project
+    // This includes locally created functions AND master functions already shared/imported
+    const deployedRefs = (client?.projectData?.localFunctions || []).map(f => String(f.masterRefId));
+    const sharedIds = (client?.sharedMasterIds || []).map(id => String(id));
+    
+    const available = (state.master.functions || [])
+        .filter(fn => {
+            const isMatch = fn.name.toLowerCase().includes(q);
+            const isAlreadyPresent = deployedRefs.includes(String(fn.id)) || sharedIds.includes(String(fn.id));
+            return isMatch && !isAlreadyPresent;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)); // 🚀 Alphabetical Sort
 
     listEl.innerHTML = available.map(fn => `
         <div class="search-result-item" onmousedown="OL.pushFunctionToClient('${fn.id}', '${clientId}'); OL.closeModal();">
-            ⚙️ ${esc(fn.name)}
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span>⚙️</span>
+                <span>${esc(fn.name)}</span>
+            </div>
         </div>
-    `).join('') || `<div class="search-result-item muted">No new functions found.</div>`;
+    `).join('') || `<div class="search-result-item muted">No unlinked functions found.</div>`;
 };
 
 OL.adoptFunctionToMaster = function(clientId, localFnId) {
@@ -2379,34 +2392,35 @@ OL.pushFunctionToClient = async function(masterFnId, clientId) {
     const masterFn = state.master.functions.find(f => String(f.id) === String(masterFnId));
     if (!client || !masterFn) return;
 
-    const alreadyInProject = (client.sharedMasterIds || []).includes(String(masterFnId));
+    // 1. Check if already in project (Shared Master list)
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    const alreadyInProject = client.sharedMasterIds.includes(String(masterFnId));
     if (alreadyInProject) return alert("Function already active in this project.");
 
-    // 1. Unlock the function for the sidebar
-    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    // 2. Unlock the function for the sidebar/project visibility
     client.sharedMasterIds.push(String(masterFnId));
 
-    // 🚀 2. THE REVERSE LOOKUP (Hardened)
+    // 🚀 3. THE REVERSE LOOKUP: Scan existing project apps for intersections
     (client.projectData.localApps || []).forEach(localApp => {
-        // Find the Master version of this local app using its reference ID
-        const masterAppSource = state.master.apps.find(ma => String(ma.id) === String(localApp.masterRefId));
+        // Match Master version by ID or Name
+        const masterAppSource = state.master.apps.find(ma => 
+            String(ma.id) === String(localApp.masterRefId) || 
+            ma.name.toLowerCase() === localApp.name.toLowerCase()
+        );
         
         if (masterAppSource && masterAppSource.functionIds) {
-            // Check if the Vault says this App performs this Function
+            // Check if the Vault says this App performs this new Function
             const isTiedInVault = masterAppSource.functionIds.some(m => {
                 const id = typeof m === 'string' ? m : m.id;
                 return String(id) === String(masterFnId);
             });
             
             if (isTiedInVault) {
-                // Check if we already have a local mapping (prevent duplicates)
-                const alreadyMappedLocally = (localApp.functionIds || []).some(m => {
-                    const id = typeof m === 'string' ? m : m.id;
-                    return String(id) === String(masterFnId);
-                });
+                // Ensure local mapping exists
+                if (!localApp.functionIds) localApp.functionIds = [];
+                const alreadyMapped = localApp.functionIds.some(m => String(m.id || m) === String(masterFnId));
                 
-                if (!alreadyMappedLocally) {
-                    if (!localApp.functionIds) localApp.functionIds = [];
+                if (!alreadyMapped) {
                     localApp.functionIds.push({ id: String(masterFnId), status: 'available' });
                     console.log(`🔗 Auto-mapped: ${localApp.name} is now Available for ${masterFn.name}`);
                 }
@@ -2414,12 +2428,16 @@ OL.pushFunctionToClient = async function(masterFnId, clientId) {
         }
     });
 
+    // 4. Persist and Refresh UI
     await OL.persist();
     
-    setTimeout(() => {
-        buildLayout();
-        renderFunctionsGrid();
-    }, 50); // 50ms gives the modal enough time to vanish from the DOM
+    // Force immediate UI updates
+    buildLayout();         // Update sidebar count
+    renderFunctionsGrid(); // Redraw cards alphabetically
+    
+    // Close modal safely
+    const modal = document.getElementById("modal-layer");
+    if (modal) modal.style.display = "none";
 };
 
 //======================= TASK CHECKLIST SECTION =======================//
