@@ -1155,20 +1155,20 @@ function renderAppModalInnerContent(app, client) {
     const showAddButton = !isVaultRoute || (isVaultRoute && app.id.startsWith('master-'));
 
     const allFunctions = client 
-        ? [...(state.master.functions || []), ...(client.projectData.localFunctions || [])]
-        : (state.master.functions || []);
+    ? [...(state.master.functions || []), ...(client.projectData.localFunctions || [])]
+    : (state.master.functions || []);
 
-    // 🚀 DEDUPLICATION LOGIC: Ensure each function appears only once
-    const rawMappings = app.functionIds || [];
+    // 1. First, Sort them using your existing rank logic
+    const sortedMappings = OL.sortMappings(app.functionIds || []);
+
+    // 2. 🚀 THE FINAL FILTER: Deduplicate the sorted list immediately before rendering
     const seenIds = new Set();
-    const uniqueMappings = rawMappings.filter(m => {
+    const finalUniqueMappings = sortedMappings.filter(m => {
         const id = String(m.id || m);
         if (seenIds.has(id)) return false;
         seenIds.add(id);
         return true;
     });
-
-    const activeMappings = OL.sortMappings(uniqueMappings);
 
     return `
         ${isLinkedToMaster && !isVaultRoute ? `
@@ -1183,16 +1183,16 @@ function renderAppModalInnerContent(app, client) {
                 ${renderStatusLegendHTML()}
             </div>
             <div class="pills-row">
-                ${activeMappings.map(mapping => {
+                ${finalUniqueMappings.map(mapping => { // 👈 Use the finalUniqueMappings here
                     const targetId = mapping.id || mapping;
-                    const fn = allFunctions.find(f => f.id === targetId);
+                    const fn = allFunctions.find(f => String(f.id) === String(targetId));
                     if (!fn) return '';
                     
                     return `
                         <span class="pill tiny status-${mapping.status || 'available'} is-clickable" 
-                              onclick="OL.handlePillInteraction(event, '${app.id}', '${fn.id}')"
-                              oncontextmenu="OL.handlePillInteraction(event, '${app.id}', '${fn.id}'); return false;"
-                              title="Left Click: Jump | Right Click: Cycle | Cmd/Ctrl+Click: Unmap">
+                            onclick="OL.handlePillInteraction(event, '${app.id}', '${fn.id}')"
+                            oncontextmenu="OL.handlePillInteraction(event, '${app.id}', '${fn.id}'); return false;"
+                            title="Left Click: Jump | Right Click: Cycle | Cmd/Ctrl+Click: Unmap">
                             ${esc(fn.name)}
                         </span>`;
                 }).join('')}
