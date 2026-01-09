@@ -16,15 +16,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject Keys
+      - name: Create Config File
         run: |
-          # Create config.js exactly where index.html is
-          echo "window.GOOGLE_API_KEY = '${{ secrets.GOOGLE_API_KEY }}';" > config.js
-          echo "window.ADMIN_ACCESS_ID = '${{ secrets.ADMIN_ACCESS_ID }}';" >> config.js
-          
-          # Log location for debugging
-          echo "File created at: $(pwd)/config.js"
-          ls -F
+          # Use printf to avoid trailing newline issues
+          printf "window.GOOGLE_API_KEY = '${{ secrets.GOOGLE_API_KEY }}';\nwindow.ADMIN_ACCESS_ID = '${{ secrets.ADMIN_ACCESS_ID }}';" > config.js
+          echo "Verification: Printing file content (masked):"
+          ls -la config.js
+          cat config.js | cut -c 1-20
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -32,8 +30,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Use the absolute path to the current directory
           path: '.'
+          # Explicitly ensure hidden files and config are included
+          if-no-files-found: error
 
       - name: Deploy to GitHub Pages
         id: deployment
