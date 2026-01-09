@@ -2259,17 +2259,22 @@ function renderFunctionModalInnerContent(fn, client) {
     const isVaultRoute = window.location.hash.startsWith('#/vault');
     const isLinkedToMaster = !!fn.masterRefId;
 
-    const allRelevantApps = client 
-        ? [...(state.master.apps || []), ...(client.projectData.localApps || [])]
-        : (state.master.apps || []);
+    // 🚀 THE FIX: Logic Scoping
+    let allRelevantApps = [];
+    if (isVaultRoute) {
+        // In the Vault, we show every app in the Master library
+        allRelevantApps = state.master.apps || [];
+    } else if (client) {
+        // In a Project, we ONLY show apps actually in this project's library
+        allRelevantApps = client.projectData.localApps || [];
+    }
 
-    // 🚀 THE FIX: Deduplicate Apps by name/ID before rendering
+    // Deduplicate and filter for apps that perform this specific function
     const seenAppIds = new Set();
     const mappedApps = allRelevantApps.filter(a => {
         const hasFunction = a.functionIds?.some(m => String(m.id || m) === String(fn.id));
         if (!hasFunction) return false;
 
-        // Ensure we only show the LOCAL version if both exist
         const appId = String(a.masterRefId || a.id);
         if (seenAppIds.has(appId)) return false;
         
@@ -2304,12 +2309,12 @@ function renderFunctionModalInnerContent(fn, client) {
                       ${esc(app.name)}
                     </span>
                 `).join('')}
-                ${mappedApps.length === 0 ? '<span class="tiny muted">No apps currently mapped.</span>' : ''}
+                ${mappedApps.length === 0 ? '<span class="tiny muted">No project apps currently mapped to this function.</span>' : ''}
             </div>
 
-            <div class="search-map-container">
+            <div class="search-map-container" style="margin-top: 15px;">
                 <input type="text" class="modal-input" 
-                      placeholder="Click to view apps..." 
+                      placeholder="Click to link existing project app..." 
                       onfocus="OL.filterMapList('', 'apps')"
                       oninput="OL.filterMapList(this.value, 'apps')">
                 <div id="search-results-list" class="search-results-overlay"></div>
