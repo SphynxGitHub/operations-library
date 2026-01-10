@@ -7613,33 +7613,33 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     const sheet = client.projectData.scopingSheets[0];
     
     let roundGross = 0;
-    let lineItemsNetTotal = 0;
+    let netAfterLineItems = 0;
 
-    // 1. Calculate the Item-level totals
+    // 1. Calculate Gross and Net for just the items in THIS round
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
-        // Only count billable items in "Do Now" status
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
-            const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
-            const itemNet = OL.calculateRowFee(item, res);
-            
-            roundGross += itemGross;
-            lineItemsNetTotal += itemNet;
+            roundGross += OL.calculateBaseFeeWithMultiplier(item, res);
+            netAfterLineItems += OL.calculateRowFee(item, res);
         }
     });
 
-    // 2. Calculate the specific Phase/Round-Level Adjustment
-    const rDisc = sheet.roundDiscounts?.[String(roundNum)] || { value: 0, type: '$' };
-    
-    const roundAdjustmentAmt = rDisc.type === '%' 
-        ? Math.round(lineItemsNetTotal * (rDisc.value / 100)) 
-        : Math.min(lineItemsNetTotal, rDisc.value);
+    // 2. Resolve the specific Round-Level Discount for THIS round index
+    let roundDeductionAmt = 0;
+    if (sheet.roundDiscounts && sheet.roundDiscounts[roundNum]) {
+        const rDisc = sheet.roundDiscounts[roundNum];
+        
+        // Calculate deduction based on the item-net subtotal (netAfterLineItems)
+        roundDeductionAmt = rDisc.type === '%' 
+            ? Math.round(netAfterLineItems * (rDisc.value / 100)) 
+            : Math.min(netAfterLineItems, rDisc.value);
+    }
 
     // 3. Final Outputs
-    const finalRoundNet = lineItemsNetTotal - roundAdjustmentAmt;
+    const finalRoundNet = netAfterLineItems - roundDeductionAmt;
     
-    // 🎯 SAVINGS LOGIC: (Gross - Item-level Net) + Phase-level Adjustment
-    const totalPhaseSavings = (roundGross - lineItemsNetTotal) + roundAdjustmentAmt;
+    // Total Phase Savings = (Sticker Price - Discounted Line Price) + Round Adjustment
+    const totalPhaseSavings = (roundGross - netAfterLineItems) + roundDeductionAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
