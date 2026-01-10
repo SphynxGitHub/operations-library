@@ -530,8 +530,7 @@ textarea {
     grid-template-columns: 
         minmax(200px, 2fr)   /* 1. Deliverable */
         minmax(150px, 1fr)   /* 2. Status */
-        140px                /* 3. Team */
-        65px                 /* 4. Mult */
+        140px                /* 3. Team + Mult*/
         75px                 /* 5. Gross */
         75px                 /* 6. Disc */
         95px                 /* 7. Fee */
@@ -2027,7 +2026,7 @@ body.fs-mode-active #app-root {
     }
 
     .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
-        grid-template-columns: 1.5fr .8fr 100px 60px 60px 60px 60px 0px !important;
+        grid-template-columns: 1.5fr .8fr 100px 60px 60px 60px 0px !important;
         gap: 5px !important;
         page-break-inside: avoid;
     }

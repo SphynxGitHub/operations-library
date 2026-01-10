@@ -7578,7 +7578,6 @@ window.renderScopingSheet = function () {
             <div class="col-expand">Deliverable</div>
             <div class="col-status">Status</div>
             <div class="col-team">Applies To</div>
-            <div class="col-multiplier" style="text-align:center;">Mult</div>
             <div class="col-gross" style="text-align:center;">Gross</div>
             <div class="col-discount" style="text-align:center;">Disc</div> 
             <div class="col-numeric" style="text-align:right;">Fee</div>
@@ -7659,7 +7658,6 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>
-                <div class="col-multiplier"></div>
                 
                 <div class="col-gross tiny muted bold" style="text-align:center; line-height: 1.1;">
                     GROSS<br>$${roundGross.toLocaleString()}
@@ -7697,7 +7695,6 @@ function renderScopingRow(item, idx, showUnits) {
                 </div>
                 <div class="col-status">N/A</div>
                 <div class="col-team">N/A</div>
-                <div class="col-multiplier">1.00x</div>
                 <div class="col-gross">N/A</div>
                 <div class="col-discount">—</div>
                 <div class="col-numeric">$0</div>
@@ -7727,6 +7724,7 @@ function renderScopingRow(item, idx, showUnits) {
     let teamLabel = '';
     let btnIcon = '👨🏼‍🤝‍👨🏻';
     let btnClass = 'soft';
+    const multiplierHtml = `<span class="multiplier-tag">${OL.getMultiplierDisplay(item)}</span>`;
 
     if (mode === 'global') {
         teamLabel = '<span class="tiny muted italic">Global Item</span>';
@@ -7779,18 +7777,21 @@ function renderScopingRow(item, idx, showUnits) {
         </div>
 
         <div class="col-team">
-            <div style="display:flex; align-items:center; gap:8px;" title="${esc(hoverText)}">
-                <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
-                    ${btnIcon}
-                </button>
-                <div class="pills-row" style="cursor:pointer;" onclick="OL.openTeamAssignmentModal('${item.id}')">
-                    ${teamLabel}
+            <div style="display:flex; flex-direction:column; gap:4px;" title="${esc(hoverText)}">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
+                        ${btnIcon}
+                    </button>
+                    <div class="pills-row" style="cursor:pointer;" onclick="OL.openTeamAssignmentModal('${item.id}')">
+                        ${teamLabel}
+                    </div>
+                </div>
+                <div style="padding-left: 34px;">
+                    ${multiplierHtml}
                 </div>
             </div>
         </div>
         
-        <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
-
         <div class="col-gross tiny muted" style="text-align:center;">
             $${gross.toLocaleString()}
         </div>
