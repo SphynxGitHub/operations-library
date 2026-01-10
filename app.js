@@ -7733,7 +7733,8 @@ function renderScopingRow(item, idx, showUnits) {
         btnIcon = '🌎';
         btnClass = 'accent';
     } else if (mode === 'individual') {
-        const selectedCount = (item.teamIds || []).length;
+        const selectedIds = item.teamIds || []; 
+        const selectedCount = selectedIds.length;
         btnIcon = '👨‍💼';
         btnClass = 'primary';
         const names = selectedIds
