@@ -540,7 +540,7 @@ textarea {
 
 /* Override the footer column placement */
 .grand-estimates, .grand-final {
-    grid-column: 7 !important; /* Align with Fee column */
+    grid-column: 8 !important; /* Align with Fee column */
 }
 
 /*============================================================
