@@ -7618,27 +7618,37 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     // 1. Calculate Gross and Net for just the items in THIS round
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
+        // Ensure we only sum billable items
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
-            roundGross += OL.calculateBaseFeeWithMultiplier(item, res);
-            netAfterLineItems += OL.calculateRowFee(item, res);
+            const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
+            const itemNet = OL.calculateRowFee(item, res);
+            
+            roundGross += itemGross;
+            netAfterLineItems += itemNet;
         }
     });
 
-    // 2. Resolve the specific Round-Level Discount for THIS round index
+    // 2. Resolve the Round-Level Discount using String Casting for the Key
     let roundDeductionAmt = 0;
-    if (sheet.roundDiscounts && sheet.roundDiscounts[roundNum]) {
-        const rDisc = sheet.roundDiscounts[roundNum];
+    
+    // 🚀 THE CRITICAL FIX: Cast roundNum to String to match Object Keys
+    const rKey = String(roundNum); 
+    
+    if (sheet.roundDiscounts && sheet.roundDiscounts[rKey]) {
+        const rDisc = sheet.roundDiscounts[rKey];
         
-        // Calculate deduction based on the item-net subtotal (netAfterLineItems)
-        roundDeductionAmt = rDisc.type === '%' 
-            ? Math.round(netAfterLineItems * (rDisc.value / 100)) 
-            : Math.min(netAfterLineItems, rDisc.value);
+        // Calculate deduction based on the item-net subtotal
+        if (rDisc.type === '%') {
+            roundDeductionAmt = Math.round(netAfterLineItems * (parseFloat(rDisc.value) / 100));
+        } else {
+            roundDeductionAmt = parseFloat(rDisc.value) || 0;
+        }
     }
 
-    // 3. Final Outputs
+    // 3. Final Calculations
     const finalRoundNet = netAfterLineItems - roundDeductionAmt;
     
-    // Total Phase Savings = (Sticker Price - Discounted Line Price) + Round Adjustment
+    // Total Savings = (Sum of Row Discounts) + (This Round Adjustment)
     const totalPhaseSavings = (roundGross - netAfterLineItems) + roundDeductionAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
@@ -8386,8 +8396,9 @@ OL.updateDiscount = function (level, id, field, value) {
 
   if (level === "round") {
     if (!sheet.roundDiscounts) sheet.roundDiscounts = {};
-    if (!sheet.roundDiscounts[id]) {
-      sheet.roundDiscounts[id] = { value: 0, type: "$" };
+    const rKey = String(id); // Force string key
+    if (!sheet.roundDiscounts[rKey]) {
+        sheet.roundDiscounts[rKey] = { value: 0, type: "$" };
     }
     if (field === "value")
       sheet.roundDiscounts[id].value = parseFloat(value) || 0;
