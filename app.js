@@ -7639,23 +7639,23 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
     return `
-        <div class="round-section" style="margin-bottom: 20px;">
-            <div class="grid-row round-header-row" style="background: rgba(var(--accent-rgb), 0.1); padding: 10px; border-bottom: 1px solid var(--accent);">
+        <div class="round-section" style="margin-bottom: 20px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
+            <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); padding: 10px; border-bottom: 1px solid var(--accent);">
                 <div class="col-expand">
-                    <strong style="color: var(--accent);">${esc(roundName)}</strong>
+                    <strong style="color: var(--accent); text-transform: uppercase;">${esc(roundName)}</strong>
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>
                 
-                <div class="col-multiplier tiny muted bold" style="line-height: 1.1; text-align:center;">
+                <div class="col-multiplier tiny muted bold" style="text-align:center; line-height: 1.1;">
                     GROSS<br>$${roundGross.toLocaleString()}
                 </div>
                 
-                <div class="col-discount tiny accent bold" style="line-height: 1.1; text-align:center;">
+                <div class="col-discount tiny accent bold" style="text-align:center; line-height: 1.1;">
                     DISC<br>-$${totalSavingsThisRound.toLocaleString()}
                 </div>
                 
-                <div class="col-numeric bold" style="color: white; font-size: 13px; line-height: 1.1; text-align:right;">
+                <div class="col-numeric bold" style="color: white; font-size: 13px; text-align:right; line-height: 1.1;">
                     NET<br>$${finalRoundNet.toLocaleString()}
                 </div>
                 
@@ -7760,19 +7760,19 @@ function renderScopingRow(item, idx, showUnits) {
 
       <div class="col-discount">
         ${discountAmt > 0 ? `
-            <span class="pill tiny accent" style="cursor:pointer;" onclick="OL.openDiscountManager()" title="${item.discountValue}${item.discountType} discount applied">
+            <span class="pill tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
                 -$${discountAmt.toLocaleString()}
             </span>
-        ` : '<span class="tiny muted" style="opacity:0.2; cursor:pointer;" onclick="OL.openDiscountManager()">—</span>'}
+        ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
       </div>
 
       <div class="col-numeric">
-          <div class="bold">$${net.toLocaleString()}</div>
-          ${discountAmt > 0 ? `<div class="tiny muted line-through" style="font-size:9px;">$${gross.toLocaleString()}</div>` : ''}
+          <div class="bold" style="color: white; font-size: 14px;">$${net.toLocaleString()}</div>
+          ${discountAmt > 0 ? `<div class="tiny muted line-through" style="font-size:9px; margin-top: -2px;">$${gross.toLocaleString()}</div>` : ''}
       </div>
 
       <div class="col-actions">
-        <span class="card-close" onclick="OL.removeFromScope('${idx}')">×</span>
+        <span class="card-close" style="opacity: 0.3;" onclick="OL.removeFromScope('${idx}')">×</span>
       </div>
     </div>
   `;

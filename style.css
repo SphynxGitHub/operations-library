@@ -538,7 +538,7 @@ textarea {
     display: grid;
     /* Deliverable | Status | Applies To | Mult | Disc | Fee | X */
     /* Adjust these fractions and pixels to your preference */
-    grid-template-columns: 1fr 110px 150px 80px 60px 100px 40px; 
+    grid-template-columns: 1fr 110px 150px 70px 70px 90px 30px; 
     align-items: center;
     gap: 12px;
     width: 100%;
@@ -775,13 +775,14 @@ textarea {
 
 .col-numeric { 
     text-align: right; 
+    padding-right: 5px;
     font-variant-numeric: tabular-nums; /* Keeps numbers aligned vertically */
 }
 
 .col-actions {
     display: flex;
     justify-content: flex-end;
-    padding-right: 5px;
+    padding-right: 2px;
 }
 
 .col-numeric .gross-fee {
