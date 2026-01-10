@@ -7579,6 +7579,7 @@ window.renderScopingSheet = function () {
         <div class="col-status">Status</div>
         <div class="col-team">Applies To</div>
         <div class="col-multiplier">Multiplier</div>
+        <div class="col-gross">Gross</div>
         <div class="col-discount">Discount</div> <div class="col-numeric">Fee</div>
         <div class="col-actions"></div>
       </div>
