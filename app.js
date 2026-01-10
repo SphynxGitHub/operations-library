@@ -7730,6 +7730,7 @@ function renderScopingRow(item, idx, showUnits) {
 
     if (mode === 'global') {
         teamLabel = '<span class="tiny muted italic">Global Item</span>';
+        hoverText = "Applies to the entire project scope";
         btnIcon = '🌎';
         btnClass = 'accent';
     } else if (mode === 'individual') {
