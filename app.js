@@ -8771,10 +8771,16 @@ OL.toggleTeamAssignment = function (itemId, memberId) {
     if (idx === -1) item.teamIds.push(memberId);
     else item.teamIds.splice(idx, 1);
 
+    if (item.teamIds.length > 0) {
+        item.teamMode = 'individual';
+    } else {
+        item.teamMode = 'everyone';
+    }
+    
     OL.persist();
 
     // Refresh UI components
-    OL.openResourceModal(itemId);
+    OL.openTeamAssignmentModal(itemId);
     renderScopingSheet();
 
     // Clear search results overlay if it exists
