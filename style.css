@@ -552,6 +552,12 @@ textarea {
     text-overflow: ellipsis;
 }
 
+/* Sets item title to appear clickable */
+.col-expand {
+    font-weight: bold;
+    color: var(--accent);
+}
+
 /*============================================================
   DISCOUNTS MODAL
   ==============================================================*/

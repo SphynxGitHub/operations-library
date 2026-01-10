@@ -7878,21 +7878,23 @@ OL.toggleScopingUnits = function () {
 
 // 74. HARDENED UNIT BADGE RENDERER
 OL.renderUnitBadges = function (item, res) {
-    // 🛡️ THE FIX: Immediately exit if the global UI toggle is OFF
+    // 1. Check the global UI toggle
     if (!state.ui?.showScopingUnits) return "";
     
-    if (!item.data) return "";
+    // 2. Ensure we have data to show
+    if (!item.data || Object.keys(item.data).length === 0) return "";
 
     const vars = state.master.rates.variables || {};
     
-    // Normalize strings for reliable matching
-    const normalize = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
+    // 3. Normalize strings for reliable matching (removes spaces/case)
+    const normalize = (s) => String(s || "").toLowerCase().replace(/\s+/g, "").trim();
     const resTypeKey = normalize(res?.type);
 
     const badges = Object.entries(item.data)
         .filter(([varId, count]) => {
             const v = vars[varId];
             if (!v || count <= 0) return false;
+            
             // Only show variables assigned to this specific resource type
             return normalize(v.applyTo) === resTypeKey;
         })
