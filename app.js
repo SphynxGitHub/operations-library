@@ -7999,52 +7999,50 @@ OL.getMultiplierDisplay = function (item) {
 OL.calculateRowFee = function (item, resource) {
     if (!item) return 0;
     
-    // 1. Get the Master Rates Library
-    const vars = state.master.rates.variables || {};
-    const itemData = item.data || {};  
-    const resData = resource?.data || {};
-    const combinedData = { ...resData, ...itemData };
+    // 1. Always fetch the LATEST rates from the master state
+    const globalVars = state.master.rates.variables || {};
+    
+    // 2. Get quantities from the item (Local Project)
+    const itemData = item.data || {};
     
     let totalVariableFee = 0;
-    let hasVariableData = false;
+    let hasTechnicalData = false;
 
-    // 2. Calculate fees based on variable counts (Technical Scoping)
-    Object.entries(combinedData).forEach(([varId, count]) => {
-        const v = vars[varId];
-        const numCount = parseFloat(count) || 0;
-        
-        if (v && numCount > 0) {
-            totalVariableFee += numCount * (parseFloat(v.value) || 0);
-            hasVariableData = true;
+    // 🚀 THE FIX: We loop through the master variables to see if the ITEM has a count for them
+    // This prevents Master changes from wiping out the Item counts.
+    Object.keys(globalVars).forEach(varId => {
+        const rateInfo = globalVars[varId];
+        const quantity = parseFloat(itemData[varId]) || 0;
+
+        // Only apply if the resource type matches the variable's target
+        if (rateInfo.applyTo === resource?.type && quantity > 0) {
+            totalVariableFee += quantity * (parseFloat(rateInfo.value) || 0);
+            hasTechnicalData = true;
         }
     });
 
-    // 3. Fallback: If no variable counts exist, use Hourly Scoping
+    // 3. Fallback to Hourly (If no technical counts exist)
     let baseAmount = totalVariableFee;
-    if (!hasVariableData) {
-        const baseRate = getActiveClient()?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
-        baseAmount = (parseFloat(item.manualHours) || 0) * baseRate;
+    if (!hasTechnicalData) {
+        const client = getActiveClient();
+        const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
+        const hours = parseFloat(item.manualHours) || 0;
+        baseAmount = hours * baseRate;
     }
 
-    // 4. Apply Multiplier (Team/Everyone/Global)
+    // 4. Multiplier Logic (Unchanged)
     let multiplier = 1;
     if (item.teamMode !== "global") {
-        const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
-        const incrementalRate = rate - 1;
+        const teamRate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
+        const incrementalStep = teamRate - 1;
+        let memberCount = (item.teamMode === "individual") 
+            ? (item.teamIds || []).length 
+            : (getActiveClient()?.projectData?.teamMembers || []).length || 1;
         
-        let memberCount = 0;
-        if (item.teamMode === "individual") {
-            memberCount = (item.teamIds || []).length;
-        } else {
-            memberCount = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
-        }
-        
-        multiplier = 1 + (Math.max(0, memberCount - 1) * incrementalRate);
+        multiplier = 1 + (Math.max(0, memberCount - 1) * incrementalStep);
     }
 
     const gross = Math.round(baseAmount * multiplier);
-    
-    // 5. Apply Line-Item Discounts
     return OL.applyDiscount(gross, item.discountValue, item.discountType);
 };
 
@@ -8444,17 +8442,15 @@ OL.createNewVarForType = function (label, typeKey) {
 
 OL.updateVarRate = function (key, field, val) {
     if (state.master.rates.variables[key]) {
-        // 1. Update the data
-        state.master.rates.variables[key][field] =
-            field === "value" ? parseFloat(val) || 0 : val.trim();
+        // 1. Update ONLY the master variable
+        state.master.rates.variables[key][field] = field === "value" ? parseFloat(val) || 0 : val.trim();
         
-        OL.persist();
-        
-        // 2. 🚀 AUTO-UPDATE: Refresh the background grid so the card counts update immediately
-        if (window.location.hash.includes('vault/rates')) {
-            renderVaultRatesPage();
-        }
-        
+        // 🚀 THE FIX: Use a targeted persist if possible, or ensure the whole state is clean
+        OL.persist().then(() => {
+            // 2. Re-render only the relevant views
+            if (window.location.hash.includes('vault/rates')) renderVaultRatesPage();
+            if (window.location.hash.includes('scoping-sheet')) renderScopingSheet();
+        });
         console.log(`✅ Variable ${key} ${field} updated to: ${val}`);
     }
 };
