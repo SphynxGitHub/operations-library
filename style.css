@@ -531,6 +531,23 @@ textarea {
     align-items: center;
 }
 
+/* 🚀 THE MASTER GRID DEFINITION */
+.scoping-grid .grid-row, 
+.round-header-row {
+    display: grid;
+    /* Deliverable | Status | Applies To | Mult | Disc | Fee | X */
+    /* Adjust these fractions and pixels to your preference */
+    grid-template-columns: 1fr 110px 150px 80px 100px 110px 40px; 
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+/* 🎯 Column Specific Tweaks */
+.col-discount { 
+    text-align: center; 
+}
+
 .scoping-grid .row-title {
     font-size: 0.85rem;
 }
@@ -592,8 +609,6 @@ textarea {
 
 /* Scoping Grid alignment fixes */
 .col-multiplier { justify-self: center; align-self: center; }
-.col-numeric { justify-self: end; align-self: center; }
-.col-actions { justify-self: end; align-self: center; }
 
 .unit-box label { font-size: 8px; color: var(--text-muted); text-transform: uppercase; }
 
@@ -755,12 +770,18 @@ textarea {
     border-bottom: 1px solid var(--panel-border);
 }
 
-.col-numeric {
-  text-align: right;
+.col-numeric { 
+    justify-self: end; align-self: center;
+    text-align: right; 
+    font-variant-numeric: tabular-nums; /* Keeps numbers aligned vertically */
 }
 
 .col-actions {
-  text-align: right;
+    justify-self: end; align-self: center;
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    padding-right: 5px;
 }
 
 .col-numeric .gross-fee {
