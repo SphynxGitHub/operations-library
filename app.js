@@ -7912,28 +7912,36 @@ OL.filterResourceForScope = function (query) {
     const masterSource = (state.master.resources || []).map(r => ({ ...r, origin: 'Master' }));
     const localSource = (client?.projectData?.localResources || []).map(r => ({ ...r, origin: 'Local' }));
     
-    const combined = [...masterSource, ...localSource];
+    // 🚀 THE DEDUPLICATION FIX:
+    // Create a list of IDs that are already "cloned" into the local project
+    const localMasterRefs = localSource.map(r => r.masterRefId);
+    
+    // Filter the Master source so it only shows items NOT yet cloned locally
+    const filteredMaster = masterSource.filter(m => !localMasterRefs.includes(m.id));
 
-    // 3. Filter for search term AND exclude already-added items
+    // Combine local items with only the "un-cloned" master items
+    const combined = [...localSource, ...filteredMaster];
+
+    // 3. Filter for search term AND exclude items ALREADY on the scoping sheet
     const matches = combined.filter((res) => {
         const nameMatch = res.name.toLowerCase().includes(q);
         const alreadyInScope = existingIds.includes(res.id);
         return nameMatch && !alreadyInScope;
     });
 
-    // 4. Split into Groups
+    // 4. Split into Groups for rendering
     const masterMatches = matches.filter(m => m.origin === 'Master').sort((a,b) => a.name.localeCompare(b.name));
     const localMatches = matches.filter(m => m.origin === 'Local').sort((a,b) => a.name.localeCompare(b.name));
 
     let html = "";
 
-    // 🏗️ Render Local Group
+    // 🏗️ Render Local Group (Items already in project library)
     if (localMatches.length > 0) {
         html += `<div class="search-group-header">📍 Available in Project</div>`;
         html += localMatches.map(res => renderResourceSearchResult(res, 'local')).join('');
     }
 
-    // 🏛️ Render Master Group
+    // 🏛️ Render Master Group (Standard templates not yet used in this project)
     if (masterMatches.length > 0) {
         html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
         html += masterMatches.map(res => renderResourceSearchResult(res, 'vault')).join('');
@@ -7964,29 +7972,59 @@ function renderResourceSearchResult(res, tagClass) {
 }
 
 OL.executeScopeAdd = function (resId) {
-  const client = getActiveClient();
-  if (!client) return;
+    const client = getActiveClient();
+    if (!client) return;
 
-  // Standard scoping line item structure
-  const newItem = {
-    id: uid(),
-    resourceId: resId,
-    manualHours: 0,
-    status: "Do Now",
-    responsibleParty: "Sphynx",
-    round: 1,
-    teamMode: "everyone",
-    teamIds: [],
-    data: {}, // Holds variable counts
-  };
+    let finalResourceId = resId;
 
-  if (!client.projectData.scopingSheets)
-    client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
-  client.projectData.scopingSheets[0].lineItems.push(newItem);
+    // 🚀 THE AUTO-IMPORT LOGIC:
+    // If we are pulling from the Master Vault, create a local project copy automatically
+    if (resId.startsWith('res-vlt-')) {
+        const template = state.master.resources.find(r => r.id === resId);
+        if (template) {
+            // Check if a local copy of this master already exists to avoid clutter
+            const existingLocal = (client.projectData.localResources || [])
+                .find(r => r.masterRefId === resId);
 
-  OL.persist();
-  OL.closeModal();
-  renderScopingSheet(); // Refresh the UI to show the new row
+            if (existingLocal) {
+                finalResourceId = existingLocal.id;
+                console.log("♻️ Linking to existing local copy of Master item.");
+            } else {
+                // Create a fresh Deep Clone
+                const newRes = JSON.parse(JSON.stringify(template));
+                const timestamp = Date.now();
+                newRes.id = `local-prj-${timestamp}`;
+                newRes.masterRefId = resId; // Track the parent master
+                
+                if (!client.projectData.localResources) client.projectData.localResources = [];
+                client.projectData.localResources.push(newRes);
+                finalResourceId = newRes.id;
+                console.log("📦 Master item auto-cloned to Local Library.");
+            }
+        }
+    }
+
+    // Standard scoping line item structure
+    const newItem = {
+        id: uid(),
+        resourceId: finalResourceId, // Now points to the local copy
+        manualHours: 0,
+        status: "Do Now",
+        responsibleParty: "Sphynx",
+        round: 1,
+        teamMode: "everyone",
+        teamIds: [],
+        data: {}, 
+    };
+
+    if (!client.projectData.scopingSheets)
+        client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
+    
+    client.projectData.scopingSheets[0].lineItems.push(newItem);
+
+    OL.persist();
+    OL.closeModal();
+    renderScopingSheet(); 
 };
 
 // 6. ADD CUSTOM ITEM TO SCOPING SHEET
