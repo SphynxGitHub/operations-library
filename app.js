@@ -3650,10 +3650,16 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
 
             <div class="form-group" style="margin-bottom: 15px;">
-                <label class="tiny muted uppercase bold">Phase / Round</label>
-                <select class="form-control" onchange="OL.updateLineItem('${res.id}', 'round', this.value)">
-                    ${roundOptions}
-                </select>
+                <label class="tiny muted uppercase bold">Phase / Round Number</label>
+                <input 
+                    type="number" 
+                    class="form-control" 
+                    value="${res.round || 1}" 
+                    min="1" 
+                    step="1"
+                    onchange="OL.updateLineItem('${res.id}', 'round', this.value)"
+                    placeholder="e.g. 1"
+                >
             </div>
 
             <div class="card-section" style="margin-top:20px; padding-top:15px; border-top: 1px solid var(--line);">
