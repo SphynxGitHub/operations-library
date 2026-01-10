@@ -514,7 +514,7 @@ textarea {
 .grand-totals-bar {
     display: grid !important;
     /* 1.Deliverable | 2.Status | 3.AppliesTo | 4.Mult | 5.Gross | 6.Disc | 7.Net Fee | 8.X */
-    grid-template-columns: 1fr 110px 140px 70px 85px 85px 95px 30px !important; 
+    grid-template-columns: 1fr 110px 140px 60px 80px 80px 90px 30px !important; 
     gap: 12px !important;
     align-items: center !important;
     width: 100% !important;

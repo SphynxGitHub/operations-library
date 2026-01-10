@@ -7574,16 +7574,16 @@ window.renderScopingSheet = function () {
     </div>
 
     <div class="scoping-grid">
-      <div class="grid-row grid-header">
-        <div class="col-expand">Deliverable</div>
-        <div class="col-status">Status</div>
-        <div class="col-team">Applies To</div>
-        <div class="col-multiplier" style="text-align:center;">Mult</div>
-        <div class="col-gross" style="text-align:center;">Gross</div>
-        <div class="col-discount" style="text-align:center;">Disc</div> 
-        <div class="col-numeric" style="text-align:right;">Fee</div>
-        <div class="col-actions"></div>
-      </div>
+        <div class="grid-row grid-header">
+            <div class="col-expand">Deliverable</div>
+            <div class="col-status">Status</div>
+            <div class="col-team">Applies To</div>
+            <div class="col-multiplier" style="text-align:center;">Mult</div>
+            <div class="col-gross" style="text-align:center;">Gross</div>
+            <div class="col-discount" style="text-align:center;">Disc</div> 
+            <div class="col-numeric" style="text-align:right;">Fee</div>
+            <div class="col-actions"></div>
+        </div>
     </div>
 
     <div class="rounds-container">
@@ -7642,23 +7642,23 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
 
     return `
         <div class="round-section" style="margin-bottom: 20px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
-            <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); padding: 10px; border-bottom: 1px solid var(--accent);">
+            <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
                 <div class="col-expand">
-                    <strong style="color: var(--accent); text-transform: uppercase;">${esc(roundName)}</strong>
+                    <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>
                 <div class="col-multiplier"></div>
-
-                <div class="col-gross tiny muted bold" style="text-align: center; line-height: 1.1;">
+                
+                <div class="col-gross tiny muted bold" style="text-align:center; line-height: 1.1;">
                     GROSS<br>$${roundGross.toLocaleString()}
                 </div>
                 
                 <div class="col-discount tiny accent bold" style="text-align:center; line-height: 1.1;">
-                    DISC<br>-$${totalSavingsThisRound.toLocaleString()}
+                    DISC<br>-$${totalRoundSavings.toLocaleString()}
                 </div>
                 
-                <div class="col-numeric bold" style="color: white; font-size: 13px; text-align:right; line-height: 1.1;">
+                <div class="col-numeric bold" style="color: white; font-size: 12px; text-align:right; line-height: 1.1;">
                     NET<br>$${finalRoundNet.toLocaleString()}
                 </div>
                 
