@@ -3604,7 +3604,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     // Generate options for the number of rounds available
     let roundOptions = '';
     for (let i = 1; i <= totalRounds; i++) {
-        roundOptions += `<option value="${i}" ${item.round == i ? 'selected' : ''}>Round ${i}</option>`;
+        roundOptions += `<option value="${i}" ${res.round == i ? 'selected' : ''}>Round ${i}</option>`;
     }
 
     const html = `
@@ -3651,7 +3651,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
             <div class="form-group" style="margin-bottom: 15px;">
                 <label class="tiny muted uppercase bold">Phase / Round</label>
-                <select class="form-control" onchange="OL.updateLineItem('${item.id}', 'round', this.value)">
+                <select class="form-control" onchange="OL.updateLineItem('${res.id}', 'round', this.value)">
                     ${roundOptions}
                 </select>
             </div>
