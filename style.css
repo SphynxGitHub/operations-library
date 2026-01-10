@@ -524,11 +524,11 @@ textarea {
     display: grid !important;
     grid-template-columns: 
         minmax(200px, 2fr)   /* 1. Deliverable */
-        minmax(120px, 1fr)   /* 2. Status */
+        minmax(150px, 1fr)   /* 2. Status */
         140px                /* 3. Team */
         65px                 /* 4. Mult */
-        85px                 /* 5. Gross */
-        85px                 /* 6. Disc */
+        75px                 /* 5. Gross */
+        75px                 /* 6. Disc */
         95px                 /* 7. Fee */
         30px !important;     /* 8. X */
     gap: 12px !important;
