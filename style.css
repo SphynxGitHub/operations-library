@@ -538,7 +538,7 @@ textarea {
     display: grid;
     /* Deliverable | Status | Applies To | Mult | Disc | Fee | X */
     /* Adjust these fractions and pixels to your preference */
-    grid-template-columns: 1fr 110px 150px 80px 100px 110px 40px; 
+    grid-template-columns: 1fr 110px 150px 80px 60px 100px 40px; 
     align-items: center;
     gap: 12px;
     width: 100%;
@@ -547,6 +547,8 @@ textarea {
 /* 🎯 Column Specific Tweaks */
 .col-discount { 
     text-align: center; 
+    display: flex;
+    justify-content: center;
 }
 
 .scoping-grid .row-title {
