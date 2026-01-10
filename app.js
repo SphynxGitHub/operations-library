@@ -49,28 +49,30 @@ OL.state = state;
 // 2. CLOUD STORAGE ENGINE
 OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
-    if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
+    const client = state.clients[state.activeClientId];
     
-    // 🛡️ THE NUCLEAR FUSE
-    // If we are about to save, but the clients list is empty, STOP.
-    // This prevents a Master update from wiping out all projects.
-    const clientCount = Object.keys(state.clients || {}).length;
-    if (clientCount === 0) {
-        console.error("🛑 SYNC BLOCKED: Client data missing from memory. Aborting save to prevent data loss.");
-        if(statusEl) statusEl.innerHTML = "⚠️ Sync Blocked";
-        return; 
+    // 🛡️ THE FAIL-SAFE
+    // If we have an active client, but their resource list just vanished from memory...
+    // DO NOT SAVE. This is the moment the "Wiping" usually happens.
+    if (client && (!client.projectData.localResources || client.projectData.localResources.length === 0)) {
+        const doc = await db.collection('systems').doc('main_state').get();
+        const diskData = doc.data();
+        const diskCount = diskData.clients[state.activeClientId]?.projectData?.localResources?.length || 0;
+        
+        if (diskCount > 0) {
+            console.error("🛑 CRITICAL: Memory/Disk Mismatch. Prevented accidental deletion of project resources.");
+            if(statusEl) statusEl.innerHTML = "⚠️ Save Blocked";
+            return; 
+        }
     }
 
     try {
         const cleanState = JSON.parse(JSON.stringify(state));
         await db.collection('systems').doc('main_state').set(cleanState);
-        
-        console.log(`💾 Cloud Sync Successful. (${clientCount} clients protected)`);
+        console.log("💾 Cloud Sync Successful.");
         if(statusEl) statusEl.innerHTML = "✅ Synced";
-        setTimeout(() => { if(statusEl) statusEl.innerHTML = "☁️ Ready"; }, 2000);
     } catch (error) {
-        console.error("❌ Cloud Sync Failed:", error);
-        if(statusEl) statusEl.innerHTML = "❌ Sync Error";
+        console.error("❌ Sync Failed:", error);
     }
 };
 
@@ -8527,23 +8529,22 @@ OL.createNewVarForType = function (label, typeKey) {
 
 OL.updateVarRate = async function (key, field, val) {
     if (state.master.rates.variables[key]) {
-        // 1. Update value locally
+        // 1. Update the local memory variable only
         state.master.rates.variables[key][field] = field === "value" ? parseFloat(val) || 0 : val.trim();
         
-        // 2. 🛡️ VERIFY INTEGRITY before saving
-        // If state.clients is missing or empty, STOP. Do not persist.
-        if (!state.clients || Object.keys(state.clients).length === 0) {
-            console.error("🛑 Blocked save: Client data is missing from state. Refreshing...");
-            location.reload();
-            return;
+        // 2. Perform a "Surgical Save"
+        // Instead of saving the whole state, we just tell Firebase to update this one key
+        const updatePath = `master.rates.variables.${key}`;
+        try {
+            await db.collection('systems').doc('main_state').update({
+                [updatePath]: state.master.rates.variables[key]
+            });
+            console.log("🎯 Surgical Rate Update Successful.");
+            renderVaultRatesPage();
+        } catch (e) {
+            // Fallback to full persist if update fails
+            await OL.persist();
         }
-
-        // 3. Persist the whole state
-        await OL.persist();
-        
-        // 4. Refresh UI
-        if (window.location.hash.includes('vault/rates')) renderVaultRatesPage();
-        if (window.location.hash.includes('scoping-sheet')) renderScopingSheet();
     }
 };
 
