@@ -522,7 +522,7 @@ textarea {
 .round-header-row {
     display: grid !important;
     /* Deliverable(1fr) | Status(110) | Team(140) | Mult(70) | Gross(85) | Disc(85) | Fee(95) | X(30) */
-    grid-template-columns: 1fr 110px 140px 70px 85px 85px 95px 30px !important;
+    grid-template-columns: 2fr 1fr 140px 70px 85px 85px 95px 30px !important;
     gap: 12px !important;
     align-items: center !important;
     padding: 10px 16px !important;
