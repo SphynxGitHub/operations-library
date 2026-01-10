@@ -550,12 +550,26 @@ textarea {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-/* Sets item title to appear clickable */
-.col-expand {
     font-weight: bold;
     color: var(--accent);
+}
+
+.unit-tag {
+    display: inline-flex;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: rgba(56, 189, 248, 0.15); /* Slightly darker for visibility */
+    color: var(--text-muted);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    margin-top: 4px;
+    margin-right: 4px;
+    white-space: nowrap;
+    /* Ensure it's never hidden if generated */
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 /*============================================================
