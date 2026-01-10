@@ -7778,7 +7778,7 @@ function renderScopingRow(item, idx, showUnits) {
         </div>
 
         <div class="col-team">
-            <div style="display:flex; align-items:center; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px;" title="${esc(hoverText)}">
                 <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
                     ${btnIcon}
                 </button>
@@ -7787,7 +7787,7 @@ function renderScopingRow(item, idx, showUnits) {
                 </div>
             </div>
         </div>
-
+        
         <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
 
         <div class="col-gross tiny muted" style="text-align:center;">
