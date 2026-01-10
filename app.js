@@ -48,21 +48,18 @@ OL.state = state;
 
 // 2. CLOUD STORAGE ENGINE
 OL.persist = async function() {
-    const statusEl = document.getElementById('cloud-status');
     const client = state.clients[state.activeClientId];
     
     // 🛡️ THE FAIL-SAFE
-    // If we have an active client, but their resource list just vanished from memory...
-    // DO NOT SAVE. This is the moment the "Wiping" usually happens.
-    if (client && (!client.projectData.localResources || client.projectData.localResources.length === 0)) {
-        const doc = await db.collection('systems').doc('main_state').get();
-        const diskData = doc.data();
-        const diskCount = diskData.clients[state.activeClientId]?.projectData?.localResources?.length || 0;
+    if (client) {
+        const localRes = client.projectData.localResources || [];
+        const scopingItems = client.projectData.scopingSheets?.[0]?.lineItems || [];
         
-        if (diskCount > 0) {
-            console.error("🛑 CRITICAL: Memory/Disk Mismatch. Prevented accidental deletion of project resources.");
-            if(statusEl) statusEl.innerHTML = "⚠️ Save Blocked";
-            return; 
+        // If the library is suddenly empty but the scoping sheet has items... 
+        // that's a desync. BLOCK THE SAVE.
+        if (localRes.length === 0 && scopingItems.length > 0) {
+            console.error("🛑 SYNC BLOCKED: Scoping items exist but Library is empty. Potential data loss prevented.");
+            return;
         }
     }
 
@@ -8040,21 +8037,23 @@ OL.cycleTeamMode = function(itemId) {
 // 9. MULTIPLIER DISPLAY
 OL.getMultiplierDisplay = function (item) {
   const client = getActiveClient();
-  // Ensure we get the rate (e.g., 1.1)
   const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
-  const mode = item.teamMode || "everyone";
+  
+  // 🚀 HARDENING: Force lowercase and provide strict fallback
+  const mode = (item.teamMode || "everyone").toLowerCase();
 
   if (mode === "global") {
     return `<span class="tiny muted" style="letter-spacing:0.5px;">GLOBAL</span><br><span class="text-dim">1.00x</span>`;
   }
 
   let count = 0;
-  if (mode === "individual") {
+  // Check for 'individual' OR if there are specific IDs present
+  if (mode === "individual" || (item.teamIds && item.teamIds.length > 0)) {
     count = (item.teamIds || []).length;
   } else {
     count = (client?.projectData?.teamMembers || []).length || 1;
   }
-
+  
   // ✅ THE FORMULA: 1 + ((count - 1) * (rate - 1))
   // If rate is 1.1, (rate - 1) is 0.1
   const incrementalRate = rate - 1;
