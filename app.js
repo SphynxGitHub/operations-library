@@ -8118,7 +8118,7 @@ OL.getMultiplierDisplay = function (item) {
   const mode = (item.teamMode || "everyone").toLowerCase();
 
   if (mode === "global") {
-    return `<span class="tiny muted" style="letter-spacing:0.5px;">GLOBAL</span><br><span class="text-dim">1.00x</span>`;
+    return `<span class="text-dim">1.00x</span>`;
   }
 
   let count = 0;
@@ -8134,13 +8134,10 @@ OL.getMultiplierDisplay = function (item) {
   const incrementalRate = rate - 1;
   const additionalMembers = Math.max(0, count - 1);
   const displayMult = 1 + additionalMembers * incrementalRate;
-
-  const label = mode === "individual" ? "TEAM" : "EVERYONE";
   const isIncremented = additionalMembers > 0;
   const color = isIncremented ? "var(--accent)" : "var(--text-dim)";
 
   return `
-    <span class="tiny muted" style="letter-spacing:0.5px;">${label}</span><br>
     <span style="color: ${color}; font-weight: ${isIncremented ? "600" : "400"};">
         ${displayMult.toFixed(2)}x
     </span>
