@@ -505,296 +505,42 @@ textarea {
     font-weight: 700;
     color: var(--text-main);
 }
-
 /* ============================================================
-   SCOPING GRID SYSTEM
+   SCOPING GRID SYSTEM - UNIFIED TRACKS
    ============================================================ */
-:root {
-  --scoping-cols: 
-    minmax(200px, 1.5fr)   /* Deliverable */
-    minmax(180px, 1fr)   /* Status */
-    minmax(200px, 1.5fr)   /* Applies To */
-    minmax(50px, .5fr)  /* Multiplier */
-    minmax(160px, .75fr)   /* Fee */
-    minmax(160px, .75fr)   /* Disc */
-    minmax(80px, .75fr)   /* Actions */
-}
-
-.scoping-grid {
-    border: 1px solid var(--panel-border);
-    border-radius: 8px;
-    background: var(--panel);
-    overflow: hidden;
-}
-
-.scoping-grid .grid-row {
-    padding: 10px 16px;
-    align-items: center;
-}
-
-/* 🚀 THE MASTER GRID DEFINITION */
 .scoping-grid .grid-row, 
-.round-header-row {
-    display: grid;
-    /* Deliverable | Status | Applies To | Mult | Disc | Fee | X */
-    /* Adjust these fractions and pixels to your preference */
-    grid-template-columns: 1fr 110px 140px 90px 70px 70px 70px 30px !important; 
+.round-header-row,
+.grid-header,
+.grand-totals-bar {
+    display: grid !important;
+    /* 1.Deliverable | 2.Status | 3.AppliesTo | 4.Mult | 5.Gross | 6.Disc | 7.Net Fee | 8.X */
+    grid-template-columns: 1fr 110px 140px 70px 85px 85px 95px 30px !important; 
     gap: 12px !important;
     align-items: center !important;
     width: 100% !important;
     padding: 10px 16px !important;
 }
 
-/* 🎯 Column Specific Tweaks */
-.col-discount { 
-    text-align: center; 
-    display: flex;
-    justify-content: center;
-}
-
-.scoping-grid .row-title {
-    font-size: 0.85rem;
-}
-
-.scoping-grid .grid-header {
-    display: grid;
-    grid-template-columns: var(--scoping-cols);
-    gap: 10px;
-}
-
-.col-multiplier sup {
-    font-size: 0.6rem;
-    color: var(--text-muted);
-}
-
-.row-title {
-  font-size: 1.2rem;
-  cursor: pointer;
-}
-
-.grid-header {
-    background: linear-gradient(
-      to bottom,
-      rgba(255,255,255,0.04),
-      rgba(255,255,255,0.02)
-    );
-    border-bottom: 1px solid var(--panel-border);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-}
-
-.grid-header .col-numeric {
-    text-align: right;
-    padding-right: 20px;
-}
-
-.footer-row {
-    background: var(--panel-soft);
-    font-weight: 700;
-    border-bottom: none;
-    border-top: 2px solid var(--accent);
-}
-
-/* Unit Tags within Scoping Sheet */
-.unit-tag {
-    display: inline-flex;
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    background: rgba(56, 189, 248, 0.1);
-    color: var(--accent);
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    margin-top: 4px;
-    margin-right: 4px;
-    white-space: nowrap;
-}
-
-/* Scoping Grid alignment fixes */
-.col-multiplier { justify-self: center; align-self: center; }
-
-.unit-box label { font-size: 8px; color: var(--text-muted); text-transform: uppercase; }
-
-.unit-input {
-    width: 60px;
-    background: var(--bg);
-    border: 1px solid var(--panel-border);
-    color: var(--accent);
-    font-family: monospace;
-    font-size: 11px;
-    padding: 4px;
-    border-radius: 4px;
-}
-
-.unit-input:disabled { opacity: 0.5; color: var(--text-dim); border-style: dashed; }
-
-.round-section {
-    margin-top: 24px;
-    border: 1px solid var(--panel-border);
-    border-radius: 12px;
-    background: var(--panel);
-    overflow: hidden;
-}
-
-.round-grid {
-    display: contents;
-}
-
-.grid-row {
-  display: grid;
-  grid-template-columns: var(--scoping-cols);
-  align-items: start;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.grid-header > div,
-.grid-row > div {
-  text-align: left;
-}
-
-.grid-header,
-.grid-row,
-.grand-totals-bar {
-  display: grid;
-  grid-template-columns: var(--scoping-cols);
-  align-items: start;
-}
-
-
-.round-footer {
-    padding: 12px 16px;
-    text-align: right;
-    background: var(--panel-soft);
-    border-top: 1px solid var(--panel-border);
-}
-
-.row-note {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.line-divider {
-  width: 1px;
-  height: 64px;
-  background: var(--panel-border);
-  justify-self: center;
-}
-
-.grand-final {
-  grid-column: 8;
-  justify-self: end;
-  text-align: right;
-}
-
-.grand-final .final-amount {
-  font-size: 22px;
-  font-weight: 900;
-  color: var(--accent);
-}
-
-
-.grand-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-
-  .grand-totals {
-      text-align: right;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 220px;
-  }
-
-  .grand-totals .final-amount {
-      font-size: 18px;
-      font-weight: 900;
-      color: var(--accent);
-  }
-
-  .grand-totals .subtle {
-      font-size: 11px;
-      color: var(--text-muted);
-  }
-
-  /* === FORCE GRAND TOTALS LAYOUT === */
-.grand-totals-bar {
-  display: grid !important;
-  grid-template-columns: var(--scoping-cols);
-  align-items: end;
-
-  padding: 24px 16px;
-  margin-top: 8px;
-  background: linear-gradient(
-    to top,
-    rgba(0,0,0,0.35),
-    rgba(0,0,0,0.15)
-  );
-}
-
-.grand-estimates,
-.grand-final {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.grand-estimates {
-  grid-column: 8;
-  justify-self: end;
-  text-align: right;
-  color: var(--text-muted);
-  padding-right: 8px;
-}
-
-.grand-estimates .big {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--primary);
-}
-
-.round-header {
-    padding: 12px 16px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 11px;
-    color: var(--accent);
-    background: linear-gradient(
-      to right,
-      rgba(56,189,248,0.08),
-      transparent
-    );
-    border-bottom: 1px solid var(--panel-border);
+/* Precise Alignment for Numeric Data */
+.col-gross, .col-discount { 
+    text-align: center !important; 
 }
 
 .col-numeric { 
-    text-align: right; 
-    padding-right: 5px;
-    font-variant-numeric: tabular-nums; /* Keeps numbers aligned vertically */
+    text-align: right !important; 
+    padding-right: 5px !important;
+    font-variant-numeric: tabular-nums !important; /* Keeps digits vertically aligned */
 }
 
 .col-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding-right: 2px;
+    display: flex !important;
+    justify-content: flex-end !important;
+    padding-right: 0 !important;
 }
 
-.col-numeric .gross-fee {
-    font-size: 11px;
-    color: var(--text-muted);
-}
-
-.col-numeric .net-fee {
-    font-size: 13px;
-    font-weight: 800;
-    color: var(--accent);
+/* Override the footer column placement */
+.grand-estimates, .grand-final {
+    grid-column: 7 !important; /* Align with Fee column */
 }
 
 /*============================================================

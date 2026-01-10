@@ -7578,9 +7578,10 @@ window.renderScopingSheet = function () {
         <div class="col-expand">Deliverable</div>
         <div class="col-status">Status</div>
         <div class="col-team">Applies To</div>
-        <div class="col-multiplier">Multiplier</div>
-        <div class="col-gross">Gross</div>
-        <div class="col-discount">Discount</div> <div class="col-numeric">Fee</div>
+        <div class="col-multiplier" style="text-align:center;">Mult</div>
+        <div class="col-gross" style="text-align:center;">Gross</div>
+        <div class="col-discount" style="text-align:center;">Disc</div> 
+        <div class="col-numeric" style="text-align:right;">Fee</div>
         <div class="col-actions"></div>
       </div>
     </div>
@@ -7647,8 +7648,7 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>
-                
-                <div class="col-multiplier tiny muted bold" style="text-align:center; line-height: 1.1;"></div>
+                <div class="col-multiplier"></div>
 
                 <div class="col-gross tiny muted bold" style="text-align: center; line-height: 1.1;">
                     GROSS<br>$${roundGross.toLocaleString()}
@@ -7727,65 +7727,60 @@ function renderScopingRow(item, idx, showUnits) {
     }
 
     return `
-    <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
-      <div class="col-expand">
-        <div class="row-title is-clickable" onclick="OL.openResourceModal('${res.id}')">
-          ${esc(res.name || "Manual Item")}
+        <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
+        <div class="col-expand">
+            <div class="row-title is-clickable" onclick="OL.openResourceModal('${res.id}')">
+            ${esc(res.name || "Manual Item")}
+            </div>
+            ${res.notes ? `<div class="row-note">${esc(res.notes)}</div>` : ""}
+            ${unitsHtml}
         </div>
-        ${res.notes ? `<div class="row-note">${esc(res.notes)}</div>` : ""}
-        ${unitsHtml}
-      </div>
       
-      <div class="col-status">
-        <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
-          <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
-          <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
-          <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
-        </select>
-        <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
-          <option value="Sphynx" ${item.responsibleParty === "Sphynx" ? "selected" : ""}>Sphynx</option>
-          <option value="${esc(client.meta.name)}" ${item.responsibleParty === client.meta.name ? "selected" : ""}>${esc(client.meta.name)}</option>
-          <option value="Joint" ${item.responsibleParty === "Joint" ? "selected" : ""}>Joint</option>
-        </select>
-      </div>
+        <div class="col-status">
+            <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
+            <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
+            <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
+            <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
+            </select>
+            <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
+            <option value="Sphynx" ${item.responsibleParty === "Sphynx" ? "selected" : ""}>Sphynx</option>
+            <option value="${esc(client.meta.name)}" ${item.responsibleParty === client.meta.name ? "selected" : ""}>${esc(client.meta.name)}</option>
+            <option value="Joint" ${item.responsibleParty === "Joint" ? "selected" : ""}>Joint</option>
+            </select>
+        </div>
 
-      <div class="col-team">
-          <div style="display:flex; align-items:center; gap:8px;">
-              <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
-                  ${btnIcon}
-              </button>
-              <div class="pills-row" style="cursor:pointer;" onclick="OL.openTeamAssignmentModal('${item.id}')">
-                  ${teamLabel}
-              </div>
-          </div>
-      </div>
+        <div class="col-team">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
+                    ${btnIcon}
+                </button>
+                <div class="pills-row" style="cursor:pointer;" onclick="OL.openTeamAssignmentModal('${item.id}')">
+                    ${teamLabel}
+                </div>
+            </div>
+        </div>
 
-      <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
+        <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
 
-      <div class="col-gross">
-        ${gross > 0 ? `
-            <span class="tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
-                -$${gross.toLocaleString()}
-            </span>
-        ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
-      </div>
+        <div class="col-gross tiny muted" style="text-align:center;">
+            $${gross.toLocaleString()}
+        </div>
 
-      <div class="col-discount">
-        ${discountAmt > 0 ? `
-            <span class="tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
-                -$${discountAmt.toLocaleString()}
-            </span>
-        ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
-      </div>
+        <div class="col-discount">
+            ${discountAmt > 0 ? `
+                <span class="pill tiny accent" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
+                    -$${discountAmt.toLocaleString()}
+                </span>
+            ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
+        </div>
 
-      <div class="col-numeric">
-          <div class="bold" style="color: white; font-size: 14px;">$${net.toLocaleString()}</div>
-          ${discountAmt > 0 ? `<div class="tiny muted line-through" style="font-size:9px; margin-top: -2px;">$${gross.toLocaleString()}</div>` : ''}
-      </div>
+        <div class="col-numeric">
+            <div class="bold" style="color: white; font-size: 13px;">$${net.toLocaleString()}</div>
+        </div>
 
-      <div class="col-actions">
-        <span class="card-close" style="opacity: 0.3;" onclick="OL.removeFromScope('${idx}')">×</span>
-      </div>
+        <div class="col-actions">
+            <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScope('${idx}')">×</button>
+        </div>
     </div>
   `;
 }
