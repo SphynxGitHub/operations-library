@@ -48,18 +48,23 @@ OL.state = state;
 
 // 2. CLOUD STORAGE ENGINE
 OL.persist = async function() {
+    // 1. Move this to the top so it's defined for the fail-safe
+    const statusEl = document.getElementById('cloud-status');
+    if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
+    
     const client = state.clients[state.activeClientId];
     
     // 🛡️ THE FAIL-SAFE
-    if (client) {
-        const localRes = client.projectData.localResources || [];
-        const scopingItems = client.projectData.scopingSheets?.[0]?.lineItems || [];
+    if (client && (!client.projectData.localResources || client.projectData.localResources.length === 0)) {
+        const doc = await db.collection('systems').doc('main_state').get();
+        const diskData = doc.data();
+        const diskCount = diskData.clients[state.activeClientId]?.projectData?.localResources?.length || 0;
         
-        // If the library is suddenly empty but the scoping sheet has items... 
-        // that's a desync. BLOCK THE SAVE.
-        if (localRes.length === 0 && scopingItems.length > 0) {
-            console.error("🛑 SYNC BLOCKED: Scoping items exist but Library is empty. Potential data loss prevented.");
-            return;
+        if (diskCount > 0) {
+            console.error("🛑 CRITICAL: Memory/Disk Mismatch. Prevented accidental deletion.");
+            // 🚀 NOW THIS WORKS:
+            if(statusEl) statusEl.innerHTML = "⚠️ Sync Blocked"; 
+            return; 
         }
     }
 
@@ -68,8 +73,12 @@ OL.persist = async function() {
         await db.collection('systems').doc('main_state').set(cleanState);
         console.log("💾 Cloud Sync Successful.");
         if(statusEl) statusEl.innerHTML = "✅ Synced";
+        
+        // Clear status after 2 seconds
+        setTimeout(() => { if(statusEl) statusEl.innerHTML = "☁️ Ready"; }, 2000);
     } catch (error) {
         console.error("❌ Sync Failed:", error);
+        if(statusEl) statusEl.innerHTML = "❌ Sync Error";
     }
 };
 
