@@ -7702,7 +7702,9 @@ function renderScopingRow(item, idx, showUnits) {
     const net = OL.calculateRowFee(item, res);
     const discountAmt = gross - net; // The actual dollar savings for this row
 
-    const unitsHtml = showUnits ? OL.renderUnitBadges(item, res) : "";
+    const combinedData = { ...(res.data || {}), ...(item.data || {}) };
+    const unitsHtml = showUnits ? OL.renderUnitBadges(combinedData, res) : "";
+
     const projectTeam = client?.projectData?.teamMembers || [];
     const mode = (item.teamMode || 'everyone').toLowerCase();
 
@@ -7877,36 +7879,26 @@ OL.toggleScopingUnits = function () {
 };
 
 // 74. HARDENED UNIT BADGE RENDERER
-OL.renderUnitBadges = function (item, res) {
-    // 1. Check the global UI toggle
+OL.renderUnitBadges = function (dataObject, res) {
     if (!state.ui?.showScopingUnits) return "";
-    
-    // 2. Ensure we have data to show
-    if (!item.data || Object.keys(item.data).length === 0) return "";
+    if (!dataObject || Object.keys(dataObject).length === 0) return "";
 
     const vars = state.master.rates.variables || {};
-    
-    // 3. Normalize strings for reliable matching (removes spaces/case)
     const normalize = (s) => String(s || "").toLowerCase().replace(/\s+/g, "").trim();
     const resTypeKey = normalize(res?.type);
 
-    const badges = Object.entries(item.data)
+    const badges = Object.entries(dataObject)
         .filter(([varId, count]) => {
             const v = vars[varId];
-            if (!v || count <= 0) return false;
-            
-            // Only show variables assigned to this specific resource type
-            return normalize(v.applyTo) === resTypeKey;
+            return v && count > 0 && normalize(v.applyTo) === resTypeKey;
         })
         .map(([varId, count]) => {
             const v = vars[varId];
-            return `<span class="unit-tag">
-                ${count} ${esc(v.label)}
-            </span>`;
+            return `<span class="unit-tag">${count} ${esc(v.label)}</span>`;
         })
         .join("");
 
-    return badges ? `<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">${badges}</div>` : "";
+    return badges ? `<div class="unit-badge-container">${badges}</div>` : "";
 };
 
 // 5. ADD ITEM TO SCOPING SHEET FROM MASTER LIBRARY
