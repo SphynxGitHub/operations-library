@@ -519,10 +519,18 @@ textarea {
 
 .grid-header,
 .grid-row,
-.round-header-row {
+.round-header-row,
+.grand-totals-bar {
     display: grid !important;
-    /* Deliverable(1fr) | Status(110) | Team(140) | Mult(70) | Gross(85) | Disc(85) | Fee(95) | X(30) */
-    grid-template-columns: 2fr 1fr 130px 60px 80px 80px 90px 30px !important;
+    grid-template-columns: 
+        minmax(200px, 2fr)   /* 1. Deliverable */
+        minmax(120px, 1fr)   /* 2. Status */
+        140px                /* 3. Team */
+        65px                 /* 4. Mult */
+        85px                 /* 5. Gross */
+        85px                 /* 6. Disc */
+        95px                 /* 7. Fee */
+        30px !important;     /* 8. X */
     gap: 12px !important;
     align-items: center !important;
     padding: 10px 16px !important;
@@ -1925,7 +1933,7 @@ body.fs-mode-active #app-root {
     .sidebar, .main-header, .app-header, .btn, .card-close, .top-bar, .card-delete-btn, .header-actions,
     .local-tag, div.cards-grid, .analysis-summary-card, #modal-layer, .fs-mode-toggle, .tiny-select
     .btn-vis-add, .vis-node-delete, .vis-header-actions, .vis-detail-toggle, .drag-handle, .vis-idx,
-    .search-map-container{
+    .search-map-container, .col-actions {
         display: none !important;
     }
 
@@ -1950,6 +1958,10 @@ body.fs-mode-active #app-root {
     /* 🚀 CRITICAL: Hide the background app entirely so it doesn't push content down */
     #mainContent .fs-canvas { 
         display: none !important; 
+    }
+
+    .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
+        grid-template-columns: 250px 120px 140px 60px 80px 80px 90px 0px !important;
     }
 
     .card, .matrix-container {
