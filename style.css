@@ -516,6 +516,7 @@ textarea {
     minmax(200px, 1.5fr)   /* Applies To */
     minmax(50px, .5fr)  /* Multiplier */
     minmax(160px, .75fr)   /* Fee */
+    minmax(160px, .75fr)   /* Disc */
     minmax(80px, .75fr)   /* Actions */
 }
 
@@ -771,14 +772,11 @@ textarea {
 }
 
 .col-numeric { 
-    justify-self: end; align-self: center;
     text-align: right; 
     font-variant-numeric: tabular-nums; /* Keeps numbers aligned vertically */
 }
 
 .col-actions {
-    justify-self: end; align-self: center;
-    text-align: right;
     display: flex;
     justify-content: flex-end;
     padding-right: 5px;
