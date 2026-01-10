@@ -7636,7 +7636,7 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
 
     // 3. Final Round Net (Gross - Item Discs - Round Disc)
     const finalRoundNet = netBeforeRoundDisc - roundDiscountAmt;
-    const totalSavingsThisRound = itemDiscountsTotal + roundDiscountAmt;
+    const totalRoundSavings = itemDiscountsTotal + roundDiscountAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
