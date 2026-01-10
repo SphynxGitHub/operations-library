@@ -7621,9 +7621,12 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
     // 1. Sum up the items in THIS round
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
-        if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
+        const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
+        
+        if (item.status === 'Do Now' && isBillable) {
             const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
             const itemNet = OL.calculateRowFee(item, res);
+            
             roundGross += itemGross;
             netAfterLineItems += itemNet;
         }
@@ -7706,9 +7709,13 @@ function renderScopingRow(item, idx, showUnits) {
     }
 
     // 2. Financial Calculations
-    const gross = OL.calculateBaseFeeWithMultiplier(item, res);
-    const net = OL.calculateRowFee(item, res);
-    const discountAmt = gross - net; // The actual dollar savings for this row
+    // Only "Do Now" and "Sphynx/Joint" count towards the totals
+    const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
+    const isCounted = item.status === 'Do Now' && isBillable;
+
+    const gross = isCounted ? OL.calculateBaseFeeWithMultiplier(item, res) : 0;
+    const net = isCounted ? OL.calculateRowFee(item, res) : 0;
+    const discountAmt = gross - net;
 
     const combinedData = { ...(res.data || {}), ...(item.data || {}) };
     const unitsHtml = showUnits ? OL.renderUnitBadges(combinedData, res) : "";
@@ -7736,11 +7743,16 @@ function renderScopingRow(item, idx, showUnits) {
         teamLabel = `<span class="tiny muted">Everyone (${projectTeam.length})</span>`;
     }
 
+    const rowStyle = !isCounted 
+        ? `background: rgba(255,255,255,0.02); opacity: 0.5; filter: grayscale(0.5);` 
+        : ``;
+
     return `
         <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
             <div class="row-title is-clickable" onclick="OL.openResourceModal('${res.id}')">
             ${esc(res.name || "Manual Item")}
+            ${!isCounted ? `<span class="tiny muted" style="font-weight:normal; margin-left:8px;">(Non-Billable)</span>` : ""}
             </div>
             ${res.notes ? `<div class="row-note">${esc(res.notes)}</div>` : ""}
             ${unitsHtml}
@@ -8190,7 +8202,9 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     // 1. Calculate base totals
     lineItems.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
-        if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
+        const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
+        
+        if (item.status === 'Do Now' && isBillable) {
             totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
             netAfterLineItems += OL.calculateRowFee(item, res);
         }
