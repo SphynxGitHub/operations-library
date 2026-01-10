@@ -7579,6 +7579,7 @@ window.renderScopingSheet = function () {
         <div class="col-status">Status</div>
         <div class="col-team">Applies To</div>
         <div class="col-multiplier">Multiplier</div>
+        <div class="col-discount">Discount</div>
         <div class="col-numeric">Fee</div>
         <div class="col-actions"></div>
       </div>
@@ -7608,30 +7609,44 @@ window.renderScopingSheet = function () {
 // 2. RENDER ROUND GROUPS
 window.renderRoundGroup = function(roundName, items, showUnits, clientName, roundNum) {
     const client = getActiveClient();
-    const allResources = [
-        ...(state.master.resources || []),
-        ...(client.projectData.localResources || [])
-    ];
+    const sheet = client.projectData.scopingSheets[0];
+    const allResources = [...(state.master.resources || []), ...(client.projectData.localResources || [])];
 
-    const roundNet = items.reduce((sum, item) => {
+    let roundGross = 0;
+    let totalItemDiscounts = 0;
+
+    // 1. Calculate Item-level math
+    items.forEach(item => {
         const res = allResources.find(r => r.id === item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
-            return sum + OL.calculateRowFee(item, res);
+            const gross = OL.calculateBaseFeeWithMultiplier(item, res);
+            const net = OL.calculateRowFee(item, res);
+            roundGross += gross;
+            totalItemDiscounts += (gross - net);
         }
-        return sum;
-    }, 0);
+    });
 
-    // 🛡️ THE FIX: Ensure showUnits is passed to renderScopingRow
-    const rows = items.map((item, idx) =>
-        renderScopingRow(item, idx, showUnits, clientName)
-    ).join("");
+    // 2. Fetch and apply the specific ROUND discount
+    const rDisc = sheet.roundDiscounts?.[roundNum] || { value: 0, type: '$' };
+    const netAfterItems = roundGross - totalItemDiscounts;
+    const roundDiscountAmt = rDisc.type === '%' 
+        ? Math.round(netAfterItems * (rDisc.value / 100)) 
+        : Math.min(netAfterItems, rDisc.value);
+
+    const roundNet = netAfterItems - roundDiscountAmt;
+    const totalRoundSavings = totalItemDiscounts + roundDiscountAmt;
+
+    const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
     return `
         <div class="round-section">
-            <div class="round-header">
-                ${esc(roundName)}
-                <span class="spacer"></span>
-                <span class="tiny muted uppercase">Round Net: $${roundNet.toLocaleString()}</span>
+            <div class="round-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>${esc(roundName)}</span>
+                <div style="text-align: right; font-family: monospace;">
+                    <span class="tiny muted">GROSS: $${roundGross.toLocaleString()}</span>
+                    <span class="tiny accent" style="margin: 0 10px;">DISC: -$${totalRoundSavings.toLocaleString()}</span>
+                    <span class="tiny bold uppercase" style="color:var(--text-main); font-size:11px;">NET: $${roundNet.toLocaleString()}</span>
+                </div>
             </div>
             <div class="round-grid">${rows}</div>
         </div>
@@ -7731,6 +7746,13 @@ function renderScopingRow(item, idx, showUnits) {
           </div>
       </div>
       <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
+      <div class="col-discount">
+        ${item.discountValue > 0 ? `
+            <span class="pill tiny accent" style="cursor:pointer;" onclick="OL.openDiscountManager()">
+                -${item.discountType === '%' ? item.discountValue + '%' : '$' + item.discountValue.toLocaleString()}
+            </span>
+        ` : '<span class="tiny muted" style="opacity:0.3; cursor:pointer;" onclick="OL.openDiscountManager()">—</span>'}
+      </div>
       <div class="col-numeric"><div class="bold">$${net.toLocaleString()}</div></div>
       <div class="col-actions">
         <span class="card-close" onclick="OL.removeFromScope('${idx}')">×</span>
@@ -8146,40 +8168,44 @@ OL.calculateBaseFeeWithMultiplier = OL.calculateRowFee;
 window.renderGrandTotals = function(lineItems, baseRate) {
     const area = document.getElementById("grand-totals-area");
     const client = getActiveClient();
-    if (!area || !client) return;
-
-    const allRes = [
-        ...(state.master.resources || []),
-        ...(client.projectData.localResources || [])
-    ];
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    if (!area || !client || !sheet) return;
 
     let totalGross = 0;
     let totalNet = 0;
 
-    // Force exact parity: Loop all items and use the exact same logic as the row renderer
+    // 1. Sum up all Items
     lineItems.forEach(item => {
-        const res = allRes.find(r => r.id === item.resourceId);
-        
-        // Filter: Must be billable and "Do Now"
+        const res = OL.getResourceById(item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
-            const gross = OL.calculateBaseFeeWithMultiplier(item, res);
-            const net = OL.calculateRowFee(item, res);
-            
-            totalGross += gross;
-            totalNet += net;
+            totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
+            totalNet += OL.calculateRowFee(item, res);
         }
     });
 
-    // Handle Global Project Discounts
+    // 2. 🚀 NEW: Subtract Round-Level Discounts
+    if (sheet.roundDiscounts) {
+        Object.keys(sheet.roundDiscounts).forEach(rNum => {
+            const rDisc = sheet.roundDiscounts[rNum];
+            // Calculate what the net was for JUST this round to apply % properly
+            const roundItems = lineItems.filter(i => i.round == rNum && i.status === 'Do Now');
+            const roundNetBeforeRoundDisc = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
+            
+            const rDeduct = rDisc.type === '%' 
+                ? Math.round(roundNetBeforeRoundDisc * (rDisc.value / 100)) 
+                : rDisc.value;
+            
+            totalNet -= rDeduct;
+        });
+    }
+
+    // 3. Subtract Global Project Discount
     const gVal = client.projectData.totalDiscountValue || 0;
     const gType = client.projectData.totalDiscountType || '$';
-    
-    const globalAdjustment = gType === '%' 
-        ? Math.round(totalNet * (gVal / 100)) 
-        : Math.min(totalNet, gVal);
+    const globalAdjustment = gType === '%' ? Math.round(totalNet * (gVal / 100)) : Math.min(totalNet, gVal);
 
     const finalApproved = totalNet - globalAdjustment;
-    const totalDeductions = (totalGross - totalNet) + globalAdjustment;
+    const totalDeductions = totalGross - finalApproved;
 
     area.innerHTML = `
     <div class="grand-totals-bar">
