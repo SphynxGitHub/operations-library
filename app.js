@@ -8001,13 +8001,15 @@ OL.calculateRowFee = function (item, resource) {
     
     // 1. Get the Master Rates Library
     const vars = state.master.rates.variables || {};
-    const itemData = item.data || {};
+    const itemData = item.data || {};  
+    const resData = resource?.data || {};
+    const combinedData = { ...resData, ...itemData };
     
     let totalVariableFee = 0;
     let hasVariableData = false;
 
     // 2. Calculate fees based on variable counts (Technical Scoping)
-    Object.entries(itemData).forEach(([varId, count]) => {
+    Object.entries(combinedData).forEach(([varId, count]) => {
         const v = vars[varId];
         const numCount = parseFloat(count) || 0;
         
