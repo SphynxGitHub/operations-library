@@ -7610,54 +7610,54 @@ window.renderScopingSheet = function () {
 window.renderRoundGroup = function(roundName, items, showUnits, clientName, roundNum) {
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
-    const allResources = [...(state.master.resources || []), ...(client.projectData.localResources || [])];
-
+    
     let roundGross = 0;
-    let totalItemDiscounts = 0;
+    let itemDiscountsTotal = 0;
 
-    // 1. Calculate Item-level math
+    // 1. Sum up Items (Gross vs Net)
     items.forEach(item => {
-        const res = allResources.find(r => r.id === item.resourceId);
+        const res = OL.getResourceById(item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
             const gross = OL.calculateBaseFeeWithMultiplier(item, res);
             const net = OL.calculateRowFee(item, res);
             roundGross += gross;
-            totalItemDiscounts += (gross - net);
+            itemDiscountsTotal += (gross - net);
         }
     });
 
-    // 2. Fetch and apply the specific ROUND discount
+    // 2. Calculate the Round-Level Discount
     const rDisc = sheet.roundDiscounts?.[roundNum] || { value: 0, type: '$' };
-    const netAfterItems = roundGross - totalItemDiscounts;
+    const netBeforeRoundDisc = roundGross - itemDiscountsTotal;
+    
     const roundDiscountAmt = rDisc.type === '%' 
-        ? Math.round(netAfterItems * (rDisc.value / 100)) 
-        : Math.min(netAfterItems, rDisc.value);
+        ? Math.round(netBeforeRoundDisc * (rDisc.value / 100)) 
+        : Math.min(netBeforeRoundDisc, rDisc.value);
 
-    const roundNet = netAfterItems - roundDiscountAmt;
-    const totalRoundSavings = totalItemDiscounts + roundDiscountAmt;
+    // 3. Final Round Net (Gross - Item Discs - Round Disc)
+    const finalRoundNet = netBeforeRoundDisc - roundDiscountAmt;
+    const totalSavingsThisRound = itemDiscountsTotal + roundDiscountAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
-    // 🚀 THE ALIGNED HEADER:
     return `
         <div class="round-section" style="margin-bottom: 20px;">
-            <div class="grid-row round-header-row" style="background: rgba(var(--accent-rgb), 0.1); border-radius: 6px 6px 0 0; padding: 10px; border-bottom: 1px solid var(--accent);">
+            <div class="grid-row round-header-row" style="background: rgba(var(--accent-rgb), 0.1); padding: 10px; border-bottom: 1px solid var(--accent);">
                 <div class="col-expand">
-                    <strong style="color: var(--accent); text-transform: uppercase; letter-spacing: 1px;">${esc(roundName)}</strong>
+                    <strong style="color: var(--accent);">${esc(roundName)}</strong>
                 </div>
                 <div class="col-status"></div>
                 <div class="col-team"></div>
                 
-                <div class="col-multiplier tiny muted bold" style="line-height: 1.1;">
+                <div class="col-multiplier tiny muted bold" style="line-height: 1.1; text-align:center;">
                     GROSS<br>$${roundGross.toLocaleString()}
                 </div>
                 
-                <div class="col-discount tiny accent bold" style="line-height: 1.1;">
-                    DISC<br>-$${totalRoundSavings.toLocaleString()}
+                <div class="col-discount tiny accent bold" style="line-height: 1.1; text-align:center;">
+                    DISC<br>-$${totalSavingsThisRound.toLocaleString()}
                 </div>
                 
-                <div class="col-numeric bold" style="color: white; font-size: 13px; line-height: 1.1;">
-                    NET<br>$${roundNet.toLocaleString()}
+                <div class="col-numeric bold" style="color: white; font-size: 13px; line-height: 1.1; text-align:right;">
+                    NET<br>$${finalRoundNet.toLocaleString()}
                 </div>
                 
                 <div class="col-actions"></div>
