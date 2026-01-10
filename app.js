@@ -7613,38 +7613,37 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     const sheet = client.projectData.scopingSheets[0];
     
     let roundGross = 0;
-    let itemDiscountsTotal = 0;
+    let lineItemsNetTotal = 0;
 
-    // 1. Sum up Items (Gross vs Net after line-item discounts)
+    // 1. Calculate the Item-level totals
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
+        // Only count billable items in "Do Now" status
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
-            const gross = OL.calculateBaseFeeWithMultiplier(item, res);
-            const net = OL.calculateRowFee(item, res);
-            roundGross += gross;
-            itemDiscountsTotal += (gross - net);
+            const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
+            const itemNet = OL.calculateRowFee(item, res);
+            
+            roundGross += itemGross;
+            lineItemsNetTotal += itemNet;
         }
     });
 
-    // 2. Identify the subtotal after line-item discounts but BEFORE round discount
-    const netBeforeRoundDisc = roundGross - itemDiscountsTotal;
-
-    // 3. Calculate the Round-Level Discount
+    // 2. Calculate the specific Phase/Round-Level Adjustment
     const rDisc = sheet.roundDiscounts?.[roundNum] || { value: 0, type: '$' };
-    
-    const roundDiscountAmt = rDisc.type === '%' 
-        ? Math.round(netBeforeRoundDisc * (rDisc.value / 100)) 
-        : Math.min(netBeforeRoundDisc, rDisc.value);
+    const roundAdjustmentAmt = rDisc.type === '%' 
+        ? Math.round(lineItemsNetTotal * (rDisc.value / 100)) 
+        : Math.min(lineItemsNetTotal, rDisc.value);
 
-    // 4. Final Math
-    const finalRoundNet = netBeforeRoundDisc - roundDiscountAmt;
-    // Total savings = (Sum of line item discounts) + (The specific round adjustment)
-    const totalRoundSavings = itemDiscountsTotal + roundDiscountAmt;
+    // 3. Final Outputs
+    const finalRoundNet = lineItemsNetTotal - roundAdjustmentAmt;
+    
+    // 🎯 SAVINGS LOGIC: (Gross - Item-level Net) + Phase-level Adjustment
+    const totalPhaseSavings = (roundGross - lineItemsNetTotal) + roundAdjustmentAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
     return `
-        <div class="round-section" style="margin-bottom: 20px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
+        <div class="round-section" style="margin-bottom: 25px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
             <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
                 <div class="col-expand">
                     <strong style="color: var(--accent); text-transform: uppercase; font-size: 11px;">${esc(roundName)}</strong>
@@ -7658,7 +7657,7 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
                 </div>
                 
                 <div class="col-discount tiny accent bold" style="text-align:center; line-height: 1.1;">
-                    DISC<br>-$${totalRoundSavings.toLocaleString()}
+                    DISC<br>-$${totalPhaseSavings.toLocaleString()}
                 </div>
                 
                 <div class="col-numeric bold" style="color: white; font-size: 12px; text-align:right; line-height: 1.1;">
@@ -7773,7 +7772,7 @@ function renderScopingRow(item, idx, showUnits) {
 
         <div class="col-discount">
             ${discountAmt > 0 ? `
-                <span class="pill tiny accent" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
+                <span class="tiny accent" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
                     -$${discountAmt.toLocaleString()}
                 </span>
             ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
@@ -8170,7 +8169,6 @@ OL.calculateBaseFeeWithMultiplier = function(item, resource) {
 
     return Math.round(baseAmount * multiplier);
 };
-
 
 
 // 11. GRAND TOTALS SUMMARY
