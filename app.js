@@ -7711,10 +7711,12 @@ function renderScopingRow(item, idx, showUnits) {
       </div>
       <div class="col-team">
           <div style="display:flex; align-items:center; gap:8px;">
-              <button class="btn tiny ${btnClass}" onclick="OL.cycleTeamMode('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
+              <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
                   ${btnIcon}
               </button>
-              <div class="pills-row">${teamLabel}</div>
+              <div class="pills-row" style="cursor:pointer;" onclick="OL.openTeamAssignmentModal('${item.id}')">
+                  ${teamLabel}
+              </div>
           </div>
       </div>
       <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
@@ -7725,6 +7727,62 @@ function renderScopingRow(item, idx, showUnits) {
     </div>
   `;
 }
+
+OL.openTeamAssignmentModal = function (itemId) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
+    const team = client.projectData.teamMembers || [];
+
+    if (!item.teamIds) item.teamIds = [];
+
+    let html = `
+        <div class="modal-head">
+            <div class="modal-title-text">👥 Assign Team to Item</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Done</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted" style="margin-bottom:15px;">
+                Selecting individual members will apply a multiplier based on the group size.
+            </p>
+            <div class="dp-manager-list">
+                ${team.map(m => {
+                    const isAssigned = item.teamIds.includes(m.id);
+                    return `
+                        <div class="dp-manager-row is-clickable" 
+                             style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--line);"
+                             onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span>${isAssigned ? '✅' : '⬜'}</span>
+                                <span style="${isAssigned ? 'font-weight:bold; color:var(--accent);' : ''}">${esc(m.name)}</span>
+                            </div>
+                            <span class="tiny muted uppercase">${esc(m.roles?.[0] || 'Member')}</span>
+                        </div>
+                    `;
+                }).join('')}
+                ${team.length === 0 ? '<div class="empty-hint">No project team members found. Add them in the Team tab first.</div>' : ''}
+            </div>
+            
+            <div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--line); display:flex; gap:10px;">
+                <button class="btn tiny soft flex-1" onclick="OL.setTeamMode('${itemId}', 'everyone')">Apply to Everyone</button>
+                <button class="btn tiny soft flex-1" onclick="OL.setTeamMode('${itemId}', 'global')">Mark as Global (1x)</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+// Helper to quickly switch modes from the modal
+OL.setTeamMode = function(itemId, mode) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
+    if (item) {
+        item.teamMode = mode;
+        if (mode === 'everyone') item.teamIds = []; 
+        OL.persist();
+        OL.closeModal();
+        renderScopingSheet();
+    }
+};
 
 OL.updateLineItem = function(itemId, field, value) {
     const client = getActiveClient();
