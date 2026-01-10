@@ -7629,7 +7629,8 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     });
 
     // 2. Calculate the specific Phase/Round-Level Adjustment
-    const rDisc = sheet.roundDiscounts?.[roundNum] || { value: 0, type: '$' };
+    const rDisc = sheet.roundDiscounts?.[String(roundNum)] || { value: 0, type: '$' };
+    
     const roundAdjustmentAmt = rDisc.type === '%' 
         ? Math.round(lineItemsNetTotal * (rDisc.value / 100)) 
         : Math.min(lineItemsNetTotal, rDisc.value);
@@ -7772,7 +7773,7 @@ function renderScopingRow(item, idx, showUnits) {
 
         <div class="col-discount">
             ${discountAmt > 0 ? `
-                <span class="tiny accent" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
+                <span class="tiny muted" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
                     -$${discountAmt.toLocaleString()}
                 </span>
             ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
