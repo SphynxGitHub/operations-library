@@ -7999,47 +7999,55 @@ OL.getMultiplierDisplay = function (item) {
 OL.calculateRowFee = function (item, resource) {
     if (!item) return 0;
     
-    // 1. Always fetch the LATEST rates from the master state
-    const globalVars = state.master.rates.variables || {};
+    const vars = state.master.rates.variables || {};
     
-    // 2. Get quantities from the item (Local Project)
+    // 🚀 THE LOGIC: 
+    // 1. Get Template defaults (Resource)
+    // 2. Overlay Project overrides (Item)
     const itemData = item.data || {};
+    const resData = resource?.data || {};
+    
+    // This creates a temporary "math-only" object. 
+    // It doesn't save back to the database, so Master changes won't wipe Project data.
+    const combinedData = { ...resData, ...itemData };
     
     let totalVariableFee = 0;
     let hasTechnicalData = false;
 
-    // 🚀 THE FIX: We loop through the master variables to see if the ITEM has a count for them
-    // This prevents Master changes from wiping out the Item counts.
-    Object.keys(globalVars).forEach(varId => {
-        const rateInfo = globalVars[varId];
-        const quantity = parseFloat(itemData[varId]) || 0;
-
-        // Only apply if the resource type matches the variable's target
-        if (rateInfo.applyTo === resource?.type && quantity > 0) {
-            totalVariableFee += quantity * (parseFloat(rateInfo.value) || 0);
-            hasTechnicalData = true;
+    // Calculate fees based on the combined counts
+    Object.entries(combinedData).forEach(([varId, count]) => {
+        const v = vars[varId];
+        const numCount = parseFloat(count) || 0;
+        
+        if (v && numCount > 0) {
+            // Only apply if the variable is assigned to this Resource Type
+            if (v.applyTo === resource?.type) {
+                totalVariableFee += numCount * (parseFloat(v.value) || 0);
+                hasTechnicalData = true;
+            }
         }
     });
 
-    // 3. Fallback to Hourly (If no technical counts exist)
+    // Fallback to Hourly if no variables (Zaps/Forms/etc) have counts
     let baseAmount = totalVariableFee;
     if (!hasTechnicalData) {
         const client = getActiveClient();
         const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
-        const hours = parseFloat(item.manualHours) || 0;
+        const hours = parseFloat(item.manualHours) || parseFloat(resource?.manualHours) || 0;
         baseAmount = hours * baseRate;
     }
 
-    // 4. Multiplier Logic (Unchanged)
+    // Apply Multiplier (Individual vs Everyone)
     let multiplier = 1;
     if (item.teamMode !== "global") {
-        const teamRate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
-        const incrementalStep = teamRate - 1;
-        let memberCount = (item.teamMode === "individual") 
-            ? (item.teamIds || []).length 
-            : (getActiveClient()?.projectData?.teamMembers || []).length || 1;
-        
-        multiplier = 1 + (Math.max(0, memberCount - 1) * incrementalStep);
+        const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
+        let memberCount = 0;
+        if (item.teamMode === "individual") {
+            memberCount = (item.teamIds || []).length;
+        } else {
+            memberCount = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
+        }
+        multiplier = 1 + (Math.max(0, memberCount - 1) * (rate - 1));
     }
 
     const gross = Math.round(baseAmount * multiplier);
