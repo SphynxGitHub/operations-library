@@ -7618,7 +7618,6 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     // 1. Calculate Gross and Net for just the items in THIS round
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
-        // Ensure we only sum billable items
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
             const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
             const itemNet = OL.calculateRowFee(item, res);
@@ -7628,27 +7627,24 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
         }
     });
 
-    // 2. Resolve the Round-Level Discount using String Casting for the Key
+    // 2. Resolve Round Discount with "Type-Agnostic" Lookup
+    // Your console showed {1: {...}}, this check handles both numeric and string keys
+    const rDisc = (sheet.roundDiscounts && (sheet.roundDiscounts[roundNum] || sheet.roundDiscounts[String(roundNum)])) 
+                  || { value: 0, type: '$' };
+    
     let roundDeductionAmt = 0;
-    
-    // 🚀 THE CRITICAL FIX: Cast roundNum to String to match Object Keys
-    const rKey = String(roundNum); 
-    
-    if (sheet.roundDiscounts && sheet.roundDiscounts[rKey]) {
-        const rDisc = sheet.roundDiscounts[rKey];
-        
-        // Calculate deduction based on the item-net subtotal
-        if (rDisc.type === '%') {
-            roundDeductionAmt = Math.round(netAfterLineItems * (parseFloat(rDisc.value) / 100));
-        } else {
-            roundDeductionAmt = parseFloat(rDisc.value) || 0;
-        }
+    const val = parseFloat(rDisc.value) || 0;
+
+    if (rDisc.type === '%') {
+        roundDeductionAmt = Math.round(netAfterLineItems * (val / 100));
+    } else {
+        roundDeductionAmt = val;
     }
 
     // 3. Final Calculations
     const finalRoundNet = netAfterLineItems - roundDeductionAmt;
     
-    // Total Savings = (Sum of Row Discounts) + (This Round Adjustment)
+    // 🎯 SAVINGS LOGIC: (Line Item Markdowns) + (This Round Adjustment)
     const totalPhaseSavings = (roundGross - netAfterLineItems) + roundDeductionAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
