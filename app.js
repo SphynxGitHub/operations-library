@@ -7742,7 +7742,7 @@ function renderScopingRow(item, idx, showUnits) {
             .filter(n => n !== "Unknown");
 
         if (selectedCount > 0) {
-            teamLabel = `<span class="pill tiny soft">👨‍💼 ${selectedCount} Team Member${selectedCount > 1 ? 's' : ''}</span>`;
+            teamLabel = `<span class="tiny muted">${selectedCount} Team Member${selectedCount > 1 ? 's' : ''}</span>`;
             hoverText = names.join(", "); // Plain text list for the title attribute
         } else {
             teamLabel = '<span class="tiny danger">No members!</span>';
