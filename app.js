@@ -7883,18 +7883,18 @@ OL.addResourceToScope = function () {
     openModal(html);
 };
 
-OL.removeFromScope = function(index) {
+OL.removeFromScope = async function(index) {
     if (!confirm("Remove this item?")) return;
     const client = getActiveClient();
     
-    // 1. Physically remove from the array first
+    // 1. Physically remove from the array
     client.projectData.scopingSheets[0].lineItems.splice(index, 1);
     
-    // 2. FORCE a save immediately after the array is changed
-    OL.persist().then(() => {
-        // 3. ONLY re-render after the save is confirmed
-        renderScopingSheet();
-    });
+    // 2. FORCE a full sync and WAIT for it to finish
+    await OL.persist();
+    
+    // 3. ONLY THEN refresh the view
+    renderScopingSheet();
 };
 
 OL.filterResourceForScope = function (query) {
@@ -7970,7 +7970,7 @@ function renderResourceSearchResult(res, tagClass) {
     `;
 }
 
-OL.executeScopeAdd = function (resId) {
+OL.executeScopeAdd = async function (resId) {
     const client = getActiveClient();
     if (!client) return;
 
@@ -8016,12 +8016,10 @@ OL.executeScopeAdd = function (resId) {
     client.projectData.scopingSheets[0].lineItems.push(newItem);
 
     // 🚀 STEP 3: PERSIST BOTH ARRAYS
-    OL.persist().then(() => {
-        OL.closeModal();
-        renderScopingSheet();
-        // Force refresh the Resource Manager too so it sees the new local copy
-        if (window.location.hash.includes('resources')) renderResourceManager();
-    });
+    await OL.persist();
+    
+    OL.closeModal();
+    renderScopingSheet(); 
 };
 
 // 6. ADD CUSTOM ITEM TO SCOPING SHEET
