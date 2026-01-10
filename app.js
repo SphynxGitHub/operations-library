@@ -7615,7 +7615,7 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
     let roundGross = 0;
     let itemDiscountsTotal = 0;
 
-    // 1. Sum up Items (Gross vs Net)
+    // 1. Sum up Items (Gross vs Net after line-item discounts)
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
@@ -7626,16 +7626,19 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
         }
     });
 
-    // 2. Calculate the Round-Level Discount
-    const rDisc = sheet.roundDiscounts?.[roundNum] || { value: 0, type: '$' };
+    // 2. Identify the subtotal after line-item discounts but BEFORE round discount
     const netBeforeRoundDisc = roundGross - itemDiscountsTotal;
+
+    // 3. Calculate the Round-Level Discount
+    const rDisc = sheet.roundDiscounts?.[roundNum] || { value: 0, type: '$' };
     
     const roundDiscountAmt = rDisc.type === '%' 
         ? Math.round(netBeforeRoundDisc * (rDisc.value / 100)) 
         : Math.min(netBeforeRoundDisc, rDisc.value);
 
-    // 3. Final Round Net (Gross - Item Discs - Round Disc)
+    // 4. Final Math
     const finalRoundNet = netBeforeRoundDisc - roundDiscountAmt;
+    // Total savings = (Sum of line item discounts) + (The specific round adjustment)
     const totalRoundSavings = itemDiscountsTotal + roundDiscountAmt;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
@@ -8120,67 +8123,55 @@ OL.getMultiplierDisplay = function (item) {
 };
 
 // 10. FEE CALCULATION
-OL.calculateRowFee = function (item, resource) {
+// Net Calculation (Line Item Level)
+OL.calculateRowFee = function(item, resource) {
+    const gross = OL.calculateBaseFeeWithMultiplier(item, resource);
+    return OL.applyDiscount(gross, item.discountValue, item.discountType);
+};
+
+// Alias for consistency in older renderers
+// Function to calculate the "Sticker Price" before line-item discounts
+OL.calculateBaseFeeWithMultiplier = function(item, resource) {
     if (!item) return 0;
-    
-    // 1. Get the current Rate variables from the Master state
     const vars = state.master.rates.variables || {};
     
-    // 🚀 THE BREAK: Create a completely isolated data object for calculation
-    // This ensures Master changes never "reach back" into the Project Scoping sheet.
-    let calcData = {};
-    try {
-        const templateData = resource?.data ? JSON.parse(JSON.stringify(resource.data)) : {};
-        const localOverrides = item.data ? JSON.parse(JSON.stringify(item.data)) : {};
-        calcData = { ...templateData, ...localOverrides };
-    } catch (e) {
-        calcData = { ...(resource?.data || {}), ...(item.data || {}) };
-    }
+    // Merge template data and local overrides
+    let calcData = { ...(resource?.data || {}), ...(item.data || {}) };
     
-    let totalVariableFee = 0;
+    let baseAmount = 0;
     let hasTechnicalData = false;
 
-    // 2. Calculate technical counts
+    // Calculate via technical variables
     Object.entries(calcData).forEach(([varId, count]) => {
         const v = vars[varId];
         const numCount = parseFloat(count) || 0;
         if (v && numCount > 0 && v.applyTo === resource?.type) {
-            totalVariableFee += numCount * (parseFloat(v.value) || 0);
+            baseAmount += numCount * (parseFloat(v.value) || 0);
             hasTechnicalData = true;
         }
     });
 
-    // 3. Fallback to Hourly
-    let baseAmount = totalVariableFee;
+    // Fallback to hourly if no technical units exist
     if (!hasTechnicalData) {
         const client = getActiveClient();
         const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
         baseAmount = (parseFloat(item.manualHours) || 0) * baseRate;
     }
 
-    // 4. THE MULTIPLIER FIX: Explicitly handle 'global' vs 'everyone'
+    // Apply Team Multiplier
     let multiplier = 1.0;
     const mode = (item.teamMode || 'everyone').toLowerCase();
-
-    if (mode === 'global') {
-        multiplier = 1.0;
-    } else {
+    if (mode !== 'global') {
         const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
         const inc = rate - 1;
-        let count = 0;
-        if (mode === 'individual') {
-            count = (item.teamIds || []).length;
-        } else {
-            count = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
-        }
+        const count = mode === 'individual' ? (item.teamIds || []).length : (getActiveClient()?.projectData?.teamMembers || []).length || 1;
         multiplier = 1 + (Math.max(0, count - 1) * inc);
     }
 
-    return OL.applyDiscount(Math.round(baseAmount * multiplier), item.discountValue, item.discountType);
+    return Math.round(baseAmount * multiplier);
 };
 
-// Alias for consistency in older renderers
-OL.calculateBaseFeeWithMultiplier = OL.calculateRowFee;
+
 
 // 11. GRAND TOTALS SUMMARY
 window.renderGrandTotals = function(lineItems, baseRate) {
@@ -8190,40 +8181,42 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     if (!area || !client || !sheet) return;
 
     let totalGross = 0;
-    let totalNet = 0;
+    let netAfterLineItems = 0;
 
-    // 1. Sum up all Items
+    // 1. Sum up Line Items (Gross vs Net after individual discounts)
     lineItems.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
             totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
-            totalNet += OL.calculateRowFee(item, res);
+            netAfterLineItems += OL.calculateRowFee(item, res);
         }
     });
 
-    // 2. 🚀 NEW: Subtract Round-Level Discounts
+    // 2. Subtract Round-Level Discounts from the Net
+    let netAfterRounds = netAfterLineItems;
     if (sheet.roundDiscounts) {
         Object.keys(sheet.roundDiscounts).forEach(rNum => {
             const rDisc = sheet.roundDiscounts[rNum];
-            // Calculate what the net was for JUST this round to apply % properly
             const roundItems = lineItems.filter(i => i.round == rNum && i.status === 'Do Now');
-            const roundNetBeforeRoundDisc = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
+            const roundSubtotal = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
             
             const rDeduct = rDisc.type === '%' 
-                ? Math.round(roundNetBeforeRoundDisc * (rDisc.value / 100)) 
-                : rDisc.value;
+                ? Math.round(roundSubtotal * (rDisc.value / 100)) 
+                : Math.min(roundSubtotal, rDisc.value);
             
-            totalNet -= rDeduct;
+            netAfterRounds -= rDeduct;
         });
     }
 
-    // 3. Subtract Global Project Discount
+    // 3. Subtract Global Project Discount from the cumulative Net
     const gVal = client.projectData.totalDiscountValue || 0;
     const gType = client.projectData.totalDiscountType || '$';
-    const globalAdjustment = gType === '%' ? Math.round(totalNet * (gVal / 100)) : Math.min(totalNet, gVal);
+    const globalAdjustment = gType === '%' ? Math.round(netAfterRounds * (gVal / 100)) : Math.min(netAfterRounds, gVal);
 
-    const finalApproved = totalNet - globalAdjustment;
-    const totalDeductions = totalGross - finalApproved;
+    const finalApproved = netAfterRounds - globalAdjustment;
+    
+    // 🎯 OUTPUT: Adjustments = Total delta from original Gross
+    const totalAdjustments = totalGross - finalApproved;
 
     area.innerHTML = `
     <div class="grand-totals-bar">
@@ -8239,7 +8232,7 @@ window.renderGrandTotals = function(lineItems, baseRate) {
 
       <div class="grand-estimates" style="text-align: right; margin-right: 20px;">
         <div class="tiny muted">Adjustments</div>
-        <div class="accent" style="font-size: 15px; font-weight: 600;">-$${totalDeductions.toLocaleString()}</div>
+        <div class="accent" style="font-size: 15px; font-weight: 600;">-$${totalAdjustments.toLocaleString()}</div>
       </div>
 
       <div class="grand-final" style="text-align: right; padding-left: 20px; border-left: 1px solid var(--panel-border);">
