@@ -8187,7 +8187,7 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     let totalGross = 0;
     let netAfterLineItems = 0;
 
-    // 1. Sum up Line Items (Gross vs Net after individual discounts)
+    // 1. Calculate base totals
     lineItems.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
@@ -8196,30 +8196,27 @@ window.renderGrandTotals = function(lineItems, baseRate) {
         }
     });
 
-    // 2. Subtract Round-Level Discounts from the Net
+    // 2. Subtract Round Discounts
     let netAfterRounds = netAfterLineItems;
     if (sheet.roundDiscounts) {
         Object.keys(sheet.roundDiscounts).forEach(rNum => {
             const rDisc = sheet.roundDiscounts[rNum];
             const roundItems = lineItems.filter(i => i.round == rNum && i.status === 'Do Now');
             const roundSubtotal = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
-            
             const rDeduct = rDisc.type === '%' 
-                ? Math.round(roundSubtotal * (rDisc.value / 100)) 
-                : Math.min(roundSubtotal, rDisc.value);
-            
+                ? Math.round(roundSubtotal * (parseFloat(rDisc.value) / 100)) 
+                : parseFloat(rDisc.value) || 0;
             netAfterRounds -= rDeduct;
         });
     }
 
-    // 3. Subtract Global Project Discount from the cumulative Net
+    // 3. Subtract Global Project Discount
     const gVal = client.projectData.totalDiscountValue || 0;
     const gType = client.projectData.totalDiscountType || '$';
     const globalAdjustment = gType === '%' ? Math.round(netAfterRounds * (gVal / 100)) : Math.min(netAfterRounds, gVal);
-
     const finalApproved = netAfterRounds - globalAdjustment;
-    
-    // 🎯 OUTPUT: Adjustments = Total delta from original Gross
+
+    // 4. Calculate total delta for the "Adjustments" column
     const totalAdjustments = totalGross - finalApproved;
 
     area.innerHTML = `
@@ -8229,23 +8226,25 @@ window.renderGrandTotals = function(lineItems, baseRate) {
         <button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>
       </div>
 
-      <div class="grand-estimates" style="text-align: right; margin-right: 20px;">
-        <div class="tiny muted">Gross Total</div>
-        <div style="font-size: 15px; font-weight: 600;">$${totalGross.toLocaleString()}</div>
+      <div class="total-item-gross">
+        <div class="tiny muted uppercase bold">Gross</div>
+        <div style="font-size: 14px; font-weight: 600;">$${totalGross.toLocaleString()}</div>
       </div>
 
-      <div class="grand-estimates" style="text-align: right; margin-right: 20px;">
-        <div class="tiny muted">Adjustments</div>
-        <div class="accent" style="font-size: 15px; font-weight: 600;">-$${totalAdjustments.toLocaleString()}</div>
+      <div class="total-item-disc">
+        <div class="tiny accent uppercase bold">Adjustments</div>
+        <div class="accent" style="font-size: 14px; font-weight: 600;">-$${totalAdjustments.toLocaleString()}</div>
       </div>
 
-      <div class="grand-final" style="text-align: right; padding-left: 20px; border-left: 1px solid var(--panel-border);">
+      <div class="total-item-net">
         <div class="tiny muted uppercase bold" style="color: var(--accent);">Final Approved</div>
-        <div class="final-amount" style="font-size: 26px; font-weight: 900; color: #fff; line-height: 1;">$${finalApproved.toLocaleString()}</div>
-        <div class="tiny muted" style="margin-top: 4px;">
-          (${(finalApproved / baseRate).toFixed(1)}h @ $${baseRate}/hr)
+        <div style="font-size: 22px; font-weight: 900; color: #fff; line-height: 1;">$${finalApproved.toLocaleString()}</div>
+        <div class="tiny muted" style="margin-top: 2px;">
+          (${(finalApproved / baseRate).toFixed(1)}h)
         </div>
       </div>
+      
+      <div></div>
     </div>
   `;
 };
