@@ -7684,6 +7684,7 @@ function renderScopingRow(item, idx, showUnits) {
                 <div class="col-status">N/A</div>
                 <div class="col-team">N/A</div>
                 <div class="col-multiplier">1.00x</div>
+                <div class="col-gross">N/A</div>
                 <div class="col-discount">—</div>
                 <div class="col-numeric">$0</div>
                 <div class="col-actions">
