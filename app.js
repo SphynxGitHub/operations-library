@@ -7968,19 +7968,21 @@ OL.executeScopeAdd = function (resId) {
 
     let finalResourceId = resId;
 
+    // 🚀 STEP 1: Handle Auto-Cloning to Library
     if (resId.startsWith('res-vlt-')) {
         const template = state.master.resources.find(r => r.id === resId);
         if (template) {
+            // Check if we already have this specific master item in our local project
             const existingLocal = (client.projectData.localResources || [])
                 .find(r => r.masterRefId === resId);
 
             if (existingLocal) {
                 finalResourceId = existingLocal.id;
             } else {
-                // 1. Deep Clone
+                // DEEP CLONE: Make a permanent project-specific copy
                 const newRes = JSON.parse(JSON.stringify(template));
                 newRes.id = 'local-prj-' + Date.now() + Math.random().toString(36).substr(2, 5);
-                newRes.masterRefId = resId; 
+                newRes.masterRefId = resId; // Essential for the "Sync" logic
                 
                 if (!client.projectData.localResources) client.projectData.localResources = [];
                 client.projectData.localResources.push(newRes);
@@ -7989,14 +7991,14 @@ OL.executeScopeAdd = function (resId) {
         }
     }
 
-    // 2. Create the Line Item with EXPLICIT defaults
+    // 🚀 STEP 2: Add to Scoping Sheet
     const newItem = {
         id: 'li-' + Date.now(),
         resourceId: finalResourceId, 
         status: "Do Now",
         responsibleParty: "Sphynx",
         round: 1,
-        teamMode: "everyone", // 🚀 Ensure this is explicitly set as a string
+        teamMode: "everyone", 
         teamIds: [],
         data: {},
         manualHours: 0
@@ -8005,9 +8007,13 @@ OL.executeScopeAdd = function (resId) {
     if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{id: 'initial', lineItems: []}];
     client.projectData.scopingSheets[0].lineItems.push(newItem);
 
-    OL.persist();
-    OL.closeModal();
-    renderScopingSheet(); 
+    // 🚀 STEP 3: PERSIST BOTH ARRAYS
+    OL.persist().then(() => {
+        OL.closeModal();
+        renderScopingSheet();
+        // Force refresh the Resource Manager too so it sees the new local copy
+        if (window.location.hash.includes('resources')) renderResourceManager();
+    });
 };
 
 // 6. ADD CUSTOM ITEM TO SCOPING SHEET
