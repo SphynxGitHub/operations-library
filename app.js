@@ -7761,7 +7761,7 @@ function renderScopingRow(item, idx, showUnits) {
 
       <div class="col-gross">
         ${gross > 0 ? `
-            <span class="pill tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
+            <span class="tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
                 -$${gross.toLocaleString()}
             </span>
         ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
@@ -7769,7 +7769,7 @@ function renderScopingRow(item, idx, showUnits) {
 
       <div class="col-discount">
         ${discountAmt > 0 ? `
-            <span class="pill tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
+            <span class="tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
                 -$${discountAmt.toLocaleString()}
             </span>
         ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
