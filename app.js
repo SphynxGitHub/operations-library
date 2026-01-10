@@ -102,11 +102,16 @@ OL.boot = async function() {
         if (doc.exists) {
             const cloudData = doc.data();
             
-            // 🚀 THE FIX: Direct reassignment to restore the working reference chain
-            state = cloudData; 
-            OL.state = state; 
-
-            console.log("✅ Data Hydrated. Clients:", Object.keys(state.clients || {}).length);
+            if (!state.clients || Object.keys(state.clients).length === 0) {
+                state = cloudData;
+                OL.state = state;
+            } else {
+                // If we are already running, only take the Master updates
+                // This prevents a Master price save from wiping project data
+                state.master = cloudData.master;
+            }
+            console.log("✅ Data Hydrated Safely. Clients:", Object.keys(state.clients || {}).length);
+          
         } else {
             console.warn("🆕 No Cloud Data. Initializing...");
             await OL.persist(); 
@@ -7526,6 +7531,10 @@ window.renderScopingSheet = function () {
   const client = getActiveClient();
   if (!container || !client) return;
 
+  if (!client.projectData) client.projectData = {};
+  if (!client.projectData.localResources) client.projectData.localResources = [];
+  if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
+
   const sheet = client.projectData.scopingSheets[0];
   const baseRate =
     client.projectData.customBaseRate ||
@@ -8449,18 +8458,25 @@ OL.createNewVarForType = function (label, typeKey) {
     renderVaultRatesPage(); 
 };
 
-OL.updateVarRate = function (key, field, val) {
+OL.updateVarRate = async function (key, field, val) {
     if (state.master.rates.variables[key]) {
-        // 1. Update ONLY the master variable
+        // 1. Update value locally
         state.master.rates.variables[key][field] = field === "value" ? parseFloat(val) || 0 : val.trim();
         
-        // 🚀 THE FIX: Use a targeted persist if possible, or ensure the whole state is clean
-        OL.persist().then(() => {
-            // 2. Re-render only the relevant views
-            if (window.location.hash.includes('vault/rates')) renderVaultRatesPage();
-            if (window.location.hash.includes('scoping-sheet')) renderScopingSheet();
-        });
-        console.log(`✅ Variable ${key} ${field} updated to: ${val}`);
+        // 2. 🛡️ VERIFY INTEGRITY before saving
+        // If state.clients is missing or empty, STOP. Do not persist.
+        if (!state.clients || Object.keys(state.clients).length === 0) {
+            console.error("🛑 Blocked save: Client data is missing from state. Refreshing...");
+            location.reload();
+            return;
+        }
+
+        // 3. Persist the whole state
+        await OL.persist();
+        
+        // 4. Refresh UI
+        if (window.location.hash.includes('vault/rates')) renderVaultRatesPage();
+        if (window.location.hash.includes('scoping-sheet')) renderScopingSheet();
     }
 };
 
