@@ -531,8 +531,8 @@ textarea {
         75px                 /* 6. Disc */
         95px                 /* 7. Fee */
         30px !important;     /* 8. X */
-    gap: 12px !important;
-    align-items: center !important;
+    gap: 8px 12px !important;
+    align-items: start !important;
     padding: 10px 16px !important;
 }
 
@@ -559,11 +559,18 @@ textarea {
 
 /* Ensure Titles don't push columns */
 .row-title {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal !important;
+    word-wrap: break-word;
+    line-height: 1.4;
     font-weight: bold;
     color: var(--accent);
+}
+
+.row-note {
+    white-space: normal !important;
+    font-size: 11px;
+    margin-top: 4px;
+    display: block;
 }
 
 .col-expand {
@@ -623,6 +630,43 @@ textarea {
 
 /* The Actions (PDF/Adjustments) stay on the left */
 .grand-actions { grid-column: 1 / span 2; display: flex; gap: 10px; }
+
+/* ============================================================
+   MOBILE: 2-ROW STACKED LAYOUT (< 768px)
+   ============================================================ */
+@media (max-width: 768px) {
+    .grid-header { display: none !important; } /* Hide headers on mobile */
+
+    .grid-row, .round-header-row {
+        grid-template-columns: 2fr 1fr 1fr 30px !important; /* 4 columns on mobile */
+        grid-template-areas: 
+            "title  status  team    x"
+            "prices prices  prices  prices" !important;
+    }
+
+    /* Wrap the Financials into a custom sub-row */
+    .col-expand { grid-column: 1; }
+    .col-status { grid-column: 2; }
+    .col-team   { grid-column: 3; }
+    .col-actions { grid-column: 4; }
+
+    /* Create a horizontal flexbox for the money metrics on row 2 */
+    .col-multiplier, .col-gross, .col-discount, .col-numeric {
+        grid-row: 2;
+        display: flex !important;
+        flex-direction: row;
+        justify-content: space-between;
+        background: rgba(255,255,255,0.03);
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+
+    .col-multiplier::before { content: "Mult: "; font-size: 10px; opacity: 0.5; }
+    .col-gross::before      { content: "Gross: "; font-size: 10px; opacity: 0.5; }
+    .col-discount::before   { content: "Disc: "; font-size: 10px; opacity: 0.5; }
+    .col-numeric::before    { content: "Net: "; font-size: 10px; opacity: 0.5; }
+}
 
 /*============================================================
   DISCOUNTS MODAL
