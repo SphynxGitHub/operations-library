@@ -3818,8 +3818,7 @@ OL.updateResourcePricingData = function(targetId, varKey, value) {
 
     // 2. Fallback: If not a line item, check Master and Local Resource libraries
     if (!targetObj) {
-        const allRes = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
-        targetObj = allRes.find(r => r.id === targetId);
+        targetObj = OL.getResourceById(targetId);
     }
 
     if (targetObj) {
@@ -7999,28 +7998,30 @@ OL.getMultiplierDisplay = function (item) {
 OL.calculateRowFee = function (item, resource) {
     if (!item) return 0;
     
+    // 1. Get the current Rate variables from the Master state
     const vars = state.master.rates.variables || {};
     
-    // 🚀 THE LOGIC: 
-    // 1. Get Template defaults (Resource)
-    // 2. Overlay Project overrides (Item)
-    const itemData = item.data || {};
-    const resData = resource?.data || {};
-    
-    // This creates a temporary "math-only" object. 
-    // It doesn't save back to the database, so Master changes won't wipe Project data.
-    const combinedData = { ...resData, ...itemData };
+    // 2. 🛡️ DEEP COPY: Create a totally isolated data object for calculation only
+    // This prevents Master changes from "bleeding" into the Project Scoping sheet.
+    let calcData = {};
+    try {
+        const templateData = resource?.data ? JSON.parse(JSON.stringify(resource.data)) : {};
+        const localOverrides = item.data ? JSON.parse(JSON.stringify(item.data)) : {};
+        calcData = { ...templateData, ...localOverrides };
+    } catch (e) {
+        calcData = { ...(resource?.data || {}), ...(item.data || {}) };
+    }
     
     let totalVariableFee = 0;
     let hasTechnicalData = false;
 
-    // Calculate fees based on the combined counts
-    Object.entries(combinedData).forEach(([varId, count]) => {
+    // 3. Loop through active rates
+    Object.entries(calcData).forEach(([varId, count]) => {
         const v = vars[varId];
         const numCount = parseFloat(count) || 0;
         
         if (v && numCount > 0) {
-            // Only apply if the variable is assigned to this Resource Type
+            // Match based on Resource Type name (e.g., "Zap")
             if (v.applyTo === resource?.type) {
                 totalVariableFee += numCount * (parseFloat(v.value) || 0);
                 hasTechnicalData = true;
@@ -8028,7 +8029,7 @@ OL.calculateRowFee = function (item, resource) {
         }
     });
 
-    // Fallback to Hourly if no variables (Zaps/Forms/etc) have counts
+    // 4. Fallback to Hourly
     let baseAmount = totalVariableFee;
     if (!hasTechnicalData) {
         const client = getActiveClient();
@@ -8037,7 +8038,7 @@ OL.calculateRowFee = function (item, resource) {
         baseAmount = hours * baseRate;
     }
 
-    // Apply Multiplier (Individual vs Everyone)
+    // 5. Multiplier Logic
     let multiplier = 1;
     if (item.teamMode !== "global") {
         const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
