@@ -7977,51 +7977,40 @@ OL.executeScopeAdd = function (resId) {
 
     let finalResourceId = resId;
 
-    // 🚀 THE AUTO-IMPORT LOGIC:
-    // If we are pulling from the Master Vault, create a local project copy automatically
+    // If it's a Master ID, we MUST clone it locally before adding it to the sheet
     if (resId.startsWith('res-vlt-')) {
         const template = state.master.resources.find(r => r.id === resId);
         if (template) {
-            // Check if a local copy of this master already exists to avoid clutter
+            // Check if this project already has a clone of this master
             const existingLocal = (client.projectData.localResources || [])
                 .find(r => r.masterRefId === resId);
 
             if (existingLocal) {
                 finalResourceId = existingLocal.id;
-                console.log("♻️ Linking to existing local copy of Master item.");
             } else {
-                // Create a fresh Deep Clone
+                // 🛡️ CRITICAL: Deep Clone to break the memory reference
                 const newRes = JSON.parse(JSON.stringify(template));
-                const timestamp = Date.now();
-                newRes.id = `local-prj-${timestamp}`;
-                newRes.masterRefId = resId; // Track the parent master
+                newRes.id = 'local-prj-' + Date.now() + Math.random().toString(36).substr(2, 5);
+                newRes.masterRefId = resId; 
                 
                 if (!client.projectData.localResources) client.projectData.localResources = [];
                 client.projectData.localResources.push(newRes);
                 finalResourceId = newRes.id;
-                console.log("📦 Master item auto-cloned to Local Library.");
             }
         }
     }
 
-    // Standard scoping line item structure
     const newItem = {
-        id: uid(),
-        resourceId: finalResourceId, // Now points to the local copy
-        manualHours: 0,
+        id: 'li-' + Date.now(),
+        resourceId: finalResourceId, 
         status: "Do Now",
         responsibleParty: "Sphynx",
-        round: 1,
-        teamMode: "everyone",
+        teamMode: "everyone", // Default state
         teamIds: [],
-        data: {}, 
+        data: {}
     };
 
-    if (!client.projectData.scopingSheets)
-        client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
-    
     client.projectData.scopingSheets[0].lineItems.push(newItem);
-
     OL.persist();
     OL.closeModal();
     renderScopingSheet(); 
@@ -8084,50 +8073,60 @@ OL.getMultiplierDisplay = function (item) {
 
 // 10. FEE CALCULATION
 OL.calculateRowFee = function (item, resource) {
-    if (!item || !resource) return 0;
+    if (!item) return 0;
     
+    // 1. Get the current Rate variables from the Master state
     const vars = state.master.rates.variables || {};
     
-    // 🚀 THE LOGIC: 
-    // We only care about the Master for the PRICE (v.value).
-    // We care about the Project Resource (the copy we made) for the default QUANTITIES.
-    // We care about the Line Item (the specific row) for overrides.
-    
-    const resData = resource.data || {};
-    const itemData = item.data || {};
-    
-    // Merge: Line Item overrides the Resource Copy
-    const combinedData = { ...resData, ...itemData };
+    // 🚀 THE BREAK: Create a completely isolated data object for calculation
+    // This ensures Master changes never "reach back" into the Project Scoping sheet.
+    let calcData = {};
+    try {
+        const templateData = resource?.data ? JSON.parse(JSON.stringify(resource.data)) : {};
+        const localOverrides = item.data ? JSON.parse(JSON.stringify(item.data)) : {};
+        calcData = { ...templateData, ...localOverrides };
+    } catch (e) {
+        calcData = { ...(resource?.data || {}), ...(item.data || {}) };
+    }
     
     let totalVariableFee = 0;
     let hasTechnicalData = false;
 
-    Object.entries(combinedData).forEach(([varId, count]) => {
+    // 2. Calculate technical counts
+    Object.entries(calcData).forEach(([varId, count]) => {
         const v = vars[varId];
         const numCount = parseFloat(count) || 0;
-        
-        if (v && numCount > 0) {
-            // Check if this variable belongs to this resource type
-            if (v.applyTo === resource.type) {
-                totalVariableFee += numCount * (parseFloat(v.value) || 0);
-                hasTechnicalData = true;
-            }
+        if (v && numCount > 0 && v.applyTo === resource?.type) {
+            totalVariableFee += numCount * (parseFloat(v.value) || 0);
+            hasTechnicalData = true;
         }
     });
 
+    // 3. Fallback to Hourly
+    let baseAmount = totalVariableFee;
     if (!hasTechnicalData) {
         const client = getActiveClient();
         const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
-        const hours = parseFloat(item.manualHours) || parseFloat(resource.manualHours) || 0;
-        baseAmount = hours * baseRate;
-    } else {
-        baseAmount = totalVariableFee;
+        baseAmount = (parseFloat(item.manualHours) || 0) * baseRate;
     }
 
-    // Apply Multiplier
-    const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
-    let memberCount = (item.teamMode === "individual") ? (item.teamIds || []).length : (getActiveClient()?.projectData?.teamMembers || []).length || 1;
-    let multiplier = (item.teamMode === "global") ? 1 : 1 + (Math.max(0, memberCount - 1) * (rate - 1));
+    // 4. THE MULTIPLIER FIX: Explicitly handle 'global' vs 'everyone'
+    let multiplier = 1.0;
+    const mode = (item.teamMode || 'everyone').toLowerCase();
+
+    if (mode === 'global') {
+        multiplier = 1.0;
+    } else {
+        const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
+        const inc = rate - 1;
+        let count = 0;
+        if (mode === 'individual') {
+            count = (item.teamIds || []).length;
+        } else {
+            count = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
+        }
+        multiplier = 1 + (Math.max(0, count - 1) * inc);
+    }
 
     return OL.applyDiscount(Math.round(baseAmount * multiplier), item.discountValue, item.discountType);
 };
