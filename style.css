@@ -578,7 +578,7 @@ textarea {
     font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
-    background: rgba(56, 189, 248, 0.15); /* Slightly darker for visibility */
+    background: transparent;
     color: var(--text-muted);
     padding: 2px 8px;
     border-radius: 4px;
