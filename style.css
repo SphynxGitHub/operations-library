@@ -510,7 +510,12 @@ textarea {
    STRICT SCOPING GRID - FORCE ALIGNMENT
    ============================================================ */
 /* This rule targets the main container, the header, the round headers, and every row */
-.scoping-grid, 
+.scoping-grid {
+    width: 100% !important;
+    min-width: 880px; /* This prevents the overlap before the mobile breakpoint hits */
+}
+
+.scoping-grid,
 .grid-row, 
 .round-header-row, 
 .grid-header {
@@ -613,9 +618,10 @@ textarea {
 /* Ensure the bar uses the master 8-track grid */
 .grand-totals-bar {
     display: grid !important;
-    /* Match the row tracks exactly */
-    grid-template-columns: 2fr 1fr 140px 70px 85px 85px 95px 30px !important;
-    gap: 12px !important;
+    /* Use exact match of the row definition */
+    grid-template-columns: 
+        minmax(200px, 2fr) 1minmax(150px, 1fr) 140px 65px 75px 75px 95px 30px !important;
+    gap: 8px 12px !important;
     align-items: center !important;
     padding: 20px 16px !important;
     background: rgba(0, 0, 0, 0.2);
@@ -635,6 +641,10 @@ textarea {
    MOBILE: 2-ROW STACKED LAYOUT (< 768px)
    ============================================================ */
 @media (max-width: 768px) {
+    .scoping-grid {
+        min-width: 0 !important;
+    }
+
     .grid-header { display: none !important; } /* Hide headers on mobile */
 
     .grid-row, .round-header-row {
@@ -2005,7 +2015,9 @@ body.fs-mode-active #app-root {
     }
 
     .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
-        grid-template-columns: 250px 200px 100px 60px 60px 60px 60px 0px !important;
+        grid-template-columns: 1.5fr .8fr 100px 60px 60px 60px 60px 0px !important;
+        gap: 5px !important;
+        page-break-inside: avoid;
     }
 
     .card, .matrix-container {
