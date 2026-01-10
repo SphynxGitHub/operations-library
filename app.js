@@ -51,33 +51,23 @@ OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
     
-    // 🛡️ DATA INTEGRITY GUARD
-    // If the state has lost its clients object or master object, ABORT the save.
-    // This prevents a "Price Update" from accidentally wiping out all Project data.
-    if (!state.clients || typeof state.clients !== 'object' || !state.master) {
-        console.error("🛑 PERSIST ABORTED: State integrity check failed. Data is missing from memory.");
-        if(statusEl) statusEl.innerHTML = "❌ Sync Blocked";
-        return;
+    // 🛡️ THE NUCLEAR FUSE
+    // If we are about to save, but the clients list is empty, STOP.
+    // This prevents a Master update from wiping out all projects.
+    const clientCount = Object.keys(state.clients || {}).length;
+    if (clientCount === 0) {
+        console.error("🛑 SYNC BLOCKED: Client data missing from memory. Aborting save to prevent data loss.");
+        if(statusEl) statusEl.innerHTML = "⚠️ Sync Blocked";
+        return; 
     }
 
     try {
-        // SANITIZATION
         const cleanState = JSON.parse(JSON.stringify(state));
-
-        // DOCUMENT SIZE CHECK
-        const size = new Blob([JSON.stringify(cleanState)]).size;
-        if (size > 900000) console.warn("⚠️ State limit warning:", (size/1024).toFixed(2), "KB");
-
-        // 💾 EXECUTE SAVE
         await db.collection('systems').doc('main_state').set(cleanState);
         
-        console.log("💾 Cloud Sync Successful.");
+        console.log(`💾 Cloud Sync Successful. (${clientCount} clients protected)`);
         if(statusEl) statusEl.innerHTML = "✅ Synced";
-        
-        setTimeout(() => { 
-            if(statusEl) statusEl.innerHTML = "☁️ Ready"; 
-        }, 2000);
-
+        setTimeout(() => { if(statusEl) statusEl.innerHTML = "☁️ Ready"; }, 2000);
     } catch (error) {
         console.error("❌ Cloud Sync Failed:", error);
         if(statusEl) statusEl.innerHTML = "❌ Sync Error";
@@ -7977,18 +7967,16 @@ OL.executeScopeAdd = function (resId) {
 
     let finalResourceId = resId;
 
-    // If it's a Master ID, we MUST clone it locally before adding it to the sheet
     if (resId.startsWith('res-vlt-')) {
         const template = state.master.resources.find(r => r.id === resId);
         if (template) {
-            // Check if this project already has a clone of this master
             const existingLocal = (client.projectData.localResources || [])
                 .find(r => r.masterRefId === resId);
 
             if (existingLocal) {
                 finalResourceId = existingLocal.id;
             } else {
-                // 🛡️ CRITICAL: Deep Clone to break the memory reference
+                // 1. Deep Clone
                 const newRes = JSON.parse(JSON.stringify(template));
                 newRes.id = 'local-prj-' + Date.now() + Math.random().toString(36).substr(2, 5);
                 newRes.masterRefId = resId; 
@@ -8000,17 +7988,22 @@ OL.executeScopeAdd = function (resId) {
         }
     }
 
+    // 2. Create the Line Item with EXPLICIT defaults
     const newItem = {
         id: 'li-' + Date.now(),
         resourceId: finalResourceId, 
         status: "Do Now",
         responsibleParty: "Sphynx",
-        teamMode: "everyone", // Default state
+        round: 1,
+        teamMode: "everyone", // 🚀 Ensure this is explicitly set as a string
         teamIds: [],
-        data: {}
+        data: {},
+        manualHours: 0
     };
 
+    if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{id: 'initial', lineItems: []}];
     client.projectData.scopingSheets[0].lineItems.push(newItem);
+
     OL.persist();
     OL.closeModal();
     renderScopingSheet(); 
