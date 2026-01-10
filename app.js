@@ -7758,6 +7758,14 @@ function renderScopingRow(item, idx, showUnits) {
 
       <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
 
+      <div class="col-gross">
+        ${gross > 0 ? `
+            <span class="pill tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">
+                -$${gross.toLocaleString()}
+            </span>
+        ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
+      </div>
+
       <div class="col-discount">
         ${discountAmt > 0 ? `
             <span class="pill tiny accent" style="cursor:pointer; padding: 2px 6px;" onclick="OL.openDiscountManager()">

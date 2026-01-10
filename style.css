@@ -538,7 +538,7 @@ textarea {
     display: grid;
     /* Deliverable | Status | Applies To | Mult | Disc | Fee | X */
     /* Adjust these fractions and pixels to your preference */
-    grid-template-columns: 1fr 110px 140px 70px 70px 90px 30px !important; 
+    grid-template-columns: 1fr 110px 140px 90px 70px 70px 70px 30px !important; 
     gap: 12px !important;
     align-items: center !important;
     width: 100% !important;
@@ -685,7 +685,7 @@ textarea {
 }
 
 .grand-final {
-  grid-column: 7;
+  grid-column: 8;
   justify-self: end;
   text-align: right;
 }
@@ -746,7 +746,7 @@ textarea {
 }
 
 .grand-estimates {
-  grid-column: 7;
+  grid-column: 8;
   justify-self: end;
   text-align: right;
   color: var(--text-muted);
