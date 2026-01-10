@@ -7899,36 +7899,69 @@ OL.removeFromScope = function(index) {
 };
 
 OL.filterResourceForScope = function (query) {
-  const listEl = document.getElementById("scope-search-results");
-  if (!listEl) return;
+    const listEl = document.getElementById("scope-search-results");
+    if (!listEl) return;
 
-  const q = (query || "").toLowerCase().trim();
-  const client = getActiveClient();
-  const source = [
-    ...(state.master.resources || []),
-    ...(client?.projectData?.localResources || []),
-  ];
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    
+    // 1. Get current IDs already on the scoping sheet to hide them
+    const existingIds = (client?.projectData?.scopingSheets?.[0]?.lineItems || []).map(i => i.resourceId);
 
-  const matches = source.filter((res) => res.name.toLowerCase().includes(q));
+    // 2. Identify and Tag Sources
+    const masterSource = (state.master.resources || []).map(r => ({ ...r, origin: 'Master' }));
+    const localSource = (client?.projectData?.localResources || []).map(r => ({ ...r, origin: 'Local' }));
+    
+    const combined = [...masterSource, ...localSource];
 
-  listEl.innerHTML = matches
-    .map(
-      (res) => `
-        <div class="search-result-item" onclick="OL.executeScopeAdd('${res.id}')">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span>🛠️ ${esc(res.name)}</span>
-                <span class="pill tiny soft">${esc(res.type || "Base")}</span>
-            </div>
-            <div class="tiny muted">${res.id.startsWith("local") ? "Local Resource" : "Master Vault"}</div>
-        </div>
-    `,
-    )
-    .join("");
+    // 3. Filter for search term AND exclude already-added items
+    const matches = combined.filter((res) => {
+        const nameMatch = res.name.toLowerCase().includes(q);
+        const alreadyInScope = existingIds.includes(res.id);
+        return nameMatch && !alreadyInScope;
+    });
 
-  if (matches.length === 0) {
-    listEl.innerHTML = `<div class="search-result-item muted">No resources match "${esc(query)}"</div>`;
-  }
+    // 4. Split into Groups
+    const masterMatches = matches.filter(m => m.origin === 'Master').sort((a,b) => a.name.localeCompare(b.name));
+    const localMatches = matches.filter(m => m.origin === 'Local').sort((a,b) => a.name.localeCompare(b.name));
+
+    let html = "";
+
+    // 🏗️ Render Local Group
+    if (localMatches.length > 0) {
+        html += `<div class="search-group-header">📍 Available in Project</div>`;
+        html += localMatches.map(res => renderResourceSearchResult(res, 'local')).join('');
+    }
+
+    // 🏛️ Render Master Group
+    if (masterMatches.length > 0) {
+        html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
+        html += masterMatches.map(res => renderResourceSearchResult(res, 'vault')).join('');
+    }
+
+    if (matches.length === 0) {
+        html = `<div class="search-result-item muted">No unlinked resources match "${esc(query)}"</div>`;
+    }
+
+    listEl.innerHTML = html;
 };
+
+function renderResourceSearchResult(res, tagClass) {
+    return `
+        <div class="search-result-item" onmousedown="OL.executeScopeAdd('${res.id}')">
+            <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span>🛠️</span>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
+                        <div class="tiny muted">${esc(res.type || "General")}</div>
+                    </div>
+                </div>
+                <span class="pill tiny ${tagClass}">${tagClass.toUpperCase()}</span>
+            </div>
+        </div>
+    `;
+}
 
 OL.executeScopeAdd = function (resId) {
   const client = getActiveClient();
