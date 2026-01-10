@@ -7608,20 +7608,17 @@ window.renderScopingSheet = function () {
 };
 
 // 2. RENDER ROUND GROUPS
-window.renderRoundGroup = function(roundName, items, showUnits, clientName, roundNum) {
+// CHANGE THIS:
+window.renderRoundGroup = function(roundName, items, baseRate, showUnits, clientName, roundNum) {
+    // Note: I added 'baseRate' as the 3rd argument to match your .map call
+    
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    // --- DEBUG LOG START ---
-    console.log(`%c 🔍 Rendering ${roundName} (Index: ${roundNum})`, 'background: #222; color: #bada55');
-    console.log("Items in this round:", items.length);
-    console.log("Global RoundDiscounts Object:", sheet.roundDiscounts);
-    // --- DEBUG LOG END ---
-
     let roundGross = 0;
     let netAfterLineItems = 0;
 
-    // 1. Calculate sum of individual line items
+    // 1. Sum up the items in THIS round
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (item.status === 'Do Now' && (item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint')) {
@@ -7632,27 +7629,20 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
         }
     });
 
-    // 2. THE BRUTE FORCE LOOKUP
+    // 2. Lookup the discount using the now-correct roundNum (6th argument)
     let roundDeductionAmt = 0;
-    if (sheet.roundDiscounts) {
-        // We look for ANY key that "loosely" matches roundNum (e.g., 1 == "1")
-        const matchingKey = Object.keys(sheet.roundDiscounts).find(key => String(key) === String(roundNum));
+    const rKey = String(roundNum);
+    
+    if (sheet.roundDiscounts && sheet.roundDiscounts[rKey]) {
+        const rDisc = sheet.roundDiscounts[rKey];
+        const val = parseFloat(rDisc.value) || 0;
         
-        if (matchingKey) {
-            const rDisc = sheet.roundDiscounts[matchingKey];
-            const val = parseFloat(rDisc.value) || 0;
-            
-            if (rDisc.type === '%') {
-                roundDeductionAmt = Math.round(netAfterLineItems * (val / 100));
-            } else {
-                roundDeductionAmt = val;
-            }
-            console.log(`✅ MATCH FOUND for Round ${roundNum}:`, rDisc);
-        } else {
-            console.warn(`❌ NO MATCH found in roundDiscounts for key: ${roundNum}`);
-        }
+        roundDeductionAmt = (rDisc.type === '%') 
+            ? Math.round(netAfterLineItems * (val / 100)) 
+            : val;
     }
 
+    // 3. Math for the header
     const finalRoundNet = netAfterLineItems - roundDeductionAmt;
     const totalPhaseSavings = (roundGross - netAfterLineItems) + roundDeductionAmt;
 
