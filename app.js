@@ -7647,7 +7647,9 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
                 <div class="col-status"></div>
                 <div class="col-team"></div>
                 
-                <div class="col-multiplier tiny muted bold" style="text-align:center; line-height: 1.1;">
+                <div class="col-multiplier tiny muted bold" style="text-align:center; line-height: 1.1;"></div>
+
+                <div class="col-gross tiny muted bold" style="text-align: center; line-height: 1.1;">
                     GROSS<br>$${roundGross.toLocaleString()}
                 </div>
                 
