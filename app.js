@@ -95,21 +95,18 @@ OL.boot = async function() {
         if (doc.exists) {
             const cloudData = doc.data();
             
-            if (!state.clients || Object.keys(state.clients).length === 0) {
-                state = cloudData;
-                OL.state = state;
-            } else {
-                // If we are already running, only take the Master updates
-                // This prevents a Master price save from wiping project data
-                state.master = cloudData.master;
-            }
-            console.log("✅ Data Hydrated Safely. Clients:", Object.keys(state.clients || {}).length);
-          
-        } else {
-            console.warn("🆕 No Cloud Data. Initializing...");
-            await OL.persist(); 
-        }
+            // 🚀 THE RESET FIX: 
+            // Instead of merging, we completely replace the local 'state' variable.
+            // This kills any 'ghost' items living in your browser's RAM.
+            state = JSON.parse(JSON.stringify(cloudData));
+            OL.state = state; 
 
+            // Ensure important sub-objects exist so the UI doesn't crash
+            if (!state.clients) state.clients = {};
+            if (!state.master) state.master = { apps: [], functions: [], resources: [], rates: { variables: {} } };
+
+            console.log("✅ State Hard-Reset from Cloud. Clients:", Object.keys(state.clients).length);
+        }
         // 🚀 Ensure routing triggers after data is local
         handleRoute(); 
         
@@ -7879,13 +7876,17 @@ OL.addResourceToScope = function () {
 };
 
 OL.removeFromScope = function(index) {
-    if (!confirm("Remove this item from the scoping sheet?")) return;
+    if (!confirm("Remove this item?")) return;
     const client = getActiveClient();
-    if (client && client.projectData.scopingSheets[0]) {
-        client.projectData.scopingSheets[0].lineItems.splice(index, 1);
-        OL.persist();
+    
+    // 1. Physically remove from the array first
+    client.projectData.scopingSheets[0].lineItems.splice(index, 1);
+    
+    // 2. FORCE a save immediately after the array is changed
+    OL.persist().then(() => {
+        // 3. ONLY re-render after the save is confirmed
         renderScopingSheet();
-    }
+    });
 };
 
 OL.filterResourceForScope = function (query) {
