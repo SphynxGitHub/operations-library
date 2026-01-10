@@ -51,16 +51,24 @@ OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
     
+    // 🛡️ DATA INTEGRITY GUARD
+    // If the state has lost its clients object or master object, ABORT the save.
+    // This prevents a "Price Update" from accidentally wiping out all Project data.
+    if (!state.clients || typeof state.clients !== 'object' || !state.master) {
+        console.error("🛑 PERSIST ABORTED: State integrity check failed. Data is missing from memory.");
+        if(statusEl) statusEl.innerHTML = "❌ Sync Blocked";
+        return;
+    }
+
     try {
-        // 🛡️ SANITIZATION: Firebase hates 'undefined' and functions.
-        // Stringifying and parsing is the fastest way to strip invalid types.
+        // SANITIZATION
         const cleanState = JSON.parse(JSON.stringify(state));
 
-        // 🛡️ DOCUMENT SIZE CHECK: Firebase has a 1MB limit per document.
-        // If your state gets too large, we'll see it in the console.
+        // DOCUMENT SIZE CHECK
         const size = new Blob([JSON.stringify(cleanState)]).size;
-        if (size > 900000) console.warn("⚠️ State is approaching Firebase 1MB limit:", (size/1024).toFixed(2), "KB");
+        if (size > 900000) console.warn("⚠️ State limit warning:", (size/1024).toFixed(2), "KB");
 
+        // 💾 EXECUTE SAVE
         await db.collection('systems').doc('main_state').set(cleanState);
         
         console.log("💾 Cloud Sync Successful.");
@@ -73,11 +81,6 @@ OL.persist = async function() {
     } catch (error) {
         console.error("❌ Cloud Sync Failed:", error);
         if(statusEl) statusEl.innerHTML = "❌ Sync Error";
-        
-        // If the error persists, it's likely a specific forbidden character or key name
-        if (error.code === 'invalid-argument') {
-            console.error("💡 Check for 'undefined' values or nested functions in the state object.");
-        }
     }
 };
 
@@ -3979,17 +3982,22 @@ OL.executeResourceImport = function(masterId) {
     const client = getActiveClient();
     if (!template || !client) return;
 
+    // 🚀 THE BREAK: Deep clone the template so it becomes a unique project object
     const newRes = JSON.parse(JSON.stringify(template));
-    newRes.id = 'local-prj-' + Date.now();
+    
+    // Assign a unique local ID
+    const timestamp = Date.now();
+    newRes.id = `local-prj-${timestamp}`;
+    
+    // Track lineage (optional, for UI tags) but keep data separate
     newRes.masterRefId = masterId; 
     
-    // 🚀 Ensure this matches the key in renderResourceManager
     if (!client.projectData.localResources) client.projectData.localResources = [];
     client.projectData.localResources.push(newRes);
 
     OL.persist();
     OL.closeModal();
-    renderResourceManager(); // Auto-reload the page view
+    renderResourceManager(); 
 };
 
 //======================RESOURCES / TASKS OVERLAP ======================//
@@ -8005,63 +8013,52 @@ OL.getMultiplierDisplay = function (item) {
 
 // 10. FEE CALCULATION
 OL.calculateRowFee = function (item, resource) {
-    if (!item) return 0;
+    if (!item || !resource) return 0;
     
-    // 1. Get the current Rate variables from the Master state
     const vars = state.master.rates.variables || {};
     
-    // 2. 🛡️ DEEP COPY: Create a totally isolated data object for calculation only
-    // This prevents Master changes from "bleeding" into the Project Scoping sheet.
-    let calcData = {};
-    try {
-        const templateData = resource?.data ? JSON.parse(JSON.stringify(resource.data)) : {};
-        const localOverrides = item.data ? JSON.parse(JSON.stringify(item.data)) : {};
-        calcData = { ...templateData, ...localOverrides };
-    } catch (e) {
-        calcData = { ...(resource?.data || {}), ...(item.data || {}) };
-    }
+    // 🚀 THE LOGIC: 
+    // We only care about the Master for the PRICE (v.value).
+    // We care about the Project Resource (the copy we made) for the default QUANTITIES.
+    // We care about the Line Item (the specific row) for overrides.
+    
+    const resData = resource.data || {};
+    const itemData = item.data || {};
+    
+    // Merge: Line Item overrides the Resource Copy
+    const combinedData = { ...resData, ...itemData };
     
     let totalVariableFee = 0;
     let hasTechnicalData = false;
 
-    // 3. Loop through active rates
-    Object.entries(calcData).forEach(([varId, count]) => {
+    Object.entries(combinedData).forEach(([varId, count]) => {
         const v = vars[varId];
         const numCount = parseFloat(count) || 0;
         
         if (v && numCount > 0) {
-            // Match based on Resource Type name (e.g., "Zap")
-            if (v.applyTo === resource?.type) {
+            // Check if this variable belongs to this resource type
+            if (v.applyTo === resource.type) {
                 totalVariableFee += numCount * (parseFloat(v.value) || 0);
                 hasTechnicalData = true;
             }
         }
     });
 
-    // 4. Fallback to Hourly
-    let baseAmount = totalVariableFee;
     if (!hasTechnicalData) {
         const client = getActiveClient();
         const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
-        const hours = parseFloat(item.manualHours) || parseFloat(resource?.manualHours) || 0;
+        const hours = parseFloat(item.manualHours) || parseFloat(resource.manualHours) || 0;
         baseAmount = hours * baseRate;
+    } else {
+        baseAmount = totalVariableFee;
     }
 
-    // 5. Multiplier Logic
-    let multiplier = 1;
-    if (item.teamMode !== "global") {
-        const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
-        let memberCount = 0;
-        if (item.teamMode === "individual") {
-            memberCount = (item.teamIds || []).length;
-        } else {
-            memberCount = (getActiveClient()?.projectData?.teamMembers || []).length || 1;
-        }
-        multiplier = 1 + (Math.max(0, memberCount - 1) * (rate - 1));
-    }
+    // Apply Multiplier
+    const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
+    let memberCount = (item.teamMode === "individual") ? (item.teamIds || []).length : (getActiveClient()?.projectData?.teamMembers || []).length || 1;
+    let multiplier = (item.teamMode === "global") ? 1 : 1 + (Math.max(0, memberCount - 1) * (rate - 1));
 
-    const gross = Math.round(baseAmount * multiplier);
-    return OL.applyDiscount(gross, item.discountValue, item.discountType);
+    return OL.applyDiscount(Math.round(baseAmount * multiplier), item.discountValue, item.discountType);
 };
 
 // Alias for consistency in older renderers
