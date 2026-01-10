@@ -629,9 +629,9 @@ textarea {
 }
 
 /* Position the totals in their specific tracks */
-.total-item-gross { grid-column: 5; text-align: center; }
-.total-item-disc  { grid-column: 6; text-align: center; }
-.total-item-net   { grid-column: 7; text-align: right; }
+.total-item-gross { grid-column: 4; text-align: center; }
+.total-item-disc  { grid-column: 5; text-align: center; }
+.total-item-net   { grid-column: 6; text-align: right; }
 
 /* The Actions (PDF/Adjustments) stay on the left */
 .grand-actions { grid-column: 1 / span 2; display: flex; gap: 10px; }
