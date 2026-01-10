@@ -7638,15 +7638,29 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
+    // 🚀 THE ALIGNED HEADER:
     return `
-        <div class="round-section">
-            <div class="round-header" style="display:flex; justify-content:space-between; align-items:center;">
-                <span>${esc(roundName)}</span>
-                <div style="text-align: right; font-family: monospace;">
-                    <span class="tiny muted">GROSS: $${roundGross.toLocaleString()}</span>
-                    <span class="tiny accent" style="margin: 0 10px;">DISC: -$${totalRoundSavings.toLocaleString()}</span>
-                    <span class="tiny bold uppercase" style="color:var(--text-main); font-size:11px;">NET: $${roundNet.toLocaleString()}</span>
+        <div class="round-section" style="margin-bottom: 20px;">
+            <div class="grid-row round-header-row" style="background: rgba(var(--accent-rgb), 0.1); border-radius: 6px 6px 0 0; padding: 10px; border-bottom: 1px solid var(--accent);">
+                <div class="col-expand">
+                    <strong style="color: var(--accent); text-transform: uppercase; letter-spacing: 1px;">${esc(roundName)}</strong>
                 </div>
+                <div class="col-status"></div>
+                <div class="col-team"></div>
+                
+                <div class="col-multiplier tiny muted bold" style="line-height: 1.1;">
+                    GROSS<br>$${roundGross.toLocaleString()}
+                </div>
+                
+                <div class="col-discount tiny accent bold" style="line-height: 1.1;">
+                    DISC<br>-$${totalRoundSavings.toLocaleString()}
+                </div>
+                
+                <div class="col-numeric bold" style="color: white; font-size: 13px; line-height: 1.1;">
+                    NET<br>$${roundNet.toLocaleString()}
+                </div>
+                
+                <div class="col-actions"></div>
             </div>
             <div class="round-grid">${rows}</div>
         </div>
@@ -7656,25 +7670,22 @@ window.renderRoundGroup = function(roundName, items, showUnits, clientName, roun
 // 3. RENDER SCOPING ROW / UPDATE ROW
 function renderScopingRow(item, idx, showUnits) {
     const client = getActiveClient();
-    const allResources = [
-        ...(state.master.resources || []),
-        ...(client.projectData.localResources || [])
-    ];
+    
+    // 1. Resolve Resource using the robust helper
+    const res = OL.getResourceById(item.resourceId);
 
-    // 1. Find the resource
-    const res = allResources.find(r => r.id === item.resourceId);
-
-    // 🛡️ SAFETY CHECK: If resource is deleted/missing, provide a fallback object
+    // 🛡️ SAFETY CHECK: Handle deleted/missing resources
     if (!res) {
         return `
-            <div class="grid-row" style="opacity: 0.6; background: rgba(255,0,0,0.05);">
+            <div class="grid-row" style="opacity: 0.6; background: rgba(255,0,0,0.05); padding: 8px 10px;">
                 <div class="col-expand">
                     <div class="row-title text-danger">⚠️ Missing Resource</div>
-                    <div class="tiny muted">The original resource was deleted.</div>
+                    <div class="tiny muted">Item: ${item.id}</div>
                 </div>
                 <div class="col-status">N/A</div>
                 <div class="col-team">N/A</div>
                 <div class="col-multiplier">1.00x</div>
+                <div class="col-discount">—</div>
                 <div class="col-numeric">$0</div>
                 <div class="col-actions">
                     <span class="card-close" onclick="OL.removeFromScope('${idx}')">×</span>
@@ -7683,13 +7694,16 @@ function renderScopingRow(item, idx, showUnits) {
         `;
     }
 
-    // 2. Proceed with calculation if resource exists
+    // 2. Financial Calculations
+    const gross = OL.calculateBaseFeeWithMultiplier(item, res);
     const net = OL.calculateRowFee(item, res);
+    const discountAmt = gross - net; // The actual dollar savings for this row
+
     const unitsHtml = showUnits ? OL.renderUnitBadges(item, res) : "";
-
     const projectTeam = client?.projectData?.teamMembers || [];
-    const mode = item.teamMode || 'everyone';
+    const mode = (item.teamMode || 'everyone').toLowerCase();
 
+    // 3. Team UI Logic
     let teamLabel = '';
     let btnIcon = '👨🏼‍🤝‍👨🏻';
     let btnClass = 'soft';
@@ -7710,7 +7724,7 @@ function renderScopingRow(item, idx, showUnits) {
     }
 
     return `
-    <div class="grid-row">
+    <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
       <div class="col-expand">
         <div class="row-title is-clickable" onclick="OL.openResourceModal('${res.id}')">
           ${esc(res.name || "Manual Item")}
@@ -7718,23 +7732,20 @@ function renderScopingRow(item, idx, showUnits) {
         ${res.notes ? `<div class="row-note">${esc(res.notes)}</div>` : ""}
         ${unitsHtml}
       </div>
+      
       <div class="col-status">
         <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
           <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
           <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
           <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
         </select>
-        <select class="tiny-select"
-                style="margin-top:4px"
-                onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
+        <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
           <option value="Sphynx" ${item.responsibleParty === "Sphynx" ? "selected" : ""}>Sphynx</option>
-          <option value="${esc(client.meta.name)}"
-            ${item.responsibleParty === client.meta.name ? "selected" : ""}>
-            ${esc(client.meta.name)}
-          </option>
+          <option value="${esc(client.meta.name)}" ${item.responsibleParty === client.meta.name ? "selected" : ""}>${esc(client.meta.name)}</option>
           <option value="Joint" ${item.responsibleParty === "Joint" ? "selected" : ""}>Joint</option>
         </select>
       </div>
+
       <div class="col-team">
           <div style="display:flex; align-items:center; gap:8px;">
               <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
@@ -7745,15 +7756,22 @@ function renderScopingRow(item, idx, showUnits) {
               </div>
           </div>
       </div>
+
       <div class="col-multiplier">${OL.getMultiplierDisplay(item)}</div>
+
       <div class="col-discount">
-        ${item.discountValue > 0 ? `
-            <span class="pill tiny accent" style="cursor:pointer;" onclick="OL.openDiscountManager()">
-                -${item.discountType === '%' ? item.discountValue + '%' : '$' + item.discountValue.toLocaleString()}
+        ${discountAmt > 0 ? `
+            <span class="pill tiny accent" style="cursor:pointer;" onclick="OL.openDiscountManager()" title="${item.discountValue}${item.discountType} discount applied">
+                -$${discountAmt.toLocaleString()}
             </span>
-        ` : '<span class="tiny muted" style="opacity:0.3; cursor:pointer;" onclick="OL.openDiscountManager()">—</span>'}
+        ` : '<span class="tiny muted" style="opacity:0.2; cursor:pointer;" onclick="OL.openDiscountManager()">—</span>'}
       </div>
-      <div class="col-numeric"><div class="bold">$${net.toLocaleString()}</div></div>
+
+      <div class="col-numeric">
+          <div class="bold">$${net.toLocaleString()}</div>
+          ${discountAmt > 0 ? `<div class="tiny muted line-through" style="font-size:9px;">$${gross.toLocaleString()}</div>` : ''}
+      </div>
+
       <div class="col-actions">
         <span class="card-close" onclick="OL.removeFromScope('${idx}')">×</span>
       </div>
