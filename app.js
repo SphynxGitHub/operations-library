@@ -7736,11 +7736,21 @@ function renderScopingRow(item, idx, showUnits) {
         const selectedCount = (item.teamIds || []).length;
         btnIcon = '👨‍💼';
         btnClass = 'primary';
-        teamLabel = selectedCount > 0 
-            ? item.teamIds.map(id => `<span class="pill tiny soft">${esc(projectTeam.find(tm => tm.id === id)?.name || "??")}</span>`).join("")
-            : '<span class="tiny danger">No members!</span>';
+        const names = selectedIds
+            .map(id => projectTeam.find(tm => tm.id === id)?.name || "Unknown")
+            .filter(n => n !== "Unknown");
+
+        if (selectedCount > 0) {
+            teamLabel = `<span class="pill tiny soft">👨‍💼 ${selectedCount} Team Member${selectedCount > 1 ? 's' : ''}</span>`;
+            hoverText = names.join(", "); // Plain text list for the title attribute
+        } else {
+            teamLabel = '<span class="tiny danger">No members!</span>';
+            hoverText = "Click to assign team members";
+        }
     } else {
-        teamLabel = `<span class="tiny muted">Everyone (${projectTeam.length})</span>`;
+        const totalCount = projectTeam.length;
+        teamLabel = `<span class="tiny muted">Everyone (${totalCount})</span>`;
+        hoverText = projectTeam.map(tm => tm.name).join(", ");
     }
 
     return `
