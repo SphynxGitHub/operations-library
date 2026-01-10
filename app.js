@@ -3598,6 +3598,15 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         (ht.resourceIds || []).includes(lookupId)
     );
 
+    const currentSheet = client.projectData.scopingSheets[0];
+    const totalRounds = currentSheet.numRounds || 1;
+
+    // Generate options for the number of rounds available
+    let roundOptions = '';
+    for (let i = 1; i <= totalRounds; i++) {
+        roundOptions += `<option value="${i}" ${item.round == i ? 'selected' : ''}>Round ${i}</option>`;
+    }
+
     const html = `
         <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
@@ -3638,6 +3647,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                                   oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
                         </div>`).join("")}
                 </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label class="tiny muted uppercase bold">Phase / Round</label>
+                <select class="form-control" onchange="OL.updateLineItem('${item.id}', 'round', this.value)">
+                    ${roundOptions}
+                </select>
             </div>
 
             <div class="card-section" style="margin-top:20px; padding-top:15px; border-top: 1px solid var(--line);">
