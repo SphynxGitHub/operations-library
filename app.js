@@ -1337,9 +1337,18 @@ OL.pushLocalAppToMaster = function(appId) {
     if (!state.adminMode) return;
     
     const client = getActiveClient();
-    const localApp = client.projectData.stack.find(a => a.id === appId);
+    if (!client || !client.projectData) {
+        console.error("❌ No active client or project data found.");
+        return;
+    }
+
+    // 🎯 FIX: Look in 'localApps' instead of 'stack'
+    const localApp = (client.projectData.localApps || []).find(a => String(a.id) === String(appId));
     
-    if (!localApp) return;
+    if (!localApp) {
+        console.error("❌ Could not find local app with ID:", appId);
+        return;
+    }
 
     const confirmMsg = `This will save "${localApp.name}" and its ${localApp.capabilities?.length || 0} capabilities as a global Master Template. Proceed?`;
     if (!confirm(confirmMsg)) return;
@@ -1349,13 +1358,12 @@ OL.pushLocalAppToMaster = function(appId) {
 
     // 2. Sanitize for Vault
     masterApp.id = 'master-app-' + Date.now();
-    masterApp.notes = ""; // Clear project-specific notes
-    delete masterApp.masterRefId; // It IS the master now
+    masterApp.notes = ""; 
+    delete masterApp.masterRefId; 
     
-    // Ensure capabilities are clean
     if (masterApp.capabilities) {
         masterApp.capabilities = masterApp.capabilities.map(cap => {
-            delete cap.masterRefId; // Clean refs for the new master specs
+            delete cap.masterRefId; 
             return cap;
         });
     }
