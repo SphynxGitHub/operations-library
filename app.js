@@ -1552,9 +1552,9 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 </span>
 
                 <div class="dp-name-cell" 
-                    contenteditable="${isAdmin}" 
-                    style="cursor: ${isAdmin ? 'text' : 'default'}; flex: 1;"
-                    ${isAdmin ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
+                    contenteditable="${isAdmin || !isPushed}" 
+                    style="cursor: ${isAdmin || !isPushed ? 'text' : 'default'}; flex: 1;"
+                    ${isAdmin || !isPushed ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
                     ${esc(cap.name)}
                 </div>
             </div>
