@@ -7680,7 +7680,7 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
 };
 
 // 3. RENDER SCOPING ROW / UPDATE ROW
-function renderScopingRow(item, idx, showUnits) {
+function renderScopingRow (item, idx, showUnits) {
     const client = getActiveClient();
     
     // 1. Resolve Resource using the robust helper
@@ -7757,7 +7757,7 @@ function renderScopingRow(item, idx, showUnits) {
     return `
         <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
-            <div class="row-title is-clickable" onclick="OL.openResourceModal('${res.id}')">
+            <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
             ${esc(res.name || "Manual Item")}
             </div>
             ${res.notes ? `<div class="row-note">${esc(res.notes)}</div>` : ""}
@@ -7876,12 +7876,17 @@ OL.updateLineItem = function(itemId, field, value) {
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    // 🔍 AGGRESSIVE SEARCH: 
-    // Find specifically by the 'li-...' ID
-    const item = sheet.lineItems.find(i => String(i.id) === String(itemId));
+    // 1. Try to find by strict ID (the li- ID)
+    let item = sheet.lineItems.find(i => String(i.id) === String(itemId));
+
+    // 2. FALLBACK: If not found, user might have passed a Resource ID
+    if (!item) {
+        console.warn("⚠️ li-ID not found, searching via Resource ID:", itemId);
+        item = sheet.lineItems.find(i => String(i.resourceId) === String(itemId));
+    }
 
     if (item) {
-        console.log(`✅ Found Item. Updating ${field} to:`, value);
+        console.log(`✅ Item Resolved. Updating ${field} to:`, value);
 
         if (field === 'round') {
             item.round = parseInt(value, 10) || 1;
@@ -7890,11 +7895,11 @@ OL.updateLineItem = function(itemId, field, value) {
         }
 
         // Save and Re-render
-        OL.saveClient(client.id);
+        OL.persist(); 
         window.renderScopingSheet();
     } else {
-        console.error("❌ Still not found! itemId provided:", itemId);
-        console.log("Current items in sheet:", sheet.lineItems);
+        console.error("❌ CRITICAL: Item completely missing from sheet.", itemId);
+        console.log("Available Sheet Items:", sheet.lineItems);
     }
 };
 
