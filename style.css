@@ -1005,6 +1005,12 @@ textarea {
     transition: all 0.2s ease;
 }
 
+.modal-input.tiny {
+    font-size: 12px;
+    padding: 4px 8px;
+    text-align: center;
+}
+
 /* ============================================================
    CREDENTIAL VAULT & REVEAL LOGIC
    ============================================================ */
