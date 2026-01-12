@@ -3141,15 +3141,14 @@ window.renderResourceManager = function () {
     const client = getActiveClient();
     const hash = window.location.hash;
 
-    // Use startsWith for a more reliable check
     const isVaultView = hash.startsWith('#/vault');
+    const isAdmin = state.adminMode === true;
 
     let displayRes = [];
 
     if (isVaultView) {
         displayRes = state.master.resources || [];
     } else if (client) {
-        // 🚀 FORCE INITIALIZATION: Ensure the key exists before trying to read it
         if (!client.projectData.localResources) {
             client.projectData.localResources = [];
         }
@@ -3160,7 +3159,6 @@ window.renderResourceManager = function () {
         displayRes = state.master.resources;
     }
 
-    // 🚀 SAFE SORT: Create a copy [...displayRes] so we don't mutate the original state in-place
     const sortedRes = [...displayRes].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     container.innerHTML = `
@@ -3170,11 +3168,17 @@ window.renderResourceManager = function () {
                 <div class="small muted">${sortedRes.length} items found</div>
             </div>
             <div class="header-actions">
-                <button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>
-                <button class="btn small soft" onclick="OL.promptCreateResource()">
-                    + Create ${isVaultView ? 'Master' : 'Local'} Resource
-                </button>
-                ${!isVaultView ? `<button class="btn primary" onclick="OL.importFromMaster()">⬇️ Import from Master</button>` : ''}
+                ${isAdmin ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
+                
+                ${isAdmin || !isVaultView ? `
+                    <button class="btn small soft" onclick="OL.promptCreateResource()">
+                        + Create ${isVaultView ? 'Master' : 'Local'} Resource
+                    </button>
+                ` : ''}
+
+                ${!isVaultView && isAdmin ? `
+                    <button class="btn primary" onclick="OL.importFromMaster()">⬇️ Import from Master</button>
+                ` : ''}
             </div>
         </div>
         <div class="cards-grid">
@@ -3348,10 +3352,15 @@ OL.closeResourceTypeManager = function() {
 window.renderResourceCard = function (res) {
     if (!res) return "";
     
-    // Check if it's master or local
+    // 1. Determine Identity & Permissions
+    const isAdmin = state.adminMode === true;
     const isVaultItem = String(res.id || "").startsWith("res-vlt-");
     const isLinkedToMaster = !!res.masterRefId;
     const isMaster = isVaultItem || isLinkedToMaster;
+
+    // 2. Logic: Admins can delete anything. 
+    // Clients can ONLY delete if it's not a Master/Synced item.
+    const canDelete = isAdmin || !isMaster;
     
     const tagLabel = isMaster ? "MASTER" : "LOCAL";
     const tagStyle = isMaster 
@@ -3366,8 +3375,11 @@ window.renderResourceCard = function (res) {
                     <span class="vault-tag" style="${tagStyle}">
                         ${tagLabel}
                     </span>
-                    <button class="card-delete-btn" 
-                            onclick="event.stopPropagation(); OL.deleteResource('${res.id}')">×</button>
+                    
+                    ${canDelete ? `
+                        <button class="card-delete-btn" 
+                                onclick="event.stopPropagation(); OL.deleteResource('${res.id}')">×</button>
+                    ` : ''}
                 </div>
             </div>
             <div class="card-body">
@@ -7595,7 +7607,7 @@ window.renderScopingSheet = function () {
             <div class="col-team">Versions Multiplier</div>
             <div class="col-gross" style="text-align:center;">Gross</div>
             <div class="col-discount" style="text-align:center;">Disc</div> 
-            <div class="col-numeric" style="text-align:right;">Fee</div>
+            <div class="col-numeric" style="text-align:right;">Net</div>
             <div class="col-actions"></div>
         </div>
     </div>
