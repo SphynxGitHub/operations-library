@@ -7677,15 +7677,15 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
                 <div class="col-team"></div>
                 
                 <div class="col-gross tiny muted bold" style="text-align:center; line-height: 1.1;">
-                    GROSS<br>$${roundGross.toLocaleString()}
+                    $${roundGross.toLocaleString()}
                 </div>
                 
                 <div class="col-discount tiny accent bold" style="text-align:center; line-height: 1.1;">
-                    DISC<br>-$${totalPhaseSavings.toLocaleString()}
+                    -$${totalPhaseSavings.toLocaleString()}
                 </div>
                 
                 <div class="col-numeric bold" style="color: white; font-size: 12px; text-align:right; line-height: 1.1;">
-                    NET<br>$${finalRoundNet.toLocaleString()}
+                    $${finalRoundNet.toLocaleString()}
                 </div>
                 
                 <div class="col-actions"></div>
