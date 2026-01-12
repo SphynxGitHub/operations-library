@@ -3564,7 +3564,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
-    const ctx = OL.getCurrentContext(); 
     
     let res = null;
     let lineItem = null;
@@ -3575,17 +3574,23 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         res = draftObj;
         isScopingContext = !!draftObj.isScopingContext;
     } else {
-        lineItem = sheet?.lineItems.find(i => i.id === targetId);
-        const lookupId = lineItem ? lineItem.resourceId : targetId;
-        res = OL.getResourceById(lookupId);
-        isScopingContext = !!lineItem;
+        // Search for the line item FIRST
+        lineItem = sheet?.lineItems.find(i => String(i.id) === String(targetId));
+        
+        if (lineItem) {
+            // We are in the Scoping Sheet editing a specific row
+            const lookupId = lineItem.resourceId;
+            res = OL.getResourceById(lookupId);
+            isScopingContext = true;
+        } else {
+            // We are in the Library/Vault editing the template directly
+            res = OL.getResourceById(targetId);
+            isScopingContext = false;
+        }
     }
 
     if (!res) return;
 
-    const isDraft = String(res.id).startsWith('draft-');
-    const isMasterLinked = !!res.masterRefId;
-    const isVaultResource = String(res.id).startsWith('res-vlt-');
     const activeData = isScopingContext ? lineItem : res;
     
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => {
@@ -3606,6 +3611,20 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     for (let i = 1; i <= totalRounds; i++) {
         roundOptions += `<option value="${i}" ${res.round == i ? 'selected' : ''}>Round ${i}</option>`;
     }
+
+    const roundInputHtml = isScopingContext ? `
+        <div class="form-group" style="margin-bottom: 15px;">
+            <label class="tiny muted uppercase bold">Phase / Round Number</label>
+            <input 
+                type="number" 
+                id="modal-item-round"
+                class="modal-input" 
+                value="${lineItem.round || 1}" 
+                min="1"
+                onchange="OL.updateLineItem('${lineItem.id}', 'round', this.value)"
+            >
+        </div>
+    ` : '';
 
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -3649,17 +3668,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </div>
             </div>
 
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label class="tiny muted uppercase bold">Phase / Round Number</label>
-                <input 
-                    type="number" 
-                    id="modal-item-round"
-                    class="form-control" 
-                    value="${res.round || 1}" 
-                    min="1"
-                    onchange="OL.updateLineItem('${res.id}', 'round', this.value)"
-                >
-            </div>
+            ${roundInputHtml}
 
             <div class="card-section" style="margin-top:20px; padding-top:15px; border-top: 1px solid var(--line);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -7901,35 +7910,25 @@ OL.updateLineItem = function(itemId, field, value) {
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    // Find the item in the array
-    const item = sheet.lineItems.find(i => i.id === itemId);
+    // 🔍 AGGRESSIVE SEARCH: 
+    // We look for the item where the ID matches OR the resourceId matches
+    const item = sheet.lineItems.find(i => String(i.id) === String(itemId) || String(i.resourceId) === String(itemId));
 
     if (item) {
-        console.log(`Updating ${field} for item ${itemId} to:`, value);
+        console.log(`✅ Found Item. Updating ${field} to:`, value);
 
         if (field === 'round') {
-            // Force numeric conversion and fallback to 1 if empty
-            const newRound = parseInt(value, 10) || 1;
-            item.round = newRound;
-            
-            // Optional: Update numRounds if this exceeds the current count
-            if (newRound > (sheet.numRounds || 0)) {
-                sheet.numRounds = newRound;
-            }
+            item.round = parseInt(value, 10) || 1;
         } else {
             item[field] = value;
         }
 
-        // 💾 CRITICAL: Save to Firebase/LocalStorage immediately
+        // Save and Re-render
         OL.saveClient(client.id);
-        
-        // 🔄 RE-RENDER: The sheet must re-render to reflect the new round group
         window.renderScopingSheet();
-        
-        // If the modal is open, we might need to refresh it too
-        // OL.openResourceModal(item.resourceId); 
     } else {
-        console.error("Item not found in scoping sheet:", itemId);
+        console.error("❌ Still not found! itemId provided:", itemId);
+        console.log("Current items in sheet:", sheet.lineItems);
     }
 };
 
