@@ -3655,9 +3655,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     type="number" 
                     id="modal-item-round"
                     class="form-control" 
-                    value="${item.round || 1}" 
+                    value="${res.round || 1}" 
                     min="1"
-                    onchange="OL.updateLineItem('${item.id}', 'round', this.value)"
+                    onchange="OL.updateLineItem('${res.id}', 'round', this.value)"
                 >
             </div>
 
