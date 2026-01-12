@@ -1487,7 +1487,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 ${isAdmin ? `
                     <span class="card-close" 
                           style="cursor:pointer; padding-right:5px; font-size: 18px; color: var(--text-dim);" 
-                          onclick="OL.removeMasterCapabilityFromApp('${app.id}', ${idx})">×</span>
+                          onclick="OL.removeAppCapability('${app.id}', ${idx})">×</span>
                 ` : `
                     <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
                 `}
