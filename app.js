@@ -1294,6 +1294,9 @@ OL.openAppModal = function(appId, draftObj = null) {
         return;
     }
 
+    const isAdmin = state.adminMode === true;
+    const canPushToMaster = isAdmin && !isVaultRoute && !isLinkedToMaster;
+
     // 3. Generate Full HTML
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -1305,7 +1308,13 @@ OL.openAppModal = function(appId, draftObj = null) {
                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                        onblur="OL.handleAppSave('${app.id}', this.value)">
             </div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            ${canPushToMaster ? `
+                <button class="btn tiny primary" 
+                        onclick="OL.pushLocalAppToMaster('${app.id}')"
+                        style="background: var(--accent); color: #000; font-weight: bold; border:none;">
+                    ⭐ PUSH TO MASTER
+                </button>
+            ` : ''}
         </div>
         <div class="modal-body">
             ${renderAppModalInnerContent(app, client)}
@@ -1319,6 +1328,49 @@ OL.openAppModal = function(appId, draftObj = null) {
         const input = document.getElementById('modal-app-name-input');
         if (input) input.focus();
     }, 100);
+};
+
+OL.pushLocalAppToMaster = function(appId) {
+    if (!state.adminMode) return;
+    
+    const client = getActiveClient();
+    const localApp = client.projectData.stack.find(a => a.id === appId);
+    
+    if (!localApp) return;
+
+    const confirmMsg = `This will save "${localApp.name}" and its ${localApp.capabilities?.length || 0} capabilities as a global Master Template. Proceed?`;
+    if (!confirm(confirmMsg)) return;
+
+    // 1. Create a Clean Clone
+    const masterApp = JSON.parse(JSON.stringify(localApp));
+
+    // 2. Sanitize for Vault
+    masterApp.id = 'master-app-' + Date.now();
+    masterApp.notes = ""; // Clear project-specific notes
+    delete masterApp.masterRefId; // It IS the master now
+    
+    // Ensure capabilities are clean
+    if (masterApp.capabilities) {
+        masterApp.capabilities = masterApp.capabilities.map(cap => {
+            delete cap.masterRefId; // Clean refs for the new master specs
+            return cap;
+        });
+    }
+
+    // 3. Push to Master State
+    if (!state.master.apps) state.master.apps = [];
+    state.master.apps.push(masterApp);
+
+    // 4. Link the current local app to the new Master
+    localApp.masterRefId = masterApp.id;
+
+    console.log("🚀 App promoted to Master Vault:", masterApp.id);
+    OL.persist();
+    
+    alert(`"${localApp.name}" has been pushed to the Master Vault!`);
+    
+    // Refresh modal to show "Live Sync" status
+    OL.openAppModal(appId);
 };
 
 function renderStatusLegendHTML() {
