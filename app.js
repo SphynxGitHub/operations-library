@@ -1540,47 +1540,38 @@ function renderCapabilitiesList(app, isReadOnlyView) {
 
     // --- RENDER LOCAL SPECS ---
     html += localSpecs.map((cap, idx) => {
+        const isAdmin = state.adminMode === true;
         const isPushed = !!cap.masterRefId;
-        const isAppMaster = !!(app.masterRefId || isVaultRoute);
-        const isAdmin = (state.adminMode === true || state.adminMode === 'true');
-        const canEdit = isAdmin || !isPushed;
+        const canEdit = (!isPushed || isAdmin);
 
         return `
-        <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03); position: relative;">
-            <div style="display:flex; gap:10px; flex:1;">
-                <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${canEdit ? 'is-clickable' : ''}" 
-                      style="cursor:${canEdit ? 'pointer' : 'default'}; user-select:none; min-width: 55px; text-align:center;"
-                      ${canEdit ? `onclick="event.stopPropagation(); OL.toggleCapabilityType(event, '${app.id}', ${idx})"` : ''}>
-                    ${cap.type || 'Action'}
-                </span>
+        <div class="dp-manager-row local-spec" style="display:flex; align-items:center; gap:10px; padding:6px; border-bottom:1px solid var(--line);">
+            
+            <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'}" 
+                style="cursor: ${canEdit ? 'pointer' : 'default'}; min-width: 60px; text-align: center; user-select: none;"
+                onmousedown="if(${canEdit}) { event.stopPropagation(); OL.toggleCapabilityType(event, '${app.id}', ${idx}); }">
+                ${cap.type || 'Action'}
+            </span>
 
-                <div class="dp-name-cell" 
-                    contenteditable="${canEdit ? 'true' : 'false'}" 
-                    style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none; min-height: 20px;"
-                    onmousedown="event.stopPropagation();"
-                    onclick="event.stopPropagation();" 
-                    onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
-                    ${esc(cap.name)}
-                </div>
+            <div class="dp-name-cell" 
+                contenteditable="${canEdit ? 'true' : 'false'}" 
+                style="flex: 1; cursor: ${canEdit ? 'text' : 'default'}; padding: 4px; outline: none;"
+                onmousedown="event.stopPropagation();"
+                onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
+                ${esc(cap.name)}
             </div>
 
             <div style="display:flex; gap:5px; align-items:center;">
-                ${isAdmin && !isPushed && isAppMaster ? `
-                    <button class="btn tiny primary" 
-                            style="padding: 2px 6px; font-size: 9px;"
-                            onclick="event.stopPropagation(); OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
+                ${isAdmin && !isPushed && !!app.masterRefId ? `
+                    <button class="btn tiny primary" onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
                 ` : ''}
                 
                 ${canEdit ? `
-                    <span class="card-close" 
-                          style="cursor:pointer; padding-right:5px; font-size: 18px;" 
-                          onclick="event.stopPropagation(); OL.removeLocalCapability('${app.id}', ${idx})">×</span>
-                ` : `
-                    <span class="tiny muted" style="padding-right:10px; font-size: 10px;" title="Locked: Pushed to Master">🔒</span>
-                `}
+                    <span class="card-close" style="cursor:pointer; font-size:18px; padding:0 8px;" 
+                        onmousedown="event.stopPropagation(); OL.removeLocalCapability('${app.id}', ${idx})">×</span>
+                ` : `<span class="tiny muted">🔒</span>`}
             </div>
-        </div>
-    `;
+        </div>`;
     }).join('');
 
     return html || '<div class="empty-hint">No capabilities defined.</div>';
