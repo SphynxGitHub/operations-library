@@ -1965,6 +1965,45 @@ body.fs-mode-active #app-root {
     background: rgba(255, 255, 255, 0.01);
 }
 
+/* Universal Modal Input Styling */
+.modal-input, 
+.form-control, 
+.tiny-select,
+.ghost-input {
+    background: rgba(0, 0, 0, 0.2) !important;
+    border: 1px solid var(--panel-border) !important;
+    color: #fff !important;
+    border-radius: 4px;
+    padding: 6px 10px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+/* Focus State */
+.modal-input:focus, 
+.form-control:focus {
+    border-color: var(--accent) !important;
+    background: rgba(56, 189, 248, 0.1) !important;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+/* Specifically for the Scoping & Pricing small inputs */
+.modal-input.tiny {
+    font-size: 12px;
+    padding: 4px 8px;
+    text-align: center;
+}
+
+/* Remove default browser arrow styling for select boxes if needed */
+select.modal-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px;
+    padding-right: 30px;
+}
+
 /* Optional: Pulse effect for the indicator */
 @keyframes left-pulse {
     0% { box-shadow: -5px 0 5px rgba(0, 170, 255, 0.2); }
