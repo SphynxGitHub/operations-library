@@ -7907,7 +7907,13 @@ OL.updateLineItem = function(itemId, field, value) {
 
     if (item) {
         if (field === 'round') {
-            item[field] = parseInt(value, 10) || 1;
+            const newRound = parseInt(value) || 1;
+            item.round = newRound;
+            
+            // Optional: Sync numRounds if you still use that for global logic
+            if (newRound > (sheet.numRounds || 0)) {
+                sheet.numRounds = newRound;
+            }
         } else {
             item[field] = value;
         }
