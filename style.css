@@ -998,8 +998,11 @@ textarea {
 
 .modal-input, .form-control, .ghost-input {
     background: var(--panel-soft);
-    color: var(--text-dim);
+    color: #fff;
     border: 1px solid var(--panel-border);
+    padding: 6px 10px;
+    outline: none;
+    transition: all 0.2s ease;
 }
 
 /* ============================================================
