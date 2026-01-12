@@ -1256,6 +1256,8 @@ let modalPillOrder = [];
 OL.openAppModal = function(appId, draftObj = null) {
     OL.currentOpenModalId = appId;
     const client = getActiveClient();
+    const hash = window.location.hash;
+    const isVaultRoute = hash.startsWith('#/vault');
 
     // 1. Resolve Data: Context-Aware Lookup
     let app = draftObj;
@@ -1295,6 +1297,7 @@ OL.openAppModal = function(appId, draftObj = null) {
     }
 
     const isAdmin = state.adminMode === true;
+    const isLinkedToMaster = !!app.masterRefId;
     const canPushToMaster = isAdmin && !isVaultRoute && !isLinkedToMaster;
 
     // 3. Generate Full HTML
