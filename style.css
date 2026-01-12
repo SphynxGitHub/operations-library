@@ -1994,6 +1994,10 @@ body.fs-mode-active #app-root {
     text-align: center;
 }
 
+select {
+    color-scheme: dark; /* Tells the browser to use dark-themed system UI */
+}
+
 /* Remove default browser arrow styling for select boxes if needed */
 select.modal-input {
     appearance: none;
