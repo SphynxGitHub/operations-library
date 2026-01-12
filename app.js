@@ -7543,6 +7543,7 @@ window.renderScopingSheet = function () {
     OL.registerView(renderScopingSheet);
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
+    const isAdmin = state.adminMode === true;
     
     if (!container || !client) return;
 
