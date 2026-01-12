@@ -1505,9 +1505,10 @@ OL.cloneMasterToLocal = function(masterAppId, clientId) {
 function renderCapabilitiesList(app, isReadOnlyView) {
     const isVaultRoute = window.location.hash.startsWith('#/vault');
     const client = getActiveClient();
+    // 🛡️ Ensure isAdmin is a strict boolean
     const isAdmin = state.adminMode === true;
     
-    // 1. Get Master Specs (Always Read-Only in Client View)
+    // 1. Get Master Specs
     let masterSpecs = [];
     if (app.masterRefId) {
         const masterSource = state.master.apps.find(ma => ma.id === app.masterRefId);
@@ -1516,7 +1517,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
         masterSpecs = app.capabilities || [];
     }
 
-    // 2. Get Local Specs (Private to this project)
+    // 2. Get Local Specs
     const localSpecs = isVaultRoute ? [] : (app.capabilities || []);
 
     // --- RENDER MASTER SPECS ---
@@ -1542,9 +1543,12 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     html += localSpecs.map((cap, idx) => {
         const isPushed = !!cap.masterRefId;
         const isAppMaster = !!(app.masterRefId || isVaultRoute);
+        
+        // 🎯 LOGIC: Anyone can edit if not pushed. Admin can ALWAYS edit.
         const canEdit = !isPushed || isAdmin;
+
         return `
-        <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03);">
+        <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03); position: relative;">
             <div style="display:flex; gap:10px; flex:1;">
                 <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${canEdit ? 'is-clickable' : ''}" 
                       style="cursor:${canEdit ? 'pointer' : 'default'}; user-select:none; min-width: 55px; text-align:center;"
@@ -1553,21 +1557,21 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 </span>
 
                 <div class="dp-name-cell" 
-                    contenteditable="${canEdit}" 
-                    style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none;"
+                    contenteditable="${canEdit ? 'true' : 'false'}" 
+                    style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none; min-height: 1.2em;"
                     ${canEdit ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
                     ${esc(cap.name)}
                 </div>
             </div>
 
             <div style="display:flex; gap:5px; align-items:center;">
-                ${isAdmin && !isPushed && isAppMaster? `
+                ${isAdmin && !isPushed && isAppMaster ? `
                     <button class="btn tiny primary" 
                             style="padding: 2px 6px; font-size: 9px;"
                             onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
                 ` : ''}
                 
-                ${(canEdit) ? `
+                ${canEdit ? `
                     <span class="card-close" 
                           style="cursor:pointer; padding-right:5px; font-size: 18px;" 
                           onclick="OL.removeLocalCapability('${app.id}', ${idx})">×</span>
@@ -1578,6 +1582,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
         </div>
     `;
     }).join('');
+
     return html || '<div class="empty-hint">No capabilities defined.</div>';
 }
 
