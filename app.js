@@ -1542,7 +1542,8 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     html += localSpecs.map((cap, idx) => {
         const isPushed = !!cap.masterRefId;
         const isAppMaster = !!(app.masterRefId || isVaultRoute);
-        const canEdit = !isPushed || isAdmin;
+        const isAdmin = (state.adminMode === true || state.adminMode === 'true');
+        const canEdit = isAdmin || !isPushed;
 
         return `
         <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03); position: relative;">
@@ -1556,6 +1557,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 <div class="dp-name-cell" 
                     contenteditable="${canEdit ? 'true' : 'false'}" 
                     style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none; min-height: 20px;"
+                    onmousedown="event.stopPropagation();"
                     onclick="event.stopPropagation();" 
                     onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
                     ${esc(cap.name)}
