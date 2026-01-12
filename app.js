@@ -140,30 +140,29 @@ OL.initializeSecurityContext = function() {
     const params = new URLSearchParams(window.location.search);
     const clientToken = params.get('access'); 
     let adminKeyFromUrl = params.get('admin'); 
-    
-    // 🛡️ Get the key from the window (injected via config.js)
     let savedAdminID = window.ADMIN_ACCESS_ID;
 
-    // 🚀 THE CLEANER: If the secret accidentally contains "admin=" or "?admin=", strip it
     if (savedAdminID && savedAdminID.includes('=')) {
         savedAdminID = savedAdminID.split('=').pop();
     }
 
-    // 1. ADMIN CHECK
-    if (adminKeyFromUrl && adminKeyFromUrl === savedAdminID) {
-        state.adminMode = true;
-        console.log("🛠️ Admin Verified");
-        return true; 
-    }
-
-    // 2. CLIENT CHECK
+    // 🚀 1. CLIENT CHECK FIRST (Strict Priority)
+    // If 'access' is in the URL, we FORCE adminMode to false immediately.
     if (clientToken) {
         state.adminMode = false;
-        console.log("👨‍💼 Client Portal");
+        console.log("👨‍💼 Client Portal Verified (Admin Disabled)");
         return true;
     } 
+
+    // 🛠️ 2. ADMIN CHECK SECOND
+    // Only if there is no clientToken can the user be verified as an Admin.
+    if (adminKeyFromUrl && adminKeyFromUrl === savedAdminID) {
+        state.adminMode = true;
+        console.log("🛠️ Admin Context Verified");
+        return true; 
+    } 
     
-    // 3. SECURE LOCKOUT
+    // 🔒 3. SECURE LOCKOUT
     if (!adminKeyFromUrl && !clientToken) {
         state.adminMode = false;
         document.body.innerHTML = `
