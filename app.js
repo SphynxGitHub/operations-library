@@ -1337,50 +1337,30 @@ OL.pushLocalAppToMaster = function(appId) {
     if (!state.adminMode) return;
     
     const client = getActiveClient();
-    if (!client || !client.projectData) {
-        console.error("❌ No active client or project data found.");
-        return;
-    }
-
-    // 🎯 FIX: Look in 'localApps' instead of 'stack'
-    const localApp = (client.projectData.localApps || []).find(a => String(a.id) === String(appId));
+    const localApp = (client?.projectData?.localApps || []).find(a => String(a.id) === String(appId));
     
-    if (!localApp) {
-        console.error("❌ Could not find local app with ID:", appId);
-        return;
-    }
+    if (!localApp) return;
 
-    const confirmMsg = `This will save "${localApp.name}" and its ${localApp.capabilities?.length || 0} capabilities as a global Master Template. Proceed?`;
-    if (!confirm(confirmMsg)) return;
+    if (!confirm(`Promote "${localApp.name}" to Master? This will clear local overrides and link this app to the new Vault template.`)) return;
 
-    // 1. Create a Clean Clone
+    // 1. Create the Master Clone
     const masterApp = JSON.parse(JSON.stringify(localApp));
-
-    // 2. Sanitize for Vault
     masterApp.id = 'master-app-' + Date.now();
     masterApp.notes = ""; 
     delete masterApp.masterRefId; 
-    
-    if (masterApp.capabilities) {
-        masterApp.capabilities = masterApp.capabilities.map(cap => {
-            delete cap.masterRefId; 
-            return cap;
-        });
-    }
 
-    // 3. Push to Master State
+    // 2. Push to Vault
     if (!state.master.apps) state.master.apps = [];
     state.master.apps.push(masterApp);
 
-    // 4. Link the current local app to the new Master
+    // 3. 🚀 THE CLEANUP: Link local to master and WIPE local capabilities
     localApp.masterRefId = masterApp.id;
+    localApp.capabilities = []; // Clear local list to prevent duplicates
 
-    console.log("🚀 App promoted to Master Vault:", masterApp.id);
+    console.log("🚀 App promoted and local capabilities cleared.");
     OL.persist();
     
-    alert(`"${localApp.name}" has been pushed to the Master Vault!`);
-    
-    // Refresh modal to show "Live Sync" status
+    alert(`"${localApp.name}" is now a Master Template. Local overrides have been removed.`);
     OL.openAppModal(appId);
 };
 
@@ -1561,6 +1541,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     // --- RENDER LOCAL SPECS ---
     html += localSpecs.map((cap, idx) => {
         const isPushed = !!cap.masterRefId;
+        const isAppMaster = !!(app.masterRefId || isVaultRoute);
         return `
         <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03);">
             <div style="display:flex; gap:10px; flex:1;">
@@ -1579,7 +1560,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
             </div>
 
             <div style="display:flex; gap:5px; align-items:center;">
-                ${isAdmin && !isPushed ? `
+                ${isAdmin && !isPushed && isAppMaster? `
                     <button class="btn tiny primary" 
                             style="padding: 2px 6px; font-size: 9px;"
                             onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
