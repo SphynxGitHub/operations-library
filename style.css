@@ -1970,13 +1970,18 @@ body.fs-mode-active #app-root {
 .form-control, 
 .tiny-select,
 .ghost-input {
-    background: rgba(0, 0, 0, 0.2) !important;
     border: 1px solid var(--panel-border) !important;
     color: #fff !important;
     border-radius: 4px;
     padding: 6px 10px;
     outline: none;
     transition: all 0.2s ease;
+}
+
+.tiny-select {
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    cursor: pointer;
 }
 
 /* Focus State */
