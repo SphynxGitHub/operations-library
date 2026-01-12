@@ -7714,6 +7714,9 @@ function renderScopingRow (item, idx, showUnits) {
     // 1. Resolve Resource using the robust helper
     const res = OL.getResourceById(item.resourceId);
     const isAdmin = state.adminMode === true;
+    const teamBtnAttr = isAdmin 
+    ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
+    : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
 
     // 🛡️ SAFETY CHECK: Handle deleted/missing resources
     if (!res) {
@@ -7811,9 +7814,7 @@ function renderScopingRow (item, idx, showUnits) {
         <div class="col-team">
             <div style="display:flex; flex-direction:column; gap:4px;" title="${esc(hoverText)}">
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <button class="btn tiny ${btnClass}" 
-                            ${isAdmin ? `onclick="OL.openTeamAssignmentModal('${item.id}')"` : `style="cursor: default; opacity: 0.8;"`} 
-                            style="padding: 2px 6px; min-width: 28px;">
+                    <button ${teamBtnAttr}>
                         ${btnIcon}
                     </button>
                     
