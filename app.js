@@ -1256,7 +1256,7 @@ let modalPillOrder = [];
 OL.openAppModal = function(appId, draftObj = null) {
     OL.currentOpenModalId = appId;
     const client = getActiveClient();
-    
+
     // 1. Resolve Data: Context-Aware Lookup
     let app = draftObj;
     if (!app) {
@@ -1476,49 +1476,71 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     const localSpecs = isVaultRoute ? [] : (app.capabilities || []);
 
     // --- RENDER MASTER SPECS ---
-    let html = masterSpecs.map(cap => `
-        <div class="dp-manager-row master-spec" style="background: var(--panel-soft); border-left: 2px solid transparent;">
-            <div style="display:flex; gap:10px; flex:1;">
-                <span class="pill tiny soft">${cap.type}</span>
-                <div class="dp-name-cell muted" style="cursor: default;">${esc(cap.name)}</div>
+    let html = masterSpecs.map((cap, idx) => {
+        const isAdmin = state.adminMode === true;
+
+        return `
+            <div class="dp-manager-row master-spec" style="background: var(--panel-soft); border-left: 2px solid transparent;">
+                <div style="display:flex; gap:10px; flex:1;">
+                    <span class="pill tiny soft">${cap.type}</span>
+                    <div class="dp-name-cell muted" style="cursor: default;">${esc(cap.name)}</div>
+                </div>
+                
+                <div style="display:flex; align-items:center; gap:8px;">
+                    ${isAdmin ? `
+                        <span class="card-close" 
+                            style="cursor:pointer; padding-right:5px; font-size: 18px; color: var(--text-dim);" 
+                            onclick="OL.removeMasterCapabilityFromApp('${app.id}', ${idx})">×</span>
+                    ` : `
+                        <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
+                    `}
+                </div>
             </div>
-            <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 
     // --- RENDER LOCAL SPECS ---
-    html += localSpecs.map((cap, idx) => `
+    html += localSpecs.map((cap, idx) => {
+    const isAdmin = state.adminMode === true;
+    
+    // 💡 If a local spec has a masterRefId, it means it's been "Pushed" or "Synced"
+    const isPushed = !!cap.masterRefId;
+
+    return `
         <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03);">
             <div style="display:flex; gap:10px; flex:1;">
-                <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} is-clickable" 
-                      style="cursor:pointer; user-select:none; min-width: 55px; text-align:center;"
-                      title="Left or Right Click to toggle Trigger/Action"
-                      onclick="OL.toggleCapabilityType(event, '${app.id}', ${idx})"
-                      oncontextmenu="OL.toggleCapabilityType(event, '${app.id}', ${idx}); return false;">
+                <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${isAdmin ? 'is-clickable' : ''}" 
+                      style="cursor:${isAdmin ? 'pointer' : 'default'}; user-select:none; min-width: 55px; text-align:center;"
+                      ${isAdmin ? `onclick="OL.toggleCapabilityType(event, '${app.id}', ${idx})"` : ''}>
                     ${cap.type || 'Action'}
                 </span>
 
                 <div class="dp-name-cell" 
-                    contenteditable="true" 
-                    style="cursor: text; flex: 1;"
-                    onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
+                    contenteditable="${isAdmin}" 
+                    style="cursor: ${isAdmin ? 'text' : 'default'}; flex: 1;"
+                    ${isAdmin ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
                     ${esc(cap.name)}
                 </div>
             </div>
+
             <div style="display:flex; gap:5px; align-items:center;">
-                ${state.adminMode ? `
+                ${isAdmin && !isPushed ? `
                     <button class="btn tiny primary" 
                             style="padding: 2px 6px; font-size: 9px;"
                             onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
                 ` : ''}
-                <span class="card-close" 
-                      style="cursor:pointer; padding-right:5px;" 
-                      onclick="OL.removeLocalCapability('${app.id}', ${idx})">×</span>
+                
+                ${(isAdmin || !isPushed) ? `
+                    <span class="card-close" 
+                          style="cursor:pointer; padding-right:5px; font-size: 18px;" 
+                          onclick="OL.removeLocalCapability('${app.id}', ${idx})">×</span>
+                ` : `
+                    <span class="tiny muted" style="padding-right:10px; font-size: 10px;" title="Locked: Pushed to Master">🔒</span>
+                `}
             </div>
         </div>
-    `).join('');
-    return html || '<div class="empty-hint">No capabilities defined.</div>';
-}
+    `;
+}).join('');
 
 OL.addAppCapability = function(appId) {
     const client = getActiveClient();
@@ -7788,7 +7810,7 @@ function renderScopingRow (item, idx, showUnits) {
     const teamBtnAttr = isAdmin 
     ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
     : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
-    
+
     return `
         <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
