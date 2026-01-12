@@ -7595,7 +7595,7 @@ window.renderScopingSheet = function () {
         <div class="grid-row grid-header">
             <div class="col-expand">Deliverable</div>
             <div class="col-status">Status</div>
-            <div class="col-team">Applies To & MULT</div>
+            <div class="col-team">Versions Multiplier</div>
             <div class="col-gross" style="text-align:center;">Gross</div>
             <div class="col-discount" style="text-align:center;">Disc</div> 
             <div class="col-numeric" style="text-align:right;">Fee</div>
@@ -7832,7 +7832,9 @@ function renderScopingRow (item, idx, showUnits) {
         </div>
 
         <div class="col-actions">
-            <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScope('${idx}')">×</button>
+            ${isAdmin ? `
+                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScope('${idx}')">×</button>
+            ` : ''}
         </div>
     </div>
   `;
