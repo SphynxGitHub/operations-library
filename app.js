@@ -2313,9 +2313,6 @@ OL.openFunctionModal = function(fnId, draftObj = null) {
     const hash = window.location.hash;
     const isVaultMode = hash.startsWith('#/vault');
     const isAdmin = state.adminMode === true;
-    const isLinkedToMaster = !!fn.masterRefId;
-    const isVaultRoute = window.location.hash.startsWith('#/vault');
-    const canPushFunction = isAdmin && !isVaultRoute && !isLinkedToMaster;
     
     // 1. Resolve Function Data
     let fn = draftObj;
@@ -2325,6 +2322,10 @@ OL.openFunctionModal = function(fnId, draftObj = null) {
     }
     if (!fn) return;
 
+    const isLinkedToMaster = !!fn.masterRefId;
+    const isVaultRoute = window.location.hash.startsWith('#/vault');
+    const canPushFunction = isAdmin && !isVaultRoute && !isLinkedToMaster;
+    
     // 2. Identify Modal Shell for Soft Refresh
     const modalLayer = document.getElementById("modal-layer");
     const isModalVisible = modalLayer && modalLayer.style.display === "flex";
