@@ -1505,7 +1505,6 @@ OL.cloneMasterToLocal = function(masterAppId, clientId) {
 function renderCapabilitiesList(app, isReadOnlyView) {
     const isVaultRoute = window.location.hash.startsWith('#/vault');
     const client = getActiveClient();
-    // 🛡️ Ensure isAdmin is a strict boolean
     const isAdmin = state.adminMode === true;
     
     // 1. Get Master Specs
@@ -1531,7 +1530,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 ${isAdmin ? `
                     <span class="card-close" 
                           style="cursor:pointer; padding-right:5px; font-size: 18px; color: var(--text-dim);" 
-                          onclick="OL.removeAppCapability('${app.id}', ${idx})">×</span>
+                          onclick="event.stopPropagation(); OL.removeMasterCapabilityFromApp('${app.id}', ${idx})">×</span>
                 ` : `
                     <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
                 `}
@@ -1543,8 +1542,6 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     html += localSpecs.map((cap, idx) => {
         const isPushed = !!cap.masterRefId;
         const isAppMaster = !!(app.masterRefId || isVaultRoute);
-        
-        // 🎯 LOGIC: Anyone can edit if not pushed. Admin can ALWAYS edit.
         const canEdit = !isPushed || isAdmin;
 
         return `
@@ -1552,7 +1549,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
             <div style="display:flex; gap:10px; flex:1;">
                 <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${canEdit ? 'is-clickable' : ''}" 
                       style="cursor:${canEdit ? 'pointer' : 'default'}; user-select:none; min-width: 55px; text-align:center;"
-                      ${canEdit ? `onclick="OL.toggleCapabilityType(event, '${app.id}', ${idx})"` : ''}>
+                      ${canEdit ? `onclick="event.stopPropagation(); OL.toggleCapabilityType(event, '${app.id}', ${idx})"` : ''}>
                     ${cap.type || 'Action'}
                 </span>
 
@@ -1569,13 +1566,13 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 ${isAdmin && !isPushed && isAppMaster ? `
                     <button class="btn tiny primary" 
                             style="padding: 2px 6px; font-size: 9px;"
-                            onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
+                            onclick="event.stopPropagation(); OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
                 ` : ''}
                 
                 ${canEdit ? `
                     <span class="card-close" 
                           style="cursor:pointer; padding-right:5px; font-size: 18px;" 
-                          onclick="OL.removeLocalCapability('${app.id}', ${idx})">×</span>
+                          onclick="event.stopPropagation(); OL.removeLocalCapability('${app.id}', ${idx})">×</span>
                 ` : `
                     <span class="tiny muted" style="padding-right:10px; font-size: 10px;" title="Locked: Pushed to Master">🔒</span>
                 `}
