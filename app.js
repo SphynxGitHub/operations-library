@@ -3572,24 +3572,32 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     // 1. DATA RESOLUTION
     if (draftObj) {
         res = draftObj;
-        isScopingContext = !!draftObj.isScopingContext;
     } else {
-        // Search for the line item FIRST
+        // Try to find if this ID belongs to a Line Item first
         lineItem = sheet?.lineItems.find(i => String(i.id) === String(targetId));
         
-        if (lineItem) {
-            // We are in the Scoping Sheet editing a specific row
-            const lookupId = lineItem.resourceId;
-            res = OL.getResourceById(lookupId);
-            isScopingContext = true;
-        } else {
-            // We are in the Library/Vault editing the template directly
-            res = OL.getResourceById(targetId);
-            isScopingContext = false;
-        }
+        // If it's a line item, get its resource. If not, treat targetId as the resource itself.
+        const lookupId = lineItem ? lineItem.resourceId : targetId;
+        res = OL.getResourceById(lookupId);
     }
 
     if (!res) return;
+
+    // 2. DEFINE THE ROUND INPUT (Always show if we have a line item)
+    // We use lineItem.id for the update function
+    const roundInputHtml = lineItem ? `
+        <div class="form-group" style="margin-bottom: 15px;">
+            <label class="tiny muted uppercase bold">Phase / Round Number</label>
+            <input 
+                type="number" 
+                id="modal-item-round"
+                class="modal-input" 
+                value="${lineItem.round || 1}" 
+                min="1"
+                onchange="OL.updateLineItem('${lineItem.id}', 'round', this.value)"
+            >
+        </div>
+    ` : ``;
 
     const activeData = isScopingContext ? lineItem : res;
     
@@ -3611,20 +3619,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     for (let i = 1; i <= totalRounds; i++) {
         roundOptions += `<option value="${i}" ${res.round == i ? 'selected' : ''}>Round ${i}</option>`;
     }
-
-    const roundInputHtml = isScopingContext ? `
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label class="tiny muted uppercase bold">Phase / Round Number</label>
-            <input 
-                type="number" 
-                id="modal-item-round"
-                class="modal-input" 
-                value="${lineItem.round || 1}" 
-                min="1"
-                onchange="OL.updateLineItem('${lineItem.id}', 'round', this.value)"
-            >
-        </div>
-    ` : '';
 
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -7911,8 +7905,8 @@ OL.updateLineItem = function(itemId, field, value) {
     const sheet = client.projectData.scopingSheets[0];
     
     // 🔍 AGGRESSIVE SEARCH: 
-    // We look for the item where the ID matches OR the resourceId matches
-    const item = sheet.lineItems.find(i => String(i.id) === String(itemId) || String(i.resourceId) === String(itemId));
+    // Find specifically by the 'li-...' ID
+    const item = sheet.lineItems.find(i => String(i.id) === String(itemId));
 
     if (item) {
         console.log(`✅ Found Item. Updating ${field} to:`, value);
