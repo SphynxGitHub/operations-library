@@ -48,13 +48,12 @@ OL.state = state;
 
 // 2. CLOUD STORAGE ENGINE
 OL.persist = async function() {
-    // 1. Move this to the top so it's defined for the fail-safe
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
     
     const client = state.clients[state.activeClientId];
     
-    // 🛡️ THE FAIL-SAFE
+    // 🛡️ THE FAIL-SAFE (Existing Logic)
     if (client && (!client.projectData.localResources || client.projectData.localResources.length === 0)) {
         const doc = await db.collection('systems').doc('main_state').get();
         const diskData = doc.data();
@@ -62,19 +61,26 @@ OL.persist = async function() {
         
         if (diskCount > 0) {
             console.error("🛑 CRITICAL: Memory/Disk Mismatch. Prevented accidental deletion.");
-            // 🚀 NOW THIS WORKS:
             if(statusEl) statusEl.innerHTML = "⚠️ Sync Blocked"; 
             return; 
         }
     }
 
     try {
+        // 1. Create the clone of the state
         const cleanState = JSON.parse(JSON.stringify(state));
+
+        // 🚀 THE SECURITY FIX: 
+        // We delete the adminMode flag from the object we are about to upload.
+        // This ensures the database always contains a "neutral" permission state.
+        delete cleanState.adminMode; 
+
+        // 2. Upload the stripped state to Firebase
         await db.collection('systems').doc('main_state').set(cleanState);
-        console.log("💾 Cloud Sync Successful.");
+        
+        console.log("💾 Cloud Sync Successful (Permissions Striped).");
         if(statusEl) statusEl.innerHTML = "✅ Synced";
         
-        // Clear status after 2 seconds
         setTimeout(() => { if(statusEl) statusEl.innerHTML = "☁️ Ready"; }, 2000);
     } catch (error) {
         console.error("❌ Sync Failed:", error);
@@ -93,29 +99,27 @@ OL.boot = async function() {
         attempts++;
     }
 
-    // 2. Security Check
-    const isAuthorized = OL.initializeSecurityContext();
-    if (!isAuthorized) return; 
-    
     try {
         const doc = await db.collection('systems').doc('main_state').get();
         
         if (doc.exists) {
             const cloudData = doc.data();
             
-            // 🚀 THE RESET FIX: 
-            // Instead of merging, we completely replace the local 'state' variable.
-            // This kills any 'ghost' items living in your browser's RAM.
+            // Overwrite local state with cloud data
             state = JSON.parse(JSON.stringify(cloudData));
             OL.state = state; 
 
-            // Ensure important sub-objects exist so the UI doesn't crash
             if (!state.clients) state.clients = {};
             if (!state.master) state.master = { apps: [], functions: [], resources: [], rates: { variables: {} } };
 
-            console.log("✅ State Hard-Reset from Cloud. Clients:", Object.keys(state.clients).length);
+            console.log("✅ State Hard-Reset from Cloud.");
         }
-        // 🚀 Ensure routing triggers after data is local
+
+        // 🚀 THE FIX: Run security context AFTER the state reset
+        // This ensures the URL parameters (?access=...) override the state.adminMode 
+        // that was just loaded from the database.
+        OL.initializeSecurityContext(); 
+        
         handleRoute(); 
         
     } catch (err) {
