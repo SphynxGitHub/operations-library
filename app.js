@@ -3623,6 +3623,23 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
 
+    // 1. Define the Scoping section only for Admins
+    const adminPricingHtml = state.adminMode ? `
+        <div class="card-section" style="margin-top: 20px;">
+            <label class="modal-section-label">📊 Scoping & Pricing</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                ${relevantVars.map(([varKey, v]) => `
+                    <div class="modal-column">
+                        <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
+                        <input type="number" class="modal-input tiny" 
+                            value="${num(activeData.data?.[varKey])}" 
+                            placeholder="0"
+                            oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
+                    </div>`).join("")}
+            </div>
+        </div>
+    ` : '';
+
     // 3. RENDER FULL MODAL
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -3641,7 +3658,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
             
-            ${roundInputHtml} <div class="card-section">
+            ${roundInputHtml} 
+            
+            <div class="card-section">
                 <label class="modal-section-label">Resource Type</label>
                 <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
                     <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
@@ -3649,19 +3668,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </select>
             </div>
 
-            <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label">📊 Scoping & Pricing</label>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                    ${relevantVars.map(([varKey, v]) => `
-                        <div class="modal-column">
-                            <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
-                            <input type="number" class="modal-input tiny" 
-                                  value="${num(activeData.data?.[varKey])}" 
-                                  placeholder="0"
-                                  oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
-                        </div>`).join("")}
-                </div>
-            </div>
+            ${adminPricingHtml}
 
             <div class="card-section" style="margin-top:20px; padding-top:15px; border-top: 1px solid var(--line);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -4003,7 +4010,8 @@ window.renderSopStepList = function (res) {
     
     // Ensure editing state is also ready
     if (state.editingStepId === undefined) state.editingStepId = null;
-
+    
+    const isAdmin = state.adminMode === true;
     const triggers = res.triggers || [];
     const steps = res.steps || [];
     
