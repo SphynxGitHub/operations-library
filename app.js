@@ -3653,12 +3653,11 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <label class="tiny muted uppercase bold">Phase / Round Number</label>
                 <input 
                     type="number" 
+                    id="modal-item-round"
                     class="form-control" 
-                    value="${res.round || 1}" 
-                    min="1" 
-                    step="1"
-                    onchange="OL.updateLineItem('${res.id}', 'round', this.value)"
-                    placeholder="e.g. 1"
+                    value="${item.round || 1}" 
+                    min="1"
+                    onchange="OL.updateLineItem('${item.id}', 'round', this.value)"
                 >
             </div>
 
@@ -7900,17 +7899,20 @@ OL.setTeamMode = function(itemId, mode) {
 
 OL.updateLineItem = function(itemId, field, value) {
     const client = getActiveClient();
-    if (!client) return;
-
     const sheet = client.projectData.scopingSheets[0];
+    
+    // Find the item in the array
     const item = sheet.lineItems.find(i => i.id === itemId);
 
     if (item) {
+        console.log(`Updating ${field} for item ${itemId} to:`, value);
+
         if (field === 'round') {
-            const newRound = parseInt(value) || 1;
+            // Force numeric conversion and fallback to 1 if empty
+            const newRound = parseInt(value, 10) || 1;
             item.round = newRound;
             
-            // Optional: Sync numRounds if you still use that for global logic
+            // Optional: Update numRounds if this exceeds the current count
             if (newRound > (sheet.numRounds || 0)) {
                 sheet.numRounds = newRound;
             }
@@ -7918,15 +7920,16 @@ OL.updateLineItem = function(itemId, field, value) {
             item[field] = value;
         }
 
-        // 🚀 THE ENGINE: Deploy requirements when marked as "Do Now"
-        if (field === 'status' && value === 'Do Now') {
-            OL.deployRequirementsFromResource(item.resourceId);
-        }
+        // 💾 CRITICAL: Save to Firebase/LocalStorage immediately
+        OL.saveClient(client.id);
         
-        OL.persist(); // Save change to storage
-        renderScopingSheet(); // Refresh the sheet
+        // 🔄 RE-RENDER: The sheet must re-render to reflect the new round group
+        window.renderScopingSheet();
         
-        console.log(`✅ Item ${itemId} updated. Engine check: ${field === 'status' && value === 'Do Now' ? 'DEPLOYED' : 'SKIP'}`);
+        // If the modal is open, we might need to refresh it too
+        // OL.openResourceModal(item.resourceId); 
+    } else {
+        console.error("Item not found in scoping sheet:", itemId);
     }
 };
 
