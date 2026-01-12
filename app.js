@@ -3623,6 +3623,10 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
 
+    // 1. CREATE A LOCAL PERMISSIONS CHECK
+    const isAdmin = state.adminMode === true;
+    console.log("🔐 Modal Permission Check - Is Admin:", isAdmin);
+
     // 1. Define the Scoping section only for Admins
     const adminPricingHtml = state.adminMode ? `
         <div class="card-section" style="margin-top: 20px;">
