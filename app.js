@@ -7582,8 +7582,11 @@ window.renderScopingSheet = function () {
             <button class="btn small soft" onclick="OL.toggleScopingUnits()">
                 ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
             </button>
-            <button class="btn small soft" onclick="OL.promptCreateResource()">+ Create New Resource</button>
-            <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
+            
+            ${isAdmin ? `
+                <button class="btn small soft" onclick="OL.promptCreateResource()">+ Create New Resource</button>
+                <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
+            ` : ''}
         </div>
     </div>
 
@@ -7700,6 +7703,7 @@ function renderScopingRow (item, idx, showUnits) {
     
     // 1. Resolve Resource using the robust helper
     const res = OL.getResourceById(item.resourceId);
+    const isAdmin = state.adminMode === true;
 
     // 🛡️ SAFETY CHECK: Handle deleted/missing resources
     if (!res) {
@@ -7715,7 +7719,9 @@ function renderScopingRow (item, idx, showUnits) {
                 <div class="col-discount">—</div>
                 <div class="col-numeric">$0</div>
                 <div class="col-actions">
-                    <span class="card-close" onclick="OL.removeFromScope('${idx}')">×</span>
+                    ${isAdmin ? `
+                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScope('${idx}')">×</button>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -8220,6 +8226,8 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     const area = document.getElementById("grand-totals-area");
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
+    const isAdmin = state.adminMode === true; // 🔐 Permission check
+
     if (!area || !client || !sheet) return;
 
     let totalGross = 0;
@@ -8263,7 +8271,10 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     <div class="grand-totals-bar">
       <div class="grand-actions">
         <button class="btn tiny soft" onclick="window.print()">🖨️ PDF</button>
-        <button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>
+        
+        ${isAdmin ? `
+            <button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>
+        ` : ''}
       </div>
 
       <div class="total-item-gross">
