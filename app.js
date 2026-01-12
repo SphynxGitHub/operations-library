@@ -1463,7 +1463,6 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     const isVaultRoute = window.location.hash.startsWith('#/vault');
     const client = getActiveClient();
     const isAdmin = state.adminMode === true;
-    const isPushed = !!cap.masterRefId;
     
     // 1. Get Master Specs (Always Read-Only in Client View)
     let masterSpecs = [];
@@ -1478,18 +1477,28 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     const localSpecs = isVaultRoute ? [] : (app.capabilities || []);
 
     // --- RENDER MASTER SPECS ---
-    let html = masterSpecs.map(cap => `
+    let html = masterSpecs.map((cap, idx) => `
         <div class="dp-manager-row master-spec" style="background: var(--panel-soft); border-left: 2px solid transparent;">
             <div style="display:flex; gap:10px; flex:1;">
                 <span class="pill tiny soft">${cap.type}</span>
                 <div class="dp-name-cell muted" style="cursor: default;">${esc(cap.name)}</div>
             </div>
-            <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${isAdmin ? `
+                    <span class="card-close" 
+                          style="cursor:pointer; padding-right:5px; font-size: 18px; color: var(--text-dim);" 
+                          onclick="OL.removeMasterCapabilityFromApp('${app.id}', ${idx})">×</span>
+                ` : `
+                    <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
+                `}
+            </div>
         </div>
     `).join('');
 
     // --- RENDER LOCAL SPECS ---
-    html += localSpecs.map((cap, idx) => `
+    html += localSpecs.map((cap, idx) => {
+        const isPushed = !!cap.masterRefId;
+        return `
         <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03);">
             <div style="display:flex; gap:10px; flex:1;">
                 <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${isAdmin ? 'is-clickable' : ''}" 
@@ -1522,7 +1531,8 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                 `}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
     return html || '<div class="empty-hint">No capabilities defined.</div>';
 }
 
