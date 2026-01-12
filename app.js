@@ -7811,10 +7811,14 @@ function renderScopingRow (item, idx, showUnits) {
         <div class="col-team">
             <div style="display:flex; flex-direction:column; gap:4px;" title="${esc(hoverText)}">
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <button class="btn tiny ${btnClass}" onclick="OL.openTeamAssignmentModal('${item.id}')" style="padding: 2px 6px; min-width: 28px;">
+                    <button class="btn tiny ${btnClass}" 
+                            ${isAdmin ? `onclick="OL.openTeamAssignmentModal('${item.id}')"` : `style="cursor: default; opacity: 0.8;"`} 
+                            style="padding: 2px 6px; min-width: 28px;">
                         ${btnIcon}
                     </button>
-                    <div class="pills-row" style="cursor:pointer;" onclick="OL.openTeamAssignmentModal('${item.id}')">
+                    
+                    <div class="pills-row" 
+                        ${isAdmin ? `onclick="OL.openTeamAssignmentModal('${item.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
                         ${teamLabel}
                     </div>
                 </div>
