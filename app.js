@@ -3569,6 +3569,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const sheet = client?.projectData?.scopingSheets?.[0];
     const hash = window.location.hash;
     const isScopingSheet = hash.includes('scoping-sheet');
+    const isAdmin = state.adminMode === true;
+    console.log("🔐 Modal Permission Check - Is Admin:", isAdmin);
     
     let res = null;
     let lineItem = null;
@@ -3626,12 +3628,15 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
 
-    // 1. CREATE A LOCAL PERMISSIONS CHECK
-    const isAdmin = state.adminMode === true;
-    console.log("🔐 Modal Permission Check - Is Admin:", isAdmin);
-
     // 1. Define the Scoping section only for Admins
     const adminPricingHtml = state.adminMode ? `
+        <div class="card-section">
+            <label class="modal-section-label">Resource Type</label>
+            <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
+                <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
+                ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
+            </select>
+        </div>
         <div class="card-section" style="margin-top: 20px;">
             <label class="modal-section-label">📊 Scoping & Pricing</label>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -3666,14 +3671,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
             
             ${roundInputHtml} 
-            
-            <div class="card-section">
-                <label class="modal-section-label">Resource Type</label>
-                <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
-                    <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
-                    ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
-                </select>
-            </div>
 
             ${adminPricingHtml}
 
