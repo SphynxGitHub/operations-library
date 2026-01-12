@@ -1558,8 +1558,9 @@ function renderCapabilitiesList(app, isReadOnlyView) {
 
                 <div class="dp-name-cell" 
                     contenteditable="${canEdit ? 'true' : 'false'}" 
-                    style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none; min-height: 1.2em;"
-                    ${canEdit ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
+                    style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none; min-height: 20px;"
+                    onclick="event.stopPropagation();" 
+                    onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
                     ${esc(cap.name)}
                 </div>
             </div>
