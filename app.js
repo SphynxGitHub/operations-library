@@ -1739,6 +1739,25 @@ OL.removeLocalCapability = function(appId, idx) {
     }
 };
 
+OL.removeMasterCapabilityFromApp = function(appId, idx) {
+    if (!state.adminMode) return;
+
+    const client = getActiveClient();
+    const app = (client?.projectData?.localApps || []).find(a => String(a.id) === String(appId));
+
+    if (!app) return;
+
+    if (!confirm("Remove this Master Capability from this project?")) return;
+
+    // If the capability is in the local array (standard behavior)
+    if (app.capabilities && app.capabilities[idx]) {
+        app.capabilities.splice(idx, 1);
+        OL.persist();
+        console.log("✅ Master capability removed from local instance.");
+        OL.openAppModal(appId);
+    }
+};
+
 // ENABLE SYNC CAPABILITY TO MASTER TEMPLATE
 OL.pushSpecToMaster = function(appId, localIdx) {
     const client = getActiveClient();
