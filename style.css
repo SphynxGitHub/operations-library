@@ -1970,6 +1970,7 @@ body.fs-mode-active #app-root {
 .form-control, 
 .tiny-select,
 .ghost-input {
+    background-color: #1a1d29 !important;
     border: 1px solid var(--panel-border) !important;
     color: #fff !important;
     border-radius: 4px;
