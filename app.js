@@ -1542,19 +1542,20 @@ function renderCapabilitiesList(app, isReadOnlyView) {
     html += localSpecs.map((cap, idx) => {
         const isPushed = !!cap.masterRefId;
         const isAppMaster = !!(app.masterRefId || isVaultRoute);
+        const canEdit = !isPushed || isAdmin;
         return `
         <div class="dp-manager-row local-spec" style="border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.03);">
             <div style="display:flex; gap:10px; flex:1;">
-                <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${isAdmin ? 'is-clickable' : ''}" 
-                      style="cursor:${isAdmin ? 'pointer' : 'default'}; user-select:none; min-width: 55px; text-align:center;"
-                      ${isAdmin ? `onclick="OL.toggleCapabilityType(event, '${app.id}', ${idx})"` : ''}>
+                <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} ${canEdit ? 'is-clickable' : ''}" 
+                      style="cursor:${canEdit ? 'pointer' : 'default'}; user-select:none; min-width: 55px; text-align:center;"
+                      ${canEdit ? `onclick="OL.toggleCapabilityType(event, '${app.id}', ${idx})"` : ''}>
                     ${cap.type || 'Action'}
                 </span>
 
                 <div class="dp-name-cell" 
-                    contenteditable="${isAdmin || !isPushed}" 
-                    style="cursor: ${isAdmin || !isPushed ? 'text' : 'default'}; flex: 1;"
-                    ${isAdmin || !isPushed ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
+                    contenteditable="${canEdit}" 
+                    style="cursor: ${canEdit ? 'text' : 'default'}; flex: 1; outline: none;"
+                    ${canEdit ? `onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)"` : ''}>
                     ${esc(cap.name)}
                 </div>
             </div>
@@ -1566,7 +1567,7 @@ function renderCapabilitiesList(app, isReadOnlyView) {
                             onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
                 ` : ''}
                 
-                ${(isAdmin || !isPushed) ? `
+                ${(canEdit) ? `
                     <span class="card-close" 
                           style="cursor:pointer; padding-right:5px; font-size: 18px;" 
                           onclick="OL.removeLocalCapability('${app.id}', ${idx})">×</span>
@@ -1683,12 +1684,22 @@ OL.updateAppCapability = function(appId, idx, field, value) {
 
 // Also update the local text editor
 OL.updateLocalCapability = function(appId, idx, field, value) {
+    // 🛡️ Remove the "admin-only" check here so clients can save their drafts
     const client = getActiveClient();
-    const app = client?.projectData?.localApps.find(a => a.id === appId);
+    const app = (client?.projectData?.localApps || []).find(a => String(a.id) === String(appId));
     
     if (app && app.capabilities && app.capabilities[idx]) {
+        const isPushed = !!app.capabilities[idx].masterRefId;
+        
+        // 🔒 Final Security Check: If it IS pushed, only Admin can save
+        if (isPushed && !state.adminMode) {
+            console.error("❌ Action denied: This capability is locked.");
+            return;
+        }
+
         app.capabilities[idx][field] = value.trim();
         OL.persist();
+        console.log(`✅ Saved ${field} for ${app.name}`);
     }
 };
 
