@@ -7551,55 +7551,58 @@ OL.selectEditCategory = function(catName) {
 
 // 1. RENDER SCOPING SHEET TABLE
 window.renderScopingSheet = function () {
-  OL.registerView(renderScopingSheet);
-  const container = document.getElementById("mainContent");
-  const client = getActiveClient();
-  if (!container || !client) return;
+    OL.registerView(renderScopingSheet);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    
+    if (!container || !client) return;
 
-  if (!client.projectData) client.projectData = {};
-  if (!client.projectData.localResources) client.projectData.localResources = [];
-  if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
+    // 1. INITIALIZE DATA STRUCTURES FIRST
+    if (!client.projectData) client.projectData = {};
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+    if (!client.projectData.scopingSheets) {
+        client.projectData.scopingSheets = [{ id: "initial", lineItems: [] }];
+    }
 
-  const sheet = client.projectData.scopingSheets[0];
-  const baseRate =
-    client.projectData.customBaseRate ||
-    state.master.rates.baseHourlyRate ||
-    300;
+    const sheet = client.projectData.scopingSheets[0];
+    const baseRate = client.projectData.customBaseRate || state.master.rates.baseHourlyRate || 300;
+    const showUnits = !!state.ui?.showScopingUnits;
 
-  const showUnits = !!state.ui?.showScopingUnits;
+    // 2. DYNAMIC ROUND GROUPING
+    // We create a map of rounds based on whatever is currently in the lineItems
+    const roundGroups = {};
+    sheet.lineItems.forEach((item) => {
+        const r = parseInt(item.round, 10) || 1;
+        item.round = r; // Normalize to integer
+        if (!roundGroups[r]) roundGroups[r] = [];
+        roundGroups[r].push(item);
+    });
 
-  // Normalize rounds → numeric
-  const rounds = {};
-  sheet.lineItems.forEach((item) => {
-    const r = parseInt(item.round, 10) || 1;
-    item.round = r;
-    if (!rounds[r]) rounds[r] = [];
-    rounds[r].push(item);
-  });
+    // Sort the round numbers numerically
+    const sortedRoundKeys = Object.keys(roundGroups)
+        .map((n) => parseInt(n, 10))
+        .sort((a, b) => a - b);
 
-  const sortedRounds = Object.keys(rounds)
-    .map((n) => parseInt(n, 10))
-    .sort((a, b) => a - b);
-
-  container.innerHTML = `
+    // 3. RENDER HTML
+    container.innerHTML = `
     <div class="section-header">
-      <div>
-        <h2>📊 ${esc(client.meta.name)} Scoping Sheet</h2>
-      </div>
-      <div class="header-actions">
-        <button class="btn small soft" onclick="OL.toggleScopingUnits()">
-          ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
-        </button>
-        <button class="btn small soft" onclick="OL.promptCreateResource()">+ Create New Resource</button>
-        <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
-      </div>
+        <div>
+            <h2>📊 ${esc(client.meta.name)} Scoping Sheet</h2>
+        </div>
+        <div class="header-actions">
+            <button class="btn small soft" onclick="OL.toggleScopingUnits()">
+                ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
+            </button>
+            <button class="btn small soft" onclick="OL.promptCreateResource()">+ Create New Resource</button>
+            <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
+        </div>
     </div>
 
     <div class="scoping-grid">
         <div class="grid-row grid-header">
             <div class="col-expand">Deliverable</div>
             <div class="col-status">Status</div>
-            <div class="col-team">Applies To</div>
+            <div class="col-team">Applies To & MULT</div>
             <div class="col-gross" style="text-align:center;">Gross</div>
             <div class="col-discount" style="text-align:center;">Disc</div> 
             <div class="col-numeric" style="text-align:right;">Fee</div>
@@ -7608,24 +7611,26 @@ window.renderScopingSheet = function () {
     </div>
 
     <div class="rounds-container">
-      ${sortedRounds
-        .map((r) =>
-          renderRoundGroup(
-            `Round ${r}`,
-            rounds[r],
-            baseRate,
-            showUnits,
-            client.meta.name,
-            r,
-          ),
-        )
-        .join("")}
+        ${sortedRoundKeys.length > 0 
+            ? sortedRoundKeys.map((r) =>
+                renderRoundGroup(
+                    `Round ${r}`,
+                    roundGroups[r],
+                    baseRate,
+                    showUnits,
+                    client.meta.name,
+                    r
+                )
+            ).join("")
+            : `<div class="p-20 muted italic">No items in scope. Click 'Add From Library' to begin.</div>`
+        }
     </div>
 
     <div id="grand-totals-area"></div>
-  `;
+    `;
 
-  renderGrandTotals(sheet.lineItems, baseRate);
+    // 4. TRIGGER TOTALS
+    renderGrandTotals(sheet.lineItems, baseRate);
 };
 
 // 2. RENDER ROUND GROUPS
