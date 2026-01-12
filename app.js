@@ -2312,6 +2312,10 @@ OL.openFunctionModal = function(fnId, draftObj = null) {
     const client = getActiveClient();
     const hash = window.location.hash;
     const isVaultMode = hash.startsWith('#/vault');
+    const isAdmin = state.adminMode === true;
+    const isLinkedToMaster = !!fn.masterRefId;
+    const isVaultRoute = window.location.hash.startsWith('#/vault');
+    const canPushFunction = isAdmin && !isVaultRoute && !isLinkedToMaster;
     
     // 1. Resolve Function Data
     let fn = draftObj;
@@ -2350,13 +2354,54 @@ OL.openFunctionModal = function(fnId, draftObj = null) {
                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                        onblur="OL.handleFunctionSave('${fn.id}', this.value)">
             </div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            ${canPushFunction ? `
+            <button class="btn tiny primary" 
+                    onclick="OL.pushLocalFunctionToMaster('${fn.id}')"
+                    style="background: var(--accent); color: #000; font-weight: bold; margin-right:10px;">
+                ⭐ PUSH TO MASTER
+            </button>
+        ` : ''}
         </div>
         <div class="modal-body">
             ${renderFunctionModalInnerContent(fn, safeClient)}
         </div>
     `;
     window.openModal(html);
+};
+
+OL.pushLocalFunctionToMaster = function(fnId) {
+    if (!state.adminMode) return;
+    
+    const client = getActiveClient();
+    if (!client || !client.projectData) return;
+
+    // 1. Find the local function
+    const localFn = (client.projectData.localFunctions || []).find(f => String(f.id) === String(fnId));
+    
+    if (!localFn) {
+        console.error("❌ Local function not found");
+        return;
+    }
+
+    if (!confirm(`Promote "${localFn.name}" to the global Master Vault?`)) return;
+
+    // 2. Create a clean Master Clone
+    const masterFn = JSON.parse(JSON.stringify(localFn));
+    masterFn.id = 'master-fn-' + Date.now();
+    delete masterFn.masterRefId; // This is now the source
+    
+    // 3. Add to Master Library
+    if (!state.master.functions) state.master.functions = [];
+    state.master.functions.push(masterFn);
+
+    // 4. Link the local version to the new Master
+    localFn.masterRefId = masterFn.id;
+
+    console.log("🚀 Function promoted to Master Vault");
+    OL.persist();
+    
+    alert(`"${localFn.name}" is now a Master Function!`);
+    OL.openFunctionModal(fnId); // Refresh to show status
 };
 
 function renderFunctionModalInnerContent(fn, client) {
@@ -2785,7 +2830,6 @@ OL.openTaskModal = function(taskId, isVault) {
                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                         onblur="OL.updateTaskField('${taskId}', '${isVault ? 'title' : 'name'}', this.value, ${isVault})">
             </div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
             <div class="card-section" style="margin-top: 15px;">
@@ -3285,7 +3329,6 @@ OL.openResourceTypeManager = function () {
         <div class="modal-head">
             <div class="modal-title-text">⚙️ Manage Resource Types</div>
             <div class="spacer"></div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
             <p class="tiny muted" style="margin-bottom:20px;">
