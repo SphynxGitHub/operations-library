@@ -3564,16 +3564,18 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
+    const hash = window.location.hash;
+    const isScopingSheet = hash.includes('scoping-sheet');
     
     let res = null;
     let lineItem = null;
-    let isScopingContext = false;
 
-    // 1. DATA RESOLUTION
+    // 1. DATA RESOLUTION (STRICTER LOOKUP)
     if (draftObj) {
         res = draftObj;
     } else {
-        // Try to find if this ID belongs to a Line Item first
+        // Find if this ID belongs to a Line Item (on the sheet) 
+        // OR if targetId is the actual lineItem ID passed from renderScopingRow
         lineItem = sheet?.lineItems.find(i => String(i.id) === String(targetId));
         
         // If it's a line item, get its resource. If not, treat targetId as the resource itself.
@@ -3583,43 +3585,45 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     if (!res) return;
 
-    // 2. DEFINE THE ROUND INPUT (Always show if we have a line item)
-    // We use lineItem.id for the update function
-    const roundInputHtml = lineItem ? `
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label class="tiny muted uppercase bold">Phase / Round Number</label>
-            <input 
-                type="number" 
-                id="modal-item-round"
-                class="modal-input" 
-                value="${lineItem.round || 1}" 
-                min="1"
-                onchange="OL.updateLineItem('${lineItem.id}', 'round', this.value)"
-            >
-        </div>
-    ` : ``;
+    // 2. DEFINE THE ROUND INPUT
+    // If we have a lineItem OR we are physically on the Scoping Sheet view
+    let roundInputHtml = "";
+    if (lineItem || isScopingSheet) {
+        // Fallback: if we are on the sheet but lineItem wasn't found by ID, 
+        // it might be a newly added item. Ensure we have something to update.
+        const activeId = lineItem ? lineItem.id : targetId;
+        const currentRound = lineItem ? (lineItem.round || 1) : 1;
 
-    const activeData = isScopingContext ? lineItem : res;
+        roundInputHtml = `
+            <div class="card-section" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--accent);">
+                <label class="modal-section-label" style="color: var(--accent);">🗓️ WORKFLOW PHASE</label>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label class="tiny muted uppercase bold">Round / Phase Number</label>
+                    <input 
+                        type="number" 
+                        id="modal-item-round"
+                        class="modal-input" 
+                        style="border-color: var(--accent); font-weight: bold;"
+                        value="${currentRound}" 
+                        min="1"
+                        onchange="OL.updateLineItem('${activeId}', 'round', this.value)"
+                    >
+                </div>
+            </div>
+        `;
+    }
+
+    const activeData = lineItem || res;
     
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => {
         return v.applyTo === res.type;
     });
 
-    const lookupId = res.masterRefId || res.id; // Get the original Master ID if this is a client copy
-
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
-        (ht.resourceIds || []).includes(lookupId)
+        (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
 
-    const currentSheet = client.projectData.scopingSheets[0];
-    const totalRounds = currentSheet.numRounds || 1;
-
-    // Generate options for the number of rounds available
-    let roundOptions = '';
-    for (let i = 1; i <= totalRounds; i++) {
-        roundOptions += `<option value="${i}" ${res.round == i ? 'selected' : ''}>Round ${i}</option>`;
-    }
-
+    // 3. RENDER FULL MODAL
     const html = `
         <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
@@ -3631,16 +3635,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                     onblur="OL.handleModalSave('${res.id}')">
             </div>
-            
             <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-            
-            <button class="btn tiny accent" onclick="OL.toggleWorkflowFullscreen('${res.id}')">🖥️ Fullscreen</button>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
 
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
-
-            <div class="card-section" style="margin-top:15px;">
+            
+            ${roundInputHtml} <div class="card-section">
                 <label class="modal-section-label">Resource Type</label>
                 <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
                     <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
@@ -3662,41 +3663,12 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </div>
             </div>
 
-            ${roundInputHtml}
-
             <div class="card-section" style="margin-top:20px; padding-top:15px; border-top: 1px solid var(--line);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <label class="modal-section-label">📝 Workflow Steps (SOP)</label>
-                    <button class="btn tiny soft" onclick="OL.openResourceLinker('${res.id}')">🔗 Link Resource</button>
-                    <button class="btn tiny accent" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
                     <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
                 </div>
                 <div id="sop-step-list">${renderSopStepList(res)}</div>
-            </div>
-
-            <div class="card-section" style="margin-top: 15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <label class="modal-section-label">📖 Linked Deployment Guides (SOPs)</label>
-                    <div class="search-map-container" style="width: 200px;">
-                        <input type="text" class="modal-input tiny" placeholder="Link an SOP..." 
-                                onfocus="OL.filterResourceSOPLinker('${res.id}', '')"
-                                oninput="OL.filterResourceSOPLinker('${res.id}', this.value)">
-                        <div id="res-sop-linker-results" class="search-results-overlay"></div>
-                    </div>
-                </div>
-                <div class="pills-row">
-                    ${linkedSOPs.map(sop => `
-                        <span class="pill tiny accent is-clickable" style="cursor:pointer;" onclick="OL.openHowToModal('${sop.id}')">
-                            📖 ${esc(sop.name)}
-                        </span>
-                    `).join('')}
-                    ${linkedSOPs.length === 0 ? '<span class="tiny muted italic">No SOP linked.</span>' : ''}
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label">Notes</label>
-                <textarea class="modal-textarea" rows="3" onblur="OL.updateResourceMeta('${res.id}', 'notes', this.value)">${esc(res.notes || "")}</textarea>
             </div>
         </div>
     `;
