@@ -1540,7 +1540,8 @@ function renderCapabilitiesList(app, isReadOnlyView) {
             </div>
         </div>
     `;
-}).join('');
+    }).join('');
+}
 
 OL.addAppCapability = function(appId) {
     const client = getActiveClient();
