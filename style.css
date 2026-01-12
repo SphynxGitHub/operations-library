@@ -1250,6 +1250,16 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
     font-size: 10px;
 }
 
+.btn.tiny {
+    padding: 2px 6px !important;
+    height: 20px;
+    line-height: 1; /* Prevents text from pushing the height out */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
 .invisible-pill {
   border: transparent;
 }
