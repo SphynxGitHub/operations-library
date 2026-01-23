@@ -4166,7 +4166,7 @@ window.renderSopStepList = function (res) {
 
     // --- ⚡ SECTION 1: TRIGGERS ---
     html += `
-        <div class="triggers-container" style="margin-bottom: 20px; background: rgba(255, 191, 0, 0.03); border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
+        <div class="triggers-container" style="margin-bottom: 20px; border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
                 <button class="btn tiny soft" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
