@@ -3710,6 +3710,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true;
+    const hash = window.location.hash;
+    const isScopingSheet = hash.includes('scoping-sheet');
     
     let res = null;
     let lineItem = null;
@@ -3724,12 +3726,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     }
 
     if (!res) return;
-
     const activeData = lineItem || res;
 
-    // --- 🗓️ SECTION: WORKFLOW PHASE (Scoping Sheet only) ---
-    const hash = window.location.hash;
-    const isScopingSheet = hash.includes('scoping-sheet');
+    // --- 🗓️ SECTION: WORKFLOW PHASE ---
     let roundInputHtml = "";
     if (lineItem || isScopingSheet) {
         const activeId = lineItem ? lineItem.id : targetId;
@@ -3768,7 +3767,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>` : '';
 
-    // --- 📝 SECTION: MASTER LIBRARY LINKED GUIDES ---
+    // --- 📝 SECTION: LINKED MASTER GUIDES ---
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
@@ -3780,7 +3779,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>` : '';
 
-    // --- 🚀 FINAL ASSEMBLY ---
+    // --- 🚀 ASSEMBLY ---
     const html = `
         <div class="modal-head" style="display: flex; flex-direction: column; gap: 15px; align-items: flex-start; padding: 20px;">
             <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
@@ -3794,17 +3793,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
                 <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
                 <div style="flex:1"></div>
-                </div>
+            </div>
         </div>
 
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
-            
             ${roundInputHtml} 
-
             ${adminPricingHtml}
-
             ${sopLibraryHtml}
-
             <div class="card-section" style="margin-top:10px; padding-top:20px; border-top: 1px solid var(--line);">
                 <div id="sop-step-list">
                     ${renderSopStepList(res)}
@@ -3812,13 +3807,10 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>
     `;
-    
     openModal(html);
-    
-    // Auto-resize the title textarea after it's injected
     setTimeout(() => {
         const el = document.getElementById('modal-res-name');
-        if (el) { el.style.height = el.scrollHeight + 'px'; }
+        if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
 };
 
@@ -7662,7 +7654,7 @@ window.renderScopingSheet = function () {
                 ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
             </button>
             
-            ${isAdmin ? `
+            ${(state.adminMode || window.location.search.includes('admin=')) ? `
                 <button class="btn small soft" onclick="OL.promptCreateResource()">+ Create New Resource</button>
                 <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
             ` : ''}
