@@ -5225,28 +5225,22 @@ OL.filterStepAppSearch = function(resId, stepId, query) {
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
     
-    // 1. Combine Master Apps and Local Project Apps
-    const allApps = [
-        ...(state.master.apps || []),
-        ...(client?.projectData?.localApps || [])
-    ];
+    // 🚀 THE FIX: Only look at local project apps
+    const localApps = client?.projectData?.localApps || [];
 
-    console.log("Searching through apps:", allApps.length); // Check console if this is 0
+    // Filter by name
+    const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
 
-    // 2. Filter matches
-    const matches = allApps.filter(a => a.name.toLowerCase().includes(q));
-
-    // 3. Render
     if (matches.length > 0) {
         listEl.innerHTML = matches.map(app => `
             <div class="search-result-item" 
                  onmousedown="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${app.id}'); OL.openStepDetailModal('${resId}', '${stepId}')">
                 📱 ${esc(app.name)} 
-                <span class="tiny muted">${app.id.startsWith('local') ? '(Local)' : '(Vault)'}</span>
+                <span class="tiny muted">(Project App)</span>
             </div>
         `).join('');
     } else {
-        listEl.innerHTML = `<div class="search-result-item muted">No apps found matching "${esc(q)}"</div>`;
+        listEl.innerHTML = `<div class="search-result-item muted">No local apps found matching "${esc(q)}"</div>`;
     }
 };
 
@@ -5711,17 +5705,19 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
 
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
+    
+    // 🚀 THE SCOPE: Local Project Data Only
     const team = client?.projectData?.teamMembers || [];
-    const apps = [...state.master.apps, ...(client?.projectData?.localApps || [])];
+    const localApps = client?.projectData?.localApps || [];
 
-    // 1. Get Unique Roles
+    // 1. Get Unique Roles existing in the current project team
     const roles = [...new Set(team.flatMap(m => m.roles || []))];
 
     let html = "";
 
-    // 🟢 Section: People
+    // 🟢 Section: People (Team Members)
     const matchPeople = team.filter(m => m.name.toLowerCase().includes(q));
-    if (matchPeople.length) {
+    if (matchPeople.length > 0) {
         html += `<div class="search-group-header">Team Members</div>`;
         html += matchPeople.map(m => `
             <div class="search-result-item" onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'person', '${m.id}', '${esc(m.name)}')">
@@ -5729,27 +5725,27 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
             </div>`).join('');
     }
 
-    // 🔵 Section: Roles
+    // 🔵 Section: Roles (Derived from local team)
     const matchRoles = roles.filter(r => r.toLowerCase().includes(q));
-    if (matchRoles.length) {
+    if (matchRoles.length > 0) {
         html += `<div class="search-group-header">Roles</div>`;
         html += matchRoles.map(r => `
             <div class="search-result-item" onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'role', '${esc(r)}', '${esc(r)}')">
-                🎭 Role: ${esc(r)}
+                🎭 ${esc(r)}
             </div>`).join('');
     }
 
-    // 🟠 Section: Systems (Apps)
-    const matchApps = apps.filter(a => a.name.toLowerCase().includes(q));
-    if (matchApps.length) {
-        html += `<div class="search-group-header">Systems / Apps</div>`;
+    // 🟠 Section: Systems (Local Apps Only)
+    const matchApps = localApps.filter(a => a.name.toLowerCase().includes(q));
+    if (matchApps.length > 0) {
+        html += `<div class="search-group-header">Project Apps</div>`;
         html += matchApps.map(a => `
             <div class="search-result-item" onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'system', '${a.id}', '${esc(a.name)}')">
                 📱 ${esc(a.name)}
             </div>`).join('');
     }
 
-    listEl.innerHTML = html || `<div class="search-result-item muted">No matches found</div>`;
+    listEl.innerHTML = html || `<div class="search-result-item muted">No matching local assignments found</div>`;
 };
 
 OL.executeAssignment = function(resId, targetId, isTrigger, type, id, name) {
