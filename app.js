@@ -3745,7 +3745,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>`;
     }
 
-    // --- 📊 SECTION: ADMIN PRICING ---
+    // --- 📊 SECTION: ADMIN PRICING & TYPE ---
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => v.applyTo === res.type);
     const adminPricingHtml = isAdmin ? `
         <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
@@ -3768,13 +3768,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>` : '';
 
-    // --- 📝 SECTION: LINKED SOPs (How-To Library) ---
+    // --- 📝 SECTION: MASTER LIBRARY LINKED GUIDES ---
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
     const sopLibraryHtml = linkedSOPs.length > 0 ? `
         <div class="card-section" style="margin-bottom:20px;">
-            <label class="modal-section-label">📚 LINKED GUIDES (LIBRARY)</label>
+            <label class="modal-section-label">📚 LINKED MASTER GUIDES</label>
             <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
                 ${linkedSOPs.map(sop => `<span class="pill soft tiny">📖 ${esc(sop.name)}</span>`).join("")}
             </div>
@@ -3782,21 +3782,22 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
-        <div class="modal-head" style="gap:15px;">
-            <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-size:18px;">🛠️</span>
-                <input type="text" class="header-editable-input" id="modal-res-name"
-                    value="${esc(val(res.name))}" placeholder="Resource Name..."
-                    style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                    onblur="OL.handleModalSave('${res.id}', this.value)">
+        <div class="modal-head" style="display: flex; flex-direction: column; gap: 15px; align-items: flex-start; padding: 20px;">
+            <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
+                <span style="font-size:20px; margin-top: 4px;">🛠️</span>
+                <textarea class="header-editable-input" id="modal-res-name"
+                    placeholder="Resource Name..."
+                    style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none; resize: none; overflow: hidden; padding: 0; line-height: 1.4;"
+                    oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
+                    onblur="OL.handleModalSave('${res.id}', this.value)">${esc(val(res.name))}</textarea>
             </div>
-            <div style="display:flex; gap:8px;">
+            <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
                 <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-                <button class="btn small soft" onclick="OL.closeModal()">Close</button>
-            </div>
+                <div style="flex:1"></div>
+                </div>
         </div>
 
-        <div class="modal-body" style="max-height: 80vh; overflow-y: auto; padding: 20px;">
+        <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
             
             ${roundInputHtml} 
 
@@ -3811,7 +3812,14 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>
     `;
+    
     openModal(html);
+    
+    // Auto-resize the title textarea after it's injected
+    setTimeout(() => {
+        const el = document.getElementById('modal-res-name');
+        if (el) { el.style.height = el.scrollHeight + 'px'; }
+    }, 10);
 };
 
 // RESOURCE TRIGGERS SECTION
