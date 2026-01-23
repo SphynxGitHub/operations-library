@@ -4165,28 +4165,30 @@ window.renderSopStepList = function (res) {
 
     let html = "";
 
-    // 1. RENDER TRIGGERS (Entry Points)
-    html += triggers.map((t, idx) => {
-        const assigneeHtml = t.assigneeName ? `
-            <span class="tiny muted" style="margin-left:auto; font-size:9px; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:10px; color:var(--accent);">
-                ${t.assigneeType === 'role' ? '🎭' : t.assigneeType === 'system' ? '📱' : '👨'} ${esc(t.assigneeName)}
-            </span>
-        ` : '';
-
-        return `
-            <div class="dp-manager-row trigger-row" 
-                 style="gap:10px; margin-bottom:6px; align-items: center; background: rgba(255, 191, 0, 0.08); border-left: 3px solid var(--accent);"
-                 onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
-                <span class="tiny accent bold" style="width:35px; font-size:9px;">WHEN</span>
-                <div style="flex:1; display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
-                    <span class="bold" style="font-size:0.9em; color: var(--accent);">${esc(val(t.name, "New Trigger..."))}</span>
-                    ${assigneeHtml}
-                </div>
-                <button class="card-delete-btn" style="position:static" onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
+    // --- ⚡ SECTION 1: DEDICATED TRIGGERS BOX ---
+    html += `
+        <div class="triggers-container" style="margin-bottom: 20px; background: rgba(255, 191, 0, 0.03); border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <label class="tiny accent bold uppercase" style="letter-spacing:1px;">⚡ Entry Triggers (When...)</label>
+                <button class="btn tiny soft" style="font-size:9px;" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
             </div>
-        `;
-    }).join("");
+            <div id="triggers-list" style="display:flex; flex-direction:column; gap:6px;">
+                ${triggers.map((t, idx) => `
+                    <div class="dp-manager-row trigger-row" 
+                         style="gap:10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
+                         onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
+                        <div style="flex:1; display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
+                            <span class="bold" style="font-size:0.9em; color: var(--accent);">${esc(val(t.name, "New Trigger..."))}</span>
+                            ${t.assigneeName ? `<span class="tiny muted" style="margin-left:auto; font-size:9px; opacity:0.7;">👤 ${esc(t.assigneeName)}</span>` : ''}
+                        </div>
+                        <button class="card-delete-btn" style="position:static" onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
+                    </div>
+                `).join("")}
+                ${triggers.length === 0 ? '<div class="tiny muted italic">No entry triggers defined.</div>' : ''}
+            </div>
+        </div>
+    `;
 
     // 2. RENDER STEPS
     html += steps.map((step, idx) => {
