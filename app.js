@@ -783,7 +783,7 @@ OL.openClientProfileModal = function(clientId) {
                     { id: 'resources', label: 'Resources' },
                     { id: 'scoping', label: 'Scoping' },
                     { id: 'analysis', label: 'Analysis' },
-                    { id: 'howto', label: 'How-To' },
+                    { id: 'how-to', label: 'How-To' },
                     { id: 'team', label: 'Team' }
                 ].map(m => `
                     <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
