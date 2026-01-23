@@ -4153,7 +4153,7 @@ window.renderSopStepList = function (res) {
         state.expandedSteps = new Set(Array.isArray(state.expandedSteps) ? state.expandedSteps : []);
     }
     
-    // Ensure editing states are initialized
+    // 🛡️ Initialize state safety
     if (state.editingStepId === undefined) state.editingStepId = null;
     if (state.editingTriggerIdx === undefined) state.editingTriggerIdx = null;
     
@@ -4163,7 +4163,7 @@ window.renderSopStepList = function (res) {
     
     let html = "";
 
-    // --- ⚡ SECTION 1: TRIGGERS (Dedicated Box + Click-to-Edit) ---
+    // --- ⚡ SECTION 1: TRIGGERS ---
     html += `
         <div class="triggers-container" style="margin-bottom: 20px; background: rgba(255, 191, 0, 0.03); border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -4172,21 +4172,22 @@ window.renderSopStepList = function (res) {
             </div>
             <div id="triggers-list" style="display:flex; flex-direction:column; gap:6px;">
                 ${triggers.map((t, idx) => {
-                    const isEditing = state.editingTriggerIdx === idx;
+                    const isEditingTrig = state.editingTriggerIdx === idx;
                     return `
                     <div class="dp-manager-row trigger-row" 
-                         style="gap:10px; align-items: center; background: ${isEditing ? '#fff' : 'rgba(255,255,255,0.6)'}; border: 1px solid ${isEditing ? 'var(--accent)' : 'var(--line)'}; border-radius:6px; padding: 6px 10px;"
-                         onclick="${isEditing ? '' : `OL.setEditingTrigger(${idx})`}">
+                         style="gap:10px; align-items: center; background: ${isEditingTrig ? '#fff' : 'rgba(255,255,255,0.6)'}; border: 1px solid ${isEditingTrig ? 'var(--accent)' : 'var(--line)'}; border-radius:6px; padding: 6px 10px;"
+                         onclick="${isEditingTrig ? '' : `OL.setEditingTrigger(${idx})`}">
                         
                         <span style="font-size:12px; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleTriggerType('${res.id}', ${idx})">
                             ${t.type === 'auto' ? '⚡' : '👨'}
                         </span>
                         
                         <div style="flex:1;">
-                            ${isEditing ? `
+                            ${isEditingTrig ? `
                                 <input type="text" class="ghost-input bold" id="edit-trigger-${idx}"
                                      style="width:100%; font-size:0.9em; color:var(--accent); border:none; outline:none; background:transparent;"
                                      value="${esc(t.name)}"
+                                     onclick="event.stopPropagation()"
                                      onkeydown="if(event.key === 'Enter') this.blur()"
                                      onblur="OL.updateTriggerName('${res.id}', ${idx}, this.value); OL.setEditingTrigger(null)">
                             ` : `
@@ -4214,7 +4215,7 @@ window.renderSopStepList = function (res) {
         html += '<div class="empty-hint">No workflow steps defined.</div>';
     } else {
         html += steps.map((step, idx) => {
-            const isEditing = state.editingStepId === step.id;
+            const isEditingThis = state.editingStepId === step.id;
             const isExpanded = state.expandedSteps.has(step.id);
             const isModule = step.type === 'module_block';
             const isLocked = !!step.isLocked || isModule;
@@ -4224,14 +4225,14 @@ window.renderSopStepList = function (res) {
             const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
             const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
 
-            // Timing Logic
+            // Timing Logic Tooltip
             let dateTooltip = "Set Due Date...";
             if (step.timingType) {
                 let ref = (step.timingType === 'after_prev') ? "Prev" : "Start";
                 dateTooltip = `${num(step.timingValue)}d after ${ref}`;
             }
 
-            // --- MODULE BLOCK LOGIC ---
+            // --- BRANCH A: MODULE BLOCK ---
             if (isModule) {
                 const nestedRes = OL.getResourceById(step.linkedResourceId);
                 const nestedSteps = nestedRes?.steps || [];
@@ -4250,9 +4251,9 @@ window.renderSopStepList = function (res) {
                     </div>`;
             }
 
-            // --- STANDARD STEP LOGIC ---
+            // --- BRANCH B: STANDARD STEP ---
             const toggleBtn = `
-                <div class="vis-detail-toggle" onmousedown="OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')" 
+                <div class="vis-detail-toggle" onmousedown="event.stopPropagation(); OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')" 
                     style="cursor:pointer; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; margin-right: -10px; z-index: 10;">
                     <span style="font-size: 10px; transition: transform 0.2s; display: inline-block; ${isExpanded ? 'transform: rotate(90deg);' : ''}">▶</span>
                 </div>
@@ -4261,30 +4262,26 @@ window.renderSopStepList = function (res) {
             let stepRowHtml = `
                 <div class="dp-manager-row is-clickable" 
                     style="gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;
-                        ${isEditingThis ? 'background:rgba(var(--accent-rgb), 0.1); border-left: 3px solid var(--accent);' : ''}" 
+                          ${isEditingThis ? 'background:rgba(var(--accent-rgb), 0.1); border-left: 3px solid var(--accent);' : ''}" 
                     onclick="OL.setEditingStep('${step.id}')">
                     
                     <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
                         <span class="drag-handle" style="opacity:0.3; font-size:12px;">⠿</span>
                         <span class="tiny muted" style="font-size:10px;">${idx + 1}</span>
-                        <span style="font-size: 10px; cursor:pointer;" onmousedown="event.stopPropagation(); OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')">
-                            ${isExpanded ? '▼' : '▶'}
-                        </span>
+                        ${toggleBtn}
                     </div>
                     
                     <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <div style="display:flex; align-items:center;">
                             ${isEditingThis ? `
                                 <input type="text" class="ghost-input bold" id="edit-step-${step.id}"
-                                    style="flex:1; font-size:0.95em; color:var(--accent); border:none; outline:none; background:transparent;" 
-                                    value="${esc(step.name)}" 
-                                    onclick="event.stopPropagation()"
-                                    onkeydown="if(event.key === 'Enter') this.blur()"
-                                    onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value); OL.setEditingStep(null)">
+                                     style="flex:1; font-size:0.95em; color:var(--accent); border:none; outline:none; background:transparent;" 
+                                     value="${esc(step.name)}" 
+                                     onclick="event.stopPropagation()"
+                                     onkeydown="if(event.key === 'Enter') this.blur()"
+                                     onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value); OL.setEditingStep(null)">
                             ` : `
-                                <div class="bold" style="font-size:0.95em; cursor:pointer;">
-                                    ${esc(step.name || "Untitled Step")}
-                                </div>
+                                <div class="bold" style="font-size:0.95em; cursor:text;">${esc(step.name || "Untitled Step")}</div>
                             `}
                         </div>
 
@@ -4297,26 +4294,23 @@ window.renderSopStepList = function (res) {
                             </span>
                         </div>
                     </div>
-
-                    <button class="card-delete-btn" style="position:static; margin-top: 4px;" 
-                            onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                    <button class="card-delete-btn" style="position:static; margin-top: 4px;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
                 </div>`;
 
-            // --- 🎯 THE FIX: SHOW FULL PANEL WHEN EDITING ---
             let editPanelHtml = isEditingThis ? `
                 <div style="margin-left:55px; margin-bottom:15px; padding:15px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-top:none; border-radius:0 0 8px 8px; display:flex; flex-direction:column; gap:15px;">
                     <div style="display:flex; flex-direction:column; gap:5px;">
                         <label class="tiny accent bold uppercase">📝 Description</label>
-                        <textarea class="modal-input tiny" style="min-height:60px;"
-                                onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
+                        <textarea class="modal-input tiny" style="min-height:60px;" onclick="event.stopPropagation()"
+                                  onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
                     </div>
                     <div style="display:flex; justify-content:flex-end;">
-                        <button class="btn tiny soft" onclick="event.stopPropagation(); OL.setEditingStep(null)">Done</button>
+                         <button class="btn tiny soft" onclick="event.stopPropagation(); OL.setEditingStep(null)">Done</button>
                     </div>
                 </div>
             ` : '';
 
-            let outcomesHtml = (isExpanded && hasOutcomes && !isEditing) ? (step.outcomes || []).map(oc => `
+            let outcomesHtml = (isExpanded && hasOutcomes && !isEditingThis) ? (step.outcomes || []).map(oc => `
                 <div class="dp-manager-row" style="margin-left: 55px; margin-bottom: 2px; padding: 4px 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
                     <span style="font-size: 10px; color: var(--accent); font-weight: bold;">↳</span>
                     <div style="flex: 1; display: flex; align-items: center; gap: 6px; font-size: 10px;">
