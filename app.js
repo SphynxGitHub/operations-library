@@ -3712,116 +3712,89 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const hash = window.location.hash;
     const isScopingSheet = hash.includes('scoping-sheet');
     const isAdmin = state.adminMode === true;
-    console.log("🔐 Modal Permission Check - Is Admin:", isAdmin);
     
     let res = null;
     let lineItem = null;
 
-    // 1. DATA RESOLUTION (STRICTER LOOKUP)
+    // 1. DATA RESOLUTION
     if (draftObj) {
         res = draftObj;
     } else {
-        // Find if this ID belongs to a Line Item (on the sheet) 
-        // OR if targetId is the actual lineItem ID passed from renderScopingRow
         lineItem = sheet?.lineItems.find(i => String(i.id) === String(targetId));
-        
-        // If it's a line item, get its resource. If not, treat targetId as the resource itself.
         const lookupId = lineItem ? lineItem.resourceId : targetId;
         res = OL.getResourceById(lookupId);
     }
 
     if (!res) return;
 
-    // 2. DEFINE THE ROUND INPUT
-    // If we have a lineItem OR we are physically on the Scoping Sheet view
+    const activeData = lineItem || res;
+
+    // --- SECTION A: ROUND/PHASE (Conditional) ---
     let roundInputHtml = "";
     if (lineItem || isScopingSheet) {
-        // Fallback: if we are on the sheet but lineItem wasn't found by ID, 
-        // it might be a newly added item. Ensure we have something to update.
         const activeId = lineItem ? lineItem.id : targetId;
         const currentRound = lineItem ? (lineItem.round || 1) : 1;
-
         roundInputHtml = `
             <div class="card-section" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--accent);">
                 <label class="modal-section-label" style="color: var(--accent);">🗓️ WORKFLOW PHASE</label>
                 <div class="form-group" style="margin-top: 10px;">
                     <label class="tiny muted uppercase bold">Round / Phase Number</label>
-                    <input 
-                        type="number" 
-                        id="modal-item-round"
-                        class="modal-input" 
-                        style="border-color: var(--accent); font-weight: bold;"
-                        value="${currentRound}" 
-                        min="1"
-                        onchange="OL.updateLineItem('${activeId}', 'round', this.value)"
-                    >
+                    <input type="number" id="modal-item-round" class="modal-input" 
+                           style="border-color: var(--accent); font-weight: bold;"
+                           value="${currentRound}" min="1"
+                           onchange="OL.updateLineItem('${activeId}', 'round', this.value)">
                 </div>
-            </div>
-        `;
+            </div>`;
     }
 
-    const activeData = lineItem || res;
+    // --- SECTION B: ADMIN PRICING & TYPE ---
+    const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => v.applyTo === res.type);
     
-    const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => {
-        return v.applyTo === res.type;
-    });
-
-    const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
-        (ht.resourceIds || []).includes(res.masterRefId || res.id)
-    );
-
-    // 1. Define the Scoping section only for Admins
-    const adminPricingHtml = state.adminMode ? `
-        <div class="card-section">
-            <label class="modal-section-label">Resource Type</label>
-            <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
-                <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
-                ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
-            </select>
-        </div>
-        <div class="card-section" style="margin-top: 20px;">
-            <label class="modal-section-label">📊 Scoping & Pricing</label>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+    const adminPricingHtml = isAdmin ? `
+        <div class="card-section" style="margin-bottom:20px;">
+            <label class="modal-section-label">⚙️ Resource Configuration</label>
+            <div style="margin-bottom:15px;">
+                <label class="tiny muted uppercase bold">Resource Type</label>
+                <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
+                    <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
+                    ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
+                </select>
+            </div>
+            <label class="tiny muted uppercase bold">📊 Scoping & Pricing</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:5px;">
                 ${relevantVars.map(([varKey, v]) => `
                     <div class="modal-column">
                         <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
                         <input type="number" class="modal-input tiny" 
-                            value="${num(activeData.data?.[varKey])}" 
-                            placeholder="0"
+                            value="${num(activeData.data?.[varKey])}" placeholder="0"
                             oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
                     </div>`).join("")}
             </div>
-        </div>
-    ` : '';
+        </div>` : '';
 
-    // 3. RENDER FULL MODAL
+    // --- 3. ASSEMBLE FULL MODAL HTML ---
     const html = `
         <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-size:18px;">🛠️</span>
-                <input type="text" class="header-editable-input" 
-                    id="modal-res-name"
-                    value="${esc(val(res.name))}" 
-                    placeholder="Resource Name..."
+                <input type="text" class="header-editable-input" id="modal-res-name"
+                    value="${esc(val(res.name))}" placeholder="Resource Name..."
                     style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                     onblur="OL.handleModalSave('${res.id}')">
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visualizer</button>
+                <button class="btn small soft" onclick="OL.closeModal()">Close</button>
             </div>
         </div>
 
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
-        
-            <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-            <button class="btn small soft" onclick="OL.openResourceModal('${res.id}')">Back to Resource</button>
             
             ${roundInputHtml} 
 
             ${adminPricingHtml}
 
-            <div class="card-section" style="margin-top:20px; padding-top:15px; border-top: 1px solid var(--line);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <label class="modal-section-label">📝 Workflow Steps (SOP)</label>
-                    <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
-                </div>
+            <div class="card-section" style="padding-top:10px; border-top: 1px solid var(--line);">
                 <div id="sop-step-list">${renderSopStepList(res)}</div>
             </div>
         </div>
@@ -3958,7 +3931,6 @@ OL.addRegistryType = function () {
   OL.persist();
   renderVaultRatesPage();
 };
-
 
 OL.updateResourcePricingData = function(targetId, varKey, value) {
     const numVal = parseFloat(value);
