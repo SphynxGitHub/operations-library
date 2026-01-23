@@ -9229,17 +9229,18 @@ OL.filterAccessSearch = function (ownerId, type, query) {
 
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
-    const registry = client.projectData.accessRegistry || [];
+    if (!client) return;
 
-    // Filter logic: Find items of the "other" type NOT already linked to this owner
+    const registry = client.projectData.accessRegistry || [];
     let source = [];
+
     if (type === "member") {
-        // We are in a Member Modal, searching for an App
+        // 🚀 THE FIX: Inside a Member Modal, only search LOCAL Project Apps
         const linkedAppIds = registry.filter(r => r.memberId === ownerId).map(r => r.appId);
-        source = [...state.master.apps, ...(client.projectData.localApps || [])]
+        source = (client.projectData.localApps || [])
                  .filter(a => !linkedAppIds.includes(a.id));
     } else {
-        // We are in an App Modal, searching for a Member
+        // Inside an App Modal, searching for a Member (This is already local-only)
         const linkedMemberIds = registry.filter(r => r.appId === ownerId).map(r => r.memberId);
         source = (client.projectData.teamMembers || [])
                  .filter(m => !linkedMemberIds.includes(m.id));
@@ -9247,11 +9248,16 @@ OL.filterAccessSearch = function (ownerId, type, query) {
 
     const matches = source.filter((item) => item.name.toLowerCase().includes(q));
 
+    if (matches.length === 0) {
+        listEl.innerHTML = `<div class="search-result-item muted">No unlinked ${type === "member" ? "local apps" : "team members"} found.</div>`;
+        return;
+    }
+
     listEl.innerHTML = matches.map(item => `
         <div class="search-result-item" onclick="OL.linkAccess('${ownerId}', '${item.id}', '${type}')">
             ${type === "member" ? "📱" : "👨‍💼"} ${esc(item.name)}
         </div>
-    `).join('') || '<div class="search-result-item muted">All matches are already linked.</div>';
+    `).join('');
 };
 
 OL.linkAccess = function (ownerId, targetId, type) {
