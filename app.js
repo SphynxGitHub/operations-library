@@ -4226,7 +4226,7 @@ window.renderSopStepList = function (res) {
             <div class="dp-manager-row is-clickable" 
                 style="gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;
                       ${isEditingThis ? 'background:rgba(var(--accent-rgb), 0.1); border-left: 3px solid var(--accent);' : ''}" 
-                onclick="OL.setEditingStep('${step.id}')">
+                        onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
                 
                 <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
                     <span class="drag-handle" style="opacity:0.3; font-size:12px;">⠿</span>
