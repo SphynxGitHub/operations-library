@@ -5275,46 +5275,50 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
 
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
+    const client = getActiveClient();
     
-    // 1. Resolve the Target Item (either a Step or a Trigger)
+    if (!client) return;
+
+    // 1. Resolve the Target Item (Step or Trigger)
     let targetItem = null;
     if (isTrigger) {
         targetItem = res?.triggers?.[trigIdx];
     } else {
         targetItem = res?.steps?.find(s => String(s.id) === String(elementId));
     }
-
-    // 2. Get IDs of things already linked to prevent duplicates
+    
+    // 2. Get IDs already linked to avoid duplicates
     const alreadyLinkedIds = (targetItem?.links || []).map(l => String(l.id));
 
-    // 3. Map SOP Resources
-    const otherResources = (state.master.resources || []).filter(r => 
-        String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id))
-    ).map(r => ({ id: r.id, name: r.name, icon: '📂', type: 'sop' }));
+    // 🚀 3. Map ONLY Local Project Resources
+    const localResources = (client.projectData?.localResources || []).filter(r => 
+        String(r.id) !== String(resId) && // Don't link a resource to itself
+        !alreadyLinkedIds.includes(String(r.id)) && // Don't show if already linked
+        (r.name || "").toLowerCase().includes(q) // Match search query
+    ).map(r => ({ 
+        id: r.id, 
+        name: r.name, 
+        type: 'sop', 
+        origin: 'Local' 
+    }));
 
-    // 4. Map How-To Library
-    const guides = (state.master.howToLibrary || []).filter(g => 
-        !alreadyLinkedIds.includes(String(g.id))
-    ).map(g => ({ id: g.id, name: g.name, icon: '📖', type: 'guide' }));
-
-    const combined = [...otherResources, ...guides].filter(item => 
-        item.name.toLowerCase().includes(q)
-    );
-
-    if (combined.length === 0) {
-        resultsContainer.innerHTML = q ? '<div class="search-item muted" style="padding:10px;">No unlinked matches...</div>' : '';
+    // 4. Handle Empty State
+    if (localResources.length === 0) {
+        resultsContainer.innerHTML = q 
+            ? '<div class="search-item muted" style="padding:10px;">No matching local resources...</div>' 
+            : '<div class="search-item muted" style="padding:10px;">Type to search project library...</div>';
         return;
     }
 
-    // 5. Render results with the extra flags passed to the selection handler
-    resultsContainer.innerHTML = combined.map(item => `
+    // 5. Render Local-Only Results
+    resultsContainer.innerHTML = localResources.map(item => `
         <div class="search-result-item" 
              style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;"
              onmousedown="OL.addStepResource('${resId}', '${elementId}', '${item.id}', '${esc(item.name)}', '${item.type}', ${isTrigger}, ${trigIdx})">
-            <span style="font-size: 14px; opacity: 0.8;">${item.icon}</span>
+            <span style="font-size: 14px; opacity: 0.8;">📍</span>
             <div style="flex:1">
                 <div style="font-size: 11px; font-weight: bold; color: white;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.type === 'guide' ? 'Instructional Guide' : 'SOP Module'}</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">Project Resource</div>
             </div>
         </div>
     `).join('');
