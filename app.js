@@ -3806,11 +3806,12 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                     onblur="OL.handleModalSave('${res.id}')">
             </div>
-            <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-            <button class="btn small soft" onclick="OL.openResourceModal('${res.id}')">Back to Resource</button>
         </div>
 
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
+        
+            <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
+            <button class="btn small soft" onclick="OL.openResourceModal('${res.id}')">Back to Resource</button>
             
             ${roundInputHtml} 
 
