@@ -4153,47 +4153,45 @@ window.renderSopStepList = function (res) {
         state.expandedSteps = new Set(Array.isArray(state.expandedSteps) ? state.expandedSteps : []);
     }
     
-    if (state.editingStepId === undefined) state.editingStepId = null;
-    if (state.editingTriggerIdx === undefined) state.editingTriggerIdx = null;
-    
     const isAdmin = state.adminMode === true;
     const triggers = res.triggers || [];
     const steps = res.steps || [];
     
+    if (triggers.length === 0 && steps.length === 0) {
+        return '<div class="empty-hint">No triggers or workflow steps defined.</div>';
+    }
+
     let html = "";
 
-    // --- ⚡ SECTION 1: TRIGGERS (Click-to-Edit) ---
+    // --- ⚡ SECTION 1: TRIGGERS ---
     html += `
         <div class="triggers-container" style="margin-bottom: 20px; background: rgba(255, 191, 0, 0.03); border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
-                <button class="btn tiny soft" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
+                <label class="tiny accent bold uppercase" style="letter-spacing:1px;">⚡ Entry Triggers</label>
+                <button class="btn tiny soft" style="font-size:9px;" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
             </div>
             <div id="triggers-list" style="display:flex; flex-direction:column; gap:6px;">
-                ${triggers.map((t, idx) => {
-                    const isEditingTrig = state.editingTriggerIdx === idx;
-                    return `
-                    <div class="dp-manager-row trigger-row" 
-                         style="gap:10px; align-items: center; background: ${isEditingTrig ? '#fff' : 'rgba(255,255,255,0.6)'}; border: 1px solid ${isEditingTrig ? 'var(--accent)' : 'var(--line)'}; border-radius:6px; padding: 6px 10px;"
-                         onclick="${isEditingTrig ? '' : `OL.setEditingTrigger(${idx})`}">
-                        <span style="font-size:12px; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleTriggerType('${res.id}', ${idx})">
-                            ${t.type === 'auto' ? '⚡' : '👨'}
-                        </span>
-                        <div style="flex:1;">
-                            ${isEditingTrig ? `
-                                <input type="text" class="ghost-input bold" id="edit-trigger-${idx}"
-                                     style="width:100%; font-size:0.9em; color:var(--accent); border:none; outline:none; background:transparent;"
-                                     value="${esc(t.name)}"
-                                     onclick="event.stopPropagation()"
-                                     onkeydown="if(event.key === 'Enter') this.blur()"
-                                     onblur="OL.updateTriggerName('${res.id}', ${idx}, this.value); OL.setEditingTrigger(null)">
-                            ` : `
-                                <span class="bold" style="font-size:0.9em; color: var(--accent); cursor:text;">${esc(val(t.name, "New Trigger..."))}</span>
-                            `}
+                ${triggers.map((t, idx) => `
+                    <div class="dp-manager-row trigger-row is-clickable" 
+                         style="gap:10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
+                         onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
+                        
+                        <div style="flex:1; display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
+                            <span class="bold" style="font-size:0.9em; color: var(--accent);">
+                                ${esc(val(t.name, "New Trigger..."))}
+                            </span>
+                            ${t.assigneeName ? `
+                                <span class="tiny muted" style="margin-left:auto; font-size:9px; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:10px;">
+                                    👤 ${esc(t.assigneeName)}
+                                </span>
+                            ` : ''}
                         </div>
-                        <button class="card-delete-btn" style="position:static" onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
-                    </div>`;
-                }).join("")}
+                        
+                        <button class="card-delete-btn" style="position:static" 
+                                onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
+                    </div>
+                `).join("")}
             </div>
         </div>
     `;
@@ -4201,112 +4199,75 @@ window.renderSopStepList = function (res) {
     // --- 📝 SECTION 2: SEQUENTIAL STEPS ---
     html += `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <label class="tiny muted bold uppercase">📝 Sequential Steps</label>
-            <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
+            <label class="tiny muted bold uppercase" style="letter-spacing:1px;">📝 Sequential Steps</label>
+            <button class="btn tiny primary" style="font-size:9px;" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
         </div>
     `;
 
     html += steps.map((step, idx) => {
-        const isEditingThis = state.editingStepId === step.id;
         const isExpanded = state.expandedSteps.has(step.id);
         const hasOutcomes = (step.outcomes || []).length > 0;
+        const isModule = step.type === 'module_block';
+        
         const client = getActiveClient();
         const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
         const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
 
-        // Timing Tooltip logic
-        let dateTooltip = "Set Due Date...";
-        if (step.timingType) {
-            let ref = (step.timingType === 'after_prev') ? "Prev" : "Start";
-            dateTooltip = `${num(step.timingValue)}d after ${ref}`;
+        // --- BRANCH A: MODULE BLOCK (VIEW ONLY) ---
+        if (isModule) {
+            const nestedRes = OL.getResourceById(step.linkedResourceId);
+            const nestedSteps = nestedRes?.steps || [];
+            return `
+                <div class="step-group module-block-container" style="margin-bottom: 12px; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; background: rgba(var(--accent-rgb), 0.02);">
+                    <div class="dp-manager-row" style="background: rgba(var(--accent-rgb), 0.1); border-bottom: 1px solid var(--accent); padding: 8px 12px;">
+                        <div style="display:flex; align-items:center; width:45px; opacity: 0.4;"><span class="drag-handle">⠿</span><span class="tiny muted" style="margin-left:8px;">${idx + 1}</span></div>
+                        <div style="flex:1; display:flex; align-items:center; gap:10px; cursor: pointer;" onclick="OL.openResourceModal('${step.linkedResourceId}')">
+                            <span style="font-size: 14px;">📦</span><strong style="color: var(--accent); font-size: 0.9em;">MODULE: ${esc(step.name)}</strong>
+                        </div>
+                        <button class="card-delete-btn" style="position:static; margin-left: 15px;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                    </div>
+                    <div class="module-nested-steps" style="padding: 10px 10px 10px 55px; display: flex; flex-direction: column; gap: 6px; opacity: 0.6;">
+                        ${nestedSteps.map((ns, nidx) => `<div style="font-size: 11px;">${nidx + 1}. ${esc(ns.name)}</div>`).join('')}
+                    </div>
+                </div>`;
         }
 
-        // Row UI
+        // --- BRANCH B: STANDARD STEP ---
+        const toggleBtn = `
+            <div class="vis-detail-toggle" 
+                style="cursor:pointer; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; margin-right: -10px; z-index: 10;"
+                onclick="event.stopPropagation(); OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')">
+                <span style="font-size: 10px; transition: transform 0.2s; display: inline-block; ${isExpanded ? 'transform: rotate(90deg);' : ''}">▶</span>
+            </div>
+        `;
+
         let stepRowHtml = `
             <div class="dp-manager-row is-clickable" 
-                style="gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;
-                      ${isEditingThis ? 'background:rgba(var(--accent-rgb), 0.1); border-left: 3px solid var(--accent);' : ''}" 
-                        onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
+                style="gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;" 
+                onclick="OL.openStepDetailModal('${res.id}', '${step.id}')">
                 
                 <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
-                    <span class="drag-handle" style="opacity:0.3; font-size:12px;">⠿</span>
+                    <span class="drag-handle" style="opacity:0.3; font-size:12px;" onclick="event.stopPropagation()">⠿</span>
                     <span class="tiny muted" style="font-size:10px;">${idx + 1}</span>
-                    <span style="font-size: 10px; cursor:pointer;" onmousedown="event.stopPropagation(); OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')">
-                        ${isExpanded ? '▼' : '▶'}
-                    </span>
+                    ${toggleBtn}
                 </div>
                 
                 <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                    <div style="display:flex; align-items:center;">
-                        ${isEditingThis ? `
-                            <input type="text" class="ghost-input bold" id="edit-step-${step.id}"
-                                 style="flex:1; font-size:0.95em; color:var(--accent); border:none; outline:none; background:transparent;" 
-                                 value="${esc(step.name)}" 
-                                 onclick="event.stopPropagation()"
-                                 onkeydown="if(event.key === 'Enter') this.blur()"
-                                 onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value); OL.setEditingStep(null)">
-                        ` : `
-                            <div class="bold" style="font-size:0.95em; cursor:text;">${esc(step.name || "Untitled Step")}</div>
-                        `}
-                    </div>
+                    <div class="bold" style="font-size:0.95em;">${esc(step.name || "Untitled Step")}</div>
 
                     <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
-                        <span class="is-clickable hover-accent" onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
-                            👤 ${esc(step.assigneeName || "Unassigned")}
-                        </span>
-                        <span class="is-clickable hover-accent" onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
-                            📱 ${esc(linkedApp?.name || "No App")}
-                        </span>
-                        <span class="is-clickable hover-accent" title="${dateTooltip}" onclick="event.stopPropagation(); OL.toggleInlineEdit(event, '${res.id}', '${step.id}')">
-                            📅 ${step.timingType ? 'Set' : 'Set Date'}
-                        </span>
+                        <span>👤 ${esc(step.assigneeName || "Unassigned")}</span>
+                        <span>📱 ${esc(linkedApp?.name || "No App")}</span>
+                        ${step.timingType ? `<span style="color:var(--accent);">📅 Scheduled</span>` : '<span>📅 No Date</span>'}
                     </div>
                 </div>
-                <button class="card-delete-btn" style="position:static; margin-top: 4px;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+
+                <button class="card-delete-btn" style="position:static; margin-top: 4px;" 
+                        onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
             </div>`;
 
-        // 🎯 FULL RESTORE: The Edit Panel (Description, Resources, Branching)
-        let editPanelHtml = isEditingThis ? `
-            <div style="margin-left:55px; margin-bottom:15px; padding:15px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-top:none; border-radius:0 0 8px 8px; display:flex; flex-direction:column; gap:20px;">
-                
-                <div style="display:flex; flex-direction:column; gap:5px;">
-                    <label class="modal-section-label" style="font-size:9px; color:var(--accent);">📝 DESCRIPTION / NOTES</label>
-                    <textarea class="modal-input tiny" style="min-height:50px; background:rgba(0,0,0,0.1);" 
-                              onclick="event.stopPropagation()"
-                              onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
-                </div>
-
-                <div style="display:flex; flex-direction:column; gap:5px;">
-                    <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🔗 LINKED RESOURCES & GUIDES</label>
-                    <div id="step-resources-list-${step.id}">${renderStepResources(res.id, step)}</div>
-                    <div class="search-map-container" style="position:relative; margin-top:5px;">
-                        <input type="text" class="modal-input tiny" placeholder="+ Link a Guide..." 
-                               onclick="event.stopPropagation()"
-                               onfocus="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)"
-                               oninput="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)">
-                        <div id="resource-results-${step.id}" class="search-results-overlay"></div>
-                    </div>
-                </div>
-
-                <div style="display:flex; flex-direction:column; gap:5px;">
-                    <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🎯 BRANCHING LOGIC</label>
-                    <div id="step-outcomes-list">${renderStepOutcomes(res.id, step)}</div>
-                    <div class="search-map-container" style="margin-top:5px;">
-                        <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add outcome..." 
-                               onclick="event.stopPropagation()"
-                               onfocus="OL.filterOutcomeSearch('${res.id}', '${step.id}', '')">
-                        <div id="outcome-results" class="search-results-overlay"></div>
-                    </div>
-                </div>
-
-                <div style="display:flex; justify-content:flex-end;">
-                     <button class="btn tiny soft" onclick="event.stopPropagation(); OL.setEditingStep(null)">Done</button>
-                </div>
-            </div>
-        ` : '';
-
-        // Outcomes (View Mode)
-        let outcomesHtml = (isExpanded && hasOutcomes && !isEditingThis) ? (step.outcomes || []).map(oc => `
+        // Inline details (Outcome Preview)
+        let outcomesHtml = (isExpanded && hasOutcomes) ? (step.outcomes || []).map(oc => `
             <div class="dp-manager-row" style="margin-left: 55px; margin-bottom: 2px; padding: 4px 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
                 <span style="font-size: 10px; color: var(--accent); font-weight: bold;">↳</span>
                 <div style="flex: 1; display: flex; align-items: center; gap: 6px; font-size: 10px;">
@@ -4316,10 +4277,14 @@ window.renderSopStepList = function (res) {
             </div>
         `).join("") : "";
 
+        // If expanded but no outcomes, show a tiny hint for description if it exists
+        if (isExpanded && !hasOutcomes && step.description) {
+            outcomesHtml = `<div class="tiny muted" style="margin-left: 65px; padding: 5px; font-style: italic;">${esc(step.description)}</div>`;
+        }
+
         return `
             <div class="step-group" draggable="true" ondragstart="OL.handleStepDragStart(event, ${idx})">
                 ${stepRowHtml}
-                ${editPanelHtml}
                 ${outcomesHtml}
             </div>
         `;
