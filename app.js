@@ -4177,7 +4177,7 @@ window.renderSopStepList = function (res) {
                     const isExp = state.expandedTriggers.has(trigId);
                     return `
                     <div class="step-group">
-                        <div class="dp-manager-row trigger-row is-clickable" style="gap:10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
+                        <div class="dp-manager-row trigger-row is-clickable" style="gap:10px; align-items: center; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
                              onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
                             
                             <div style="display:flex; align-items:center; width:35px; justify-content:space-between;">
