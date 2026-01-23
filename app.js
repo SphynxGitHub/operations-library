@@ -5250,22 +5250,31 @@ OL.filterStepAppSearch = function(resId, stepId, query) {
 };
 
 // HANDLE RESOURCE AND SOP LINKING
-function renderStepResources(resId, step) {
-    const links = step.links || [];
+function renderStepResources(resId, item, isTrigger = false, trigIdx = null) {
+    const links = item.links || [];
     if (links.length === 0) return '<div class="tiny muted" style="padding: 5px;">No linked resources.</div>';
     
     return links.map((link, idx) => {
-        // Use the saved type to determine which icon to show on the pill
-        const icon = link.type === 'guide' ? '📖' : '📂';
+        // Local resources use 'sop' type. Master library guides use 'guide' type.
+        const icon = link.type === 'guide' ? '📖' : '📍';
         
+        // Logic switch for the delete button (stopPropagation is key here to avoid triggering the pill click)
+        const deleteAction = isTrigger 
+            ? `event.stopPropagation(); OL.removeTriggerLink('${resId}', ${trigIdx}, ${idx})`
+            : `event.stopPropagation(); OL.removeStepLink('${resId}', '${item.id}', ${idx})`;
+
         return `
-            <div class="pill soft" style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:4px 10px; background: rgba(255,255,255,0.05);">
+            <div class="pill soft is-clickable" 
+                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:4px 10px; background: rgba(255,255,255,0.05); cursor: pointer;"
+                 onclick="OL.openResourceModal('${link.id}')">
                 <span style="font-size:10px; opacity: 0.7;">${icon}</span>
-                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(link.name)}</span>
-                <b class="pill-remove-x" style="cursor:pointer; opacity: 0.5;" 
-                   onclick="OL.removeStepLink('${resId}', '${step.id}', ${idx})">×</b>
-            </div>
-        `;
+                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Click to view resource">
+                    ${esc(link.name)}
+                </span>
+                <b class="pill-remove-x" 
+                   style="cursor:pointer; opacity: 0.4; padding: 2px 5px; margin-right: -5px;" 
+                   onclick="${deleteAction}">×</b>
+            </div>`;
     }).join('');
 }
 
@@ -5277,48 +5286,55 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
     const res = OL.getResourceById(resId);
     const client = getActiveClient();
     
+    // Check for Admin Mode (URL parameter or state flag)
+    const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
+    
     if (!client) return;
 
-    // 1. Resolve the Target Item (Step or Trigger)
+    // 1. Resolve current linked IDs to prevent duplicates
     let targetItem = null;
     if (isTrigger) {
         targetItem = res?.triggers?.[trigIdx];
     } else {
         targetItem = res?.steps?.find(s => String(s.id) === String(elementId));
     }
-    
-    // 2. Get IDs already linked to avoid duplicates
     const alreadyLinkedIds = (targetItem?.links || []).map(l => String(l.id));
 
-    // 🚀 3. Map ONLY Local Project Resources
+    // 🚀 2. Gather Local Resources
     const localResources = (client.projectData?.localResources || []).filter(r => 
-        String(r.id) !== String(resId) && // Don't link a resource to itself
-        !alreadyLinkedIds.includes(String(r.id)) && // Don't show if already linked
-        (r.name || "").toLowerCase().includes(q) // Match search query
-    ).map(r => ({ 
-        id: r.id, 
-        name: r.name, 
-        type: 'sop', 
-        origin: 'Local' 
-    }));
+        String(r.id) !== String(resId) && 
+        !alreadyLinkedIds.includes(String(r.id)) &&
+        (r.name || "").toLowerCase().includes(q)
+    ).map(r => ({ id: r.id, name: r.name, type: 'sop', origin: 'Local', icon: '📍' }));
 
-    // 4. Handle Empty State
-    if (localResources.length === 0) {
-        resultsContainer.innerHTML = q 
-            ? '<div class="search-item muted" style="padding:10px;">No matching local resources...</div>' 
-            : '<div class="search-item muted" style="padding:10px;">Type to search project library...</div>';
+    // 🚀 3. Gather "Client Facing" Master Resources (Admin Only)
+    let masterResources = [];
+    if (isAdmin) {
+        masterResources = (state.master.resources || []).filter(r => {
+            const isClientFacing = r.scope === 'client' || r.visibility === 'client' || r.isClientFacing === true;
+            const notSelf = String(r.id) !== String(resId);
+            const notLinked = !alreadyLinkedIds.includes(String(r.id));
+            const matchesQuery = (r.name || "").toLowerCase().includes(q);
+            return isClientFacing && notSelf && notLinked && matchesQuery;
+        }).map(r => ({ id: r.id, name: r.name, type: 'sop', origin: 'Vault', icon: '🏛️' }));
+    }
+
+    const combined = [...localResources, ...masterResources];
+
+    if (combined.length === 0) {
+        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matching resources found.</div>`;
         return;
     }
 
-    // 5. Render Local-Only Results
-    resultsContainer.innerHTML = localResources.map(item => `
+    // 4. Render results
+    resultsContainer.innerHTML = combined.map(item => `
         <div class="search-result-item" 
              style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;"
              onmousedown="OL.addStepResource('${resId}', '${elementId}', '${item.id}', '${esc(item.name)}', '${item.type}', ${isTrigger}, ${trigIdx})">
-            <span style="font-size: 14px; opacity: 0.8;">📍</span>
+            <span style="font-size: 14px; opacity: 0.8;">${item.icon}</span>
             <div style="flex:1">
                 <div style="font-size: 11px; font-weight: bold; color: white;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">Project Resource</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} Resource</div>
             </div>
         </div>
     `).join('');
