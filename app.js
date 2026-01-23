@@ -5276,21 +5276,30 @@ function renderStepResources(resId, step) {
     }).join('');
 }
 
-OL.filterResourceSearch = function(resId, stepId, query) {
-    const resultsContainer = document.getElementById(`resource-results-${stepId}`);
+OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, trigIdx = null) {
+    const resultsContainer = document.getElementById(`resource-results-${elementId}`);
     if (!resultsContainer) return;
 
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
-    const alreadyLinkedIds = (step?.links || []).map(l => String(l.id));
+    
+    // 1. Resolve the Target Item (either a Step or a Trigger)
+    let targetItem = null;
+    if (isTrigger) {
+        targetItem = res?.triggers?.[trigIdx];
+    } else {
+        targetItem = res?.steps?.find(s => String(s.id) === String(elementId));
+    }
 
-    // 1. Map SOP Resources with a Folder icon
+    // 2. Get IDs of things already linked to prevent duplicates
+    const alreadyLinkedIds = (targetItem?.links || []).map(l => String(l.id));
+
+    // 3. Map SOP Resources
     const otherResources = (state.master.resources || []).filter(r => 
         String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id))
     ).map(r => ({ id: r.id, name: r.name, icon: '📂', type: 'sop' }));
 
-    // 2. Map How-To Library with a Book icon
+    // 4. Map How-To Library
     const guides = (state.master.howToLibrary || []).filter(g => 
         !alreadyLinkedIds.includes(String(g.id))
     ).map(g => ({ id: g.id, name: g.name, icon: '📖', type: 'guide' }));
@@ -5300,39 +5309,57 @@ OL.filterResourceSearch = function(resId, stepId, query) {
     );
 
     if (combined.length === 0) {
-        resultsContainer.innerHTML = q ? '<div class="search-item muted">No unlinked matches...</div>' : '';
+        resultsContainer.innerHTML = q ? '<div class="search-item muted" style="padding:10px;">No unlinked matches...</div>' : '';
         return;
     }
 
+    // 5. Render results with the extra flags passed to the selection handler
     resultsContainer.innerHTML = combined.map(item => `
         <div class="search-result-item" 
-             style="display: flex; align-items: center; gap: 10px; padding: 8px 12px;"
-             onmousedown="OL.addStepResource('${resId}', '${stepId}', '${item.id}', '${esc(item.name)}', '${item.type}')">
+             style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;"
+             onmousedown="OL.addStepResource('${resId}', '${elementId}', '${item.id}', '${esc(item.name)}', '${item.type}', ${isTrigger}, ${trigIdx})">
             <span style="font-size: 14px; opacity: 0.8;">${item.icon}</span>
             <div style="flex:1">
                 <div style="font-size: 11px; font-weight: bold; color: white;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.5px;">${item.type === 'guide' ? 'Instructional Guide' : 'SOP Module'}</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.type === 'guide' ? 'Instructional Guide' : 'SOP Module'}</div>
             </div>
         </div>
     `).join('');
 };
 
-OL.addStepResource = function(resId, stepId, targetId, targetName, targetType) {
+OL.addStepResource = function(resId, elementId, targetId, targetName, targetType, isTrigger = false, trigIdx = null) {
     const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
-    
-    if (!step) return;
-    if (!step.links) step.links = [];
+    if (!res) return;
 
-    step.links.push({ id: targetId, name: targetName, type: targetType });
+    // 1. Resolve the specific target object (either a Trigger or a Step)
+    let targetObj = null;
+    if (isTrigger && trigIdx !== null) {
+        targetObj = res.triggers[trigIdx];
+    } else {
+        targetObj = res.steps?.find(s => String(s.id) === String(elementId));
+    }
+
+    if (!targetObj) {
+        console.error("Target for resource link not found:", { elementId, isTrigger, trigIdx });
+        return;
+    }
+
+    // 2. Initialize links array if it doesn't exist
+    if (!targetObj.links) targetObj.links = [];
+
+    // 3. Add the link and save
+    targetObj.links.push({ id: targetId, name: targetName, type: targetType });
     OL.persist();
     
-    // Refresh the local resource list
-    const listContainer = document.getElementById(`step-resources-list-${stepId}`);
-    if (listContainer) listContainer.innerHTML = renderStepResources(resId, step);
+    // 4. Refresh the visual list for this specific element
+    const listContainer = document.getElementById(`step-resources-list-${elementId}`);
+    if (listContainer) {
+        // Ensure renderStepResources knows if it's rendering for a trigger to set up delete buttons correctly
+        listContainer.innerHTML = renderStepResources(resId, targetObj, isTrigger, trigIdx);
+    }
     
-    // 🚀 Close only this specific dropdown
-    const resultsContainer = document.getElementById(`resource-results-${stepId}`);
+    // 5. 🚀 Close the dropdown results
+    const resultsContainer = document.getElementById(`resource-results-${elementId}`);
     if (resultsContainer) resultsContainer.innerHTML = "";
 };
 
@@ -5753,6 +5780,9 @@ OL.openTriggerDetailModal = function(resId, triggerIdx) {
     const trigger = res?.triggers?.[triggerIdx];
     if (!trigger) return;
 
+    // We use a unique string ID for the DOM elements to avoid clashing with Step IDs
+    const trigId = `trig-${triggerIdx}`;
+
     const html = `
         <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
@@ -5780,17 +5810,17 @@ OL.openTriggerDetailModal = function(resId, triggerIdx) {
                 </div>
             </div>
 
-            <div style="display:flex; flex-direction:column; gap:5px;">
+            <div style="display:flex; flex-direction:column; gap:5px; margin-top:20px;">
                 <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🔗 LINKED RESOURCES & GUIDES</label>
-                <div id="step-resources-list-${step.id}">
-                    ${renderStepResources(res.id, step)}
+                <div id="step-resources-list-${trigId}">
+                    ${renderStepResources(resId, trigger, true, triggerIdx)}
                 </div>
                 <div class="search-map-container" style="position:relative; margin-top:5px;">
                     <input type="text" class="modal-input tiny" 
                         placeholder="+ Link a Guide or SOP..." 
-                        onfocus="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)"
-                        oninput="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)">
-                    <div id="resource-results-${step.id}" class="search-results-overlay" style="position:absolute; top:100%; left:0; width:100%; z-index:100;"></div>
+                        onfocus="OL.filterResourceSearch('${resId}', '${trigId}', this.value, true, ${triggerIdx})"
+                        oninput="OL.filterResourceSearch('${resId}', '${trigId}', this.value, true, ${triggerIdx})">
+                    <div id="resource-results-${trigId}" class="search-results-overlay" style="position:absolute; top:100%; left:0; width:100%; z-index:100;"></div>
                 </div>
             </div>
 
