@@ -3806,6 +3806,11 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             ${sopLibraryHtml}
             <div class="card-section" style="margin-top:10px; padding-top:20px; border-top: 1px solid var(--line);">
                 <div id="sop-step-list">
+                <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+                    <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                        <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
+                        <button class="btn tiny primary" onclick="OL.toggleWorkflowFullScreen('${res.id}')">📃 List Editor</button>
+                    </div>
                     ${renderSopStepList(res)}
                 </div>
             </div>
@@ -4155,11 +4160,6 @@ window.renderSopStepList = function (res) {
 
     // --- ⚡ SECTION 1: TRIGGERS ---
     html += `
-        <label class="modal-section-label">📋 WORKFLOW STEPS</label>
-        <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-            <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-            <button class="btn tiny primary" onclick="OL.toggleWorkflowFullScreen('${res.id}')">📃 List Editor</button>
-        </div>
         <div class="triggers-container" style="margin-bottom: 20px; border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
