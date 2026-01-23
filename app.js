@@ -4261,36 +4261,60 @@ window.renderSopStepList = function (res) {
             let stepRowHtml = `
                 <div class="dp-manager-row is-clickable" 
                     style="gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;
-                          ${isEditing ? 'background:rgba(var(--accent-rgb), 0.08); border-left: 3px solid var(--accent);' : ''}" 
+                        ${isEditingThis ? 'background:rgba(var(--accent-rgb), 0.1); border-left: 3px solid var(--accent);' : ''}" 
                     onclick="OL.setEditingStep('${step.id}')">
                     
                     <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
                         <span class="drag-handle" style="opacity:0.3; font-size:12px;">⠿</span>
                         <span class="tiny muted" style="font-size:10px;">${idx + 1}</span>
-                        ${toggleBtn}
+                        <span style="font-size: 10px; cursor:pointer;" onmousedown="event.stopPropagation(); OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')">
+                            ${isExpanded ? '▼' : '▶'}
+                        </span>
                     </div>
                     
                     <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <div style="display:flex; align-items:center;">
-                            ${isEditing ? `
+                            ${isEditingThis ? `
                                 <input type="text" class="ghost-input bold" id="edit-step-${step.id}"
-                                     style="flex:1; font-size:0.95em; color:var(--accent); border:none; outline:none; background:transparent;" 
-                                     value="${esc(step.name)}" 
-                                     onkeydown="if(event.key === 'Enter') this.blur()"
-                                     onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value); OL.setEditingStep(null)">
+                                    style="flex:1; font-size:0.95em; color:var(--accent); border:none; outline:none; background:transparent;" 
+                                    value="${esc(step.name)}" 
+                                    onclick="event.stopPropagation()"
+                                    onkeydown="if(event.key === 'Enter') this.blur()"
+                                    onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value); OL.setEditingStep(null)">
                             ` : `
-                                <div class="bold" style="font-size:0.95em; cursor:text;">${esc(step.name || "Untitled Step")}</div>
+                                <div class="bold" style="font-size:0.95em; cursor:pointer;">
+                                    ${esc(step.name || "Untitled Step")}
+                                </div>
                             `}
                         </div>
 
                         <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
-                            <span class="is-clickable" onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">👤 ${esc(step.assigneeName || "Unassigned")}</span>
-                            <span class="is-clickable" onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">📱 ${esc(linkedApp?.name || "No App")}</span>
-                            <span class="is-clickable" title="${dateTooltip}" onclick="event.stopPropagation(); OL.toggleInlineEdit(event, '${res.id}', '${step.id}')">📅 ${step.timingType ? 'Set' : 'Set Date'}</span>
+                            <span class="is-clickable hover-accent" onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
+                                👤 ${esc(step.assigneeName || "Unassigned")}
+                            </span>
+                            <span class="is-clickable hover-accent" onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
+                                📱 ${esc(linkedApp?.name || "No App")}
+                            </span>
                         </div>
                     </div>
-                    <button class="card-delete-btn" style="position:static; margin-top: 4px;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+
+                    <button class="card-delete-btn" style="position:static; margin-top: 4px;" 
+                            onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
                 </div>`;
+
+            // --- 🎯 THE FIX: SHOW FULL PANEL WHEN EDITING ---
+            let editPanelHtml = isEditingThis ? `
+                <div style="margin-left:55px; margin-bottom:15px; padding:15px; background:rgba(255,255,255,0.02); border:1px solid var(--line); border-top:none; border-radius:0 0 8px 8px; display:flex; flex-direction:column; gap:15px;">
+                    <div style="display:flex; flex-direction:column; gap:5px;">
+                        <label class="tiny accent bold uppercase">📝 Description</label>
+                        <textarea class="modal-input tiny" style="min-height:60px;"
+                                onblur="OL.updateAtomicStep('${res.id}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end;">
+                        <button class="btn tiny soft" onclick="event.stopPropagation(); OL.setEditingStep(null)">Done</button>
+                    </div>
+                </div>
+            ` : '';
 
             let outcomesHtml = (isExpanded && hasOutcomes && !isEditing) ? (step.outcomes || []).map(oc => `
                 <div class="dp-manager-row" style="margin-left: 55px; margin-bottom: 2px; padding: 4px 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
@@ -4305,6 +4329,7 @@ window.renderSopStepList = function (res) {
             return `
                 <div class="step-group" draggable="true" ondragstart="OL.handleStepDragStart(event, ${idx})">
                     ${stepRowHtml}
+                    ${editPanelHtml}
                     ${outcomesHtml}
                 </div>
             `;
