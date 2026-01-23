@@ -4149,8 +4149,12 @@ OL.executeResourceImport = function(masterId) {
 
 //======================= SOP STEP LOGIC =======================//
 window.renderSopStepList = function (res) {
+    // --- 🛡️ INITIALIZATION SAFETY ---
     if (!(state.expandedSteps instanceof Set)) {
         state.expandedSteps = new Set(Array.isArray(state.expandedSteps) ? state.expandedSteps : []);
+    }
+    if (!(state.expandedTriggers instanceof Set)) {
+        state.expandedTriggers = new Set(Array.isArray(state.expandedTriggers) ? state.expandedTriggers : []);
     }
     
     const isAdmin = state.adminMode === true;
@@ -4215,7 +4219,6 @@ window.renderSopStepList = function (res) {
         const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
         const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
 
-        // --- BRANCH A: MODULE BLOCK (VIEW ONLY) ---
         if (isModule) {
             const nestedRes = OL.getResourceById(step.linkedResourceId);
             const nestedSteps = nestedRes?.steps || [];
@@ -4234,7 +4237,6 @@ window.renderSopStepList = function (res) {
                 </div>`;
         }
 
-        // --- BRANCH B: STANDARD STEP ---
         const toggleBtn = `
             <div class="vis-detail-toggle" 
                 style="cursor:pointer; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; margin-right: -10px; z-index: 10;"
@@ -4256,7 +4258,6 @@ window.renderSopStepList = function (res) {
                 
                 <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
                     <div class="bold" style="font-size:0.95em;">${esc(step.name || "Untitled Step")}</div>
-
                     <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
                         <span>👤 ${esc(step.assigneeName || "Unassigned")}</span>
                         <span>📱 ${esc(linkedApp?.name || "No App")}</span>
@@ -4268,7 +4269,6 @@ window.renderSopStepList = function (res) {
                         onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
             </div>`;
 
-        // Inline details (Outcome Preview)
         let outcomesHtml = (isExpanded && hasOutcomes) ? (step.outcomes || []).map(oc => `
             <div class="dp-manager-row" style="margin-left: 55px; margin-bottom: 2px; padding: 4px 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
                 <span style="font-size: 10px; color: var(--accent); font-weight: bold;">↳</span>
@@ -4279,7 +4279,6 @@ window.renderSopStepList = function (res) {
             </div>
         `).join("") : "";
 
-        // If expanded but no outcomes, show a tiny hint for description if it exists
         if (isExpanded && !hasOutcomes && step.description) {
             outcomesHtml = `<div class="tiny muted" style="margin-left: 65px; padding: 5px; font-style: italic;">${esc(step.description)}</div>`;
         }
@@ -4343,7 +4342,16 @@ OL.toggleInlineEdit = function(event, resId, stepId) {
 // Helper for Trigger Toggle
 OL.toggleTrigDetails = function(event, resId, trigId) {
     if (event) event.stopPropagation();
-    state.expandedTriggers.has(trigId) ? state.expandedTriggers.delete(trigId) : state.expandedTriggers.add(trigId);
+    
+    if (!(state.expandedTriggers instanceof Set)) state.expandedTriggers = new Set();
+    
+    if (state.expandedTriggers.has(trigId)) {
+        state.expandedTriggers.delete(trigId);
+    } else {
+        state.expandedTriggers.add(trigId);
+    }
+    
+    // RE-RENDER JUST THE LIST
     const res = OL.getResourceById(resId);
     document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
 };
