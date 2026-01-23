@@ -3798,9 +3798,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
                     onblur="OL.handleModalSave('${res.id}', this.value)">${esc(val(res.name))}</textarea>
             </div>
-            <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-            </div>
         </div>
 
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
@@ -4159,6 +4156,10 @@ window.renderSopStepList = function (res) {
     // --- ⚡ SECTION 1: TRIGGERS ---
     html += `
         <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+        <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
+            <button class="btn tiny primary" onclick="OL.toggleWorkflowFullScreen('${res.id}')">📃 List Editor</button>
+        </div>
         <div class="triggers-container" style="margin-bottom: 20px; border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
@@ -4551,8 +4552,8 @@ OL.switchFSMode = function(mode, resId) {
 
     if (mode === 'editor') {
         canvas.innerHTML = `
-            <div class="fs-editor-wrap" style="padding: 40px 20px; overflow-y: auto; height: 100%;">
-                <div style="max-width:900px; margin: 0 auto; background: var(--panel-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--line);">
+            <div class="fs-editor-wrap" style="padding: 40px 20px; overflow-y: auto; height: 100%; background: #050816;">
+                <div style="max-width:900px; margin: 0 auto; background: var(--panel-bg); padding: 30px; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                     <div id="sop-step-list"> 
                         ${renderSopStepList(res)}
                     </div>
