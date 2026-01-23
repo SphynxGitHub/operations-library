@@ -3737,7 +3737,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const currentRound = lineItem ? (lineItem.round || 1) : 1;
         roundInputHtml = `
             <div class="card-section" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--accent);">
-                <label class="modal-section-label" style="color: var(--accent);">🗓️ WORKFLOW PHASE</label>
+                <label class="modal-section-label" style="color: var(--accent);">🗓️ IMPLEMENTATION STAGE</label>
                 <div class="form-group" style="margin-top: 10px;">
                     <label class="tiny muted uppercase bold">Round / Phase Number</label>
                     <input type="number" class="modal-input" value="${currentRound}" min="1"
