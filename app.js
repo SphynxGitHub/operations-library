@@ -5780,6 +5780,20 @@ OL.openTriggerDetailModal = function(resId, triggerIdx) {
                 </div>
             </div>
 
+            <div style="display:flex; flex-direction:column; gap:5px;">
+                <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🔗 LINKED RESOURCES & GUIDES</label>
+                <div id="step-resources-list-${step.id}">
+                    ${renderStepResources(res.id, step)}
+                </div>
+                <div class="search-map-container" style="position:relative; margin-top:5px;">
+                    <input type="text" class="modal-input tiny" 
+                        placeholder="+ Link a Guide or SOP..." 
+                        onfocus="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)"
+                        oninput="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)">
+                    <div id="resource-results-${step.id}" class="search-results-overlay" style="position:absolute; top:100%; left:0; width:100%; z-index:100;"></div>
+                </div>
+            </div>
+
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">Technical Notes / Source URL</label>
                 <textarea class="modal-textarea" rows="3" 
