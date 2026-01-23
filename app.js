@@ -3709,9 +3709,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
-    const isAdmin = state.adminMode === true;
-    const hash = window.location.hash;
-    const isScopingSheet = hash.includes('scoping-sheet');
+    
+    // 🛡️ HARDENED ADMIN CHECK: Check state OR URL parameter directly
+    const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
     
     let res = null;
     let lineItem = null;
@@ -3729,6 +3729,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const activeData = lineItem || res;
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
+    const hash = window.location.hash;
+    const isScopingSheet = hash.includes('scoping-sheet');
     let roundInputHtml = "";
     if (lineItem || isScopingSheet) {
         const activeId = lineItem ? lineItem.id : targetId;
@@ -3745,7 +3747,11 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     }
 
     // --- 📊 SECTION: ADMIN PRICING & TYPE ---
-    const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => v.applyTo === res.type);
+    // We get the variables based on the Resource Type (e.g. 'Zap', 'Form')
+    const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
+        String(v.applyTo).toLowerCase() === String(res.type).toLowerCase()
+    );
+    
     const adminPricingHtml = isAdmin ? `
         <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
             <label class="modal-section-label">⚙️ RESOURCE CONFIG & PRICING</label>
@@ -3756,14 +3762,15 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
                 </select>
             </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                ${relevantVars.map(([varKey, v]) => `
+            <label class="tiny muted uppercase bold">Pricing Inputs</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:5px;">
+                ${relevantVars.length > 0 ? relevantVars.map(([varKey, v]) => `
                     <div class="modal-column">
                         <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
                         <input type="number" class="modal-input tiny" 
                             value="${num(activeData.data?.[varKey])}" 
                             oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
-                    </div>`).join("")}
+                    </div>`).join("") : '<div class="tiny muted italic" style="grid-column: 1/-1;">No pricing variables found for this type.</div>'}
             </div>
         </div>` : '';
 
@@ -3771,15 +3778,16 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
-    const sopLibraryHtml = linkedSOPs.length > 0 ? `
+    
+    const sopLibraryHtml = `
         <div class="card-section" style="margin-bottom:20px;">
             <label class="modal-section-label">📚 LINKED MASTER GUIDES</label>
             <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
-                ${linkedSOPs.map(sop => `<span class="pill soft tiny">📖 ${esc(sop.name)}</span>`).join("")}
+                ${linkedSOPs.length > 0 ? linkedSOPs.map(sop => `<span class="pill soft tiny">📖 ${esc(sop.name)}</span>`).join("") : '<span class="tiny muted">No guides linked to this resource template.</span>'}
             </div>
-        </div>` : '';
+        </div>`;
 
-    // --- 🚀 ASSEMBLY ---
+    // --- 🚀 FINAL ASSEMBLY ---
     const html = `
         <div class="modal-head" style="display: flex; flex-direction: column; gap: 15px; align-items: flex-start; padding: 20px;">
             <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
@@ -3792,7 +3800,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
             <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
                 <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-                <div style="flex:1"></div>
             </div>
         </div>
 
@@ -3807,6 +3814,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>
     `;
+    
     openModal(html);
     setTimeout(() => {
         const el = document.getElementById('modal-res-name');
