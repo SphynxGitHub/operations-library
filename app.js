@@ -3709,8 +3709,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
-    const hash = window.location.hash;
-    const isScopingSheet = hash.includes('scoping-sheet');
     const isAdmin = state.adminMode === true;
     
     let res = null;
@@ -3729,7 +3727,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const activeData = lineItem || res;
 
-    // --- SECTION A: ROUND/PHASE (Conditional) ---
+    // --- 🗓️ SECTION: WORKFLOW PHASE (Scoping Sheet only) ---
+    const hash = window.location.hash;
+    const isScopingSheet = hash.includes('scoping-sheet');
     let roundInputHtml = "";
     if (lineItem || isScopingSheet) {
         const activeId = lineItem ? lineItem.id : targetId;
@@ -3739,40 +3739,48 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <label class="modal-section-label" style="color: var(--accent);">🗓️ WORKFLOW PHASE</label>
                 <div class="form-group" style="margin-top: 10px;">
                     <label class="tiny muted uppercase bold">Round / Phase Number</label>
-                    <input type="number" id="modal-item-round" class="modal-input" 
-                           style="border-color: var(--accent); font-weight: bold;"
-                           value="${currentRound}" min="1"
+                    <input type="number" class="modal-input" value="${currentRound}" min="1"
                            onchange="OL.updateLineItem('${activeId}', 'round', this.value)">
                 </div>
             </div>`;
     }
 
-    // --- SECTION B: ADMIN PRICING & TYPE ---
+    // --- 📊 SECTION: ADMIN PRICING ---
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => v.applyTo === res.type);
-    
     const adminPricingHtml = isAdmin ? `
-        <div class="card-section" style="margin-bottom:20px;">
-            <label class="modal-section-label">⚙️ Resource Configuration</label>
-            <div style="margin-bottom:15px;">
+        <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
+            <label class="modal-section-label">⚙️ RESOURCE CONFIG & PRICING</label>
+            <div style="margin: 10px 0 15px 0;">
                 <label class="tiny muted uppercase bold">Resource Type</label>
                 <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
                     <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
                     ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
                 </select>
             </div>
-            <label class="tiny muted uppercase bold">📊 Scoping & Pricing</label>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:5px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                 ${relevantVars.map(([varKey, v]) => `
                     <div class="modal-column">
                         <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
                         <input type="number" class="modal-input tiny" 
-                            value="${num(activeData.data?.[varKey])}" placeholder="0"
+                            value="${num(activeData.data?.[varKey])}" 
                             oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
                     </div>`).join("")}
             </div>
         </div>` : '';
 
-    // --- 3. ASSEMBLE FULL MODAL HTML ---
+    // --- 📝 SECTION: LINKED SOPs (How-To Library) ---
+    const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
+        (ht.resourceIds || []).includes(res.masterRefId || res.id)
+    );
+    const sopLibraryHtml = linkedSOPs.length > 0 ? `
+        <div class="card-section" style="margin-bottom:20px;">
+            <label class="modal-section-label">📚 LINKED GUIDES (LIBRARY)</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+                ${linkedSOPs.map(sop => `<span class="pill soft tiny">📖 ${esc(sop.name)}</span>`).join("")}
+            </div>
+        </div>` : '';
+
+    // --- 🚀 FINAL ASSEMBLY ---
     const html = `
         <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
@@ -3780,22 +3788,26 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <input type="text" class="header-editable-input" id="modal-res-name"
                     value="${esc(val(res.name))}" placeholder="Resource Name..."
                     style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                    onblur="OL.handleModalSave('${res.id}')">
+                    onblur="OL.handleModalSave('${res.id}', this.value)">
             </div>
             <div style="display:flex; gap:8px;">
-                <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visualizer</button>
+                <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
                 <button class="btn small soft" onclick="OL.closeModal()">Close</button>
             </div>
         </div>
 
-        <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
+        <div class="modal-body" style="max-height: 80vh; overflow-y: auto; padding: 20px;">
             
             ${roundInputHtml} 
 
             ${adminPricingHtml}
 
-            <div class="card-section" style="padding-top:10px; border-top: 1px solid var(--line);">
-                <div id="sop-step-list">${renderSopStepList(res)}</div>
+            ${sopLibraryHtml}
+
+            <div class="card-section" style="margin-top:10px; padding-top:20px; border-top: 1px solid var(--line);">
+                <div id="sop-step-list">
+                    ${renderSopStepList(res)}
+                </div>
             </div>
         </div>
     `;
