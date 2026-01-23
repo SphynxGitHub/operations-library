@@ -3807,7 +3807,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     onblur="OL.handleModalSave('${res.id}')">
             </div>
             <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
         </div>
 
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
@@ -4167,31 +4167,33 @@ window.renderSopStepList = function (res) {
     html += `
         <div class="triggers-container" style="margin-bottom: 20px; background: rgba(255, 191, 0, 0.03); border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <label class="tiny accent bold uppercase" style="letter-spacing:1px;">⚡ Entry Triggers</label>
-                <button class="btn tiny soft" style="font-size:9px;" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
+                <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
+                <button class="btn tiny soft" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
             </div>
             <div id="triggers-list" style="display:flex; flex-direction:column; gap:6px;">
-                ${triggers.map((t, idx) => `
-                    <div class="dp-manager-row trigger-row is-clickable" 
-                         style="gap:10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
-                         onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
-                        
-                        <div style="flex:1; display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
-                            <span class="bold" style="font-size:0.9em; color: var(--accent);">
-                                ${esc(val(t.name, "New Trigger..."))}
-                            </span>
-                            ${t.assigneeName ? `
-                                <span class="tiny muted" style="margin-left:auto; font-size:9px; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:10px;">
-                                    👤 ${esc(t.assigneeName)}
+                ${triggers.map((t, idx) => {
+                    const trigId = `trig-${idx}`;
+                    const isExp = state.expandedTriggers.has(trigId);
+                    return `
+                    <div class="step-group">
+                        <div class="dp-manager-row trigger-row is-clickable" style="gap:10px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
+                             onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
+                            
+                            <div style="display:flex; align-items:center; width:35px; justify-content:space-between;">
+                                <span style="font-size: 10px; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleTrigDetails(event, '${res.id}', '${trigId}')">
+                                    ${isExp ? '▼' : '▶'}
                                 </span>
-                            ` : ''}
+                            </div>
+
+                            <div style="flex:1; display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
+                                <span class="bold" style="font-size:0.9em; color: var(--accent);">${esc(t.name || "New Trigger")}</span>
+                            </div>
+                            <button class="card-delete-btn" style="position:static" onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
                         </div>
-                        
-                        <button class="card-delete-btn" style="position:static" 
-                                onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
-                    </div>
-                `).join("")}
+                        ${isExp ? `<div class="tiny muted" style="margin-left: 45px; padding: 5px; font-style: italic;">👤 Assigned: ${esc(t.assigneeName || 'Unassigned')}</div>` : ''}
+                    </div>`;
+                }).join("")}
             </div>
         </div>
     `;
@@ -4335,6 +4337,14 @@ OL.toggleInlineEdit = function(event, resId, stepId) {
         state.expandedSteps.add(stepId);
     }
     
+    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
+};
+
+// Helper for Trigger Toggle
+OL.toggleTrigDetails = function(event, resId, trigId) {
+    if (event) event.stopPropagation();
+    state.expandedTriggers.has(trigId) ? state.expandedTriggers.delete(trigId) : state.expandedTriggers.add(trigId);
+    const res = OL.getResourceById(resId);
     document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
 };
 
@@ -5458,12 +5468,12 @@ OL.toggleStepOutcomes = function(event, resId, stepId) {
     
     if (isCurrentlyExpanded) {
         state.expandedSteps.delete(stepId);
-        if (state.editingStepId === stepId) state.editingStepId = null;
     } else {
-        state.expandedSteps.clear(); // 🚀 THE FIX: Ensures only one branch is visible
+        state.expandedSteps.clear(); // Keeps it focused
         state.expandedSteps.add(stepId);
-        state.editingStepId = stepId; 
     }
+    
+    // 💡 Note: We removed state.editingStepId here so the name stays read-only in the list
     
     const res = OL.getResourceById(resId);
     const listEl = document.getElementById('sop-step-list');
