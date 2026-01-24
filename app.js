@@ -9435,7 +9435,7 @@ function renderHowToCard(clientId, ht, isClientView) {
                 ${canDelete ? `
                 <button class="card-delete-btn" 
                         onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">x</button>
-            ` : ''}
+                ` : ''}
             </div>
             
             <div class="card-body" style="padding-top: 12px;">
@@ -9482,24 +9482,23 @@ OL.openHowToModal = function(htId, draftObj = null) {
     const isVaultMode = hash.includes('vault'); 
     const client = getActiveClient();
     
-    // 1. Resolve Guide Data (Check Master then Local)
+    // 1. Resolve Guide Data
     let ht = draftObj || (state.master.howToLibrary || []).find(h => h.id === htId);
     if (!ht && client) {
         ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
     }
     if (!ht) return;
 
-    // 2. Identify Permissions
+    // 2. Identify Permissions & Scope
     const isAdmin = window.FORCE_ADMIN === true;
     const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal; // 🚀 FIXED: isMaster is now defined here
     const isDraft = String(htId).startsWith('draft');
-    
-    // 🚀 THE FIX: canEdit allows guests to edit LOCAL files, but locks Master templates
-    const canEdit = isAdmin || isLocal || isDraft;
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
 
+    const canEdit = isAdmin || isLocal || isDraft;
     const canPromote = isAdmin && isLocal && !isVaultMode;
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-    const linkedTasks = (state.master.taskBlueprints || []).filter(t => (t.howToIds || []).includes(htId));
 
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -9522,37 +9521,37 @@ OL.openHowToModal = function(htId, draftObj = null) {
             ` : ''}
 
             ${isVaultMode && isAdmin ? `
-               <div style="display: flex; gap: 6px; align-items: center;">
-                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
-                        ${isMaster ? 'MASTER' : 'LOCAL'}
-                    </span>
-
-                    ${!isClientView && isMaster ? `
-                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
-                              style="font-size: 8px; cursor: pointer;"
-                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
-                            ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
-                        </span>
-                    ` : ''}
+                <div style="display:flex; background:var(--panel-soft); border-radius:6px; padding:2px; margin-right:10px;">
+                    <button class="btn tiny ${ht.scope === 'global' || !ht.scope ? 'accent' : 'soft'}" 
+                            style="min-width:100px;"
+                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'global'); OL.openHowToModal('${ht.id}')">Client-Facing</button>
+                    <button class="btn tiny ${ht.scope === 'internal' ? 'accent' : 'soft'}" 
+                            style="min-width:100px;"
+                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'internal'); OL.openHowToModal('${ht.id}')">Internal-Only</button>
                 </div>
             ` : ''}
+
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
             <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">🎥 Training Video URL (Loom, YouTube, Vimeo)</label>
-                
+                <label class="modal-section-label">📄 Brief Summary (Shows on card)</label>
+                <input type="text" class="modal-input tiny" 
+                       placeholder="One-sentence overview..."
+                       value="${esc(ht.summary || '')}" 
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL.handleHowToSave('${ht.id}', 'summary', this.value)">
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">🎥 Training Video URL</label>
                 ${canEdit ? `
                     <input type="text" class="modal-input tiny" 
-                           placeholder="Paste video link here..."
+                           placeholder="Paste link..."
                            value="${esc(ht.videoUrl || '')}" 
                            onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value); OL.openHowToModal('${ht.id}')">
-                ` : ht.videoUrl ? '' : '<div class="tiny muted italic">No video provided.</div>'}
-
-                ${ht.videoUrl ? `
-                    <div class="video-preview-wrap" style="margin-top:10px; border-radius:8px; overflow:hidden; background:#000; border: 1px solid var(--line);">
-                        ${OL.parseVideoEmbed(ht.videoUrl)}
-                    </div>
                 ` : ''}
+                ${ht.videoUrl ? `<div class="video-preview-wrap" style="margin-top:10px;">${OL.parseVideoEmbed(ht.videoUrl)}</div>` : ''}
             </div>
 
             <div class="card-section" style="margin-top:15px;">
@@ -9560,20 +9559,19 @@ OL.openHowToModal = function(htId, draftObj = null) {
                 <input type="text" class="modal-input tiny" 
                        value="${esc(ht.category || 'General')}" 
                        ${!canEdit ? 'readonly' : ''}
-                       placeholder="e.g. Finance, Tech..."
                        onblur="OL.handleHowToSave('${ht.id}', 'category', this.value)">
             </div>
 
             <div class="card-section" style="margin-top:15px;">
                 <label class="modal-section-label">📱 Related Applications</label>
-                <div class="pills-row" id="ht-app-pills" style="margin-bottom:8px;">
+                <div class="pills-row" id="ht-app-pills">
                     ${(ht.appIds || []).map(appId => {
                         const app = allApps.find(a => a.id === appId);
                         return app ? `<span class="pill tiny accent">${esc(app.name)}</span>` : '';
                     }).join('')}
                 </div>
                 ${canEdit ? `
-                    <div class="search-map-container">
+                    <div class="search-map-container" style="margin-top:8px;">
                         <input type="text" class="modal-input tiny" placeholder="Link an app..." 
                                onfocus="OL.filterHTAppSearch('${ht.id}', '')"
                                oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
