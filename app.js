@@ -9366,13 +9366,16 @@ window.renderHowToLibrary = function() {
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const hash = window.location.hash;
+    const urlParams = new URLSearchParams(window.location.search);
 
     if (!container) return;
 
-    // source selection
+    // 🚀 THE ZERO-FAILURE ADMIN CHECK
+    // We check the URL directly. If 'admin' matches 'pizza123', show buttons.
+    const isAdmin = urlParams.get('admin') === window.ADMIN_ACCESS_ID;
     const isVaultView = hash.startsWith('#/vault');
-    const isAdmin = state.adminMode === true; // Simplified: same as dashboard
 
+    // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
@@ -9382,23 +9385,24 @@ window.renderHowToLibrary = function() {
         <div class="section-header">
             <div>
                 <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted">${isVaultView ? 'Global Operational Standards' : `Guides for ${esc(client?.meta?.name)}`}</div>
+                <div class="small muted">${isVaultView ? 'Global Standards' : 'Project Guides'}</div>
             </div>
-            
             <div class="header-actions">
                 ${isAdmin ? `
-                    ${isVaultView ? `
-                        <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
-                    ` : `
-                        <button class="btn primary" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
-                    `}
+                    <button class="btn primary" style="background:#38bdf8 !important; color:black !important; font-weight:bold;" onclick="OL.openHowToEditorModal()">
+                        ${isVaultView ? '+ Create Master SOP' : '⬇ Import from Master'}
+                    </button>
                 ` : ''}
             </div>
         </div>
 
         <div class="cards-grid">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align:center; padding:50px;">No guides found here yet.</div>' : ''}
+            ${visibleGuides.length === 0 ? `
+                <div class="empty-hint" style="grid-column: 1/-1; text-align:center; padding:50px;">
+                    <p>No guides found here yet.</p>
+                    ${isAdmin ? '<p class="tiny muted">Admin verified: Use the button above to add content.</p>' : ''}
+                </div>` : ''}
         </div>
     `;
 };
