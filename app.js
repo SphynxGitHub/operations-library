@@ -9540,8 +9540,6 @@ OL.openHowToModal = function(htId, draftObj = null) {
                             onclick="OL.handleHowToSave('${ht.id}', 'scope', 'internal')">Internal</button>
                 </div>
             ` : ''}
-
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
             <div class="card-section" style="margin-top:15px;">
