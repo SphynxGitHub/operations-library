@@ -9469,7 +9469,7 @@ OL.openLocalHowToEditor = function() {
     const draftId = 'draft-local-ht-' + Date.now();
     const draftHowTo = {
         id: draftId,
-        name: "New Local SOP",
+        name: "",
         summary: "",
         content: "",
         isDraft: true,
