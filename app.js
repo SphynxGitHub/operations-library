@@ -9371,13 +9371,11 @@ window.renderHowToLibrary = function() {
     const hash = window.location.hash;
     const urlParams = new URLSearchParams(window.location.search);
 
-    // 🚀 THE FIX: Determine Admin status exactly like the sidebar does
+    // 1. Identify context strictly like the sidebar does
     const isPublic = urlParams.has("access");
     const effectiveAdminMode = isPublic ? false : state.adminMode;
-
-    // 1. Identify Context (Vault vs Project)
     const isVaultView = hash.startsWith('#/vault');
-    
+
     // 2. Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
