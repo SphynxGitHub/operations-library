@@ -9364,27 +9364,27 @@ OL.updateCredentialStatus = function (clientId, idx, status) {
 window.renderHowToLibrary = function() {
     OL.registerView(renderHowToLibrary);
     const container = document.getElementById("mainContent");
+    if (!container) return;
+
     const client = getActiveClient();
     const hash = window.location.hash;
     const urlParams = new URLSearchParams(window.location.search);
 
-    // 1. Unified Security Context
+    // 🚀 THE RESILIENT FIX: Check URL params directly as a backup to state
+    const adminKeyFromUrl = urlParams.get('admin');
     const isPublic = urlParams.has("access");
-    const isGuest = window.IS_GUEST === true || isPublic;
+    
+    // We are an admin if the state says so OR if the URL admin key matches our global constant
+    const isAdmin = !isPublic && (state.adminMode === true || OL.state.adminMode === true || (adminKeyFromUrl && adminKeyFromUrl === window.ADMIN_ACCESS_ID));
+    
     const isVaultView = hash.startsWith('#/vault');
-    const isAdmin = (state.adminMode === true || OL.state.adminMode === true) && !isGuest;
 
-    console.log("🛠️ Rendering How-To. Context:", isVaultView ? "VAULT" : "PROJECT", "Admin:", isAdmin);
-
-    if (!container) return;
-
-    // 2. Data Selection
+    // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
-    // 3. Render HTML
     container.innerHTML = `
         <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid var(--line); padding-bottom: 15px;">
             <div>
@@ -9407,7 +9407,7 @@ window.renderHowToLibrary = function() {
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
             ${visibleGuides.length === 0 ? `
                 <div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
-                    No instructional guides found here. ${isAdmin ? 'Click the button above to add one.' : ''}
+                    No instructional guides found here. ${isAdmin ? 'Use the button above to create your first SOP.' : ''}
                 </div>` : ''}
         </div>
     `;
