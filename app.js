@@ -9418,50 +9418,47 @@ function renderHowToCard(clientId, ht, isClientView) {
     const client = state.clients[clientId];
     const isAdmin = window.FORCE_ADMIN === true;
     
-    // 1. Identify Identity & Delete Permission
+    // 1. Logic & Permissions
     const isMaster = String(ht.id).startsWith('ht-vlt-') || !String(ht.id).startsWith('local-ht-');
     const isLocal = !isMaster;
     const canDelete = isAdmin || isLocal;
-    
-    // 2. Sharing Status (Master SOPs only)
     const isShared = client?.sharedMasterIds?.includes(ht.id);
 
-    // 3. UI logic for tags
-    let tagLabel = isMaster ? "MASTER" : "LOCAL";
-    let tagClass = isMaster ? "vault" : "local";
-    
     return `
         <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
              style="cursor: pointer; position: relative;" 
              onclick="OL.openHowToModal('${ht.id}')">
             
             ${canDelete ? `
-                <button class="card-delete-btn"" 
+                <button class="card-delete-btn" 
                         title="Delete SOP"
                         onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
                     &times;
                 </button>
             ` : ''}
 
-            <div class="card-header">
-                <div style="flex:1">
-                    <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
-                    <span class="pill tiny ${tagClass}" style="font-size: 8px; margin-top: 4px; display: inline-block;">
-                        ${tagLabel}
-                    </span>
+            <div class="card-header" style="display: block;">
+                <div class="card-title ht-card-title-${ht.id}" style="margin: 0 0 8px 0; padding-right: 20px; font-size: 1.1rem;">
+                    ${esc(ht.name || 'Untitled SOP')}
                 </div>
 
-                ${!isClientView && isMaster ? `
-                    <button class="pill tiny ${isShared ? 'accent' : 'soft'}" 
-                            style="white-space: nowrap; margin-left: 8px;"
-                            onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
-                        ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
-                    </button>
-                ` : ''}
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
+                        ${isMaster ? 'MASTER' : 'LOCAL'}
+                    </span>
+
+                    ${!isClientView && isMaster ? `
+                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                              style="font-size: 8px; cursor: pointer;"
+                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                        </span>
+                    ` : ''}
+                </div>
             </div>
             
-            <div class="card-body">
-                <p class="small muted" style="margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+            <div class="card-body" style="padding-top: 12px;">
+                <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">
                     ${esc(ht.summary || 'No summary provided.')}
                 </p>
             </div>
