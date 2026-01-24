@@ -340,7 +340,7 @@ window.buildLayout = function () {
                             if (!isModuleEnabled) return ''; 
 
                             // 3. Generate Link
-                            const linkHref = isPublic ? `${item.href}?access=${token}` : item.href;
+                            const linkHref = isPublic ? `${item.href}` : item.href;
                             const isActive = hash.startsWith(item.href);
 
                             return `
@@ -9493,10 +9493,11 @@ OL.openHowToModal = function(htId, draftObj = null) {
 
     // 2. Identify Permissions
     const isAdmin = window.FORCE_ADMIN === true;
-    const isLocal = String(ht.id).startsWith('local-ht-');
+    const isLocal = String(ht.id).includes('local');
+    const isDraft = String(htId).startsWith('draft');
     
     // 🚀 THE FIX: canEdit allows guests to edit LOCAL files, but locks Master templates
-    const canEdit = isAdmin || isLocal;
+    const canEdit = isAdmin || isLocal || isDraft;
 
     const canPromote = isAdmin && isLocal && !isVaultMode;
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
@@ -9799,57 +9800,40 @@ OL.syncHowToName = function(htId, newName) {
 // UPDATED SAVE LOGIC
 OL.handleHowToSave = function(id, field, value) {
     const client = getActiveClient();
-    const isVaultMode = window.location.hash.includes('vault');
     const cleanVal = (typeof value === 'string') ? value.trim() : value;
     
-    // 1. Resolve existing object
+    // 1. Resolve Target
     let ht = state.master.howToLibrary.find(h => h.id === id);
-    if (!ht && client && client.projectData.localHowTo) {
-        ht = client.projectData.localHowTo.find(h => h.id === id);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === id);
     }
 
-    // 🚀 2. DYNAMIC COMMIT: Route draft to Master or Local
-    if (!ht && (id.startsWith('draft-ht-') || id.startsWith('local-ht-'))) {
-        const isDraftLocal = id.startsWith('local-ht-');
-        const newId = isDraftLocal ? id : 'ht-vlt-' + Date.now();
-        
-        const newSOP = { 
-            id: newId, 
-            name: "New SOP",
-            summary: "",
-            content: "",
-            videoUrl: "",
-            appIds: [], 
-            resourceIds: [], 
-            scope: isDraftLocal ? 'private' : 'global',
-            createdDate: new Date().toISOString() 
+    // 🚀 THE CRITICAL FIX: If it's a local draft and wasn't found, create it now
+    if (!ht && id.includes('local') && client) {
+        if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+        const newLocal = { 
+            id: id, 
+            name: "New Local SOP", 
+            content: "", 
+            category: "General",
+            appIds: [],
+            resourceIds: []
         };
-        
-        // Initial value assignment
-        newSOP[field] = cleanVal;
-
-        if (isDraftLocal && client) {
-            if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
-            client.projectData.localHowTo.push(newSOP);
-            console.log("📍 Local SOP Committed to Project:", newId);
-        } else {
-            state.master.howToLibrary.push(newSOP);
-            console.log("🏛️ Master SOP Committed to Vault:", newId);
-        }
-        ht = newSOP;
-        OL.currentOpenHowToId = newId; 
+        client.projectData.localHowTo.push(newLocal);
+        ht = newLocal;
+        console.log("📍 New Local SOP Initialized in Project Data");
     }
 
-    if (!ht) return;
-
-    // 3. Update data and persist
-    ht[field] = cleanVal;
-    OL.persist();
-    
-    // 4. UI Sync: Update card titles in the background
-    if (field === 'name') {
-        const cardTitles = document.querySelectorAll(`.ht-card-title-${id}`);
-        cardTitles.forEach(el => el.innerText = cleanVal);
+    if (ht) {
+        ht[field] = cleanVal;
+        OL.persist();
+        
+        // 🔄 Surgical UI Sync for name
+        if (field === 'name') {
+            document.querySelectorAll(`.ht-card-title-${id}`).forEach(el => el.innerText = cleanVal);
+        }
+    } else {
+        console.error("❌ SAVE FAILED: No SOP or Client Context found for ID:", id);
     }
 };
 
