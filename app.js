@@ -9479,7 +9479,7 @@ OL.openLocalHowToEditor = function() {
 };
 
 // 3. RENDER HOW TO MODAL
-window.OL.openHowToModal = function(htId, draftObj = null) {
+OL.openHowToModal = function(htId, draftObj = null) {
     const hash = window.location.hash;
     const isVaultMode = hash.includes('vault'); 
     const client = getActiveClient();
@@ -9491,11 +9491,14 @@ window.OL.openHowToModal = function(htId, draftObj = null) {
     }
     if (!ht) return;
 
-    // 2. Identify Permissions & Context
+    // 2. Identify Permissions
     const isAdmin = window.FORCE_ADMIN === true;
     const isLocal = String(ht.id).startsWith('local-ht-');
-    const canPromote = isAdmin && isLocal && !isVaultMode;
     
+    // 🚀 THE FIX: canEdit allows guests to edit LOCAL files, but locks Master templates
+    const canEdit = isAdmin || isLocal;
+
+    const canPromote = isAdmin && isLocal && !isVaultMode;
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
     const linkedTasks = (state.master.taskBlueprints || []).filter(t => (t.howToIds || []).includes(htId));
 
@@ -9506,7 +9509,7 @@ window.OL.openHowToModal = function(htId, draftObj = null) {
                 <input type="text" class="header-editable-input" 
                        value="${esc(ht.name)}" 
                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                       ${!isAdmin ? 'readonly' : ''}
+                       ${!canEdit ? 'readonly' : ''} 
                        onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
             </div>
             
@@ -9532,19 +9535,28 @@ window.OL.openHowToModal = function(htId, draftObj = null) {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            ${ht.videoUrl ? `
-                <div class="card-section" style="margin-top:10px;">
-                    <div class="video-embed-container" style="border-radius:8px; overflow:hidden; background:#000;">
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">🎥 Training Video URL (Loom, YouTube, Vimeo)</label>
+                
+                ${canEdit ? `
+                    <input type="text" class="modal-input tiny" 
+                           placeholder="Paste video link here..."
+                           value="${esc(ht.videoUrl || '')}" 
+                           onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value); OL.openHowToModal('${ht.id}')">
+                ` : ht.videoUrl ? '' : '<div class="tiny muted italic">No video provided.</div>'}
+
+                ${ht.videoUrl ? `
+                    <div class="video-preview-wrap" style="margin-top:10px; border-radius:8px; overflow:hidden; background:#000; border: 1px solid var(--line);">
                         ${OL.parseVideoEmbed(ht.videoUrl)}
                     </div>
-                </div>
-            ` : ''}
+                ` : ''}
+            </div>
 
             <div class="card-section" style="margin-top:15px;">
                 <label class="modal-section-label">📂 Category</label>
                 <input type="text" class="modal-input tiny" 
                        value="${esc(ht.category || 'General')}" 
-                       ${!isAdmin ? 'readonly' : ''}
+                       ${!canEdit ? 'readonly' : ''}
                        placeholder="e.g. Finance, Tech..."
                        onblur="OL.handleHowToSave('${ht.id}', 'category', this.value)">
             </div>
@@ -9557,7 +9569,7 @@ window.OL.openHowToModal = function(htId, draftObj = null) {
                         return app ? `<span class="pill tiny accent">${esc(app.name)}</span>` : '';
                     }).join('')}
                 </div>
-                ${isAdmin ? `
+                ${canEdit ? `
                     <div class="search-map-container">
                         <input type="text" class="modal-input tiny" placeholder="Link an app..." 
                                onfocus="OL.filterHTAppSearch('${ht.id}', '')"
@@ -9570,8 +9582,8 @@ window.OL.openHowToModal = function(htId, draftObj = null) {
             <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:20px;">
                 <label class="modal-section-label">Instructions</label>
                 <textarea class="modal-textarea" rows="12" 
-                          ${!isAdmin ? 'readonly' : ''}
-                          style="${!isAdmin ? 'background:transparent; border:none;' : ''}"
+                          ${!canEdit ? 'readonly' : ''} 
+                          style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.5);' : ''}"
                           onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
             </div>
         </div>
@@ -9688,19 +9700,19 @@ OL.filterHTAppSearch = function(htId, query) {
 OL.parseVideoEmbed = function(url) {
     if (!url) return "";
     
-    // YouTube
+    // YouTube logic
     const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) return `<iframe width="100%" height="315" src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allowfullscreen></iframe>`;
     
-    // Loom
+    // Loom logic
     const loomMatch = url.match(/(?:https?:\/\/)?(?:www\.)?loom\.com\/share\/([a-zA-Z0-9]+)/);
     if (loomMatch) return `<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/${loomMatch[1]}" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>`;
 
-    // Vimeo
+    // Vimeo logic
     const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
     if (vimeoMatch) return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="100%" height="315" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
 
-    return "";
+    return `<div class="p-10 tiny warn">Unrecognized video format. Please use Loom, YouTube, or Vimeo.</div>`;
 };
 
 // Toggle a resource ID in the guide's resourceIds array
@@ -9788,42 +9800,53 @@ OL.syncHowToName = function(htId, newName) {
 OL.handleHowToSave = function(id, field, value) {
     const client = getActiveClient();
     const isVaultMode = window.location.hash.includes('vault');
+    const cleanVal = (typeof value === 'string') ? value.trim() : value;
     
-    // 1. Try to find existing
+    // 1. Resolve existing object
     let ht = state.master.howToLibrary.find(h => h.id === id);
     if (!ht && client && client.projectData.localHowTo) {
         ht = client.projectData.localHowTo.find(h => h.id === id);
     }
 
-    // 🚀 2. THE FIX: If NOT found and it's a draft, commit it immediately
-    if (!ht && id.startsWith('draft-ht-')) {
-        const newId = 'ht-vlt-' + Date.now();
+    // 🚀 2. DYNAMIC COMMIT: Route draft to Master or Local
+    if (!ht && (id.startsWith('draft-ht-') || id.startsWith('local-ht-'))) {
+        const isDraftLocal = id.startsWith('local-ht-');
+        const newId = isDraftLocal ? id : 'ht-vlt-' + Date.now();
+        
         const newSOP = { 
             id: newId, 
-            [field]: value.trim(), 
+            name: "New SOP",
+            summary: "",
+            content: "",
+            videoUrl: "",
             appIds: [], 
             resourceIds: [], 
-            scope: 'global',
+            scope: isDraftLocal ? 'private' : 'global',
             createdDate: new Date().toISOString() 
         };
         
-        state.master.howToLibrary.push(newSOP);
+        // Initial value assignment
+        newSOP[field] = cleanVal;
+
+        if (isDraftLocal && client) {
+            if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+            client.projectData.localHowTo.push(newSOP);
+            console.log("📍 Local SOP Committed to Project:", newId);
+        } else {
+            state.master.howToLibrary.push(newSOP);
+            console.log("🏛️ Master SOP Committed to Vault:", newId);
+        }
         ht = newSOP;
-        
-        // Silently update the modal ID so subsequent blurs don't create duplicates
-        // This is a bit of a hack but necessary for "window" assigned functions
         OL.currentOpenHowToId = newId; 
-        console.log("✅ Master SOP Committed:", newId);
     }
 
     if (!ht) return;
 
-    const cleanVal = (typeof value === 'string') ? value.trim() : value;
+    // 3. Update data and persist
     ht[field] = cleanVal;
-
     OL.persist();
     
-    // Sync the UI grid name if it's visible in the background
+    // 4. UI Sync: Update card titles in the background
     if (field === 'name') {
         const cardTitles = document.querySelectorAll(`.ht-card-title-${id}`);
         cardTitles.forEach(el => el.innerText = cleanVal);
