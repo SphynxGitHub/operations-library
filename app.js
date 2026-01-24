@@ -9369,18 +9369,16 @@ window.renderHowToLibrary = function() {
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const hash = window.location.hash;
+    const urlParams = new URLSearchParams(window.location.search);
 
-    // 1. Identify Context
+    // 🚀 THE FIX: Determine Admin status exactly like the sidebar does
+    const isPublic = urlParams.has("access");
+    const effectiveAdminMode = isPublic ? false : state.adminMode;
+
+    // 1. Identify Context (Vault vs Project)
     const isVaultView = hash.startsWith('#/vault');
-    const isAdmin = state.adminMode === true;
     
-    // 2. Permissions Check for Client View
-    if (!isVaultView) {
-        const perm = OL.checkPermission('how-to');
-        if (perm === 'none') return;
-    }
-
-    // 3. Data Selection
+    // 2. Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
@@ -9396,7 +9394,7 @@ window.renderHowToLibrary = function() {
             </div>
             
             <div class="header-actions">
-                ${isAdmin ? `
+                ${effectiveAdminMode ? `
                     ${isVaultView ? `
                         <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
                     ` : `
