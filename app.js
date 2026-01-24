@@ -9370,13 +9370,9 @@ window.renderHowToLibrary = function() {
     const hash = window.location.hash;
     const urlParams = new URLSearchParams(window.location.search);
 
-    // 🚀 THE RESILIENT FIX: Check URL params directly as a backup to state
-    const adminKeyFromUrl = urlParams.get('admin');
-    const isPublic = urlParams.has("access");
-    
-    // We are an admin if the state says so OR if the URL admin key matches our global constant
-    const isAdmin = !isPublic && (state.adminMode === true || OL.state.adminMode === true || (adminKeyFromUrl && adminKeyFromUrl === window.ADMIN_ACCESS_ID));
-    
+    // 🚀 THE "NUCLEAR" ADMIN CHECK:
+    // If the URL has the admin key, we ARE an admin. Period.
+    const isAdmin = urlParams.get('admin') === window.ADMIN_ACCESS_ID;
     const isVaultView = hash.startsWith('#/vault');
 
     // Data Selection
@@ -9386,18 +9382,18 @@ window.renderHowToLibrary = function() {
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
     container.innerHTML = `
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid var(--line); padding-bottom: 15px;">
+        <div class="section-header" style="display: flex !important; justify-content: space-between !important; align-items: center !important;">
             <div>
-                <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted">${isVaultView ? 'Global Operational Standards' : `Guides shared with ${esc(client?.meta?.name)}`}</div>
+                <h2 style="margin:0;">📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
+                <div class="small muted">${isVaultView ? 'Global Standards' : 'Project Guides'}</div>
             </div>
             
-            <div class="header-actions">
+            <div class="header-actions" style="display: flex !important; gap: 10px !important;">
                 ${isAdmin ? `
                     ${isVaultView ? `
-                        <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                        <button class="btn primary" style="background:#38bdf8 !important; color:black !important;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
                     ` : `
-                        <button class="btn primary" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
+                        <button class="btn primary" style="background:#38bdf8 !important; color:black !important;" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
                     `}
                 ` : ''}
             </div>
@@ -9406,8 +9402,9 @@ window.renderHowToLibrary = function() {
         <div class="cards-grid" style="margin-top: 20px;">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
             ${visibleGuides.length === 0 ? `
-                <div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
-                    No instructional guides found here. ${isAdmin ? 'Use the button above to create your first SOP.' : ''}
+                <div style="grid-column: 1/-1; padding: 100px; text-align: center; opacity: 0.5; border: 2px dashed var(--line);">
+                    <h3>Empty Library</h3>
+                    <p>${isAdmin ? 'Click the blue button above to create a guide.' : 'No guides have been shared with you yet.'}</p>
                 </div>` : ''}
         </div>
     `;
