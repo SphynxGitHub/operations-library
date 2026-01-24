@@ -9416,22 +9416,47 @@ window.renderHowToLibrary = function() {
 // 2. RENDER HOW TO CARDS
 function renderHowToCard(clientId, ht, isClientView) {
     const client = state.clients[clientId];
-    const isShared = client.sharedMasterIds.includes(ht.id);
+    
+    // 1. Identify Identity: Is it a Master SOP or a Local SOP?
+    const isMaster = String(ht.id).startsWith('ht-vlt-') || !String(ht.id).startsWith('local-ht-');
+    
+    // 2. Identify Sharing Status (only applies to Master SOPs)
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
 
+    // 3. UI logic for the tag
+    let tagLabel = isMaster ? "MASTER" : "LOCAL";
+    let tagClass = isMaster ? "vault" : "local";
+    
     return `
-        <div class="card ${isShared ? 'is-shared' : 'is-private'}">
+        <div class="card ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}">
             <div class="card-header">
-                <div class="card-title ht-card-title-${ht.id}">${esc(ht.name)}</div>
-                ${!isClientView ? `
+                <div style="flex:1">
+                    <div class="card-title ht-card-title-${ht.id}">${esc(ht.name)}</div>
+                    <span class="pill tiny ${tagClass}" style="font-size: 8px; margin-top: 4px; display: inline-block;">
+                        ${tagLabel}
+                    </span>
+                </div>
+
+                ${!isClientView && isMaster ? `
                     <button class="pill tiny ${isShared ? 'accent' : 'soft'}" 
-                            onclick="OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
                         ${isShared ? '🌍 Shared' : '🔒 Private'}
                     </button>
                 ` : ''}
+                
+                ${!isMaster ? `
+                    <button class="card-delete-btn" style="position:static;" 
+                            onclick="event.stopPropagation(); OL.deleteLocalSOP('${clientId}', '${ht.id}')">×</button>
+                ` : ''}
             </div>
+            
             <div class="card-body">
-                <p class="small muted" style="height: 40px; overflow: hidden;">${esc(ht.summary || 'No summary provided.')}</p>
-                <button class="btn small soft full-width" onclick="OL.openHowToModal('${ht.id}')">Read Guide ➔</button>
+                <p class="small muted" style="height: 40px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                    ${esc(ht.summary || 'No summary provided.')}
+                </p>
+                <button class="btn small soft full-width" onclick="OL.openHowToModal('${ht.id}')">
+                    ${isMaster ? 'Read Guide ➔' : 'Edit Local SOP ➔'}
+                </button>
             </div>
         </div>
     `;
@@ -9454,19 +9479,24 @@ OL.openLocalHowToEditorModal = function() {
 };
 
 // 3. RENDER HOW TO MODAL
-OL.openHowToModal = function(htId, draftObj = null) {
+window.OL.openHowToModal = function(htId, draftObj = null) {
     const hash = window.location.hash;
     const isVaultMode = hash.includes('vault'); 
     const client = getActiveClient();
     
-    // 1. Resolve Guide Data
+    // 1. Resolve Guide Data (Check Master then Local)
     let ht = draftObj || (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    }
     if (!ht) return;
 
-    // 2. Identify Permissions
-    const isAdmin = state.adminMode === true;
+    // 2. Identify Permissions & Context
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isLocal = String(ht.id).startsWith('local-ht-');
+    const canPromote = isAdmin && isLocal && !isVaultMode;
+    
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-
     const linkedTasks = (state.master.taskBlueprints || []).filter(t => (t.howToIds || []).includes(htId));
 
     const html = `
@@ -9480,7 +9510,15 @@ OL.openHowToModal = function(htId, draftObj = null) {
                        onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
             </div>
             
-            ${isVaultMode ? `
+            ${canPromote ? `
+                <button class="btn tiny primary" 
+                        style="background: #fbbf24 !important; color: black !important; font-weight: bold;" 
+                        onclick="OL.promoteLocalSOPToMaster('${ht.id}')">
+                    ⭐ PROMOTE TO MASTER
+                </button>
+            ` : ''}
+
+            ${isVaultMode && isAdmin ? `
                 <div style="display:flex; background:var(--panel-soft); border-radius:6px; padding:2px; margin-right:10px;">
                     <button class="btn tiny ${ht.scope === 'global' || !ht.scope ? 'accent' : 'soft'}" 
                             style="min-width:70px;"
@@ -9494,6 +9532,14 @@ OL.openHowToModal = function(htId, draftObj = null) {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
+            ${ht.videoUrl ? `
+                <div class="card-section" style="margin-top:10px;">
+                    <div class="video-embed-container" style="border-radius:8px; overflow:hidden; background:#000;">
+                        ${OL.parseVideoEmbed(ht.videoUrl)}
+                    </div>
+                </div>
+            ` : ''}
+
             <div class="card-section" style="margin-top:15px;">
                 <label class="modal-section-label">📂 Category</label>
                 <input type="text" class="modal-input tiny" 
@@ -9508,83 +9554,61 @@ OL.openHowToModal = function(htId, draftObj = null) {
                 <div class="pills-row" id="ht-app-pills" style="margin-bottom:8px;">
                     ${(ht.appIds || []).map(appId => {
                         const app = allApps.find(a => a.id === appId);
-                        return app ? `
-                            <span class="pill tiny accent is-clickable" 
-                                  style="cursor: pointer;" 
-                                  onclick="OL.openAppModal('${app.id}')">
-                                ${esc(app.name)}
-                            </span>` : '';
+                        return app ? `<span class="pill tiny accent">${esc(app.name)}</span>` : '';
                     }).join('')}
                 </div>
-                <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" placeholder="Link an app..." 
-                           onfocus="OL.filterHTAppSearch('${ht.id}', '')"
-                           oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
-                    <div id="ht-app-search-results" class="search-results-overlay"></div>
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">🛠️ Linked Master Resources</label>
-                <div class="pills-row" id="ht-resource-pills" style="margin-bottom:8px;">
-                    ${(ht.resourceIds || []).map(resId => {
-                        const res = (state.master.resources || []).find(r => r.id === resId);
-                        return res ? `
-                            <span class="pill tiny soft is-clickable" 
-                                  style="cursor: pointer;" 
-                                  oonclick="OL.openResourceModal('${res.id}')">
-                                 ${esc(res.name)}
-                            </span>` : '';
-                    }).join('')}
-                </div>
-                <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" placeholder="Link a Resource to this guide..." 
-                          onfocus="OL.filterHTResourceSearch('${ht.id}', '')"
-                          oninput="OL.filterHTResourceSearch('${ht.id}', this.value)">
-                    <div id="ht-resource-search-results" class="search-results-overlay"></div>
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">🎥 Training Video URL</label>
-                <input type="text" class="modal-input tiny" 
-                       value="${esc(ht.videoUrl || '')}" 
-                       ${!isAdmin ? 'readonly' : ''}
-                       onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value)">
-            </div>
-
-            <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <label class="modal-section-label">📋 Client Requirements Logic</label>
-                    <button class="btn tiny primary" onclick="OL.addHTRequirement('${ht.id}')">+ Add Requirement</button>
-                </div>
-                <div id="ht-requirements-list">
-                    ${renderHTRequirements(ht)}
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label">📋 Used in Master Tasks</label>
-                <div class="pills-row">
-                    ${linkedTasks.map(task => `
-                        <span class="pill tiny soft is-clickable" 
-                              style="cursor: pointer;"
-                              onclick="OL.openTaskModal('${task.id}', true)">
-                            📋 ${esc(task.title || task.name)}
-                        </span>
-                    `).join('')}
-                    ${linkedTasks.length === 0 ? '<span class="tiny muted italic">Not currently linked to any blueprints.</span>' : ''}
-                </div>
+                ${isAdmin ? `
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" placeholder="Link an app..." 
+                               onfocus="OL.filterHTAppSearch('${ht.id}', '')"
+                               oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
+                        <div id="ht-app-search-results" class="search-results-overlay"></div>
+                    </div>
+                ` : ''}
             </div>
 
             <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:20px;">
                 <label class="modal-section-label">Instructions</label>
                 <textarea class="modal-textarea" rows="12" 
+                          ${!isAdmin ? 'readonly' : ''}
+                          style="${!isAdmin ? 'background:transparent; border:none;' : ''}"
                           onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
             </div>
         </div>
     `;
     openModal(html);
+};
+
+window.OL.promoteLocalSOPToMaster = function(localId) {
+    const client = getActiveClient();
+    const localSOP = client?.projectData?.localHowTo?.find(h => h.id === localId);
+
+    if (!localSOP) return;
+    if (!confirm(`Standardize "${localSOP.name}"? This will add it to the Global Vault for all future projects.`)) return;
+
+    // 1. Create the Master Copy
+    const masterId = 'ht-vlt-' + Date.now();
+    const masterCopy = {
+        ...JSON.parse(JSON.stringify(localSOP)), 
+        id: masterId,
+        scope: 'global',
+        createdDate: new Date().toISOString()
+    };
+
+    // 2. Add to Global Library
+    if (!state.master.howToLibrary) state.master.howToLibrary = [];
+    state.master.howToLibrary.push(masterCopy);
+
+    // 3. Remove Local copy and replace with Shared Master link
+    client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== localId);
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    client.sharedMasterIds.push(masterId);
+
+    OL.persist();
+    OL.closeModal();
+    renderHowToLibrary(); // Refresh grid to show new status
+    
+    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
 };
 
 function renderHTRequirements(ht) {
@@ -9797,6 +9821,16 @@ OL.deleteHowToGuide = function(htId) {
     OL.persist();
     renderHowToLibrary();
     console.log("🗑️ Master Guide Deleted:", htId);
+};
+
+OL.deleteLocalSOP = function(clientId, htId) {
+    if (!confirm("Permanently delete this local SOP? Master templates will not be affected.")) return;
+    const client = state.clients[clientId];
+    if (client && client.projectData.localHowTo) {
+        client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
+        OL.persist();
+        renderHowToLibrary();
+    }
 };
 
 // 6. HANDLE SYNCING TO MASTER AND VICE VERSA
