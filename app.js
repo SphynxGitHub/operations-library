@@ -272,7 +272,7 @@ window.buildLayout = function () {
       href: "#/analyze",
     },
     {
-      key: "howto",
+      key: "how-to",
       label: "How-To Library",
       icon: "👩‍🏫",
       href: "#/how-to",
@@ -734,7 +734,7 @@ OL.onboardNewClient = function () {
         resources: false,
         scoping: false,
         analysis: false,
-        howto: false,
+        "how-to": false,
         team: false
     },
     permissions: {
