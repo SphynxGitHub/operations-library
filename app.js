@@ -9370,31 +9370,33 @@ window.renderHowToLibrary = function() {
     const client = getActiveClient();
     const hash = window.location.hash;
 
-    // 🛡️ THE GATEKEEPER: Determine if we are viewing the Master Vault or a Project
-    const isVaultView = hash.includes('vault');
+    // 1. Identify Context
+    const isVaultView = hash.startsWith('#/vault');
+    const isAdmin = state.adminMode === true;
     
-    // 1. Permissions Check
-    const perm = OL.checkPermission('how-to');
-    if (perm === 'none' && !isVaultView) return;
+    // 2. Permissions Check for Client View
+    if (!isVaultView) {
+        const perm = OL.checkPermission('how-to');
+        if (perm === 'none') return;
+    }
 
-    // 2. Data Selection
+    // 3. Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
-    // 3. UI logic: Only show edit/create buttons if we are an Admin
-    const canManage = state.adminMode === true;
-
     container.innerHTML = `
         <div class="section-header">
             <div>
                 <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted subheader">${isVaultView ? 'Global Operational Standards' : `Guides shared with ${esc(client?.meta?.name)}`}</div>
+                <div class="small muted subheader">
+                    ${isVaultView ? 'Global Operational Standards' : `Guides shared with ${esc(client?.meta?.name)}`}
+                </div>
             </div>
             
             <div class="header-actions">
-                ${canManage ? `
+                ${isAdmin ? `
                     ${isVaultView ? `
                         <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
                     ` : `
