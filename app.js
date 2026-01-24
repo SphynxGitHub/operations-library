@@ -159,12 +159,12 @@ OL.initializeSecurityContext = function() {
     } 
 
     // 🛠️ 2. ADMIN CHECK SECOND
-    // Only if there is no clientToken can the user be verified as an Admin.
     if (adminKeyFromUrl && adminKeyFromUrl === savedAdminID) {
-        state.adminMode = true;
+        state.adminMode = true; // 🚀 THIS MUST SET THE GLOBAL STATE
+        OL.state.adminMode = true; 
         console.log("🛠️ Admin Context Verified");
         return true; 
-    } 
+    }
     
     // 🔒 3. SECURE LOCKOUT
     if (!adminKeyFromUrl && !clientToken) {
