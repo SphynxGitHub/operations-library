@@ -9462,7 +9462,7 @@ function renderHowToCard(clientId, ht, isClientView) {
     `;
 }
 
-OL.openLocalHowToEditorModal = function() {
+OL.openLocalHowToEditor = function() {
     const client = getActiveClient();
     if (!client) return;
 
