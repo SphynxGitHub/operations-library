@@ -9429,17 +9429,12 @@ function renderHowToCard(clientId, ht, isClientView) {
              style="cursor: pointer; position: relative;" 
              onclick="OL.openHowToModal('${ht.id}')">
 
-            <div class="card-header" style="display: block;">
-                <div class="card-title ht-card-title-${ht.id}" style="margin: 0 0 8px 0; padding-right: 20px; font-size: 1.1rem;">
-                    ${esc(ht.name || 'Untitled SOP')}
-                </div>
+            <div class="card-header">
+                <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
 
                 ${canDelete ? `
                 <button class="card-delete-btn" 
-                        title="Delete SOP"
-                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
-                    &times;
-                </button>
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">x</button>
             ` : ''}
 
                 <div style="display: flex; gap: 6px; align-items: center;">
@@ -9528,13 +9523,18 @@ OL.openHowToModal = function(htId, draftObj = null) {
             ` : ''}
 
             ${isVaultMode && isAdmin ? `
-                <div style="display:flex; background:var(--panel-soft); border-radius:6px; padding:2px; margin-right:10px;">
-                    <button class="btn tiny ${ht.scope === 'global' || !ht.scope ? 'accent' : 'soft'}" 
-                            style="min-width:100px;"
-                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'global')">Client-Facing</button>
-                    <button class="btn tiny ${ht.scope === 'internal' ? 'accent' : 'soft'}" 
-                            style="min-width:100px;"
-                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'internal')">Internal-Only</button>
+               <div style="display: flex; gap: 6px; align-items: center;">
+                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
+                        ${isMaster ? 'MASTER' : 'LOCAL'}
+                    </span>
+
+                    ${!isClientView && isMaster ? `
+                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                              style="font-size: 8px; cursor: pointer;"
+                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                        </span>
+                    ` : ''}
                 </div>
             ` : ''}
         </div>
