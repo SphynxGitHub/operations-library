@@ -745,6 +745,7 @@ OL.onboardNewClient = function () {
       checklist: "full",
       team: "full",
       "how-to": "full",
+      analysis: "full"
     },
     projectData: {
       localApps: [],
@@ -842,7 +843,7 @@ OL.toggleClientModule = function(clientId, moduleId) {
     window.buildLayout(); 
     
     console.log(`✅ Module ${moduleId} toggled: ${client.modules[moduleId]}`);
-};;
+};
 
 OL.copyShareLink = function(token) {
     const url = `${window.location.origin}${window.location.pathname}?access=${token}#/client-tasks`;
