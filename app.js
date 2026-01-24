@@ -755,6 +755,7 @@ OL.onboardNewClient = function () {
       localFunctions: [],
       localAnalyses: [],
       localResources: [],
+      localHowTo: [],
       scopingSheets: [{ id: "initial", lineItems: [] }],
       clientTasks: [],
       teamMembers: [],
@@ -9374,40 +9375,40 @@ window.renderHowToLibrary = function() {
 
     if (!container) return;
 
-    // 🚀 USE THE LOCKED ANCHOR
     const isAdmin = window.FORCE_ADMIN === true;
     const isVaultView = hash.startsWith('#/vault');
 
+    // 1. Data Selection (Master + Project Local)
     const masterLibrary = state.master.howToLibrary || [];
+    const localLibrary = (client && client.projectData.localHowTo) || [];
+    
+    // If in Vault, show all master. If in project, show shared masters + locals.
     const visibleGuides = isVaultView 
         ? masterLibrary 
-        : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
+        : [...masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id)), ...localLibrary];
 
     container.innerHTML = `
         <div class="section-header" style="display: flex !important; visibility: visible !important; opacity: 1 !important;">
             <div style="flex: 1;">
                 <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted">Standards and Guides</div>
+                <div class="small muted">${isVaultView ? 'Global Standards' : `Custom guides for ${esc(client?.meta?.name)}`}</div>
             </div>
             
             <div class="header-actions" style="display: flex !important; gap: 10px !important;">
-                ${isAdmin ? `
-                    <button class="btn primary" 
-                            style="background: #38bdf8 !important; color: black !important; font-weight: bold !important; display: inline-block !important; border: 2px solid white !important;" 
-                            onclick="OL.openHowToEditorModal()">
-                        ${isVaultView ? '+ Create Master SOP' : '⬇ Import from Master'}
-                    </button>
+                ${isVaultView && isAdmin ? `
+                    <button class="btn primary" style="background: #38bdf8 !important; color: black !important; font-weight: bold;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                ` : ''}
+
+                ${!isVaultView ? `
+                    <button class="btn small soft" onclick="OL.openLocalHowToEditor()">+ Create Local SOP</button>
+                    ${isAdmin ? `<button class="btn primary" style="background: #38bdf8 !important; color: black !important; margin-left:8px;" onclick="OL.importHowToToProject()">⬇ Import Master</button>` : ''}
                 ` : ''}
             </div>
         </div>
 
         <div class="cards-grid" style="margin-top: 20px;">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? `
-                <div style="grid-column: 1/-1; text-align: center; padding: 100px; border: 2px dashed rgba(255,255,255,0.1);">
-                    <p>No guides found.</p>
-                    ${isAdmin ? '<p style="color: #38bdf8;">Verified Admin: You should see the BLUE button above.</p>' : ''}
-                </div>` : ''}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
         </div>
     `;
 };
@@ -9435,6 +9436,22 @@ function renderHowToCard(clientId, ht, isClientView) {
         </div>
     `;
 }
+
+OL.openLocalHowToEditorModal = function() {
+    const client = getActiveClient();
+    if (!client) return;
+
+    const draftId = 'draft-local-ht-' + Date.now();
+    const draftHowTo = {
+        id: draftId,
+        name: "New Local SOP",
+        summary: "",
+        content: "",
+        isDraft: true,
+        isLocal: true // 🚀 Flag to tell the saver where to go
+    };
+    OL.openHowToModal(draftId, draftHowTo);
+};
 
 // 3. RENDER HOW TO MODAL
 OL.openHowToModal = function(htId, draftObj = null) {
@@ -9723,32 +9740,41 @@ OL.syncHowToName = function(htId, newName) {
 
 // UPDATED SAVE LOGIC
 OL.handleHowToSave = function(id, field, value) {
-    const ht = state.master.howToLibrary.find(h => h.id === id);
+    const client = getActiveClient();
+    
+    // 1. Check Master Library
+    let ht = state.master.howToLibrary.find(h => h.id === id);
+    
+    // 2. If not in master, check the active project's local list
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === id);
+    }
+
+    // 3. Handle NEW Local Draft Commits
+    if (!ht && id.startsWith('local-ht-') && client) {
+        const newLocal = { id, [field]: value.trim(), createdDate: new Date().toISOString() };
+        client.projectData.localHowTo.push(newLocal);
+        ht = newLocal;
+    }
+
     if (!ht) return;
 
     const cleanVal = (typeof value === 'string') ? value.trim() : value;
     ht[field] = cleanVal;
 
-    // 🔒 1. If set to internal, automatically revoke from all clients
-    if (field === 'scope' && cleanVal === 'internal') {
-        Object.values(state.clients).forEach(client => {
-            if (client.sharedMasterIds) {
-                client.sharedMasterIds = client.sharedMasterIds.filter(mid => mid !== id);
-            }
+    // Standard revocation logic for master guides
+    if (field === 'scope' && cleanVal === 'internal' && !id.startsWith('local-')) {
+        Object.values(state.clients).forEach(c => {
+            if (c.sharedMasterIds) c.sharedMasterIds = c.sharedMasterIds.filter(mid => mid !== id);
         });
     }
 
-    OL.persist(); // Save to Firebase
-
-    // 🔄 2. THE FIX: Trigger an immediate UI refresh for specific fields
-    if (field === 'scope') {
-        // Re-opens the current modal to update button colors and scope indicators
-        OL.openHowToModal(id); 
-        
-        // Also refresh the background grid to sync visibility
-        if (typeof renderHowToLibrary === 'function') {
-            renderHowToLibrary(); 
-        }
+    OL.persist();
+    
+    // Sync UI
+    if (field === 'name') {
+        const cardTitles = document.querySelectorAll(`.ht-card-title-${id}`);
+        cardTitles.forEach(el => el.innerText = cleanVal);
     }
 };
 
