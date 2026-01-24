@@ -9436,7 +9436,9 @@ function renderHowToCard(clientId, ht, isClientView) {
                 <button class="card-delete-btn" 
                         onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">x</button>
             ` : ''}
-
+            </div>
+            
+            <div class="card-body" style="padding-top: 12px;">
                 <div style="display: flex; gap: 6px; align-items: center;">
                     <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
                         ${isMaster ? 'MASTER' : 'LOCAL'}
@@ -9450,9 +9452,6 @@ function renderHowToCard(clientId, ht, isClientView) {
                         </span>
                     ` : ''}
                 </div>
-            </div>
-            
-            <div class="card-body" style="padding-top: 12px;">
                 <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">
                     ${esc(ht.summary || 'No summary provided.')}
                 </p>
