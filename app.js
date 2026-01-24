@@ -502,6 +502,7 @@ OL.getCurrentContext = function() {
 // 🚀 Register current view so modals know what to refresh
 OL.registerView = function(renderFn) {
     OL.currentRenderer = renderFn;
+    const viewName = renderFn.name || window.location.hash;
     console.log(`📍 View Context Set: ${renderFn.name}`);
 };
 
@@ -9364,16 +9365,14 @@ OL.updateCredentialStatus = function (clientId, idx, status) {
 window.renderHowToLibrary = function() {
     OL.registerView(renderHowToLibrary);
     const container = document.getElementById("mainContent");
-    if (!container) return;
-
     const client = getActiveClient();
     const hash = window.location.hash;
-    const urlParams = new URLSearchParams(window.location.search);
 
-    // 🚀 THE "NUCLEAR" ADMIN CHECK:
-    // If the URL has the admin key, we ARE an admin. Period.
-    const isAdmin = urlParams.get('admin') === window.ADMIN_ACCESS_ID;
+    if (!container) return;
+
+    // 🚀 STANDARD LOGIC (Same as Apps/Resources)
     const isVaultView = hash.startsWith('#/vault');
+    const isAdmin = (state.adminMode === true || OL.state.adminMode === true);
 
     // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
@@ -9382,30 +9381,23 @@ window.renderHowToLibrary = function() {
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
     container.innerHTML = `
-        <div class="section-header" style="display: flex !important; justify-content: space-between !important; align-items: center !important;">
+        <div class="section-header">
             <div>
-                <h2 style="margin:0;">📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted">${isVaultView ? 'Global Standards' : 'Project Guides'}</div>
+                <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
+                <div class="small muted subheader">${isVaultView ? 'Global Standards' : 'Project Guides'}</div>
             </div>
-            
-            <div class="header-actions" style="display: flex !important; gap: 10px !important;">
+            <div class="header-actions">
                 ${isAdmin ? `
-                    ${isVaultView ? `
-                        <button class="btn primary" style="background:#38bdf8 !important; color:black !important;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
-                    ` : `
-                        <button class="btn primary" style="background:#38bdf8 !important; color:black !important;" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
-                    `}
+                    <button class="btn primary" onclick="OL.openHowToEditorModal()">
+                        ${isVaultView ? '+ Create Master SOP' : '⬇ Import from Master'}
+                    </button>
                 ` : ''}
             </div>
         </div>
 
-        <div class="cards-grid" style="margin-top: 20px;">
+        <div class="cards-grid">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? `
-                <div style="grid-column: 1/-1; padding: 100px; text-align: center; opacity: 0.5; border: 2px dashed var(--line);">
-                    <h3>Empty Library</h3>
-                    <p>${isAdmin ? 'Click the blue button above to create a guide.' : 'No guides have been shared with you yet.'}</p>
-                </div>` : ''}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint">No guides found.</div>' : ''}
         </div>
     `;
 };
