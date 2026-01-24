@@ -9643,7 +9643,13 @@ function renderHTRequirements(ht) {
 
 // HOW TO AND APP OVERLAP
 OL.toggleHTApp = function(htId, appId) {
-    const ht = state.master.howToLibrary.find(h => h.id === htId);
+    const client = getActiveClient();
+    let ht = state.master.howToLibrary.find(h => h.id === htId);
+    
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
     if (!ht) return;
     
     if (!ht.appIds) ht.appIds = [];
@@ -9653,7 +9659,7 @@ OL.toggleHTApp = function(htId, appId) {
     else ht.appIds.splice(idx, 1);
     
     OL.persist();
-    OL.openHowToModal(htId); // Refresh
+    OL.openHowToModal(htId);
 };
 
 OL.filterHTAppSearch = function(htId, query) {
@@ -9661,10 +9667,24 @@ OL.filterHTAppSearch = function(htId, query) {
     if (!listEl) return;
     const q = (query || "").toLowerCase();
     const client = getActiveClient();
-    const ht = state.master.howToLibrary.find(h => h.id === htId);
+    
+    // 🚀 THE FIX: Search BOTH Master and Local libraries to find the SOP object
+    let ht = state.master.howToLibrary.find(h => h.id === htId);
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    // Guard clause: If ht is still not found, exit early
+    if (!ht) {
+        console.warn("SOP not found for ID:", htId);
+        return;
+    }
     
     const allApps = [...state.master.apps, ...(client?.projectData?.localApps || [])];
-    const matches = allApps.filter(a => a.name.toLowerCase().includes(q) && !(ht.appIds || []).includes(a.id));
+    // Use an empty array fallback for appIds if it doesn't exist yet
+    const currentAppIds = ht.appIds || [];
+    
+    const matches = allApps.filter(a => a.name.toLowerCase().includes(q) && !currentAppIds.includes(a.id));
     
     listEl.innerHTML = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.toggleHTApp('${htId}', '${app.id}')">
@@ -9693,17 +9713,27 @@ OL.parseVideoEmbed = function(url) {
 
 // Toggle a resource ID in the guide's resourceIds array
 OL.toggleHTResource = function(htId, resId) {
-    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Find the target SOP in Master OR Local
+    let ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
     if (!ht) return;
     
     if (!ht.resourceIds) ht.resourceIds = [];
     const idx = ht.resourceIds.indexOf(resId);
     
-    if (idx === -1) ht.resourceIds.push(resId);
-    else ht.resourceIds.splice(idx, 1);
+    if (idx === -1) {
+        ht.resourceIds.push(resId);
+    } else {
+        ht.resourceIds.splice(idx, 1);
+    }
     
-    OL.persist(); //
-    OL.openHowToModal(htId); // Refresh UI to show updated pills
+    OL.persist(); // This will now save the modified object in whichever array it lives in
+    OL.openHowToModal(htId); 
 };
 
 // Filter the master resource library for the search dropdown
