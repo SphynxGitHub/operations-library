@@ -149,15 +149,18 @@ OL.initializeSecurityContext = function() {
     // If 'access' is in the URL, we FORCE adminMode to false immediately.
     if (clientToken) {
         state.adminMode = false;
-        console.log("👨‍💼 Client Portal Verified (Admin Disabled)");
+        OL.state.adminMode = false;
+        window.IS_GUEST = true; // Set a global flag
+        console.log("👨‍💼 Guest Access Mode Active");
         return true;
-    } 
+    }
 
     // 🛠️ 2. ADMIN CHECK SECOND
     if (adminKeyFromUrl && adminKeyFromUrl === savedAdminID) {
-        state.adminMode = true; // 🚀 THIS MUST SET THE GLOBAL STATE
-        OL.state.adminMode = true; 
-        console.log("🛠️ Admin Context Verified");
+        state.adminMode = true;
+        OL.state.adminMode = true;
+        window.IS_GUEST = false; 
+        console.log("🛠️ Admin Mode Active");
         return true; 
     }
 
@@ -9366,8 +9369,7 @@ window.renderHowToLibrary = function() {
     const hash = window.location.hash;
     const urlParams = new URLSearchParams(window.location.search);
 
-    const isPublic = urlParams.has("access");
-    const effectiveAdminMode = isPublic ? false : (state.adminMode || OL.state.adminMode);
+    const isGuest = window.IS_GUEST === true;
     const isVaultView = hash.startsWith('#/vault');
 
     // Prove the logic is reaching the button stage
@@ -9386,14 +9388,14 @@ window.renderHowToLibrary = function() {
                 <div class="small muted">${isVaultView ? 'Global Operational Standards' : `Guides shared with ${esc(client?.meta?.name)}`}</div>
             </div>
             
-            <div class="header-actions" id="how-to-actions" style="display: flex !important; gap: 10px; visibility: visible !important;">
-                ${effectiveAdminMode ? `
+            <div class="header-actions">
+                ${!isGuest ? `
                     ${isVaultView ? `
-                        <button class="btn primary" style="background: var(--accent) !important; color: black !important; display: block !important;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                        <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
                     ` : `
-                        <button class="btn primary" style="background: var(--accent) !important; color: black !important; display: block !important;" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
+                        <button class="btn primary" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
                     `}
-                ` : `<span class="tiny muted">Read Only Mode</span>`}
+                ` : ''}
             </div>
         </div>
 
