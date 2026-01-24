@@ -9668,22 +9668,14 @@ OL.filterHTAppSearch = function(htId, query) {
     const q = (query || "").toLowerCase();
     const client = getActiveClient();
     
-    // 🚀 THE FIX: Search BOTH Master and Local libraries to find the SOP object
-    let ht = state.master.howToLibrary.find(h => h.id === htId);
-    if (!ht && client && client.projectData.localHowTo) {
-        ht = client.projectData.localHowTo.find(h => h.id === htId);
-    }
+    // Find the SOP or use a dummy object if it's still a draft
+    let ht = state.master.howToLibrary.find(h => h.id === htId) || 
+             (client?.projectData?.localHowTo || []).find(h => h.id === htId);
 
-    // Guard clause: If ht is still not found, exit early
-    if (!ht) {
-        console.warn("SOP not found for ID:", htId);
-        return;
-    }
+    // 🚀 THE FIX: If it's a brand new draft, treat it as having 0 apps linked
+    const currentAppIds = ht ? (ht.appIds || []) : [];
     
     const allApps = [...state.master.apps, ...(client?.projectData?.localApps || [])];
-    // Use an empty array fallback for appIds if it doesn't exist yet
-    const currentAppIds = ht.appIds || [];
-    
     const matches = allApps.filter(a => a.name.toLowerCase().includes(q) && !currentAppIds.includes(a.id));
     
     listEl.innerHTML = matches.map(app => `
@@ -9795,20 +9787,33 @@ OL.syncHowToName = function(htId, newName) {
 // UPDATED SAVE LOGIC
 OL.handleHowToSave = function(id, field, value) {
     const client = getActiveClient();
+    const isVaultMode = window.location.hash.includes('vault');
     
-    // 1. Check Master Library
+    // 1. Try to find existing
     let ht = state.master.howToLibrary.find(h => h.id === id);
-    
-    // 2. If not in master, check the active project's local list
     if (!ht && client && client.projectData.localHowTo) {
         ht = client.projectData.localHowTo.find(h => h.id === id);
     }
 
-    // 3. Handle NEW Local Draft Commits
-    if (!ht && id.startsWith('local-ht-') && client) {
-        const newLocal = { id, [field]: value.trim(), createdDate: new Date().toISOString() };
-        client.projectData.localHowTo.push(newLocal);
-        ht = newLocal;
+    // 🚀 2. THE FIX: If NOT found and it's a draft, commit it immediately
+    if (!ht && id.startsWith('draft-ht-')) {
+        const newId = 'ht-vlt-' + Date.now();
+        const newSOP = { 
+            id: newId, 
+            [field]: value.trim(), 
+            appIds: [], 
+            resourceIds: [], 
+            scope: 'global',
+            createdDate: new Date().toISOString() 
+        };
+        
+        state.master.howToLibrary.push(newSOP);
+        ht = newSOP;
+        
+        // Silently update the modal ID so subsequent blurs don't create duplicates
+        // This is a bit of a hack but necessary for "window" assigned functions
+        OL.currentOpenHowToId = newId; 
+        console.log("✅ Master SOP Committed:", newId);
     }
 
     if (!ht) return;
@@ -9816,16 +9821,9 @@ OL.handleHowToSave = function(id, field, value) {
     const cleanVal = (typeof value === 'string') ? value.trim() : value;
     ht[field] = cleanVal;
 
-    // Standard revocation logic for master guides
-    if (field === 'scope' && cleanVal === 'internal' && !id.startsWith('local-')) {
-        Object.values(state.clients).forEach(c => {
-            if (c.sharedMasterIds) c.sharedMasterIds = c.sharedMasterIds.filter(mid => mid !== id);
-        });
-    }
-
     OL.persist();
     
-    // Sync UI
+    // Sync the UI grid name if it's visible in the background
     if (field === 'name') {
         const cardTitles = document.querySelectorAll(`.ht-card-title-${id}`);
         cardTitles.forEach(el => el.innerText = cleanVal);
