@@ -9436,7 +9436,7 @@ function renderHowToCard(clientId, ht, isClientView) {
              onclick="OL.openHowToModal('${ht.id}')">
             
             ${canDelete ? `
-                <button class="delete-corner-x" 
+                <button class="card-delete-btn"" 
                         title="Delete SOP"
                         onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
                     &times;
