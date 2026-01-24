@@ -9509,6 +9509,7 @@ OL.openHowToModal = function(htId, draftObj = null) {
                 <span style="font-size:18px;">📖</span>
                 <input type="text" class="header-editable-input" 
                        value="${esc(ht.name)}" 
+                       placeholder="Enter SOP Name..."
                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                        ${!canEdit ? 'readonly' : ''} 
                        onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
@@ -9813,7 +9814,7 @@ OL.handleHowToSave = function(id, field, value) {
         if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
         const newLocal = { 
             id: id, 
-            name: "New Local SOP", 
+            name: "", 
             content: "", 
             category: "General",
             appIds: [],
@@ -9821,6 +9822,7 @@ OL.handleHowToSave = function(id, field, value) {
         };
         client.projectData.localHowTo.push(newLocal);
         ht = newLocal;
+        renderHowToLibrary();
         console.log("📍 New Local SOP Initialized in Project Data");
     }
 
@@ -9830,7 +9832,7 @@ OL.handleHowToSave = function(id, field, value) {
         
         // 🔄 Surgical UI Sync for name
         if (field === 'name') {
-            document.querySelectorAll(`.ht-card-title-${id}`).forEach(el => el.innerText = cleanVal);
+            document.querySelectorAll(`.ht-card-title-${id}`).forEach(el => el.innerText = cleanVal || "New SOP");
         }
     } else {
         console.error("❌ SAVE FAILED: No SOP or Client Context found for ID:", id);
