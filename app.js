@@ -361,14 +361,13 @@ window.handleRoute = function () {
   if (!main) return;
 
   if (hash.startsWith("#/vault")) {
-    if (hash === "#/vault/resources") renderResourceManager();
-    else if (hash === "#/vault/apps") renderAppsGrid();
-    else if (hash === "#/vault/functions") renderFunctionsGrid();
-    else if (hash === "#/vault/rates") renderVaultRatesPage();
-    else if (hash === "#/vault/analyses") renderAnalysisModule(true);
-    else if (hash === "#/vault/how-to") renderHowToLibrary();
-    else if (hash === "#/vault/tasks") renderBlueprintManager();
-    else if (hash === "#/vault/datapoints") renderVaultDatapointsPage();
+    if (hash.includes("resources")) renderResourceManager();
+    else if (hash.includes("apps")) renderAppsGrid();
+    else if (hash.includes("functions")) renderFunctionsGrid();
+    else if (hash.includes("rates")) renderVaultRatesPage();
+    else if (hash.includes("analyses")) renderAnalysisModule(true);
+    else if (hash.includes("how-to")) renderHowToLibrary(); // 🚀 Changed from ===
+    else if (hash.includes("tasks")) renderBlueprintManager();
     else renderAppsGrid();
   } else if (hash === "#/") {
     renderClientDashboard();
@@ -9367,16 +9366,13 @@ window.renderHowToLibrary = function() {
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const hash = window.location.hash;
-    const urlParams = new URLSearchParams(window.location.search);
 
     if (!container) return;
 
-    // 🚀 THE SYNCED LOGIC
+    // source selection
     const isVaultView = hash.startsWith('#/vault');
-    const isGuest = window.IS_GUEST === true;
-    const isAdmin = (state.adminMode === true || OL.state.adminMode === true) && !isGuest;
+    const isAdmin = state.adminMode === true; // Simplified: same as dashboard
 
-    // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
@@ -9386,23 +9382,23 @@ window.renderHowToLibrary = function() {
         <div class="section-header">
             <div>
                 <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted subheader">${isVaultView ? 'Global Standards' : 'Project Guides'}</div>
+                <div class="small muted">${isVaultView ? 'Global Operational Standards' : `Guides for ${esc(client?.meta?.name)}`}</div>
             </div>
+            
             <div class="header-actions">
                 ${isAdmin ? `
-                    <button class="btn primary" onclick="OL.openHowToEditorModal()">
-                        ${isVaultView ? '+ Create Master SOP' : '⬇ Import from Master'}
-                    </button>
+                    ${isVaultView ? `
+                        <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                    ` : `
+                        <button class="btn primary" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
+                    `}
                 ` : ''}
             </div>
         </div>
 
         <div class="cards-grid">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? `
-                <div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
-                    No guides found. ${isAdmin ? 'Click the button above to add one.' : ''}
-                </div>` : ''}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align:center; padding:50px;">No guides found here yet.</div>' : ''}
         </div>
     `;
 };
