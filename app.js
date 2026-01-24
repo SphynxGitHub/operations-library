@@ -9416,22 +9416,36 @@ window.renderHowToLibrary = function() {
 // 2. RENDER HOW TO CARDS
 function renderHowToCard(clientId, ht, isClientView) {
     const client = state.clients[clientId];
+    const isAdmin = window.FORCE_ADMIN === true;
     
-    // 1. Identify Identity: Is it a Master SOP or a Local SOP?
+    // 1. Identify Identity & Delete Permission
     const isMaster = String(ht.id).startsWith('ht-vlt-') || !String(ht.id).startsWith('local-ht-');
+    const isLocal = !isMaster;
+    const canDelete = isAdmin || isLocal;
     
-    // 2. Identify Sharing Status (only applies to Master SOPs)
+    // 2. Sharing Status (Master SOPs only)
     const isShared = client?.sharedMasterIds?.includes(ht.id);
 
-    // 3. UI logic for the tag
+    // 3. UI logic for tags
     let tagLabel = isMaster ? "MASTER" : "LOCAL";
     let tagClass = isMaster ? "vault" : "local";
     
     return `
-        <div class="card ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}">
+        <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
+             style="cursor: pointer; position: relative;" 
+             onclick="OL.openHowToModal('${ht.id}')">
+            
+            ${canDelete ? `
+                <button class="delete-corner-x" 
+                        title="Delete SOP"
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
+                    &times;
+                </button>
+            ` : ''}
+
             <div class="card-header">
                 <div style="flex:1">
-                    <div class="card-title ht-card-title-${ht.id}">${esc(ht.name)}</div>
+                    <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
                     <span class="pill tiny ${tagClass}" style="font-size: 8px; margin-top: 4px; display: inline-block;">
                         ${tagLabel}
                     </span>
@@ -9439,24 +9453,17 @@ function renderHowToCard(clientId, ht, isClientView) {
 
                 ${!isClientView && isMaster ? `
                     <button class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                            style="white-space: nowrap; margin-left: 8px;"
                             onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
-                        ${isShared ? '🌍 Shared' : '🔒 Private'}
+                        ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
                     </button>
-                ` : ''}
-                
-                ${!isMaster ? `
-                    <button class="card-delete-btn" style="position:static;" 
-                            onclick="event.stopPropagation(); OL.deleteLocalSOP('${clientId}', '${ht.id}')">×</button>
                 ` : ''}
             </div>
             
             <div class="card-body">
-                <p class="small muted" style="height: 40px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                <p class="small muted" style="margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
                     ${esc(ht.summary || 'No summary provided.')}
                 </p>
-                <button class="btn small soft full-width" onclick="OL.openHowToModal('${ht.id}')">
-                    ${isMaster ? 'Read Guide ➔' : 'Edit Local SOP ➔'}
-                </button>
             </div>
         </div>
     `;
@@ -9839,35 +9846,48 @@ OL.handleHowToSave = function(id, field, value) {
     }
 };
 
-OL.deleteHowToGuide = function(htId) {
-    const guide = state.master.howToLibrary.find(h => h.id === htId);
+OL.deleteSOP = function(clientId, htId) {
+    const isLocal = String(htId).includes('local');
+    const client = state.clients[clientId];
+    
+    // 1. Resolve the guide to get its name for the confirmation prompt
+    let guide;
+    if (isLocal && client) {
+        guide = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    } else {
+        guide = (state.master.howToLibrary || []).find(h => h.id === htId);
+    }
+
     if (!guide) return;
 
-    if (!confirm(`⚠️ PERMANENT DELETE: Are you sure you want to delete "${guide.name}"?\n\nThis will remove the guide from the library for ALL client projects.`)) return;
+    // 2. Dynamic Confirmation Message
+    const msg = isLocal 
+        ? `Delete local SOP "${guide.name}"? This cannot be undone.` 
+        : `⚠️ PERMANENT DELETE: Are you sure you want to delete "${guide.name}"?\n\nThis will remove it from the Master Vault and ALL client libraries.`;
+    
+    if (!confirm(msg)) return;
 
-    // 1. Remove from Master Library
-    state.master.howToLibrary = state.master.howToLibrary.filter(h => h.id !== htId);
+    // 3. Execution
+    if (isLocal && client) {
+        // Remove from Project Data
+        client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
+        console.log("🗑️ Local SOP Deleted:", htId);
+    } else {
+        // Remove from Master Library
+        state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
+        
+        // Scrub from all client shared lists so they don't have "ghost" IDs
+        Object.values(state.clients).forEach(c => {
+            if (c.sharedMasterIds) {
+                c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
+            }
+        });
+        console.log("🗑️ Master Guide Nuked from Orbit:", htId);
+    }
 
-    // 2. Cleanup Client Links (Optional but recommended)
-    Object.values(state.clients).forEach(client => {
-        if (client.sharedMasterIds) {
-            client.sharedMasterIds = client.sharedMasterIds.filter(id => id !== htId);
-        }
-    });
-
+    // 4. Persistence & UI Sync
     OL.persist();
     renderHowToLibrary();
-    console.log("🗑️ Master Guide Deleted:", htId);
-};
-
-OL.deleteLocalSOP = function(clientId, htId) {
-    if (!confirm("Permanently delete this local SOP? Master templates will not be affected.")) return;
-    const client = state.clients[clientId];
-    if (client && client.projectData.localHowTo) {
-        client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
-        OL.persist();
-        renderHowToLibrary();
-    }
 };
 
 // 6. HANDLE SYNCING TO MASTER AND VICE VERSA
