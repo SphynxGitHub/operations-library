@@ -9419,8 +9419,8 @@ function renderHowToCard(clientId, ht, isClientView) {
     const isAdmin = window.FORCE_ADMIN === true;
     
     // 1. Logic & Permissions
-    const isMaster = String(ht.id).startsWith('ht-vlt-') || !String(ht.id).startsWith('local-ht-');
-    const isLocal = !isMaster;
+    const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal;
     const canDelete = isAdmin || isLocal;
     const isShared = client?.sharedMasterIds?.includes(ht.id);
 
