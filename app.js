@@ -9428,19 +9428,19 @@ function renderHowToCard(clientId, ht, isClientView) {
         <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
              style="cursor: pointer; position: relative;" 
              onclick="OL.openHowToModal('${ht.id}')">
-            
-            ${canDelete ? `
+
+            <div class="card-header" style="display: block;">
+                <div class="card-title ht-card-title-${ht.id}" style="margin: 0 0 8px 0; padding-right: 20px; font-size: 1.1rem;">
+                    ${esc(ht.name || 'Untitled SOP')}
+                </div>
+
+                ${canDelete ? `
                 <button class="card-delete-btn" 
                         title="Delete SOP"
                         onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
                     &times;
                 </button>
             ` : ''}
-
-            <div class="card-header" style="display: block;">
-                <div class="card-title ht-card-title-${ht.id}" style="margin: 0 0 8px 0; padding-right: 20px; font-size: 1.1rem;">
-                    ${esc(ht.name || 'Untitled SOP')}
-                </div>
 
                 <div style="display: flex; gap: 6px; align-items: center;">
                     <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
@@ -9530,11 +9530,11 @@ OL.openHowToModal = function(htId, draftObj = null) {
             ${isVaultMode && isAdmin ? `
                 <div style="display:flex; background:var(--panel-soft); border-radius:6px; padding:2px; margin-right:10px;">
                     <button class="btn tiny ${ht.scope === 'global' || !ht.scope ? 'accent' : 'soft'}" 
-                            style="min-width:70px;"
-                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'global')">Global</button>
+                            style="min-width:100px;"
+                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'global')">Client-Facing</button>
                     <button class="btn tiny ${ht.scope === 'internal' ? 'accent' : 'soft'}" 
-                            style="min-width:70px;"
-                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'internal')">Internal</button>
+                            style="min-width:100px;"
+                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'internal')">Internal-Only</button>
                 </div>
             ` : ''}
         </div>
@@ -9830,6 +9830,17 @@ OL.handleHowToSave = function(id, field, value) {
 
     if (ht) {
         ht[field] = cleanVal;
+
+        // 🔒 TERMINOLOGY SYNC: If scope becomes internal, revoke client sharing
+        if (field === 'scope' && cleanVal === 'internal') {
+            Object.values(state.clients).forEach(c => {
+                if (c.sharedMasterIds) {
+                    c.sharedMasterIds = c.sharedMasterIds.filter(mid => mid !== id);
+                }
+            });
+            console.log("🔒 Revoked sharing for internal guide.");
+        }
+
         OL.persist();
         
         // 🔄 Surgical UI Sync for name
