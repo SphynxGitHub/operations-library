@@ -829,18 +829,20 @@ OL.toggleClientModule = function(clientId, moduleId) {
     const client = state.clients[clientId];
     if (!client) return;
 
-    // Ensure the modules object exists
     if (!client.modules) client.modules = {};
 
-    // Toggle the value
+    // 1. Toggle the data
     client.modules[moduleId] = !client.modules[moduleId];
 
+    // 2. Save it
     OL.persist();
     
-    // 🚀 Refresh the sidebar immediately so you see the change
-    buildLayout(); 
-    console.log(`✅ Module ${moduleId} for ${client.meta.name}: ${client.modules[moduleId] ? 'ENABLED' : 'DISABLED'}`);
-};
+    // 3. 🚀 THE CRITICAL FIX: Repaint the layout immediately
+    // This makes the tab pop in/out the SECOND you click the box
+    window.buildLayout(); 
+    
+    console.log(`✅ Module ${moduleId} toggled: ${client.modules[moduleId]}`);
+};;
 
 OL.copyShareLink = function(token) {
     const url = `${window.location.origin}${window.location.pathname}?access=${token}#/client-tasks`;
