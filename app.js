@@ -9367,12 +9367,14 @@ window.renderHowToLibrary = function() {
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const hash = window.location.hash;
+    const urlParams = new URLSearchParams(window.location.search);
 
     if (!container) return;
 
-    // 🚀 STANDARD LOGIC (Same as Apps/Resources)
+    // 🚀 THE SYNCED LOGIC
     const isVaultView = hash.startsWith('#/vault');
-    const isAdmin = (state.adminMode === true || OL.state.adminMode === true);
+    const isGuest = window.IS_GUEST === true;
+    const isAdmin = (state.adminMode === true || OL.state.adminMode === true) && !isGuest;
 
     // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
@@ -9397,7 +9399,10 @@ window.renderHowToLibrary = function() {
 
         <div class="cards-grid">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? '<div class="empty-hint">No guides found.</div>' : ''}
+            ${visibleGuides.length === 0 ? `
+                <div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
+                    No guides found. ${isAdmin ? 'Click the button above to add one.' : ''}
+                </div>` : ''}
         </div>
     `;
 };
