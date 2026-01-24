@@ -3,6 +3,11 @@
 // 1. MUST BE LINE 1: Define the namespace immediately
 const OL = window.OL = {};
 
+// 🚀 THE ANCHOR: Lock the security context at the absolute start
+const params = new URLSearchParams(window.location.search);
+window.FORCE_ADMIN = params.get('admin') === 'pizza123'; 
+console.log("🛠️ Global Admin Lock:", window.FORCE_ADMIN);
+
 // 2. Define standard helpers next (so functions can use them)
 
 // val: returns empty string if missing (allows placeholder to show)
@@ -9366,42 +9371,42 @@ window.renderHowToLibrary = function() {
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const hash = window.location.hash;
-    const urlParams = new URLSearchParams(window.location.search);
 
     if (!container) return;
 
-    // 🚀 THE ZERO-FAILURE ADMIN CHECK
-    // We check the URL directly. If 'admin' matches 'pizza123', show buttons.
-    const isAdmin = urlParams.get('admin') === window.ADMIN_ACCESS_ID;
+    // 🚀 USE THE LOCKED ANCHOR
+    const isAdmin = window.FORCE_ADMIN === true;
     const isVaultView = hash.startsWith('#/vault');
 
-    // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
     container.innerHTML = `
-        <div class="section-header">
-            <div>
+        <div class="section-header" style="display: flex !important; visibility: visible !important; opacity: 1 !important;">
+            <div style="flex: 1;">
                 <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted">${isVaultView ? 'Global Standards' : 'Project Guides'}</div>
+                <div class="small muted">Standards and Guides</div>
             </div>
-            <div class="header-actions">
+            
+            <div class="header-actions" style="display: flex !important; gap: 10px !important;">
                 ${isAdmin ? `
-                    <button class="btn primary" style="background:#38bdf8 !important; color:black !important; font-weight:bold;" onclick="OL.openHowToEditorModal()">
+                    <button class="btn primary" 
+                            style="background: #38bdf8 !important; color: black !important; font-weight: bold !important; display: inline-block !important; border: 2px solid white !important;" 
+                            onclick="OL.openHowToEditorModal()">
                         ${isVaultView ? '+ Create Master SOP' : '⬇ Import from Master'}
                     </button>
                 ` : ''}
             </div>
         </div>
 
-        <div class="cards-grid">
+        <div class="cards-grid" style="margin-top: 20px;">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
             ${visibleGuides.length === 0 ? `
-                <div class="empty-hint" style="grid-column: 1/-1; text-align:center; padding:50px;">
-                    <p>No guides found here yet.</p>
-                    ${isAdmin ? '<p class="tiny muted">Admin verified: Use the button above to add content.</p>' : ''}
+                <div style="grid-column: 1/-1; text-align: center; padding: 100px; border: 2px dashed rgba(255,255,255,0.1);">
+                    <p>No guides found.</p>
+                    ${isAdmin ? '<p style="color: #38bdf8;">Verified Admin: You should see the BLUE button above.</p>' : ''}
                 </div>` : ''}
         </div>
     `;
