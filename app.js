@@ -9361,7 +9361,6 @@ OL.updateCredentialStatus = function (clientId, idx, status) {
 
 //============================= HOW TO SECTION ============================== //
 
-// 1. RENDER HOW TO LIBRARY
 window.renderHowToLibrary = function() {
     OL.registerView(renderHowToLibrary);
     const container = document.getElementById("mainContent");
@@ -9369,18 +9368,23 @@ window.renderHowToLibrary = function() {
     const hash = window.location.hash;
     const urlParams = new URLSearchParams(window.location.search);
 
-    const isGuest = window.IS_GUEST === true;
+    // 1. Unified Security Context
+    const isPublic = urlParams.has("access");
+    const isGuest = window.IS_GUEST === true || isPublic;
     const isVaultView = hash.startsWith('#/vault');
+    const isAdmin = (state.adminMode === true || OL.state.adminMode === true) && !isGuest;
 
-    // Prove the logic is reaching the button stage
-    console.log("Rendering Library. Admin:", effectiveAdminMode, "Vault:", isVaultView);
+    console.log("🛠️ Rendering How-To. Context:", isVaultView ? "VAULT" : "PROJECT", "Admin:", isAdmin);
 
-    // Data Selection
+    if (!container) return;
+
+    // 2. Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
+    // 3. Render HTML
     container.innerHTML = `
         <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid var(--line); padding-bottom: 15px;">
             <div>
@@ -9389,7 +9393,7 @@ window.renderHowToLibrary = function() {
             </div>
             
             <div class="header-actions">
-                ${!isGuest ? `
+                ${isAdmin ? `
                     ${isVaultView ? `
                         <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
                     ` : `
@@ -9401,7 +9405,10 @@ window.renderHowToLibrary = function() {
 
         <div class="cards-grid" style="margin-top: 20px;">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="padding: 40px; text-align: center; opacity: 0.5;">No instructional guides found.</div>' : ''}
+            ${visibleGuides.length === 0 ? `
+                <div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
+                    No instructional guides found here. ${isAdmin ? 'Click the button above to add one.' : ''}
+                </div>` : ''}
         </div>
     `;
 };
