@@ -9371,40 +9371,40 @@ window.renderHowToLibrary = function() {
     const hash = window.location.hash;
     const urlParams = new URLSearchParams(window.location.search);
 
-    // 1. Identify context strictly like the sidebar does
     const isPublic = urlParams.has("access");
     const effectiveAdminMode = isPublic ? false : state.adminMode;
     const isVaultView = hash.startsWith('#/vault');
 
-    // 2. Data Selection
+    // Prove the logic is reaching the button stage
+    console.log("Rendering Library. Admin:", effectiveAdminMode, "Vault:", isVaultView);
+
+    // Data Selection
     const masterLibrary = state.master.howToLibrary || [];
     const visibleGuides = isVaultView 
         ? masterLibrary 
         : masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id));
 
     container.innerHTML = `
-        <div class="section-header">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid var(--line); padding-bottom: 15px;">
             <div>
                 <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
-                <div class="small muted subheader">
-                    ${isVaultView ? 'Global Operational Standards' : `Guides shared with ${esc(client?.meta?.name)}`}
-                </div>
+                <div class="small muted">${isVaultView ? 'Global Operational Standards' : `Guides shared with ${esc(client?.meta?.name)}`}</div>
             </div>
             
-            <div class="header-actions">
+            <div class="header-actions" id="how-to-actions" style="display: flex !important; gap: 10px; visibility: visible !important;">
                 ${effectiveAdminMode ? `
                     ${isVaultView ? `
-                        <button class="btn primary" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                        <button class="btn primary" style="background: var(--accent) !important; color: black !important; display: block !important;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
                     ` : `
-                        <button class="btn primary" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
+                        <button class="btn primary" style="background: var(--accent) !important; color: black !important; display: block !important;" onclick="OL.importHowToToProject()">⬇ Import from Master</button>
                     `}
-                ` : ''}
+                ` : `<span class="tiny muted">Read Only Mode</span>`}
             </div>
         </div>
 
-        <div class="cards-grid">
+        <div class="cards-grid" style="margin-top: 20px;">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
-            ${visibleGuides.length === 0 ? '<div class="empty-hint">No instructional guides found here.</div>' : ''}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="padding: 40px; text-align: center; opacity: 0.5;">No instructional guides found.</div>' : ''}
         </div>
     `;
 };
