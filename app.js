@@ -92,7 +92,6 @@ OL.persist = async function() {
 OL.boot = async function() {
     console.log("🚀 Sphynx System: Booting...");
 
-    // 1. Wait for config variables
     let attempts = 0;
     while (!window.ADMIN_ACCESS_ID && attempts < 30) {
         await new Promise(r => setTimeout(r, 100));
@@ -101,23 +100,19 @@ OL.boot = async function() {
 
     try {
         const doc = await db.collection('systems').doc('main_state').get();
-        
         if (doc.exists) {
             const cloudData = doc.data();
             
-            // Overwrite local state with cloud data
-            state = JSON.parse(JSON.stringify(cloudData));
+            // 🚀 THE FIX 1: Merge cloud data INTO the existing state placeholder 
+            // instead of overwriting the whole reference.
+            Object.assign(state, cloudData);
             OL.state = state; 
-
-            if (!state.clients) state.clients = {};
-            if (!state.master) state.master = { apps: [], functions: [], resources: [], rates: { variables: {} } };
 
             console.log("✅ State Hard-Reset from Cloud.");
         }
 
-        // 🚀 THE FIX: Run security context AFTER the state reset
-        // This ensures the URL parameters (?access=...) override the state.adminMode 
-        // that was just loaded from the database.
+        // 🚀 THE FIX 2: RUN security context IMMEDIATELY after data load
+        // This ensures OL.state.adminMode is set before handleRoute paints the page
         OL.initializeSecurityContext(); 
         
         handleRoute(); 
@@ -165,7 +160,7 @@ OL.initializeSecurityContext = function() {
         console.log("🛠️ Admin Context Verified");
         return true; 
     }
-    
+
     // 🔒 3. SECURE LOCKOUT
     if (!adminKeyFromUrl && !clientToken) {
         state.adminMode = false;
@@ -9372,7 +9367,7 @@ window.renderHowToLibrary = function() {
     const urlParams = new URLSearchParams(window.location.search);
 
     const isPublic = urlParams.has("access");
-    const effectiveAdminMode = isPublic ? false : state.adminMode;
+    const effectiveAdminMode = isPublic ? false : (state.adminMode || OL.state.adminMode);
     const isVaultView = hash.startsWith('#/vault');
 
     // Prove the logic is reaching the button stage
