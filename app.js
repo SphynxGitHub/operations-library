@@ -3740,6 +3740,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
     
+    
     let res = null;
     let lineItem = null;
 
@@ -3755,15 +3756,17 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     if (!res) return;
     const activeData = lineItem || res;
     const isLocal = String(res.id).includes('local');
+    const isVaultItem = String(res.id).startsWith('res-vlt-');
     const isLinked = !!res.masterRefId;
+    const isTrulyMaster = isVaultItem || isLinked;
     const canPromote = isAdmin && isLocal && !isVaultView && !isLinked;
 
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
     const originPill = `
-        <span class="pill tiny ${isLocal ? 'local' : 'vault'}" 
+        <span class="pill tiny ${isTrulyMaster ? 'vault' : 'local' }" 
               style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; border: 1px solid rgba(255,255,255,0.1);">
-            ${isLocal ? '📍 Local' : '🏛️ Master'}
+            ${isTrulyMaster ? '🏛️ Master' : '📍 Local' }
         </span>`;
     
     const typePill = `
