@@ -3605,6 +3605,7 @@ OL.handleResourceHeaderBlur = function(id, name) {
 OL.handleModalSave = function(id, nameOrContext) {
     // 1. Get the actual name from the DOM input
     const input = document.getElementById('modal-res-name');
+    if (!input || id.includes('tm-') || id.includes('step')) return;
     const cleanName = input ? input.value.trim() : (typeof nameOrContext === 'string' ? nameOrContext.trim() : "");
 
     if (!cleanName || cleanName.toLowerCase() === 'vault' || cleanName.toLowerCase() === 'project') {
@@ -4581,16 +4582,15 @@ OL.openStepDetailModal = function(resId, stepId) {
         // Correctly update the specific header input without triggering side effects
         const headerInput = document.querySelector('.header-editable-input');
         if (headerInput) headerInput.value = step.name || "";
-    } else {
+        } else {
         const fullHtml = `
             <div class="modal-head" style="gap:15px;">
                 <div style="display:flex; align-items:center; gap:10px; flex:1;">
                     <span style="font-size:18px;">⚙️</span>
-                    <input type="text" class="header-editable-input" 
+                    <input type="text" class="header-editable-input" id="modal-step-name" 
                         value="${esc(val(step.name))}" 
                         placeholder="Step Name..."
                         style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                        /* 🚀 FIXED: Now uses onblur with atomic update logic */
                         onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
                 </div>
                 <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
