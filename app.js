@@ -6130,18 +6130,30 @@ OL.openResourceLinker = function(parentResId) {
 
 OL.filterResourceLinker = function(parentResId, query) {
     const listEl = document.getElementById("res-linker-results");
-    const q = (query || "").toLowerCase();
+    if (!listEl) return;
     
-    // Get all apps except the current one (prevent infinite recursion)
-    const available = (state.master.resources || []).filter(r => 
-        r.id !== parentResId && r.name.toLowerCase().includes(q)
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Only look at local project resources
+    if (!client || !client.projectData || !client.projectData.localResources) {
+        listEl.innerHTML = '<div class="search-result-item muted">No local resources found.</div>';
+        return;
+    }
+
+    const available = client.projectData.localResources.filter(r => 
+        r.id !== parentResId && 
+        (r.name || "").toLowerCase().includes(q)
     );
 
     listEl.innerHTML = available.map(r => `
-        <div class="search-result-item" onmousedown="OL.addLinkedResourceStep('${parentResId}', '${r.id}'); OL.closeModal();">
-            📦 ${esc(r.name)}
+        <div class="search-result-item" onmousedown="OL.addLinkedResourceStep('${parentResId}', '${r.id}')">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <span>🛠️ ${esc(r.name)}</span>
+                <span class="pill tiny local">LOCAL</span>
+            </div>
         </div>
-    `).join('');
+    `).join('') || `<div class="search-result-item muted">No matching local resources for "${esc(query)}"</div>`;
 };
 
 OL.addLinkedResourceStep = function(parentResId, linkedResId) {
