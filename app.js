@@ -3849,7 +3849,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </div>
                 ` : '<div class="tiny muted italic">No external link provided.</div>'}
             </div>
-            ${sopLibraryHtml}
             <div class="card-section" style="margin-top:10px; padding-top:20px; border-top: 1px solid var(--line);">
                 <div id="sop-step-list">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
@@ -3860,6 +3859,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     ${renderSopStepList(res)}
                 </div>
             </div>
+            ${sopLibraryHtml}
         </div>
     `;
     
