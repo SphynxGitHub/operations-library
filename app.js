@@ -5615,7 +5615,7 @@ OL.addStepResource = function(resId, elementId, targetId, targetName, targetType
     if (resultsContainer) resultsContainer.innerHTML = "";
     
     // Refresh background library if it's open
-    if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
+    if (typeof renderResourceLibrary === 'function') renderResourceLibrary();
 };
 
 OL.removeStepLink = function(resId, stepId, linkIdx) {
@@ -10087,7 +10087,7 @@ OL.toggleSOPSharing = function(clientId, htId) {
     }
 
     OL.persist();
-    renderHowToLibrary(); // Refresh view
+    renderResourceLibrary(); // Refresh view
 };
 
 // 5. HANDLE EDIT or REMOVE HOW TO
