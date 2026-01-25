@@ -5731,6 +5731,7 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
     if (!listEl) return;
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
+    const client = getActiveClient(); // 🚀 THE ANCHOR
 
     const logicActions = [
         { id: 'next', name: 'Proceed to Next Step', icon: '➡️' },
