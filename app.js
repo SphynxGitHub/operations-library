@@ -3925,17 +3925,49 @@ OL.shouldIframe = function(url) {
 
 OL.handleResourceSave = function(id, field, value) {
     const client = getActiveClient();
-    const isLocal = String(id).includes('local');
+    const isVaultMode = window.location.hash.includes('vault');
+    const isLocalDraft = String(id).includes('local') || String(id).includes('draft-res');
     
+    // 1. Try to find the existing record
     let res = state.master.resources.find(r => r.id === id);
     if (!res && client) {
         res = (client.projectData.localResources || []).find(r => r.id === id);
     }
 
+    // 🚀 THE FIX: If not found, initialize it now
+    if (!res) {
+        const newObj = {
+            id: id,
+            name: field === 'name' ? value : "",
+            type: "General",
+            description: field === 'description' ? value : "",
+            externalUrl: field === 'externalUrl' ? value : "",
+            steps: []
+        };
+
+        if (isVaultMode) {
+            state.master.resources.push(newObj);
+            res = newObj;
+            console.log("🏛️ New Master Resource Initialized");
+        } else if (client) {
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources.push(newObj);
+            res = newObj;
+            console.log("📍 New Local Resource Initialized");
+        }
+    }
+
+    // 2. Update and Persist
     if (res) {
         res[field] = value;
-        OL.persist();
-        console.log(`💾 Resource ${field} updated.`);
+        OL.persist(); 
+        
+        // Surgical UI Sync so the background card updates title instantly
+        if (field === 'name') {
+            document.querySelectorAll(`.res-card-title-${id}`).forEach(el => el.innerText = value || "Untitled Resource");
+        }
+    } else {
+        console.error("❌ PERSISTENCE FAILURE: No context for ID", id);
     }
 };
 
