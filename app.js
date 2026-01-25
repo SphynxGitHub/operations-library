@@ -3743,10 +3743,21 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         </span>`;
     
     const typePill = `
-        <span class="pill tiny soft" 
-              style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; opacity: 0.8; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
-            ${esc(res.type || 'Resource')}
-        </span>`;
+        <div style="position: relative; display: inline-block;">
+            <span class="pill tiny soft is-clickable" 
+                  onclick="document.getElementById('res-type-selector').click()"
+                  style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+                ${esc(res.type || 'General')} ▾
+            </span>
+            <select id="res-type-selector" 
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
+                    onchange="OL.updateResourceMeta('${res.id}', 'type', this.value); OL.openResourceModal('${res.id}')">
+                <option value="General">General</option>
+                ${(state.master.resourceTypes || []).map(t => `
+                    <option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>
+                `).join("")}
+            </select>
+        </div>`;
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
@@ -3802,10 +3813,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const html = `
         <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line);">
             <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    ${originPill}
-                    ${typePill}
-                </div>
                 <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
                     <span style="font-size:20px; margin-top: 4px;">🛠️</span>
                     <textarea class="header-editable-input" id="modal-res-name"
@@ -3813,6 +3820,10 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                         style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none; resize: none; overflow: hidden; padding: 0; line-height: 1.4;"
                         oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
                         onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name || '')}</textarea>
+                </div>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    ${originPill}
+                    ${typePill}
                 </div>
             </div>
         </div>
