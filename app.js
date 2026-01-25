@@ -6123,15 +6123,7 @@ OL.updateSopStep = function (resId, stepId, field, value) {
 };
 
 OL.updateAtomicStep = function (resId, stepId, field, value) {
-    const context = OL.getCurrentContext();
-    let res = null;
-
-    if (context.isMaster) {
-        res = state.master.resources.find(r => String(r.id) === String(resId));
-    } else {
-        const client = getActiveClient();
-        res = client?.projectData?.localResources?.find(r => String(r.id) === String(resId));
-    }
+    const res = OL.getResourceById(resId); // Automatically handles Vault vs Local
 
     if (res && res.steps) {
         const step = res.steps.find(s => String(s.id) === String(stepId));
@@ -6139,23 +6131,11 @@ OL.updateAtomicStep = function (resId, stepId, field, value) {
             step[field] = value;
             OL.persist();
             
-            // 1. Refresh Standard Modal List
+            // Re-render the list so the UI stays in sync
             const listEl = document.getElementById('sop-step-list');
             if (listEl) listEl.innerHTML = renderSopStepList(res);
             
-            // 🚀 THE FULLSCREEN RE-RENDER FIX:
-            const fsOverlay = document.getElementById('workflow-fs-overlay');
-            if (fsOverlay) {
-                const visualModeBtn = document.getElementById('mode-visual');
-                // Check if we are currently looking at the Visualizer
-                if (visualModeBtn && visualModeBtn.classList.contains('active')) {
-                    console.log("♻️ Syncing Visualizer with Modal Changes...");
-                    OL.renderVisualizer(resId);
-                }
-            }
-            
-            OL.refreshActiveView();
-            console.log(`✅ Step Updated: ${field} = ${value}`);
+            console.log(`✅ Step ${stepId} updated: ${field} = ${value}`);
         }
     }
 };
