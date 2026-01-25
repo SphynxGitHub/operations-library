@@ -3811,23 +3811,28 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
-        <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line);">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
-                    <span style="font-size:24px; margin-top: 4px; flex-shrink: 0;">🛠️</span>
-                    <div style="flex-grow: 1;"> <textarea class="header-editable-input" id="modal-res-name"
-                        placeholder="Resource Name..."
-                        style="background: transparent; border: none; color: inherit; 
-                               font-size: 22px; font-weight: bold; width: 100%; 
-                               outline: none; resize: none; overflow: hidden; 
-                               padding: 0; line-height: 1.2; display: block;"
-                        oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
-                        onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name || '')}</textarea>
+        <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
+            <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                
+                <div style="display: flex; align-items: flex-start; gap: 12px; width: 100%;">
+                    <span style="font-size: 24px; margin-top: 2px; flex-shrink: 0;">🛠️</span>
+                    <div style="flex-grow: 1;">
+                        <textarea class="header-editable-input" id="modal-res-name"
+                            placeholder="Resource Name..."
+                            style="background: transparent; border: none; color: inherit; 
+                                font-size: 22px; font-weight: bold; width: 100%; 
+                                outline: none; resize: none; overflow: hidden; 
+                                padding: 0; line-height: 1.2; display: block;"
+                            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
+                            onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name || '')}</textarea>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 6px; align-items: center;">
+
+                <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
                     ${originPill}
                     ${typePill}
                 </div>
+
             </div>
         </div>
 
