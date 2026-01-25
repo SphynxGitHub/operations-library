@@ -3754,21 +3754,23 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     if (!res) return;
     const activeData = lineItem || res;
-    const isLocal = String(res.id).includes('local');
-    const isVaultItem = String(res.id).startsWith('res-vlt-');
-    const isLinked = !!res.masterRefId;
-    const isVaultID = String(res.id).startsWith('res-vlt-');
-    const hasMasterLink = !!res.masterRefId;
-    const isDraft = String(res.id).startsWith('draft-');
-    const isTrulyMaster = isVaultItem || isLinked;
-    const canPromote = isAdmin && !isVaultID && !hasMasterLink && !isDraft;
+    
+        // 🚀 THE SIMPLIFIED CHECK
+    // 1. Is the user an admin? (Checks both state and URL)
+    const userIsAdmin = state.adminMode || window.location.search.includes('admin=');
+
+    // 2. Is it currently a Master item? (If so, hide button)
+    const isAlreadyMaster = String(res.id).startsWith('res-vlt-') || !!res.masterRefId;
+
+    // 3. Show button if Admin AND not already Master
+    const canPromote = userIsAdmin && !isAlreadyMaster;
 
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
     const originPill = `
-        <span class="pill tiny ${isTrulyMaster ? 'vault' : 'local' }" 
+        <span class="pill tiny ${isAlreadyMaster ? 'vault' : 'local' }" 
               style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; border: 1px solid rgba(255,255,255,0.1);">
-            ${isTrulyMaster ? '🏛️ Master' : '📍 Local' }
+            ${isAlreadyMaster ? '🏛️ Master' : '📍 Local' }
         </span>`;
     
     const typePill = `
