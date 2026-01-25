@@ -4587,10 +4587,11 @@ OL.openStepDetailModal = function(resId, stepId) {
                 <div style="display:flex; align-items:center; gap:10px; flex:1;">
                     <span style="font-size:18px;">⚙️</span>
                     <input type="text" class="header-editable-input" 
-                    value="${esc(val(step.name))}" 
-                    placeholder="Step Name..."
-                    style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                    "OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
+                        value="${esc(val(step.name))}" 
+                        placeholder="Step Name..."
+                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                        /* 🚀 FIXED: Added onblur attribute */
+                        onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
                 </div>
                 <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
             </div>
@@ -6123,19 +6124,18 @@ OL.updateSopStep = function (resId, stepId, field, value) {
 };
 
 OL.updateAtomicStep = function (resId, stepId, field, value) {
-    const res = OL.getResourceById(resId); // Automatically handles Vault vs Local
-
+    const res = OL.getResourceById(resId);
     if (res && res.steps) {
         const step = res.steps.find(s => String(s.id) === String(stepId));
         if (step) {
-            step[field] = value;
+            step[field] = value.trim();
             OL.persist();
             
-            // Re-render the list so the UI stays in sync
+            // Sync the background step list inside the Resource Modal
             const listEl = document.getElementById('sop-step-list');
             if (listEl) listEl.innerHTML = renderSopStepList(res);
             
-            console.log(`✅ Step ${stepId} updated: ${field} = ${value}`);
+            console.log(`✅ Atomic Update: Step ${stepId} [${field}] saved.`);
         }
     }
 };
