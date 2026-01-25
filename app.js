@@ -9456,8 +9456,11 @@ function renderHowToCard(clientId, ht, isClientView) {
                 <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
 
                 ${canDelete ? `
-                <button class="card-delete-btn" 
-                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">x</button>
+                    <button class="card-delete-btn" 
+                            title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
+                            onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
+                        &times;
+                    </button>
                 ` : ''}
             </div>
             
@@ -9482,6 +9485,15 @@ function renderHowToCard(clientId, ht, isClientView) {
         </div>
     `;
 }
+
+OL.getProjectsSharingSOP = function(sopId) {
+    return Object.values(state.clients || {}).filter(client => 
+        (client.sharedMasterIds || []).includes(sopId)
+    ).map(client => ({
+        id: client.id,
+        name: client.meta?.name || 'Unnamed Client'
+    }));
+};
 
 OL.openLocalHowToEditor = function() {
     const client = getActiveClient();
@@ -9523,6 +9535,7 @@ OL.openHowToModal = function(htId, draftObj = null) {
     const canPromote = isAdmin && isLocal && !isVaultMode;
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
     const backlinks = OL.getSOPBacklinks(ht.id);
+    const sharedProjects = isMaster ? OL.getProjectsSharingSOP(ht.id) : [];
 
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -9630,8 +9643,25 @@ OL.openHowToModal = function(htId, draftObj = null) {
                     </div>
                 </div>
             ` : ''}
-        </div>
-    `;
+
+            ${sharedProjects.length > 0 ? `
+                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
+                    <label class="modal-section-label" style="color: #10b981;">🌍 Shared With Projects</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                        ${sharedProjects.map(p => `
+                            <div class="pill soft" style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <span style="font-size: 10px;">🏢</span>
+                                <span style="font-size: 10px; font-weight: bold;">${esc(p.name)}</span>
+                                <button class="pill-remove-x" 
+                                        style="cursor:pointer; opacity: 0.5; margin-left: 5px;" 
+                                        onclick="event.stopPropagation(); OL.deleteSOP('${p.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">×</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : (isMaster ? '<div class="tiny muted" style="margin-top:20px;">This Master SOP is not shared with any projects.</div>' : '')}
+                    </div>
+        `;
     openModal(html);
 };
 
@@ -9901,52 +9931,58 @@ OL.handleHowToSave = function(id, field, value) {
 };
 
 OL.deleteSOP = function(clientId, htId) {
+    const isVaultView = window.location.hash.includes('vault');
     const isLocal = String(htId).includes('local');
     const client = state.clients[clientId];
-    const backlinks = OL.getSOPBacklinks(htId);
-    if (backlinks.length > 0) {
-        const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
-        if (!confirm(`⚠️ WARNING: This SOP is currently mapped to the following resources: ${resNames}.\n\nDeleting it will leave broken links in those resources. Proceed anyway?`)) {
-            return;
+    
+    // 1. Backlink Check (Only for permanent deletes)
+    if (isVaultView || isLocal) {
+        const backlinks = OL.getSOPBacklinks(htId);
+        if (backlinks.length > 0) {
+            const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
+            if (!confirm(`⚠️ WARNING: This SOP is mapped to: ${resNames}.\n\nDeleting the SOURCE will break these links. Proceed?`)) return;
         }
     }
-    
-    // 1. Resolve the guide to get its name for the confirmation prompt
+
+    // 2. Resolve Guide Name
     let guide;
     if (isLocal && client) {
         guide = (client.projectData.localHowTo || []).find(h => h.id === htId);
     } else {
         guide = (state.master.howToLibrary || []).find(h => h.id === htId);
     }
-
     if (!guide) return;
 
-    // 2. Dynamic Confirmation Message
-    const msg = isLocal 
-        ? `Delete local SOP "${guide.name}"? This cannot be undone.` 
-        : `⚠️ PERMANENT DELETE: Are you sure you want to delete "${guide.name}"?\n\nThis will remove it from the Master Vault and ALL client libraries.`;
-    
-    if (!confirm(msg)) return;
-
-    // 3. Execution
-    if (isLocal && client) {
-        // Remove from Project Data
-        client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
-        console.log("🗑️ Local SOP Deleted:", htId);
-    } else {
-        // Remove from Master Library
-        state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
+    // 3. Contextual Execution
+    if (isVaultView) {
+        // --- MASTER VAULT DELETE ---
+        if (!confirm(`⚠️ PERMANENT VAULT DELETE: "${guide.name}"\n\nThis removes the source file for ALL projects. This cannot be undone.`)) return;
         
-        // Scrub from all client shared lists so they don't have "ghost" IDs
+        state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
+        // Scrub the ID from every single client's shared list
         Object.values(state.clients).forEach(c => {
-            if (c.sharedMasterIds) {
-                c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
-            }
+            if (c.sharedMasterIds) c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
         });
-        console.log("🗑️ Master Guide Nuked from Orbit:", htId);
+        console.log("🗑️ Master Source Deleted:", htId);
+
+    } else if (isLocal) {
+        // --- LOCAL PROJECT DELETE ---
+        if (!confirm(`Delete local SOP "${guide.name}"?`)) return;
+        if (client) {
+            client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
+        }
+        console.log("🗑️ Local SOP Deleted:", htId);
+
+    } else {
+        // --- MASTER UNLINK (Revoke Access) ---
+        if (!confirm(`Remove "${guide.name}" from this project?\n\nThe guide will remain safe in your Master Vault.`)) return;
+        if (client && client.sharedMasterIds) {
+            client.sharedMasterIds = client.sharedMasterIds.filter(id => id !== htId);
+        }
+        console.log("🔒 Master SOP Unlinked from Client:", clientId);
     }
 
-    // 4. Persistence & UI Sync
+    // 4. Finalize
     OL.persist();
     renderHowToLibrary();
 };
