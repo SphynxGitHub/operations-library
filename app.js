@@ -88,25 +88,32 @@ OL.sync = function() {
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (!doc.exists) return;
         const cloudData = doc.data();
-        
-        // 🚀 THE MAGIC: Only update local state if the incoming data is actually different
-        const masterDiff = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
-        const clientsDiff = JSON.stringify(cloudData.clients) !== JSON.stringify(state.clients);
 
-        if (masterDiff || clientsDiff) {
-            state.master = cloudData.master;
-            state.clients = cloudData.clients;
+        // 🚀 1. Resolve State
+        state.master = cloudData.master;
+        state.clients = cloudData.clients;
 
-            // 🛡️ UI PROTECTION: Do NOT refresh the layout if the user is typing
-            const activeTag = document.activeElement?.tagName;
-            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-                console.log("☁️ State synced from cloud (Safe Refresh).");
-                window.buildLayout();
-                handleRoute();
+        // 🚀 2. THE TOKEN AUTO-RESOLVER
+        // If we have an access token in the URL but no activeClientId, find the match!
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('access');
+
+        if (token && !state.activeClientId) {
+            const matchedClient = Object.values(state.clients).find(c => c.publicToken === token);
+            if (matchedClient) {
+                state.activeClientId = matchedClient.id;
+                console.log("🔑 Access Token Resolved for:", matchedClient.meta.name);
+            } else {
+                console.error("❌ Invalid Access Token");
             }
         }
-    }, (error) => {
-        console.error("❌ Sync Connection Lost:", error);
+
+        // 🚀 3. Guarded Refresh
+        const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+        if (!isUserTyping) {
+            window.buildLayout();
+            window.handleRoute(); 
+        }
     });
 };
 
@@ -348,6 +355,8 @@ window.handleRoute = function () {
   const main = document.getElementById("mainContent");
   if (!main) return;
 
+  const client = getActiveClient();
+
   if (hash.startsWith("#/vault")) {
     if (hash.includes("resources")) renderResourceManager();
     else if (hash.includes("apps")) renderAppsGrid();
@@ -368,7 +377,13 @@ window.handleRoute = function () {
     else if (hash.includes("#/client-tasks")) renderChecklistModule();
     else if (hash.includes("#/team")) renderTeamManager();
     else if (hash.includes("#/how-to")) renderHowToLibrary();
-  }
+  } else {
+        // 🛡️ Fallback: If no client and no vault, show the dashboard or an error
+        main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
+            <h3>Loading Project...</h3>
+            <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
+        </div>`;
+    }
 };
 
 window.addEventListener("hashchange", handleRoute);
