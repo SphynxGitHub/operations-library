@@ -3791,7 +3791,68 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 `).join("")}
             </select>
         </div>`;
+    
+        // --- Inside OL.openResourceModal ---
+    const resType = (res.type || "General").toLowerCase();
+        let typeSpecificHtml = "";
 
+        if (resType === "email") {
+            const team = client?.projectData?.teamMembers || [];
+            
+            typeSpecificHtml = `
+            <div class="card-section" style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--line); margin-top: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                    <label class="modal-section-label" style="color: var(--accent); margin:0;">✉️ EMAIL COMPOSITION</label>
+                    <button class="btn tiny primary" onclick="OL.previewEmailTemplate('${res.id}')">👁️ Preview Template</button>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="modal-column">
+                        <label class="tiny muted bold">FROM (Team Member)</label>
+                        <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailFrom', this.value)">
+                            <option value="">Select Sender...</option>
+                            ${team.map(m => `<option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>👨‍💼 ${esc(m.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="modal-column">
+                        <label class="tiny muted bold">TO (Contact Type)</label>
+                        <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailToType', this.value)">
+                            <option value="">Select Recipient...</option>
+                            <option value="Household" ${res.emailToType === 'Household' ? 'selected' : ''}>🏠 Household</option>
+                            <option value="Client 1" ${res.emailToType === 'Client 1' ? 'selected' : ''}>👤 Client 1</option>
+                            <option value="Client 2" ${res.emailToType === 'Client 2' ? 'selected' : ''}>👤 Client 2</option>
+                            <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>🤝 COI (Professional)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <label class="tiny muted bold">SUBJECT LINE</label>
+                    <input type="text" class="modal-input" placeholder="Enter email subject..." 
+                        value="${esc(res.emailSubject || '')}" 
+                        onblur="OL.handleResourceSave('${res.id}', 'emailSubject', this.value)">
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <label class="tiny muted bold">EMAIL BODY</label>
+                    <textarea class="modal-textarea" style="min-height: 180px; font-family: 'Inter', sans-serif; font-size: 13px;" 
+                            placeholder="Write email template here..."
+                            onblur="OL.handleResourceSave('${res.id}', 'emailBody', this.value)">${esc(res.emailBody || '')}</textarea>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <label class="tiny muted bold">LINKED SIGNATURE</label>
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" 
+                            placeholder="${res.signatureName ? '✍️ ' + res.signatureName : 'Search Signatures...'}"
+                            onfocus="OL.filterSignatureSearch('${res.id}', this.value)"
+                            oninput="OL.filterSignatureSearch('${res.id}', this.value)">
+                        <div id="sig-search-results" class="search-results-overlay"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
     const isScopingSheet = hash.includes('scoping-sheet');
@@ -3919,7 +3980,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </div>
                 ` : ''}
             </div>
-
+            ${typeSpecificHTML}
             <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
@@ -3939,6 +4000,66 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+// Filter for Signature resources within the project
+OL.filterSignatureSearch = function(resId, query) {
+    const listEl = document.getElementById("sig-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    
+    const sigs = (client.projectData.localResources || []).filter(r => 
+        (r.type || "").toLowerCase() === "signature" && r.name.toLowerCase().includes(q)
+    );
+
+    listEl.innerHTML = sigs.map(s => `
+        <div class="search-result-item" onmousedown="OL.linkSignature('${resId}', '${s.id}', '${esc(s.name)}')">
+            ✍️ ${esc(s.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No signatures found. Create one typed "Signature" first!</div>';
+};
+
+// Link a Signature resource to an Email resource
+OL.linkSignature = function(resId, sigId, sigName) {
+    const res = OL.getResourceById(resId);
+    if (res) {
+        res.signatureId = sigId;
+        res.signatureName = sigName;
+        OL.persist();
+        // Clear results and re-open modal to show change
+        const results = document.getElementById("sig-search-results");
+        if (results) results.innerHTML = "";
+        OL.openResourceModal(resId);
+    }
+};
+
+// 📧 THE PREVIEW ENGINE
+OL.previewEmailTemplate = function(resId) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    // Resolve the linked signature content
+    const sigResource = res.signatureId ? OL.getResourceById(res.signatureId) : null;
+    const signatureHtml = sigResource ? `<div style="margin-top:20px; border-top:1px solid #eee; padding-top:10px; color:#666;">${esc(sigResource.description || '').replace(/\n/g, '<br>')}</div>` : "";
+
+    const previewHtml = `
+        <div class="modal-head">
+            <div class="modal-title-text">📧 Email Preview</div>
+        </div>
+        <div class="modal-body" style="background: #fff; color: #333; padding: 30px; font-family: sans-serif; border-radius: 0 0 8px 8px;">
+            <div style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="font-size: 13px;"><b style="color:#888;">To:</b> [${res.emailToType || 'Recipient'}]</div>
+                <div style="font-size: 13px;"><b style="color:#888;">Subject:</b> ${esc(res.emailSubject || '(No Subject)')}</div>
+            </div>
+            <div style="line-height: 1.6; white-space: pre-wrap;">${esc(res.emailBody || 'Empty body...')}</div>
+            ${signatureHtml}
+            <div style="margin-top: 40px; text-align: center;">
+                <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">← Back to Editor</button>
+            </div>
+        </div>
+    `;
+    window.openModal(previewHtml);
 };
 
 OL.copyToClipboard = function(text, btn) {
