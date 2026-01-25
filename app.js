@@ -3739,7 +3739,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
-    
+    const isVaultID = String(res.id).startsWith('res-vlt-');
+    const hasMasterLink = !!res.masterRefId;
+    const isDraft = String(res.id).startsWith('draft-');
     
     let res = null;
     let lineItem = null;
@@ -3759,7 +3761,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const isVaultItem = String(res.id).startsWith('res-vlt-');
     const isLinked = !!res.masterRefId;
     const isTrulyMaster = isVaultItem || isLinked;
-    const canPromote = isAdmin && isLocal && !isVaultView && !isLinked;
+    const canPromote = isAdmin && !isVaultID && !hasMasterLink && !isDraft;
 
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
