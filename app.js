@@ -5257,16 +5257,10 @@ function renderStepResources(resId, item, isTrigger = false, trigIdx = null) {
     if (links.length === 0) return '<div class="tiny muted" style="padding: 5px;">No linked items.</div>';
     
     return links.map((link, idx) => {
-        // 1. Dynamic Icon & Router Logic
-        // type 'sop' or 'guide' -> How-To Modal
-        // type 'resource' -> Resource Modal
         const isSOP = link.type === 'sop' || link.type === 'guide';
         const icon = isSOP ? '📖' : '📱';
-        const openAction = isSOP 
-            ? `OL.openHowToModal('${link.id}')` 
-            : `OL.openResourceModal('${link.id}')`;
+        const openAction = isSOP ? `OL.openHowToModal('${link.id}')` : `OL.openResourceModal('${link.id}')`;
         
-        // 2. Delete Actions
         const deleteAction = isTrigger 
             ? `event.stopPropagation(); OL.removeTriggerLink('${resId}', ${trigIdx}, ${idx})`
             : `event.stopPropagation(); OL.removeStepLink('${resId}', '${item.id}', ${idx})`;
@@ -5277,14 +5271,10 @@ function renderStepResources(resId, item, isTrigger = false, trigIdx = null) {
                  onmouseover="this.style.borderColor='var(--accent)'" 
                  onmouseout="this.style.borderColor='transparent'"
                  onclick="${openAction}">
-                
                 <span style="font-size:10px; opacity: 0.7;">${icon}</span>
-                
-                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" 
-                      title="View ${isSOP ? 'Guide' : 'Resource'}">
+                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="View Link">
                     ${esc(link.name)}
                 </span>
-                
                 <b class="pill-remove-x" 
                    style="cursor:pointer; opacity: 0.4; padding: 2px 5px; margin-right: -5px;" 
                    onmouseover="this.style.opacity='1'; this.style.color='var(--danger)'"
@@ -5318,76 +5308,100 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
         !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q)
     ).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Local', icon: '📍' }));
 
-    // 3. Gather Vault Pool (Client-Facing Only)
+    // 3. Gather Vault Pool (Admins see all; tagged by share status)
     let masterResources = [];
     let masterSOPs = [];
 
     if (isAdmin) {
-        masterResources = (state.master.resources || []).filter(r => {
-            const isClientFacing = r.scope === 'global' || r.scope === 'client' || r.isClientFacing === true;
-            return isClientFacing && String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q);
-        }).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Vault', icon: '🏛️' }));
+        masterResources = (state.master.resources || []).filter(r => 
+            String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q)
+        ).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Vault', icon: '🏛️' }));
 
-        masterSOPs = (state.master.howToLibrary || []).filter(h => {
+        masterSOPs = (state.master.howToLibrary || []).filter(h => 
+            !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q)
+        ).map(h => {
             const isShared = (client.sharedMasterIds || []).includes(h.id);
-            return isShared && !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q);
-        }).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Vault', icon: '📖' }));
+            return { 
+                id: h.id, 
+                name: h.name, 
+                type: 'sop', 
+                origin: 'Vault', 
+                icon: isShared ? '📖' : '🔒',
+                isShared: isShared 
+            };
+        });
     }
 
     const combined = [...localResources, ...localSOPs, ...masterResources, ...masterSOPs];
 
-    // 4. Render results with distinct grouping
     if (combined.length === 0) {
         resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matches found.</div>`;
         return;
     }
 
+    // 4. Render with dynamic hover icon for unshared items
     resultsContainer.innerHTML = combined.map(item => `
         <div class="search-result-item" 
+             onmouseover="if('${item.icon}' === '🔒') this.querySelector('.status-icon').innerText = '🌍'"
+             onmouseout="if('${item.icon}' === '🔒') this.querySelector('.status-icon').innerText = '🔒'"
              onmousedown="OL.addStepResource('${resId}', '${elementId}', '${item.id}', '${esc(item.name)}', '${item.type}', ${isTrigger}, ${trigIdx})">
-            <span style="margin-right:8px;">${item.icon}</span>
+            <span class="status-icon" style="margin-right:8px; width: 16px; display: inline-block;">${item.icon}</span>
             <div style="flex:1">
-                <div style="font-size: 11px; font-weight: 600;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} ${item.type}</div>
+                <div style="font-size: 11px; font-weight: 600; color: white;">${esc(item.name)}</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">
+                    ${item.origin} ${item.type} ${(!item.isShared && item.origin === 'Vault' && item.type === 'sop') ? '— <span style="color:var(--accent)">Unlocks on Click</span>' : ''}
+                </div>
             </div>
         </div>
     `).join('');
 };
 
 OL.addStepResource = function(resId, elementId, targetId, targetName, targetType, isTrigger = false, trigIdx = null) {
+    const client = getActiveClient();
+    if (!client) return;
+
+    // 1. AUTO-SHARE LOGIC: If it's a Vault SOP, ensure it's in sharedMasterIds
+    const isVaultSOP = targetId.startsWith('ht-vlt-') || (!targetId.includes('local') && targetType === 'sop');
+    
+    if (isVaultSOP) {
+        if (!client.sharedMasterIds) client.sharedMasterIds = [];
+        if (!client.sharedMasterIds.includes(targetId)) {
+            client.sharedMasterIds.push(targetId);
+            console.log(`🌍 Master SOP "${targetName}" has been auto-shared with this project.`);
+        }
+    }
+
+    // 2. Resolve the Resource and Step
     const res = OL.getResourceById(resId);
     if (!res) return;
 
-    // 1. Resolve the specific target object (either a Trigger or a Step)
-    let targetObj = null;
-    if (isTrigger && trigIdx !== null) {
-        targetObj = res.triggers[trigIdx];
-    } else {
-        targetObj = res.steps?.find(s => String(s.id) === String(elementId));
-    }
+    let targetObj = isTrigger ? res.triggers[trigIdx] : res.steps?.find(s => String(s.id) === String(elementId));
+    if (!targetObj) return;
 
-    if (!targetObj) {
-        console.error("Target for resource link not found:", { elementId, isTrigger, trigIdx });
-        return;
-    }
-
-    // 2. Initialize links array if it doesn't exist
+    // 3. Add Link
     if (!targetObj.links) targetObj.links = [];
+    if (targetObj.links.some(l => l.id === targetId)) return; // Prevent double-linking
 
-    // 3. Add the link and save
-    targetObj.links.push({ id: targetId, name: targetName, type: targetType });
+    targetObj.links.push({ 
+        id: targetId, 
+        name: targetName, 
+        type: targetType 
+    });
+
+    // 4. Persist and Refresh
     OL.persist();
     
-    // 4. Refresh the visual list for this specific element
     const listContainer = document.getElementById(`step-resources-list-${elementId}`);
     if (listContainer) {
-        // Ensure renderStepResources knows if it's rendering for a trigger to set up delete buttons correctly
         listContainer.innerHTML = renderStepResources(resId, targetObj, isTrigger, trigIdx);
     }
     
-    // 5. 🚀 Close the dropdown results
+    // 5. Close Dropdown
     const resultsContainer = document.getElementById(`resource-results-${elementId}`);
     if (resultsContainer) resultsContainer.innerHTML = "";
+    
+    // Refresh background library if it's open
+    if (typeof renderHowToLibrary === 'function') renderHowToLibrary();
 };
 
 OL.removeStepLink = function(resId, stepId, linkIdx) {
