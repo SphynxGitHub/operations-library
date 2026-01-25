@@ -3293,17 +3293,23 @@ window.renderResourceManager = function () {
         displayRes = client.projectData.localResources;
     }
 
-    if (isVaultView && displayRes.length === 0 && state.master.resources) {
-        displayRes = state.master.resources;
-    }
+    // 🚀 THE GROUPING LOGIC
+    // Reduce the array into an object where keys are the resource types
+    const grouped = displayRes.reduce((acc, res) => {
+        const type = res.type || "General";
+        if (!acc[type]) acc[type] = [];
+        acc[type].push(res);
+        return acc;
+    }, {});
 
-    const sortedRes = [...displayRes].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    // Sort the types alphabetically
+    const sortedTypes = Object.keys(grouped).sort();
 
     container.innerHTML = `
         <div class="section-header">
             <div>
                 <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
-                <div class="small muted">${sortedRes.length} items found</div>
+                <div class="small muted">${displayRes.length} items grouped by category</div>
             </div>
             <div class="header-actions">
                 ${isAdmin ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
@@ -3319,13 +3325,28 @@ window.renderResourceManager = function () {
                 ` : ''}
             </div>
         </div>
-        <div class="cards-grid">
-            ${sortedRes.length > 0 
-                ? sortedRes.map(res => renderResourceCard(res)).join("") 
-                : `<div class="empty-hint" style="grid-column: 1/-1; padding: 40px; text-align: center; opacity: 0.5;">
+
+        <div class="resource-sections-wrapper">
+            ${sortedTypes.length > 0 ? sortedTypes.map(type => `
+                <div class="resource-group" style="margin-bottom: 30px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+                        <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">
+                            ${esc(type)}
+                        </h3>
+                        <span class="pill tiny soft" style="font-size: 9px; opacity: 0.5;">${grouped[type].length}</span>
+                    </div>
+                    <div class="cards-grid">
+                        ${grouped[type]
+                            .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                            .map(res => renderResourceCard(res))
+                            .join("")}
+                    </div>
+                </div>
+            `).join("") : `
+                <div class="empty-hint" style="padding: 40px; text-align: center; opacity: 0.5;">
                     No resources found in this ${isVaultView ? 'Vault' : 'Project'}.
-                   </div>`
-            }
+                </div>
+            `}
         </div>
     `;
 };
