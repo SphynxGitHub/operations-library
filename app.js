@@ -4482,7 +4482,11 @@ OL.openStepDetailModal = function(resId, stepId) {
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
 
-    // ... (keep your existing app/client lookups) ...
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    
+    // 🚀 THE FIX: Find linkedApp here so it's defined for the template below
+    const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
 
     const modalLayer = document.getElementById("modal-layer");
     const isModalVisible = modalLayer && modalLayer.style.display === "flex";
