@@ -9521,14 +9521,11 @@ OL.openHowToModal = function(htId, draftObj = null) {
             ` : ''}
 
             ${isVaultMode && isAdmin ? `
-                <div style="display:flex; background:var(--panel-soft); border-radius:6px; padding:2px; margin-right:10px;">
-                    <button class="btn tiny ${ht.scope === 'global' || !ht.scope ? 'accent' : 'soft'}" 
-                            style="min-width:100px;"
-                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'global'); OL.openHowToModal('${ht.id}')">Client-Facing</button>
-                    <button class="btn tiny ${ht.scope === 'internal' ? 'accent' : 'soft'}" 
-                            style="min-width:100px;"
-                            onclick="OL.handleHowToSave('${ht.id}', 'scope', 'internal'); OL.openHowToModal('${ht.id}')">Internal-Only</button>
-                </div>
+                <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                    style="font-size: 8px; cursor: pointer;"
+                    onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
+                    ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                </span>
             ` : ''}
 
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
