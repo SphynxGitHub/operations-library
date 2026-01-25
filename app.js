@@ -9522,6 +9522,7 @@ OL.openHowToModal = function(htId, draftObj = null) {
     const canEdit = isAdmin || isLocal || isDraft;
     const canPromote = isAdmin && isLocal && !isVaultMode;
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const backlinks = OL.getSOPBacklinks(ht.id);
 
     const html = `
         <div class="modal-head" style="gap:15px;">
@@ -9610,6 +9611,25 @@ OL.openHowToModal = function(htId, draftObj = null) {
                           style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.5);' : ''}"
                           onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
             </div>
+            ${backlinks.length > 0 ? `
+                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
+                    <label class="modal-section-label" style="color: var(--accent); opacity: 1;">🔗 Mapped to Technical Resources</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                        ${backlinks.map(link => `
+                            <div class="pill soft is-clickable" 
+                                style="display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(56, 189, 248, 0.05);"
+                                onclick="OL.openResourceModal('${link.resId}')">
+                                <span style="font-size: 12px;">📱</span>
+                                <div style="flex: 1;">
+                                    <div style="font-size: 10px; font-weight: bold;">${esc(link.resName)}</div>
+                                    <div style="font-size: 8px; opacity: 0.6;">Linked via ${link.context}: "${esc(link.detail)}"</div>
+                                </div>
+                                <span style="font-size: 10px; opacity: 0.4;">View Resource ➔</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
         </div>
     `;
     openModal(html);
@@ -9883,6 +9903,13 @@ OL.handleHowToSave = function(id, field, value) {
 OL.deleteSOP = function(clientId, htId) {
     const isLocal = String(htId).includes('local');
     const client = state.clients[clientId];
+    const backlinks = OL.getSOPBacklinks(htId);
+    if (backlinks.length > 0) {
+        const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
+        if (!confirm(`⚠️ WARNING: This SOP is currently mapped to the following resources: ${resNames}.\n\nDeleting it will leave broken links in those resources. Proceed anyway?`)) {
+            return;
+        }
+    }
     
     // 1. Resolve the guide to get its name for the confirmation prompt
     let guide;
