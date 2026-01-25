@@ -3755,6 +3755,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     if (!res) return;
     const activeData = lineItem || res;
     const isLocal = String(res.id).includes('local');
+    const isLinked = !!res.masterRefId;
+    const canPromote = isAdmin && isLocal && !isVaultView && !isLinked;
 
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
@@ -3853,6 +3855,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
                     ${originPill}
                     ${typePill}
+                    ${canPromote ? `
+                    <button class="btn tiny primary" 
+                            style="background: #fbbf24 !important; color: black !important; font-weight: bold; border: none;"
+                            onclick="OL.pushToMaster('${res.id}')">
+                        ⭐ Promote to Master
+                    </button>
+                ` : ''}
                 </div>
 
             </div>
