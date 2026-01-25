@@ -9882,6 +9882,7 @@ OL.syncHowToName = function(htId, newName) {
 OL.handleHowToSave = function(id, field, value) {
     const client = getActiveClient();
     const cleanVal = (typeof value === 'string') ? value.trim() : value;
+    const isVaultMode = window.location.hash.includes('vault');
     
     // 1. Resolve Target
     let ht = state.master.howToLibrary.find(h => h.id === id);
@@ -9889,7 +9890,24 @@ OL.handleHowToSave = function(id, field, value) {
         ht = (client.projectData.localHowTo || []).find(h => h.id === id);
     }
 
-    // 🚀 THE CRITICAL FIX: If it's a local draft and wasn't found, create it now
+    // 🚀 NEW: Initialize MASTER SOP if it's a new draft in the Vault
+    if (!ht && isVaultMode && (id.startsWith('draft') || id.startsWith('vlt'))) {
+        const newMaster = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            scope: "internal", // Default to internal/private
+            appIds: [],
+            resourceIds: []
+        };
+        state.master.howToLibrary.push(newMaster);
+        ht = newMaster;
+        renderHowToLibrary();
+        console.log("🏛️ New Master SOP Initialized in Vault");
+    }
+
+    // 🚀 EXISTING: Initialize LOCAL SOP if it's a new local draft
     if (!ht && id.includes('local') && client) {
         if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
         const newLocal = { 
