@@ -9441,7 +9441,9 @@ function renderHowToCard(clientId, ht, isClientView) {
     const client = state.clients[clientId];
     const isAdmin = window.FORCE_ADMIN === true;
     
-    // 1. Logic & Permissions
+    // 🚀 THE FIX: Define the missing variable
+    const isVaultView = window.location.hash.includes('vault');
+    
     const isLocal = String(ht.id).includes('local');
     const isMaster = !isLocal;
     const canDelete = isAdmin || isLocal;
@@ -9456,11 +9458,9 @@ function renderHowToCard(clientId, ht, isClientView) {
                 <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
 
                 ${canDelete ? `
-                    <button class="card-delete-btn" 
-                            title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
-                            onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
-                        &times;
-                    </button>
+                <button class="card-delete-btn" 
+                        title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">×</button>
                 ` : ''}
             </div>
             
