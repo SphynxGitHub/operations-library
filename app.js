@@ -51,84 +51,67 @@ let state = {
 };
 OL.state = state;
 
-// 2. CLOUD STORAGE ENGINE
+// 2. REAL-TIME CLOUD ENGINE
+// We keep the name 'persist' so we don't have to change the rest of the code.
 OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
-    
-    const client = state.clients[state.activeClientId];
-    
-    // 🛡️ THE FAIL-SAFE (Existing Logic)
-    if (client && (!client.projectData.localResources || client.projectData.localResources.length === 0)) {
-        const doc = await db.collection('systems').doc('main_state').get();
-        const diskData = doc.data();
-        const diskCount = diskData.clients[state.activeClientId]?.projectData?.localResources?.length || 0;
-        
-        if (diskCount > 0) {
-            console.error("🛑 CRITICAL: Memory/Disk Mismatch. Prevented accidental deletion.");
-            if(statusEl) statusEl.innerHTML = "⚠️ Sync Blocked"; 
-            return; 
-        }
-    }
 
     try {
-        // 1. Create the clone of the state
+        // 1. Create the clean clone (stripping security flags)
         const cleanState = JSON.parse(JSON.stringify(state));
-
-        // 🚀 THE SECURITY FIX: 
-        // We delete the adminMode flag from the object we are about to upload.
-        // This ensures the database always contains a "neutral" permission state.
         delete cleanState.adminMode; 
 
-        // 2. Upload the stripped state to Firebase
+        // 2. The Real-Time Push
+        // We use .set with {merge: false} because we want the cloud to 
+        // mirror our local memory exactly.
         await db.collection('systems').doc('main_state').set(cleanState);
         
-        console.log("💾 Cloud Sync Successful (Permissions Striped).");
         if(statusEl) statusEl.innerHTML = "✅ Synced";
-        
         setTimeout(() => { if(statusEl) statusEl.innerHTML = "☁️ Ready"; }, 2000);
     } catch (error) {
-        console.error("❌ Sync Failed:", error);
-        if(statusEl) statusEl.innerHTML = "❌ Sync Error";
+        console.error("❌ Real-time Sync Failed:", error);
+        if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
     }
 };
 
-// 3. CLOUD BOOT (The "Master Key" to opening the app)
-OL.boot = async function() {
-    console.log("🚀 Sphynx System: Booting...");
+// HELPER: Use this when you want to run logic AND sync in one go
+OL.updateAndSync = async function(updateFn) {
+    if (typeof updateFn === 'function') updateFn();
+    await OL.persist();
+};
 
-    let attempts = 0;
-    while (!window.ADMIN_ACCESS_ID && attempts < 30) {
-        await new Promise(r => setTimeout(r, 100));
-        attempts++;
-    }
+// 3. REAL-TIME SYNC ENGINE
+OL.sync = function() {
+    console.log("📡 Initializing Real-Time Sync...");
+    
+    db.collection('systems').doc('main_state').onSnapshot((doc) => {
+        if (!doc.exists) return;
+        const cloudData = doc.data();
+        
+        // 🚀 THE MAGIC: Only update local state if the incoming data is actually different
+        const masterDiff = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
+        const clientsDiff = JSON.stringify(cloudData.clients) !== JSON.stringify(state.clients);
 
-    try {
-        const doc = await db.collection('systems').doc('main_state').get();
-        if (doc.exists) {
-            const cloudData = doc.data();
-            
-            // 🚀 THE FIX 1: Merge cloud data INTO the existing state placeholder 
-            // instead of overwriting the whole reference.
-            Object.assign(state, cloudData);
-            OL.state = state; 
+        if (masterDiff || clientsDiff) {
+            state.master = cloudData.master;
+            state.clients = cloudData.clients;
 
-            console.log("✅ State Hard-Reset from Cloud.");
+            // 🛡️ UI PROTECTION: Do NOT refresh the layout if the user is typing
+            const activeTag = document.activeElement?.tagName;
+            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                console.log("☁️ State synced from cloud (Safe Refresh).");
+                window.buildLayout();
+                handleRoute();
+            }
         }
-
-        // 🚀 THE FIX 2: RUN security context IMMEDIATELY after data load
-        // This ensures OL.state.adminMode is set before handleRoute paints the page
-        OL.initializeSecurityContext(); 
-        
-        handleRoute(); 
-        
-    } catch (err) {
-        console.error("❌ Firebase Error:", err);
-    }
+    }, (error) => {
+        console.error("❌ Sync Connection Lost:", error);
+    });
 };
 
 // Update your event listener to use the Async Boot
-window.addEventListener("load", OL.boot);
+window.addEventListener("load", OL.sync);
 
 const getActiveClient = () => state.clients[state.activeClientId] || null;
 
@@ -634,6 +617,8 @@ OL.handlePillInteraction = function(event, appId, fnId) {
     }
 };
 
+OL.sync();
+
 //======================= CLIENT DASHBOARD SECTION =======================//
 
 // 1. CLIENT DASHBOARD & CORE MODULES
@@ -831,22 +816,11 @@ OL.openClientProfileModal = function(clientId) {
 };
 
 OL.toggleClientModule = function(clientId, moduleId) {
-    const client = state.clients[clientId];
-    if (!client) return;
-
-    if (!client.modules) client.modules = {};
-
-    // 1. Toggle the data
-    client.modules[moduleId] = !client.modules[moduleId];
-
-    // 2. Save it
-    OL.persist();
-    
-    // 3. 🚀 THE CRITICAL FIX: Repaint the layout immediately
-    // This makes the tab pop in/out the SECOND you click the box
-    window.buildLayout(); 
-    
-    console.log(`✅ Module ${moduleId} toggled: ${client.modules[moduleId]}`);
+    OL.updateAndSync(() => {
+        const client = state.clients[clientId];
+        if (!client.modules) client.modules = {};
+        client.modules[moduleId] = !client.modules[moduleId];
+    });
 };
 
 OL.copyShareLink = function(token) {
@@ -3623,15 +3597,17 @@ OL.handleResourceHeaderBlur = function(id, name) {
     }
 };
 
-OL.handleModalSave = function(id, nameOrContext) {
+OL.handleModalSave = async function(id, nameOrContext) {
     // 1. Get the actual name from the DOM input
     const input = document.getElementById('modal-res-name');
-    if (!input || id.includes('tm-') || id.includes('step')) return;
+    
+    // Safety guard for Team Members or Steps (which have their own save logic)
+    if (id.includes('tm-') || id.includes('step')) return;
+    
     const cleanName = input ? input.value.trim() : (typeof nameOrContext === 'string' ? nameOrContext.trim() : "");
 
+    // Prevent context strings from being saved as names
     if (!cleanName || cleanName.toLowerCase() === 'vault' || cleanName.toLowerCase() === 'project') {
-        // This guard prevents the "Vault" string from becoming the name
-        // if the function was accidentally called with context as the name.
         if (!input) return; 
     }
 
@@ -3644,25 +3620,37 @@ OL.handleModalSave = function(id, nameOrContext) {
         
         const newRes = { 
             id: newId, 
-            name: cleanName, // 🚀 Uses the name from the input, not the context string
+            name: cleanName, 
             type: "General", 
-            archetype: "Base", 
+            archetype: "Base",
+            data: {},
+            steps: [],
+            triggers: [],
             createdDate: new Date().toISOString() 
         };
 
-        if (isVault) {
-            if (!state.master.resources) state.master.resources = [];
-            state.master.resources.push(newRes);
-        } else {
-            const client = getActiveClient();
-            if (!client.projectData.localResources) client.projectData.localResources = [];
-            client.projectData.localResources.push(newRes);
-        }
-        
-        OL.persist();
+        // 🚀 THE FIX: Use updateAndSync to prevent race conditions
+        await OL.updateAndSync(() => {
+            if (isVault) {
+                if (!state.master.resources) state.master.resources = [];
+                state.master.resources.push(newRes);
+            } else {
+                const client = getActiveClient();
+                if (client) {
+                    if (!client.projectData.localResources) client.projectData.localResources = [];
+                    client.projectData.localResources.push(newRes);
+                }
+            }
+        });
+
+        // 2. Open the modal with the permanent ID
         OL.openResourceModal(newId); 
+        
+        // 3. Redraw the background library
         renderResourceManager();
+        
     } else {
+        // Standard update for existing resources
         OL.updateResourceMeta(id, 'name', cleanName);
     }
 };
@@ -4230,7 +4218,7 @@ OL.renameResourceType = function (oldNameEncoded, newName, archetype, isEncoded 
 };
 
 // 5. PUSH TO MASTER / IMPORT FROM MASTER
-OL.pushToMaster = function(localResId) {
+OL.pushToMaster = async function(localResId) {
     const client = getActiveClient();
     const localRes = client?.projectData?.localResources?.find(r => r.id === localResId);
 
@@ -4239,30 +4227,33 @@ OL.pushToMaster = function(localResId) {
 
     if (!confirm(`Standardize "${localRes.name}"?\n\nThis will add it to the Global Master Vault for all future projects.`)) return;
 
-    // 1. Create Global Master Clone (The "Gold Standard" Source)
-    const masterId = 'res-vlt-' + Date.now();
-    const masterCopy = JSON.parse(JSON.stringify(localRes));
-    
-    masterCopy.id = masterId;
-    masterCopy.createdDate = new Date().toISOString();
-    masterCopy.originProject = client.meta.name; // Useful for tracking where it came from
-    delete masterCopy.isScopingContext; 
+    // 🚀 THE SYNC WRAPPER: Ensures both updates are pushed as one state change
+    await OL.updateAndSync(() => {
+        // 1. Create Global Master Clone
+        const masterId = 'res-vlt-' + Date.now();
+        const masterCopy = JSON.parse(JSON.stringify(localRes));
+        
+        masterCopy.id = masterId;
+        masterCopy.createdDate = new Date().toISOString();
+        masterCopy.originProject = client.meta.name;
+        delete masterCopy.masterRefId; // Ensure the Master isn't linked to itself
+        delete masterCopy.isScopingContext; 
 
-    // 2. Add to Master Vault
-    if (!state.master.resources) state.master.resources = [];
-    state.master.resources.push(masterCopy);
+        // 2. Add to Master Vault
+        if (!state.master.resources) state.master.resources = [];
+        state.master.resources.push(masterCopy);
 
-    // 3. ✨ THE HYBRID LINK
-    // We assign the ID and then empty the local steps.
-    // This forces the app to look at the Vault for the SOP list.
-    localRes.masterRefId = masterId;
-    localRes.steps = []; 
+        // 3. ✨ THE HYBRID LINK
+        // Link the local copy and empty the steps so it "Inherits" from the Vault
+        localRes.masterRefId = masterId;
+        localRes.steps = []; 
+    });
 
-    OL.persist();
+    // 4. UI Cleanup
     OL.closeModal();
     
-    // 4. Refresh the Grid
-    // Because renderResourceCard now checks !!masterRefId, the tag will flip to MASTER.
+    // Grid refresh is handled by the Real-Time Listener, but we call it 
+    // manually here just to ensure instant local feedback.
     renderResourceManager(); 
     
     alert(`🚀 Resource "${localRes.name}" is now a Master Template.`);
