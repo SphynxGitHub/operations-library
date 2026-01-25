@@ -9992,6 +9992,29 @@ OL.filterMasterHowToImport = function(query) {
     `).join('') || `<div class="search-result-item muted">No unlinked guides found.</div>`;
 };
 
+//=======================HOW-TO RESOURCES OVERLAP ====================//
+OL.getSOPBacklinks = function(sopId) {
+    const client = getActiveClient();
+    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+    const links = [];
+
+    allResources.forEach(res => {
+        // Check Triggers
+        (res.triggers || []).forEach((trig, idx) => {
+            if ((trig.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Trigger', detail: trig.name });
+            }
+        });
+        // Check Steps
+        (res.steps || []).forEach(step => {
+            if ((step.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Step', detail: step.text });
+            }
+        });
+    });
+    return links;
+};
+
 //======================= HOW-TO TASKS OVERLAP ========================//
 
 OL.filterTaskHowToSearch = function(taskId, query, isVault) {
@@ -10109,7 +10132,7 @@ OL.removeHTRequirement = function(htId, index) {
     OL.openHowToModal(htId);
 };
 
-// HOW TO SCOPING OVERLAP
+// =========================HOW TO SCOPING OVERLAP=====================================
 OL.resolveRequirementTarget = function(requirement) {
     const client = getActiveClient();
     if (requirement.targetType === 'app') return requirement.targetId;
@@ -10155,7 +10178,8 @@ OL.deployRequirementsFromResource = function(resourceId) {
     OL.persist();
 };
 
-// HANDLE TASK RESOURCE OVERLAP
+// ===========================TASK RESOURCE OVERLAP===========================
+
 // Filter SOPs that aren't already linked to this resource
 OL.filterResourceSOPLinker = function(resId, query) {
     const listEl = document.getElementById("res-sop-linker-results");
