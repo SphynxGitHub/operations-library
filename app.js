@@ -4482,9 +4482,7 @@ OL.openStepDetailModal = function(resId, stepId) {
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
 
-    const client = getActiveClient();
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-    const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
+    // ... (keep your existing app/client lookups) ...
 
     const modalLayer = document.getElementById("modal-layer");
     const isModalVisible = modalLayer && modalLayer.style.display === "flex";
@@ -4577,11 +4575,28 @@ OL.openStepDetailModal = function(resId, stepId) {
     `;
 
     // 🚀 THE FIX: Use updateAtomicStep and avoid ID collisions
-    if (isModalVisible && existingBody) {
-        existingBody.innerHTML = innerHtml;
-        // Correctly update the specific header input without triggering side effects
-        const headerInput = document.querySelector('.header-editable-input');
-        if (headerInput) headerInput.value = step.name || "";
+        if (isModalVisible && existingBody) {
+            // 1. Swap the body content
+            existingBody.innerHTML = innerHtml;
+            
+            // 2. FORCE THE HEADER INPUT TO SHOW THE STEP NAME
+            const headerInput = document.querySelector('.header-editable-input');
+            if (headerInput) {
+                headerInput.value = step.name || "Untitled Step";
+                // IMPORTANT: Update the onblur so it saves to the STEP, not the Resource
+                headerInput.setAttribute('onblur', `OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)`);
+            }
+            
+            // 3. Update the "Back" button if it exists
+            const headerZone = document.querySelector('.modal-head');
+            if (headerZone && !headerZone.innerHTML.includes('Back to Resource')) {
+                // If we just came from Resource view, we need the Back button
+                const btn = document.createElement('button');
+                btn.className = "btn small soft";
+                btn.innerText = "Back to Resource";
+                btn.onclick = () => OL.openResourceModal(resId);
+                headerZone.appendChild(btn);
+            }
         } else {
         const fullHtml = `
             <div class="modal-head" style="gap:15px;">
