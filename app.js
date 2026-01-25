@@ -9532,7 +9532,6 @@ OL.openHowToModal = function(htId, draftObj = null) {
                 <span class="pill tiny soft" style="font-size: 8px;">📍 Project-Specific</span>
             ` : ''}
 
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
             <div class="card-section" style="margin-top:15px;">
