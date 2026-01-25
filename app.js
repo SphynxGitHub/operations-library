@@ -3969,6 +3969,17 @@ OL.handleResourceSave = function(id, field, value) {
     } else {
         console.error("❌ PERSISTENCE FAILURE: No context for ID", id);
     }
+    // 🔄 SURGICAL UPDATE (No refresh needed)
+    if (res) {
+        res[field] = value;
+        OL.persist(); 
+        
+        // Update the specific title on the background card without re-rendering everything
+        const cardTitles = document.querySelectorAll(`.res-card-title-${id}`);
+        cardTitles.forEach(el => {
+            el.innerText = value || "New Resource";
+        });
+    }
 };
 
 // RESOURCE TRIGGERS SECTION
