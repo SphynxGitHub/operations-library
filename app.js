@@ -5301,20 +5301,15 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
     const client = getActiveClient();
-    const isAdmin = window.FORCE_ADMIN === true; // Consistent with your other functions
+    const isAdmin = window.FORCE_ADMIN === true;
     
     if (!client) return;
 
     // 1. Resolve current linked IDs to prevent duplicates
-    let targetItem = null;
-    if (isTrigger) {
-        targetItem = res?.triggers?.[trigIdx];
-    } else {
-        targetItem = res?.steps?.find(s => String(s.id) === String(elementId));
-    }
+    let targetItem = isTrigger ? res?.triggers?.[trigIdx] : res?.steps?.find(s => String(s.id) === String(elementId));
     const alreadyLinkedIds = (targetItem?.links || []).map(l => String(l.id));
 
-    // 🚀 2. Gather Local Items (Resources AND SOPs)
+    // 2. Gather Local Pool
     const localResources = (client.projectData?.localResources || []).filter(r => 
         String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q)
     ).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Local', icon: '📱' }));
@@ -5323,41 +5318,37 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
         !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q)
     ).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Local', icon: '📍' }));
 
-    // 🚀 3. Gather Vault Items (Resources AND SOPs)
+    // 3. Gather Vault Pool (Client-Facing Only)
     let masterResources = [];
     let masterSOPs = [];
 
     if (isAdmin) {
-        // Master Resources (Client Facing only)
         masterResources = (state.master.resources || []).filter(r => {
             const isClientFacing = r.scope === 'global' || r.scope === 'client' || r.isClientFacing === true;
             return isClientFacing && String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q);
         }).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Vault', icon: '🏛️' }));
 
-        // Master SOPs (Client Facing only - using your 'sharedMasterIds' logic)
         masterSOPs = (state.master.howToLibrary || []).filter(h => {
             const isShared = (client.sharedMasterIds || []).includes(h.id);
-            const matchesQuery = (h.name || "").toLowerCase().includes(q);
-            return isShared && !alreadyLinkedIds.includes(String(h.id)) && matchesQuery;
+            return isShared && !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q);
         }).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Vault', icon: '📖' }));
     }
 
     const combined = [...localResources, ...localSOPs, ...masterResources, ...masterSOPs];
 
+    // 4. Render results with distinct grouping
     if (combined.length === 0) {
-        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matching items found.</div>`;
+        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matches found.</div>`;
         return;
     }
 
-    // 4. Render results
     resultsContainer.innerHTML = combined.map(item => `
         <div class="search-result-item" 
-             style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;"
              onmousedown="OL.addStepResource('${resId}', '${elementId}', '${item.id}', '${esc(item.name)}', '${item.type}', ${isTrigger}, ${trigIdx})">
-            <span style="font-size: 14px; opacity: 0.8;">${item.icon}</span>
+            <span style="margin-right:8px;">${item.icon}</span>
             <div style="flex:1">
-                <div style="font-size: 11px; font-weight: bold; color: white;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} ${item.type === 'sop' ? 'Guide' : 'Resource'}</div>
+                <div style="font-size: 11px; font-weight: 600;">${esc(item.name)}</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} ${item.type}</div>
             </div>
         </div>
     `).join('');
