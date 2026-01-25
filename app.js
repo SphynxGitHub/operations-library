@@ -5299,7 +5299,7 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
     let targetItem = isTrigger ? res?.triggers?.[trigIdx] : res?.steps?.find(s => String(s.id) === String(elementId));
     const alreadyLinkedIds = (targetItem?.links || []).map(l => String(l.id));
 
-    // 2. Gather Local Pool
+    // 🚀 RULE 1 & 2: Local Project Data
     const localResources = (client.projectData?.localResources || []).filter(r => 
         String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q)
     ).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Local', icon: '📱' }));
@@ -5308,49 +5308,40 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
         !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q)
     ).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Local', icon: '📍' }));
 
-    // 3. Gather Vault Pool (Admins see all; tagged by share status)
-    let masterResources = [];
-    let masterSOPs = [];
+    // 🚀 RULE 3 & 4: Master SOPs (Filtered for Visibility/Sharing)
+    // Note: masterResources is intentionally omitted to avoid template clutter.
+    const masterSOPs = (state.master.howToLibrary || []).filter(h => {
+        const isShared = (client.sharedMasterIds || []).includes(h.id);
+        const isClientFacing = h.scope === 'global' || h.scope === 'client' || h.isClientFacing === true;
+        const matchesQuery = (h.name || "").toLowerCase().includes(q);
+        const notLinked = !alreadyLinkedIds.includes(String(h.id));
 
-    if (isAdmin) {
-        masterResources = (state.master.resources || []).filter(r => 
-            String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q)
-        ).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Vault', icon: '🏛️' }));
+        // Strictly only show if it's already linked to this client OR marked as public-facing
+        return (isShared || isClientFacing) && notLinked && matchesQuery;
+    }).map(h => ({ 
+        id: h.id, 
+        name: h.name, 
+        type: 'sop', 
+        origin: 'Vault', 
+        icon: '📖' 
+    }));
 
-        masterSOPs = (state.master.howToLibrary || []).filter(h => 
-            !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q)
-        ).map(h => {
-            const isShared = (client.sharedMasterIds || []).includes(h.id);
-            return { 
-                id: h.id, 
-                name: h.name, 
-                type: 'sop', 
-                origin: 'Vault', 
-                icon: isShared ? '📖' : '🔒',
-                isShared: isShared 
-            };
-        });
-    }
-
-    const combined = [...localResources, ...localSOPs, ...masterResources, ...masterSOPs];
+    const combined = [...localResources, ...localSOPs, ...masterSOPs];
 
     if (combined.length === 0) {
-        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matches found.</div>`;
+        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matching project-ready items found.</div>`;
         return;
     }
 
-    // 4. Render with dynamic hover icon for unshared items
+    // 4. Render results
     resultsContainer.innerHTML = combined.map(item => `
         <div class="search-result-item" 
-             onmouseover="if('${item.icon}' === '🔒') this.querySelector('.status-icon').innerText = '🌍'"
-             onmouseout="if('${item.icon}' === '🔒') this.querySelector('.status-icon').innerText = '🔒'"
+             style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05);"
              onmousedown="OL.addStepResource('${resId}', '${elementId}', '${item.id}', '${esc(item.name)}', '${item.type}', ${isTrigger}, ${trigIdx})">
-            <span class="status-icon" style="margin-right:8px; width: 16px; display: inline-block;">${item.icon}</span>
+            <span style="width: 16px; text-align: center;">${item.icon}</span>
             <div style="flex:1">
-                <div style="font-size: 11px; font-weight: 600; color: white;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">
-                    ${item.origin} ${item.type} ${(!item.isShared && item.origin === 'Vault' && item.type === 'sop') ? '— <span style="color:var(--accent)">Unlocks on Click</span>' : ''}
-                </div>
+                <div style="font-size: 11px; font-weight: bold; color: white;">${esc(item.name)}</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} ${item.type}</div>
             </div>
         </div>
     `).join('');
