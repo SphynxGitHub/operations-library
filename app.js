@@ -5287,9 +5287,7 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
     const client = getActiveClient();
-    
-    // Check for Admin Mode (URL parameter or state flag)
-    const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
+    const isAdmin = window.FORCE_ADMIN === true; // Consistent with your other functions
     
     if (!client) return;
 
@@ -5302,29 +5300,38 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
     }
     const alreadyLinkedIds = (targetItem?.links || []).map(l => String(l.id));
 
-    // 🚀 2. Gather Local Resources
+    // 🚀 2. Gather Local Items (Resources AND SOPs)
     const localResources = (client.projectData?.localResources || []).filter(r => 
-        String(r.id) !== String(resId) && 
-        !alreadyLinkedIds.includes(String(r.id)) &&
-        (r.name || "").toLowerCase().includes(q)
-    ).map(r => ({ id: r.id, name: r.name, type: 'sop', origin: 'Local', icon: '📍' }));
+        String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q)
+    ).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Local', icon: '📱' }));
 
-    // 🚀 3. Gather "Client Facing" Master Resources (Admin Only)
+    const localSOPs = (client.projectData?.localHowTo || []).filter(h => 
+        !alreadyLinkedIds.includes(String(h.id)) && (h.name || "").toLowerCase().includes(q)
+    ).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Local', icon: '📍' }));
+
+    // 🚀 3. Gather Vault Items (Resources AND SOPs)
     let masterResources = [];
+    let masterSOPs = [];
+
     if (isAdmin) {
+        // Master Resources (Client Facing only)
         masterResources = (state.master.resources || []).filter(r => {
-            const isClientFacing = r.scope === 'client' || r.visibility === 'client' || r.isClientFacing === true;
-            const notSelf = String(r.id) !== String(resId);
-            const notLinked = !alreadyLinkedIds.includes(String(r.id));
-            const matchesQuery = (r.name || "").toLowerCase().includes(q);
-            return isClientFacing && notSelf && notLinked && matchesQuery;
-        }).map(r => ({ id: r.id, name: r.name, type: 'sop', origin: 'Vault', icon: '🏛️' }));
+            const isClientFacing = r.scope === 'global' || r.scope === 'client' || r.isClientFacing === true;
+            return isClientFacing && String(r.id) !== String(resId) && !alreadyLinkedIds.includes(String(r.id)) && (r.name || "").toLowerCase().includes(q);
+        }).map(r => ({ id: r.id, name: r.name, type: 'resource', origin: 'Vault', icon: '🏛️' }));
+
+        // Master SOPs (Client Facing only - using your 'sharedMasterIds' logic)
+        masterSOPs = (state.master.howToLibrary || []).filter(h => {
+            const isShared = (client.sharedMasterIds || []).includes(h.id);
+            const matchesQuery = (h.name || "").toLowerCase().includes(q);
+            return isShared && !alreadyLinkedIds.includes(String(h.id)) && matchesQuery;
+        }).map(h => ({ id: h.id, name: h.name, type: 'sop', origin: 'Vault', icon: '📖' }));
     }
 
-    const combined = [...localResources, ...masterResources];
+    const combined = [...localResources, ...localSOPs, ...masterResources, ...masterSOPs];
 
     if (combined.length === 0) {
-        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matching resources found.</div>`;
+        resultsContainer.innerHTML = `<div class="search-item muted" style="padding:10px;">No matching items found.</div>`;
         return;
     }
 
@@ -5336,7 +5343,7 @@ OL.filterResourceSearch = function(resId, elementId, query, isTrigger = false, t
             <span style="font-size: 14px; opacity: 0.8;">${item.icon}</span>
             <div style="flex:1">
                 <div style="font-size: 11px; font-weight: bold; color: white;">${esc(item.name)}</div>
-                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} Resource</div>
+                <div style="font-size: 8px; opacity: 0.5; text-transform: uppercase;">${item.origin} ${item.type === 'sop' ? 'Guide' : 'Resource'}</div>
             </div>
         </div>
     `).join('');
@@ -9681,21 +9688,29 @@ OL.filterHTAppSearch = function(htId, query) {
     const q = (query || "").toLowerCase();
     const client = getActiveClient();
     
-    // Find the SOP or use a dummy object if it's still a draft
-    let ht = state.master.howToLibrary.find(h => h.id === htId) || 
-             (client?.projectData?.localHowTo || []).find(h => h.id === htId);
+    // 1. Resolve current guide (to avoid linking to itself)
+    let currentHt = state.master.howToLibrary.find(h => h.id === htId) || 
+                   (client?.projectData?.localHowTo || []).find(h => h.id === htId);
 
-    // 🚀 THE FIX: If it's a brand new draft, treat it as having 0 apps linked
-    const currentAppIds = ht ? (ht.appIds || []) : [];
+    const currentAppIds = currentHt ? (currentHt.appIds || []) : [];
+
+    // 🚀 2. THE MERGE: Combine Global Master Apps/SOPs with Local Project Apps/SOPs
+    const masterApps = state.master.apps || [];
+    const localApps = client?.projectData?.localApps || [];
+    const allAvailableApps = [...masterApps, ...localApps];
+
+    // 3. Filter based on query and exclude what's already linked
+    const matches = allAvailableApps.filter(a => 
+        a.name.toLowerCase().includes(q) && 
+        !currentAppIds.includes(a.id)
+    );
     
-    const allApps = [...state.master.apps, ...(client?.projectData?.localApps || [])];
-    const matches = allApps.filter(a => a.name.toLowerCase().includes(q) && !currentAppIds.includes(a.id));
-    
+    // 4. Render results
     listEl.innerHTML = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.toggleHTApp('${htId}', '${app.id}')">
-            📱 ${esc(app.name)}
+            ${String(app.id).includes('local') ? '📍' : '🏛️'} ${esc(app.name)}
         </div>
-    `).join('') || '<div class="search-result-item muted">No apps found</div>';
+    `).join('') || '<div class="search-result-item muted">No matching items found</div>';
 };
 
 OL.parseVideoEmbed = function(url) {
