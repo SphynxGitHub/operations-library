@@ -3810,6 +3810,45 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
             ${roundInputHtml} 
             ${adminPricingHtml}
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">📝 Description & Access Notes</label>
+                <textarea class="modal-textarea" 
+                        placeholder="Enter login details, account purpose, or specific access instructions..." 
+                        style="min-height: 80px; font-size: 12px;"
+                        onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+            </div>
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">🌐 External Link (Portal, Tool, or Dashboard)</label>
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="text" class="modal-input tiny" 
+                        placeholder="https://app.example.com" 
+                        value="${esc(res.externalUrl || '')}" 
+                        onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
+                    ${res.externalUrl ? `
+                        <button class="btn soft tiny" onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" style="white-space: nowrap;">
+                            Copy Link
+                        </button>
+                    ` : ''}
+                </div>
+
+                ${res.externalUrl ? `
+                    <div class="link-preview-container" style="border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: rgba(0,0,0,0.2);">
+                        ${OL.shouldIframe(res.externalUrl) ? `
+                            <iframe src="${res.externalUrl}" 
+                                    style="width:100%; height:300px; border:none;" 
+                                    allowfullscreen></iframe>
+                        ` : `
+                            <div style="padding: 20px; text-align: center;">
+                                <div class="tiny muted" style="margin-bottom:10px;">Preview not available for this site.</div>
+                                <a href="${res.externalUrl}" target="_blank" class="btn small primary" style="display:inline-flex; align-items:center; gap:8px;">
+                                    <span>Open External Site</span>
+                                    <span style="font-size:10px;">↗</span>
+                                </a>
+                            </div>
+                        `}
+                    </div>
+                ` : '<div class="tiny muted italic">No external link provided.</div>'}
+            </div>
             ${sopLibraryHtml}
             <div class="card-section" style="margin-top:10px; padding-top:20px; border-top: 1px solid var(--line);">
                 <div id="sop-step-list">
@@ -3829,6 +3868,44 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+OL.copyToClipboard = function(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = "✅ Copied!";
+        btn.style.color = "var(--accent)";
+        
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.style.color = "";
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+};
+
+OL.shouldIframe = function(url) {
+    if (!url) return false;
+    // Allow iframes for known "embed-friendly" domains
+    const embedFriendly = ['youtube.com', 'vimeo.com', 'loom.com', 'miro.com'];
+    return embedFriendly.some(domain => url.includes(domain));
+};
+
+OL.handleResourceSave = function(id, field, value) {
+    const client = getActiveClient();
+    const isLocal = String(id).includes('local');
+    
+    let res = state.master.resources.find(r => r.id === id);
+    if (!res && client) {
+        res = (client.projectData.localResources || []).find(r => r.id === id);
+    }
+
+    if (res) {
+        res[field] = value;
+        OL.persist();
+        console.log(`💾 Resource ${field} updated.`);
+    }
 };
 
 // RESOURCE TRIGGERS SECTION
