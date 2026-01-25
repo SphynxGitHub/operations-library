@@ -4587,10 +4587,10 @@ OL.openStepDetailModal = function(resId, stepId) {
                 <div style="display:flex; align-items:center; gap:10px; flex:1;">
                     <span style="font-size:18px;">⚙️</span>
                     <input type="text" class="header-editable-input" 
-                    value="${esc(val(res.name))}" 
-                    placeholder="Resource Name..."
+                    value="${esc(val(step.name))}" 
+                    placeholder="Step Name..."
                     style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                    onblur="OL.handleModalSave('${res.id}', this.value)">
+                    "OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
                 </div>
                 <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
             </div>
