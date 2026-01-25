@@ -3716,8 +3716,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
-    
-    // 🛡️ HARDENED ADMIN CHECK: Check state OR URL parameter directly
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
     
     let res = null;
@@ -3734,6 +3732,21 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     if (!res) return;
     const activeData = lineItem || res;
+    const isLocal = String(res.id).includes('local');
+
+    // --- 🏷️ NEW: PILL & TAG UI ---
+    // This replaces the dropdown with compact inline tags
+    const originPill = `
+        <span class="pill tiny ${isLocal ? 'local' : 'vault'}" 
+              style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; border: 1px solid rgba(255,255,255,0.1);">
+            ${isLocal ? '📍 Local' : '🏛️ Master'}
+        </span>`;
+    
+    const typePill = `
+        <span class="pill tiny soft" 
+              style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; opacity: 0.8; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+            ${esc(res.type || 'Resource')}
+        </span>`;
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
@@ -3753,24 +3766,15 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>`;
     }
 
-    // --- 📊 SECTION: ADMIN PRICING & TYPE ---
-    // We get the variables based on the Resource Type (e.g. 'Zap', 'Form')
+    // --- 📊 SECTION: ADMIN PRICING ---
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
         String(v.applyTo).toLowerCase() === String(res.type).toLowerCase()
     );
     
     const adminPricingHtml = isAdmin ? `
         <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
-            <label class="modal-section-label">⚙️ RESOURCE CONFIG & PRICING</label>
-            <div style="margin: 10px 0 15px 0;">
-                <label class="tiny muted uppercase bold">Resource Type</label>
-                <select class="modal-input" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
-                    <option value="General" ${(!res.type || res.type === "General") ? "selected" : ""}>General</option>
-                    ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? "selected" : ""}>${esc(t.type)}</option>`).join("")}
-                </select>
-            </div>
-            <label class="tiny muted uppercase bold">Pricing Inputs</label>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:5px;">
+            <label class="modal-section-label">⚙️ PRICING CONFIG</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
                 ${relevantVars.length > 0 ? relevantVars.map(([varKey, v]) => `
                     <div class="modal-column">
                         <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
@@ -3796,31 +3800,40 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
-        <div class="modal-head" style="display: flex; flex-direction: column; gap: 15px; align-items: flex-start; padding: 20px;">
-            <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
-                <span style="font-size:20px; margin-top: 4px;">🛠️</span>
-                <textarea class="header-editable-input" id="modal-res-name"
-                    placeholder="Resource Name..."
-                    style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none; resize: none; overflow: hidden; padding: 0; line-height: 1.4;"
-                    oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
-                    onblur="OL.handleModalSave('${res.id}', this.value)">${esc(val(res.name))}</textarea>
+        <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line);">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    ${originPill}
+                    ${typePill}
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:12px; width: 100%;">
+                    <span style="font-size:20px; margin-top: 4px;">🛠️</span>
+                    <textarea class="header-editable-input" id="modal-res-name"
+                        placeholder="Resource Name..."
+                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none; resize: none; overflow: hidden; padding: 0; line-height: 1.4;"
+                        oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
+                        onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name || '')}</textarea>
+                </div>
             </div>
         </div>
 
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
             ${roundInputHtml} 
             ${adminPricingHtml}
+            
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">📝 Description & Access Notes</label>
                 <textarea class="modal-textarea" 
                         placeholder="Enter login details, account purpose, or specific access instructions..." 
-                        style="min-height: 80px; font-size: 12px;"
+                        style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
                         onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
             </div>
+
             <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">🌐 External Link (Portal, Tool, or Dashboard)</label>
+                <label class="modal-section-label">🌐 External Link</label>
                 <div style="display:flex; gap:10px; margin-bottom:10px;">
                     <input type="text" class="modal-input tiny" 
+                        style="flex: 1;"
                         placeholder="https://app.example.com" 
                         value="${esc(res.externalUrl || '')}" 
                         onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
@@ -3832,13 +3845,11 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </div>
 
                 ${res.externalUrl ? `
-                    <div class="link-preview-container" style="border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: rgba(0,0,0,0.2);">
+                    <div class="link-preview-container" style="border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000;">
                         ${OL.shouldIframe(res.externalUrl) ? `
-                            <iframe src="${res.externalUrl}" 
-                                    style="width:100%; height:300px; border:none;" 
-                                    allowfullscreen></iframe>
+                            <iframe src="${res.externalUrl}" style="width:100%; height:300px; border:none;" allowfullscreen></iframe>
                         ` : `
-                            <div style="padding: 20px; text-align: center;">
+                            <div style="padding: 30px; text-align: center;">
                                 <div class="tiny muted" style="margin-bottom:10px;">Preview not available for this site.</div>
                                 <a href="${res.externalUrl}" target="_blank" class="btn small primary" style="display:inline-flex; align-items:center; gap:8px;">
                                     <span>Open External Site</span>
@@ -3847,15 +3858,16 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                             </div>
                         `}
                     </div>
-                ` : '<div class="tiny muted italic">No external link provided.</div>'}
+                ` : ''}
             </div>
-            <div class="card-section" style="margin-top:10px; padding-top:20px; border-top: 1px solid var(--line);">
-                <div id="sop-step-list">
+
+            <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
-                    <div style="display:flex; gap:8px; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                        <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-                        <button class="btn tiny primary" onclick="OL.toggleWorkflowFullScreen('${res.id}')">📃 List Editor</button>
-                    </div>
+                <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
+                    <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
+                    <button class="btn tiny primary" onclick="OL.toggleWorkflowFullScreen('${res.id}')">📃 List Editor</button>
+                </div>
+                <div id="sop-step-list">
                     ${renderSopStepList(res)}
                 </div>
             </div>
