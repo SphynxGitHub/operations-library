@@ -5254,27 +5254,41 @@ OL.filterStepAppSearch = function(resId, stepId, query) {
 // HANDLE RESOURCE AND SOP LINKING
 function renderStepResources(resId, item, isTrigger = false, trigIdx = null) {
     const links = item.links || [];
-    if (links.length === 0) return '<div class="tiny muted" style="padding: 5px;">No linked resources.</div>';
+    if (links.length === 0) return '<div class="tiny muted" style="padding: 5px;">No linked items.</div>';
     
     return links.map((link, idx) => {
-        // Local resources use 'sop' type. Master library guides use 'guide' type.
-        const icon = link.type === 'guide' ? '📖' : '📍';
+        // 1. Dynamic Icon & Router Logic
+        // type 'sop' or 'guide' -> How-To Modal
+        // type 'resource' -> Resource Modal
+        const isSOP = link.type === 'sop' || link.type === 'guide';
+        const icon = isSOP ? '📖' : '📱';
+        const openAction = isSOP 
+            ? `OL.openHowToModal('${link.id}')` 
+            : `OL.openResourceModal('${link.id}')`;
         
-        // Logic switch for the delete button (stopPropagation is key here to avoid triggering the pill click)
+        // 2. Delete Actions
         const deleteAction = isTrigger 
             ? `event.stopPropagation(); OL.removeTriggerLink('${resId}', ${trigIdx}, ${idx})`
             : `event.stopPropagation(); OL.removeStepLink('${resId}', '${item.id}', ${idx})`;
 
         return `
             <div class="pill soft is-clickable" 
-                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:4px 10px; background: rgba(255,255,255,0.05); cursor: pointer;"
-                 onclick="OL.openResourceModal('${link.id}')">
+                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:4px 10px; background: rgba(255,255,255,0.05); cursor: pointer; border: 1px solid transparent;"
+                 onmouseover="this.style.borderColor='var(--accent)'" 
+                 onmouseout="this.style.borderColor='transparent'"
+                 onclick="${openAction}">
+                
                 <span style="font-size:10px; opacity: 0.7;">${icon}</span>
-                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Click to view resource">
+                
+                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" 
+                      title="View ${isSOP ? 'Guide' : 'Resource'}">
                     ${esc(link.name)}
                 </span>
+                
                 <b class="pill-remove-x" 
                    style="cursor:pointer; opacity: 0.4; padding: 2px 5px; margin-right: -5px;" 
+                   onmouseover="this.style.opacity='1'; this.style.color='var(--danger)'"
+                   onmouseout="this.style.opacity='0.4'; this.style.color='inherit'"
                    onclick="${deleteAction}">×</b>
             </div>`;
     }).join('');
@@ -5385,18 +5399,15 @@ OL.addStepResource = function(resId, elementId, targetId, targetName, targetType
     if (resultsContainer) resultsContainer.innerHTML = "";
 };
 
-OL.removeStepLink = function(resId, stepId, index) {
+OL.removeStepLink = function(resId, stepId, linkIdx) {
     const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
-    
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (step && step.links) {
-        step.links.splice(index, 1);
+        step.links.splice(linkIdx, 1);
         OL.persist();
-        
-        const listContainer = document.getElementById('step-resources-list-' + stepId);
-        if (listContainer) {
-            listContainer.innerHTML = renderStepResources(resId, step);
-        }
+        // Refresh the specific list UI
+        const listContainer = document.getElementById(`step-resources-list-${stepId}`);
+        if (listContainer) listContainer.innerHTML = renderStepResources(resId, step);
     }
 };
 
