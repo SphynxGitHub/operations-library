@@ -5578,6 +5578,32 @@ OL.removeStepLink = function(resId, stepId, linkIdx) {
     }
 };
 
+OL.removeTriggerLink = function(resId, trigIdx, linkIdx) {
+    const res = OL.getResourceById(resId);
+    const trigger = res?.triggers?.[trigIdx];
+    
+    if (trigger && trigger.links) {
+        // Remove the specific link from the array
+        trigger.links.splice(linkIdx, 1);
+        
+        OL.persist();
+        
+        // 🚀 SURGICAL UI REFRESH
+        // If the detail modal is open, refresh its content
+        const trigId = `trig-${trigIdx}`;
+        const listContainer = document.getElementById(`step-resources-list-${trigId}`);
+        if (listContainer) {
+            listContainer.innerHTML = renderStepResources(resId, trigger, true, trigIdx);
+        }
+
+        // Also sync the background list in the Resource Modal
+        const mainList = document.getElementById('sop-step-list');
+        if (mainList) mainList.innerHTML = renderSopStepList(res);
+        
+        console.log(`🗑️ Link removed from Trigger ${trigIdx}`);
+    }
+};
+
 // HANDLE EDITING, INCLUDING DRAG AND DROP
 OL.toggleInlineEdit = function(event, resId, stepId) {
     // If the user clicked an input or textarea inside the row, don't collapse/expand
