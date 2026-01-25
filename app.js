@@ -5740,7 +5740,8 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
     ];
     
     const steps = (res.steps || []).filter(s => String(s.id) !== String(stepId));
-    const externalResources = (state.master.resources || []).filter(r => r.id !== resId);
+    const projectResources = client ? (client.projectData.localResources || []) : [];
+    const externalResources = (projectResources || []).filter(r => r.id !== resId);
 
     let html = '';
 
