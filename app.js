@@ -4357,6 +4357,7 @@ window.renderSopStepList = function (res) {
     html += `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <label class="tiny muted bold uppercase">📝 Sequential Steps</label>
+            <button class="btn tiny soft" onclick="OL.openResourceLinker('${res.id}')">📦 Link Module</button>
             <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
         </div>
     `;
@@ -4374,7 +4375,21 @@ window.renderSopStepList = function (res) {
 
             if (isModule) {
                 const nestedRes = OL.getResourceById(step.linkedResourceId);
-                return `<div class="step-group module-block-container" style="...">... Module Content ...</div>`;
+                const nestedSteps = nestedRes?.steps || [];
+                
+                return `
+                <div class="step-group module-block-container" 
+                    style="margin-bottom: 12px; border: 1px solid var(--accent); border-radius: 8px; background: rgba(56, 189, 248, 0.03); overflow: hidden;">
+                    <div style="background: var(--accent); color: #000; padding: 4px 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="tiny bold uppercase">📦 Module: ${esc(nestedRes?.name || 'Unknown')}</span>
+                        <button class="card-delete-btn" style="position:static; color: #000;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                    </div>
+                    <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px; opacity: 0.8;">
+                        ${nestedSteps.map((nS, nIdx) => `
+                            <div style="font-size: 11px;"><span style="opacity:0.5">${idx+1}.${nIdx+1}</span> ${esc(nS.name)}</div>
+                        `).join('') || '<div class="tiny muted">Empty module</div>'}
+                    </div>
+                </div>`;
             }
 
             return `
