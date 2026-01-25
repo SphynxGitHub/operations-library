@@ -9520,12 +9520,16 @@ OL.openHowToModal = function(htId, draftObj = null) {
                 </button>
             ` : ''}
 
-            ${isVaultMode && isAdmin ? `
+            ${isAdmin && isMaster ? `
                 <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
                     style="font-size: 8px; cursor: pointer;"
                     onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
                     ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
                 </span>
+            ` : ''}
+            
+            ${!isAdmin && isLocal ? `
+                <span class="pill tiny soft" style="font-size: 8px;">📍 Project-Specific</span>
             ` : ''}
 
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
