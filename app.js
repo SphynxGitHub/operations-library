@@ -89,26 +89,25 @@ OL.sync = function() {
         if (!doc.exists) return;
         const cloudData = doc.data();
 
-        // 🚀 1. Resolve State
+        // Preserve current local active ID before merging cloud data
+        const currentLocalActiveId = state.activeClientId;
+
         state.master = cloudData.master;
         state.clients = cloudData.clients;
 
-        // 🚀 2. THE TOKEN AUTO-RESOLVER
-        // If we have an access token in the URL but no activeClientId, find the match!
+        // 🚀 THE LOGIC FIX: 
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('access');
 
-        if (token && !state.activeClientId) {
+        if (token) {
+            // Case A: End-client link. Force resolve via token.
             const matchedClient = Object.values(state.clients).find(c => c.publicToken === token);
-            if (matchedClient) {
-                state.activeClientId = matchedClient.id;
-                console.log("🔑 Access Token Resolved for:", matchedClient.meta.name);
-            } else {
-                console.error("❌ Invalid Access Token");
-            }
+            if (matchedClient) state.activeClientId = matchedClient.id;
+        } else {
+            // Case B: Admin/Master dashboard. Keep the ID we just clicked.
+            state.activeClientId = currentLocalActiveId;
         }
 
-        // 🚀 3. Guarded Refresh
         const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
         if (!isUserTyping) {
             window.buildLayout();
@@ -845,9 +844,9 @@ OL.copyShareLink = function(token) {
 };
 
 OL.switchClient = function (id) {
-  state.activeClientId = id;
-  OL.persist();
-  window.location.hash = "#/client-tasks";
+    state.activeClientId = id;
+    window.location.hash = "#/client-tasks";
+    window.handleRoute();
 };
 
 OL.deleteClient = function(clientId) {
