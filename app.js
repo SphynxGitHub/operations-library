@@ -4485,11 +4485,11 @@ OL.openStepDetailModal = function(resId, stepId) {
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
     const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
 
-    // 🚀 THE FIX: Check if modal is already open to prevent "flicker"
     const modalLayer = document.getElementById("modal-layer");
     const isModalVisible = modalLayer && modalLayer.style.display === "flex";
     const existingBody = document.querySelector('.modal-body');
 
+    // Inner UI content (Description, Apps, Assignments, Links, Outcomes)
     const innerHtml = `
         <div class="card-section">
             <label class="modal-section-label">📱 Required App</label>
@@ -4546,7 +4546,7 @@ OL.openStepDetailModal = function(resId, stepId) {
             </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:5px;">
+        <div style="display:flex; flex-direction:column; gap:5px; margin-top: 20px;">
             <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🔗 LINKED RESOURCES & GUIDES</label>
             <div id="step-resources-list-${step.id}">
                 ${renderStepResources(res.id, step)}
@@ -4556,7 +4556,7 @@ OL.openStepDetailModal = function(resId, stepId) {
                       placeholder="+ Link a Guide or SOP..." 
                       onfocus="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)"
                       oninput="OL.filterResourceSearch('${res.id}', '${step.id}', this.value)">
-                <div id="resource-results-${step.id}" class="search-results-overlay" style="position:absolute; top:100%; left:0; width:100%; z-index:100;"></div>
+                <div id="resource-results-${step.id}" class="search-results-overlay"></div>
             </div>
         </div>
 
@@ -4575,12 +4575,12 @@ OL.openStepDetailModal = function(resId, stepId) {
         </div>
     `;
 
-    // 🚀 THE LOGIC: If open, just update the body. If closed, do the full animation.
+    // 🚀 THE FIX: Use updateAtomicStep and avoid ID collisions
     if (isModalVisible && existingBody) {
         existingBody.innerHTML = innerHtml;
-        // Also update the header input name if it changed
+        // Correctly update the specific header input without triggering side effects
         const headerInput = document.querySelector('.header-editable-input');
-        if (headerInput && headerInput.value !== step.name) headerInput.value = step.name;
+        if (headerInput) headerInput.value = step.name || "";
     } else {
         const fullHtml = `
             <div class="modal-head" style="gap:15px;">
@@ -4590,7 +4590,7 @@ OL.openStepDetailModal = function(resId, stepId) {
                         value="${esc(val(step.name))}" 
                         placeholder="Step Name..."
                         style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                        /* 🚀 FIXED: Added onblur attribute */
+                        /* 🚀 FIXED: Now uses onblur with atomic update logic */
                         onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
                 </div>
                 <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
