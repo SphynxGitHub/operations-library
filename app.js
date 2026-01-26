@@ -4853,19 +4853,18 @@ OL.openStepDetailModal = function(resId, stepId) {
             <label class="modal-section-label">👨‍💼 Responsibility Assignment</label>
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 ${step.assigneeName ? `
-                    <div class="pill accent is-clickable" 
-                        style="display:flex; align-items:center; gap:8px; cursor:pointer; background:rgba(168, 85, 247, 0.1); border: 1px solid #a855f7;"
-                        onclick="OL.openTeamMemberModal('${step.assigneeId}')">
-                        
-                        <span>${step.assigneeType === 'person' ? '👨‍💼' : (step.assigneeType === 'role' ? '🎭' : '📱')}</span>
-                        
-                        <span style="font-weight:600;">${esc(step.assigneeName)}</span>
-                        
-                        <b class="pill-remove-x" 
-                        style="margin-left:5px; opacity:0.6;" 
-                        onclick="event.stopPropagation(); OL.executeAssignment('${resId}', '${stepId}', false, '', '', '')">×</b>
-                    </div>
-                ` : '<span class="tiny muted">No one assigned yet</span>'}
+                <div class="pill accent is-clickable" 
+                    style="display:flex; align-items:center; gap:8px; cursor:pointer; background:rgba(168, 85, 247, 0.1); border: 1px solid #a855f7;"
+                    onclick="event.stopPropagation(); OL.openTeamMemberModal('${step.assigneeId}')">
+                    
+                    <span>${step.assigneeType === 'person' ? '👨‍💼' : (step.assigneeType === 'role' ? '🎭' : '👥')}</span>
+                    <span style="font-weight:600;">${esc(step.assigneeName)}</span>
+                    
+                    <b class="pill-remove-x" 
+                    style="margin-left:5px; opacity:0.6;" 
+                    onclick="event.stopPropagation(); OL.executeAssignment('${resId}', '${stepId}', false, '', '', '')">×</b>
+                </div>
+            ` : '<span class="tiny muted">Unassigned</span>'}
             </div>
             <div class="search-map-container">
                 <input type="text" class="modal-input tiny" 
@@ -6402,13 +6401,16 @@ OL.openTriggerDetailModal = function(resId, triggerIdx) {
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                     ${trigger.assigneeName ? `
                         <div class="pill accent is-clickable" 
-                            style="display:flex; align-items:center; gap:8px; cursor:pointer;"
-                            onclick="OL.openTeamMemberModal('${trigger.assigneeId}')" title="Jump to Team Profile">
-                            👨‍💼 ${esc(trigger.assigneeName)}
-                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'assigneeId', ''); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'assigneeName', ''); OL.openTriggerDetailModal('${resId}', ${triggerIdx})">×</b>
+                            style="display:flex; align-items:center; gap:8px; cursor:pointer; background:rgba(168, 85, 247, 0.1); border: 1px solid #a855f7;"
+                            onclick="event.stopPropagation(); (window.OL.openTeamMemberModal || window.OL.openAssigneeModal)('${trigger.assigneeId}')">
+                            <span>👨‍💼</span>
+                            <span style="font-weight:600;">${esc(trigger.assigneeName)}</span>
+                            <b class="pill-remove-x" 
+                            onclick="event.stopPropagation(); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'assigneeId', ''); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'assigneeName', '');">×</b>
                         </div>
                     ` : '<span class="tiny muted">Unassigned</span>'}
                 </div>
+                
                 <div class="search-map-container">
                     <input type="text" class="modal-input tiny" 
                         placeholder="Assign a Person..." 
