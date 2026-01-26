@@ -4512,24 +4512,55 @@ window.renderSopStepList = function (res) {
                 ${triggers.map((t, idx) => {
                     const trigId = `trig-${idx}`;
                     const isExp = state.expandedTriggers.has(trigId);
+                    
+                    // Resolve the App linked to this trigger (if any)
+                    const client = getActiveClient();
+                    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+                    const linkedApp = allApps.find(a => String(a.id) === String(t.appId));
+
                     return `
                     <div class="step-group">
-                        <div class="dp-manager-row trigger-row is-clickable" style="gap:10px; align-items: center; border: 1px solid var(--line); border-radius:6px; padding: 6px 10px;"
-                             onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
+                        <div class="dp-manager-row trigger-row is-clickable" 
+                            style="gap:10px; align-items: flex-start; border: 1px solid var(--line); border-radius:6px; padding: 10px 12px;"
+                            onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
                             
-                            <div style="display:flex; align-items:center; width:35px; justify-content:space-between;">
+                            <div style="display:flex; align-items:center; width:35px; justify-content:space-between; padding-top: 4px;">
                                 <span style="font-size: 10px; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleTrigDetails(event, '${res.id}', '${trigId}')">
                                     ${isExp ? '▼' : '▶'}
                                 </span>
                             </div>
 
-                            <div style="flex:1; display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
-                                <span class="bold" style="font-size:0.9em; color: var(--accent);">${esc(t.name || "New Trigger")}</span>
+                            <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
+                                    <span class="bold" style="font-size:0.95em; color: var(--accent);">${esc(t.name || "New Trigger")}</span>
+                                </div>
+                                
+                                <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
+                                    <span>👤 ${esc(t.assigneeName || "Unassigned")}</span>
+                                    <span>📱 ${esc(linkedApp?.name || (t.type === 'auto' ? "System Auto" : "Manual Source"))}</span>
+                                    <span style="border-left: 1px solid rgba(255,191,0,0.3); padding-left: 10px; color: #ffbf00; font-weight: bold; font-size: 9px; text-transform: uppercase;">
+                                        START EVENT
+                                    </span>
+                                </div>
                             </div>
-                            <button class="card-delete-btn" style="position:static" onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
+                            
+                            <button class="card-delete-btn" style="position:static; margin-top: 4px;" 
+                                    onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
                         </div>
-                        ${isExp ? `<div class="tiny muted" style="margin-left: 45px; padding: 5px; font-style: italic; background:rgba(0,0,0,0.02); border-radius:4px;">👤 Assigned: ${esc(t.assigneeName || 'Unassigned')}</div>` : ''}
+                        
+                        ${isExp ? `
+                            <div class="sop-expansion-panel" style="margin-left: 45px; padding: 10px; border-left: 2px solid #ffbf00; background: rgba(255, 191, 0, 0.02);">
+                                <div class="tiny muted" style="margin-bottom:8px;">
+                                    ${esc(t.notes || 'No technical notes provided for this trigger.')}
+                                </div>
+                                ${(t.links || []).map(link => `
+                                    <div class="pill tiny soft" style="display:inline-block; margin-right:5px; font-size:9px;">
+                                        🔗 ${esc(link.name)}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     </div>`;
                 }).join("")}
                 ${triggers.length === 0 ? '<div class="tiny muted italic">No entry triggers defined.</div>' : ''}
@@ -4556,6 +4587,7 @@ window.renderSopStepList = function (res) {
             const client = getActiveClient();
             const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
             const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
+            const timingLabel = step.timingType ? `📅 T+${step.timingValue || 0}d (${step.timingType === 'after_prev' ? 'Prev' : 'Start'})` : "";
 
             if (isModule) {
                 const nestedRes = OL.getResourceById(step.linkedResourceId);
@@ -4618,6 +4650,10 @@ window.renderSopStepList = function (res) {
                                     <div style="font-size: 11px; font-weight: 600; color: white; opacity: 0.9;">
                                         <span style="opacity:0.4; font-weight: normal;">${idx+1}.${nIdx+1}</span> ${esc(nS.name)}
                                     </div>
+                                    <div style="display:flex; gap:10px; align-items:center; opacity: 0.5; font-size: 9px; margin: 2px 0 4px 20px;">
+                                        <span>👤 ${esc(nS.assigneeName || "Unassigned")}</span>
+                                        ${nS.timingType ? `<span style="color: var(--accent);">📅 T+${nS.timingValue || 0}d</span>` : ''}
+                                    </div>
                                     ${nestedOutcomesHtml}
                                 </div>
                             `;
@@ -4644,6 +4680,7 @@ window.renderSopStepList = function (res) {
                         <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
                             <span>👤 ${esc(step.assigneeName || "Unassigned")}</span>
                             <span>📱 ${esc(linkedApp?.name || "No App")}</span>
+                            ${timingLabel ? `<span style="border-left: 1px solid rgba(255,255,255,0.2); padding-left: 10px; color: var(--accent); font-weight: bold;">${timingLabel}</span>` : ''}
                         </div>
                     </div>
                     <button class="card-delete-btn" style="position:static; margin-top: 4px;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
