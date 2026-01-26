@@ -6004,7 +6004,7 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
         html += `<div class="search-group-header">Jump to External Resource</div>`;
         filteredExt.forEach(r => {
             // 🚀 We tag this as jump_res_
-            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_res_${r.id}', '🚀 Open: ${esc(r.name)}')">
+            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_res_${r.id}', '🚀 ${esc(r.name)}')">
                 🚀 ${esc(r.name)} <span class="pill tiny vault">${esc(r.type || 'Res')}</span>
             </div>`;
         });
