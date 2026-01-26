@@ -4652,6 +4652,11 @@ window.renderSopStepList = function (res) {
                                     </div>
                                     <div style="display:flex; gap:10px; align-items:center; opacity: 0.5; font-size: 9px; margin: 2px 0 4px 20px;">
                                         <span>👤 ${esc(nS.assigneeName || "Unassigned")}</span>
+                                        ${(() => {
+                                            // Resolve the App for this specific nested step
+                                            const stepApp = allApps.find(a => String(a.id) === String(nS.appId));
+                                            return stepApp ? `<span>📱 ${esc(stepApp.name)}</span>` : '';
+                                        })()}
                                         ${nS.timingType ? `<span style="color: var(--accent);">📅 T+${nS.timingValue || 0}d</span>` : ''}
                                     </div>
                                     ${nestedOutcomesHtml}
@@ -6340,59 +6345,90 @@ OL.openTriggerDetailModal = function(resId, triggerIdx) {
     const trigger = res?.triggers?.[triggerIdx];
     if (!trigger) return;
 
-    // We use a unique string ID for the DOM elements to avoid clashing with Step IDs
     const trigId = `trig-${triggerIdx}`;
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const linkedApp = allApps.find(a => String(a.id) === String(trigger.appId));
 
     const html = `
-        <div class="modal-head" style="gap:15px;">
+        <div class="modal-head" style="gap:15px; background: var(--panel-dark);">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-size:18px;">⚡</span>
                 <input type="text" class="header-editable-input" 
                        value="${esc(val(trigger.name))}" 
-                       placeholder="Trigger Name (e.g. New Lead)..."
+                       placeholder="Trigger Name..."
                        style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                        onblur="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'name', this.value)">
             </div>
-            <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
+            <button class="btn tiny soft" style="color: black !important; background: #fff !important;" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
         </div>
         <div class="modal-body">
             <div class="card-section">
-                <label class="modal-section-label">Trigger Logic Type</label>
-                <div style="display:flex; gap:10px; margin-top:10px;">
-                    <button class="btn small ${trigger.type === 'auto' ? 'accent' : 'soft'} flex-1" 
-                            onclick="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'type', 'auto')">
-                        ⚡ Automatic (Zap/Webhook)
-                    </button>
-                    <button class="btn small ${trigger.type === 'manual' ? 'accent' : 'soft'} flex-1" 
-                            onclick="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'type', 'manual')">
-                        👨‍💼 Manual Action
-                    </button>
+                <label class="modal-section-label">📱 Source Application (Tool)</label>
+                <div class="search-map-container" style="position:relative;">
+                    <input type="text" class="modal-input" 
+                            placeholder="${linkedApp ? '📱 ' + esc(linkedApp.name) : 'Search Apps (Zapier, Typeform, etc)...'}" 
+                            onfocus="OL.filterTriggerAppSearch('${resId}', ${triggerIdx}, '')"
+                            oninput="OL.filterTriggerAppSearch('${resId}', ${triggerIdx}, this.value)">
+                    ${linkedApp ? `
+                        <button onclick="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'appId', ''); OL.openTriggerDetailModal('${resId}', ${triggerIdx})" 
+                                style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:18px;">
+                            ×
+                        </button>
+                    ` : ''}
+                    <div id="trigger-app-results" class="search-results-overlay"></div>
                 </div>
             </div>
 
-            <div style="display:flex; flex-direction:column; gap:5px; margin-top:20px;">
-                <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🔗 LINKED RESOURCES & GUIDES</label>
-                <div id="step-resources-list-${trigId}">
-                    ${renderStepResources(resId, trigger, true, triggerIdx)}
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">👨‍💼 Responsibility Assignment</label>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    ${trigger.assigneeName ? `
+                        <div class="pill accent" style="display:flex; align-items:center; gap:8px;">
+                            👨‍💼 ${esc(trigger.assigneeName)}
+                            <b class="pill-remove-x" onclick="OL.executeAssignment('${resId}', ${triggerIdx}, true, '', '', '')">×</b>
+                        </div>
+                    ` : '<span class="tiny muted">No one assigned to monitor this trigger</span>'}
                 </div>
-                <div class="search-map-container" style="position:relative; margin-top:5px;">
+                <div class="search-map-container">
                     <input type="text" class="modal-input tiny" 
-                        placeholder="+ Link a Guide or SOP..." 
-                        onfocus="OL.filterResourceSearch('${resId}', '${trigId}', this.value, true, ${triggerIdx})"
-                        oninput="OL.filterResourceSearch('${resId}', '${trigId}', this.value, true, ${triggerIdx})">
-                    <div id="resource-results-${trigId}" class="search-results-overlay" style="position:absolute; top:100%; left:0; width:100%; z-index:100;"></div>
+                          placeholder="Assign a Person or Role..." 
+                          onfocus="OL.filterAssignmentSearch('${resId}', ${triggerIdx}, true, '')"
+                          oninput="OL.filterAssignmentSearch('${resId}', ${triggerIdx}, true, this.value)">
+                    <div id="assignment-search-results" class="search-results-overlay"></div>
                 </div>
             </div>
 
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">Technical Notes / Source URL</label>
                 <textarea class="modal-textarea" rows="3" 
-                          placeholder="Link to the Zap, Form URL, or description of the starting event..."
+                          placeholder="Link to the Zap, Form URL, or API documentation..."
                           onblur="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'notes', this.value)">${esc(trigger.notes || "")}</textarea>
             </div>
         </div>
     `;
     openModal(html);
+};
+
+OL.filterTriggerAppSearch = function(resId, triggerIdx, query) {
+    const listEl = document.getElementById("trigger-app-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const localApps = client?.projectData?.localApps || [];
+    const masterApps = state.master.apps || [];
+    const allApps = [...masterApps, ...localApps];
+
+    const matches = allApps.filter(a => a.name.toLowerCase().includes(q));
+
+    listEl.innerHTML = matches.map(app => `
+        <div class="search-result-item" 
+             onmousedown="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'appId', '${app.id}'); OL.openTriggerDetailModal('${resId}', ${triggerIdx})">
+            📱 ${esc(app.name)} 
+            <span class="tiny muted">(${String(app.id).includes('local') ? 'Local' : 'Master'})</span>
+        </div>
+    `).join('') || `<div class="search-result-item muted">No apps found.</div>`;
 };
 
 // Update Logic with Surgical Refresh
