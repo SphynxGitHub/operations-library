@@ -4836,19 +4836,16 @@ OL.openStepDetailModal = function(resId, stepId) {
     // Inner UI content (Description, Apps, Assignments, Links, Outcomes)
     const innerHtml = `
         <div class="card-section">
-            <label class="modal-section-label">📱 Required App</label>
-            <div class="search-map-container" style="position:relative;">
-                <input type="text" class="modal-input" 
-                        placeholder="${linkedApp ? '📱 ' + esc(linkedApp.name) : 'Search Apps...'}" 
-                        onfocus="OL.filterStepAppSearch('${resId}', '${stepId}', '')"
-                        oninput="OL.filterStepAppSearch('${resId}', '${stepId}', this.value)">
+            <label class="modal-section-label">📱 Linked Application</label>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 ${linkedApp ? `
-                    <button onclick="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', ''); OL.openStepDetailModal('${resId}', '${stepId}')" 
-                            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:18px;">
-                        ×
-                    </button>
-                ` : ''}
-                <div id="step-app-results" class="search-results-overlay"></div>
+                    <div class="pill accent is-clickable" 
+                        onclick="OL.openAppModal('${linkedApp.id}')"
+                        style="display:flex; align-items:center; gap:8px; cursor:pointer; background:rgba(56, 189, 248, 0.1); border: 1px solid var(--accent); padding: 5px 12px; border-radius: 20px;">
+                        📱 ${esc(linkedApp.name)}
+                        <b class="pill-remove-x" style="margin-left:8px;" onclick="event.stopPropagation(); OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '')">×</b>
+                    </div>
+                ` : '<span class="tiny muted">No app linked to this step</span>'}
             </div>
         </div>
         
@@ -4856,10 +4853,17 @@ OL.openStepDetailModal = function(resId, stepId) {
             <label class="modal-section-label">👨‍💼 Responsibility Assignment</label>
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 ${step.assigneeName ? `
-                    <div class="pill accent" style="display:flex; align-items:center; gap:8px;">
-                        ${step.assigneeType === 'person' ? '👨‍💼' : step.assigneeType === 'role' ? '🎭' : '📱'}
-                        ${esc(step.assigneeName)}
-                        <b class="pill-remove-x" onclick="OL.executeAssignment('${resId}', '${stepId}', false, '', '', '')">×</b>
+                    <div class="pill accent is-clickable" 
+                        style="display:flex; align-items:center; gap:8px; cursor:pointer; background:rgba(168, 85, 247, 0.1); border: 1px solid #a855f7;"
+                        onclick="OL.openTeamMemberModal('${step.assigneeId}')">
+                        
+                        <span>${step.assigneeType === 'person' ? '👨‍💼' : (step.assigneeType === 'role' ? '🎭' : '📱')}</span>
+                        
+                        <span style="font-weight:600;">${esc(step.assigneeName)}</span>
+                        
+                        <b class="pill-remove-x" 
+                        style="margin-left:5px; opacity:0.6;" 
+                        onclick="event.stopPropagation(); OL.executeAssignment('${resId}', '${stepId}', false, '', '', '')">×</b>
                     </div>
                 ` : '<span class="tiny muted">No one assigned yet</span>'}
             </div>
@@ -6375,36 +6379,41 @@ OL.openTriggerDetailModal = function(resId, triggerIdx) {
         <div class="modal-body">
             <div class="card-section">
                 <label class="modal-section-label">📱 Source Application (Tool)</label>
-                <div class="search-map-container" style="position:relative;">
-                    <input type="text" class="modal-input" 
-                            placeholder="${linkedApp ? '📱 ' + esc(linkedApp.name) : 'Search Apps (Zapier, Typeform, etc)...'}" 
-                            onfocus="OL.filterTriggerAppSearch('${resId}', ${triggerIdx}, '')"
-                            oninput="OL.filterTriggerAppSearch('${resId}', ${triggerIdx}, this.value)">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                     ${linkedApp ? `
-                        <button onclick="OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'appId', ''); OL.openTriggerDetailModal('${resId}', ${triggerIdx})" 
-                                style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:18px;">
-                            ×
-                        </button>
-                    ` : ''}
+                        <div class="pill accent is-clickable" 
+                            style="display:flex; align-items:center; gap:8px; cursor:pointer;"
+                            onclick="OL.openAppModal('${linkedApp.id}')" title="Jump to App Settings">
+                            📱 ${esc(linkedApp.name)}
+                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'appId', ''); OL.openTriggerDetailModal('${resId}', ${triggerIdx})">×</b>
+                        </div>
+                    ` : '<span class="tiny muted">No source app linked</span>'}
+                </div>
+                <div class="search-map-container">
+                    <input type="text" class="modal-input tiny" 
+                        placeholder="Search Apps..." 
+                        onfocus="OL.filterTriggerAppSearch('${resId}', ${triggerIdx}, '')"
+                        oninput="OL.filterTriggerAppSearch('${resId}', ${triggerIdx}, this.value)">
                     <div id="trigger-app-results" class="search-results-overlay"></div>
                 </div>
             </div>
-
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">👨‍💼 Responsibility Assignment</label>
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                     ${trigger.assigneeName ? `
-                        <div class="pill accent" style="display:flex; align-items:center; gap:8px;">
+                        <div class="pill accent is-clickable" 
+                            style="display:flex; align-items:center; gap:8px; cursor:pointer;"
+                            onclick="OL.openTeamMemberModal('${trigger.assigneeId}')" title="Jump to Team Profile">
                             👨‍💼 ${esc(trigger.assigneeName)}
-                            <b class="pill-remove-x" onclick="OL.executeAssignment('${resId}', ${triggerIdx}, true, '', '', '')">×</b>
+                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'assigneeId', ''); OL.updateTriggerMeta('${resId}', ${triggerIdx}, 'assigneeName', ''); OL.openTriggerDetailModal('${resId}', ${triggerIdx})">×</b>
                         </div>
-                    ` : '<span class="tiny muted">No one assigned to monitor this trigger</span>'}
+                    ` : '<span class="tiny muted">Unassigned</span>'}
                 </div>
                 <div class="search-map-container">
                     <input type="text" class="modal-input tiny" 
-                          placeholder="Assign a Person or Role..." 
-                          onfocus="OL.filterAssignmentSearch('${resId}', ${triggerIdx}, true, '')"
-                          oninput="OL.filterAssignmentSearch('${resId}', ${triggerIdx}, true, this.value)">
+                        placeholder="Assign a Person..." 
+                        onfocus="OL.filterAssignmentSearch('${resId}', ${triggerIdx}, true, '')"
+                        oninput="OL.filterAssignmentSearch('${resId}', ${triggerIdx}, true, this.value)">
                     <div id="assignment-search-results" class="search-results-overlay"></div>
                 </div>
             </div>
@@ -6442,18 +6451,27 @@ OL.filterTriggerAppSearch = function(resId, triggerIdx, query) {
 };
 
 // Update Logic with Surgical Refresh
-OL.updateTriggerMeta = function(resId, idx, field, value) {
+OL.updateTriggerMeta = function(resId, idx, field, value, extraData = null) {
     const res = OL.getResourceById(resId);
     if (res && res.triggers[idx]) {
+        // Handle standard field updates
         res.triggers[idx][field] = value;
+        
+        // 🚀 THE PILL FIX: If extraData (like a Name) is passed, save it too
+        if (extraData) {
+            Object.keys(extraData).forEach(key => {
+                res.triggers[idx][key] = extraData[key];
+            });
+        }
+
         OL.persist();
         
-        // Surgical Update: Refresh the list in the background Resource Modal
+        // Surgical Update for the background list
         const listEl = document.getElementById('sop-step-list');
         if (listEl) listEl.innerHTML = renderSopStepList(res);
 
-        // If we toggled the type, refresh the detail modal to update button colors
-        if (field === 'type') OL.openTriggerDetailModal(resId, idx);
+        // ALWAYS refresh the Trigger Modal to show the new Pill state
+        OL.openTriggerDetailModal(resId, idx);
     }
 };
 
