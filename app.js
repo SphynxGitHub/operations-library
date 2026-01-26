@@ -4550,32 +4550,49 @@ window.renderSopStepList = function (res) {
                 ${isExpanded ? `
                     <div class="sop-expansion-panel" style="margin-left: 55px; padding: 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
                         ${step.description ? `<div class="tiny muted" style="margin-bottom:8px;">${esc(step.description)}</div>` : ''}
+
                         ${(step.outcomes || []).map(oc => {
-                            let clickAction = "";
-                            
-                            // 🚀 LOGIC JUMP ENGINE
+                            // 1. Logic Resolution: Determine WHERE the "THEN" part goes
+                            let jumpAction = "";
+                            let jumpIcon = "➔";
+
                             if (oc.action?.startsWith('jump_step_')) {
-                                // Internal Step Jump: Open the Step Detail Modal for that specific step
-                                const targetStepId = oc.action.replace('jump_step_', '');
-                                clickAction = `onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${targetStepId}')"`;
+                                const targetId = oc.action.replace('jump_step_', '');
+                                jumpAction = `OL.openStepDetailModal('${res.id}', '${targetId}')`;
                             } 
                             else if (oc.action?.startsWith('jump_res_')) {
-                                // External Resource Jump: Open the Resource Modal for the linked resource
-                                const targetResId = oc.action.replace('jump_res_', '');
-                                clickAction = `onclick="event.stopPropagation(); OL.openResourceModal('${targetResId}')"`;
+                                const targetId = oc.action.replace('jump_res_', '');
+                                jumpAction = `OL.openResourceModal('${targetId}')`;
+                                jumpIcon = "🚀"; // Use a rocket for jumping to a different file
                             } 
-                            else {
-                                // Default: Just open the current step's detail modal
-                                clickAction = `onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')"`;
+                            else if (oc.action === 'next') {
+                                const currentIdx = steps.findIndex(s => s.id === step.id);
+                                const nextStep = steps[currentIdx + 1];
+                                jumpAction = nextStep ? `OL.openStepDetailModal('${res.id}', '${nextStep.id}')` : "";
                             }
 
                             return `
-                                <div class="is-clickable outcome-link-tag" ${clickAction} 
-                                    style="font-size: 10px; margin-top:3px; cursor: pointer; transition: color 0.2s;"
-                                    onmouseover="this.style.color='var(--accent)'" 
-                                    onmouseout="this.style.color='inherit'">
-                                    <span class="accent bold">↳ ${esc(oc.condition || 'IF...')}</span>: 
-                                    <span style="text-decoration: underline dotted; opacity: 0.9;">${esc(oc.label)}</span>
+                                <div class="outcome-nav-row" style="display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px;">
+                                    
+                                    <div class="is-clickable" 
+                                        style="color: var(--accent); font-weight: bold; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s;"
+                                        onmouseover="this.style.background='rgba(56, 189, 248, 0.1)'" 
+                                        onmouseout="this.style.background='transparent'"
+                                        onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
+                                        IF ${esc(oc.condition || '...')}
+                                    </div>
+
+                                    <span class="muted" style="opacity: 0.5;">:</span>
+
+                                    <div class="is-clickable" 
+                                        style="flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; transition: all 0.2s;"
+                                        onmouseover="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='translateX(4px)';" 
+                                        onmouseout="this.style.background='transparent'; this.style.transform='translateX(0)';"
+                                        onclick="event.stopPropagation(); ${jumpAction}">
+                                        <span style="opacity: 0.7;">${jumpIcon}</span>
+                                        <span style="text-decoration: underline dotted; text-underline-offset: 3px;">${esc(oc.label)}</span>
+                                    </div>
+                                    
                                 </div>
                             `;
                         }).join('')}
