@@ -4568,9 +4568,8 @@ window.renderSopStepList = function (res) {
                     <div style="background: var(--accent); color: #000; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;"
                         onclick="event.stopPropagation(); OL.openResourceModal('${step.linkedResourceId}')"
                         onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                        <span class="tiny bold uppercase">📦 MODULE: ${esc(nestedRes?.name || 'Unknown')} 🚀</span>
+                        <span class="tiny bold uppercase">${idx+1}: ${esc(nestedRes?.name || 'Unknown')} 🚀</span>
                         <div style="display:flex; gap: 8px; align-items:center;">
-                            <span style="font-size: 9px; opacity: 0.7;">Click to Open Resource</span>
                             <button class="card-delete-btn" style="position:static; color: #000;" 
                                     onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
                         </div>
