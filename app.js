@@ -3980,7 +3980,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </div>
                 ` : ''}
             </div>
-            ${typeSpecificHTML}
+            ${typeSpecificHtml}
             <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
