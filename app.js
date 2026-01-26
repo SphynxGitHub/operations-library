@@ -554,12 +554,15 @@ window.openModal = function (contentHTML) {
 };
 
 OL.closeModal = function () {
-  const layer = document.getElementById("modal-layer");
-  if (layer) {
-    layer.style.display = "none";
-    layer.innerHTML = "";
-  }
-  if (typeof activeOnClose === "function") activeOnClose();
+    const layer = document.getElementById("modal-layer");
+    if (layer) {
+        layer.style.display = "none";
+        layer.innerHTML = "";
+    }
+    // 🚀 NEW: Wipe history on close
+    OL.clearNavHistory();
+    
+    if (typeof activeOnClose === "function") activeOnClose();
 };
 
 OL.deleteCard = function(id, type, event) {
@@ -3751,12 +3754,16 @@ OL.getResourceById = function(id) {
 OL.openResourceModal = function (targetId, draftObj = null) {
     if (!targetId) return;
 
+    OL.trackNav(targetId, 'resource');
+
     // 🚩 THE TRACKER: Save the current ID before switching to the new target
     const currentId = document.getElementById('active-modal-box')?.dataset?.activeResId;
     if (currentId && currentId !== targetId) {
         sessionStorage.setItem('lastActiveResourceId', currentId);
     }
-    
+
+    const hasHistory = JSON.parse(sessionStorage.getItem('ol_nav_history') || '[]').length > 1;
+
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
@@ -3941,10 +3948,10 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     ${originPill}
                     ${typePill}
 
-                    ${sessionStorage.getItem('lastActiveResourceId') && sessionStorage.getItem('lastActiveResourceId') !== res.id ? `
-                        <button class="btn tiny soft" style="color: black !important; background: #64748b !important; color: white !important;" 
-                                onclick="const prevId = sessionStorage.getItem('lastActiveResourceId'); OL.openResourceModal(prevId)">
-                            ⬅️ Back to Previous
+                    ${hasHistory ? `
+                        <button class="btn tiny soft" style="color: black !important; background: #fff !important; font-weight:bold;" 
+                                onclick="OL.navigateBack()">
+                            ⬅️ Back
                         </button>
                     ` : ''}
                     
@@ -4015,6 +4022,36 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+OL.navigateBack = function() {
+    const history = JSON.parse(sessionStorage.getItem('ol_nav_history') || '[]');
+    if (history.length < 2) {
+        OL.closeModal(); // Nowhere to go back to
+        return;
+    }
+    
+    history.pop(); // Remove current view
+    const prev = history.pop(); // Get previous view
+    sessionStorage.setItem('ol_nav_history', JSON.stringify(history));
+
+    if (prev.type === 'resource') OL.openResourceModal(prev.id);
+    else if (prev.type === 'step') OL.openStepDetailModal(prev.resId, prev.id);
+};
+
+OL.trackNav = function(id, type, resId = null) {
+    let history = JSON.parse(sessionStorage.getItem('ol_nav_history') || '[]');
+    // Prevent duplicate entries if refreshing same item
+    if (history.length > 0 && history[history.length - 1].id === id) return;
+    
+    history.push({ id, type, resId });
+    if (history.length > 10) history.shift(); // Keep history lean
+    sessionStorage.setItem('ol_nav_history', JSON.stringify(history));
+};
+
+OL.clearNavHistory = function() {
+    sessionStorage.removeItem('ol_nav_history');
+    console.log("🧹 Navigation stack reset.");
 };
 
 // Filter for Signature resources within the project
@@ -4678,6 +4715,8 @@ OL.toggleTrigDetails = function(event, resId, trigId) {
 };
 
 OL.openStepDetailModal = function(resId, stepId) {
+    OL.trackNav(stepId, 'step', resId);
+
     const res = OL.getResourceById(resId);
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
@@ -4812,7 +4851,16 @@ OL.openStepDetailModal = function(resId, stepId) {
                         style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                         onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)">
                 </div>
-                <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">Back to Resource</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn tiny soft" style="color: black !important; font-weight: bold; background: #fff !important;" 
+                            onclick="OL.navigateBack()">
+                        ⬅️ Back
+                    </button>
+                    <button class="btn tiny soft" style="color: black !important; font-weight: bold; background: #fff !important;" 
+                            onclick="OL.openResourceModal('${resId}')">
+                        🏠 Index
+                    </button>
+                </div>
             </div>
             <div class="modal-body">
                 ${innerHtml}
