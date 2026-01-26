@@ -3751,6 +3751,12 @@ OL.getResourceById = function(id) {
 OL.openResourceModal = function (targetId, draftObj = null) {
     if (!targetId) return;
 
+    // 🚩 THE TRACKER: Save the current ID before switching to the new target
+    const currentId = document.getElementById('active-modal-box')?.dataset?.activeResId;
+    if (currentId && currentId !== targetId) {
+        sessionStorage.setItem('lastActiveResourceId', currentId);
+    }
+    
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
@@ -3934,6 +3940,14 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
                     ${originPill}
                     ${typePill}
+
+                    ${sessionStorage.getItem('lastActiveResourceId') && sessionStorage.getItem('lastActiveResourceId') !== res.id ? `
+                        <button class="btn tiny soft" style="color: black !important; background: #64748b !important; color: white !important;" 
+                                onclick="const prevId = sessionStorage.getItem('lastActiveResourceId'); OL.openResourceModal(prevId)">
+                            ⬅️ Back to Previous
+                        </button>
+                    ` : ''}
+                    
                     ${canPromote ? `
                     <button class="btn tiny primary" 
                             style="background: #fbbf24 !important; color: black !important; font-weight: bold; border: none;"
