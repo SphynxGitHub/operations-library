@@ -4560,18 +4560,50 @@ window.renderSopStepList = function (res) {
             if (isModule) {
                 const nestedRes = OL.getResourceById(step.linkedResourceId);
                 const nestedSteps = nestedRes?.steps || [];
-                
+                const nestedOutcomes = nestedRes?.triggers?.[0]?.outcomes || []; // Pull logic from module entry
+
                 return `
                 <div class="step-group module-block-container" 
                     style="margin-bottom: 12px; border: 1px solid var(--accent); border-radius: 8px; background: rgba(56, 189, 248, 0.03); overflow: hidden;">
-                    <div style="background: var(--accent); color: #000; padding: 4px 12px; display: flex; justify-content: space-between; align-items: center;">
-                        <span class="tiny bold uppercase">📦 Module: ${esc(nestedRes?.name || 'Unknown')}</span>
-                        <button class="card-delete-btn" style="position:static; color: #000;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                    
+                    <div style="background: var(--accent); color: #000; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;"
+                        onclick="event.stopPropagation(); OL.openResourceModal('${step.linkedResourceId}')"
+                        onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                        <span class="tiny bold uppercase">📦 MODULE: ${esc(nestedRes?.name || 'Unknown')} 🚀</span>
+                        <div style="display:flex; gap: 8px; align-items:center;">
+                            <span style="font-size: 9px; opacity: 0.7;">Click to Open</span>
+                            <button class="card-delete-btn" style="position:static; color: #000;" 
+                                    onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                        </div>
                     </div>
-                    <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px; opacity: 0.8;">
+
+                    <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px;">
                         ${nestedSteps.map((nS, nIdx) => `
-                            <div style="font-size: 11px;"><span style="opacity:0.5">${idx+1}.${nIdx+1}</span> ${esc(nS.name)}</div>
-                        `).join('') || '<div class="tiny muted">Empty module</div>'}
+                            <div style="font-size: 11px; opacity: 0.7;">
+                                <span style="opacity:0.5">${idx+1}.${nIdx+1}</span> ${esc(nS.name)}
+                            </div>
+                        `).join('') || '<div class="tiny muted">No steps in module</div>'}
+
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+                            ${(nestedRes.steps?.[nestedRes.steps.length - 1]?.outcomes || []).map(oc => {
+                                // Reuse the teleport logic for nested outcomes
+                                let jumpAction = "";
+                                if (oc.action?.startsWith('jump_step_')) {
+                                    jumpAction = `OL.openStepDetailModal('${nestedRes.id}', '${oc.action.replace('jump_step_', '')}')`;
+                                } else if (oc.action?.startsWith('jump_res_')) {
+                                    jumpAction = `OL.openResourceModal('${oc.action.replace('jump_res_', '')}')`;
+                                }
+
+                                return `
+                                    <div class="outcome-nav-row" style="display: flex; align-items: center; gap: 6px; font-size: 10px; cursor: pointer;"
+                                        onclick="event.stopPropagation(); ${jumpAction}">
+                                        <span class="accent bold">↳ IF ${esc(oc.condition || '...')}</span>
+                                        <span class="muted">:</span>
+                                        <span style="text-decoration: underline dotted;">${esc(oc.label)}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
                     </div>
                 </div>`;
             }
