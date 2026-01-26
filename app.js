@@ -4653,9 +4653,19 @@ window.renderSopStepList = function (res) {
                                     <div style="display:flex; gap:10px; align-items:center; opacity: 0.5; font-size: 9px; margin: 2px 0 4px 20px;">
                                         <span>👤 ${esc(nS.assigneeName || "Unassigned")}</span>
                                         ${(() => {
-                                            // Resolve the App for this specific nested step
                                             const stepApp = allApps.find(a => String(a.id) === String(nS.appId));
-                                            return stepApp ? `<span>📱 ${esc(stepApp.name)}</span>` : '';
+                                            if (!stepApp) return '';
+                                            
+                                            // 🚀 INTERACTIVE APP LINK
+                                            return `
+                                                <span class="is-clickable" 
+                                                    style="cursor: pointer; text-decoration: underline dotted; transition: color 0.2s;"
+                                                    onmouseover="this.style.color='var(--accent)';" 
+                                                    onmouseout="this.style.color='inherit';"
+                                                    onclick="event.stopPropagation(); OL.openAppModal('${stepApp.id}')">
+                                                    📱 ${esc(stepApp.name)}
+                                                </span>
+                                            `;
                                         })()}
                                         ${nS.timingType ? `<span style="color: var(--accent);">📅 T+${nS.timingValue || 0}d</span>` : ''}
                                     </div>
