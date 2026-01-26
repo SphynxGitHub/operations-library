@@ -4624,7 +4624,7 @@ window.renderSopStepList = function (res) {
                                 <div class="outcome-nav-row" style="display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px;">
                                     
                                     <div class="is-clickable" 
-                                        style="color: var(--accent); font-weight: bold; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s;"
+                                        style="cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s;"
                                         onmouseover="this.style.background='rgba(56, 189, 248, 0.1)'" 
                                         onmouseout="this.style.background='transparent'"
                                         onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
