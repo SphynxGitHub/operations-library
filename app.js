@@ -3959,36 +3959,28 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
 
             <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">🌐 External Link</label>
+                <label class="modal-section-label">🌐 External Link & Source</label>
                 <div style="display:flex; gap:10px; margin-bottom:10px;">
                     <input type="text" class="modal-input tiny" 
                         style="flex: 1;"
                         placeholder="https://app.example.com" 
                         value="${esc(res.externalUrl || '')}" 
                         onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
+                    
                     ${res.externalUrl ? `
-                        <button class="btn soft tiny" onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" style="white-space: nowrap;">
-                            Copy Link
+                        <button class="btn soft tiny" style="color: black !important; padding: 0 12px;" 
+                                onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" title="Copy Link">
+                            📋 Copy
                         </button>
+                        <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
+                           style="display: flex; align-items: center; gap: 4px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
+                            ↗️ Open
+                        </a>
                     ` : ''}
                 </div>
-
-                ${res.externalUrl ? `
-                    <div class="link-preview-container" style="border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000;">
-                        ${OL.shouldIframe(res.externalUrl) ? `
-                            <iframe src="${res.externalUrl}" style="width:100%; height:300px; border:none;" allowfullscreen></iframe>
-                        ` : `
-                            <div style="padding: 30px; text-align: center;">
-                                <div class="tiny muted" style="margin-bottom:10px;">Preview not available for this site.</div>
-                                <a href="${res.externalUrl}" target="_blank" class="btn small primary" style="display:inline-flex; align-items:center; gap:8px;">
-                                    <span>Open External Site</span>
-                                    <span style="font-size:10px;">↗</span>
-                                </a>
-                            </div>
-                        `}
-                    </div>
-                ` : ''}
+                ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
             </div>
+
             ${typeSpecificHtml}
             <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
@@ -4088,13 +4080,6 @@ OL.copyToClipboard = function(text, btn) {
     }).catch(err => {
         console.error('Failed to copy: ', err);
     });
-};
-
-OL.shouldIframe = function(url) {
-    if (!url) return false;
-    // Allow iframes for known "embed-friendly" domains
-    const embedFriendly = ['youtube.com', 'vimeo.com', 'loom.com', 'miro.com'];
-    return embedFriendly.some(domain => url.includes(domain));
 };
 
 OL.handleResourceSave = async function(id, field, value) {
