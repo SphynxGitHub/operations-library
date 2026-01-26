@@ -3853,14 +3853,10 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                             onblur="OL.handleResourceSave('${res.id}', 'emailBody', this.value)">${esc(res.emailBody || '')}</textarea>
                 </div>
 
-                <div style="margin-top: 12px;">
-                    <label class="tiny muted bold">LINKED SIGNATURE</label>
-                    <div class="search-map-container">
-                        <input type="text" class="modal-input tiny" 
-                            placeholder="${res.signatureName ? '✍️ ' + res.signatureName : 'Search Signatures...'}"
-                            onfocus="OL.filterSignatureSearch('${res.id}', this.value)"
-                            oninput="OL.filterSignatureSearch('${res.id}', this.value)">
-                        <div id="sig-search-results" class="search-results-overlay"></div>
+                <div style="margin-top: 12px; padding: 8px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
+                    <label class="tiny muted bold">SIGNATURE STATUS</label>
+                    <div class="tiny">
+                        ${res.emailFrom ? '✅ Signature will be pulled from selected Team Member.' : '⚠️ Select a "FROM" sender to enable signature preview.'}
                     </div>
                 </div>
             </div>
@@ -4052,23 +4048,27 @@ OL.previewEmailTemplate = function(resId) {
     const res = OL.getResourceById(resId);
     if (!res) return;
 
-    // Resolve the linked signature content
-    const sigResource = res.signatureId ? OL.getResourceById(res.signatureId) : null;
-    const signatureHtml = sigResource ? `<div style="margin-top:20px; border-top:1px solid #eee; padding-top:10px; color:#666;">${esc(sigResource.description || '').replace(/\n/g, '<br>')}</div>` : "";
+    const client = getActiveClient();
+    
+    // 🚀 NEW LOGIC: Pull signature from the selected Team Member
+    const sender = (client?.projectData?.teamMembers || []).find(m => m.id === res.emailFrom);
+    const signatureContent = sender?.signature 
+        ? `<div style="margin-top:20px; border-top:1px solid #eee; padding-top:15px; color:#555; font-style: normal;">${esc(sender.signature).replace(/\n/g, '<br>')}</div>` 
+        : `<div class="tiny muted italic" style="margin-top:20px; color:#999;">(No signature defined for ${sender?.name || 'this sender'})</div>`;
 
     const previewHtml = `
         <div class="modal-head">
             <div class="modal-title-text">📧 Email Preview</div>
         </div>
-        <div class="modal-body" style="background: #fff; color: #333; padding: 30px; font-family: sans-serif; border-radius: 0 0 8px 8px;">
-            <div style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="font-size: 13px;"><b style="color:#888;">To:</b> [${res.emailToType || 'Recipient'}]</div>
-                <div style="font-size: 13px;"><b style="color:#888;">Subject:</b> ${esc(res.emailSubject || '(No Subject)')}</div>
+        <div class="modal-body" style="background: #fff; color: #333; padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border-radius: 0 0 8px 8px;">
+            <div style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; font-size: 13px;">
+                <div style="margin-bottom:5px;"><b style="color:#888;">To:</b> [${res.emailToType || 'Recipient'}]</div>
+                <div><b style="color:#888;">Subject:</b> ${esc(res.emailSubject || '(No Subject)')}</div>
             </div>
-            <div style="line-height: 1.6; white-space: pre-wrap;">${esc(res.emailBody || 'Empty body...')}</div>
-            ${signatureHtml}
-            <div style="margin-top: 40px; text-align: center;">
-                <button class="btn small soft" style="color: black !important;" onclick="OL.openResourceModal('${resId}')">← Back to Editor</button>
+            <div style="line-height: 1.6; white-space: pre-wrap; font-size: 15px; color:#222;">${esc(res.emailBody || '...')}</div>
+            ${signatureContent}
+            <div style="margin-top: 40px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
+                <button class="btn small soft" style="color:black !important;" onclick="OL.openResourceModal('${resId}')">← Back to Editor</button>
             </div>
         </div>
     `;
@@ -9330,6 +9330,14 @@ OL.openTeamMemberModal = function (memberId, draftObj = null) {
                         oninput="OL.filterRoleSearch('${memberId}', this.value)">
                     <div id="role-search-results" class="search-results-overlay"></div>
                 </div>
+            </div>
+            <div class="card-section" style="margin-top: 20px;">
+                <label class="modal-section-label">✍️ Email Signature</label>
+                <textarea class="modal-textarea" 
+                        style="min-height: 100px; font-family: monospace; font-size: 11px;" 
+                        placeholder="Best regards,\n{{name}}\nSphynx Financial"
+                        onblur="OL.updateTeamMember('${memberId}', 'signature', this.value)">${esc(member.signature || '')}</textarea>
+                <div class="tiny muted" style="margin-top:5px;">This signature will be used for all email templates sent by this member.</div>
             </div>
             ${OL.renderAccessSection(memberId, "member")} 
         </div>
