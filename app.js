@@ -4434,6 +4434,7 @@ OL.executeResourceImport = function(masterId) {
 
 
 //======================= SOP STEP LOGIC =======================//
+
 window.renderSopStepList = function (res) {
     if (!res) return "";
 
@@ -4549,11 +4550,35 @@ window.renderSopStepList = function (res) {
                 ${isExpanded ? `
                     <div class="sop-expansion-panel" style="margin-left: 55px; padding: 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
                         ${step.description ? `<div class="tiny muted" style="margin-bottom:8px;">${esc(step.description)}</div>` : ''}
-                        ${(step.outcomes || []).map(oc => `
-                            <div style="font-size: 10px; margin-top:3px;">
-                                <span class="accent bold">↳ ${esc(oc.condition || 'IF...')}</span>: ${esc(oc.label)}
-                            </div>
-                        `).join('')}
+                        ${(step.outcomes || []).map(oc => {
+                            let clickAction = "";
+                            
+                            // 🚀 LOGIC JUMP ENGINE
+                            if (oc.action?.startsWith('jump_step_')) {
+                                // Internal Step Jump: Open the Step Detail Modal for that specific step
+                                const targetStepId = oc.action.replace('jump_step_', '');
+                                clickAction = `onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${targetStepId}')"`;
+                            } 
+                            else if (oc.action?.startsWith('jump_res_')) {
+                                // External Resource Jump: Open the Resource Modal for the linked resource
+                                const targetResId = oc.action.replace('jump_res_', '');
+                                clickAction = `onclick="event.stopPropagation(); OL.openResourceModal('${targetResId}')"`;
+                            } 
+                            else {
+                                // Default: Just open the current step's detail modal
+                                clickAction = `onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')"`;
+                            }
+
+                            return `
+                                <div class="is-clickable outcome-link-tag" ${clickAction} 
+                                    style="font-size: 10px; margin-top:3px; cursor: pointer; transition: color 0.2s;"
+                                    onmouseover="this.style.color='var(--accent)'" 
+                                    onmouseout="this.style.color='inherit'">
+                                    <span class="accent bold">↳ ${esc(oc.condition || 'IF...')}</span>: 
+                                    <span style="text-decoration: underline dotted; opacity: 0.9;">${esc(oc.label)}</span>
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
                 ` : ''}
             </div>`;
@@ -5863,59 +5888,54 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
     if (!listEl) return;
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
-    const client = getActiveClient(); // 🚀 THE ANCHOR
+    const client = getActiveClient();
 
     const logicActions = [
         { id: 'next', name: 'Proceed to Next Step', icon: '➡️' },
         { id: 'close', name: 'Close Workflow', icon: '🏁' },
-        { id: 'restartStep', name: 'Restart Step', icon: '🔁' },
-        { id: 'restartWorkflow', name: 'Restart Workflow', icon: '🔝' },
+        { id: 'restartStep', name: 'Restart Step', icon: '🔁' }
     ];
     
     const steps = (res.steps || []).filter(s => String(s.id) !== String(stepId));
-    const projectResources = client ? (client.projectData.localResources || []) : [];
-    const externalResources = (projectResources || []).filter(r => r.id !== resId);
+    const externalResources = (client?.projectData?.localResources || []).filter(r => r.id !== resId);
 
     let html = '';
 
-    // 1. Logic Group
-    const filteredLogic = logicActions.filter(a => a.name.toLowerCase().includes(q));
-    if (filteredLogic.length) {
-        html += `<div class="search-group-header">Logic</div>`;
-        filteredLogic.forEach(a => {
-            // Passing the icon + name as the destination label
-            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', '${a.id}', '${esc(a.icon + " " + a.name)}')">
-                ${a.icon} ${a.name}
-            </div>`;
-        });
-    }
+    // 1. Workflow Logic
+    html += `<div class="search-group-header">Standard Logic</div>`;
+    logicActions.filter(a => a.name.toLowerCase().includes(q)).forEach(a => {
+        html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', '${a.id}', '${esc(a.icon + " " + a.name)}')">
+            ${a.icon} ${a.name}
+        </div>`;
+    });
 
-    // 2. Jump Group
+    // 2. Internal Jumps (Jump to another step in THIS resource)
     const filteredSteps = steps.filter(s => val(s.name, "Unnamed Step").toLowerCase().includes(q));
     if (filteredSteps.length) {
-        html += `<div class="search-group-header">Jump To Step</div>`;
+        html += `<div class="search-group-header">Jump To Step (Internal)</div>`;
         filteredSteps.forEach(s => {
             const stepTitle = val(s.name, "Unnamed Step");
-            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_${s.id}', '↪ ${esc(stepTitle)}')">
-                ↪ ${esc(stepTitle)}
+            // 🚀 We tag this as jump_step_
+            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(stepTitle)}')">
+                ↪ Step: ${esc(stepTitle)}
             </div>`;
         });
     }
 
-    // 3. External Group
+    // 3. External Jumps (Open a different Resource/Email/Form)
     const filteredExt = externalResources.filter(r => r.name.toLowerCase().includes(q));
     if (filteredExt.length) {
-        html += `<div class="search-group-header">Trigger External Resource</div>`;
+        html += `<div class="search-group-header">Jump to External Resource</div>`;
         filteredExt.forEach(r => {
-            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'launch_${r.id}', '🚀 Launch: ${esc(r.name)}')">
-                🚀 Launch: ${esc(r.name)}
+            // 🚀 We tag this as jump_res_
+            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_res_${r.id}', '🚀 Open: ${esc(r.name)}')">
+                🚀 Open: ${esc(r.name)} <span class="pill tiny vault">${esc(r.type || 'Res')}</span>
             </div>`;
         });
     }
 
     listEl.innerHTML = html || `<div class="search-result-item muted">No outcomes found</div>`;
 };
-
 OL.getOutcomeLabel = function(action, res) {
     if (!action || action === 'next') return "➡️ Proceed to Next Step";
     if (action === 'close') return "🏁 Close Workflow";
