@@ -4562,19 +4562,26 @@ window.renderSopStepList = function (res) {
                 const nestedSteps = nestedRes?.steps || [];
 
                 return `
-                <div class="step-group module-block-container" 
+                <div class="step-group module-block-container"
                     style="margin-bottom: 12px; border: 1px solid var(--accent); border-radius: 8px; background: rgba(56, 189, 248, 0.03); overflow: hidden;">
                     
-                    <div style="background: var(--accent); color: #000; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;"
+                    <div class="step-group module-block-container" style="background: var(--accent); color: #000; gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;" 
                         onclick="event.stopPropagation(); OL.openResourceModal('${step.linkedResourceId}')"
                         onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                        <span class="tiny bold uppercase">${idx+1}: ${esc(nestedRes?.name || 'Unknown')} 🚀</span>
-                        <div style="display:flex; gap: 8px; align-items:center;">
+                        
+                        <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
+                            <span class="drag-handle" style="opacity:0.3; font-size:12px;" onclick="event.stopPropagation()">⠿</span>
+                            <span class="tiny muted" style="font-size:10px;">${idx + 1}</span>
+                        </div>
+                        
+                        <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                            <div class="bold" style="font-size:0.95em;">${esc(nestedRes?.name || 'Unknown')} 🚀</div>
                             <button class="card-delete-btn" style="position:static; color: #000;" 
-                                    onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                                        onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                            </div>
                         </div>
                     </div>
-
+                    
                     <div style="padding: 10px; display: flex; flex-direction: column; gap: 10px;">
                         ${nestedSteps.map((nS, nIdx) => {
                             // 🚀 NESTED TELEPORT ENGINE: Logic for each step inside the module
