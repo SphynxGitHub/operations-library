@@ -4007,7 +4007,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
                     <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-                    <button class="btn tiny primary" onclick="OL.toggleWorkflowFullScreen('${res.id}')">📃 List Editor</button>
+                    <button class="btn tiny primary" onclick="OL.toggleWorkflowFullscreen('${res.id}')">📃 List Editor</button>
                 </div>
                 <div id="sop-step-list">
                     ${renderSopStepList(res)}
