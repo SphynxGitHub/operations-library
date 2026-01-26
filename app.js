@@ -3970,14 +3970,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
             ${roundInputHtml} 
             ${adminPricingHtml}
-            
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">📝 Description & Access Notes</label>
-                <textarea class="modal-textarea" 
-                        placeholder="Enter login details, account purpose, or specific access instructions..." 
-                        style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
-                        onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-            </div>
 
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">🌐 External Link & Source</label>
@@ -4000,6 +3992,14 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     ` : ''}
                 </div>
                 ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
+            </div>
+            
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">📝 Description & Access Notes</label>
+                <textarea class="modal-textarea" 
+                        placeholder="Enter login details, account purpose, or specific access instructions..." 
+                        style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
+                        onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
             </div>
 
             ${typeSpecificHtml}
