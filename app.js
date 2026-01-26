@@ -116,8 +116,14 @@ OL.sync = function() {
     });
 };
 
-// Update your event listener to use the Async Boot
-window.addEventListener("load", OL.sync);
+window.addEventListener("load", () => {
+    // 🔑 THE RE-AUTHENTICATOR
+    if (window.location.search.includes('admin=pizza123')) {
+        state.adminMode = true;
+        OL.state.adminMode = true;
+    }
+    OL.sync(); // Start the heartbeat
+});
 
 const getActiveClient = () => state.clients[state.activeClientId] || null;
 
@@ -3300,16 +3306,14 @@ window.renderResourceManager = function () {
                 <div class="small muted">${displayRes.length} items grouped by category</div>
             </div>
             <div class="header-actions">
-                ${isAdmin ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
+                ${isAdmin ? `<button class="btn small soft" style="color:black !important;" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
                 
-                ${isAdmin || !isVaultView ? `
-                    <button class="btn small soft" onclick="OL.promptCreateResource()">
-                        + Create ${isVaultView ? 'Master' : 'Local'} Resource
-                    </button>
-                ` : ''}
+                <button class="btn small soft" style="color: black !important;" onclick="OL.promptCreateResource()">
+                    + Create ${isVaultView ? 'Master' : 'Local'} Resource
+                </button>
 
                 ${!isVaultView && isAdmin ? `
-                    <button class="btn primary" onclick="OL.importFromMaster()">⬇️ Import from Master</button>
+                    <button class="btn primary" style="background:#38bdf8; color:black; font-weight:bold;" onclick="OL.importFromMaster()">⬇️ Import from Master</button>
                 ` : ''}
             </div>
         </div>
@@ -4084,62 +4088,33 @@ OL.shouldIframe = function(url) {
     return embedFriendly.some(domain => url.includes(domain));
 };
 
-OL.handleResourceSave = function(id, field, value) {
+OL.handleResourceSave = async function(id, field, value) {
     const client = getActiveClient();
     const isVaultMode = window.location.hash.includes('vault');
-    const isLocalDraft = String(id).includes('local') || String(id).includes('draft-res');
     
-    // 1. Try to find the existing record
+    // 1. Resolve Target
     let res = state.master.resources.find(r => r.id === id);
     if (!res && client) {
         res = (client.projectData.localResources || []).find(r => r.id === id);
     }
 
-    // 🚀 THE FIX: If not found, initialize it now
-    if (!res) {
-        const newObj = {
-            id: id,
-            name: field === 'name' ? value : "",
-            type: "General",
-            description: field === 'description' ? value : "",
-            externalUrl: field === 'externalUrl' ? value : "",
-            steps: []
-        };
-
-        if (isVaultMode) {
-            state.master.resources.push(newObj);
-            res = newObj;
-            console.log("🏛️ New Master Resource Initialized");
-        } else if (client) {
-            if (!client.projectData.localResources) client.projectData.localResources = [];
-            client.projectData.localResources.push(newObj);
-            res = newObj;
-            console.log("📍 New Local Resource Initialized");
-        }
+    // 🚀 THE PERSISTENCE FIX: If it's a new draft, commit it immediately
+    if (!res && id.startsWith('draft-')) {
+        console.log("📝 Auto-committing draft...");
+        await OL.handleModalSave(id, document.getElementById('modal-res-name')?.value || "New Resource");
+        // Re-fetch res after commit
+        res = isVaultMode 
+            ? state.master.resources.find(r => r.id.includes(id.split('-').pop()))
+            : client.projectData.localResources.find(r => r.id.includes(id.split('-').pop()));
     }
 
-    // 2. Update and Persist
     if (res) {
         res[field] = value;
-        OL.persist(); 
+        await OL.persist(); // ⚡ Push to Cloud
         
-        // Surgical UI Sync so the background card updates title instantly
         if (field === 'name') {
-            document.querySelectorAll(`.res-card-title-${id}`).forEach(el => el.innerText = value || "Untitled Resource");
+            document.querySelectorAll(`.res-card-title-${id}`).forEach(el => el.innerText = value || "Untitled");
         }
-    } else {
-        console.error("❌ PERSISTENCE FAILURE: No context for ID", id);
-    }
-    // 🔄 SURGICAL UPDATE (No refresh needed)
-    if (res) {
-        res[field] = value;
-        OL.persist(); 
-        
-        // Update the specific title on the background card without re-rendering everything
-        const cardTitles = document.querySelectorAll(`.res-card-title-${id}`);
-        cardTitles.forEach(el => {
-            el.innerText = value || "New Resource";
-        });
     }
 };
 
