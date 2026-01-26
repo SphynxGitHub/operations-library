@@ -4562,41 +4562,49 @@ window.renderSopStepList = function (res) {
                 const nestedSteps = nestedRes?.steps || [];
 
                 return `
-                <div class="step-group module-block-container"
+                <div class="step-group module-block-container" 
+                    draggable="true" 
+                    ondragstart="OL.handleStepDragStart(event, ${idx})" 
+                    ondragover="OL.handleDragOver(event)" 
+                    ondrop="OL.handleStepDrop(event, ${idx}, '${res.id}')"
                     style="margin-bottom: 12px; border: 1px solid var(--accent); border-radius: 8px; background: rgba(56, 189, 248, 0.03); overflow: hidden;">
                     
-                    <div class="step-group module-block-container" style="background: var(--accent); color: #000; gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;" 
+                    <div class="dp-manager-row is-clickable" 
+                        style="gap:10px; margin-bottom:0; align-items: flex-start; padding: 10px 12px; background: var(--accent); color: #000;" 
                         onclick="event.stopPropagation(); OL.openResourceModal('${step.linkedResourceId}')"
                         onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
                         
                         <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
-                            <span class="drag-handle" style="opacity:0.3; font-size:12px;" onclick="event.stopPropagation()">⠿</span>
-                            <span class="tiny muted" style="font-size:10px;">${idx + 1}</span>
+                            <span class="drag-handle" style="opacity:0.5; font-size:12px; color: #000;" onclick="event.stopPropagation()">⠿</span>
+                            <span class="tiny bold" style="font-size:10px; color: #000;">${idx + 1}</span>
+                            <span style="font-size: 10px; color: #000; opacity: 0.5;">📦</span>
                         </div>
                         
                         <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                            <div class="bold" style="font-size:0.95em;">${esc(nestedRes?.name || 'Unknown')} 🚀</div>
-                            <button class="card-delete-btn" style="position:static; color: #000;" 
-                                        onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                            <div class="bold" style="font-size:0.95em; color: #000;">${esc(nestedRes?.name || 'Unknown Module')} 🚀</div>
+                            <div style="display:flex; gap:12px; align-items:center; opacity: 0.8; font-size: 10px; color: #000;">
+                                <span>Linked Module Resource</span>
+                                <span>${nestedSteps.length} Steps</span>
                             </div>
                         </div>
+                        
+                        <button class="card-delete-btn" 
+                                style="position:static; margin-top: 4px; color: #000;" 
+                                onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
                     </div>
                     
-                    <div style="padding: 10px; display: flex; flex-direction: column; gap: 10px;">
+                    <div style="padding: 10px 10px 15px 65px; display: flex; flex-direction: column; gap: 12px; background: rgba(0,0,0,0.1);">
                         ${nestedSteps.map((nS, nIdx) => {
-                            // 🚀 NESTED TELEPORT ENGINE: Logic for each step inside the module
                             const nestedOutcomesHtml = (nS.outcomes || []).map(oc => {
                                 let jumpAction = "";
                                 if (oc.action?.startsWith('jump_step_')) {
-                                    // Jump to a step INSIDE the nested resource
                                     jumpAction = `OL.openStepDetailModal('${nestedRes.id}', '${oc.action.replace('jump_step_', '')}')`;
                                 } else if (oc.action?.startsWith('jump_res_')) {
-                                    // Jump to a completely different resource
                                     jumpAction = `OL.openResourceModal('${oc.action.replace('jump_res_', '')}')`;
                                 }
 
                                 return `
-                                    <div class="outcome-nav-row" style="margin-left: 20px; display: flex; align-items: center; gap: 6px; font-size: 10px; cursor: pointer; margin-top: 2px;"
+                                    <div class="outcome-nav-row" style="display: flex; align-items: center; gap: 6px; font-size: 10px; cursor: pointer; margin-top: 3px;"
                                         onclick="event.stopPropagation(); ${jumpAction}">
                                         <span class="accent bold" style="opacity:0.8;">↳ IF ${esc(oc.condition || '...')}</span>
                                         <span class="muted" style="opacity:0.5;">:</span>
@@ -4606,7 +4614,7 @@ window.renderSopStepList = function (res) {
                             }).join('');
 
                             return `
-                                <div class="nested-step-wrap">
+                                <div class="nested-step-wrap" style="border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 8px;">
                                     <div style="font-size: 11px; font-weight: 600; color: white; opacity: 0.9;">
                                         <span style="opacity:0.4; font-weight: normal;">${idx+1}.${nIdx+1}</span> ${esc(nS.name)}
                                     </div>
