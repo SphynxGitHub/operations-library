@@ -4554,7 +4554,6 @@ window.renderSopStepList = function (res) {
                         ${(step.outcomes || []).map(oc => {
                             // 1. Logic Resolution: Determine WHERE the "THEN" part goes
                             let jumpAction = "";
-                            let jumpIcon = "➔";
 
                             if (oc.action?.startsWith('jump_step_')) {
                                 const targetId = oc.action.replace('jump_step_', '');
@@ -4563,7 +4562,6 @@ window.renderSopStepList = function (res) {
                             else if (oc.action?.startsWith('jump_res_')) {
                                 const targetId = oc.action.replace('jump_res_', '');
                                 jumpAction = `OL.openResourceModal('${targetId}')`;
-                                jumpIcon = "🚀"; // Use a rocket for jumping to a different file
                             } 
                             else if (oc.action === 'next') {
                                 const currentIdx = steps.findIndex(s => s.id === step.id);
@@ -4589,7 +4587,6 @@ window.renderSopStepList = function (res) {
                                         onmouseover="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='translateX(4px)';" 
                                         onmouseout="this.style.background='transparent'; this.style.transform='translateX(0)';"
                                         onclick="event.stopPropagation(); ${jumpAction}">
-                                        <span style="opacity: 0.7;">${jumpIcon}</span>
                                         <span style="text-decoration: underline dotted; text-underline-offset: 3px;">${esc(oc.label)}</span>
                                     </div>
                                     
@@ -5946,7 +5943,7 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
         filteredExt.forEach(r => {
             // 🚀 We tag this as jump_res_
             html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_res_${r.id}', '🚀 Open: ${esc(r.name)}')">
-                🚀 Open: ${esc(r.name)} <span class="pill tiny vault">${esc(r.type || 'Res')}</span>
+                🚀 ${esc(r.name)} <span class="pill tiny vault">${esc(r.type || 'Res')}</span>
             </div>`;
         });
     }
