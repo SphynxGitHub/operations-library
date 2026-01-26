@@ -117,13 +117,21 @@ OL.sync = function() {
 };
 
 window.addEventListener("load", () => {
-    // 🔑 THE RE-AUTHENTICATOR
+    // Re-verify admin status
     if (window.location.search.includes('admin=pizza123')) {
         state.adminMode = true;
         OL.state.adminMode = true;
     }
-    OL.sync(); // Start the heartbeat
-});
+    
+    // 🚩 THE RECALL: Check if we were previously looking at a client
+    const savedId = sessionStorage.getItem('lastActiveClientId');
+    if (savedId) {
+        state.activeClientId = savedId;
+        console.log("📍 Recalled Active Project:", savedId);
+    }
+    
+    OL.sync(); 
+})
 
 const getActiveClient = () => state.clients[state.activeClientId] || null;
 
@@ -851,9 +859,10 @@ OL.copyShareLink = function(token) {
 
 OL.switchClient = function (id) {
     state.activeClientId = id;
+    sessionStorage.setItem('lastActiveClientId', id); // 🚩 Save to browser memory
     window.location.hash = "#/client-tasks";
     window.handleRoute();
-};
+}
 
 OL.deleteClient = function(clientId) {
     const client = state.clients[clientId];
@@ -3583,7 +3592,7 @@ OL.updateResourceMeta = function (resId, key, value) {
         if (key === 'type') {
             const registryEntry = state.master.resourceTypes.find(t => t.type === value);
             if (registryEntry) {
-                target.archetype = registryEntry.archetype;
+                target.archetype = registryEntry.archetype || "Base";
             }
         }
 
@@ -3616,13 +3625,14 @@ OL.handleResourceHeaderBlur = function(id, name) {
 };
 
 OL.handleModalSave = async function(id, nameOrContext) {
-    // 1. Get the actual name from the DOM input
     const input = document.getElementById('modal-res-name');
+    const typeSelector = document.getElementById('res-type-selector');
     
     // Safety guard for Team Members or Steps (which have their own save logic)
     if (id.includes('tm-') || id.includes('step')) return;
     
     const cleanName = input ? input.value.trim() : (typeof nameOrContext === 'string' ? nameOrContext.trim() : "");
+    const selectedType = typeSelector ? typeSelector.value : "General";
 
     // Prevent context strings from being saved as names
     if (!cleanName || cleanName.toLowerCase() === 'vault' || cleanName.toLowerCase() === 'project') {
@@ -3639,7 +3649,7 @@ OL.handleModalSave = async function(id, nameOrContext) {
         const newRes = { 
             id: newId, 
             name: cleanName, 
-            type: "General", 
+            type: selectedType, 
             archetype: "Base",
             data: {},
             steps: [],
@@ -3647,7 +3657,6 @@ OL.handleModalSave = async function(id, nameOrContext) {
             createdDate: new Date().toISOString() 
         };
 
-        // 🚀 THE FIX: Use updateAndSync to prevent race conditions
         await OL.updateAndSync(() => {
             if (isVault) {
                 if (!state.master.resources) state.master.resources = [];
