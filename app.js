@@ -4055,7 +4055,7 @@ OL.previewEmailTemplate = function(resId) {
             <div style="line-height: 1.6; white-space: pre-wrap;">${esc(res.emailBody || 'Empty body...')}</div>
             ${signatureHtml}
             <div style="margin-top: 40px; text-align: center;">
-                <button class="btn small soft" onclick="OL.openResourceModal('${resId}')">← Back to Editor</button>
+                <button class="btn small soft" style="color: black;" onclick="OL.openResourceModal('${resId}')">← Back to Editor</button>
             </div>
         </div>
     `;
