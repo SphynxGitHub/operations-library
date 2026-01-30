@@ -816,6 +816,7 @@ OL.openClientProfileModal = function(clientId) {
                     { id: 'apps', label: 'Apps' },
                     { id: 'functions', label: 'Functions' },
                     { id: 'resources', label: 'Resources' },
+                    { id: 'visualizer', label: 'Flow Map' },
                     { id: 'scoping', label: 'Scoping' },
                     { id: 'analysis', label: 'Analysis' },
                     { id: 'how-to', label: 'How-To' },
@@ -930,7 +931,7 @@ OL.pushFeaturesToAllClients = function() {
         // Ensure modules exist and the key is 'checklist' to match the sidebar
         if (!client.modules) {
             client.modules = { 
-                checklist: true, apps: true, functions: true, resources: true, 
+                checklist: true, apps: true, functions: true, resources: true, visualizer: false,
                 scoping: true, analysis: true, "how-to": true, team: true 
             };
         } else {
@@ -939,7 +940,12 @@ OL.pushFeaturesToAllClients = function() {
                 client.modules.checklist = client.modules.tasks;
                 delete client.modules.tasks;
             }
-        }
+        } else {
+            // If the field doesn't exist yet, initialize it as false
+            if (client.modules.visualizer === undefined) {
+                client.modules.visualizer = false;
+            }
+        }        
     });
     OL.persist();
     alert("Migration Complete. Refreshing...");
