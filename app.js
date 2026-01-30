@@ -10885,6 +10885,63 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     `;
 };
 
+// HELPER 1: Toolbox Icons
+window.renderDraggableTools = function() {
+    const tools = [
+        { type: 'trigger', label: 'Trigger', icon: '⚡' },
+        { type: 'action', label: 'App Action', icon: '📱' },
+        { type: 'email', label: 'Email SOP', icon: '📧' },
+        { type: 'logic', label: 'Logic Split', icon: '⚖️' }
+    ];
+    return tools.map(t => `
+        <div class="draggable-tool-item pill soft tiny" draggable="true" data-type="${t.type}" 
+             style="margin-bottom:8px; cursor:grab; display:flex; align-items:center; gap:8px; padding:10px; background:rgba(255,255,255,0.05); border:1px solid var(--line);">
+            <span>${t.icon}</span>
+            <span>${esc(t.label)}</span>
+        </div>
+    `).join('');
+};
+
+// HELPER 2: Breadcrumbs
+window.renderBreadcrumbs = function(client) {
+    if (!client) return `<span class="tiny muted">Master Vault > Global Map</span>`;
+    return `
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:bold;">
+            <span class="muted">Project:</span> 
+            <span class="accent">${esc(client.meta.name)}</span>
+            <span class="muted"> > </span>
+            <span class="white">Flow Mapper</span>
+        </div>
+    `;
+};
+
+// HELPER 3: Inventory Table
+window.renderInventoryTable = function(resources) {
+    return `
+        <table style="width:100%; font-size:11px; border-collapse: collapse;">
+            <thead>
+                <tr class="muted uppercase" style="border-bottom: 1px solid var(--line); text-align:left;">
+                    <th style="padding:10px;">Resource Name</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th style="text-align:right; padding-right:10px;">Score</th>
+                </tr>
+            </thead>
+            <tbody id="inventory-body">
+                ${resources.map(res => `
+                    <tr class="inventory-row" id="row-${res.id}" onclick="OL.openResourceModal('${res.id}')" 
+                        style="border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer;">
+                        <td style="padding:10px;">${esc(res.name)}</td>
+                        <td><span class="pill tiny soft">${esc(res.type)}</span></td>
+                        <td><span class="status-dot primary"></span> Live</td>
+                        <td style="text-align:right; padding-right:10px; opacity:0.5;">${(res.steps || []).length} steps</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+};
+
 OL.loadIntoGlobalMapper = function(resId) {
     if (!resId) return;
     const canvas = document.getElementById('global-mapper-canvas');
