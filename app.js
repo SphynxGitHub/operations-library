@@ -928,27 +928,29 @@ OL.pushFeaturesToAllClients = function() {
     clientIds.forEach(id => {
         const client = state.clients[id];
         
-        // Ensure modules exist and the key is 'checklist' to match the sidebar
+        // 1. If modules don't exist at all, create the default object
         if (!client.modules) {
             client.modules = { 
-                checklist: true, apps: true, functions: true, resources: true, visualizer: false,
+                checklist: true, apps: true, functions: true, resources: true, 
+                visualizer: false, // New module defaults to OFF
                 scoping: true, analysis: true, "how-to": true, team: true 
             };
         } else {
-            // Fix naming if 'tasks' was used instead of 'checklist'
-            if (client.modules.tasks) {
+            // 2. Fix naming migration if 'tasks' was used instead of 'checklist'
+            if (client.modules.tasks !== undefined) {
                 client.modules.checklist = client.modules.tasks;
                 delete client.modules.tasks;
             }
-        } else {
-            // If the field doesn't exist yet, initialize it as false
+
+            // 3. Ensure the 'visualizer' key exists for the checkbox to work
             if (client.modules.visualizer === undefined) {
                 client.modules.visualizer = false;
             }
-        }        
+        }
     });
+
     OL.persist();
-    alert("Migration Complete. Refreshing...");
+    alert("System Migration Complete. You can now enable 'Flow Map' in individual Client Profiles.");
     location.reload();
 };
 
