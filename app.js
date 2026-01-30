@@ -390,7 +390,7 @@ window.handleRoute = function () {
     else if (hash.includes("analyses")) renderAnalysisModule(true);
     else if (hash.includes("how-to")) renderHowToLibrary(); // 🚀 Changed from ===
     else if (hash.includes("tasks")) renderBlueprintManager();
-    else if (hash.includes("visualizer")) renderGlobalVisualizer()
+    else if (hash.includes("visualizer")) renderGlobalVisualizer(true)
     else renderAppsGrid();
   } else if (hash === "#/") {
     renderClientDashboard();
@@ -403,7 +403,7 @@ window.handleRoute = function () {
     else if (hash.includes("#/client-tasks")) renderChecklistModule();
     else if (hash.includes("#/team")) renderTeamManager();
     else if (hash.includes("#/how-to")) renderHowToLibrary();
-    else if (hash.includes("#/visualizer")) renderGlobalVisualizer();
+    else if (hash.includes("#/visualizer")) renderGlobalVisualizer(false);
   } else {
         // 🛡️ Fallback: If no client and no vault, show the dashboard or an error
         main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
