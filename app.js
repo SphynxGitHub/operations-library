@@ -138,8 +138,12 @@ const getActiveClient = () => state.clients[state.activeClientId] || null;
 // Controls what a user can SEE
 OL.checkPermission = function (tabKey) {
   const client = getActiveClient();
+  // If we are in the Master Vault or no client is selected, allow everything
   if (!client) return "full";
-  return client.permissions[tabKey] || "none";
+  
+  // 🚀 THE FIX: If the permission key is missing, default to "full" instead of "none"
+  // This ensures new features like 'visualizer' show up immediately
+  return client.permissions[tabKey] || "full"; 
 };
 
 // Controls what a user can DO
