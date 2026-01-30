@@ -2250,3 +2250,42 @@ body.fs-mode-active #app-root {
 .fs-mode-active #global-mapper-canvas {
     display: none; /* Hide global mapper if full-screen workspace is active */
 }
+
+.three-pane-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr 300px;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+}
+
+.pane-canvas-wrap {
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+}
+
+.blueprint-canvas {
+    flex: 6; /* Top 60% */
+    position: relative;
+    background-image: radial-gradient(var(--line) 1px, transparent 1px);
+    background-size: 30px 30px;
+}
+
+.pane-inventory-split {
+    flex: 4; /* Bottom 40% */
+    background: var(--panel-dark);
+    border-top: 2px solid var(--accent);
+    overflow-y: auto;
+}
+
+.pulse-highlight {
+    animation: blue-pulse 2s infinite;
+    border: 2px solid var(--accent) !important;
+}
+
+@keyframes blue-pulse {
+    0% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0.4); }
+    70% { box-shadow: 0 0 0 15px rgba(56, 189, 248, 0); }
+    100% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0); }
+}

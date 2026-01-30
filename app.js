@@ -10849,30 +10849,38 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
-    
-    // Determine which list of resources to show in the dropdown
     const resources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     container.innerHTML = `
-        <div class="section-header" style="background: var(--panel-dark); padding: 15px 20px; border-bottom: 1px solid var(--line);">
-            <div style="display:flex; align-items:center; gap:20px; flex:1;">
-                <h2>🕸️ Flow Mapper</h2>
-                <select id="viz-focus-selector" class="modal-input" style="width: 300px; margin:0;" 
-                        onchange="OL.loadIntoGlobalMapper(this.value)">
-                    <option value="">Select a Workflow to Map...</option>
-                    ${resources.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('')}
-                </select>
-            </div>
-            <div class="header-actions">
-                 <button class="btn small soft" onclick="window.print()">🖨️ Export PDF</button>
-            </div>
-        </div>
+        <div class="three-pane-layout">
+            <aside class="pane-drawer">
+                <div class="drawer-header">
+                    <h3>Toolbox</h3>
+                    <div class="tiny muted">Drag to Canvas</div>
+                </div>
+                <div class="drawer-tools">
+                    ${renderDraggableTools()}
+                </div>
+            </aside>
 
-        <div id="global-mapper-canvas" style="height: calc(100vh - 120px); background: #050816; overflow: hidden; position: relative;">
-            <div class="empty-hint" style="padding: 100px; text-align: center;">
-                <h3>Select a resource from the dropdown above</h3>
-                <p class="muted">Visualizing your logic across the project architecture.</p>
-            </div>
+            <main class="pane-canvas-wrap">
+                <div class="canvas-breadcrumbs">
+                    ${renderBreadcrumbs(client)}
+                </div>
+                <div id="global-mapper-canvas" class="blueprint-canvas">
+                    <div id="fs-canvas"></div>
+                </div>
+                <section class="pane-inventory-split">
+                    ${renderInventoryTable(resources)}
+                </section>
+            </main>
+
+            <aside id="inspector-panel" class="pane-inspector">
+                <div class="empty-inspector">
+                    <i class="spacer-icon">🔍</i>
+                    <p>Select a node to view metadata</p>
+                </div>
+            </aside>
         </div>
     `;
 };
@@ -10896,6 +10904,23 @@ OL.loadIntoGlobalMapper = function(resId) {
         <button class="btn tiny soft" onclick="OL.autoLayoutGlobal('${resId}')">🪄 Auto-Layout</button>
     `;
     canvas.appendChild(toolbar);
+};
+
+OL.highlightResource = function(resId) {
+    // 1. Highlight the Row in the list
+    document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active'));
+    document.getElementById(`row-${resId}`)?.classList.add('active');
+
+    // 2. Pulse the Node on the map
+    document.querySelectorAll('.vis-node').forEach(n => n.classList.remove('pulse-highlight'));
+    const node = document.getElementById(`vis-node-${resId}`);
+    if (node) {
+        node.classList.add('pulse-highlight');
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    
+    // 3. Load the Inspector
+    OL.loadInspector(resId);
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
