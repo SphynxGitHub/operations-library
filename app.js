@@ -10861,8 +10861,12 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">${renderBreadcrumbs(client)}</div>
                 
-                <div id="global-mapper-canvas" class="blueprint-canvas">
-                    <div id="fs-canvas"></div> </div>
+                <div id="global-mapper-canvas" class="blueprint-canvas"
+                    ondragover="OL.handleCanvasDragOver(event)"
+                    ondrop="OL.handleCanvasDrop(event, '${resId}')"
+                    style="flex: 1; position: relative; overflow: hidden; background: #050816;">
+                    <div id="fs-canvas" style="height:100%; width:100%;"></div>
+                </div>
 
                 <section class="pane-inventory-split">
                     ${renderInventoryTable(resources)}
@@ -10881,8 +10885,11 @@ window.renderDraggableTools = function() {
     const tools = [
         { type: 'trigger', label: 'Trigger', icon: '⚡' },
         { type: 'action', label: 'App Action', icon: '📱' },
+        { type: 'step', label: 'Manual Step', icon: '📝' },
         { type: 'email', label: 'Email SOP', icon: '📧' },
+        { type: 'form', label: 'Form/Input', icon: '📄' }
         { type: 'logic', label: 'Logic Split', icon: '⚖️' }
+        { type: 'automation', label: 'Automation', icon: '🪄' }
     ];
     return tools.map(t => `
         <div class="draggable-tool-item pill soft tiny" draggable="true" data-type="${t.type}" 
@@ -10966,6 +10973,60 @@ OL.highlightResource = function(resId) {
         node.classList.add('pulse-highlight');
         node.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+};
+
+// 1. Store what we are dragging
+OL.handleToolboxDragStart = function(e, type) {
+    e.dataTransfer.setData("toolType", type);
+};
+
+// 2. Tell the Canvas it is a valid drop zone
+OL.handleCanvasDragOver = function(e) {
+    e.preventDefault(); // Required to allow a drop
+    e.dataTransfer.dropEffect = "copy";
+};
+
+// 3. Process the Drop
+OL.handleCanvasDrop = function(e, resId) {
+    e.preventDefault();
+    const type = e.dataTransfer.getData("toolType");
+    if (!type) return;
+
+    const workspace = document.getElementById('vis-workspace');
+    const rect = workspace.getBoundingClientRect();
+
+    // Calculate position relative to the infinite canvas
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Create the actual data entry
+    OL.addNewNodeAtPosition(resId, type, { x, y });
+};
+
+OL.addNewNodeAtPosition = function(resId, type, pos) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    const newId = uid();
+    const newStep = {
+        id: newId,
+        name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+        type: type,
+        position: pos, // 🚀 Saved coordinate
+        outcomes: [],
+        description: ""
+    };
+
+    if (!res.steps) res.steps = [];
+    res.steps.push(newStep);
+
+    OL.persist();
+    
+    // Refresh the view
+    OL.renderVisualizer(resId);
+    
+    // Automatically open the inspector for the new node
+    OL.loadInspector(newId, resId);
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
