@@ -2240,3 +2240,13 @@ body.fs-mode-active #app-root {
     }
 
 }
+/*=========== GLOBAL MAP ==============*/
+#global-mapper-canvas .vis-workspace {
+    background-image: 
+        radial-gradient(circle, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+.fs-mode-active #global-mapper-canvas {
+    display: none; /* Hide global mapper if full-screen workspace is active */
+}

@@ -219,6 +219,12 @@ window.buildLayout = function () {
       icon: "💾",
       href: "#/vault/resources",
     },
+    {
+      key: "visualizer",
+      label: "Flow Map",
+      icon: "🕸️",
+      href: "#/vault/visualizer",
+    },
      {
       key: "how-to",
       label: "Master How-To Guides",
@@ -264,6 +270,12 @@ window.buildLayout = function () {
       label: "Project Resources",
       icon: "💾",
       href: "#/resources",
+    },
+    {
+      key: "visualizer",
+      label: "Flow Map",
+      icon: "🕸️",
+      href: "#/visualizer",
     },
     {
       key: "scoping",
@@ -378,6 +390,7 @@ window.handleRoute = function () {
     else if (hash.includes("analyses")) renderAnalysisModule(true);
     else if (hash.includes("how-to")) renderHowToLibrary(); // 🚀 Changed from ===
     else if (hash.includes("tasks")) renderBlueprintManager();
+    else if (hash.includes("visualizer")) renderGlobalVisualizer()
     else renderAppsGrid();
   } else if (hash === "#/") {
     renderClientDashboard();
@@ -390,6 +403,7 @@ window.handleRoute = function () {
     else if (hash.includes("#/client-tasks")) renderChecklistModule();
     else if (hash.includes("#/team")) renderTeamManager();
     else if (hash.includes("#/how-to")) renderHowToLibrary();
+    else if (hash.includes("#/visualizer")) renderGlobalVisualizer();
   } else {
         // 🛡️ Fallback: If no client and no vault, show the dashboard or an error
         main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
@@ -5205,7 +5219,8 @@ OL.renderVisualizer = function(resId) {
         return `
         <div class="vis-node" id="vis-node-${step.id}" 
             style="left: ${pos.x}px; top: ${pos.y}px; position: absolute;"
-            onmousedown="OL.startCardMove(event, '${resId}', '${step.id}')">
+            onmousedown="OL.startCardMove(event, '${resId}', '${step.id}')"
+            onclick="if(event.detail === 2) OL.openStepDetailModal('${resId}', '${step.id}')">
 
             <div class="vis-node-header">
                 <span class="vis-drag-handle">⠿</span>
@@ -10815,6 +10830,60 @@ OL.deployRequirementsFromResource = function(resourceId) {
     });
     
     OL.persist();
+};
+
+// ===========================GLOBAL WORKFLOW VISUALIZER===========================
+window.renderGlobalVisualizer = function(isVaultMode) {
+    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    
+    // Determine which list of resources to show in the dropdown
+    const resources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    container.innerHTML = `
+        <div class="section-header" style="background: var(--panel-dark); padding: 15px 20px; border-bottom: 1px solid var(--line);">
+            <div style="display:flex; align-items:center; gap:20px; flex:1;">
+                <h2>🕸️ Flow Mapper</h2>
+                <select id="viz-focus-selector" class="modal-input" style="width: 300px; margin:0;" 
+                        onchange="OL.loadIntoGlobalMapper(this.value)">
+                    <option value="">Select a Workflow to Map...</option>
+                    ${resources.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="header-actions">
+                 <button class="btn small soft" onclick="window.print()">🖨️ Export PDF</button>
+            </div>
+        </div>
+
+        <div id="global-mapper-canvas" style="height: calc(100vh - 120px); background: #050816; overflow: hidden; position: relative;">
+            <div class="empty-hint" style="padding: 100px; text-align: center;">
+                <h3>Select a resource from the dropdown above</h3>
+                <p class="muted">Visualizing your logic across the project architecture.</p>
+            </div>
+        </div>
+    `;
+};
+
+OL.loadIntoGlobalMapper = function(resId) {
+    if (!resId) return;
+    const canvas = document.getElementById('global-mapper-canvas');
+    
+    // We repurpose your existing visualizer engine
+    // We inject a "canvas" ID that matches what the FS logic uses
+    canvas.innerHTML = `<div id="fs-canvas" style="height:100%; width:100%;"></div>`;
+    
+    // Call your existing visualizer renderer
+    OL.renderVisualizer(resId);
+    
+    // Add a specialized button to jump straight to the editor from the map
+    const toolbar = document.createElement('div');
+    toolbar.style = "position:absolute; bottom:20px; left:20px; z-index:1000; display:flex; gap:10px;";
+    toolbar.innerHTML = `
+        <button class="btn tiny primary" onclick="OL.openResourceModal('${resId}')">⚙️ Open Resource Editor</button>
+        <button class="btn tiny soft" onclick="OL.autoLayoutGlobal('${resId}')">🪄 Auto-Layout</button>
+    `;
+    canvas.appendChild(toolbar);
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
