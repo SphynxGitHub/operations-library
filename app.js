@@ -10854,32 +10854,23 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     container.innerHTML = `
         <div class="three-pane-layout">
             <aside class="pane-drawer">
-                <div class="drawer-header">
-                    <h3>Toolbox</h3>
-                    <div class="tiny muted">Drag to Canvas</div>
-                </div>
-                <div class="drawer-tools">
-                    ${renderDraggableTools()}
-                </div>
+                <div class="drawer-header"><h3>Toolbox</h3></div>
+                <div class="drawer-tools">${renderDraggableTools()}</div>
             </aside>
 
             <main class="pane-canvas-wrap">
-                <div class="canvas-breadcrumbs">
-                    ${renderBreadcrumbs(client)}
-                </div>
+                <div class="canvas-header">${renderBreadcrumbs(client)}</div>
+                
                 <div id="global-mapper-canvas" class="blueprint-canvas">
-                    <div id="fs-canvas"></div>
-                </div>
+                    <div id="fs-canvas"></div> </div>
+
                 <section class="pane-inventory-split">
                     ${renderInventoryTable(resources)}
                 </section>
             </main>
 
             <aside id="inspector-panel" class="pane-inspector">
-                <div class="empty-inspector">
-                    <i class="spacer-icon">🔍</i>
-                    <p>Select a node to view metadata</p>
-                </div>
+                <div class="empty-inspector">Select a node to view metadata</div>
             </aside>
         </div>
     `;
@@ -10965,8 +10956,8 @@ OL.loadIntoGlobalMapper = function(resId) {
 
 OL.highlightResource = function(resId) {
     // 1. Highlight the Row in the list
-    document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active'));
-    document.getElementById(`row-${resId}`)?.classList.add('active');
+    document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active-row'));
+    document.getElementById(`row-${resId}`)?.classList.add('active-row');
 
     // 2. Pulse the Node on the map
     document.querySelectorAll('.vis-node').forEach(n => n.classList.remove('pulse-highlight'));
@@ -10975,9 +10966,6 @@ OL.highlightResource = function(resId) {
         node.classList.add('pulse-highlight');
         node.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    
-    // 3. Load the Inspector
-    OL.loadInspector(resId);
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
