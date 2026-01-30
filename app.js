@@ -344,22 +344,22 @@ window.buildLayout = function () {
 
                     <nav class="menu">
                         ${clientTabs.map(item => {
-                            // 1. Resolve Permission: Check if they are locked out via Permissions
+                            // 1. Permission Check
                             const perm = OL.checkPermission(item.key);
+                            // If permission is strictly 'none', hide it
                             if (perm === 'none') return '';
 
-                            // 🚀 THE FIX: Use effectiveAdminMode. 
-                            // Also added a check for the specific module key.
+                            // 2. Module Toggle Check (The Checkbox logic)
+                            // We check if Admin is forcing it, OR if the checkbox is checked in client.modules
                             const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
                             
+                            // 🚀 THE FIX: If the key is 'visualizer' but the checkbox is off, hide it
                             if (!isModuleEnabled) return ''; 
 
-                            // 3. Generate Link
-                            const linkHref = isPublic ? `${item.href}` : item.href;
                             const isActive = hash.startsWith(item.href);
 
                             return `
-                                <a href="${linkHref}" class="${isActive ? 'active' : ''}">
+                                <a href="${item.href}" class="${isActive ? 'active' : ''}">
                                     <i>${item.icon}</i> <span>${item.label}</span>
                                     ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                                 </a>
