@@ -390,8 +390,7 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const main = document.getElementById("mainContent");
-    buildLayout();
-
+    
     if (main) {
         if (hash.includes('visualizer')) {
             // Apply your specific padding: Top 10, Right 10, Bottom 40, Left 10
@@ -404,7 +403,7 @@ window.handleRoute = function () {
         }
     }
 
-    const client = getActiveClient();
+    buildLayout();
 
     if (hash.startsWith("#/vault")) {
     if (hash.includes("resources")) renderResourceManager();

@@ -1829,12 +1829,6 @@ body.fs-mode-active {
     z-index: 10000 !important; /* Now double the Workspace index */
 }
 
-/* 3. Helper for when Fullscreen is active */
-body.fs-mode-active #app-root {
-    filter: blur(4px);
-    pointer-events: none;
-}
-
 /* 1. The card being moved (ghost/low opacity) */
 .vis-node.is-dragging-source {
     opacity: 0.3 !important;
