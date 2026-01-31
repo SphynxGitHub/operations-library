@@ -10948,59 +10948,55 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 };
 
 OL.loadInspector = function(resId) {
-    console.log("🛠️ Inspector attempting to load ID:", resId);
-    
-    // 🚀 THE FIX: Find the panel specifically inside the ACTIVE layout
-    const activeLayout = document.querySelector('.three-pane-layout');
-    const panel = activeLayout ? activeLayout.querySelector('#inspector-panel') : document.getElementById('inspector-panel');
-    
-    if (!panel) {
-        console.error("❌ UI Error: Element #inspector-panel not found.");
-        return;
-    }
+    console.log("🚀 Inspector loading data for:", resId);
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return console.error("❌ Panel missing from DOM");
 
+    // 1. Find Data
     const res = OL.getResourceById(resId);
     if (!res) {
-        panel.innerHTML = `<div style="padding:20px;">⚠️ Resource ${resId} not found.</div>`;
+        console.error("❌ Data Lookup Failed for ID:", resId);
+        panel.innerHTML = `<div style="padding:20px; color: #f87171;">⚠️ Error: Data for ${resId} not found.</div>`;
         return;
     }
 
+    // 2. Clear and Set Base Styles (Safety)
+    panel.innerHTML = "";
+    panel.style.display = "block";
+    panel.style.opacity = "1";
+
     const steps = res.steps || [];
-    const statusClass = res.status === 'Live' ? 'status-live' : 'status-draft';
+    
+    // 3. Construct HTML safely
+    const html = `
+        <div class="inspector-content fade-in" style="padding: 20px; color: white !important;">
+            <div style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+                <span class="tiny accent bold uppercase" style="letter-spacing: 1px;">Workflow Detail</span>
+                <h2 style="margin: 10px 0 5px 0; font-size: 18px; color: white !important;">${esc(res.name)}</h2>
+                <div class="tiny muted">${esc(res.type || 'SOP')} • ${res.status || 'Draft'}</div>
+            </div>
 
-    // 🚀 THE REPAINT: Force clear then inject
-    panel.innerHTML = ""; 
-    const content = `
-        <div class="inspector-content" style="padding: 20px; color: white !important; display: block !important; opacity: 1 !important;">
-            <header style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny muted uppercase" style="color: #9ca3af !important;">Workflow Detail</span>
-                    <div class="node-status-badge ${statusClass}" style="position:static; display:inline-block;"></div>
-                </div>
-                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff !important;">${esc(res.name)}</h2>
-                <div class="tiny muted" style="color: #9ca3af !important;">${esc(res.type || 'Standard SOP')}</div>
-            </header>
+            <label class="modal-section-label" style="display: block; margin-bottom: 12px;">Process Steps (${steps.length})</label>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${steps.map((s, i) => `
+                    <div style="display: flex; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 3px solid var(--accent);">
+                        <span style="font-weight: bold; color: var(--accent); font-size: 10px;">${i + 1}</span>
+                        <div class="tiny" style="color: #fff !important; font-weight: 500;">${esc(s.name || 'Untitled step')}</div>
+                    </div>
+                `).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
+            </div>
 
-            <section>
-                <label class="modal-section-label" style="color: var(--accent) !important;">Execution Steps (${steps.length})</label>
-                <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
-                    ${steps.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
-                            <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                            <div class="tiny" style="color:#eee !important; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
-                        </div>
-                    `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
-                </div>
-            </section>
-
-            <footer style="margin-top: 30px; display:flex; flex-direction:column; gap:10px;">
-                <button class="btn tiny primary" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">⚙️ Edit Full Workflow</button>
-            </footer>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button class="btn tiny primary full-width" style="width: 100%;" onclick="OL.openResourceModal('${res.id}')">
+                    ⚙️ Edit Full Resource
+                </button>
+            </div>
         </div>
     `;
-    
-    panel.insertAdjacentHTML('afterbegin', content);
-    console.log("✅ Inspector Content Injected into DOM Node:", panel);
+
+    // 4. Inject
+    panel.innerHTML = html;
+    console.log("✅ Inspector Paint Successfully Completed for:", res.name);
 };
 
 // Universal Start Drag (Works for Toolbox AND Canvas Cards)
