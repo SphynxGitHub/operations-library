@@ -2266,7 +2266,7 @@ body, #app-root {
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    width: 75%;
+    width: 100%;
     overflow: hidden;
     padding-left: 15px;
 }
