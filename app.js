@@ -10873,96 +10873,88 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (!container) return;
 
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
-    const stages = sourceData.stages || [];
-    
-    // 🚀 THE FILTER: Only workflows that haven't been assigned a Stage yet
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const toolboxResources = allResources.filter(res => {
-        const isWorkflow = (res.type || "").toLowerCase() === 'workflow';
-        return isWorkflow && !res.stageId;
-    });
+
+    // 🚀 NEW LOGIC: Determine what to show in the toolbox
+    let toolboxResources = [];
+    let canvasHtml = "";
+    let breadcrumbLabel = "Global Lifecycle";
+
+    if (state.focusedWorkflowId) {
+        // --- FOCUS MODE ACTIVE ---
+        const focusedRes = OL.getResourceById(state.focusedWorkflowId);
+        breadcrumbLabel = `Lifecycle > ${focusedRes?.name}`;
+
+        // 1. Filter toolbox for NON-workflows (Technical Assets)
+        toolboxResources = allResources.filter(res => 
+            (res.type || "").toLowerCase() !== 'workflow'
+        );
+
+        // 2. Set Canvas to the Visual Flow Editor
+        canvasHtml = `<div id="fs-canvas" style="height:100%; width:100%;"></div>`;
+        
+        // Use a timeout to ensure the div exists before drawing
+        setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
+
+    } else {
+        // --- STANDARD LIFECYCLE MODE ---
+        toolboxResources = allResources.filter(res => 
+            (res.type || "").toLowerCase() === 'workflow' && !res.stageId
+        );
+        
+        const stages = sourceData.stages || [];
+        canvasHtml = `
+            <div class="vertical-stage-canvas">
+                <svg id="vis-links-layer" class="vis-svg"></svg>
+                ${stages.map((stage, sIdx) => `
+                    <div class="stage-container">
+                        <div class="stage-header-row">
+                            <span class="stage-number">${sIdx + 1}</span>
+                            <span class="stage-name" contenteditable="true" onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">${esc(stage.name)}</span>
+                        </div>
+                        <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
+                            ${renderWorkflowsInStage(stage.id, isVaultMode)}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+    }
 
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
                 <div class="drawer-header">
-                    <h3 style="margin-bottom: 12px;">Workflow Library</h3>
-                    <input type="text" class="modal-input tiny" id="toolbox-search"
-                           placeholder="🔍 Search unmapped..." oninput="OL.filterToolbox(this.value)">
+                    <h3 style="margin-bottom: 12px;">${state.focusedWorkflowId ? '📦 Technical Assets' : 'Workflow Library'}</h3>
+                    <input type="text" class="modal-input tiny" id="toolbox-search" placeholder="Search..." oninput="OL.filterToolbox(this.value)">
                 </div>
-                
-                <div class="drawer-tools" id="toolbox-list" style="flex: 1; overflow-y: auto;">
+                <div class="drawer-tools" id="toolbox-list">
                     ${toolboxResources.map(res => `
-                        <div class="draggable-workflow-item" 
-                            data-name="${res.name.toLowerCase()}"
-                            draggable="true" 
-                            ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                            <span style="opacity: 0.6;">📂</span>
+                        <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" 
+                             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                            <span style="opacity: 0.6;">${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
                             <span style="flex: 1;">${esc(res.name)}</span>
-                            
-                            <button class="btn-icon-only tiny" 
-                                    title="Clone Template"
-                                    onclick="event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
-                                    style="padding: 2px 5px; opacity: 0.5; font-size: 10px;">
-                                👯
-                            </button>
                         </div>
                     `).join('')}
-                    ${toolboxResources.length === 0 ? '<div class="tiny muted italic p-10">All resources are mapped.</div>' : ''}
-                </div>
-
-                <div class="return-to-library-zone" 
-                     ondragover="OL.handleCanvasDragOver(event)"
-                     ondragleave="this.classList.remove('drag-over')"
-                     ondrop="OL.handleReturnToLibrary(event)">
-                    📥 Drop here to un-map
                 </div>
             </aside>
 
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">
-                    ${renderBreadcrumbs(client)}
-                    <button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Lifecycle Stage</button>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        ${state.focusedWorkflowId ? `<button class="btn tiny soft" onclick="OL.exitWorkflowFocus()">⬅ Back</button>` : ''}
+                        <span class="tiny muted bold">${breadcrumbLabel}</span>
+                    </div>
+                    ${!state.focusedWorkflowId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
                 </div>
-
-                <div class="vertical-stage-canvas">
-                    <svg id="vis-links-layer" class="vis-svg"></svg>
-                    
-                    ${stages.map((stage, sIdx) => `
-                        <div class="stage-container">
-                            <div class="stage-header-row">
-                                <span class="stage-number">${sIdx + 1}</span>
-                                <span class="stage-name" contenteditable="true" 
-                                      onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">
-                                    ${esc(stage.name)}
-                                </span>
-                            </div>
-                            
-                            <div class="stage-workflow-stream" 
-                                 ondragover="OL.handleCanvasDragOver(event)"
-                                 ondragleave="this.classList.remove('drag-over')"
-                                 ondrop="OL.handleStageDrop(event, '${stage.id}')">
-                                ${renderWorkflowsInStage(stage.id, isVaultMode)}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
+                ${canvasHtml}
             </main>
 
-            <aside id="inspector-panel" class="pane-inspector">
-                 <div class="empty-inspector tiny muted">Select a Workflow block to see SOP links</div>
-            </aside>
+            <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
-    
-    // Draw hand-off lines
-    setTimeout(() => { if(window.OL.drawGlobalTimelineLines) OL.drawGlobalTimelineLines(); }, 100);
 
-    if (state.activeInspectorResId) {
-        setTimeout(() => {
-            OL.loadInspector(state.activeInspectorResId);
-        }, 10);
-    }
+    // Persistence Check for Inspector
+    if (state.activeInspectorResId) setTimeout(() => OL.loadInspector(state.activeInspectorResId), 10);
 };
 
 OL.loadInspector = function(resId) {
@@ -11118,6 +11110,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
                  draggable="true" 
                  ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${safeName}')"
                  onclick="console.log('Card Clicked:', '${res.id}'); OL.loadInspector('${res.id}')"
+                 ondblclick="OL.drillDownIntoWorkflow('${res.id}')"
                  style="position: relative; z-index: 10; pointer-events: auto;">
                 
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events: none;">
@@ -11240,6 +11233,23 @@ OL.cloneResourceWorkflow = function(resId) {
     OL.persist();
     renderGlobalVisualizer(false);
     console.log(`👯 Cloned: ${clone.name}`);
+};
+
+// 🚀 THE DRILL DOWN ENGINE
+OL.drillDownIntoWorkflow = function(resId) {
+    console.log("Entering Focused Workflow Mode for:", resId);
+    
+    // 1. Set the focus state
+    state.focusedWorkflowId = resId;
+    
+    // 2. We trigger a "Soft Refresh" of the visualizer
+    // This will cause renderGlobalVisualizer to detect the focus and change the UI
+    renderGlobalVisualizer(window.location.hash.includes('vault'));
+};
+
+OL.exitWorkflowFocus = function() {
+    state.focusedWorkflowId = null;
+    renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
 // HELPER 1: Toolbox Icons
