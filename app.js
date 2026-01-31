@@ -11257,6 +11257,40 @@ OL.handleMatrixDrop = function(e, stageId, workflowId) {
     renderGlobalVisualizer(false);
 };
 
+window.renderStepsInCell = function(colId, rowId) {
+    const client = getActiveClient();
+    if (!client) return "";
+
+    // 1. Gather every step from every resource in the project
+    const allResources = client.projectData.localResources || [];
+    
+    // 2. Filter for steps that match this specific grid coordinate
+    const cellSteps = allResources.flatMap(res => {
+        return (res.steps || []).map(step => ({ ...step, parentResId: res.id }));
+    }).filter(step => step.stageId === colId && step.workflowId === rowId);
+
+    if (cellSteps.length === 0) return "";
+
+    // 3. Render the mini-cards
+    return cellSteps.map(step => {
+        let icon = "📝";
+        if (step.type === 'trigger') icon = "⚡";
+        if (step.type === 'email') icon = "📧";
+        if (step.type === 'action') icon = "📱";
+
+        return `
+            <div class="mini-step-card" 
+                 onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${step.parentResId}')"
+                 style="background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                <span style="font-size: 10px;">${icon}</span>
+                <span class="tiny" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">
+                    ${esc(step.name || 'Untitled')}
+                </span>
+            </div>
+        `;
+    }).join('');
+};
+
 // ===========================TASK RESOURCE OVERLAP===========================
 
 // Filter SOPs that aren't already linked to this resource

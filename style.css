@@ -2407,3 +2407,16 @@ body, #app-root {
     flex-direction: column;
     gap: 8px;
 }
+
+.mini-step-card:hover {
+    background: rgba(56, 189, 248, 0.15) !important;
+    border-color: var(--accent) !important;
+    transform: translateY(-1px);
+}
+
+.mini-step-card .tiny {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.8);
+}
