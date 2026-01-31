@@ -10795,12 +10795,28 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         breadcrumbLabel = `Lifecycle > ${focusedRes?.name}`;
         toolboxResources = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
 
+        // We determine how many columns to draw for the visual grid
+        const maxCol = (focusedRes.steps || []).reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+
         canvasHtml = `
             <div id="fs-canvas-wrapper" 
                  style="height:100%; width:100%; overflow: auto; position: relative;"
                  ondragover="OL.handleCanvasDragOver(event)"
                  ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
-                <div id="fs-canvas"></div> </div>`;
+                
+                <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
+                    ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
+                        <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
+                            <div style="width: 120px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.05);"></div>
+                            ${Array.from({length: maxCol + 4}).map(() => `
+                                <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                            `).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
+            </div>`;
         
         setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
 
@@ -10812,7 +10828,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         
         const stages = sourceData.stages || [];
         canvasHtml = `
-            <div class="vertical-stage-canvas" id="fs-canvas"> <svg id="vis-links-layer" class="vis-svg"></svg>
+            <div class="vertical-stage-canvas" id="fs-canvas"> 
+                <svg id="vis-links-layer" class="vis-svg"></svg>
                 ${stages.map((stage, sIdx) => `
                     <div class="stage-container">
                         <div class="stage-header-row">
@@ -10833,7 +10850,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             </div>`;
     }
 
-    // Render the Three-Pane Shell
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
@@ -10850,14 +10866,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                         </div>
                     `).join('')}
                 </div>
-                ${state.focusedWorkflowId ? `
-                    <div class="canvas-trash-zone" 
-                        ondragover="OL.handleCanvasDragOver(event)" 
-                        ondragleave="this.classList.remove('drag-over')"
-                        ondrop="OL.handleCanvasDeleteDrop(event, '${state.focusedWorkflowId}')">
-                        🗑️ Drop here to remove from Flow
-                    </div>
-                ` : ''}
+
+                <div class="return-to-library-zone" 
+                    style="margin-top: auto; padding: 20px; border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.05); color: #ef4444; text-align: center; border-radius: 8px; margin: 10px; font-size: 10px; font-weight: bold; text-transform: uppercase;"
+                    ondragover="OL.handleCanvasDragOver(event)" 
+                    ondragleave="this.classList.remove('drag-over')"
+                    ondrop="OL.handleUnifiedDelete(event, '${state.focusedWorkflowId || ""}')">
+                    🗑️ Drop to Remove / Unmap
+                </div>
             </aside>
 
             <main class="pane-canvas-wrap">
@@ -10877,7 +10893,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    // Persistence Check for Inspector
     if (state.activeInspectorResId) setTimeout(() => OL.loadInspector(state.activeInspectorResId), 10);
 };
 
@@ -11048,25 +11063,23 @@ OL.highlightInventoryRow = function(resId) {
 };
 
 // Update this helper to use Resource ID directly
-OL.handleCanvasDeleteDrop = function(e, focusedWorkflowId) {
+OL.handleUnifiedDelete = function(e, focusedWorkflowId) {
     e.preventDefault();
-    const moveStepId = e.dataTransfer.getData("moveStepId"); // Internal Move (Detailed Step)
-    const draggedResId = e.dataTransfer.getData("resId");    // External Move (Whole Workflow)
+    const moveStepId = e.dataTransfer.getData("moveStepId"); // Identify if we're moving a STEP
+    const resId = e.dataTransfer.getData("resId");           // Identify if we're moving a WORKFLOW
 
-    // SCENARIO A: We are deleting a STEP from a focused workflow
     if (focusedWorkflowId && moveStepId) {
+        // --- DETAIL LEVEL: Remove Step from Workflow ---
         const parentRes = OL.getResourceById(focusedWorkflowId);
-        if (parentRes && parentRes.steps) {
+        if (parentRes) {
             parentRes.steps = parentRes.steps.filter(s => s.id !== moveStepId);
-            console.log("🗑️ Step deleted from workflow");
+            OL.clearInspector();
         }
-    } 
-    // SCENARIO B: We are unmapping a WORKFLOW from a stage (Your original logic)
-    else if (draggedResId) {
-        const res = OL.getResourceById(draggedResId);
+    } else if (resId) {
+        // --- LIFECYCLE LEVEL: Unmap Workflow from Stage ---
+        const res = OL.getResourceById(resId);
         if (res) {
             res.stageId = null;
-            console.log("📥 Workflow returned to library");
         }
     }
 
