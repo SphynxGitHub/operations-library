@@ -2612,6 +2612,17 @@ body, #app-root {
     z-index: 50;
 }
 
+.pane-inspector {
+    width: 320px !important;
+    min-width: 320px !important;
+    flex-shrink: 0 !important; /* 🛡️ Stops the grid from squishing the panel */
+    background: #0b0f1a !important;
+    border-left: 1px solid rgba(255,255,255,0.1) !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    z-index: 100;
+}
+
 .inspector-content {
     padding: 20px;
     color: white !important;
