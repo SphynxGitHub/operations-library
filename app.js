@@ -10782,27 +10782,55 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    // 🚀 NEW LOGIC: Determine what to show in the toolbox
     let toolboxResources = [];
     let canvasHtml = "";
     let breadcrumbLabel = "Global Lifecycle";
 
     if (state.focusedWorkflowId) {
+        // --- 1. FOCUSED MODE (Drilled Down) ---
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         breadcrumbLabel = `Lifecycle > ${focusedRes?.name}`;
         toolboxResources = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
 
         canvasHtml = `
             <div id="fs-canvas-wrapper" 
-                style="height:100%; width:100%; overflow: auto; position: relative;"
-                ondragover="OL.handleCanvasDragOver(event)"
-                ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
-                <div id="fs-canvas"></div>
-            </div>`;
+                 style="height:100%; width:100%; overflow: auto; position: relative;"
+                 ondragover="OL.handleCanvasDragOver(event)"
+                 ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
+                <div id="fs-canvas"></div> </div>`;
         
         setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
+
+    } else {
+        // --- 2. STANDARD MODE (The Lifecycle Stages) ---
+        toolboxResources = allResources.filter(res => 
+            (res.type || "").toLowerCase() === 'workflow' && !res.stageId
+        );
+        
+        const stages = sourceData.stages || [];
+        canvasHtml = `
+            <div class="vertical-stage-canvas" id="fs-canvas"> <svg id="vis-links-layer" class="vis-svg"></svg>
+                ${stages.map((stage, sIdx) => `
+                    <div class="stage-container">
+                        <div class="stage-header-row">
+                            <span class="stage-number">${sIdx + 1}</span>
+                            <span class="stage-name" contenteditable="true" 
+                                  onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">
+                                ${esc(stage.name)}
+                            </span>
+                        </div>
+                        <div class="stage-workflow-stream" 
+                             ondragover="OL.handleCanvasDragOver(event)" 
+                             ondrop="OL.handleStageDrop(event, '${stage.id}')">
+                            ${renderWorkflowsInStage(stage.id, isVaultMode)}
+                        </div>
+                    </div>
+                `).join('')}
+                ${stages.length === 0 ? '<div class="empty-hint">No stages defined. Click "+ Add Stage" to begin.</div>' : ''}
+            </div>`;
     }
 
+    // Render the Three-Pane Shell
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
@@ -10832,7 +10860,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 ${canvasHtml}
             </main>
 
-            <aside id="inspector-panel" class="pane-inspector"></aside>
+            <aside id="inspector-panel" class="pane-inspector">
+                 <div class="empty-inspector tiny muted">Select a node to inspect</div>
+            </aside>
         </div>
     `;
 
@@ -10978,38 +11008,23 @@ OL.handleReturnToLibrary = function(e) {
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
     const matchedResources = allResources
         .filter(r => String(r.stageId) === String(stageId))
         .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
-    if (matchedResources.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Workflows Here</div>`;
+    if (matchedResources.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
 
-    return matchedResources.map(res => {
-        // Clean the name for the HTML attribute
-        const safeName = res.name.replace(/'/g, "\\'");
-        
-        return `
-            <div class="workflow-block-card" 
-                 draggable="true" 
-                 ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${safeName}')"
-                 onclick="console.log('Card Clicked:', '${res.id}'); OL.loadInspector('${res.id}')"
-                 ondblclick="OL.drillDownIntoWorkflow('${res.id}')"
-                 style="position: relative; z-index: 10; pointer-events: auto;">
-                
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events: none;">
-                    <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
-                </div>
-                
-                <div class="bold" style="font-size: 12px; color: var(--accent); pointer-events: none;">
-                    ${esc(res.name)}
-                </div>
-                
-                <div class="tiny muted" style="margin-top:8px; pointer-events: none;">
-                    📝 ${(res.steps || []).length} Steps
-                </div>
-            </div>
-        `;
-    }).join('');
+    return matchedResources.map(res => `
+        <div class="workflow-block-card" 
+             draggable="true" 
+             onmousedown="OL.loadInspector('${res.id}')"
+             ondblclick="OL.drillDownIntoWorkflow('${res.id}')"
+             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${res.name.replace(/'/g, "\\'")}')">
+            <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
+            <div class="tiny muted">📝 ${(res.steps || []).length} Steps</div>
+        </div>
+    `).join('');
 };
 
 OL.highlightInventoryRow = function(resId) {
