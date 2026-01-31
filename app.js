@@ -10905,61 +10905,53 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (state.activeInspectorResId) setTimeout(() => OL.loadInspector(state.activeInspectorResId), 10);
 };
 
-OL.loadInspector = function(resId) {
-    // 1. Save sticky ID so it survives background syncs
-    state.activeInspectorResId = resId; 
-
-    // 2. Resolve the panel specifically
+OL.loadInspector = function(targetId, parentWorkflowId = null) {
+    state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    // 3. Resolve Data (Checking Master and Local)
-    const res = OL.getResourceById(resId);
-    if (!res) {
-        panel.innerHTML = `<div style="padding:20px; color:#f87171;">⚠️ Data not found for ID: ${resId}</div>`;
+    // 1. Find the Step data first
+    const stepData = OL.getResourceById(targetId);
+    if (!stepData) {
+        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
         return;
     }
 
-    // 4. Safely resolve steps and apps
-    const steps = res.steps || [];
-    const client = getActiveClient();
-    const allApps = [...(state.master?.apps || []), ...(client?.projectData?.localApps || [])];
+    // 2. 🚀 THE FIX: Resolve the "Technical Source" 
+    // We look for the technical asset (Zap/Form) that this step represents
+    const technicalAsset = OL.getResourceById(stepData.resourceLinkId);
+    
+    // If we found a technical asset, show ITS steps. Otherwise, show the step's own steps.
+    const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (stepData.steps || []);
+    const displayName = technicalAsset ? technicalAsset.name : stepData.name;
+    const displayType = technicalAsset ? technicalAsset.type : stepData.type;
 
-    // 5. Paint the HTML
     panel.innerHTML = `
-        <div class="inspector-content fade-in" style="padding: 20px; display: block !important;">
+        <div class="inspector-content fade-in" style="padding: 20px;">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny accent bold uppercase">Workflow Detail</span>
-                    <div class="node-status-badge status-${(res.status || 'draft').toLowerCase()}" style="position:static; display:inline-block;"></div>
-                </div>
-                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff !important;">${esc(res.name)}</h2>
-                <div class="tiny muted">${esc(res.type || 'SOP')}</div>
+                <span class="tiny accent bold uppercase">Technical SOP</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(displayName)}</h2>
+                <div class="tiny muted">${esc(displayType || 'Action')}</div>
             </div>
 
             <section>
-                <label class="modal-section-label">Execution Sequence (${steps.length})</label>
+                <label class="modal-section-label">Execution Sequence (${nestedSteps.length})</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
-                    ${steps.map((s, i) => {
-                        const linkedApp = allApps.find(a => String(a.id) === String(s.appId));
-                        return `
-                            <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
-                                <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                                <div style="flex:1;">
-                                    <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
-                                    ${linkedApp ? `<div style="font-size:9px; color:var(--accent); opacity:0.7;">📱 ${esc(linkedApp.name)}</div>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+                    ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
+                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                            <span class="tiny bold accent">${i + 1}</span>
+                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || s.text || 'Step')}</div>
+                        </div>
+                    `).join('') : `
+                        <div class="empty-state-mini">
+                            <div class="tiny muted italic">No steps mapped yet.</div>
+                            <button class="btn tiny soft" style="margin-top:10px;" onclick="OL.openResourceModal('${technicalAsset?.id || stepData.id}')">
+                                + Define Procedures
+                            </button>
+                        </div>
+                    `}
                 </div>
             </section>
-
-            <footer style="margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:20px;">
-                <button class="btn tiny primary full-width" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
-                    ⚙️ Edit Full Resource
-                </button>
-            </footer>
         </div>
     `;
 };
@@ -11238,7 +11230,8 @@ OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
                 type: sourceRes.type || 'Action',
                 gridLane: laneNames[laneIdx],
                 gridCol: colIdx,
-                description: sourceRes.description || ""
+                description: sourceRes.description || "",
+                resourceLinkId: draggedResId
             };
             if (!parentWorkflow.steps) parentWorkflow.steps = [];
             parentWorkflow.steps.push(newStep);
