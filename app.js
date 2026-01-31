@@ -10813,13 +10813,13 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         
-        // Find parents for breadcrumbs
+        // Find parents for full breadcrumb trail
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
 
         breadcrumbHtml += `
             <span class="muted"> > </span> 
-            <span class="breadcrumb-item" onclick="OL.exitWorkflowFocus()">${esc(parentStage?.name || 'Stage')}</span>
+            <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
             <span class="muted"> > </span> 
             <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
             <span class="muted"> > </span> 
@@ -10837,7 +10837,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
         breadcrumbHtml += `
             <span class="muted"> > </span> 
-            <span class="breadcrumb-item" onclick="OL.exitWorkflowFocus()">${esc(parentStage?.name || 'Stage')}</span>
+            <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
             <span class="muted"> > </span> 
             <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>
         `;
@@ -10852,12 +10852,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
-    // --- RENDER MAIN WRAPPER ---
     container.innerHTML = `
-        <div class="three-pane-layout">
+        <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
                 ${toolboxHtml}
-                <div class="return-to-library-zone" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUnifiedDelete(event)">
+                <div class="return-to-library-zone" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUnifiedDelete(event, '${state.focusedWorkflowId || ""}')">
                     🗑️ Drop to Unmap
                 </div>
             </aside>
@@ -10878,7 +10877,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    // Post-render triggers
     if (state.focusedResourceId) setTimeout(() => OL.renderVisualizer(state.focusedResourceId), 50);
     else if (state.focusedWorkflowId) setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
 };
@@ -11560,6 +11558,54 @@ window.renderStepsInCell = function(colId, rowId) {
             </div>
         `;
     }).join('');
+};
+
+window.renderLevel1SidebarContent = function(allResources) {
+    const workflows = allResources.filter(res => (res.type || "").toLowerCase() === 'workflow' && !res.stageId);
+    return `
+        <div class="drawer-header"><h3>Workflow Library</h3><input type="text" class="modal-input tiny" placeholder="Search..." oninput="OL.filterToolbox(this.value)"></div>
+        <div class="drawer-tools" id="toolbox-list">
+            ${workflows.map(res => `
+                <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>⚙️</span> <span style="flex: 1;">${esc(res.name)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+window.renderLevel1Canvas = function(sourceData, isVaultMode) {
+    const stages = sourceData.stages || [];
+    return `
+        <div class="vertical-stage-canvas" id="fs-canvas">
+            <svg id="vis-links-layer" class="vis-svg"></svg>
+            ${stages.map((stage, i) => `
+                <div class="stage-container">
+                    <div class="stage-header-row">
+                        <span class="stage-number">${i + 1}</span>
+                        <span class="stage-name" contenteditable="true" onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">${esc(stage.name)}</span>
+                    </div>
+                    <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
+                        ${renderWorkflowsInStage(stage.id, isVaultMode)}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+window.renderLevel2SidebarContent = function(allResources) {
+    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
+    return `
+        <div class="drawer-header"><h3>Technical Assets</h3><input type="text" class="modal-input tiny" placeholder="Search..." oninput="OL.filterToolbox(this.value)"></div>
+        <div class="drawer-tools" id="toolbox-list">
+            ${assets.map(res => `
+                <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span> <span style="flex: 1;">${esc(res.name)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
