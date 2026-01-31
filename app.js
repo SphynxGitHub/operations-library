@@ -5220,13 +5220,16 @@ OL.renderVisualizer = function(resId) {
 
         return `
             <div class="workflow-block-card grid-snapped" 
-                 style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: pointer;"
-                 onclick="OL.loadInspector('${step.id}', '${res.id}')">
+                draggable="true"
+                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: grab;"
+                onmousedown="OL.loadInspector('${step.id}', '${res.id}')"
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')"
+                onclick="OL.loadInspector('${step.id}', '${res.id}')">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
+                    <span class="pill tiny vault">${esc(step.type)}</span>
                 </div>
-                <div class="bold" style="font-size: 12px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name || 'Untitled')}
+                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
+                    ${esc(step.name)}
                 </div>
             </div>
         `;
@@ -11171,27 +11174,28 @@ OL.drillDownIntoWorkflow = function(resId) {
     renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
+OL.handleStepMoveStart = function(e, stepId, parentResId) {
+    e.dataTransfer.setData("moveStepId", stepId);
+    e.dataTransfer.setData("parentResId", parentResId);
+    e.target.style.opacity = "0.4";
+};
+
 OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
     e.preventDefault();
     const parentWorkflow = OL.getResourceById(parentWorkflowId);
     if (!parentWorkflow) return;
 
+    // Calculate Grid Position
     const canvas = document.getElementById('vis-workspace');
     const rect = canvas.getBoundingClientRect();
-    
-    // 🚀 CALCULATE THE REAL COORDINATES
-    // We subtract the header and label offsets to find the "Zero" of the grid
-    const x = e.clientX - rect.left - 120; 
+    const x = e.clientX - rect.left - 120; // Account for sticky label
     const y = e.clientY - rect.top;
-
-    // 🚀 HARDENED GRID MATH
+    
     const colIdx = Math.max(0, Math.floor(x / 280));
     const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
-    
-    // Each lane is 200px high. Math.floor(y / 200) gives us 0, 1, or 2.
-    const rawLaneIdx = Math.floor(y / 200);
-    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, rawLaneIdx));
+    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
 
+    // Check if this is an INTERNAL MOVE
     const moveStepId = e.dataTransfer.getData("moveStepId");
     
     if (moveStepId) {
@@ -11199,8 +11203,10 @@ OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
         if (step) {
             step.gridLane = laneNames[laneIdx];
             step.gridCol = colIdx;
+            console.log(`🚚 Moved step ${step.name} to ${step.gridLane} Col ${colIdx}`);
         }
     } else {
+        // Check if this is a NEW DROP from Toolbox
         const draggedResId = e.dataTransfer.getData("resId");
         if (draggedResId) {
             const sourceRes = OL.getResourceById(draggedResId);
@@ -11208,12 +11214,13 @@ OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
                 id: uid(),
                 name: sourceRes.name,
                 type: sourceRes.type || 'Action',
-                gridLane: laneNames[laneIdx], // 📍 This is now fixed
+                gridLane: laneNames[laneIdx],
                 gridCol: colIdx,
                 description: sourceRes.description || ""
             };
             if (!parentWorkflow.steps) parentWorkflow.steps = [];
             parentWorkflow.steps.push(newStep);
+            console.log(`✨ Added new step: ${newStep.name}`);
         }
     }
 
