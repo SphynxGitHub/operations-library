@@ -5187,159 +5187,66 @@ OL.printSop = function(resId) {
 
 OL.renderVisualizer = function(resId) {
     const canvas = document.getElementById('fs-canvas');
-    
-    // 1. Resolve Data FIRST to prevent ReferenceErrors
     const res = OL.getResourceById(resId);
     if (!canvas || !res) return;
 
-    if (!(state.expandedVisualNodes instanceof Set)) {
-        state.expandedVisualNodes = new Set();
-    }
-
-    // 2. Initialize default lanes if missing
-    if (!res.lanes || res.lanes.length === 0) {
-        res.lanes = [
-            { id: 'lane1', title: 'Sales', width: 450 },
-            { id: 'lane2', title: 'Operations', width: 450 },
-            { id: 'lane3', title: 'Finance', width: 450 }
-        ];
-    }
-
-    const triggers = res.triggers || [];
-    const steps = res.steps || [];
-
-    // 3. Generate Background Lanes
-    const lanesHtml = res.lanes.map(lane => `
-        <div class="vis-lane" style="width: ${lane.width}px;">
-            <div class="vis-lane-header" contenteditable="true" 
-                 onblur="OL.updateLaneTitle('${resId}', '${lane.id}', this.innerText)">
-                ${esc(lane.title)}
-            </div>
-        </div>
-    `).join('');
+    // 1. Define our standard grid dimensions
+    const LANE_HEIGHT = 200;
+    const COL_WIDTH = 280;
+    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
     
-    // Position triggers at the top of the absolute plane
-    const triggersHtml = triggers.map((trigger, idx) => `
-        <div class="vis-node trigger-node" style="left: ${50 + (idx * 280)}px; top: 80px; position: absolute;">
-            <div class="vis-node-header trigger-header">
-                <span class="vis-idx">🏁</span>
-                <textarea class="vis-input-ghost bold" rows="1"
-                    oninput="OL.autoGrowNode(this, '${resId}')"
-                    onblur="OL.updateTriggerName('${resId}', ${idx}, this.value)"
-                >${esc(trigger.name || '')}</textarea>
+    // Calculate required width based on steps
+    const steps = res.steps || [];
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 4);
+    const canvasWidth = (maxCol + 2) * COL_WIDTH;
+
+    // 2. Generate Grid Background (Prior Level Style)
+    const lanesHtml = lanes.map(lane => `
+        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative;">
+            <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
+                ${lane}
             </div>
-            <div class="vis-node-body tiny muted uppercase" style="padding:10px;">Entry Point</div>
+            ${Array.from({length: maxCol + 2}).map(() => `
+                <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); flex-shrink: 0;"></div>
+            `).join('')}
         </div>
     `).join('');
 
-    const nodesHtml = steps.map((step, idx) => {
-        const isExpanded = state.expandedVisualNodes.has(step.id);
-        const client = getActiveClient();
-        const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-        const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
-        const assigneeIcon = step.assigneeType === 'role' ? '🎭' : step.assigneeType === 'system' ? '📱' : '👨‍💼';
-        
-        let timingLabel = "";
-        if (step.timingType) {
-            const ref = step.timingType === 'after_prev' ? 'Prev' : 'Start';
-            timingLabel = `T+${step.timingValue || 0}d (${ref})`;
-        }
-
-        // 🚀 POSITION LOGIC: Use saved coords or staggered vertical default
-        const pos = step.position || { x: 100, y: (idx * 200) + 250 };
+    // 3. Render Snapped Nodes
+    const nodesHtml = steps.map((step) => {
+        const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
+        const top = (laneIdx * LANE_HEIGHT) + 50; 
+        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for the sticky label
 
         return `
-        <div class="vis-node" id="vis-node-${step.id}" 
-            style="left: ${pos.x}px; top: ${pos.y}px; position: absolute;"
-            onmousedown="OL.startCardMove(event, '${resId}', '${step.id}')"
-            onclick="OL.loadInspector('${step.id}', '${resId}'); OL.highlightResource('${step.id}')">
-
-            <div class="vis-node-header">
-                <span class="vis-drag-handle">⠿</span>
-                <span class="vis-idx">${idx + 1}</span>
-                <textarea class="vis-input-ghost bold" rows="1"
-                    onfocus="this.style.height='auto'; this.style.height=this.scrollHeight+'px';"
-                    oninput="OL.autoGrowNode(this, '${resId}')"
-                    onblur="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'name', this.value)"
-                >${esc(step.name || '')}</textarea>
-                
-                <div class="vis-header-actions">
-                    <button class="vis-icon-btn edit" onclick="event.stopPropagation(); OL.openStepConfigFromVis('${resId}', '${step.id}')">⚙️</button>
-                    <button class="vis-icon-btn delete" onclick="event.stopPropagation(); OL.removeStepFromVisualizer('${resId}', '${step.id}')">×</button>
+            <div class="workflow-block-card grid-snapped" 
+                 style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: pointer;"
+                 onclick="OL.loadInspector('${step.id}', '${res.id}')">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
+                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
+                </div>
+                <div class="bold" style="font-size: 12px; color: var(--accent); pointer-events:none;">
+                    ${esc(step.name || 'Untitled')}
                 </div>
             </div>
-
-            <div class="vis-node-body">
-                <div class="vis-card-meta">
-                    ${step.assigneeName ? `<div class="vis-meta-pill">${assigneeIcon} ${esc(step.assigneeName)}</div>` : ''}
-                    ${linkedApp ? `<div class="vis-meta-pill">📱 ${esc(linkedApp.name)}</div>` : ''}
-                    ${timingLabel ? `<div class="vis-meta-pill">📅 ${timingLabel}</div>` : ''}
-                </div>
-
-                <div class="vis-detail-toggle" onclick="event.stopPropagation(); OL.toggleVisNodeDetails('${step.id}', '${resId}')">
-                    ${isExpanded ? 'Collapse Procedures ▴' : 'View Procedures ▾'}
-                </div>
-
-                ${isExpanded ? `
-                    <div class="vis-expanded-editor">
-                        <div class="vis-detail-block">
-                            <label class="vis-section-label">Procedure Summary</label>
-                            <div class="vis-read-only-text">${esc(step.description || 'No notes.')}</div>
-                        </div>
-                    </div>
-                ` : ''}
-
-                <div class="vis-outcomes-area">
-                    ${(step.outcomes || []).map((oc, oIdx) => `
-                        <div class="vis-port" id="port-${step.id}-${oIdx}">
-                            <div class="vis-outcome-chip">
-                                <span class="tiny-label">IF</span> ${esc(oc.condition || '...')}
-                            </div>
-                            <div class="vis-arrow"> ${esc(oc.label || 'Next')}</div>
-                        </div>
-                    `).join('')}
-                </div>
-                <button class="btn-vis-add" onclick="event.stopPropagation(); OL.addSopStep('${resId}')">+</button>
-            </div>
-        </div>
         `;
     }).join('');
 
-    // 4. Assemble the Canvas with Dynamic Scrolling width
-    // 🚀 CALCULATE DYNAMIC SIZE
-    const totalLaneWidth = res.lanes.reduce((sum, l) => sum + (l.width || 450), 0);
-    
-    // Find the step with the highest Y position to determine canvas height
-    const maxY = res.steps.reduce((max, s) => Math.max(max, (s.position?.y || 0)), 0);
-    const maxStepX = res.steps.reduce((max, s) => Math.max(max, (s.position?.x || 0) + 300), 0);
-    const canvasHeight = Math.max(3000, maxY + 1000); // Content + 1000px buffer
-    const dynamicWidth = Math.max(3000, totalLaneWidth, maxStepX + 500);
-
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
-             style="width: ${dynamicWidth}px; height: ${canvasHeight}px;">
-            <div class="vis-swimlane-layer">${lanesHtml}</div>
-            
-            <div class="vis-trigger-row" style="position: absolute; top: 100px; left: 50px; display: flex; gap: 40px; z-index: 100;">
-                ${triggersHtml}
+             style="width: ${canvasWidth}px; height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
+            <div class="vis-swimlane-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                ${lanesHtml}
             </div>
-            
             <div class="vis-absolute-container">
                 ${nodesHtml}
             </div>
-
-            <svg id="vis-links-layer" class="vis-svg"></svg>
+            <svg id="vis-links-layer" class="vis-svg" style="pointer-events: none; z-index: 25;"></svg>
         </div>
     `;
 
-    // 5. Finalize UI
-    setTimeout(() => {
-        document.querySelectorAll('.vis-input-ghost').forEach(el => {
-            el.style.height = '0px'; 
-            el.style.height = el.scrollHeight + 'px';
-        });
-        OL.drawVisualizerLines(resId);
-    }, 150);
+    // 4. Auto-draw handoff lines
+    setTimeout(() => OL.drawVisualizerLines(resId), 50);
 };
 
 OL.autoGrowNode = function(element, resId) {
@@ -10881,49 +10788,19 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let breadcrumbLabel = "Global Lifecycle";
 
     if (state.focusedWorkflowId) {
-        // --- FOCUS MODE ACTIVE ---
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         breadcrumbLabel = `Lifecycle > ${focusedRes?.name}`;
+        toolboxResources = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
 
-        // 1. Filter toolbox for NON-workflows (Technical Assets)
-        toolboxResources = allResources.filter(res => 
-            (res.type || "").toLowerCase() !== 'workflow'
-        );
-
-        // 2. Set Canvas to the Visual Flow Editor with DROP LISTENERS
         canvasHtml = `
             <div id="fs-canvas-wrapper" 
-                 style="height:100%; width:100%; overflow: auto; position: relative;"
-                 ondragover="OL.handleCanvasDragOver(event)"
-                 ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
-                <div id="fs-canvas" style="height:4000px; width:4000px; position:relative;"></div>
+                style="height:100%; width:100%; overflow: auto; position: relative;"
+                ondragover="OL.handleCanvasDragOver(event)"
+                ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
+                <div id="fs-canvas"></div>
             </div>`;
         
-        // Use a timeout to ensure the div exists before drawing
         setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
-
-    } else {
-        // --- STANDARD LIFECYCLE MODE ---
-        toolboxResources = allResources.filter(res => 
-            (res.type || "").toLowerCase() === 'workflow' && !res.stageId
-        );
-        
-        const stages = sourceData.stages || [];
-        canvasHtml = `
-            <div class="vertical-stage-canvas">
-                <svg id="vis-links-layer" class="vis-svg"></svg>
-                ${stages.map((stage, sIdx) => `
-                    <div class="stage-container">
-                        <div class="stage-header-row">
-                            <span class="stage-number">${sIdx + 1}</span>
-                            <span class="stage-name" contenteditable="true" onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">${esc(stage.name)}</span>
-                        </div>
-                        <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
-                            ${renderWorkflowsInStage(stage.id, isVaultMode)}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>`;
     }
 
     container.innerHTML = `
@@ -11255,47 +11132,36 @@ OL.drillDownIntoWorkflow = function(resId) {
 
 OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
     e.preventDefault();
-    
-    // 1. Get the Resource ID from the toolbox
     const draggedResId = e.dataTransfer.getData("resId");
     if (!draggedResId) return;
 
     const sourceRes = OL.getResourceById(draggedResId);
-    if (!sourceRes) return;
+    const parentWorkflow = OL.getResourceById(parentWorkflowId);
 
-    // 2. Calculate position relative to the infinite canvas
-    const canvas = document.getElementById('fs-canvas');
+    const canvas = document.getElementById('vis-workspace');
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const x = e.clientX - rect.left - 120; // Subtract the sticky label width
     const y = e.clientY - rect.top;
 
-    // 3. Resolve the Parent Workflow
-    const parentWorkflow = OL.getResourceById(parentWorkflowId);
-    if (!parentWorkflow) return;
+    // Calculate Grid Position
+    const colIdx = Math.max(0, Math.floor(x / 280));
+    const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
+    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
 
-    if (!parentWorkflow.steps) parentWorkflow.steps = [];
-
-    // 4. Create a new Node (Step) within this workflow
-    const newStepId = uid();
     const newStep = {
-        id: newStepId,
+        id: uid(),
         name: sourceRes.name,
         type: sourceRes.type || 'Action',
-        resourceLinkId: draggedResId, // Save the link to the technical asset
-        position: { x, y },           // Absolute coordinates on canvas
-        outcomes: [],
+        gridLane: laneNames[laneIdx],
+        gridCol: colIdx,
         description: sourceRes.description || ""
     };
 
+    if (!parentWorkflow.steps) parentWorkflow.steps = [];
     parentWorkflow.steps.push(newStep);
 
-    // 5. Sync and Refresh
     OL.persist();
     OL.renderVisualizer(parentWorkflowId);
-    
-    // Auto-inspect the new drop
-    setTimeout(() => OL.loadInspector(newStepId, parentWorkflowId), 100);
-    console.log(`✅ Linked asset ${sourceRes.name} as a step in ${parentWorkflow.name}`);
 };
 
 OL.exitWorkflowFocus = function() {
