@@ -10895,9 +10895,9 @@ window.renderLevel1SidebarContent = function(allResources) {
                      ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
                     <span>⚙️</span> 
                     <span style="flex:1;">${esc(res.name)}</span>
-                    <button class="btn tiny soft" 
+                    <button class="btn tiny soft clone-btn" 
                             style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
-                            onclick="event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                            onclick="event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); OL.cloneResourceWorkflow('${res.id}')"
                             title="Clone Workflow">⿻</button>
                 </div>
             `).join('')}
@@ -10997,9 +10997,9 @@ window.renderLevel2SidebarContent = function(allResources) {
                     <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
                     <span style="flex: 1;">${esc(res.name)}</span>
                     
-                    <button class="btn tiny soft" 
+                    <button class="btn tiny soft clone-btn" 
                             style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
-                            onclick="event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                            onclick="event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); OL.cloneResourceWorkflow('${res.id}')"
                             title="Clone Resource">⿻</button>
                 </div>
             `).join('')}
