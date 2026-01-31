@@ -2243,6 +2243,10 @@ body.fs-mode-active {
     overflow: hidden !important;
 }
 
+body.visualizer-active #mainContent {
+    padding: 10px 10px 40px 10px !important;
+}
+
 .three-pane-layout {
     display: flex;
     flex-direction: row;
