@@ -10786,7 +10786,7 @@ OL.deployRequirementsFromResource = function(resourceId) {
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
-const STEP_FACTORY_LIB = {
+const ATOMIC_STEP_LIB = {
     Triggers: [
         "Meeting Booked", "Meeting Completed", "Task Completed", "Task Created", 
         "Workflow Step Completed", "Workflow Completed", "Workflow Started", 
