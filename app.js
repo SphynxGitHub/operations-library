@@ -10950,6 +10950,11 @@ OL.loadInspector = function(resId, unused, isArchitectMode = false) {
     const client = getActiveClient();
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
+    // Add this inside OL.loadInspector
+    document.querySelectorAll('.workflow-block-card').forEach(c => c.classList.remove('active-node'));
+    const activeCard = document.querySelector(`[onclick*="${resId}"]`);
+    if (activeCard) activeCard.classList.add('active-node');
+
     panel.innerHTML = `
         <div class="inspector-content fade-in">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -11068,14 +11073,24 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
 
     return matchedResources.map(res => `
         <div class="workflow-block-card" 
-             draggable="true" 
-             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
-             onclick="event.stopPropagation(); OL.loadInspector('${res.id}', null, true); OL.highlightInventoryRow('${res.id}')">
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            draggable="true" 
+            ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
+            onclick="event.stopPropagation(); OL.loadInspector('${res.id}', null, true); OL.highlightInventoryRow('${res.id}')">
+            
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                 <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
+                <button class="card-delete-btn" style="position:static; padding:0;" 
+                        onclick="event.stopPropagation(); OL.unmapWorkflowFromStage('${res.id}')">×</button>
             </div>
-            <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
-            <div class="tiny muted" style="margin-top:8px;">📝 ${(res.steps || []).length} Steps</div>
+            
+            <div class="bold" style="font-size: 12px; color: var(--accent); line-height:1.2;">
+                ${esc(res.name)}
+            </div>
+            
+            <div class="tiny muted" style="margin-top:8px; display:flex; gap:10px;">
+                <span>📝 ${(res.steps || []).length} Steps</span>
+                <span class="status-dot ${res.status === 'Live' ? 'primary' : 'evaluating'}"></span>
+            </div>
         </div>
     `).join('');
 };
