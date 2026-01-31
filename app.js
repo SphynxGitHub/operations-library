@@ -10871,10 +10871,18 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 <div class="drawer-tools" id="toolbox-list" style="flex: 1; overflow-y: auto;">
                     ${toolboxResources.map(res => `
                         <div class="draggable-workflow-item" 
-                             data-name="${res.name.toLowerCase()}"
-                             draggable="true" 
-                             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                            <span>📂</span> <span style="flex: 1;">${esc(res.name)}</span>
+                            data-name="${res.name.toLowerCase()}"
+                            draggable="true" 
+                            ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                            <span style="opacity: 0.6;">📂</span>
+                            <span style="flex: 1;">${esc(res.name)}</span>
+                            
+                            <button class="btn-icon-only tiny" 
+                                    title="Clone Template"
+                                    onclick="event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                                    style="padding: 2px 5px; opacity: 0.5; font-size: 10px;">
+                                👯
+                            </button>
                         </div>
                     `).join('')}
                     ${toolboxResources.length === 0 ? '<div class="tiny muted italic p-10">All resources are mapped.</div>' : ''}
@@ -11061,6 +11069,36 @@ OL.filterToolbox = function(query) {
     } else if (emptyMsg) {
         emptyMsg.remove();
     }
+};
+
+OL.cloneResourceWorkflow = function(resId) {
+    const original = OL.getResourceById(resId);
+    if (!original) return;
+
+    const client = getActiveClient();
+    const isVaultItem = String(resId).startsWith('res-vlt-');
+    
+    // 1. Create the Deep Copy
+    const clone = JSON.parse(JSON.stringify(original));
+    
+    // 2. Reset Identity & Metadata
+    const timestamp = Date.now();
+    clone.id = isVaultItem ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    clone.name = `${original.name} (Copy)`;
+    clone.stageId = null; // 🚀 Ensure it starts in the toolbox
+    clone.createdDate = new Date().toISOString();
+
+    // 3. Persist to correct array
+    if (isVaultItem) {
+        state.master.resources.push(clone);
+    } else {
+        if (!client.projectData.localResources) client.projectData.localResources = [];
+        client.projectData.localResources.push(clone);
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(false);
+    console.log(`👯 Cloned: ${clone.name}`);
 };
 
 // HELPER 1: Toolbox Icons

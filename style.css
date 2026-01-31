@@ -2453,10 +2453,28 @@ body, #app-root {
     border-color: var(--accent);
     transform: translateY(-4px) scale(1.02);
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-}
+ }
 
 .workflow-block-card:active {
     cursor: grabbing;
+}
+
+.draggable-workflow-item .btn-icon-only {
+    display: none;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: white;
+}
+
+.draggable-workflow-item:hover .btn-icon-only {
+    display: block;
+}
+
+.draggable-workflow-item .btn-icon-only:hover {
+    background: var(--accent);
+    color: black;
 }
 /*==================================================================
   5. STATUS & INDICATORS
