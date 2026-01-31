@@ -10936,6 +10936,55 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     setTimeout(() => { if(window.OL.drawGlobalTimelineLines) OL.drawGlobalTimelineLines(); }, 100);
 };
 
+OL.loadInspector = function(resId, unused, isArchitectMode = false) {
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+
+    const res = OL.getResourceById(resId);
+    if (!res) {
+        panel.innerHTML = `<div class="empty-inspector tiny muted">Select a workflow to inspect</div>`;
+        return;
+    }
+
+    const steps = res.steps || [];
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+
+    panel.innerHTML = `
+        <div class="inspector-content fade-in">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; font-size:12px; color:var(--accent); letter-spacing:1px;">WORKFLOW PREVIEW</h3>
+                <span class="status-pill tiny ${res.status === 'Live' ? 'accent' : 'soft'}">${esc(res.status || 'Draft')}</span>
+            </div>
+
+            <h2 style="font-size:18px; margin-bottom:5px;">${esc(res.name)}</h2>
+            <div class="tiny muted" style="margin-bottom:20px;">Type: ${esc(res.type || 'SOP')}</div>
+
+            <label class="modal-section-label">Sequence Overview (${steps.length} Steps)</label>
+            <div class="inspector-step-preview-list">
+                ${steps.map((step, idx) => {
+                    const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
+                    return `
+                        <div class="preview-step-item">
+                            <div class="step-num">${idx + 1}</div>
+                            <div style="flex:1">
+                                <div class="step-name">${esc(step.name || 'Untitled Step')}</div>
+                                ${linkedApp ? `<div class="tiny accent">📱 ${esc(linkedApp.name)}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('') || '<div class="tiny muted italic">No steps defined in this workflow yet.</div>'}
+            </div>
+
+            <div style="margin-top:30px; padding-top:20px; border-top:1px solid var(--line);">
+                <button class="btn tiny primary full-width" onclick="OL.openResourceModal('${res.id}')">
+                    ⚙️ Full Resource Configuration
+                </button>
+            </div>
+        </div>
+    `;
+};
+
 // Universal Start Drag (Works for Toolbox AND Canvas Cards)
 OL.handleWorkflowDragStart = function(e, resId, resName) {
     e.dataTransfer.setData("resId", resId);
@@ -11021,7 +11070,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
         <div class="workflow-block-card" 
              draggable="true" 
              ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
-             onclick="event.stopPropagation(); OL.loadInspector('${res.id}', null, true)">
+             onclick="event.stopPropagation(); OL.loadInspector('${res.id}', null, true); OL.highlightInventoryRow('${res.id}')">
             <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
                 <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
             </div>
@@ -11029,6 +11078,15 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
             <div class="tiny muted" style="margin-top:8px;">📝 ${(res.steps || []).length} Steps</div>
         </div>
     `).join('');
+};
+
+OL.highlightInventoryRow = function(resId) {
+    document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active-row'));
+    const row = document.getElementById(`row-${resId}`);
+    if (row) {
+        row.classList.add('active-row');
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 };
 
 // Update this helper to use Resource ID directly
