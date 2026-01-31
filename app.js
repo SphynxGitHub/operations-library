@@ -202,131 +202,70 @@ OL.initializeSecurityContext = function() {
 // 4. LAYOUT & ROUTING ENGINE
 window.buildLayout = function () {
     const root = document.getElementById("app-root");
-    if (!root) {
-        console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
-        return; 
-    }
+    if (!root) return;
+
     const client = getActiveClient();
     const hash = location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
-
     const isPublic = urlParams.has("access");
     const isMaster = hash.startsWith("#/vault");
-    const isVisualizer = hash.includes('visualizer'); // 🚀 OUR KEY SWITCH
-
+    const isVisualizer = hash.includes('visualizer');
     const effectiveAdminMode = isPublic ? false : state.adminMode;
 
-    // --- 1. TAB DEFINITIONS (Stay exactly as you had them) ---
-    const masterTabs = [
-        { key: "apps", label: "Master Apps", icon: "📱", href: "#/vault/apps" },
-        { key: "functions", label: "Master Functions", icon: "⚒", href: "#/vault/functions" },
-        { key: "resources", label: "Master Resources", icon: "💾", href: "#/vault/resources" },
-        { key: "visualizer", label: "Flow Map", icon: "🕸️", href: "#/vault/visualizer" },
-        { key: "how-to", label: "Master How-To Guides", icon: "👩‍🏫", href: "#/vault/how-to" },
-        { key: "checklist", label: "Master Tasks", icon: "📋", href: "#/vault/tasks" },
-        { key: "analyses", label: "Master Analyses", icon: "📈", href: "#/vault/analyses" },
-        { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" },
-    ];
-
-    const clientTabs = [
-        { key: "checklist", label: "Tasks", icon: "📋", href: "#/client-tasks" },
-        { key: "apps", label: "Applications", icon: "📱", href: "#/applications" },
-        { key: "functions", label: "Functions", icon: "⚒", href: "#/functions" },
-        { key: "resources", label: "Project Resources", icon: "💾", href: "#/resources" },
-        { key: "visualizer", label: "Flow Map", icon: "🕸️", href: "#/visualizer" },
-        { key: "scoping", label: "Scoping & Pricing", icon: "📊", href: "#/scoping-sheet" },
-        { key: "analysis", label: "Weighted Analysis", icon: "📈", href: "#/analyze" },
-        { key: "how-to", label: "How-To Library", icon: "👩‍🏫", href: "#/how-to" },
-        { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
-    ];
-
-    // --- 2. SIDEBAR HTML GENERATOR ---
-    const sidebarHTML = `
+    // --- 1. PRE-GENERATE THE SIDEBAR (To prevent duplication) ---
+    const sidebarContent = `
         ${!isPublic ? `
             <div class="admin-nav-zone">
-                <nav class="menu">
-                    <a href="#/" class="${hash === '#/' ? 'active' : ''}">
-                        <i>🏠</i> <span>Dashboard</span>
-                    </a>
-                </nav>
+                <nav class="menu"><a href="#/" class="${hash === '#/' ? 'active' : ''}"><i>🏠</i> <span>Dashboard</span></a></nav>
             </div>
             <div class="divider"></div>
         ` : ''}
-
         ${isMaster ? `
             <div class="client-nav-zone admin-workspace">
                 <div class="menu-category-label">Global Administration</div>
-                <div class="client-profile-trigger is-master">
-                    <div class="client-avatar" style="background: var(--accent); color: white;">M</div>
-                    <div class="client-info">
-                        <div class="client-name">Master Vault</div>
-                        <div class="client-meta">Global Standards</div>
-                    </div>
-                </div>
                 <nav class="menu">
-                    ${masterTabs.map(item => `
-                        <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
-                            <i>${item.icon}</i> <span>${item.label}</span>
-                        </a>
-                    `).join('')}
+                    ${masterTabs.map(item => `<a href="${item.href}" class="${hash === item.href ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`).join('')}
                 </nav>
             </div>
         ` : client ? `
             <div class="client-nav-zone">
                 <div class="menu-category-label">Project Workspace</div>
-                <div class="client-profile-trigger" 
-                     ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                    <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
-                    <div class="client-info">
-                        <div class="client-name">${esc(client.meta.name)}</div>
-                        <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
-                    </div>
-                </div>
                 <nav class="menu">
                     ${clientTabs.map(item => {
-                        const perm = OL.checkPermission(item.key);
-                        if (perm === 'none') return '';
                         const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                        if (!isModuleEnabled) return ''; 
-                        const isActive = hash.startsWith(item.href);
-                        return `
-                            <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                <i>${item.icon}</i> <span>${item.label}</span>
-                                ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
-                            </a>
-                        `;
+                        if (!isModuleEnabled || OL.checkPermission(item.key) === 'none') return ''; 
+                        return `<a href="${item.href}" class="${hash.startsWith(item.href) ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`;
                     }).join('')}
                 </nav>
             </div>
-        ` : `
-            <div class="empty-context-hint"><p>Select a Client or enter Global Vault from Dashboard.</p></div>
-        `}
+        ` : `<div class="empty-context-hint"><p>Select a Client.</p></div>`}
     `;
 
-    // --- 3. THE LAYOUT ENGINE (Switching Frames) ---
+    // --- 2. SELECT THE FRAME (The Cage vs. The Regular) ---
     if (isVisualizer) {
-        // 🏗️ THE 3-PANEL CAGE (Grid Mode)
+        // 🏗️ FLOW MAP: Rigid Grid (No Duplication)
         root.innerHTML = `
-            <div class="three-pane-layout" style="display: grid; grid-template-columns: 240px 1fr 220px; width: 100vw; height: 100vh; overflow: hidden; background: var(--bg);">
-                <aside class="sidebar" style="grid-column: 1; border-right: 1px solid var(--panel-border); overflow-y: auto;">
-                    ${sidebarHTML}
+            <div class="three-pane-layout" style="display: grid; grid-template-columns: 240px 1fr 200px; width: 100vw; height: 100vh; overflow: hidden;">
+                <aside class="sidebar" style="grid-column: 1; border-right: 1px solid #333; overflow-y: auto;">
+                    ${sidebarContent}
                 </aside>
-                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative; display: flex; flex-direction: column;">
+                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative;">
                     </main>
-                <aside id="inspector-panel" class="pane-inspector" style="grid-column: 3; border-left: 1px solid rgba(255,255,255,0.1); background: #0b0f1a; overflow-y: auto;">
-                     <div class="empty-inspector tiny muted" style="padding:40px; text-align:center;">Select a node to inspect</div>
+                <aside id="inspector-panel" style="grid-column: 3; border-left: 1px solid #333; background: #0b0f1a; overflow-y: auto; padding: 20px;">
+                    <h3 style="font-size: 12px; color: #38bdf8;">TECHNICAL SOP</h3>
+                    <div id="new-inspector"></div>
                 </aside>
             </div>
         `;
     } else {
-        // 📱 THE STANDARD LAYOUT (Flex Mode)
+        // 📱 ALL OTHER TABS: Standard Flex
         root.innerHTML = `
-            <div class="standard-layout" style="display: flex; width: 100vw; height: 100vh; background: var(--bg);">
-                <aside class="sidebar" style="width: 240px; flex-shrink: 0; border-right: 1px solid var(--panel-border); overflow-y: auto;">
-                    ${sidebarHTML}
+            <div class="standard-layout" style="display: flex; width: 100vw; height: 100vh;">
+                <aside class="sidebar" style="width: 240px; flex-shrink: 0; border-right: 1px solid #333; overflow-y: auto;">
+                    ${sidebarContent}
                 </aside>
                 <main id="mainContent" style="flex: 1; overflow-y: auto; padding: 40px; min-width: 0;">
-                    </main>
+                </main>
             </div>
         `;
     }
