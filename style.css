@@ -63,7 +63,6 @@ textarea {
     flex: 1;
     margin-left: 240px; 
     padding-top: 10px;
-    padding-bottom: 10px;
     background: radial-gradient(circle at top right, #0f172a, transparent);
 }
 
@@ -2270,6 +2269,7 @@ body, #app-root {
     width: 100%;
     overflow: hidden;
     padding-left: 15px;
+    padding-bottom: 10px;
 }
 
 /*==================================================================
