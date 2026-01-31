@@ -2420,3 +2420,54 @@ body, #app-root {
     letter-spacing: 0.02em;
     color: rgba(255,255,255,0.8);
 }
+
+.vertical-stage-canvas {
+    flex: 1;
+    overflow-y: auto;
+    background: #050816;
+    padding: 20px;
+}
+
+.stage-container {
+    margin-bottom: 40px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.stage-header-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 0;
+}
+
+.stage-number {
+    background: var(--accent);
+    color: #000;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 11px;
+}
+
+.stage-name {
+    font-weight: bold;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 13px;
+}
+
+.stage-workflow-stream {
+    display: flex;
+    gap: 15px;
+    min-height: 100px;
+    padding: 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    flex-wrap: wrap; /* Allows workflows to wrap if there are too many */
+}

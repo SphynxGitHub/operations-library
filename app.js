@@ -10850,77 +10850,91 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
-    
     if (!container) return;
-    container.style.padding = "0";
 
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    const stages = sourceData.stages || []; // ⬇️ Vertical Rows
+    const workflows = sourceData.workflows || []; // ➡️ Horizontal Columns
     
-    // Initialize defaults if empty
-    const columns = sourceData.stages || []; 
-    const rows = sourceData.workflows || [];
+    // The Toolbox now shows available Resources to be used as Workflows
+    const availableResources = isVaultMode ? state.master.resources : client.projectData.localResources;
 
     container.innerHTML = `
-        <div class="three-pane-layout matrix-mode">
+        <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
-                <div class="drawer-header"><h3>Toolbox</h3></div>
-                <div class="drawer-tools">
-                    ${renderDraggableTools()}
-                </div>
-                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
-                    <button class="btn tiny soft full-width" onclick="OL.addWorkflowRow('${isVaultMode}')">+ Add Workflow Row</button>
+                <div class="drawer-header"><h3>Workflow Library</h3></div>
+                <div class="drawer-tools" style="padding:10px;">
+                    <p class="tiny muted">Drag a workflow into a stage row</p>
+                    ${availableResources.map(res => `
+                        <div class="draggable-workflow-item pill soft" 
+                             draggable="true" 
+                             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                            <span>📂</span> <span>${esc(res.name)}</span>
+                        </div>
+                    `).join('')}
                 </div>
             </aside>
 
             <main class="pane-canvas-wrap">
-                <div class="canvas-header" style="justify-content: space-between;">
+                <div class="canvas-header">
                     ${renderBreadcrumbs(client)}
-                    <button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage Column</button>
+                    <button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Lifecycle Stage</button>
                 </div>
 
-                <div class="matrix-canvas-area">
-                    <div class="matrix-grid" style="grid-template-columns: 200px repeat(${columns.length}, minmax(250px, 1fr));">
-                        <div class="matrix-corner" style="position: sticky; top: 0; left: 0; z-index: 10; background: var(--panel-dark); border: 1px solid var(--line);"></div>
-                        ${columns.map(col => `
-                            <div class="matrix-col-header" contenteditable="true" 
-                                 onblur="OL.updateStageName('${col.id}', this.innerText, ${isVaultMode})">
-                                ${esc(col.name)}
+                <div class="vertical-stage-canvas">
+                    ${stages.map((stage, sIdx) => `
+                        <div class="stage-container">
+                            <div class="stage-header-row">
+                                <span class="stage-number">${sIdx + 1}</span>
+                                <span class="stage-name" contenteditable="true" 
+                                      onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">
+                                    ${esc(stage.name)}
+                                </span>
                             </div>
-                        `).join('')}
-
-                        ${rows.map(row => `
-                            <div class="matrix-row-label" contenteditable="true" 
-                                 onblur="OL.updateWorkflowName('${row.id}', this.innerText, ${isVaultMode})">
-                                ${esc(row.name)}
+                            
+                            <div class="stage-workflow-stream" 
+                                 ondragover="OL.handleCanvasDragOver(event)"
+                                 ondrop="OL.handleStageDrop(event, '${stage.id}')">
+                                ${renderWorkflowsInStage(stage.id, isVaultMode)}
                             </div>
-                            ${columns.map(col => `
-                                <div class="matrix-cell" 
-                                     ondragover="OL.handleCanvasDragOver(event)"
-                                     ondrop="OL.handleMatrixDrop(event, '${col.id}', '${row.id}')">
-                                    ${renderStepsInCell(col.id, row.id)}
-                                </div>
-                            `).join('')}
-                        `).join('')}
-                    </div>
-                    
-                    ${(columns.length === 0 || rows.length === 0) ? `
-                        <div class="empty-hint" style="padding: 100px; text-align: center;">
-                            <h3>Build your Blueprint</h3>
-                            <p class="muted">Add Stages (Columns) and Workflows (Rows) to begin mapping logic.</p>
                         </div>
-                    ` : ''}
+                    `).join('')}
+                    
+                    ${stages.length === 0 ? '<div class="empty-hint">Create your first Lifecycle Stage to begin.</div>' : ''}
                 </div>
-
-                <section class="pane-inventory-split">
-                    ${renderInventoryTable(isVaultMode ? state.master.resources : client.projectData.localResources)}
-                </section>
             </main>
 
             <aside id="inspector-panel" class="pane-inspector">
-                 <div class="empty-inspector tiny muted">Select a node to inspect metadata</div>
+                 <div class="empty-inspector tiny muted">Select a Workflow block to see SOP links</div>
             </aside>
         </div>
     `;
+};
+
+OL.handleWorkflowDragStart = function(e, resId, resName) {
+    e.dataTransfer.setData("resId", resId);
+    e.dataTransfer.setData("resName", resName);
+};
+
+OL.handleStageDrop = function(e, stageId) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId");
+    const resName = e.dataTransfer.getData("resName");
+    if (!resId) return;
+
+    const client = getActiveClient();
+    const sheet = client.projectData.scopingSheets[0];
+
+    // Find the item in the scoping sheet and assign it to this stage (round)
+    const item = sheet.lineItems.find(i => i.resourceId === resId);
+    if (item) {
+        // Map the Stage ID to the 'round' or a new 'stageId' field
+        item.stageId = stageId;
+        console.log(`✅ Linked ${resName} to Stage ${stageId}`);
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(false);
 };
 
 // HELPER 1: Toolbox Icons
