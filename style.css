@@ -2428,9 +2428,8 @@ body, #app-root {
 
 .return-to-library-zone.drag-over {
     background: rgba(239, 68, 68, 0.1);
-    border-color: #ef4444;
-    color: #ef4444;
-    transform: scale(1.02);
+    color: #e7e1e1;
+    transform: scale(1.03);
 }
 
 .stage-workflow-stream.drag-over {
