@@ -10918,6 +10918,58 @@ window.renderLevel3SidebarContent = function(resourceId) {
     `;
 };
 
+// --- INSPECTOR ENGINE ---
+OL.loadInspector = function(targetId, parentId = null) {
+    state.activeInspectorResId = targetId;
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+
+    // 1. Resolve Data
+    const data = OL.getResourceById(targetId);
+    if (!data) {
+        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
+        return;
+    }
+
+    // 2. Identify Context (Workflow, Resource, or Atomic Step)
+    const isStep = !!parentId;
+    const technicalAsset = OL.getResourceById(data.resourceLinkId);
+    const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (data.steps || []);
+
+    panel.innerHTML = `
+        <div class="inspector-content fade-in" style="padding: 20px;">
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <span class="tiny accent bold uppercase">${isStep ? 'Mechanical Step' : 'Process Module'}</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name)}</h2>
+                <div class="tiny muted">${esc(data.type || 'Action')}</div>
+            </div>
+
+            <section>
+                <label class="modal-section-label">Sub-Procedures (${nestedSteps.length})</label>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+                    ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
+                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                            <span class="tiny bold accent">${i + 1}</span>
+                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
+                        </div>
+                    `).join('') : `<div class="tiny muted italic">No procedures defined.</div>`}
+                </div>
+                
+                <button class="btn tiny primary" style="margin-top:20px; width:100%;" 
+                        onclick="OL.openResourceModal('${technicalAsset?.id || data.id}')">
+                    ⚙️ Configure Full SOP
+                </button>
+            </section>
+        </div>
+    `;
+};
+
+OL.clearInspector = function() {
+    state.activeInspectorResId = null;
+    const panel = document.getElementById('inspector-panel');
+    if (panel) panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
+};
+
 // --- CANVAS RENDERERS ---
 
 window.renderLevel1Canvas = function(sourceData, isVaultMode) {
@@ -11013,6 +11065,76 @@ OL.filterResourceToolbox = function(q) {
         el.style.display = el.getAttribute('data-name').includes(query) ? 'flex' : 'none';
     });
 };
+
+// --- DRAG & DROP ORCHESTRATION ---
+
+// 1. Source: When you start dragging a Workflow or Resource from the sidebar
+OL.handleWorkflowDragStart = function(e, resId, resName) {
+    e.dataTransfer.setData("resId", resId);
+    e.dataTransfer.setData("resName", resName);
+    e.target.style.opacity = "0.5";
+    console.log(`Dragging Source: ${resName}`);
+};
+
+// 2. Destination: Required to allow the canvas to receive the drop
+OL.handleCanvasDragOver = function(e) {
+    e.preventDefault(); // CRITICAL: Browsers block drops by default
+    e.dataTransfer.dropEffect = "copy";
+    
+    // Add a visual hint to the container being hovered over
+    const container = e.currentTarget;
+    if (container.classList.contains('stage-workflow-stream') || container.id === 'fs-canvas-wrapper') {
+        container.style.background = "rgba(56, 189, 248, 0.05)";
+    }
+};
+
+// 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
+OL.handleStepMoveStart = function(e, stepId, parentResId) {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+    
+    e.dataTransfer.setData("moveStepId", stepId);
+    e.dataTransfer.setData("parentResId", parentResId);
+    e.target.style.opacity = "0.4";
+};
+
+// 4. Source: Atomic Step dragging (Level 3 Factory)
+OL.handleAtomicDrag = function(e, type, name) {
+    const payload = { type, name, isAtomic: true };
+    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+    e.target.style.opacity = "0.4";
+};
+
+OL.handleModularAtomicDrag = function(e) {
+    const verb = document.getElementById('builder-verb').value;
+    const obj = document.getElementById('builder-object').value;
+    const payload = { type: 'Action', name: `${verb} ${obj}`, isAtomic: true };
+    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+    e.target.style.opacity = "0.4";
+};
+
+OL.handleStageDrop = function(e, stageId) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId");
+    if (!resId) return;
+
+    const res = OL.getResourceById(resId);
+    if (res) {
+        res.stageId = stageId;
+        OL.persist();
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    }
+};
+
+document.addEventListener('dragleave', (e) => {
+    if (e.target.classList.contains('stage-workflow-stream') || e.target.id === 'fs-canvas-wrapper') {
+        e.target.style.background = "";
+    }
+});
+
+document.addEventListener('dragend', (e) => {
+    e.target.style.opacity = "1";
+    document.querySelectorAll('.stage-workflow-stream, #fs-canvas-wrapper').forEach(el => el.style.background = "");
+});
 
 // ===========================TASK RESOURCE OVERLAP===========================
 
