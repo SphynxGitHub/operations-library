@@ -5200,66 +5200,56 @@ OL.renderVisualizer = function(resId) {
     const res = OL.getResourceById(resId);
     if (!canvas || !res) return;
 
-    // 1. Define our standard grid dimensions
-    const LANE_HEIGHT = 200;
+    const LANE_HEIGHT = 140; 
     const COL_WIDTH = 280;
     const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    
-    // Calculate required width based on steps
     const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 4);
-    const canvasWidth = (maxCol + 2) * COL_WIDTH;
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
 
-    // 2. Generate Grid Background (Prior Level Style)
-    const lanesHtml = lanes.map(lane => `
-        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative;">
-            <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
+    // 1. Generate the Grid with Fixed Labels and Drop Targets
+    const lanesHtml = lanes.map((lane, laneIdx) => `
+        <div class="grid-lane" style="height: ${LANE_HEIGHT}px;">
+            <div class="grid-label">
                 ${lane}
             </div>
-            ${Array.from({length: maxCol + 2}).map(() => `
-                <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); flex-shrink: 0;"></div>
-            `).join('')}
+            <div class="grid-cells-wrap" style="display: flex; flex: 1;">
+                ${Array.from({length: maxCol + 4}).map((_, colIdx) => `
+                    <div class="grid-drop-target" 
+                         style="width: ${COL_WIDTH}px;"
+                         ondragover="event.preventDefault(); this.classList.add('hovered');" 
+                         ondragleave="this.classList.remove('hovered');"
+                         ondrop="this.classList.remove('hovered'); OL.handleFocusedCanvasDrop(event, '${res.id}', ${laneIdx}, ${colIdx})">
+                    </div>
+                `).join('')}
+            </div>
         </div>
     `).join('');
 
-    // 3. Render Snapped Nodes
+    // 2. The Cards
     const nodesHtml = steps.map((step) => {
         const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        const top = (laneIdx * LANE_HEIGHT) + 50; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for the sticky label
+        const top = (laneIdx * LANE_HEIGHT) + 30; 
+        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for label width
 
         return `
             <div class="workflow-block-card grid-snapped" 
-                draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: grab;"
-                onmousedown="OL.loadInspector('${step.id}', '${res.id}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')"
-                onclick="OL.loadInspector('${step.id}', '${res.id}')">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type)}</span>
-                </div>
-                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name)}
-                </div>
+                 draggable="true"
+                 style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 50;"
+                 onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${res.id}')"
+                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')">
+                <div class="pill tiny vault" style="margin-bottom:8px;">${esc(step.type)}</div>
+                <div class="bold" style="font-size: 11px; color: var(--accent);">${esc(step.name)}</div>
             </div>
         `;
     }).join('');
 
     canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" 
-             style="width: ${canvasWidth}px; height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
-            <div class="vis-swimlane-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-                ${lanesHtml}
-            </div>
-            <div class="vis-absolute-container">
-                ${nodesHtml}
-            </div>
-            <svg id="vis-links-layer" class="vis-svg" style="pointer-events: none; z-index: 25;"></svg>
+        <div class="vis-workspace" id="vis-workspace" style="width: ${(maxCol + 5) * COL_WIDTH}px;">
+            <div class="grid-background-layer">${lanesHtml}</div>
+            <div class="grid-content-layer">${nodesHtml}</div>
+            <svg id="vis-links-layer" class="vis-svg"></svg>
         </div>
     `;
-
-    // 4. Auto-draw handoff lines
-    setTimeout(() => OL.drawVisualizerLines(resId), 50);
 };
 
 OL.autoGrowNode = function(element, resId) {
@@ -10814,7 +10804,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                  ondragover="OL.handleCanvasDragOver(event)"
                  ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
                 
-                <div class="visual-grid-bg">
+                <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
                     ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
                         <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
                             <div style="width: 120px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.05);"></div>
