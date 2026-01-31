@@ -2292,7 +2292,7 @@ body.fs-mode-active {
 .drawer-tools {
     flex: 1;
     overflow-y: auto; /* 🚀 This fixed your "uh oh" overflow */
-    padding: 15px;
+    padding: 15px 10px 15px 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -2303,7 +2303,7 @@ body.fs-mode-active {
     flex-direction: row;
     align-items: flex-start; /* Keeps icons at the top while text grows down */
     gap: 12px;
-    padding: 12px;
+    padding: 8px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--panel-border);
     border-radius: 8px;
