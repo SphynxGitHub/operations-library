@@ -5201,13 +5201,19 @@ OL.renderVisualizer = function(resId) {
     const canvasWidth = (maxCol + 2) * COL_WIDTH;
 
     // 2. Generate Grid Background (Prior Level Style)
-    const lanesHtml = lanes.map(lane => `
-        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative;">
+    // Inside OL.renderVisualizer
+    const lanesHtml = lanes.map((lane, laneIdx) => `
+        <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05); position: relative;">
             <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
                 ${lane}
             </div>
-            ${Array.from({length: maxCol + 2}).map(() => `
-                <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); flex-shrink: 0;"></div>
+            ${Array.from({length: maxCol + 4}).map((_, colIdx) => `
+                <div class="grid-drop-target" 
+                    style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%; transition: background 0.2s;"
+                    ondragover="event.preventDefault(); this.style.background='rgba(56, 189, 248, 0.1)';" 
+                    ondragleave="this.style.background='transparent';"
+                    ondrop="this.style.background='transparent'; OL.handleFocusedCanvasDrop(event, '${resId}', ${laneIdx}, ${colIdx})">
+                </div>
             `).join('')}
         </div>
     `).join('');
@@ -10895,59 +10901,56 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (state.activeInspectorResId) setTimeout(() => OL.loadInspector(state.activeInspectorResId), 10);
 };
 
-OL.loadInspector = function(resId) {
-    // 1. Save sticky ID so it survives background syncs
-    state.activeInspectorResId = resId; 
-
-    // 2. Resolve the panel specifically
+OL.loadInspector = function(targetId, parentWorkflowId = null) {
+    state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    // 3. Resolve Data (Checking Master and Local)
-    const res = OL.getResourceById(resId);
-    if (!res) {
-        panel.innerHTML = `<div style="padding:20px; color:#f87171;">⚠️ Data not found for ID: ${resId}</div>`;
+    let displayData = null;
+    let titlePrefix = "Workflow";
+
+    // 1. Resolve target: Is it a nested step or a top-level resource?
+    if (parentWorkflowId) {
+        const parent = OL.getResourceById(parentWorkflowId);
+        const step = parent?.steps?.find(s => s.id === targetId);
+        // Link to the actual technical asset to get its details
+        const technicalAsset = OL.getResourceById(step?.resourceLinkId);
+        displayData = technicalAsset || step;
+        titlePrefix = "Step Detail";
+    } else {
+        displayData = OL.getResourceById(targetId);
+    }
+
+    if (!displayData) {
+        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
         return;
     }
 
-    // 4. Safely resolve steps and apps
-    const steps = res.steps || [];
-    const client = getActiveClient();
-    const allApps = [...(state.master?.apps || []), ...(client?.projectData?.localApps || [])];
+    const steps = displayData.steps || [];
 
-    // 5. Paint the HTML
     panel.innerHTML = `
-        <div class="inspector-content fade-in" style="padding: 20px; display: block !important;">
+        <div class="inspector-content fade-in" style="padding: 20px;">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny accent bold uppercase">Workflow Detail</span>
-                    <div class="node-status-badge status-${(res.status || 'draft').toLowerCase()}" style="position:static; display:inline-block;"></div>
-                </div>
-                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff !important;">${esc(res.name)}</h2>
-                <div class="tiny muted">${esc(res.type || 'SOP')}</div>
+                <span class="tiny accent bold uppercase">${titlePrefix}</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(displayData.name)}</h2>
+                <div class="tiny muted">${esc(displayData.type || 'Action')}</div>
             </div>
 
             <section>
-                <label class="modal-section-label">Execution Sequence (${steps.length})</label>
+                <label class="modal-section-label">Technical SOP / Steps</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
-                    ${steps.map((s, i) => {
-                        const linkedApp = allApps.find(a => String(a.id) === String(s.appId));
-                        return `
-                            <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
-                                <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                                <div style="flex:1;">
-                                    <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
-                                    ${linkedApp ? `<div style="font-size:9px; color:var(--accent); opacity:0.7;">📱 ${esc(linkedApp.name)}</div>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+                    ${steps.length > 0 ? steps.map((s, i) => `
+                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                            <span class="tiny bold accent">${i + 1}</span>
+                            <div class="tiny" style="color:#eee;">${esc(s.name || s.text || 'Process Step')}</div>
+                        </div>
+                    `).join('') : '<div class="tiny muted italic">No technical steps defined for this asset.</div>'}
                 </div>
             </section>
 
             <footer style="margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:20px;">
-                <button class="btn tiny primary full-width" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
-                    ⚙️ Edit Full Resource
+                <button class="btn tiny primary full-width" onclick="OL.openResourceModal('${displayData.id}')">
+                    ⚙️ Configure Asset
                 </button>
             </footer>
         </div>
@@ -11192,52 +11195,40 @@ OL.handleStepMoveStart = function(e, stepId, parentResId) {
     e.target.style.opacity = "0.4";
 };
 
-OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
+OL.handleFocusedCanvasDrop = function(e, parentWorkflowId, laneIdx, colIdx) {
     e.preventDefault();
     const parentWorkflow = OL.getResourceById(parentWorkflowId);
-    if (!parentWorkflow) return;
-
-    // Calculate Grid Position
-    const canvas = document.getElementById('vis-workspace');
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left - 120; // Account for sticky label
-    const y = e.clientY - rect.top;
-    
-    const colIdx = Math.max(0, Math.floor(x / 280));
     const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
-    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
-
-    // Check if this is an INTERNAL MOVE
-    const moveStepId = e.dataTransfer.getData("moveStepId");
     
+    const moveStepId = e.dataTransfer.getData("moveStepId");
+    const draggedResId = e.dataTransfer.getData("resId");
+
     if (moveStepId) {
+        // MOVING EXISTING
         const step = parentWorkflow.steps.find(s => s.id === moveStepId);
         if (step) {
             step.gridLane = laneNames[laneIdx];
             step.gridCol = colIdx;
-            console.log(`🚚 Moved step ${step.name} to ${step.gridLane} Col ${colIdx}`);
         }
-    } else {
-        // Check if this is a NEW DROP from Toolbox
-        const draggedResId = e.dataTransfer.getData("resId");
-        if (draggedResId) {
-            const sourceRes = OL.getResourceById(draggedResId);
-            const newStep = {
-                id: uid(),
-                name: sourceRes.name,
-                type: sourceRes.type || 'Action',
-                gridLane: laneNames[laneIdx],
-                gridCol: colIdx,
-                description: sourceRes.description || ""
-            };
-            if (!parentWorkflow.steps) parentWorkflow.steps = [];
-            parentWorkflow.steps.push(newStep);
-            console.log(`✨ Added new step: ${newStep.name}`);
-        }
+    } else if (draggedResId) {
+        // ADDING NEW
+        const sourceRes = OL.getResourceById(draggedResId);
+        const newStepId = uid();
+        parentWorkflow.steps.push({
+            id: newStepId,
+            name: sourceRes.name,
+            type: sourceRes.type || 'Action',
+            gridLane: laneNames[laneIdx],
+            gridCol: colIdx,
+            resourceLinkId: draggedResId // 🔗 LINK TO THE ASSET
+        });
+        // 🚀 AUTO-INSPECT NEW ITEM
+        state.activeInspectorResId = newStepId;
     }
 
     OL.persist();
     OL.renderVisualizer(parentWorkflowId);
+    if (state.activeInspectorResId) OL.loadInspector(state.activeInspectorResId, parentWorkflowId);
 };
 
 OL.exitWorkflowFocus = function() {
