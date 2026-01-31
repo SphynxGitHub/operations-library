@@ -10850,47 +10850,56 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
-    const resources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-
+    
     if (!container) return;
     container.style.padding = "0";
 
-    // 🚀 THE FIX: Get the currently selected resId from the selector or state
-    const currentFocusId = document.getElementById('viz-focus-selector')?.value || "";
+    // 🚀 ARCHITECT DATA: Stages live at the Project/Vault level, not inside a resource
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    if (!sourceData.stages) sourceData.stages = [{ id: 'stg_1', name: 'Discovery', workflows: [] }];
 
     container.innerHTML = `
-        <div class="three-pane-layout">
+        <div class="three-pane-layout architect-mode">
             <aside class="pane-drawer">
                 <div class="drawer-header"><h3>Toolbox</h3></div>
-                <div class="drawer-tools">${renderDraggableTools()}</div>
+                <div class="drawer-tools">
+                    <p class="tiny muted">Drag a resource type to create a new workflow</p>
+                    ${renderDraggableTools()}
+                </div>
             </aside>
 
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">
                     ${renderBreadcrumbs(client)}
-                    <select id="viz-focus-selector" class="modal-input tiny" style="width: 250px; margin:0;" 
-                            onchange="OL.loadIntoGlobalMapper(this.value)">
-                        <option value="">Select Resource to Map...</option>
-                        ${resources.map(r => `<option value="${r.id}" ${r.id === currentFocusId ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
-                    </select>
+                    <div class="spacer"></div>
+                    <button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage Row</button>
                 </div>
 
-                <div id="global-mapper-canvas" class="blueprint-canvas"
-                    ondragover="OL.handleCanvasDragOver(event)"
-                    ondrop="OL.handleCanvasDrop(event, document.getElementById('viz-focus-selector').value)"
-                    style="flex: 1; position: relative; overflow: hidden; background: #050816;">
-                    <div id="fs-canvas" style="height:100%; width:100%;"></div>
+                <div id="architect-canvas" class="blueprint-canvas stage-canvas">
+                    <div class="structured-flow-container">
+                        ${sourceData.stages.map((stage, sIdx) => `
+                            <div class="stage-row" data-stage-id="${stage.id}">
+                                <div class="stage-label-vertical" contenteditable="true" 
+                                     onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">
+                                    ${esc(stage.name)}
+                                </div>
+                                <div class="workflow-drop-zone" 
+                                     ondragover="OL.handleCanvasDragOver(event)" 
+                                     ondrop="OL.handleWorkflowDrop(event, '${stage.id}', ${isVaultMode})">
+                                    ${renderArchitectNodes(stage.workflows, isVaultMode)}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
 
                 <section class="pane-inventory-split">
-                    ${renderInventoryTable(resources)}
+                    ${renderInventoryTable(isVaultMode ? state.master.resources : client.projectData.localResources)}
                 </section>
             </main>
 
             <aside id="inspector-panel" class="pane-inspector">
-                <div class="empty-inspector tiny muted" style="text-align:center; padding-top:40px;">
-                    Select a node to inspect
-                </div>
+                <div class="empty-inspector tiny muted">Select a Workflow Node to see SOP details</div>
             </aside>
         </div>
     `;
@@ -11100,6 +11109,35 @@ OL.syncMatrixNameFromInspector = function(stepId, newName) {
         const titleCell = row.querySelector('.row-title') || row.cells[0];
         if (titleCell) titleCell.innerText = newName;
     }
+};
+
+OL.launchVisualizer = function(id, mode = 'global') {
+    if (mode === 'global') {
+        // Look at state.master.stages or client.projectData.stages
+        renderGlobalVisualizer(); 
+    } else {
+        // Look at resource.steps
+        renderResourceVisualizer(id); 
+    }
+};
+
+// Helper to render nodes in the Architect View
+window.renderArchitectNodes = function(workflows, isVaultMode) {
+    return workflows.map(wf => {
+        const res = OL.getResourceById(wf.resourceId);
+        return `
+            <div class="workflow-node architect-node" onclick="OL.loadInspector('${wf.resourceId}', null, true)">
+                <div class="node-status-badge status-${(res?.status || 'draft').toLowerCase()}"></div>
+                <div class="node-content">
+                    <div class="tiny muted uppercase">${esc(res?.type || 'Workflow')}</div>
+                    <div class="bold">${esc(res?.name || 'Unnamed')}</div>
+                </div>
+                <button class="node-drill-down" onclick="event.stopPropagation(); OL.openResourceModal('${wf.resourceId}')">
+                    ⚙️ Edit Steps
+                </button>
+            </div>
+        `;
+    }).join('');
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================

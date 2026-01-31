@@ -2251,50 +2251,6 @@ body.fs-mode-active #app-root {
     display: none; /* Hide global mapper if full-screen workspace is active */
 }
 
-/* Layout Container */
-.three-pane-layout {
-    display: flex;
-    height: calc(100vh - 60px);
-    overflow: hidden;
-    background: #050816;
-}
-
-/* Left & Right sidebars */
-.pane-drawer, .pane-inspector {
-    width: 260px;
-    flex-shrink: 0;
-    background: #0b0f1a;
-    border-color: rgba(255,255,255,0.05);
-    padding: 20px;
-    overflow-y: auto;
-    z-index: 10;
-}
-
-/* Center Wrapper */
-.pane-canvas-wrap {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-}
-
-/* The Hybrid Split: Top 60% Canvas, Bottom 40% List */
-.blueprint-canvas {
-    flex: 6;
-    position: relative;
-    overflow: auto;
-    background-image: radial-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px);
-    background-size: 30px 30px;
-}
-
-.pane-inventory-split {
-    flex: 4;
-    background: #080c14;
-    border-top: 2px solid var(--accent);
-    overflow-y: auto;
-    padding: 0;
-}
-
 /* 🚀 Node Pulsing (Cross-Highlighting) */
 .pulse-highlight {
     animation: blue-pulse 2s infinite;
@@ -2348,4 +2304,61 @@ body.fs-mode-active #app-root {
 }
 .vis-path.solid {
     stroke-dasharray: none;
+}
+
+/* Ensure the overall app container doesn't scroll */
+body, #app-root {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+/* Ensure the layout fills the viewport exactly */
+.three-pane-layout {
+    display: flex;
+    height: calc(100vh - 60px); /* 60px = top nav */
+    width: 100%;
+    overflow: hidden;
+}
+
+.pane-canvas-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+}
+
+.blueprint-canvas {
+    flex: 1; /* This takes the top 60-70% */
+    overflow: auto; /* Internal scrolling for the map */
+    background: #050816;
+}
+
+.pane-inventory-split {
+    height: 300px; /* Fixed height for the bottom list */
+    background: #0b0f1a;
+    border-top: 2px solid var(--accent);
+    overflow-y: auto;
+}
+
+/* Stage Row Styling */
+.stage-row {
+    display: flex;
+    min-height: 150px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.stage-label-vertical {
+    width: 50px;
+    background: var(--panel-dark);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--accent);
+    border-right: 1px solid var(--line);
 }
