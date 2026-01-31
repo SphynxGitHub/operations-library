@@ -10810,11 +10810,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    // --- LEVEL 3: MECHANICAL VIEW (Resource -> Steps) ---
+    // --- LEVEL 3: THE MECHANICS (Resource -> Atomic Steps) ---
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         
-        // Find parents for full breadcrumb trail
+        // Find the "Parent Workflow" by looking for which Workflow contains this Resource
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
 
@@ -10829,9 +10829,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
         canvasHtml = renderLevel3Canvas(state.focusedResourceId);
-
     } 
-    // --- LEVEL 2: FLOW VIEW (Workflow -> Resources) ---
+    // --- LEVEL 2: THE FLOW (Workflow -> Resources) ---
     else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
@@ -10845,14 +10844,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId, allResources);
-
     } 
-    // --- LEVEL 1: LIFECYCLE VIEW (Stage -> Workflows) ---
+    // --- LEVEL 1: THE LIFECYCLE (Stages -> Workflows) ---
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
+    // --- RENDER MAIN WRAPPER ---
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
@@ -10864,7 +10863,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">
-                    <div class="breadcrumb-trail">${breadcrumbHtml}</div>
+                    <div class="breadcrumb-trail" style="display:flex; align-items:center; gap:8px;">${breadcrumbHtml}</div>
                     <div class="header-actions">
                         ${!state.focusedWorkflowId && !state.focusedResourceId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
                     </div>
@@ -10878,21 +10877,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
+    // Re-draw logic for Level 2 & 3
     if (state.focusedResourceId) setTimeout(() => OL.renderVisualizer(state.focusedResourceId), 50);
     else if (state.focusedWorkflowId) setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
-};
-
-OL.exitToLifecycle = function() {
-    state.focusedWorkflowId = null;
-    state.focusedResourceId = null;
-    OL.clearInspector();
-    renderGlobalVisualizer(location.hash.includes('vault'));
-};
-
-OL.exitToWorkflow = function() {
-    state.focusedResourceId = null;
-    OL.clearInspector();
-    renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 OL.loadInspector = function(targetId, parentWorkflowId = null) {
@@ -11176,15 +11163,15 @@ OL.cloneResourceWorkflow = function(resId) {
 // Entering Level 2 (Workflow View)
 OL.drillDownIntoWorkflow = function(resId) {
     state.focusedWorkflowId = resId; // Set the parent
-    state.focusedResourceId = null;  // 🚀 CRITICAL: Clear the child so sidebar shows Resources
+    state.focusedResourceId = null;  // 🚀 RESET LEVEL 3: This ensures you see Resources, not the Factory
     OL.clearInspector();
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 // Entering Level 3 (Mechanical Step View)
-OL.drillIntoResource = function(resId) {
-    // Note: focusedWorkflowId stays set so the breadcrumb knows the parent!
-    state.focusedResourceId = resId; 
+OL.drillIntoResourceMechanics = function(resId) {
+    state.focusedResourceId = resId; // Set the child focus
+    OL.clearInspector();
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
