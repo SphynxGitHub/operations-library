@@ -394,11 +394,11 @@ window.handleRoute = function () {
     if (main) {
         if (hash.includes('visualizer')) {
             // Apply your specific padding: Top 10, Right 10, Bottom 40, Left 10
-            main.setAttribute('data-view', 'visualizer');
+            document.body.classList.add('is-visualizer');
             document.body.classList.add('fs-mode-active');
         } else {
             // Standard padding for Apps, Scoping, etc.
-            main.setAttribute('data-view', 'standard');
+            document.body.classList.remove('is-visualizer');
             document.body.classList.remove('fs-mode-active');
         }
     }

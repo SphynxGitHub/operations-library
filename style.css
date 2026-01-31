@@ -2243,7 +2243,7 @@ body.fs-mode-active {
     overflow: hidden !important;
 }
 
-#mainContent[data-view="visualizer"] {
+body.is-visualizer #mainContent {
     padding: 10px 10px 40px 10px !important;
 }
 
