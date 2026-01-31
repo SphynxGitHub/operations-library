@@ -10877,20 +10877,42 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
 window.renderLevel1SidebarContent = function(allResources) {
     const workflows = allResources.filter(res => (res.type || "").toLowerCase() === 'workflow' && !res.stageId);
+    
     return `
-        <div class="drawer-header"><h3>Workflow Library</h3></div>
-        <div class="drawer-tools">${workflows.map(res => `
-            <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                <span>⚙️</span> <span style="flex:1;">${esc(res.name)}</span>
-            </div>
-        `).join('')}</div>
-        <div class="return-to-library-zone" 
-            ondragover="OL.handleCanvasDragOver(event)" 
-            ondragleave="this.classList.remove('drag-over')"
-            ondrop="OL.handleUnifiedDelete(event)">
-            🗑️ Drop to Unmap
+        <div class="drawer-header">
+            <h3 style="color: var(--accent); margin-bottom: 8px;">🔄 Workflow Library</h3>
+            <input type="text" class="modal-input tiny" id="workflow-toolbox-search" 
+                   placeholder="Search workflows..." 
+                   oninput="OL.filterToolbox(this.value)">
+        </div>
+        <div class="drawer-tools" id="toolbox-list">
+            ${workflows.map(res => `
+                <div class="draggable-workflow-item" 
+                     data-name="${res.name.toLowerCase()}" 
+                     draggable="true" 
+                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>⚙️</span> 
+                    <span style="flex:1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(res.name)}</span>
+                </div>
+            `).join('')}
+            ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px;">No unmapped workflows found.</div>' : ''}
         </div>
     `;
+};
+
+OL.filterToolbox = function(query) {
+    const q = query.toLowerCase().trim();
+    // Target items in the current drawer list
+    const items = document.querySelectorAll('.draggable-workflow-item');
+    
+    items.forEach(item => {
+        const name = item.getAttribute('data-name') || "";
+        if (name.includes(q)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
