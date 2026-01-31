@@ -5232,7 +5232,7 @@ OL.renderVisualizer = function(resId) {
         <div class="vis-node" id="vis-node-${step.id}" 
             style="left: ${pos.x}px; top: ${pos.y}px; position: absolute;"
             onmousedown="OL.startCardMove(event, '${resId}', '${step.id}')"
-            onclick="if(event.detail === 2) OL.openStepDetailModal('${resId}', '${step.id}')">
+            onclick="OL.loadInspector('${step.id}', '${resId}'); OL.highlightResource('${step.id}')">
 
             <div class="vis-node-header">
                 <span class="vis-drag-handle">⠿</span>
@@ -10845,11 +10845,18 @@ OL.deployRequirementsFromResource = function(resourceId) {
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
+
 window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const resources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    if (!container) return;
+    container.style.padding = "0";
+
+    // 🚀 THE FIX: Get the currently selected resId from the selector or state
+    const currentFocusId = document.getElementById('viz-focus-selector')?.value || "";
 
     container.innerHTML = `
         <div class="three-pane-layout">
@@ -10859,11 +10866,18 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             </aside>
 
             <main class="pane-canvas-wrap">
-                <div class="canvas-header">${renderBreadcrumbs(client)}</div>
-                
+                <div class="canvas-header">
+                    ${renderBreadcrumbs(client)}
+                    <select id="viz-focus-selector" class="modal-input tiny" style="width: 250px; margin:0;" 
+                            onchange="OL.loadIntoGlobalMapper(this.value)">
+                        <option value="">Select Resource to Map...</option>
+                        ${resources.map(r => `<option value="${r.id}" ${r.id === currentFocusId ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+                    </select>
+                </div>
+
                 <div id="global-mapper-canvas" class="blueprint-canvas"
                     ondragover="OL.handleCanvasDragOver(event)"
-                    ondrop="OL.handleCanvasDrop(event, '${resId}')"
+                    ondrop="OL.handleCanvasDrop(event, document.getElementById('viz-focus-selector').value)"
                     style="flex: 1; position: relative; overflow: hidden; background: #050816;">
                     <div id="fs-canvas" style="height:100%; width:100%;"></div>
                 </div>
@@ -10874,7 +10888,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             </main>
 
             <aside id="inspector-panel" class="pane-inspector">
-                <div class="empty-inspector">Select a node to view metadata</div>
+                <div class="empty-inspector tiny muted" style="text-align:center; padding-top:40px;">
+                    Select a node to inspect
+                </div>
             </aside>
         </div>
     `;
@@ -11027,6 +11043,61 @@ OL.addNewNodeAtPosition = function(resId, type, pos) {
     
     // Automatically open the inspector for the new node
     OL.loadInspector(newId, resId);
+};
+
+OL.loadInspector = function(targetId, resId) {
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+
+    const res = OL.getResourceById(resId);
+    const step = res?.steps?.find(s => s.id === targetId);
+
+    if (!step) {
+        panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
+        return;
+    }
+
+    // Determine node type styling
+    const typeLabel = step.type || 'Manual Step';
+    
+    panel.innerHTML = `
+        <div class="inspector-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; font-size:14px; color:var(--accent);">INSPECTOR</h3>
+                <span class="pill tiny vault">${esc(typeLabel.toUpperCase())}</span>
+            </div>
+
+            <label class="modal-section-label">Component Name</label>
+            <input type="text" class="modal-input tiny" value="${esc(step.name)}" 
+                   oninput="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'name', this.value); OL.syncMatrixNameFromInspector('${step.id}', this.value)">
+
+            <label class="modal-section-label" style="margin-top:15px;">Status</label>
+            <select class="modal-input tiny" onchange="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'status', this.value)">
+                <option value="Live" ${step.status === 'Live' ? 'selected' : ''}>🟢 Live</option>
+                <option value="Draft" ${step.status === 'Draft' ? 'selected' : ''}>🟡 Draft</option>
+                <option value="Error" ${step.status === 'Error' ? 'selected' : ''}>🔴 Error/Broken</option>
+            </select>
+
+            <label class="modal-section-label" style="margin-top:15px;">Technical Notes</label>
+            <textarea class="modal-textarea tiny" style="height:100px;"
+                      onblur="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
+
+            <div style="margin-top:25px; padding-top:15px; border-top: 1px solid var(--line);">
+                <button class="btn tiny primary full-width" onclick="OL.openStepDetailModal('${resId}', '${step.id}')">
+                    🛠️ Full Configuration
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+// Simple helper to keep the list view in sync while you type in the inspector
+OL.syncMatrixNameFromInspector = function(stepId, newName) {
+    const row = document.getElementById(`row-${stepId}`);
+    if (row) {
+        const titleCell = row.querySelector('.row-title') || row.cells[0];
+        if (titleCell) titleCell.innerText = newName;
+    }
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================

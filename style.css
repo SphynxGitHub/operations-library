@@ -2313,3 +2313,7 @@ body.fs-mode-active #app-root {
     opacity: 0.7;
     transform: scale(0.95);
 }
+
+.active-row {
+    background: rgba(56, 189, 248, 0.1) !important;
+}
