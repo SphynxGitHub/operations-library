@@ -10847,6 +10847,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                         </div>
                     `).join('')}
                 </div>
+                ${state.focusedWorkflowId ? `
+                    <div class="canvas-trash-zone" 
+                        ondragover="OL.handleCanvasDragOver(event)" 
+                        ondragleave="this.classList.remove('drag-over')"
+                        ondrop="OL.handleCanvasDeleteDrop(event, '${state.focusedWorkflowId}')">
+                        🗑️ Drop here to remove from Flow
+                    </div>
+                ` : ''}
             </aside>
 
             <main class="pane-canvas-wrap">
@@ -11037,13 +11045,31 @@ OL.highlightInventoryRow = function(resId) {
 };
 
 // Update this helper to use Resource ID directly
-OL.unmapWorkflowFromStage = function(resId) {
-    const res = OL.getResourceById(resId);
-    if (res) {
-        res.stageId = null; 
-        OL.persist();
-        renderGlobalVisualizer(false);
+OL.handleCanvasDeleteDrop = function(e, focusedWorkflowId) {
+    e.preventDefault();
+    const moveStepId = e.dataTransfer.getData("moveStepId"); // Internal Move (Detailed Step)
+    const draggedResId = e.dataTransfer.getData("resId");    // External Move (Whole Workflow)
+
+    // SCENARIO A: We are deleting a STEP from a focused workflow
+    if (focusedWorkflowId && moveStepId) {
+        const parentRes = OL.getResourceById(focusedWorkflowId);
+        if (parentRes && parentRes.steps) {
+            parentRes.steps = parentRes.steps.filter(s => s.id !== moveStepId);
+            console.log("🗑️ Step deleted from workflow");
+        }
+    } 
+    // SCENARIO B: We are unmapping a WORKFLOW from a stage (Your original logic)
+    else if (draggedResId) {
+        const res = OL.getResourceById(draggedResId);
+        if (res) {
+            res.stageId = null;
+            console.log("📥 Workflow returned to library");
+        }
     }
+
+    OL.persist();
+    renderGlobalVisualizer(window.location.hash.includes('vault'));
+    e.currentTarget.classList.remove('drag-over');
 };
 
 OL.drawGlobalTimelineLines = function() {
@@ -11147,45 +11173,52 @@ OL.drillDownIntoWorkflow = function(resId) {
 
 OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
     e.preventDefault();
-    const draggedResId = e.dataTransfer.getData("resId");
-    if (!draggedResId) return;
-
-    const sourceRes = OL.getResourceById(draggedResId);
     const parentWorkflow = OL.getResourceById(parentWorkflowId);
     if (!parentWorkflow) return;
 
     const canvas = document.getElementById('vis-workspace');
     const rect = canvas.getBoundingClientRect();
+    
+    // 🚀 CALCULATE THE REAL COORDINATES
+    // We subtract the header and label offsets to find the "Zero" of the grid
+    const x = e.clientX - rect.left - 120; 
     const y = e.clientY - rect.top;
 
-    // 🚀 THE SMART INCREMENTER: 
-    // Find the current highest column and add 1
-    if (!parentWorkflow.steps) parentWorkflow.steps = [];
-    const maxCol = parentWorkflow.steps.reduce((max, s) => Math.max(max, s.gridCol ?? -1), -1);
-    const nextCol = maxCol + 1;
-
-    // Determine Lane based on mouse Y position
+    // 🚀 HARDENED GRID MATH
+    const colIdx = Math.max(0, Math.floor(x / 280));
     const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
-    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
+    
+    // Each lane is 200px high. Math.floor(y / 200) gives us 0, 1, or 2.
+    const rawLaneIdx = Math.floor(y / 200);
+    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, rawLaneIdx));
 
-    const newStepId = uid();
-    const newStep = {
-        id: newStepId,
-        name: sourceRes.name,
-        type: sourceRes.type || 'Action',
-        resourceLinkId: draggedResId,
-        gridLane: laneNames[laneIdx],
-        gridCol: nextCol, // 📍 land in the next slot
-        description: sourceRes.description || ""
-    };
-
-    parentWorkflow.steps.push(newStep);
+    const moveStepId = e.dataTransfer.getData("moveStepId");
+    
+    if (moveStepId) {
+        const step = parentWorkflow.steps.find(s => s.id === moveStepId);
+        if (step) {
+            step.gridLane = laneNames[laneIdx];
+            step.gridCol = colIdx;
+        }
+    } else {
+        const draggedResId = e.dataTransfer.getData("resId");
+        if (draggedResId) {
+            const sourceRes = OL.getResourceById(draggedResId);
+            const newStep = {
+                id: uid(),
+                name: sourceRes.name,
+                type: sourceRes.type || 'Action',
+                gridLane: laneNames[laneIdx], // 📍 This is now fixed
+                gridCol: colIdx,
+                description: sourceRes.description || ""
+            };
+            if (!parentWorkflow.steps) parentWorkflow.steps = [];
+            parentWorkflow.steps.push(newStep);
+        }
+    }
 
     OL.persist();
     OL.renderVisualizer(parentWorkflowId);
-    
-    // Auto-inspect the new drop
-    setTimeout(() => OL.loadInspector(newStepId, parentWorkflowId), 50);
 };
 
 OL.exitWorkflowFocus = function() {
