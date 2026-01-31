@@ -11166,15 +11166,18 @@ OL.cloneResourceWorkflow = function(resId) {
 };
 
 // 🚀 THE DRILL DOWN ENGINE
+// Entering Level 2 (Workflow View)
 OL.drillDownIntoWorkflow = function(resId) {
-    console.log("Entering Focused Workflow Mode for:", resId);
-    
-    // 1. Set the focus state
-    state.focusedWorkflowId = resId;
-    
-    // 2. We trigger a "Soft Refresh" of the visualizer
-    // This will cause renderGlobalVisualizer to detect the focus and change the UI
-    renderGlobalVisualizer(window.location.hash.includes('vault'));
+    state.focusedWorkflowId = resId; // Set parent
+    state.focusedResourceId = null;  // Ensure child is clear
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+// Entering Level 3 (Mechanical Step View)
+OL.drillIntoResource = function(resId) {
+    // Note: focusedWorkflowId stays set so the breadcrumb knows the parent!
+    state.focusedResourceId = resId; 
+    renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 OL.handleStepMoveStart = function(e, stepId, parentResId) {
@@ -11183,53 +11186,76 @@ OL.handleStepMoveStart = function(e, stepId, parentResId) {
     e.target.style.opacity = "0.4";
 };
 
-OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
+OL.handleFocusedCanvasDrop = function(e, parentId) {
     e.preventDefault();
-    const parentWorkflow = OL.getResourceById(parentWorkflowId);
-    if (!parentWorkflow) return;
-
-    // Calculate Grid Position
-    const canvas = document.getElementById('vis-workspace');
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left - 120; // Account for sticky label
-    const y = e.clientY - rect.top;
+    
+    // 1. Resolve Grid Placement (Math is the same for both levels)
+    const rect = document.getElementById('fs-canvas-wrapper').getBoundingClientRect();
+    const scrollLeft = document.getElementById('fs-canvas-wrapper').scrollLeft;
+    const scrollTop = document.getElementById('fs-canvas-wrapper').scrollTop;
+    
+    // Offset by 140px to account for the sticky lane labels
+    const x = e.clientX - rect.left - 140 + scrollLeft;
+    const y = e.clientY - rect.top + scrollTop;
     
     const colIdx = Math.max(0, Math.floor(x / 280));
     const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
     const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
 
-    // Check if this is an INTERNAL MOVE
-    const moveStepId = e.dataTransfer.getData("moveStepId");
-    
+    // 2. Identify the Parent Object (Could be a Workflow or a Resource)
+    const parentObj = OL.getResourceById(parentId);
+    if (!parentObj) return;
+
+    // 3. ROUTE BY PAYLOAD TYPE
+    const moveStepId = e.dataTransfer.getData("moveStepId");   // Internal Move
+    const resId = e.dataTransfer.getData("resId");             // Level 2 Drop
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Level 3 Drop
+
+    // --- CASE A: INTERNAL RE-POSITIONING ---
     if (moveStepId) {
-        const step = parentWorkflow.steps.find(s => s.id === moveStepId);
+        const step = (parentObj.steps || []).find(s => s.id === moveStepId);
         if (step) {
             step.gridLane = laneNames[laneIdx];
             step.gridCol = colIdx;
-            console.log(`🚚 Moved step ${step.name} to ${step.gridLane} Col ${colIdx}`);
         }
-    } else {
-        // Check if this is a NEW DROP from Toolbox
-        const draggedResId = e.dataTransfer.getData("resId");
-        if (draggedResId) {
-            const sourceRes = OL.getResourceById(draggedResId);
-            const newStep = {
-                id: uid(),
-                name: sourceRes.name,
-                type: sourceRes.type || 'Action',
-                gridLane: laneNames[laneIdx],
-                gridCol: colIdx,
-                description: sourceRes.description || "",
-                resourceLinkId: draggedResId
-            };
-            if (!parentWorkflow.steps) parentWorkflow.steps = [];
-            parentWorkflow.steps.push(newStep);
-            console.log(`✨ Added new step: ${newStep.name}`);
-        }
+    } 
+    // --- CASE B: LEVEL 3 DROP (Atomic Mechanics into Resource) ---
+    else if (atomicPayload) {
+        const data = JSON.parse(atomicPayload);
+        const newStep = {
+            id: uid(),
+            name: data.name,
+            type: data.type,
+            gridLane: laneNames[laneIdx],
+            gridCol: colIdx,
+            outcomes: [],
+            description: "",
+            status: 'Draft'
+        };
+        if (!parentObj.steps) parentObj.steps = [];
+        parentObj.steps.push(newStep);
+    } 
+    // --- CASE C: LEVEL 2 DROP (Resource Assets into Workflow) ---
+    else if (resId) {
+        const sourceRes = OL.getResourceById(resId);
+        const newStep = {
+            id: uid(),
+            name: sourceRes.name,
+            type: sourceRes.type || 'Action',
+            gridLane: laneNames[laneIdx],
+            gridCol: colIdx,
+            resourceLinkId: resId, // Keep the reference to the original asset
+            description: sourceRes.description || "",
+            outcomes: []
+        };
+        if (!parentObj.steps) parentObj.steps = [];
+        parentObj.steps.push(newStep);
     }
 
     OL.persist();
-    OL.renderVisualizer(parentWorkflowId);
+    
+    // Refresh the visualizer (works for both Levels because they share the same ID)
+    OL.renderVisualizer(parentId);
 };
 
 OL.exitWorkflowFocus = function() {
@@ -11608,6 +11634,36 @@ window.renderLevel2SidebarContent = function(allResources) {
     `;
 };
 
+window.renderLevel2Canvas = function(workflowId, allResources) {
+    const res = OL.getResourceById(workflowId);
+    if (!res) return `<div class="empty-hint">Workflow not found.</div>`;
+
+    // Determine grid size based on mapped resources
+    const steps = res.steps || [];
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+
+    return `
+        <div id="fs-canvas-wrapper" 
+             style="height:100%; width:100%; overflow: auto; position: relative;"
+             ondragover="OL.handleCanvasDragOver(event)"
+             ondrop="OL.handleFocusedCanvasDrop(event, '${workflowId}')">
+            
+            <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
+                ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
+                    <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
+                        <div class="grid-label">${lane}</div>
+                        ${Array.from({length: maxCol + 4}).map(() => `
+                            <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                        `).join('')}
+                    </div>
+                `).join('')}
+            </div>
+
+            <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
+        </div>
+    `;
+};
+
 window.renderLevel3SidebarContent = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     return `
@@ -11699,16 +11755,20 @@ OL.exitToWorkflow = function() {
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
+// Used by the Triggers list in Level 3 Sidebar
 OL.handleAtomicDrag = function(e, type, name) {
     const payload = { type, name, isAtomic: true };
     e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-};
+    e.target.style.opacity = "0.4";
+}
 
+// Used by the Modular "Drag New Action" button in Level 3 Sidebar
 OL.handleModularAtomicDrag = function(e) {
     const verb = document.getElementById('builder-verb').value;
     const obj = document.getElementById('builder-object').value;
     const payload = { type: 'Action', name: `${verb} ${obj}`, isAtomic: true };
     e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+    e.target.style.opacity = "0.4";
 };
 
 OL.handleFocusedCanvasDrop = function(e, resId) {
