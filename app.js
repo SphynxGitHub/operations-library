@@ -10973,21 +10973,38 @@ OL.cloneResourceWorkflow = function(resId) {
 
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
-    console.log(`👯 Cloned Workflow: ${clone.name}`);
+    console.log(`⿻ Cloned Workflow: ${clone.name}`);
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
     const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
     return `
         <div class="drawer-header">
-            <h3 style="color:var(--accent)">📦 Resource Library</h3>
-            <input type="text" class="modal-input tiny" placeholder="Search resources..." oninput="OL.filterResourceToolbox(this.value)">
-        </div>
-        <div class="drawer-tools" id="resource-toolbox-list">${assets.map(res => `
-            <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span> <span style="flex:1;">${esc(res.name)}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
+                <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.promptCreateResource()" title="Create New Resource">+</button>
             </div>
-        `).join('')}</div>
+            <input type="text" class="modal-input tiny" id="resource-toolbox-search" 
+                   placeholder="Search assets..." 
+                   oninput="OL.filterResourceToolbox(this.value)">
+        </div>
+        <div class="drawer-tools" id="resource-toolbox-list">
+            ${assets.map(res => `
+                <div class="draggable-workflow-item hover-trigger" 
+                     data-name="${res.name.toLowerCase()}" 
+                     draggable="true" 
+                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
+                    <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(res.name)}</span>
+                    
+                    <button class="btn tiny soft" 
+                            style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
+                            onclick="event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                            title="Clone Resource">⿻</button>
+                </div>
+            `).join('')}
+            ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
+        </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
             ondragleave="this.classList.remove('drag-over')"
