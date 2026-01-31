@@ -10884,6 +10884,12 @@ window.renderLevel1SidebarContent = function(allResources) {
                 <span>⚙️</span> <span style="flex:1;">${esc(res.name)}</span>
             </div>
         `).join('')}</div>
+        <div class="return-to-library-zone" 
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="OL.handleUnifiedDelete(event)">
+            🗑️ Drop to Unmap
+        </div>
     `;
 };
 
@@ -10899,6 +10905,12 @@ window.renderLevel2SidebarContent = function(allResources) {
                 <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span> <span style="flex:1;">${esc(res.name)}</span>
             </div>
         `).join('')}</div>
+        <div class="return-to-library-zone" 
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="OL.handleUnifiedDelete(event)">
+            🗑️ Drop to Unmap
+        </div>
     `;
 };
 
@@ -10914,6 +10926,12 @@ window.renderLevel3SidebarContent = function(resourceId) {
                 <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
                 <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
             </div>
+        </div>
+        <div class="return-to-library-zone" 
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="OL.handleUnifiedDelete(event)">
+            🗑️ Drop to Unmap
         </div>
     `;
 };
@@ -11125,6 +11143,79 @@ OL.handleStageDrop = function(e, stageId) {
     }
 };
 
+// --- UNIFIED CANVAS DROP HANDLER ---
+OL.handleFocusedCanvasDrop = function(e, parentId) {
+    e.preventDefault();
+    
+    // 1. Resolve Grid Placement (Calculation for snapped positioning)
+    const wrapper = document.getElementById('fs-canvas-wrapper');
+    const rect = wrapper.getBoundingClientRect();
+    const scrollLeft = wrapper.scrollLeft;
+    const scrollTop = wrapper.scrollTop;
+    
+    // Offset by 140px to account for the sticky lane labels on the left
+    const x = e.clientX - rect.left - 140 + scrollLeft;
+    const y = e.clientY - rect.top + scrollTop;
+    
+    const colIdx = Math.max(0, Math.floor(x / 280));
+    const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
+    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
+
+    // 2. Identify the Parent (Workflow or Resource)
+    const parentObj = OL.getResourceById(parentId);
+    if (!parentObj) return;
+
+    // 3. Resolve Payload Type
+    const moveStepId = e.dataTransfer.getData("moveStepId");      // Re-positioning existing node
+    const resId = e.dataTransfer.getData("resId");                // Level 2: New Resource from sidebar
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Level 3: New Step from factory
+
+    // --- EXECUTION ---
+    
+    // Case A: Moving an existing card
+    if (moveStepId) {
+        const step = (parentObj.steps || []).find(s => s.id === moveStepId);
+        if (step) {
+            step.gridLane = laneNames[laneIdx];
+            step.gridCol = colIdx;
+        }
+    } 
+    // Case B: Dropping a Verb + Noun from the Factory (Level 3)
+    else if (atomicPayload) {
+        const data = JSON.parse(atomicPayload);
+        const newStep = {
+            id: uid(),
+            name: data.name,
+            type: data.type,
+            gridLane: laneNames[laneIdx],
+            gridCol: colIdx,
+            outcomes: [],
+            status: 'Draft'
+        };
+        if (!parentObj.steps) parentObj.steps = [];
+        parentObj.steps.push(newStep);
+    } 
+    // Case C: Dropping a Resource into a Workflow (Level 2)
+    else if (resId) {
+        const sourceRes = OL.getResourceById(resId);
+        const newStep = {
+            id: uid(),
+            name: sourceRes.name,
+            type: sourceRes.type || 'Action',
+            gridLane: laneNames[laneIdx],
+            gridCol: colIdx,
+            resourceLinkId: resId, // Crucial for drill-down and inspector
+            outcomes: []
+        };
+        if (!parentObj.steps) parentObj.steps = [];
+        parentObj.steps.push(newStep);
+    }
+
+    // 4. Finalize
+    OL.persist();
+    OL.renderVisualizer(parentId); // Re-draw the nodes on the grid
+};
+
 document.addEventListener('dragleave', (e) => {
     if (e.target.classList.contains('stage-workflow-stream') || e.target.id === 'fs-canvas-wrapper') {
         e.target.style.background = "";
@@ -11135,6 +11226,40 @@ document.addEventListener('dragend', (e) => {
     e.target.style.opacity = "1";
     document.querySelectorAll('.stage-workflow-stream, #fs-canvas-wrapper').forEach(el => el.style.background = "");
 });
+
+// --- UNMAPPING / TRASH LOGIC ---
+
+OL.handleUnifiedDelete = function(e) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId");             // Level 1: Workflow Card
+    const moveStepId = e.dataTransfer.getData("moveStepId");   // Level 2/3: Resource or Atomic Card
+    const parentId = state.focusedWorkflowId || state.focusedResourceId;
+
+    // Remove the hover effect class
+    e.currentTarget.classList.remove('drag-over');
+
+    // SCENARIO 1: We are inside a focus view (Level 2 or 3) and moving a child node
+    if (parentId && moveStepId) {
+        const parentObj = OL.getResourceById(parentId);
+        if (parentObj && parentObj.steps) {
+            parentObj.steps = parentObj.steps.filter(s => s.id !== moveStepId);
+            console.log(`🗑️ Removed node ${moveStepId} from parent ${parentId}`);
+            OL.clearInspector();
+        }
+    } 
+    // SCENARIO 2: We are in Global view and unmapping a Workflow from a Stage
+    else if (resId) {
+        const res = OL.getResourceById(resId);
+        if (res) {
+            res.stageId = null;
+            res.mapOrder = null;
+            console.log(`📥 Returned ${res.name} to Library`);
+        }
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
 
 // ===========================TASK RESOURCE OVERLAP===========================
 
