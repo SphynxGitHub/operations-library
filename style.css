@@ -2445,7 +2445,7 @@ body, #app-root {
 /* 🚀 THE INTERNAL SCROLL WINDOW */
 #fs-canvas-wrapper {
     flex: 1 !important;
-    width: 90% !important;
+    width: 100% !important;
     overflow: auto !important; /* This is where the scrollbars should live */
     position: relative !important;
     background: #050816;
