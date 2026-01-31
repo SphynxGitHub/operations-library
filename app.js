@@ -11035,10 +11035,15 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
         <div class="workflow-block-card" 
              draggable="true" 
              onmousedown="OL.loadInspector('${res.id}')"
-             ondblclick="OL.drillDownIntoWorkflow('${res.id}')"
              ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${res.name.replace(/'/g, "\\'")}')">
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
-            <div class="tiny muted">📝 ${(res.steps || []).length} Steps</div>
+            <div class="tiny muted">📝 ${(res.steps || []).length} Atomic Steps</div>
+            
+            <button class="btn tiny primary" 
+                    style="margin-top: 10px; width: 100%; font-size: 9px;" 
+                    onclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${res.id}')">
+                🛠️ Map Mechanics
+            </button>
         </div>
     `).join('');
 };
@@ -11177,6 +11182,16 @@ OL.drillDownIntoWorkflow = function(resId) {
 OL.drillIntoResource = function(resId) {
     // Note: focusedWorkflowId stays set so the breadcrumb knows the parent!
     state.focusedResourceId = resId; 
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+OL.drillIntoResourceMechanics = function(resId) {
+    console.log("🛠️ Entering Level 3 Mechanics for:", resId);
+    
+    // Set the Level 3 focus
+    state.focusedResourceId = resId;
+    
+    // Re-render the visualizer (renderGlobalVisualizer will now pick Level 3)
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
