@@ -10887,9 +10887,9 @@ window.renderDraggableTools = function() {
         { type: 'action', label: 'App Action', icon: '📱' },
         { type: 'step', label: 'Manual Step', icon: '📝' },
         { type: 'email', label: 'Email SOP', icon: '📧' },
-        { type: 'form', label: 'Form/Input', icon: '📄' }
-        { type: 'logic', label: 'Logic Split', icon: '⚖️' }
-        { type: 'automation', label: 'Automation', icon: '🪄' }
+        { type: 'form', label: 'Form/Input', icon: '📄' },
+        { type: 'logic', label: 'Logic Split', icon: '⚖️' },
+        { type: 'automation', label: 'Automation', icon: '🪄' },
     ];
     return tools.map(t => `
         <div class="draggable-tool-item pill soft tiny" draggable="true" data-type="${t.type}" 

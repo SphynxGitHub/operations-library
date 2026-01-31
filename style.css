@@ -2250,6 +2250,7 @@ body.fs-mode-active #app-root {
 .fs-mode-active #global-mapper-canvas {
     display: none; /* Hide global mapper if full-screen workspace is active */
 }
+
 /* Container for the entire 3-pane view */
 .three-pane-layout {
     display: flex;
