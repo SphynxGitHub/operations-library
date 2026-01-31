@@ -5247,7 +5247,7 @@ OL.renderVisualizer = function(resId) {
 
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
-             style="width: ${canvasWidth}px; height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
+             style="height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
             <div class="vis-swimlane-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
                 ${lanesHtml}
             </div>
