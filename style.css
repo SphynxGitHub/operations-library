@@ -2344,6 +2344,31 @@ body, #app-root {
     color: var(--accent);
 }
 
+.canvas-trash-zone {
+    margin: 20px;
+    padding: 20px;
+    border: 2px dashed #ef4444;
+    border-radius: 8px;
+    color: #ef4444;
+    text-align: center;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.canvas-trash-zone.drag-over {
+    background: #ef4444;
+    color: white;
+    transform: scale(1.05);
+}
+
+/* Ensure lanes are visually distinct */
+.vis-lane:nth-child(even) {
+    background: rgba(255,255,255,0.01);
+}
+
 /*==================================================================
   3. VERTICAL TIMELINE CANVAS (Stages & Workflows)
 ==================================================================*/
@@ -2434,6 +2459,9 @@ body, #app-root {
     border-color: var(--accent) !important;
 }
 
+#fs-canvas-wrapper.drag-over {
+    background: rgba(56, 189, 248, 0.02);
+}
 /*==================================================================
   4. WORKFLOW CARDS
 ==================================================================*/
