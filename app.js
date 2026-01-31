@@ -10810,11 +10810,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    // --- LEVEL 3: THE MECHANICS (Resource -> Atomic Steps) ---
+    // --- LOGIC ROUTER: LEVEL 3 (Mechanics) ---
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         
-        // Find the "Parent Workflow" by looking for which Workflow contains this Resource
+        // Parent lookup for breadcrumbs
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
 
@@ -10830,7 +10830,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
         canvasHtml = renderLevel3Canvas(state.focusedResourceId);
     } 
-    // --- LEVEL 2: THE FLOW (Workflow -> Resources) ---
+    // --- LOGIC ROUTER: LEVEL 2 (Flow) ---
     else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
@@ -10845,22 +10845,15 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId, allResources);
     } 
-    // --- LEVEL 1: THE LIFECYCLE (Stages -> Workflows) ---
+    // --- LOGIC ROUTER: LEVEL 1 (Lifecycle) ---
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
-    // --- RENDER MAIN WRAPPER ---
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
-            <aside class="pane-drawer">
-                ${toolboxHtml}
-                <div class="return-to-library-zone" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUnifiedDelete(event, '${state.focusedWorkflowId || ""}')">
-                    🗑️ Drop to Unmap
-                </div>
-            </aside>
-
+            <aside class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">
                     <div class="breadcrumb-trail" style="display:flex; align-items:center; gap:8px;">${breadcrumbHtml}</div>
@@ -10870,737 +10863,62 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 </div>
                 ${canvasHtml}
             </main>
-
             <aside id="inspector-panel" class="pane-inspector">
                  <div class="empty-inspector tiny muted">Select a node to inspect</div>
             </aside>
         </div>
     `;
 
-    // Re-draw logic for Level 2 & 3
     if (state.focusedResourceId) setTimeout(() => OL.renderVisualizer(state.focusedResourceId), 50);
     else if (state.focusedWorkflowId) setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
 };
 
-OL.loadInspector = function(targetId, parentWorkflowId = null) {
-    state.activeInspectorResId = targetId;
-    const panel = document.getElementById('inspector-panel');
-    if (!panel) return;
-
-    // 1. Find the Step data first
-    const stepData = OL.getResourceById(targetId);
-    if (!stepData) {
-        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
-        return;
-    }
-
-    // 2. 🚀 THE FIX: Resolve the "Technical Source" 
-    // We look for the technical asset (Zap/Form) that this step represents
-    const technicalAsset = OL.getResourceById(stepData.resourceLinkId);
-    
-    // If we found a technical asset, show ITS steps. Otherwise, show the step's own steps.
-    const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (stepData.steps || []);
-    const displayName = technicalAsset ? technicalAsset.name : stepData.name;
-    const displayType = technicalAsset ? technicalAsset.type : stepData.type;
-
-    panel.innerHTML = `
-        <div class="inspector-content fade-in" style="padding: 20px;">
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <span class="tiny accent bold uppercase">Technical SOP</span>
-                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(displayName)}</h2>
-                <div class="tiny muted">${esc(displayType || 'Action')}</div>
-            </div>
-
-            <section>
-                <label class="modal-section-label">Execution Sequence (${nestedSteps.length})</label>
-                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
-                    ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                            <span class="tiny bold accent">${i + 1}</span>
-                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || s.text || 'Step')}</div>
-                        </div>
-                    `).join('') : `
-                        <div class="empty-state-mini">
-                            <div class="tiny muted italic">No steps mapped yet.</div>
-                            <button class="btn tiny soft" style="margin-top:10px;" onclick="OL.openResourceModal('${technicalAsset?.id || stepData.id}')">
-                                + Define Procedures
-                            </button>
-                        </div>
-                    `}
-                </div>
-            </section>
-        </div>
-    `;
-};
-
-// Add this helper
-OL.clearInspector = function() {
-    state.activeInspectorResId = null;
-    if (document.getElementById('inspector-panel')) {
-        document.getElementById('inspector-panel').innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
-    }
-};
-
-// Universal Start Drag (Works for Toolbox AND Canvas Cards)
-OL.handleWorkflowDragStart = function(e, resId, resName) {
-    e.dataTransfer.setData("resId", resId);
-    e.dataTransfer.setData("resName", resName);
-    // Add a ghost effect to the element being dragged
-    e.target.style.opacity = "0.5";
-};
-
-OL.handleStageDrop = function(e, stageId) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("resId");
-    if (!resId) return;
-
-    const client = getActiveClient();
-    const allResources = client.projectData.localResources || [];
-    const draggedRes = allResources.find(r => r.id === resId);
-    
-    if (draggedRes) {
-        // 1. Assign the Stage ID
-        draggedRes.stageId = stageId;
-
-        // 2. Calculate the new order within that stage
-        const stageWorkflows = allResources
-            .filter(r => r.stageId === stageId && r.id !== resId)
-            .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-
-        // 3. Find the insertion point based on mouse X position
-        const container = e.currentTarget;
-        const children = Array.from(container.querySelectorAll('.workflow-block-card'));
-        let newIndex = stageWorkflows.length;
-
-        for (let i = 0; i < children.length; i++) {
-            const rect = children[i].getBoundingClientRect();
-            const midPoint = rect.left + rect.width / 2;
-            if (e.clientX < midPoint) {
-                newIndex = i;
-                break;
-            }
-        }
-
-        // 4. Update the mapOrder of all items in this stage
-        stageWorkflows.splice(newIndex, 0, draggedRes);
-        stageWorkflows.forEach((r, idx) => {
-            r.mapOrder = idx;
-        });
-
-        OL.persist();
-        renderGlobalVisualizer(false);
-    }
-};
-
-// Return to Library (Unmap)
-OL.handleReturnToLibrary = function(e) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("resId");
-    if (!resId) return;
-
-    const res = OL.getResourceById(resId);
-    if (res) {
-        res.stageId = null; // Wipe the stage assignment
-        OL.persist();
-        renderGlobalVisualizer(false);
-        console.log(`📥 Returned ${res.name} to Workflow Library`);
-    }
-    document.querySelector('.return-to-library-zone').classList.remove('drag-over');
-};
-
-// Ensure Canvas Cards are also draggable
-window.renderWorkflowsInStage = function(stageId, isVaultMode) {
-    const client = getActiveClient();
-    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    
-    const matchedResources = allResources
-        .filter(r => String(r.stageId) === String(stageId))
-        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-
-    if (matchedResources.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
-
-    return matchedResources.map(res => `
-        <div class="workflow-block-card" 
-             draggable="true" 
-             onmousedown="OL.loadInspector('${res.id}')"
-             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${res.name.replace(/'/g, "\\'")}')"
-             ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
-            <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
-            <div class="tiny muted">📝 ${(res.steps || []).length} Atomic Steps</div>
-            
-            <button class="btn tiny primary" 
-                    style="margin-top: 10px; width: 100%; font-size: 9px;" 
-                    onclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${res.id}')">
-                🛠️ Map Mechanics
-            </button>
-        </div>
-    `).join('');
-};
-
-OL.highlightInventoryRow = function(resId) {
-    document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active-row'));
-    const row = document.getElementById(`row-${resId}`);
-    if (row) {
-        row.classList.add('active-row');
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-};
-
-// Update this helper to use Resource ID directly
-OL.handleUnifiedDelete = function(e, focusedWorkflowId) {
-    e.preventDefault();
-    const moveStepId = e.dataTransfer.getData("moveStepId"); // Identify if we're moving a STEP
-    const resId = e.dataTransfer.getData("resId");           // Identify if we're moving a WORKFLOW
-
-    if (focusedWorkflowId && moveStepId) {
-        // --- DETAIL LEVEL: Remove Step from Workflow ---
-        const parentRes = OL.getResourceById(focusedWorkflowId);
-        if (parentRes) {
-            parentRes.steps = parentRes.steps.filter(s => s.id !== moveStepId);
-            OL.clearInspector();
-        }
-    } else if (resId) {
-        // --- LIFECYCLE LEVEL: Unmap Workflow from Stage ---
-        const res = OL.getResourceById(resId);
-        if (res) {
-            res.stageId = null;
-        }
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(window.location.hash.includes('vault'));
-    e.currentTarget.classList.remove('drag-over');
-};
-
-OL.drawGlobalTimelineLines = function() {
-    const svg = document.getElementById('vis-links-layer');
-    if (!svg) return;
-    svg.innerHTML = '';
-    
-    const stages = document.querySelectorAll('.stage-container');
-    const cRect = document.querySelector('.vertical-stage-canvas').getBoundingClientRect();
-
-    for (let i = 0; i < stages.length - 1; i++) {
-        const current = stages[i].getBoundingClientRect();
-        const next = stages[i+1].getBoundingClientRect();
-
-        const x = current.left + 12 - cRect.left; // Center of the stage number
-        const y1 = current.bottom - cRect.top;
-        const y2 = next.top + 15 - cRect.top;
-
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", x); line.setAttribute("y1", y1);
-        line.setAttribute("x2", x); line.setAttribute("y2", y2);
-        line.setAttribute("stroke", "rgba(56, 189, 248, 0.2)");
-        line.setAttribute("stroke-width", "2");
-        line.setAttribute("stroke-dasharray", "4,4");
-        svg.appendChild(line);
-    }
-};
-
-OL.filterToolbox = function(query) {
-    const q = query.toLowerCase().trim();
-    const items = document.querySelectorAll('.draggable-workflow-item');
-    
-    items.forEach(item => {
-        const name = item.getAttribute('data-name');
-        if (name.includes(q)) {
-            item.style.display = 'flex';
-        } else {
-            item.style.display = 'none';
-        }
-    });
-
-    // Optional: Show empty state if no matches
-    const visibleCount = [...items].filter(i => i.style.display !== 'none').length;
-    let emptyMsg = document.getElementById('toolbox-empty-msg');
-    
-    if (visibleCount === 0) {
-        if (!emptyMsg) {
-            emptyMsg = document.createElement('div');
-            emptyMsg.id = 'toolbox-empty-msg';
-            emptyMsg.className = 'tiny muted italic';
-            emptyMsg.style.padding = '20px';
-            emptyMsg.innerText = 'No matching workflows found.';
-            document.getElementById('toolbox-list').appendChild(emptyMsg);
-        }
-    } else if (emptyMsg) {
-        emptyMsg.remove();
-    }
-};
-
-OL.cloneResourceWorkflow = function(resId) {
-    const original = OL.getResourceById(resId);
-    if (!original) return;
-
-    const client = getActiveClient();
-    const isVaultItem = String(resId).startsWith('res-vlt-');
-    
-    // 1. Create the Deep Copy
-    const clone = JSON.parse(JSON.stringify(original));
-    
-    // 2. Reset Identity & Metadata
-    const timestamp = Date.now();
-    clone.id = isVaultItem ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
-    clone.name = `${original.name} (Copy)`;
-    clone.stageId = null; // 🚀 Ensure it starts in the toolbox
-    clone.createdDate = new Date().toISOString();
-
-    // 3. Persist to correct array
-    if (isVaultItem) {
-        state.master.resources.push(clone);
-    } else {
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        client.projectData.localResources.push(clone);
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(false);
-    console.log(`👯 Cloned: ${clone.name}`);
-};
-
-// 🚀 THE DRILL DOWN ENGINE
-// Entering Level 2 (Workflow View)
-OL.drillDownIntoWorkflow = function(resId) {
-    state.focusedWorkflowId = resId; // Set the parent
-    state.focusedResourceId = null;  // 🚀 RESET LEVEL 3: This ensures you see Resources, not the Factory
-    OL.clearInspector();
-    renderGlobalVisualizer(location.hash.includes('vault'));
-};
-
-// Entering Level 3 (Mechanical Step View)
-OL.drillIntoResourceMechanics = function(resId) {
-    state.focusedResourceId = resId; // Set the child focus
-    OL.clearInspector();
-    renderGlobalVisualizer(location.hash.includes('vault'));
-};
-
-OL.drillIntoResourceMechanics = function(resId) {
-    // We KEEP focusedWorkflowId so the breadcrumb trail knows the parent
-    state.focusedResourceId = resId; // 🚀 Trigger the Factory Sidebar
-    OL.clearInspector();
-    renderGlobalVisualizer(location.hash.includes('vault'));
-};
-
-OL.handleStepMoveStart = function(e, stepId, parentResId) {
-    e.dataTransfer.setData("moveStepId", stepId);
-    e.dataTransfer.setData("parentResId", parentResId);
-    e.target.style.opacity = "0.4";
-};
-
-OL.handleFocusedCanvasDrop = function(e, parentId) {
-    e.preventDefault();
-    
-    // 1. Resolve Grid Placement (Math is the same for both levels)
-    const rect = document.getElementById('fs-canvas-wrapper').getBoundingClientRect();
-    const scrollLeft = document.getElementById('fs-canvas-wrapper').scrollLeft;
-    const scrollTop = document.getElementById('fs-canvas-wrapper').scrollTop;
-    
-    // Offset by 140px to account for the sticky lane labels
-    const x = e.clientX - rect.left - 140 + scrollLeft;
-    const y = e.clientY - rect.top + scrollTop;
-    
-    const colIdx = Math.max(0, Math.floor(x / 280));
-    const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
-    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
-
-    // 2. Identify the Parent Object (Could be a Workflow or a Resource)
-    const parentObj = OL.getResourceById(parentId);
-    if (!parentObj) return;
-
-    // 3. ROUTE BY PAYLOAD TYPE
-    const moveStepId = e.dataTransfer.getData("moveStepId");   // Internal Move
-    const resId = e.dataTransfer.getData("resId");             // Level 2 Drop
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Level 3 Drop
-
-    // --- CASE A: INTERNAL RE-POSITIONING ---
-    if (moveStepId) {
-        const step = (parentObj.steps || []).find(s => s.id === moveStepId);
-        if (step) {
-            step.gridLane = laneNames[laneIdx];
-            step.gridCol = colIdx;
-        }
-    } 
-    // --- CASE B: LEVEL 3 DROP (Atomic Mechanics into Resource) ---
-    else if (atomicPayload) {
-        const data = JSON.parse(atomicPayload);
-        const newStep = {
-            id: uid(),
-            name: data.name,
-            type: data.type,
-            gridLane: laneNames[laneIdx],
-            gridCol: colIdx,
-            outcomes: [],
-            description: "",
-            status: 'Draft'
-        };
-        if (!parentObj.steps) parentObj.steps = [];
-        parentObj.steps.push(newStep);
-    } 
-    // --- CASE C: LEVEL 2 DROP (Resource Assets into Workflow) ---
-    else if (resId) {
-        const sourceRes = OL.getResourceById(resId);
-        const newStep = {
-            id: uid(),
-            name: sourceRes.name,
-            type: sourceRes.type || 'Action',
-            gridLane: laneNames[laneIdx],
-            gridCol: colIdx,
-            resourceLinkId: resId, // Keep the reference to the original asset
-            description: sourceRes.description || "",
-            outcomes: []
-        };
-        if (!parentObj.steps) parentObj.steps = [];
-        parentObj.steps.push(newStep);
-    }
-
-    OL.persist();
-    
-    // Refresh the visualizer (works for both Levels because they share the same ID)
-    OL.renderVisualizer(parentId);
-};
-
-OL.exitWorkflowFocus = function() {
-    state.focusedWorkflowId = null;
-    renderGlobalVisualizer(window.location.hash.includes('vault'));
-};
-
-// HELPER 1: Toolbox Icons
-window.renderDraggableTools = function() {
-    const tools = [
-        { type: 'trigger', label: 'Trigger', icon: '⚡' },
-        { type: 'action', label: 'App Action', icon: '📱' },
-        { type: 'step', label: 'Manual Step', icon: '📝' },
-        { type: 'email', label: 'Email SOP', icon: '📧' },
-        { type: 'form', label: 'Form/Input', icon: '📄' },
-        { type: 'logic', label: 'Logic Split', icon: '⚖️' },
-        { type: 'automation', label: 'Automation', icon: '🪄' },
-    ];
-    return tools.map(t => `
-        <div class="draggable-tool-item pill soft tiny" draggable="true" data-type="${t.type}" 
-             style="margin-bottom:8px; cursor:grab; display:flex; align-items:center; gap:8px; padding:10px; background:rgba(255,255,255,0.05); border:1px solid var(--line);">
-            <span>${t.icon}</span>
-            <span>${esc(t.label)}</span>
-        </div>
-    `).join('');
-};
-
-// HELPER 2: Breadcrumbs
-window.renderBreadcrumbs = function(client) {
-    if (!client) return `<span class="tiny muted">Master Vault > Global Map</span>`;
-    return `
-        <div style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:bold;">
-            <span class="muted">Project:</span> 
-            <span class="accent">${esc(client.meta.name)}</span>
-            <span class="muted"> > </span>
-            <span class="white">Flow Mapper</span>
-        </div>
-    `;
-};
-
-// HELPER 3: Inventory Table
-window.renderInventoryTable = function(resources) {
-    return `
-        <table style="width:100%; font-size:11px; border-collapse: collapse;">
-            <thead>
-                <tr class="muted uppercase" style="border-bottom: 1px solid var(--line); text-align:left;">
-                    <th style="padding:10px;">Resource Name</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th style="text-align:right; padding-right:10px;">Score</th>
-                </tr>
-            </thead>
-            <tbody id="inventory-body">
-                ${resources.map(res => `
-                    <tr class="inventory-row" id="row-${res.id}" onclick="OL.openResourceModal('${res.id}')" 
-                        style="border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer;">
-                        <td style="padding:10px;">${esc(res.name)}</td>
-                        <td><span class="pill tiny soft">${esc(res.type)}</span></td>
-                        <td><span class="status-dot primary"></span> Live</td>
-                        <td style="text-align:right; padding-right:10px; opacity:0.5;">${(res.steps || []).length} steps</td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-};
-
-OL.loadIntoGlobalMapper = function(resId) {
-    if (!resId) return;
-    const canvas = document.getElementById('global-mapper-canvas');
-    
-    // We repurpose your existing visualizer engine
-    // We inject a "canvas" ID that matches what the FS logic uses
-    canvas.innerHTML = `<div id="fs-canvas" style="height:100%; width:100%;"></div>`;
-    
-    // Call your existing visualizer renderer
-    OL.renderVisualizer(resId);
-    
-    // Add a specialized button to jump straight to the editor from the map
-    const toolbar = document.createElement('div');
-    toolbar.style = "position:absolute; bottom:20px; left:20px; z-index:1000; display:flex; gap:10px;";
-    toolbar.innerHTML = `
-        <button class="btn tiny primary" onclick="OL.openResourceModal('${resId}')">⚙️ Open Resource Editor</button>
-        <button class="btn tiny soft" onclick="OL.autoLayoutGlobal('${resId}')">🪄 Auto-Layout</button>
-    `;
-    canvas.appendChild(toolbar);
-};
-
-OL.highlightResource = function(resId) {
-    // 1. Highlight Row
-    document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active-row'));
-    document.getElementById(`row-${resId}`)?.classList.add('active-row');
-
-    // 2. Pulse Node on Map
-    document.querySelectorAll('.vis-node').forEach(n => n.classList.remove('pulse-highlight'));
-    const node = document.getElementById(`vis-node-${resId}`);
-    
-    if (node) {
-        node.classList.add('pulse-highlight');
-        // Smooth scroll canvas to center this node
-        node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    }
-};
-
-// 1. Store what we are dragging
-OL.handleToolboxDragStart = function(e, type) {
-    e.dataTransfer.setData("toolType", type);
-};
-
-// 2. Tell the Canvas it is a valid drop zone
-OL.handleCanvasDragOver = function(e) {
-    e.preventDefault(); // Required to allow a drop
-    e.dataTransfer.dropEffect = "copy";
-    e.currentTarget.classList.add('drag-over');
-};
-
-// 3. Process the Drop
-OL.handleCanvasDrop = function(e, resId) {
-    e.preventDefault();
-    const type = e.dataTransfer.getData("toolType");
-    if (!type) return;
-
-    const workspace = document.getElementById('vis-workspace');
-    const rect = workspace.getBoundingClientRect();
-
-    // Calculate position relative to the infinite canvas
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // Create the actual data entry
-    OL.addNewNodeAtPosition(resId, type, { x, y });
-};
-
-OL.addNewNodeAtPosition = function(resId, type, pos) {
-    const res = OL.getResourceById(resId);
-    if (!res) return;
-
-    const newId = uid();
-    const newStep = {
-        id: newId,
-        name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
-        type: type,
-        position: pos, // 🚀 Saved coordinate
-        outcomes: [],
-        description: ""
-    };
-
-    if (!res.steps) res.steps = [];
-    res.steps.push(newStep);
-
-    OL.persist();
-    
-    // Refresh the view
-    OL.renderVisualizer(resId);
-    
-    // Automatically open the inspector for the new node
-    OL.loadInspector(newId, resId);
-};
-
-// Simple helper to keep the list view in sync while you type in the inspector
-OL.syncMatrixNameFromInspector = function(stepId, newName) {
-    const row = document.getElementById(`row-${stepId}`);
-    if (row) {
-        const titleCell = row.querySelector('.row-title') || row.cells[0];
-        if (titleCell) titleCell.innerText = newName;
-    }
-};
-
-OL.launchVisualizer = function(id, mode = 'global') {
-    if (mode === 'global') {
-        // Look at state.master.stages or client.projectData.stages
-        renderGlobalVisualizer(); 
-    } else {
-        // Look at resource.steps
-        renderResourceVisualizer(id); 
-    }
-};
-
-// Helper to render nodes in the Architect View
-window.renderArchitectNodes = function(workflows, isVaultMode) {
-    return workflows.map(wf => {
-        const res = OL.getResourceById(wf.resourceId);
-        return `
-            <div class="workflow-node architect-node" onclick="OL.loadInspector('${wf.resourceId}', null, true)">
-                <div class="node-status-badge status-${(res?.status || 'draft').toLowerCase()}"></div>
-                <div class="node-content">
-                    <div class="tiny muted uppercase">${esc(res?.type || 'Workflow')}</div>
-                    <div class="bold">${esc(res?.name || 'Unnamed')}</div>
-                </div>
-                <button class="node-drill-down" onclick="event.stopPropagation(); OL.openResourceModal('${wf.resourceId}')">
-                    ⚙️ Edit Steps
-                </button>
-            </div>
-        `;
-    }).join('');
-};
-
-// --- STAGE MANAGEMENT ---
-
-OL.addStage = function(isVaultMode) {
-    const name = prompt("Enter Stage Name (e.g. Onboarding, Week 1):");
-    if (!name) return;
-
-    const client = getActiveClient();
-    const sourceData = isVaultMode === "true" ? state.master : client.projectData;
-
-    if (!sourceData.stages) sourceData.stages = [];
-    
-    sourceData.stages.push({
-        id: 'stg-' + Date.now(),
-        name: name,
-        workflows: [] // Initialize empty workflow container
-    });
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode === "true");
-};
-
-OL.updateStageName = function(stageId, newName, isVaultMode) {
-    const client = getActiveClient();
-    const sourceData = isVaultMode ? state.master : client.projectData;
-    
-    const stage = sourceData.stages?.find(s => s.id === stageId);
-    if (stage) {
-        stage.name = newName.trim();
-        OL.persist();
-        console.log(`✅ Stage ${stageId} renamed to ${newName}`);
-    }
-};
-
-// --- WORKFLOW MANAGEMENT ---
-
-OL.addWorkflowRow = function(isVaultMode) {
-    const name = prompt("Enter Workflow Title (e.g. Lead Gen, fulfillment):");
-    if (!name) return;
-
-    const client = getActiveClient();
-    const sourceData = isVaultMode === "true" ? state.master : client.projectData;
-
-    if (!sourceData.workflows) sourceData.workflows = [];
-    
-    sourceData.workflows.push({
-        id: 'wf-' + Date.now(),
-        name: name
-    });
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode === "true");
-};
-
-OL.updateWorkflowName = function(wfId, newName, isVaultMode) {
-    const client = getActiveClient();
-    const sourceData = isVaultMode ? state.master : client.projectData;
-    
-    const wf = sourceData.workflows?.find(w => w.id === wfId);
-    if (wf) {
-        wf.name = newName.trim();
-        OL.persist();
-    }
-};
-
-OL.handleMatrixDrop = function(e, stageId, workflowId) {
-    e.preventDefault();
-    const toolType = e.dataTransfer.getData("toolType");
-    if (!toolType) return;
-
-    const client = getActiveClient();
-    // 1. Create a new Step/Resource
-    const newId = uid();
-    const newStep = {
-        id: newId,
-        name: `New ${toolType}`,
-        type: toolType,
-        stageId: stageId,    // 📍 Locked to Column
-        workflowId: workflowId, // 📍 Locked to Row
-        status: 'Draft'
-    };
-
-    // 2. We need a "bucket" resource to hold these orphan steps 
-    // or assign them to a specific resource. For now, let's assume 
-    // they add to the Project's "Global Process" resource.
-    if (!client.projectData.localResources) client.projectData.localResources = [];
-    
-    // Find or create a 'Matrix Master' resource to hold these steps
-    let containerRes = client.projectData.localResources.find(r => r.name === "Matrix Steps");
-    if (!containerRes) {
-        containerRes = { id: 'res-matrix', name: 'Matrix Steps', steps: [] };
-        client.projectData.localResources.push(containerRes);
-    }
-    
-    containerRes.steps.push(newStep);
-
-    OL.persist();
-    renderGlobalVisualizer(false);
-};
-
-window.renderStepsInCell = function(colId, rowId) {
-    const client = getActiveClient();
-    if (!client) return "";
-
-    // 1. Gather every step from every resource in the project
-    const allResources = client.projectData.localResources || [];
-    
-    // 2. Filter for steps that match this specific grid coordinate
-    const cellSteps = allResources.flatMap(res => {
-        return (res.steps || []).map(step => ({ ...step, parentResId: res.id }));
-    }).filter(step => step.stageId === colId && step.workflowId === rowId);
-
-    if (cellSteps.length === 0) return "";
-
-    // 3. Render the mini-cards
-    return cellSteps.map(step => {
-        let icon = "📝";
-        if (step.type === 'trigger') icon = "⚡";
-        if (step.type === 'email') icon = "📧";
-        if (step.type === 'action') icon = "📱";
-
-        return `
-            <div class="mini-step-card" 
-                 onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${step.parentResId}')"
-                 style="background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
-                <span style="font-size: 10px;">${icon}</span>
-                <span class="tiny" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">
-                    ${esc(step.name || 'Untitled')}
-                </span>
-            </div>
-        `;
-    }).join('');
-};
+// --- SIDEBAR RENDERERS ---
 
 window.renderLevel1SidebarContent = function(allResources) {
     const workflows = allResources.filter(res => (res.type || "").toLowerCase() === 'workflow' && !res.stageId);
     return `
-        <div class="drawer-header"><h3>Workflow Library</h3><input type="text" class="modal-input tiny" placeholder="Search..." oninput="OL.filterToolbox(this.value)"></div>
-        <div class="drawer-tools" id="toolbox-list">
-            ${workflows.map(res => `
-                <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>⚙️</span> <span style="flex: 1;">${esc(res.name)}</span>
-                </div>
-            `).join('')}
+        <div class="drawer-header"><h3>Workflow Library</h3></div>
+        <div class="drawer-tools">${workflows.map(res => `
+            <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                <span>⚙️</span> <span style="flex:1;">${esc(res.name)}</span>
+            </div>
+        `).join('')}</div>
+    `;
+};
+
+window.renderLevel2SidebarContent = function(allResources) {
+    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
+    return `
+        <div class="drawer-header">
+            <h3 style="color:var(--accent)">📦 Resource Library</h3>
+            <input type="text" class="modal-input tiny" placeholder="Search resources..." oninput="OL.filterResourceToolbox(this.value)">
+        </div>
+        <div class="drawer-tools" id="resource-toolbox-list">${assets.map(res => `
+            <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span> <span style="flex:1;">${esc(res.name)}</span>
+            </div>
+        `).join('')}</div>
+    `;
+};
+
+window.renderLevel3SidebarContent = function(resourceId) {
+    return `
+        <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
+        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto;">
+            <label class="modal-section-label" style="color:#ffbf00">⚡ Triggers</label>
+            ${ATOMIC_STEP_LIB.Triggers.map(t => `<div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>`).join('')}
+            <label class="modal-section-label" style="margin-top:20px;">🎬 Action Builder</label>
+            <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px;">
+                <select id="builder-verb" class="modal-input tiny">${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
+            </div>
         </div>
     `;
 };
+
+// --- CANVAS RENDERERS ---
 
 window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     const stages = sourceData.stages || [];
@@ -11609,202 +10927,68 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
             <svg id="vis-links-layer" class="vis-svg"></svg>
             ${stages.map((stage, i) => `
                 <div class="stage-container">
-                    <div class="stage-header-row">
-                        <span class="stage-number">${i + 1}</span>
-                        <span class="stage-name" contenteditable="true" onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">${esc(stage.name)}</span>
-                    </div>
+                    <div class="stage-header-row"><span class="stage-number">${i+1}</span><span class="stage-name">${esc(stage.name)}</span></div>
                     <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
                         ${renderWorkflowsInStage(stage.id, isVaultMode)}
                     </div>
                 </div>
             `).join('')}
-        </div>
-    `;
+        </div>`;
 };
 
-window.renderLevel2SidebarContent = function(allResources) {
-    // Filter out workflows so we only see actual technical assets
-    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
-    
-    return `
-        <div class="drawer-header">
-            <h3 style="color: var(--accent);">📦 Resource Library</h3>
-            <p class="tiny muted">Drag assets into the workflow</p>
-        </div>
-        <div class="drawer-tools">
-            ${assets.map(res => `
-                <div class="draggable-workflow-item" draggable="true" 
-                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
-                    <span style="flex: 1;">${esc(res.name)}</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
-};
-
-window.renderLevel2Canvas = function(workflowId, allResources) {
-    const res = OL.getResourceById(workflowId);
-    if (!res) return `<div class="empty-hint">Workflow not found.</div>`;
-
-    // Determine grid size based on mapped resources
-    const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
-
-    return `
-        <div id="fs-canvas-wrapper" 
-             style="height:100%; width:100%; overflow: auto; position: relative;"
-             ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleFocusedCanvasDrop(event, '${workflowId}')">
-            
-            <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
-                ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
-                    <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
-                        <div class="grid-label">${lane}</div>
-                        ${Array.from({length: maxCol + 4}).map(() => `
-                            <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
-                        `).join('')}
-                    </div>
-                `).join('')}
-            </div>
-
-            <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
-        </div>
-    `;
-};
-
-window.renderLevel3SidebarContent = function(resourceId) {
-    const res = OL.getResourceById(resourceId);
-    return `
-        <div class="drawer-header">
-            <h3 style="color: var(--accent); margin-bottom: 4px;">🛠️ Step Factory</h3>
-            <p class="tiny muted" style="margin-bottom: 12px;">Internal Mechanics: ${esc(res?.name)}</p>
-            <input type="text" class="modal-input tiny" placeholder="Search factory..." oninput="OL.filterToolbox(this.value)">
-        </div>
-        
-        <div class="factory-scroll-zone" style="flex: 1; overflow-y: auto; padding: 15px;">
-            <section style="margin-bottom: 25px;">
-                <label class="modal-section-label" style="color: #ffbf00; margin-bottom: 10px;">⚡ Triggers</label>
-                <div class="factory-grid" style="display: flex; flex-direction: column; gap: 4px;">
-                    ${ATOMIC_STEP_LIB.Triggers.map(t => `
-                        <div class="draggable-factory-item trigger" draggable="true" 
-                             data-name="${t.toLowerCase()}"
-                             ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">
-                            ${t}
-                        </div>
-                    `).join('')}
-                </div>
-            </section>
-
-            <section>
-                <label class="modal-section-label">🎬 Action Builder</label>
-                <div class="builder-box" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--panel-border);">
-                    <div class="modal-column" style="margin-bottom: 10px;">
-                        <label class="tiny muted bold">VERB</label>
-                        <select id="builder-verb" class="modal-input tiny" style="text-align: left;">
-                            ${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="modal-column" style="margin-bottom: 15px;">
-                        <label class="tiny muted bold">OBJECT</label>
-                        <select id="builder-object" class="modal-input tiny" style="text-align: left;">
-                            ${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}
-                        </select>
-                    </div>
-                    
-                    <div class="draggable-factory-item action" draggable="true" 
-                         style="text-align: center; background: var(--accent-glow); border: 1px dashed var(--accent); color: var(--accent); font-weight: bold; padding: 12px;"
-                         ondragstart="OL.handleModularAtomicDrag(event)">
-                         DRAG NEW ACTION +
-                    </div>
-                    <p class="tiny muted" style="text-align:center; margin-top:8px;">Combines Verb + Object</p>
-                </div>
-            </section>
-        </div>
-    `;
+window.renderLevel2Canvas = function(workflowId) {
+    return renderGridCanvasShell(workflowId);
 };
 
 window.renderLevel3Canvas = function(resourceId) {
-    const res = OL.getResourceById(resourceId);
-    const steps = res?.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+    return renderGridCanvasShell(resourceId);
+};
 
+function renderGridCanvasShell(parentId) {
+    const res = OL.getResourceById(parentId);
+    const maxCol = (res?.steps || []).reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
     return `
-        <div id="fs-canvas-wrapper" style="height:100%; width:100%; overflow: auto; position: relative;"
-             ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleFocusedCanvasDrop(event, '${resourceId}')">
-            
-            <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
+        <div id="fs-canvas-wrapper" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleFocusedCanvasDrop(event, '${parentId}')">
+            <div class="visual-grid-bg" style="width: ${(maxCol + 4) * 280}px;">
                 ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
-                    <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
-                        <div class="grid-label">${lane}</div>
-                        ${Array.from({length: maxCol + 4}).map(() => `
-                            <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
-                        `).join('')}
+                    <div class="vis-lane"><div class="grid-label">${lane}</div>
+                    ${Array.from({length: maxCol + 4}).map(() => `<div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02);"></div>`).join('')}
                     </div>
                 `).join('')}
             </div>
-
             <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
-        </div>
-    `;
+        </div>`;
+}
+
+// --- NAVIGATION & STATE ---
+
+OL.drillDownIntoWorkflow = function(resId) {
+    state.focusedWorkflowId = resId;
+    state.focusedResourceId = null; 
+    renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
-// Breadcrumb Navigation Functions
-OL.exitToLifecycle = function() {
-    state.focusedWorkflowId = null;
-    state.focusedResourceId = null;
-    OL.clearInspector();
+OL.drillIntoResourceMechanics = function(resId) {
+    state.focusedResourceId = resId; 
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 OL.exitToWorkflow = function() {
     state.focusedResourceId = null;
-    OL.clearInspector();
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
-// Used by the Triggers list in Level 3 Sidebar
-OL.handleAtomicDrag = function(e, type, name) {
-    const payload = { type, name, isAtomic: true };
-    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-    e.target.style.opacity = "0.4";
-}
-
-// Used by the Modular "Drag New Action" button in Level 3 Sidebar
-OL.handleModularAtomicDrag = function(e) {
-    const verb = document.getElementById('builder-verb').value;
-    const obj = document.getElementById('builder-object').value;
-    const payload = { type: 'Action', name: `${verb} ${obj}`, isAtomic: true };
-    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-    e.target.style.opacity = "0.4";
+OL.exitToLifecycle = function() {
+    state.focusedWorkflowId = null;
+    state.focusedResourceId = null;
+    renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
-OL.handleFocusedCanvasDrop = function(e, resId) {
-    e.preventDefault();
-    const res = OL.getResourceById(resId);
-    const rawData = e.dataTransfer.getData("atomicPayload");
-    if (!rawData || !res) return;
-
-    const data = JSON.parse(rawData);
-    const rect = document.getElementById('fs-canvas-wrapper').getBoundingClientRect();
-    const colIdx = Math.max(0, Math.floor((e.clientX - rect.left - 140 + e.currentTarget.scrollLeft) / 280));
-    const laneIdx = Math.max(0, Math.min(2, Math.floor((e.clientY - rect.top + e.currentTarget.scrollTop) / 200)));
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-
-    const newStep = {
-        id: uid(),
-        name: data.name,
-        type: data.type,
-        gridLane: lanes[laneIdx],
-        gridCol: colIdx,
-        outcomes: []
-    };
-
-    if (!res.steps) res.steps = [];
-    res.steps.push(newStep);
-    OL.persist();
-    OL.renderVisualizer(resId);
+OL.filterResourceToolbox = function(q) {
+    const query = q.toLowerCase();
+    document.querySelectorAll('#resource-toolbox-list .draggable-workflow-item').forEach(el => {
+        el.style.display = el.getAttribute('data-name').includes(query) ? 'flex' : 'none';
+    });
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
