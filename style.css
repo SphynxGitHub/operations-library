@@ -2343,27 +2343,6 @@ body, #app-root {
     letter-spacing: 1px;
     color: var(--accent);
 }
-
-.canvas-trash-zone {
-    margin: 20px;
-    padding: 20px;
-    border: 2px dashed #c1acac;
-    border-radius: 8px;
-    color: #cebfbf;
-    text-align: center;
-    font-size: 10px;
-    font-weight: bold;
-    text-transform: uppercase;
-    transition: all 0.2s;
-    background: rgba(186, 144, 144, 0.05);
-}
-
-.canvas-trash-zone.drag-over {
-    background: #ef4444;
-    color: white;
-    transform: scale(1.05);
-}
-
 /* Ensure lanes are visually distinct */
 .vis-lane:nth-child(even) {
     background: rgba(255,255,255,0.01);
