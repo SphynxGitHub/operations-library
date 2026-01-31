@@ -10862,14 +10862,24 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
-                <div class="drawer-header"><h3>Workflow Library</h3></div>
-                <div class="drawer-tools" style="padding:10px;">
-                    <p class="tiny muted">Drag a workflow into a stage row</p>
+                <div class="drawer-header">
+                    <h3 style="margin-bottom: 12px;">Workflow Library</h3>
+                    <div class="search-map-container" style="position: relative;">
+                        <input type="text" class="modal-input tiny" 
+                            id="toolbox-search"
+                            placeholder="🔍 Search templates..." 
+                            oninput="OL.filterToolbox(this.value)"
+                            style="width: 100%; padding-left: 30px;">
+                    </div>
+                </div>
+                <div class="drawer-tools" id="toolbox-list">
                     ${availableResources.map(res => `
-                        <div class="draggable-workflow-item pill soft" 
-                             draggable="true" 
-                             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                            <span>📂</span> <span>${esc(res.name)}</span>
+                        <div class="draggable-workflow-item" 
+                            data-name="${res.name.toLowerCase()}"
+                            draggable="true" 
+                            ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                            <span style="opacity: 0.6;">📂</span>
+                            <span style="flex: 1;">${esc(res.name)}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -11007,6 +11017,37 @@ OL.drawGlobalTimelineLines = function() {
         line.setAttribute("stroke-width", "2");
         line.setAttribute("stroke-dasharray", "4,4");
         svg.appendChild(line);
+    }
+};
+
+OL.filterToolbox = function(query) {
+    const q = query.toLowerCase().trim();
+    const items = document.querySelectorAll('.draggable-workflow-item');
+    
+    items.forEach(item => {
+        const name = item.getAttribute('data-name');
+        if (name.includes(q)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+
+    // Optional: Show empty state if no matches
+    const visibleCount = [...items].filter(i => i.style.display !== 'none').length;
+    let emptyMsg = document.getElementById('toolbox-empty-msg');
+    
+    if (visibleCount === 0) {
+        if (!emptyMsg) {
+            emptyMsg = document.createElement('div');
+            emptyMsg.id = 'toolbox-empty-msg';
+            emptyMsg.className = 'tiny muted italic';
+            emptyMsg.style.padding = '20px';
+            emptyMsg.innerText = 'No matching workflows found.';
+            document.getElementById('toolbox-list').appendChild(emptyMsg);
+        }
+    } else if (emptyMsg) {
+        emptyMsg.remove();
     }
 };
 

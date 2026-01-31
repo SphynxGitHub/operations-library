@@ -2241,83 +2241,23 @@ body.fs-mode-active #app-root {
 
 }
 /*=========== GLOBAL MAP ==============*/
-#global-mapper-canvas .vis-workspace {
-    background-image: 
-        radial-gradient(circle, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
-    background-size: 40px 40px;
-}
-
-.fs-mode-active #global-mapper-canvas {
-    display: none; /* Hide global mapper if full-screen workspace is active */
-}
-
-/* 🚀 Node Pulsing (Cross-Highlighting) */
-.pulse-highlight {
-    animation: blue-pulse 2s infinite;
-    border: 2px solid var(--accent) !important;
-    z-index: 1000 !important;
-}
-
-@keyframes blue-pulse {
-    0% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0.4); }
-    70% { box-shadow: 0 0 0 15px rgba(56, 189, 248, 0); }
-    100% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0); }
-}
-
-/* 📍 Status Badges (Corner Dots) */
-.node-status-badge {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 2px solid #050816;
-    z-index: 10;
-}
-.status-live { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
-.status-draft { background: #eab308; box-shadow: 0 0 8px #eab308; }
-.status-error { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
-
-/* 📱 Brand Icons */
-.node-brand-icon {
-    width: 24px;
-    height: 24px;
-    object-fit: contain;
-    margin-right: 8px;
-    border-radius: 4px;
-}
-
-/* 📈 Inventory Table Polish */
-.inventory-row:hover {
-    background: rgba(255, 255, 255, 0.03);
-}
-.inventory-row.active-row {
-    background: rgba(56, 189, 248, 0.1) !important;
-    border-left: 3px solid var(--accent);
-}
-
-/* ➰ Connector Styles */
-.vis-path.dashed {
-    stroke-dasharray: 8, 5;
-    opacity: 0.6;
-}
-.vis-path.solid {
-    stroke-dasharray: none;
-}
-
-/* Ensure the overall app container doesn't scroll */
+/*==================================================================
+  1. CORE LAYOUT (Screen Fitting)
+==================================================================*/
 body, #app-root {
     height: 100vh;
     width: 100vw;
     overflow: hidden;
+    margin: 0;
 }
-/* Ensure the layout fills the viewport exactly */
+
 .three-pane-layout {
     display: flex;
-    height: calc(100vh - 60px); /* 60px = top nav */
+    flex-direction: row;
     width: 100%;
+    height: calc(100vh - 60px); /* Adjust based on your top nav height */
     overflow: hidden;
+    background-color: #050816;
 }
 
 .pane-canvas-wrap {
@@ -2328,109 +2268,96 @@ body, #app-root {
     min-width: 0;
 }
 
-.blueprint-canvas {
-    flex: 1; /* This takes the top 60-70% */
-    overflow: auto; /* Internal scrolling for the map */
-    background: #050816;
-}
-
-.pane-inventory-split {
-    height: 300px; /* Fixed height for the bottom list */
-    background: #0b0f1a;
-    border-top: 2px solid var(--accent);
-    overflow-y: auto;
-}
-
-/* Stage Row Styling */
-.stage-row {
+/*==================================================================
+  2. LEFT SIDEBAR (The Workflow Library Toolbox)
+==================================================================*/
+.pane-drawer {
+    width: 280px;
+    height: 100%;
+    flex-shrink: 0;
     display: flex;
-    min-height: 150px;
+    flex-direction: column;
+    background: #0b0f1a;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.drawer-header {
+    padding: 20px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.stage-label-vertical {
-    width: 50px;
-    background: var(--panel-dark);
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-transform: uppercase;
-    font-size: 10px;
-    font-weight: 900;
-    color: var(--accent);
-    border-right: 1px solid var(--line);
-}
-
-.matrix-canvas-area {
+.drawer-tools {
     flex: 1;
-    overflow: auto;
-    background: #050816;
-}
-
-.matrix-grid {
-    display: grid;
-    min-width: 100%;
-}
-
-.matrix-col-header {
-    position: sticky;
-    top: 0;
-    background: var(--panel-dark);
+    overflow-y: auto; /* 🚀 This fixed your "uh oh" overflow */
     padding: 15px;
-    border: 1px solid var(--line);
-    text-align: center;
-    font-weight: 700;
-    color: var(--accent);
-    text-transform: uppercase;
-    font-size: 11px;
-    z-index: 5;
-}
-
-.matrix-row-label {
-    position: sticky;
-    left: 0;
-    background: var(--panel-dark);
-    padding: 15px;
-    border: 1px solid var(--line);
-    font-weight: 600;
-    font-size: 12px;
-    z-index: 4;
-}
-
-.matrix-cell {
-    border: 1px solid rgba(255,255,255,0.05);
-    min-height: 120px;
-    padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.mini-step-card:hover {
-    background: rgba(56, 189, 248, 0.15) !important;
-    border-color: var(--accent) !important;
-    transform: translateY(-1px);
-}
-
-.mini-step-card .tiny {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+.draggable-workflow-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    cursor: grab;
+    font-size: 12px;
     color: rgba(255,255,255,0.8);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
+.draggable-workflow-item:hover {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.draggable-workflow-item:active {
+    cursor: grabbing;
+    opacity: 0.7;
+    transform: scale(0.98);
+}
+
+#toolbox-search {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    height: 32px;
+    font-size: 11px;
+}
+
+#toolbox-search:focus {
+    border-color: var(--accent);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.drawer-header h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+}
+
+/*==================================================================
+  3. VERTICAL TIMELINE CANVAS (Stages & Workflows)
+==================================================================*/
 .vertical-stage-canvas {
     flex: 1;
     overflow-y: auto;
     background: #050816;
-    padding: 20px;
+    padding: 40px 20px 100px 80px; /* Left padding for connectors */
+    position: relative;
 }
 
 .stage-container {
-    margin-bottom: 40px;
-    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 50px;
+    position: relative;
 }
 
 .stage-header-row {
@@ -2441,56 +2368,129 @@ body, #app-root {
 }
 
 .stage-number {
+    position: absolute;
+    left: -45px;
     background: var(--accent);
     color: #000;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 900;
-    font-size: 11px;
+    font-size: 12px;
+    z-index: 2;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
 }
 
 .stage-name {
-    font-weight: bold;
+    font-weight: 800;
     color: #fff;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 13px;
+    letter-spacing: 2px;
+    font-size: 14px;
 }
 
 .stage-workflow-stream {
     display: flex;
-    gap: 15px;
-    min-height: 100px;
-    padding: 10px;
+    gap: 20px;
+    min-height: 120px;
+    padding: 20px;
     background: rgba(255,255,255,0.02);
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px dashed rgba(255,255,255,0.1);
-    flex-wrap: wrap; /* Allows workflows to wrap if there are too many */
+    flex-wrap: wrap; /* Allows cards to wrap if a stage gets crowded */
+    transition: background 0.3s ease;
 }
 
-.vertical-stage-canvas {
-    position: relative; /* Essential for SVG lines */
-    padding-left: 60px !important;
+.stage-workflow-stream.drag-over {
+    background: rgba(56, 189, 248, 0.05);
+    border-color: var(--accent);
+}
+
+/*==================================================================
+  4. WORKFLOW CARDS
+==================================================================*/
+.workflow-block-card {
+    width: 240px;
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
 }
 
 .workflow-block-card:hover {
-    border-color: var(--accent) !important;
-    transform: translateX(5px);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    border-color: var(--accent);
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
 }
 
-.stage-number {
-    position: relative;
-    z-index: 2;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+/*==================================================================
+  5. STATUS & INDICATORS
+==================================================================*/
+.node-status-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #050816;
+    z-index: 10;
+}
+.status-live { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.status-draft { background: #eab308; box-shadow: 0 0 8px #eab308; }
+.status-error { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+/* Pulse animation for cross-highlighting */
+.pulse-highlight {
+    animation: blue-pulse 2s infinite;
+    border: 2px solid var(--accent) !important;
 }
 
-.stage-workflow-stream {
-    border-left: 2px solid rgba(255,255,255,0.05);
-    margin-left: 11px;
-    padding-left: 30px !important;
+@keyframes blue-pulse {
+    0% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0.4); }
+    70% { box-shadow: 0 0 0 15px rgba(56, 189, 248, 0); }
+    100% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0); }
+}
+
+/*==================================================================
+  6. BOTTOM INVENTORY & RIGHT INSPECTOR
+==================================================================*/
+.pane-inventory-split {
+    height: 300px;
+    background: #080c14;
+    border-top: 2px solid var(--accent);
+    overflow-y: auto;
+}
+
+.pane-inspector {
+    width: 300px;
+    height: 100%;
+    flex-shrink: 0;
+    background: #0b0f1a;
+    border-left: 1px solid rgba(255,255,255,0.1);
+    padding: 20px;
+}
+
+/*==================================================================
+  7. UTILITIES
+==================================================================*/
+.vis-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.inventory-row.active-row {
+    background: rgba(56, 189, 248, 0.1) !important;
+    border-left: 3px solid var(--accent);
 }
