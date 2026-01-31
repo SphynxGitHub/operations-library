@@ -11175,8 +11175,9 @@ OL.cloneResourceWorkflow = function(resId) {
 // 🚀 THE DRILL DOWN ENGINE
 // Entering Level 2 (Workflow View)
 OL.drillDownIntoWorkflow = function(resId) {
-    state.focusedWorkflowId = resId; // Set parent
-    state.focusedResourceId = null;  // Ensure child is clear
+    state.focusedWorkflowId = resId; // Set the parent
+    state.focusedResourceId = null;  // 🚀 CRITICAL: Clear the child so sidebar shows Resources
+    OL.clearInspector();
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
@@ -11188,12 +11189,9 @@ OL.drillIntoResource = function(resId) {
 };
 
 OL.drillIntoResourceMechanics = function(resId) {
-    console.log("🛠️ Entering Level 3 Mechanics for:", resId);
-    
-    // Set the Level 3 focus
-    state.focusedResourceId = resId;
-    
-    // Re-render the visualizer (renderGlobalVisualizer will now pick Level 3)
+    // We KEEP focusedWorkflowId so the breadcrumb trail knows the parent
+    state.focusedResourceId = resId; // 🚀 Trigger the Factory Sidebar
+    OL.clearInspector();
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
