@@ -5234,7 +5234,8 @@ OL.renderVisualizer = function(resId) {
                 style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: grab;"
                 onmousedown="OL.loadInspector('${step.id}', '${res.id}')"
                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')"
-                onclick="OL.loadInspector('${step.id}', '${res.id}')">
+                onclick="OL.loadInspector('${step.id}', '${res.id}')"
+                ondblclick="OL.drillIntoResourceMechanics('${res.id}')">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
                     <span class="pill tiny vault">${esc(step.type)}</span>
                 </div>
@@ -11035,7 +11036,8 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
         <div class="workflow-block-card" 
              draggable="true" 
              onmousedown="OL.loadInspector('${res.id}')"
-             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${res.name.replace(/'/g, "\\'")}')">
+             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${res.name.replace(/'/g, "\\'")}')"
+             ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
             <div class="tiny muted">📝 ${(res.steps || []).length} Atomic Steps</div>
             
@@ -11636,13 +11638,20 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
+    // Filter out workflows so we only see actual technical assets
     const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
+    
     return `
-        <div class="drawer-header"><h3>Technical Assets</h3><input type="text" class="modal-input tiny" placeholder="Search..." oninput="OL.filterToolbox(this.value)"></div>
-        <div class="drawer-tools" id="toolbox-list">
+        <div class="drawer-header">
+            <h3 style="color: var(--accent);">📦 Resource Library</h3>
+            <p class="tiny muted">Drag assets into the workflow</p>
+        </div>
+        <div class="drawer-tools">
             ${assets.map(res => `
-                <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span> <span style="flex: 1;">${esc(res.name)}</span>
+                <div class="draggable-workflow-item" draggable="true" 
+                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
+                    <span style="flex: 1;">${esc(res.name)}</span>
                 </div>
             `).join('')}
         </div>
