@@ -2252,27 +2252,20 @@ body, #app-root {
 }
 
 .three-pane-layout {
-    display: grid !important;
-    grid-template-columns: 260px 1fr 320px !important; 
-    height: calc(100vh - 60px) !important;
-    width: 100vw !important;
-    overflow: hidden !important; /* Prevents the grid from pushing the sidebar */
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: calc(100vh - 60px); /* Adjust based on your top nav height */
+    overflow: hidden;
+    background-color: #050816;
 }
 
 .pane-canvas-wrap {
-    height: 100% !important;
-    width: 100% !important;
-    overflow: hidden !important; /* The wrapper handles the scroll, not this pane */
+    flex: 1;
     display: flex;
     flex-direction: column;
-}
-
-.visual-grid-bg {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none;
-    z-index: 0;
+    height: 100%;
+    min-width: 0;
 }
 
 /*==================================================================
@@ -2443,13 +2436,6 @@ body, #app-root {
 .stage-workflow-stream.drag-over {
     background: rgba(56, 189, 248, 0.05) !important;
     border-color: var(--accent) !important;
-}
-
-#fs-canvas-wrapper {
-    flex: 1;
-    overflow: auto !important; /* Scrollbars stay here */
-    position: relative;
-    background: #050816;
 }
 
 #fs-canvas-wrapper.drag-over {
