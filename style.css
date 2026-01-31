@@ -2252,18 +2252,27 @@ body, #app-root {
 }
 
 .three-pane-layout {
-    display: grid;
-    grid-template-columns: 260px 1fr 320px; /* Sidebar, Canvas, Inspector */
-    height: calc(100vh - 60px); /* Adjust based on your header height */
-    width: 100vw;
-    overflow: hidden; /* prevents the child grid from pushing the sidebar out */
+    display: grid !important;
+    grid-template-columns: 260px 1fr 320px !important; 
+    height: calc(100vh - 60px) !important;
+    width: 100vw !important;
+    overflow: hidden !important; /* Prevents the grid from pushing the sidebar */
 }
 
 .pane-canvas-wrap {
-    height: 100%;
-    overflow: hidden; /* Important: The wrapper handles the scroll, not the page */
+    height: 100% !important;
+    width: 100% !important;
+    overflow: hidden !important; /* The wrapper handles the scroll, not this pane */
     display: flex;
     flex-direction: column;
+}
+
+.visual-grid-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 0;
 }
 
 /*==================================================================
@@ -2438,9 +2447,9 @@ body, #app-root {
 
 #fs-canvas-wrapper {
     flex: 1;
-    overflow: auto; /* This creates the scrollbars INSIDE the center pane only */
-    background: #050816;
+    overflow: auto !important; /* Scrollbars stay here */
     position: relative;
+    background: #050816;
 }
 
 #fs-canvas-wrapper.drag-over {
