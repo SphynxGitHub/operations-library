@@ -5210,44 +5210,42 @@ OL.renderVisualizer = function(resId) {
     const res = OL.getResourceById(resId);
     if (!canvas || !res) return;
 
-    // 1. Define our standard grid dimensions
     const LANE_HEIGHT = 200;
     const COL_WIDTH = 280;
     const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
     
-    // Calculate required width based on steps
     const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 4);
-    const canvasWidth = (maxCol + 2) * COL_WIDTH;
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
 
-    // 2. Generate Grid Background (Prior Level Style)
+    // 1. Generate the Grid Layer (Background only)
     const lanesHtml = lanes.map(lane => `
-        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative;">
-            <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
+        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; width: 100%;">
+            <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
                 ${lane}
             </div>
-            ${Array.from({length: maxCol + 2}).map(() => `
-                <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); flex-shrink: 0;"></div>
-            `).join('')}
+            <div style="position: absolute; top: 0; left: 140px; display: flex; height: 100%;">
+                ${Array.from({length: maxCol + 2}).map(() => `
+                    <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                `).join('')}
+            </div>
         </div>
     `).join('');
 
-    // 3. Render Snapped Nodes
+    // 2. Generate the Node Layer (Absolute coordinates)
     const nodesHtml = steps.map((step) => {
         const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        const top = (laneIdx * LANE_HEIGHT) + 50; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for the sticky label
+        // Center the card vertically in the 200px lane (card is ~80px tall)
+        const top = (laneIdx * LANE_HEIGHT) + 60; 
+        const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
 
         return `
             <div class="workflow-block-card grid-snapped" 
                 draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: grab;"
-                onmousedown="OL.loadInspector('${step.id}', '${res.id}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')"
-                onclick="OL.loadInspector('${step.id}', '${res.id}')"
-                ondblclick="OL.drillIntoResourceMechanics('${res.id}')">
+                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 50; cursor: grab;"
+                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type)}</span>
+                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
                 </div>
                 <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
                     ${esc(step.name)}
@@ -5256,21 +5254,20 @@ OL.renderVisualizer = function(resId) {
         `;
     }).join('');
 
+    // 3. One-Pass Paint
     canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" 
-             style="height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
-            <div class="vis-swimlane-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: fit-content; min-width: 100%;">
+            <div class="vis-swimlane-layer" style="position: relative; z-index: 1;">
                 ${lanesHtml}
             </div>
-            <div class="vis-absolute-container">
+            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
                 ${nodesHtml}
             </div>
-            <svg id="vis-links-layer" class="vis-svg" style="pointer-events: none; z-index: 25;"></svg>
+            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
         </div>
     `;
 
-    // 4. Auto-draw handoff lines
-    setTimeout(() => OL.drawVisualizerLines(resId), 50);
+    setTimeout(() => OL.drawVisualizerLines(resId), 10);
 };
 
 OL.autoGrowNode = function(element, resId) {
