@@ -10937,6 +10937,79 @@ OL.handleStageDrop = function(e, stageId) {
     renderGlobalVisualizer(false);
 };
 
+window.renderWorkflowsInStage = function(stageId, isVaultMode) {
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    if (!sheet) return "";
+
+    // 1. Find line items mapped to this stage
+    // We'll use 'round' as our data bridge to the Scoping Sheet
+    const mappedItems = sheet.lineItems.filter(item => String(item.stageId) === String(stageId));
+
+    if (mappedItems.length === 0) return `<div class="tiny muted italic" style="padding:20px;">Drop Workflows Here</div>`;
+
+    return mappedItems.map(item => {
+        const res = OL.getResourceById(item.resourceId);
+        const stepCount = (res?.steps || []).length;
+        
+        return `
+            <div class="workflow-block-card" 
+                 onclick="event.stopPropagation(); OL.openResourceModal('${item.resourceId}')"
+                 style="width: 220px; background: var(--panel-dark); border: 1px solid var(--line); border-radius: 8px; padding: 12px; cursor: pointer; transition: transform 0.2s;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span class="pill tiny vault">${esc(res?.type || 'SOP')}</span>
+                    <button class="card-delete-btn" style="position:static;" 
+                            onclick="event.stopPropagation(); OL.unmapWorkflowFromStage('${item.id}')">×</button>
+                </div>
+                <div class="bold" style="font-size: 13px; margin-bottom: 5px; color: var(--accent);">${esc(res?.name || 'Unknown')}</div>
+                <div class="tiny muted" style="display:flex; gap:10px;">
+                    <span>📝 ${stepCount} Steps</span>
+                    <span>👤 ${item.responsibleParty || 'Sphynx'}</span>
+                </div>
+                <div class="card-progress-mini" style="height:3px; background:rgba(255,255,255,0.05); margin-top:10px; border-radius:10px; overflow:hidden;">
+                    <div style="width: ${res?.status === 'Live' ? '100%' : '30%'}; height:100%; background: ${res?.status === 'Live' ? 'var(--accent)' : 'var(--warn)'};"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+OL.unmapWorkflowFromStage = function(lineItemId) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === lineItemId);
+    if (item) {
+        item.stageId = null; // Remove the time-mapping but keep the resource in the project
+        OL.persist();
+        renderGlobalVisualizer(false);
+    }
+};
+
+OL.drawGlobalTimelineLines = function() {
+    const svg = document.getElementById('vis-links-layer');
+    if (!svg) return;
+    svg.innerHTML = '';
+    
+    const stages = document.querySelectorAll('.stage-container');
+    const cRect = document.querySelector('.vertical-stage-canvas').getBoundingClientRect();
+
+    for (let i = 0; i < stages.length - 1; i++) {
+        const current = stages[i].getBoundingClientRect();
+        const next = stages[i+1].getBoundingClientRect();
+
+        const x = current.left + 12 - cRect.left; // Center of the stage number
+        const y1 = current.bottom - cRect.top;
+        const y2 = next.top + 15 - cRect.top;
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x); line.setAttribute("y1", y1);
+        line.setAttribute("x2", x); line.setAttribute("y2", y2);
+        line.setAttribute("stroke", "rgba(56, 189, 248, 0.2)");
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "4,4");
+        svg.appendChild(line);
+    }
+};
+
 // HELPER 1: Toolbox Icons
 window.renderDraggableTools = function() {
     const tools = [

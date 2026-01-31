@@ -2471,3 +2471,26 @@ body, #app-root {
     border: 1px dashed rgba(255,255,255,0.1);
     flex-wrap: wrap; /* Allows workflows to wrap if there are too many */
 }
+
+.vertical-stage-canvas {
+    position: relative; /* Essential for SVG lines */
+    padding-left: 60px !important;
+}
+
+.workflow-block-card:hover {
+    border-color: var(--accent) !important;
+    transform: translateX(5px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+.stage-number {
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.stage-workflow-stream {
+    border-left: 2px solid rgba(255,255,255,0.05);
+    margin-left: 11px;
+    padding-left: 30px !important;
+}
