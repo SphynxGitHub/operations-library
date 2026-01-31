@@ -1473,7 +1473,7 @@ body.fs-mode-active {
     overflow: visible !important;
     display: block;
     padding: 50px;
-    width: 3500px; 
+    width: 75%; 
     height: 5000px;
 }
 
