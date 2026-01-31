@@ -388,14 +388,27 @@ window.buildLayout = function () {
 };
 
 window.handleRoute = function () {
-  const hash = window.location.hash || "#/";
-  buildLayout();
-  const main = document.getElementById("mainContent");
-  if (!main) return;
+    const hash = window.location.hash || "#/";
+    const main = document.getElementById("mainContent");
+    if (!main) return;
 
-  const client = getActiveClient();
+    if (main) {
+        if (hash.includes('visualizer')) {
+            // Apply your specific padding: Top 10, Right 10, Bottom 40, Left 10
+            main.style.padding = "10px 10px 40px 10px";
+            document.body.classList.add('fs-mode-active');
+        } else {
+            // Standard padding for Apps, Scoping, etc.
+            main.style.padding = "40px";
+            document.body.classList.remove('fs-mode-active');
+        }
+    }
 
-  if (hash.startsWith("#/vault")) {
+    const client = getActiveClient();
+
+    buildLayout();
+
+    if (hash.startsWith("#/vault")) {
     if (hash.includes("resources")) renderResourceManager();
     else if (hash.includes("apps")) renderAppsGrid();
     else if (hash.includes("functions")) renderFunctionsGrid();
@@ -405,9 +418,9 @@ window.handleRoute = function () {
     else if (hash.includes("tasks")) renderBlueprintManager();
     else if (hash.includes("visualizer")) renderGlobalVisualizer(true)
     else renderAppsGrid();
-  } else if (hash === "#/") {
+    } else if (hash === "#/") {
     renderClientDashboard();
-  } else if (getActiveClient()) {
+    } else if (getActiveClient()) {
     if (hash.includes("#/resources")) renderResourceManager();
     else if (hash.includes("#/applications")) renderAppsGrid();
     else if (hash.includes("#/functions")) renderFunctionsGrid();
@@ -417,7 +430,7 @@ window.handleRoute = function () {
     else if (hash.includes("#/team")) renderTeamManager();
     else if (hash.includes("#/how-to")) renderHowToLibrary();
     else if (hash.includes("#/visualizer")) renderGlobalVisualizer(false);
-  } else {
+    } else {
         // 🛡️ Fallback: If no client and no vault, show the dashboard or an error
         main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
             <h3>Loading Project...</h3>
