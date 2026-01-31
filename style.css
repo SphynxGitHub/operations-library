@@ -2300,7 +2300,7 @@ body.fs-mode-active {
 
 .draggable-workflow-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.03);
@@ -2310,7 +2310,10 @@ body.fs-mode-active {
     font-size: 12px;
     color: rgba(255,255,255,0.8);
     transition: all 0.2s ease;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
+    height: auto;
+    min-height: 40px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
