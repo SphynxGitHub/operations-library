@@ -3792,16 +3792,17 @@ OL.getResourceById = function(id) {
     
     if (fromLocal) return fromLocal;
 
-    console.warn(`⚠️ Resource ${idStr} not found in Master or Local storage.`);
-
     // 4. Search inside Workflows for the step itself 
     // (In case the ID being passed is the Step ID acting as a standalone resource)
-    const allWorkflows = (client?.projectData?.localResources || []).filter(r => (r.type || '').toLowerCase() === 'workflow');
-    for (const wf of allWorkflows) {
-        const step = (wf.steps || []).find(s => String(s.id) === idStr);
-        if (step) return step;
+    const allLocalResources = client?.projectData?.localResources || [];
+    for (const res of allLocalResources) {
+        if (res.steps && Array.isArray(res.steps)) {
+            const nestedStep = res.steps.find(s => String(s.id) === idStr);
+            if (nestedStep) return nestedStep;
+        }
     }
 
+    console.warn(`⚠️ Resource ${idStr} not found in Master, Local, or Nested Steps.`);
     return null;
 };
 
