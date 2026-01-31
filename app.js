@@ -10895,6 +10895,10 @@ window.renderLevel1SidebarContent = function(allResources) {
                      ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
                     <span>⚙️</span> 
                     <span style="flex:1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(res.name)}</span>
+                    <button class="btn tiny soft" 
+                            style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
+                            onclick="event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                            title="Clone Workflow">⿻</button>
                 </div>
             `).join('')}
             ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No workflows available.</div>' : ''}
@@ -10906,6 +10910,70 @@ window.renderLevel1SidebarContent = function(allResources) {
             🗑️ Drop to Unmap
         </div>
     `;
+};
+
+OL.quickCreateWorkflow = function() {
+    const name = prompt("Enter Workflow Name:");
+    if (!name) return;
+
+    const isVaultMode = location.hash.includes('vault');
+    const client = getActiveClient();
+    const timestamp = Date.now();
+    const newId = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+
+    const newWorkflow = {
+        id: newId,
+        name: name,
+        type: "Workflow",
+        archetype: "Multi-Level",
+        steps: [],
+        stageId: null, // Starts in the library/sidebar
+        createdDate: new Date().toISOString()
+    };
+
+    if (isVaultMode) {
+        if (!state.master.resources) state.master.resources = [];
+        state.master.resources.push(newWorkflow);
+    } else if (client) {
+        if (!client.projectData.localResources) client.projectData.localResources = [];
+        client.projectData.localResources.push(newWorkflow);
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+    console.log(`✨ Created New Workflow: ${name}`);
+};
+
+OL.cloneResourceWorkflow = function(resId) {
+    const original = OL.getResourceById(resId);
+    if (!original) return;
+
+    const isVaultMode = location.hash.includes('vault');
+    const client = getActiveClient();
+    
+    // 1. Deep Copy the data
+    const clone = JSON.parse(JSON.stringify(original));
+    
+    // 2. Generate New Identity
+    const timestamp = Date.now();
+    clone.id = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    clone.name = `${original.name} (Copy)`;
+    clone.stageId = null; // 🚀 Always force back into the toolbox/library
+    clone.mapOrder = null;
+    clone.createdDate = new Date().toISOString();
+
+    // 3. Save to correct location
+    if (isVaultMode) {
+        if (!state.master.resources) state.master.resources = [];
+        state.master.resources.push(clone);
+    } else if (client) {
+        if (!client.projectData.localResources) client.projectData.localResources = [];
+        client.projectData.localResources.push(clone);
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+    console.log(`👯 Cloned Workflow: ${clone.name}`);
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
