@@ -10890,8 +10890,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             (res.type || "").toLowerCase() !== 'workflow'
         );
 
-        // 2. Set Canvas to the Visual Flow Editor
-        canvasHtml = `<div id="fs-canvas" style="height:100%; width:100%;"></div>`;
+        // 2. Set Canvas to the Visual Flow Editor with DROP LISTENERS
+        canvasHtml = `
+            <div id="fs-canvas-wrapper" 
+                 style="height:100%; width:100%; overflow: auto; position: relative;"
+                 ondragover="OL.handleCanvasDragOver(event)"
+                 ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
+                <div id="fs-canvas" style="height:4000px; width:4000px; position:relative;"></div>
+            </div>`;
         
         // Use a timeout to ensure the div exists before drawing
         setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
@@ -11247,6 +11253,51 @@ OL.drillDownIntoWorkflow = function(resId) {
     renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
+OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
+    e.preventDefault();
+    
+    // 1. Get the Resource ID from the toolbox
+    const draggedResId = e.dataTransfer.getData("resId");
+    if (!draggedResId) return;
+
+    const sourceRes = OL.getResourceById(draggedResId);
+    if (!sourceRes) return;
+
+    // 2. Calculate position relative to the infinite canvas
+    const canvas = document.getElementById('fs-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // 3. Resolve the Parent Workflow
+    const parentWorkflow = OL.getResourceById(parentWorkflowId);
+    if (!parentWorkflow) return;
+
+    if (!parentWorkflow.steps) parentWorkflow.steps = [];
+
+    // 4. Create a new Node (Step) within this workflow
+    const newStepId = uid();
+    const newStep = {
+        id: newStepId,
+        name: sourceRes.name,
+        type: sourceRes.type || 'Action',
+        resourceLinkId: draggedResId, // Save the link to the technical asset
+        position: { x, y },           // Absolute coordinates on canvas
+        outcomes: [],
+        description: sourceRes.description || ""
+    };
+
+    parentWorkflow.steps.push(newStep);
+
+    // 5. Sync and Refresh
+    OL.persist();
+    OL.renderVisualizer(parentWorkflowId);
+    
+    // Auto-inspect the new drop
+    setTimeout(() => OL.loadInspector(newStepId, parentWorkflowId), 100);
+    console.log(`✅ Linked asset ${sourceRes.name} as a step in ${parentWorkflow.name}`);
+};
+
 OL.exitWorkflowFocus = function() {
     state.focusedWorkflowId = null;
     renderGlobalVisualizer(window.location.hash.includes('vault'));
@@ -11358,6 +11409,7 @@ OL.handleToolboxDragStart = function(e, type) {
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault(); // Required to allow a drop
     e.dataTransfer.dropEffect = "copy";
+    e.currentTarget.classList.add('drag-over');
 };
 
 // 3. Process the Drop
