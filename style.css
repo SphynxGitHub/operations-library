@@ -2310,8 +2310,7 @@ body.is-visualizer #mainContent {
     
     /* 🚀 THE "I DON'T CARE" GROWTH ENGINE */
     width: 100% !important;
-    height: auto !important;      /* Grows with text */
-    min-height: 50px;             /* Baseline */
+    height: 100% !important;      /* Grows with text */
     white-space: normal !important; /* Forces wrapping */
     overflow: visible !important;   /* No clipping allowed */
 }
