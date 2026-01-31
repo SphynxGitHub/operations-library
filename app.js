@@ -10877,12 +10877,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
 window.renderLevel1SidebarContent = function(allResources) {
     const workflows = allResources.filter(res => (res.type || "").toLowerCase() === 'workflow' && !res.stageId);
-    
     return `
         <div class="drawer-header">
-            <h3 style="color: var(--accent); margin-bottom: 8px;">🔄 Workflow Library</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <h3 style="color: var(--accent); margin:0;">🔄 Workflows</h3>
+                <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.quickCreateWorkflow()" title="Create New Workflow">+</button>
+            </div>
             <input type="text" class="modal-input tiny" id="workflow-toolbox-search" 
-                   placeholder="Search workflows..." 
+                   placeholder="Search..." 
                    oninput="OL.filterToolbox(this.value)">
         </div>
         <div class="drawer-tools" id="toolbox-list">
@@ -10895,24 +10897,15 @@ window.renderLevel1SidebarContent = function(allResources) {
                     <span style="flex:1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(res.name)}</span>
                 </div>
             `).join('')}
-            ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px;">No unmapped workflows found.</div>' : ''}
+            ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No workflows available.</div>' : ''}
+        </div>
+        <div class="return-to-library-zone" 
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="OL.handleUnifiedDelete(event)">
+            🗑️ Drop to Unmap
         </div>
     `;
-};
-
-OL.filterToolbox = function(query) {
-    const q = query.toLowerCase().trim();
-    // Target items in the current drawer list
-    const items = document.querySelectorAll('.draggable-workflow-item');
-    
-    items.forEach(item => {
-        const name = item.getAttribute('data-name') || "";
-        if (name.includes(q)) {
-            item.style.display = 'flex';
-        } else {
-            item.style.display = 'none';
-        }
-    });
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
