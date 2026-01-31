@@ -11152,31 +11152,40 @@ OL.handleFocusedCanvasDrop = function(e, parentWorkflowId) {
 
     const sourceRes = OL.getResourceById(draggedResId);
     const parentWorkflow = OL.getResourceById(parentWorkflowId);
+    if (!parentWorkflow) return;
 
     const canvas = document.getElementById('vis-workspace');
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left - 120; // Subtract the sticky label width
     const y = e.clientY - rect.top;
 
-    // Calculate Grid Position
-    const colIdx = Math.max(0, Math.floor(x / 280));
+    // 🚀 THE SMART INCREMENTER: 
+    // Find the current highest column and add 1
+    if (!parentWorkflow.steps) parentWorkflow.steps = [];
+    const maxCol = parentWorkflow.steps.reduce((max, s) => Math.max(max, s.gridCol ?? -1), -1);
+    const nextCol = maxCol + 1;
+
+    // Determine Lane based on mouse Y position
     const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
     const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
 
+    const newStepId = uid();
     const newStep = {
-        id: uid(),
+        id: newStepId,
         name: sourceRes.name,
         type: sourceRes.type || 'Action',
+        resourceLinkId: draggedResId,
         gridLane: laneNames[laneIdx],
-        gridCol: colIdx,
+        gridCol: nextCol, // 📍 land in the next slot
         description: sourceRes.description || ""
     };
 
-    if (!parentWorkflow.steps) parentWorkflow.steps = [];
     parentWorkflow.steps.push(newStep);
 
     OL.persist();
     OL.renderVisualizer(parentWorkflowId);
+    
+    // Auto-inspect the new drop
+    setTimeout(() => OL.loadInspector(newStepId, parentWorkflowId), 50);
 };
 
 OL.exitWorkflowFocus = function() {
