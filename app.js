@@ -204,7 +204,9 @@ window.buildLayout = function () {
     const root = document.getElementById("app-root");
     if (!root) return;
 
-    // 1. DATA & STATE FIRST
+    // 1. DESTROY EVERYTHING OLD (Prevents duplication)
+    root.innerHTML = ''; 
+
     const client = getActiveClient();
     const hash = location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
@@ -213,7 +215,7 @@ window.buildLayout = function () {
     const isVisualizer = hash.includes('visualizer');
     const effectiveAdminMode = isPublic ? false : state.adminMode;
 
-    // 2. DEFINE THE ARRAYS (The script was crashing here because these were missing)
+    // 2. TABS DEFINITIONS
     const masterTabs = [
         { key: "apps", label: "Master Apps", icon: "📱", href: "#/vault/apps" },
         { key: "functions", label: "Master Functions", icon: "⚒", href: "#/vault/functions" },
@@ -222,7 +224,7 @@ window.buildLayout = function () {
         { key: "how-to", label: "Master How-To Guides", icon: "👩‍🏫", href: "#/vault/how-to" },
         { key: "checklist", label: "Master Tasks", icon: "📋", href: "#/vault/tasks" },
         { key: "analyses", label: "Master Analyses", icon: "📈", href: "#/vault/analyses" },
-        { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" },
+        { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" }
     ];
 
     const clientTabs = [
@@ -234,46 +236,40 @@ window.buildLayout = function () {
         { key: "scoping", label: "Scoping & Pricing", icon: "📊", href: "#/scoping-sheet" },
         { key: "analysis", label: "Weighted Analysis", icon: "📈", href: "#/analyze" },
         { key: "how-to", label: "How-To Library", icon: "👩‍🏫", href: "#/how-to" },
-        { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
+        { key: "team", label: "Team Members", icon: "👬", href: "#/team" }
     ];
 
-    // 3. GENERATE THE CONTENT (Now clientTabs exists!)
-    const sidebarContent = `
-        ${!isPublic ? `
-            <div class="admin-nav-zone">
-                <nav class="menu"><a href="#/" class="${hash === '#/' ? 'active' : ''}"><i>🏠</i> <span>Dashboard</span></a></nav>
-            </div>
-            <div class="divider"></div>
-        ` : ''}
-        ${isMaster ? `
-            <div class="client-nav-zone admin-workspace">
-                <div class="menu-category-label">Global Administration</div>
-                <nav class="menu">
-                    ${masterTabs.map(item => `<a href="${item.href}" class="${hash === item.href ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`).join('')}
-                </nav>
-            </div>
-        ` : client ? `
-            <div class="client-nav-zone">
-                <div class="menu-category-label">Project Workspace</div>
-                <nav class="menu">
-                    ${clientTabs.map(item => {
-                        const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                        if (!isModuleEnabled || OL.checkPermission(item.key) === 'none') return ''; 
-                        return `<a href="${item.href}" class="${hash.startsWith(item.href) ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`;
-                    }).join('')}
-                </nav>
-            </div>
-        ` : `<div class="empty-context-hint"><p>Select a Client.</p></div>`}
+    // 3. GENERATE THE SHARED SIDEBAR HTML
+    const sidebarHTML = `
+        <aside class="sidebar" style="${isVisualizer ? 'grid-column: 1;' : 'width: 240px; flex-shrink: 0;'} border-right: 1px solid #333; overflow-y: auto; background: #0b0f1a;">
+            ${!isPublic ? `<div class="admin-nav-zone"><nav class="menu"><a href="#/" class="${hash === '#/' ? 'active' : ''}"><i>🏠</i> <span>Dashboard</span></a></nav></div><div class="divider"></div>` : ''}
+            ${isMaster ? `
+                <div class="client-nav-zone admin-workspace">
+                    <div class="menu-category-label">Global Administration</div>
+                    <nav class="menu">${masterTabs.map(item => `<a href="${item.href}" class="${hash === item.href ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`).join('')}</nav>
+                </div>
+            ` : client ? `
+                <div class="client-nav-zone">
+                    <div class="menu-category-label">Project Workspace</div>
+                    <nav class="menu">
+                        ${clientTabs.map(item => {
+                            const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
+                            if (!isModuleEnabled || OL.checkPermission(item.key) === 'none') return ''; 
+                            return `<a href="${item.href}" class="${hash.startsWith(item.href) ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`;
+                        }).join('')}
+                    </nav>
+                </div>
+            ` : `<div class="empty-context-hint"><p>Select a Client.</p></div>`}
+        </aside>
     `;
 
-    // 4. APPLY THE CORRECT FRAME
+    // 4. CHOOSE THE FINAL FRAME
     if (isVisualizer) {
+        // 🏗️ GRID FRAME (No duplication, exact tracks)
         root.innerHTML = `
-            <div class="three-pane-layout" style="display: grid; grid-template-columns: 240px 1fr 200px; width: 100vw; height: 100vh; overflow: hidden;">
-                <aside class="sidebar" style="grid-column: 1; border-right: 1px solid #333; overflow-y: auto;">
-                    ${sidebarContent}
-                </aside>
-                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative;"></main>
+            <div class="three-pane-layout" style="display: grid; grid-template-columns: 240px 1fr 240px; width: 100vw; height: 100vh; overflow: hidden;">
+                ${sidebarHTML}
+                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative; display: flex; flex-direction: column;"></main>
                 <aside id="inspector-panel" style="grid-column: 3; border-left: 1px solid #333; background: #0b0f1a; overflow-y: auto; padding: 20px;">
                     <h3 style="font-size: 12px; color: #38bdf8;">TECHNICAL SOP</h3>
                     <div id="new-inspector"></div>
@@ -281,11 +277,10 @@ window.buildLayout = function () {
             </div>
         `;
     } else {
+        // 📱 FLEX FRAME (Standard view)
         root.innerHTML = `
-            <div class="standard-layout" style="display: flex; width: 100vw; height: 100vh;">
-                <aside class="sidebar" style="width: 240px; flex-shrink: 0; border-right: 1px solid #333; overflow-y: auto;">
-                    ${sidebarContent}
-                </aside>
+            <div class="standard-layout" style="display: flex; width: 100vw; height: 100vh; overflow: hidden;">
+                ${sidebarHTML}
                 <main id="mainContent" style="flex: 1; overflow-y: auto; padding: 40px; min-width: 0;"></main>
             </div>
         `;
