@@ -10963,46 +10963,52 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 };
 
 OL.loadInspector = function(resId) {
-    // 1. Save the ID globally so it survives a rebuild
+    // 1. Save sticky ID so it survives background syncs
     state.activeInspectorResId = resId; 
-    console.log("📍 Inspector set to Sticky ID:", resId);
 
-    // 2. Resolve the active panel
-    const allPanels = document.querySelectorAll('#inspector-panel');
-    const panel = allPanels[allPanels.length - 1];
+    // 2. Resolve the panel specifically
+    const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    // 3. Resolve Data
+    // 3. Resolve Data (Checking Master and Local)
     const res = OL.getResourceById(resId);
     if (!res) {
-        panel.innerHTML = `<div style="padding:20px; color:var(--danger);">⚠️ Data missing for ${resId}</div>`;
+        panel.innerHTML = `<div style="padding:20px; color:#f87171;">⚠️ Data not found for ID: ${resId}</div>`;
         return;
     }
 
+    // 4. Safely resolve steps and apps
     const steps = res.steps || [];
-    const statusClass = res.status === 'Live' ? 'status-live' : 'status-draft';
+    const client = getActiveClient();
+    const allApps = [...(state.master?.apps || []), ...(client?.projectData?.localApps || [])];
 
-    // 4. Force Render
+    // 5. Paint the HTML
     panel.innerHTML = `
         <div class="inspector-content fade-in" style="padding: 20px; display: block !important;">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span class="tiny accent bold uppercase">Workflow Detail</span>
-                    <div class="node-status-badge ${statusClass}" style="position:static; display:inline-block;"></div>
+                    <div class="node-status-badge status-${(res.status || 'draft').toLowerCase()}" style="position:static; display:inline-block;"></div>
                 </div>
                 <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff !important;">${esc(res.name)}</h2>
-                <div class="tiny muted">${esc(res.type || 'SOP')} • ${res.status || 'Draft'}</div>
+                <div class="tiny muted">${esc(res.type || 'SOP')}</div>
             </div>
 
             <section>
-                <label class="modal-section-label">Process Steps (${steps.length})</label>
-                <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
-                    ${steps.map((s, i) => `
-                        <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
-                            <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                            <div class="tiny" style="color:#eee !important; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
-                        </div>
-                    `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+                <label class="modal-section-label">Execution Sequence (${steps.length})</label>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+                    ${steps.map((s, i) => {
+                        const linkedApp = allApps.find(a => String(a.id) === String(s.appId));
+                        return `
+                            <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
+                                <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
+                                <div style="flex:1;">
+                                    <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
+                                    ${linkedApp ? `<div style="font-size:9px; color:var(--accent); opacity:0.7;">📱 ${esc(linkedApp.name)}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
                 </div>
             </section>
 
@@ -11382,52 +11388,6 @@ OL.addNewNodeAtPosition = function(resId, type, pos) {
     
     // Automatically open the inspector for the new node
     OL.loadInspector(newId, resId);
-};
-
-OL.loadInspector = function(targetId, resId) {
-    const panel = document.getElementById('inspector-panel');
-    if (!panel) return;
-
-    const res = OL.getResourceById(resId);
-    const step = res?.steps?.find(s => s.id === targetId);
-
-    if (!step) {
-        panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
-        return;
-    }
-
-    // Determine node type styling
-    const typeLabel = step.type || 'Manual Step';
-    
-    panel.innerHTML = `
-        <div class="inspector-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0; font-size:14px; color:var(--accent);">INSPECTOR</h3>
-                <span class="pill tiny vault">${esc(typeLabel.toUpperCase())}</span>
-            </div>
-
-            <label class="modal-section-label">Component Name</label>
-            <input type="text" class="modal-input tiny" value="${esc(step.name)}" 
-                   oninput="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'name', this.value); OL.syncMatrixNameFromInspector('${step.id}', this.value)">
-
-            <label class="modal-section-label" style="margin-top:15px;">Status</label>
-            <select class="modal-input tiny" onchange="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'status', this.value)">
-                <option value="Live" ${step.status === 'Live' ? 'selected' : ''}>🟢 Live</option>
-                <option value="Draft" ${step.status === 'Draft' ? 'selected' : ''}>🟡 Draft</option>
-                <option value="Error" ${step.status === 'Error' ? 'selected' : ''}>🔴 Error/Broken</option>
-            </select>
-
-            <label class="modal-section-label" style="margin-top:15px;">Technical Notes</label>
-            <textarea class="modal-textarea tiny" style="height:100px;"
-                      onblur="OL.updateStepFromWorkspace('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
-
-            <div style="margin-top:25px; padding-top:15px; border-top: 1px solid var(--line);">
-                <button class="btn tiny primary full-width" onclick="OL.openStepDetailModal('${resId}', '${step.id}')">
-                    🛠️ Full Configuration
-                </button>
-            </div>
-        </div>
-    `;
 };
 
 // Simple helper to keep the list view in sync while you type in the inspector
