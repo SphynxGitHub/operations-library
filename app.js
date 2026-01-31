@@ -10814,7 +10814,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                  ondragover="OL.handleCanvasDragOver(event)"
                  ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
                 
-                <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
+                <div class="visual-grid-bg">
                     ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
                         <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
                             <div style="width: 120px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.05);"></div>
