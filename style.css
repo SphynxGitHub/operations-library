@@ -1947,7 +1947,9 @@ body.fs-mode-active {
 }
 
 .vis-lane {
-    height: 100%;
+    height: 200px;
+    display: flex;
+    align-items: flex-start;
     border-right: 1px dashed rgba(255, 255, 255, 0.1);
     position: relative;
 }
