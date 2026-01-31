@@ -10802,8 +10802,13 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
                         <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
                             <div style="width: 120px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.05);"></div>
-                            ${Array.from({length: maxCol + 4}).map(() => `
-                                <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                            ${Array.from({length: maxCol + 4}).map((_, colIdx) => `
+                                <div class="grid-drop-target" 
+                                    style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"
+                                    ondragover="event.preventDefault(); this.style.background='rgba(56, 189, 248, 0.1)';" 
+                                    ondragleave="this.style.background='transparent';"
+                                    ondrop="this.style.background='transparent'; OL.handleFocusedCanvasDrop(event, '${resId}', ${laneIdx}, ${colIdx})">
+                                </div>
                             `).join('')}
                         </div>
                     `).join('')}
@@ -11186,37 +11191,47 @@ OL.handleStepMoveStart = function(e, stepId, parentResId) {
 OL.handleFocusedCanvasDrop = function(e, parentWorkflowId, laneIdx, colIdx) {
     e.preventDefault();
     const parentWorkflow = OL.getResourceById(parentWorkflowId);
+    if (!parentWorkflow) return;
+
     const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
     
+    // Check what we are moving
     const moveStepId = e.dataTransfer.getData("moveStepId");
     const draggedResId = e.dataTransfer.getData("resId");
 
     if (moveStepId) {
-        // MOVING EXISTING
+        // --- 1. INTERNAL MOVE ---
         const step = parentWorkflow.steps.find(s => s.id === moveStepId);
         if (step) {
             step.gridLane = laneNames[laneIdx];
             step.gridCol = colIdx;
+            console.log(`🚚 Relocated to Lane: ${laneIdx}, Col: ${colIdx}`);
         }
     } else if (draggedResId) {
-        // ADDING NEW
+        // --- 2. NEW DROP FROM TOOLBOX ---
         const sourceRes = OL.getResourceById(draggedResId);
         const newStepId = uid();
+        
+        if (!parentWorkflow.steps) parentWorkflow.steps = [];
+        
         parentWorkflow.steps.push({
             id: newStepId,
             name: sourceRes.name,
             type: sourceRes.type || 'Action',
-            gridLane: laneNames[laneIdx],
-            gridCol: colIdx,
-            resourceLinkId: draggedResId // 🔗 LINK TO THE ASSET
+            gridLane: laneNames[laneIdx], // 🎯 Targeted Lane
+            gridCol: colIdx,             // 🎯 Targeted Column
+            resourceLinkId: draggedResId  // Link to technical asset
         });
-        // 🚀 AUTO-INSPECT NEW ITEM
+        
         state.activeInspectorResId = newStepId;
     }
 
     OL.persist();
+    // Use renderVisualizer to redraw the grid, then load inspector
     OL.renderVisualizer(parentWorkflowId);
-    if (state.activeInspectorResId) OL.loadInspector(state.activeInspectorResId, parentWorkflowId);
+    if (state.activeInspectorResId) {
+        OL.loadInspector(state.activeInspectorResId, parentWorkflowId);
+    }
 };
 
 OL.exitWorkflowFocus = function() {

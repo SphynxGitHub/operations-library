@@ -2252,20 +2252,18 @@ body, #app-root {
 }
 
 .three-pane-layout {
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    height: calc(100vh - 60px); /* Adjust based on your top nav height */
-    overflow: hidden;
-    background-color: #050816;
+    display: grid;
+    grid-template-columns: 260px 1fr 320px; /* Sidebar, Canvas, Inspector */
+    height: calc(100vh - 60px); /* Adjust based on your header height */
+    width: 100vw;
+    overflow: hidden; /* prevents the child grid from pushing the sidebar out */
 }
 
 .pane-canvas-wrap {
-    flex: 1;
+    height: 100%;
+    overflow: hidden; /* Important: The wrapper handles the scroll, not the page */
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-width: 0;
 }
 
 /*==================================================================
@@ -2436,6 +2434,13 @@ body, #app-root {
 .stage-workflow-stream.drag-over {
     background: rgba(56, 189, 248, 0.05) !important;
     border-color: var(--accent) !important;
+}
+
+#fs-canvas-wrapper {
+    flex: 1;
+    overflow: auto; /* This creates the scrollbars INSIDE the center pane only */
+    background: #050816;
+    position: relative;
 }
 
 #fs-canvas-wrapper.drag-over {
