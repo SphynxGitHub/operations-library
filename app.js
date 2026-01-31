@@ -204,6 +204,7 @@ window.buildLayout = function () {
     const root = document.getElementById("app-root");
     if (!root) return;
 
+    // 1. DATA & STATE FIRST
     const client = getActiveClient();
     const hash = location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
@@ -212,7 +213,31 @@ window.buildLayout = function () {
     const isVisualizer = hash.includes('visualizer');
     const effectiveAdminMode = isPublic ? false : state.adminMode;
 
-    // --- 1. PRE-GENERATE THE SIDEBAR (To prevent duplication) ---
+    // 2. DEFINE THE ARRAYS (The script was crashing here because these were missing)
+    const masterTabs = [
+        { key: "apps", label: "Master Apps", icon: "📱", href: "#/vault/apps" },
+        { key: "functions", label: "Master Functions", icon: "⚒", href: "#/vault/functions" },
+        { key: "resources", label: "Master Resources", icon: "💾", href: "#/vault/resources" },
+        { key: "visualizer", label: "Flow Map", icon: "🕸️", href: "#/vault/visualizer" },
+        { key: "how-to", label: "Master How-To Guides", icon: "👩‍🏫", href: "#/vault/how-to" },
+        { key: "checklist", label: "Master Tasks", icon: "📋", href: "#/vault/tasks" },
+        { key: "analyses", label: "Master Analyses", icon: "📈", href: "#/vault/analyses" },
+        { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" },
+    ];
+
+    const clientTabs = [
+        { key: "checklist", label: "Tasks", icon: "📋", href: "#/client-tasks" },
+        { key: "apps", label: "Applications", icon: "📱", href: "#/applications" },
+        { key: "functions", label: "Functions", icon: "⚒", href: "#/functions" },
+        { key: "resources", label: "Project Resources", icon: "💾", href: "#/resources" },
+        { key: "visualizer", label: "Flow Map", icon: "🕸️", href: "#/visualizer" },
+        { key: "scoping", label: "Scoping & Pricing", icon: "📊", href: "#/scoping-sheet" },
+        { key: "analysis", label: "Weighted Analysis", icon: "📈", href: "#/analyze" },
+        { key: "how-to", label: "How-To Library", icon: "👩‍🏫", href: "#/how-to" },
+        { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
+    ];
+
+    // 3. GENERATE THE CONTENT (Now clientTabs exists!)
     const sidebarContent = `
         ${!isPublic ? `
             <div class="admin-nav-zone">
@@ -241,16 +266,14 @@ window.buildLayout = function () {
         ` : `<div class="empty-context-hint"><p>Select a Client.</p></div>`}
     `;
 
-    // --- 2. SELECT THE FRAME (The Cage vs. The Regular) ---
+    // 4. APPLY THE CORRECT FRAME
     if (isVisualizer) {
-        // 🏗️ FLOW MAP: Rigid Grid (No Duplication)
         root.innerHTML = `
             <div class="three-pane-layout" style="display: grid; grid-template-columns: 240px 1fr 200px; width: 100vw; height: 100vh; overflow: hidden;">
                 <aside class="sidebar" style="grid-column: 1; border-right: 1px solid #333; overflow-y: auto;">
                     ${sidebarContent}
                 </aside>
-                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative;">
-                    </main>
+                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative;"></main>
                 <aside id="inspector-panel" style="grid-column: 3; border-left: 1px solid #333; background: #0b0f1a; overflow-y: auto; padding: 20px;">
                     <h3 style="font-size: 12px; color: #38bdf8;">TECHNICAL SOP</h3>
                     <div id="new-inspector"></div>
@@ -258,14 +281,12 @@ window.buildLayout = function () {
             </div>
         `;
     } else {
-        // 📱 ALL OTHER TABS: Standard Flex
         root.innerHTML = `
             <div class="standard-layout" style="display: flex; width: 100vw; height: 100vh;">
                 <aside class="sidebar" style="width: 240px; flex-shrink: 0; border-right: 1px solid #333; overflow-y: auto;">
                     ${sidebarContent}
                 </aside>
-                <main id="mainContent" style="flex: 1; overflow-y: auto; padding: 40px; min-width: 0;">
-                </main>
+                <main id="mainContent" style="flex: 1; overflow-y: auto; padding: 40px; min-width: 0;"></main>
             </div>
         `;
     }
