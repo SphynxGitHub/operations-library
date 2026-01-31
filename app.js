@@ -109,7 +109,10 @@ OL.sync = function() {
         }
 
         const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-        if (!isUserTyping) {
+        // 🚀 ADD THIS: Check if the inspector is currently showing content
+        const inspectorActive = !!document.querySelector('.inspector-content');
+
+        if (!isUserTyping && !inspectorActive) {
             window.buildLayout();
             window.handleRoute(); 
         }
@@ -10948,61 +10951,60 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 };
 
 OL.loadInspector = function(resId) {
-    console.log("🛠️ Inspector triggering for ID:", resId);
+    console.log("🔍 Triggering Inspector for:", resId);
     
-    // 1. Resolve Target specifically within the current layout to avoid 'ghost' targets
-    const panel = document.getElementById('inspector-panel');
-    if (!panel) return console.error("❌ UI Error: #inspector-panel not found.");
+    // 🚀 THE MASTER FIX: Find ALL panels and pick the last one (the active one)
+    const allPanels = document.querySelectorAll('#inspector-panel');
+    const panel = allPanels[allPanels.length - 1];
+    
+    if (!panel) return console.error("❌ Panel physically missing from DOM");
 
-    // 2. Resolve Data using your robust getResourceById helper
     const res = OL.getResourceById(resId);
     if (!res) {
-        panel.innerHTML = `<div style="padding:20px; color:#f87171;">⚠️ Resource Not Found: ${resId}</div>`;
+        panel.innerHTML = `<div style="padding:20px; color:#f87171;">⚠️ Resource ${resId} not found.</div>`;
         return;
     }
 
-    // 3. UI: Manage Selection State (Card Glow)
-    document.querySelectorAll('.workflow-block-card').forEach(c => c.classList.remove('active-node'));
-    const activeCard = [...document.querySelectorAll('.workflow-block-card')].find(el => el.outerHTML.includes(resId));
-    if (activeCard) activeCard.classList.add('active-node');
-
-    // 4. Paint Content - Using innerHTML for a clean wipe
+    // Prepare steps
     const steps = res.steps || [];
     const statusClass = res.status === 'Live' ? 'status-live' : 'status-draft';
 
-    panel.innerHTML = `
-        <div class="inspector-content fade-in" style="display: block !important; visibility: visible !important;">
+    // 🚀 THE PAINT: Force a hard wipe of the "select a node" text
+    panel.innerHTML = ""; 
+    
+    const contentHtml = `
+        <div class="inspector-content fade-in" style="display: block !important; opacity: 1 !important; visibility: visible !important;">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny muted uppercase" style="letter-spacing:1px; color: var(--accent) !important;">Workflow Detail</span>
+                    <span class="tiny accent bold uppercase">Workflow Detail</span>
                     <div class="node-status-badge ${statusClass}" style="position:static; display:inline-block;"></div>
                 </div>
-                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff !important;">${esc(res.name)}</h2>
+                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: white !important;">${esc(res.name)}</h2>
                 <div class="tiny muted">${esc(res.type || 'SOP')} • ${res.status || 'Draft'}</div>
             </div>
 
-            <section>
-                <label class="modal-section-label" style="display:block; margin-bottom:12px;">Process Steps (${steps.length})</label>
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                    ${steps.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
-                            <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                            <div class="tiny" style="color:#eee !important; font-weight:600;">${esc(s.name || 'Untitled step')}</div>
-                        </div>
-                    `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
-                </div>
-            </section>
+            <label class="modal-section-label" style="display:block; margin-bottom:12px;">Steps (${steps.length})</label>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                ${steps.map((s, i) => `
+                    <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
+                        <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
+                        <div class="tiny" style="color:#eee !important; font-weight:600;">${esc(s.name || 'Untitled step')}</div>
+                    </div>
+                `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+            </div>
 
             <footer style="margin-top: 30px;">
-                <button class="btn tiny primary full-width" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
+                <button class="btn tiny primary full-width" style="width: 100%;" onclick="OL.openResourceModal('${res.id}')">
                     ⚙️ Edit Full Workflow
                 </button>
             </footer>
         </div>
     `;
-    
-    console.log("✅ Inspector successfully painted for:", res.name);
+
+    panel.innerHTML = contentHtml;
+    console.log("✅ Hard Paint Complete on DOM Node:", panel);
 };
+
 // Universal Start Drag (Works for Toolbox AND Canvas Cards)
 OL.handleWorkflowDragStart = function(e, resId, resName) {
     e.dataTransfer.setData("resId", resId);
