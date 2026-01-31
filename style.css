@@ -2255,7 +2255,7 @@ body, #app-root {
     display: flex;
     flex-direction: row;
     width: 100% !important;
-    height: calc(100vh - 60px); /* Adjust based on your top nav height */
+    height: calc(100vh); /* Adjust based on your top nav height */
     overflow: hidden;
     background-color: #050816;
 }
@@ -2274,7 +2274,8 @@ body, #app-root {
   2. LEFT SIDEBAR (The Workflow Library Toolbox)
 ==================================================================*/
 .pane-drawer {
-    width: 280px;
+    width: 180px;
+    max-width: 25%;
     height: 100%;
     flex-shrink: 0;
     display: flex;
