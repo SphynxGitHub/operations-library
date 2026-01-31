@@ -10936,13 +10936,17 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     setTimeout(() => { if(window.OL.drawGlobalTimelineLines) OL.drawGlobalTimelineLines(); }, 100);
 };
 
-OL.loadInspector = function(resId, unused, isArchitectMode = false) {
+OL.loadInspector = function(resId) {
+    console.log("🔍 Inspector triggered for ID:", resId);
     const panel = document.getElementById('inspector-panel');
-    if (!panel) return;
+    if (!panel) return console.error("❌ Could not find #inspector-panel");
 
+    // 1. Resolve Resource with absolute fallback
     const res = OL.getResourceById(resId);
+    
     if (!res) {
-        panel.innerHTML = `<div class="empty-inspector tiny muted">Select a workflow to inspect</div>`;
+        console.warn("⚠️ Resource not found in state for ID:", resId);
+        panel.innerHTML = `<div class="empty-inspector tiny muted">Error: Resource ${resId} not found.</div>`;
         return;
     }
 
@@ -10950,40 +10954,45 @@ OL.loadInspector = function(resId, unused, isArchitectMode = false) {
     const client = getActiveClient();
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
-    // Add this inside OL.loadInspector
+    // 2. UI: Update Active Selection State
     document.querySelectorAll('.workflow-block-card').forEach(c => c.classList.remove('active-node'));
-    const activeCard = document.querySelector(`[onclick*="${resId}"]`);
+    // We search for cards that contain this ID in their onclick
+    const activeCard = [...document.querySelectorAll('.workflow-block-card')].find(el => el.outerHTML.includes(resId));
     if (activeCard) activeCard.classList.add('active-node');
 
+    // 3. Paint the Panel
     panel.innerHTML = `
-        <div class="inspector-content fade-in">
+        <div class="inspector-content fade-in" style="padding: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0; font-size:12px; color:var(--accent); letter-spacing:1px;">WORKFLOW PREVIEW</h3>
-                <span class="status-pill tiny ${res.status === 'Live' ? 'accent' : 'soft'}">${esc(res.status || 'Draft')}</span>
+                <h3 style="margin:0; font-size:10px; color:var(--accent); letter-spacing:1px; font-weight:900;">INSPECTOR</h3>
+                <span class="pill tiny ${res.status === 'Live' ? 'vault' : 'soft'}">${esc(res.status || 'Draft')}</span>
             </div>
 
-            <h2 style="font-size:18px; margin-bottom:5px;">${esc(res.name)}</h2>
-            <div class="tiny muted" style="margin-bottom:20px;">Type: ${esc(res.type || 'SOP')}</div>
+            <h2 style="font-size:18px; margin: 0 0 5px 0; color: white;">${esc(res.name)}</h2>
+            <div class="tiny muted" style="margin-bottom:25px;">Resource ID: ${res.id}</div>
 
-            <label class="modal-section-label">Sequence Overview (${steps.length} Steps)</label>
-            <div class="inspector-step-preview-list">
+            <label class="modal-section-label" style="font-size:9px; color:var(--accent);">WORKFLOW SEQUENCE</label>
+            <div class="inspector-step-preview-list" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
                 ${steps.map((step, idx) => {
                     const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
                     return `
-                        <div class="preview-step-item">
-                            <div class="step-num">${idx + 1}</div>
+                        <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border-left: 2px solid var(--accent);">
+                            <div style="font-size:9px; font-weight:bold; color:var(--accent);">${idx + 1}</div>
                             <div style="flex:1">
-                                <div class="step-name">${esc(step.name || 'Untitled Step')}</div>
-                                ${linkedApp ? `<div class="tiny accent">📱 ${esc(linkedApp.name)}</div>` : ''}
+                                <div style="font-size:11px; font-weight:600; color:white;">${esc(step.name || 'Untitled Step')}</div>
+                                ${linkedApp ? `<div style="font-size:9px; color:var(--accent); opacity:0.8;">📱 ${esc(linkedApp.name)}</div>` : ''}
                             </div>
                         </div>
                     `;
-                }).join('') || '<div class="tiny muted italic">No steps defined in this workflow yet.</div>'}
+                }).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
             </div>
 
-            <div style="margin-top:30px; padding-top:20px; border-top:1px solid var(--line);">
-                <button class="btn tiny primary full-width" onclick="OL.openResourceModal('${res.id}')">
-                    ⚙️ Full Resource Configuration
+            <div style="margin-top:30px; padding-top:20px; border-top:1px solid rgba(255,255,255,0.1);">
+                <button class="btn tiny primary full-width" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
+                    ⚙️ Full Configuration
+                </button>
+                <button class="btn tiny soft full-width" style="width:100%; margin-top:8px; color:black !important;" onclick="OL.unmapWorkflowFromStage('${res.id}')">
+                    📥 Un-map from Timeline
                 </button>
             </div>
         </div>
