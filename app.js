@@ -201,90 +201,190 @@ OL.initializeSecurityContext = function() {
 
 // 4. LAYOUT & ROUTING ENGINE
 window.buildLayout = function () {
-    const root = document.getElementById("app-root");
-    if (!root) return;
+  const root = document.getElementById("app-root");
+  if (!root) {
+      console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
+      return; 
+  }
+  const client = getActiveClient();
+  const hash = location.hash || "#/";
+  const urlParams = new URLSearchParams(window.location.search);
 
-    // 1. DESTROY EVERYTHING OLD (Prevents duplication)
-    root.innerHTML = ''; 
+  const isPublic = urlParams.has("access");
+  const token = urlParams.get("access");
+  const isMaster = hash.startsWith("#/vault");
 
-    const client = getActiveClient();
-    const hash = location.hash || "#/";
-    const urlParams = new URLSearchParams(window.location.search);
-    const isPublic = urlParams.has("access");
-    const isMaster = hash.startsWith("#/vault");
-    const isVisualizer = hash.includes('visualizer');
-    const effectiveAdminMode = isPublic ? false : state.adminMode;
+  const effectiveAdminMode = isPublic ? false : state.adminMode;
 
-    // 2. TABS DEFINITIONS
-    const masterTabs = [
-        { key: "apps", label: "Master Apps", icon: "📱", href: "#/vault/apps" },
-        { key: "functions", label: "Master Functions", icon: "⚒", href: "#/vault/functions" },
-        { key: "resources", label: "Master Resources", icon: "💾", href: "#/vault/resources" },
-        { key: "visualizer", label: "Flow Map", icon: "🕸️", href: "#/vault/visualizer" },
-        { key: "how-to", label: "Master How-To Guides", icon: "👩‍🏫", href: "#/vault/how-to" },
-        { key: "checklist", label: "Master Tasks", icon: "📋", href: "#/vault/tasks" },
-        { key: "analyses", label: "Master Analyses", icon: "📈", href: "#/vault/analyses" },
-        { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" }
-    ];
+  if (!root) return; // Safety guard
 
-    const clientTabs = [
-        { key: "checklist", label: "Tasks", icon: "📋", href: "#/client-tasks" },
-        { key: "apps", label: "Applications", icon: "📱", href: "#/applications" },
-        { key: "functions", label: "Functions", icon: "⚒", href: "#/functions" },
-        { key: "resources", label: "Project Resources", icon: "💾", href: "#/resources" },
-        { key: "visualizer", label: "Flow Map", icon: "🕸️", href: "#/visualizer" },
-        { key: "scoping", label: "Scoping & Pricing", icon: "📊", href: "#/scoping-sheet" },
-        { key: "analysis", label: "Weighted Analysis", icon: "📈", href: "#/analyze" },
-        { key: "how-to", label: "How-To Library", icon: "👩‍🏫", href: "#/how-to" },
-        { key: "team", label: "Team Members", icon: "👬", href: "#/team" }
-    ];
+  const masterTabs = [
+    { key: "apps", label: "Master Apps", icon: "📱", href: "#/vault/apps" },
+    {
+      key: "functions",
+      label: "Master Functions",
+      icon: "⚒",
+      href: "#/vault/functions",
+    },
+    {
+      key: "resources",
+      label: "Master Resources",
+      icon: "💾",
+      href: "#/vault/resources",
+    },
+    {
+      key: "visualizer",
+      label: "Flow Map",
+      icon: "🕸️",
+      href: "#/vault/visualizer",
+    },
+     {
+      key: "how-to",
+      label: "Master How-To Guides",
+      icon: "👩‍🏫",
+      href: "#/vault/how-to",
+    },
+     {
+      key: "checklist",
+      label: "Master Tasks",
+      icon: "📋",
+      href: "#/vault/tasks",
+    },
+    {
+      key: "analyses",
+      label: "Master Analyses",
+      icon: "📈",
+      href: "#/vault/analyses",
+    },
+    { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" },
+  ];
 
-    // 3. GENERATE THE SHARED SIDEBAR HTML
-    const sidebarHTML = `
-        <aside class="sidebar" style="${isVisualizer ? 'grid-column: 1;' : 'width: 240px; flex-shrink: 0;'} border-right: 1px solid #333; overflow-y: auto; background: #0b0f1a;">
-            ${!isPublic ? `<div class="admin-nav-zone"><nav class="menu"><a href="#/" class="${hash === '#/' ? 'active' : ''}"><i>🏠</i> <span>Dashboard</span></a></nav></div><div class="divider"></div>` : ''}
+  const clientTabs = [
+    {
+      key: "checklist",
+      label: "Tasks",
+      icon: "📋",
+      href: "#/client-tasks",
+    },
+    {
+      key: "apps",
+      label: "Applications",
+      icon: "📱",
+      href: "#/applications",
+    },
+    {
+      key: "functions",
+      label: "Functions",
+      icon: "⚒",
+      href: "#/functions",
+    },
+    {
+      key: "resources",
+      label: "Project Resources",
+      icon: "💾",
+      href: "#/resources",
+    },
+    {
+      key: "visualizer",
+      label: "Flow Map",
+      icon: "🕸️",
+      href: "#/visualizer",
+    },
+    {
+      key: "scoping",
+      label: "Scoping & Pricing",
+      icon: "📊",
+      href: "#/scoping-sheet",
+    },
+    {
+      key: "analysis",
+      label: "Weighted Analysis",
+      icon: "📈",
+      href: "#/analyze",
+    },
+    {
+      key: "how-to",
+      label: "How-To Library",
+      icon: "👩‍🏫",
+      href: "#/how-to",
+    },
+    { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
+  ];
+
+  root.innerHTML = `
+        <aside class="sidebar">
+            ${!isPublic ? `
+                <div class="admin-nav-zone">
+                    <nav class="menu">
+                        <a href="#/" class="${hash === '#/' ? 'active' : ''}">
+                            <i>🏠</i> <span>Dashboard</span>
+                        </a>
+                    </nav>
+                </div>
+                <div class="divider"></div>
+            ` : ''}
+
             ${isMaster ? `
                 <div class="client-nav-zone admin-workspace">
                     <div class="menu-category-label">Global Administration</div>
-                    <nav class="menu">${masterTabs.map(item => `<a href="${item.href}" class="${hash === item.href ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`).join('')}</nav>
+                    <div class="client-profile-trigger is-master">
+                        <div class="client-avatar" style="background: var(--accent); color: white;">M</div>
+                        <div class="client-info">
+                            <div class="client-name">Master Vault</div>
+                            <div class="client-meta">Global Standards</div>
+                        </div>
+                    </div>
+                    <nav class="menu">
+                        ${masterTabs.map(item => `
+                            <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
+                                <i>${item.icon}</i> <span>${item.label}</span>
+                            </a>
+                        `).join('')}
+                    </nav>
                 </div>
             ` : client ? `
                 <div class="client-nav-zone">
                     <div class="menu-category-label">Project Workspace</div>
+                    
+                    <div class="client-profile-trigger" 
+                         ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                        <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
+                        <div class="client-info">
+                            <div class="client-name">${esc(client.meta.name)}</div>
+                            <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
+                        </div>
+                    </div>
+
                     <nav class="menu">
                         ${clientTabs.map(item => {
+                            // 1. Permission Check
+                            const perm = OL.checkPermission(item.key);
+                            // If permission is strictly 'none', hide it
+                            if (perm === 'none') return '';
+
+                            // 2. Module Toggle Check (The Checkbox logic)
+                            // We check if Admin is forcing it, OR if the checkbox is checked in client.modules
                             const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                            if (!isModuleEnabled || OL.checkPermission(item.key) === 'none') return ''; 
-                            return `<a href="${item.href}" class="${hash.startsWith(item.href) ? 'active' : ''}"><i>${item.icon}</i> <span>${item.label}</span></a>`;
+                            
+                            // 🚀 THE FIX: If the key is 'visualizer' but the checkbox is off, hide it
+                            if (!isModuleEnabled) return ''; 
+
+                            const isActive = hash.startsWith(item.href);
+
+                            return `
+                                <a href="${item.href}" class="${isActive ? 'active' : ''}">
+                                    <i>${item.icon}</i> <span>${item.label}</span>
+                                    ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
+                                </a>
+                            `;
                         }).join('')}
                     </nav>
-                </div>
-            ` : `<div class="empty-context-hint"><p>Select a Client.</p></div>`}
+            ` : `
+                <div class="empty-context-hint"><p>Select a Client or enter Global Vault from Dashboard.</p></div>
+            `}
         </aside>
+        <main id="mainContent"></main>
     `;
-
-    // 4. CHOOSE THE FINAL FRAME
-    if (isVisualizer) {
-        // 🏗️ GRID FRAME (No duplication, exact tracks)
-        root.innerHTML = `
-            <div class="three-pane-layout" style="display: grid; grid-template-columns: 240px 1fr 240px; width: 100vw; height: 100vh; overflow: hidden;">
-                ${sidebarHTML}
-                <main id="mainContent" style="grid-column: 2; overflow: hidden; position: relative; display: flex; flex-direction: column;"></main>
-                <aside id="inspector-panel" style="grid-column: 3; border-left: 1px solid #333; background: #0b0f1a; overflow-y: auto; padding: 20px;">
-                    <h3 style="font-size: 12px; color: #38bdf8;">TECHNICAL SOP</h3>
-                    <div id="new-inspector"></div>
-                </aside>
-            </div>
-        `;
-    } else {
-        // 📱 FLEX FRAME (Standard view)
-        root.innerHTML = `
-            <div class="standard-layout" style="display: flex; width: 100vw; height: 100vh; overflow: hidden;">
-                ${sidebarHTML}
-                <main id="mainContent" style="flex: 1; overflow-y: auto; padding: 40px; min-width: 0;"></main>
-            </div>
-        `;
-    }
 };
 
 window.handleRoute = function () {
@@ -5100,56 +5200,66 @@ OL.renderVisualizer = function(resId) {
     const res = OL.getResourceById(resId);
     if (!canvas || !res) return;
 
-    const LANE_HEIGHT = 140; 
+    // 1. Define our standard grid dimensions
+    const LANE_HEIGHT = 200;
     const COL_WIDTH = 280;
     const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
+    
+    // Calculate required width based on steps
     const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 4);
+    const canvasWidth = (maxCol + 2) * COL_WIDTH;
 
-    // 1. Generate the Grid with Fixed Labels and Drop Targets
-    const lanesHtml = lanes.map((lane, laneIdx) => `
-        <div class="grid-lane" style="height: ${LANE_HEIGHT}px;">
-            <div class="grid-label">
+    // 2. Generate Grid Background (Prior Level Style)
+    const lanesHtml = lanes.map(lane => `
+        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative;">
+            <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
                 ${lane}
             </div>
-            <div class="grid-cells-wrap" style="display: flex; flex: 1;">
-                ${Array.from({length: maxCol + 4}).map((_, colIdx) => `
-                    <div class="grid-drop-target" 
-                         style="width: ${COL_WIDTH}px;"
-                         ondragover="event.preventDefault(); this.classList.add('hovered');" 
-                         ondragleave="this.classList.remove('hovered');"
-                         ondrop="this.classList.remove('hovered'); OL.handleFocusedCanvasDrop(event, '${res.id}', ${laneIdx}, ${colIdx})">
-                    </div>
-                `).join('')}
-            </div>
+            ${Array.from({length: maxCol + 2}).map(() => `
+                <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); flex-shrink: 0;"></div>
+            `).join('')}
         </div>
     `).join('');
 
-    // 2. The Cards
+    // 3. Render Snapped Nodes
     const nodesHtml = steps.map((step) => {
         const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        const top = (laneIdx * LANE_HEIGHT) + 30; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for label width
+        const top = (laneIdx * LANE_HEIGHT) + 50; 
+        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for the sticky label
 
         return `
             <div class="workflow-block-card grid-snapped" 
-                 draggable="true"
-                 style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 50;"
-                 onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${res.id}')"
-                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')">
-                <div class="pill tiny vault" style="margin-bottom:8px;">${esc(step.type)}</div>
-                <div class="bold" style="font-size: 11px; color: var(--accent);">${esc(step.name)}</div>
+                draggable="true"
+                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: grab;"
+                onmousedown="OL.loadInspector('${step.id}', '${res.id}')"
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')"
+                onclick="OL.loadInspector('${step.id}', '${res.id}')">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
+                    <span class="pill tiny vault">${esc(step.type)}</span>
+                </div>
+                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
+                    ${esc(step.name)}
+                </div>
             </div>
         `;
     }).join('');
 
     canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" style="width: ${(maxCol + 5) * COL_WIDTH}px;">
-            <div class="grid-background-layer">${lanesHtml}</div>
-            <div class="grid-content-layer">${nodesHtml}</div>
-            <svg id="vis-links-layer" class="vis-svg"></svg>
+        <div class="vis-workspace" id="vis-workspace" 
+             style="width: ${canvasWidth}px; height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
+            <div class="vis-swimlane-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                ${lanesHtml}
+            </div>
+            <div class="vis-absolute-container">
+                ${nodesHtml}
+            </div>
+            <svg id="vis-links-layer" class="vis-svg" style="pointer-events: none; z-index: 25;"></svg>
         </div>
     `;
+
+    // 4. Auto-draw handoff lines
+    setTimeout(() => OL.drawVisualizerLines(resId), 50);
 };
 
 OL.autoGrowNode = function(element, resId) {
