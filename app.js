@@ -10948,66 +10948,67 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 };
 
 OL.loadInspector = function(resId) {
-    console.log("🔍 Inspector triggered for ID:", resId);
+    console.log("🛠️ Inspector attempting to load ID:", resId);
     const panel = document.getElementById('inspector-panel');
-    if (!panel) return console.error("❌ Could not find #inspector-panel");
-
-    // 1. Resolve Resource with absolute fallback
-    const res = OL.getResourceById(resId);
     
-    if (!res) {
-        console.warn("⚠️ Resource not found in state for ID:", resId);
-        panel.innerHTML = `<div class="empty-inspector tiny muted">Error: Resource ${resId} not found.</div>`;
+    if (!panel) {
+        console.error("❌ UI Error: Element #inspector-panel not found in DOM.");
         return;
     }
 
+    // 1. Find the resource
+    const res = OL.getResourceById(resId);
+    
+    if (!res) {
+        panel.innerHTML = `
+            <div style="padding:20px; color:#ef4444;">
+                <h3 class="tiny">⚠️ Data Error</h3>
+                <p class="tiny muted">Resource <strong>${resId}</strong> not found in your current project or master library.</p>
+                <button class="btn tiny soft" onclick="location.reload()">Refresh Data</button>
+            </div>`;
+        return;
+    }
+
+    // 2. Prep data for the list
     const steps = res.steps || [];
-    const client = getActiveClient();
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const statusClass = res.status === 'Live' ? 'status-live' : 'status-draft';
 
-    // 2. UI: Update Active Selection State
-    document.querySelectorAll('.workflow-block-card').forEach(c => c.classList.remove('active-node'));
-    // We search for cards that contain this ID in their onclick
-    const activeCard = [...document.querySelectorAll('.workflow-block-card')].find(el => el.outerHTML.includes(resId));
-    if (activeCard) activeCard.classList.add('active-node');
-
-    // 3. Paint the Panel
+    // 3. Render the content
     panel.innerHTML = `
         <div class="inspector-content fade-in" style="padding: 20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0; font-size:10px; color:var(--accent); letter-spacing:1px; font-weight:900;">INSPECTOR</h3>
-                <span class="pill tiny ${res.status === 'Live' ? 'vault' : 'soft'}">${esc(res.status || 'Draft')}</span>
-            </div>
+            <header style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="tiny muted uppercase" style="letter-spacing:1px;">Workflow Detail</span>
+                    <div class="node-status-badge ${statusClass}" style="position:static; display:inline-block;"></div>
+                </div>
+                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff;">${esc(res.name)}</h2>
+                <div class="tiny muted">${esc(res.type || 'Standard SOP')}</div>
+            </header>
 
-            <h2 style="font-size:18px; margin: 0 0 5px 0; color: white;">${esc(res.name)}</h2>
-            <div class="tiny muted" style="margin-bottom:25px;">Resource ID: ${res.id}</div>
-
-            <label class="modal-section-label" style="font-size:9px; color:var(--accent);">WORKFLOW SEQUENCE</label>
-            <div class="inspector-step-preview-list" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
-                ${steps.map((step, idx) => {
-                    const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
-                    return `
-                        <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border-left: 2px solid var(--accent);">
-                            <div style="font-size:9px; font-weight:bold; color:var(--accent);">${idx + 1}</div>
-                            <div style="flex:1">
-                                <div style="font-size:11px; font-weight:600; color:white;">${esc(step.name || 'Untitled Step')}</div>
-                                ${linkedApp ? `<div style="font-size:9px; color:var(--accent); opacity:0.8;">📱 ${esc(linkedApp.name)}</div>` : ''}
-                            </div>
+            <section>
+                <label class="modal-section-label" style="display:block; margin-bottom:10px;">Execution Steps (${steps.length})</label>
+                <div class="preview-step-container" style="display:flex; flex-direction:column; gap:8px;">
+                    ${steps.map((s, i) => `
+                        <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
+                            <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
+                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
                         </div>
-                    `;
-                }).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
-            </div>
+                    `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+                </div>
+            </section>
 
-            <div style="margin-top:30px; padding-top:20px; border-top:1px solid rgba(255,255,255,0.1);">
-                <button class="btn tiny primary full-width" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
-                    ⚙️ Full Configuration
+            <footer style="margin-top: 30px; display:flex; flex-direction:column; gap:10px;">
+                <button class="btn tiny primary" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
+                    ⚙️ Edit Full Workflow
                 </button>
-                <button class="btn tiny soft full-width" style="width:100%; margin-top:8px; color:black !important;" onclick="OL.unmapWorkflowFromStage('${res.id}')">
+                <button class="btn tiny soft" style="width:100%; color:black !important;" onclick="OL.unmapWorkflowFromStage('${res.id}')">
                     📥 Un-map from Timeline
                 </button>
-            </div>
+            </footer>
         </div>
     `;
+    
+    console.log("✅ Inspector Paint Complete for:", res.name);
 };
 
 // Universal Start Drag (Works for Toolbox AND Canvas Cards)
