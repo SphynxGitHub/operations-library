@@ -11125,17 +11125,8 @@ window.renderLevel3Canvas = function(resourceId) {
 };
 
 function renderGridCanvasShell(parentId) {
-    const res = OL.getResourceById(parentId);
-    const maxCol = (res?.steps || []).reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
     return `
         <div id="fs-canvas-wrapper" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleFocusedCanvasDrop(event, '${parentId}')">
-            <div class="visual-grid-bg" style="width: ${(maxCol + 4) * 280}px;">
-                ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
-                    <div class="vis-lane"><div class="grid-label">${lane}</div>
-                    ${Array.from({length: maxCol + 4}).map(() => `<div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02);"></div>`).join('')}
-                    </div>
-                `).join('')}
-            </div>
             <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
         </div>`;
 }
