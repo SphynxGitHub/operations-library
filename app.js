@@ -11140,6 +11140,105 @@ window.renderArchitectNodes = function(workflows, isVaultMode) {
     }).join('');
 };
 
+// --- STAGE MANAGEMENT ---
+
+OL.addStage = function(isVaultMode) {
+    const name = prompt("Enter Stage Name (e.g. Onboarding, Week 1):");
+    if (!name) return;
+
+    const client = getActiveClient();
+    const sourceData = isVaultMode === "true" ? state.master : client.projectData;
+
+    if (!sourceData.stages) sourceData.stages = [];
+    
+    sourceData.stages.push({
+        id: 'stg-' + Date.now(),
+        name: name,
+        workflows: [] // Initialize empty workflow container
+    });
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode === "true");
+};
+
+OL.updateStageName = function(stageId, newName, isVaultMode) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : client.projectData;
+    
+    const stage = sourceData.stages?.find(s => s.id === stageId);
+    if (stage) {
+        stage.name = newName.trim();
+        OL.persist();
+        console.log(`✅ Stage ${stageId} renamed to ${newName}`);
+    }
+};
+
+// --- WORKFLOW MANAGEMENT ---
+
+OL.addWorkflowRow = function(isVaultMode) {
+    const name = prompt("Enter Workflow Title (e.g. Lead Gen, fulfillment):");
+    if (!name) return;
+
+    const client = getActiveClient();
+    const sourceData = isVaultMode === "true" ? state.master : client.projectData;
+
+    if (!sourceData.workflows) sourceData.workflows = [];
+    
+    sourceData.workflows.push({
+        id: 'wf-' + Date.now(),
+        name: name
+    });
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode === "true");
+};
+
+OL.updateWorkflowName = function(wfId, newName, isVaultMode) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : client.projectData;
+    
+    const wf = sourceData.workflows?.find(w => w.id === wfId);
+    if (wf) {
+        wf.name = newName.trim();
+        OL.persist();
+    }
+};
+
+OL.handleMatrixDrop = function(e, stageId, workflowId) {
+    e.preventDefault();
+    const toolType = e.dataTransfer.getData("toolType");
+    if (!toolType) return;
+
+    const client = getActiveClient();
+    // 1. Create a new Step/Resource
+    const newId = uid();
+    const newStep = {
+        id: newId,
+        name: `New ${toolType}`,
+        type: toolType,
+        stageId: stageId,    // 📍 Locked to Column
+        workflowId: workflowId, // 📍 Locked to Row
+        status: 'Draft'
+    };
+
+    // 2. We need a "bucket" resource to hold these orphan steps 
+    // or assign them to a specific resource. For now, let's assume 
+    // they add to the Project's "Global Process" resource.
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+    
+    // Find or create a 'Matrix Master' resource to hold these steps
+    let containerRes = client.projectData.localResources.find(r => r.name === "Matrix Steps");
+    if (!containerRes) {
+        containerRes = { id: 'res-matrix', name: 'Matrix Steps', steps: [] };
+        client.projectData.localResources.push(containerRes);
+    }
+    
+    containerRes.steps.push(newStep);
+
+    OL.persist();
+    renderGlobalVisualizer(false);
+};
+
 // ===========================TASK RESOURCE OVERLAP===========================
 
 // Filter SOPs that aren't already linked to this resource
