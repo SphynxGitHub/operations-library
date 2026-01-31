@@ -10868,11 +10868,10 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 </div>
 
                 <div class="return-to-library-zone" 
-                    style="margin-top: auto; padding: 20px; border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.05); color: #ef4444; text-align: center; border-radius: 8px; margin: 10px; font-size: 10px; font-weight: bold; text-transform: uppercase;"
                     ondragover="OL.handleCanvasDragOver(event)" 
                     ondragleave="this.classList.remove('drag-over')"
                     ondrop="OL.handleUnifiedDelete(event, '${state.focusedWorkflowId || ""}')">
-                    🗑️ Drop to Remove / Unmap
+                    🗑️ Drop to Unmap
                 </div>
             </aside>
 
