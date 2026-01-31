@@ -2394,14 +2394,14 @@ body, #app-root {
 
 .stage-workflow-stream {
     display: flex;
-    gap: 20px;
-    min-height: 120px;
-    padding: 20px;
-    background: rgba(255,255,255,0.02);
-    border-radius: 12px;
-    border: 1px dashed rgba(255,255,255,0.1);
-    flex-wrap: wrap; /* Allows cards to wrap if a stage gets crowded */
-    transition: background 0.3s ease;
+    flex-direction: row; /* Ensure they stay horizontal */
+    flex-wrap: wrap;     /* 🚀 Allow them to jump to a new line if crowded */
+    gap: 12px;
+    min-height: 100px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.01);
+    border-radius: 8px;
+    border: 1px dashed rgba(255, 255, 255, 0.05);
 }
 
 .stage-workflow-stream.drag-over {
@@ -2414,6 +2414,7 @@ body, #app-root {
 ==================================================================*/
 .workflow-block-card {
     width: 240px;
+    flex-shrink: 0;
     background: #111827;
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 10px;

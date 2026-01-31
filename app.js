@@ -10929,66 +10929,66 @@ OL.handleWorkflowDragStart = function(e, resId, resName) {
 OL.handleStageDrop = function(e, stageId) {
     e.preventDefault();
     const resId = e.dataTransfer.getData("resId");
-    const resName = e.dataTransfer.getData("resName");
     if (!resId) return;
 
     const client = getActiveClient();
-    const sheet = client.projectData.scopingSheets[0];
+    const localResources = client.projectData.localResources || [];
 
-    // Find the item in the scoping sheet and assign it to this stage (round)
-    const item = sheet.lineItems.find(i => i.resourceId === resId);
-    if (item) {
-        // Map the Stage ID to the 'round' or a new 'stageId' field
-        item.stageId = stageId;
-        console.log(`✅ Linked ${resName} to Stage ${stageId}`);
+    // Find the specific resource being dragged
+    const res = localResources.find(r => r.id === resId);
+    
+    if (res) {
+        // 🚀 THE FIX: Simply assign the stageId to this resource.
+        // This allows infinite resources to share the same stageId.
+        res.stageId = stageId;
+        console.log(`✅ Linked ${res.name} to Stage ${stageId}`);
+        
+        OL.persist();
+        renderGlobalVisualizer(false);
     }
-
-    OL.persist();
-    renderGlobalVisualizer(false);
 };
 
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
-    const sheet = client?.projectData?.scopingSheets?.[0];
-    if (!sheet) return "";
+    if (!client) return "";
 
-    // 1. Find line items mapped to this stage
-    // We'll use 'round' as our data bridge to the Scoping Sheet
-    const mappedItems = sheet.lineItems.filter(item => String(item.stageId) === String(stageId));
+    // 1. Grab all resources that have been assigned this Stage ID
+    const allResources = isVaultMode ? (state.master.resources || []) : (client.projectData.localResources || []);
+    const matchedResources = allResources.filter(r => String(r.stageId) === String(stageId));
 
-    if (mappedItems.length === 0) return `<div class="tiny muted italic" style="padding:20px;">Drop Workflows Here</div>`;
+    if (matchedResources.length === 0) {
+        return `<div class="tiny muted italic" style="padding:20px; opacity:0.5;">Drop Workflows Here</div>`;
+    }
 
-    return mappedItems.map(item => {
-        const res = OL.getResourceById(item.resourceId);
-        const stepCount = (res?.steps || []).length;
+    // 2. Map through ALL matched resources to show them side-by-side
+    return matchedResources.map(res => {
+        const stepCount = (res.steps || []).length;
         
         return `
             <div class="workflow-block-card" 
-                 onclick="event.stopPropagation(); OL.openResourceModal('${item.resourceId}')"
-                 style="width: 220px; background: var(--panel-dark); border: 1px solid var(--line); border-radius: 8px; padding: 12px; cursor: pointer; transition: transform 0.2s;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                    <span class="pill tiny vault">${esc(res?.type || 'SOP')}</span>
-                    <button class="card-delete-btn" style="position:static;" 
-                            onclick="event.stopPropagation(); OL.unmapWorkflowFromStage('${item.id}')">×</button>
+                 onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                    <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
+                    <button class="card-delete-btn" style="position:static; padding:0; margin:-5px -5px 0 0;" 
+                            onclick="event.stopPropagation(); OL.unmapWorkflowFromStage('${res.id}')">×</button>
                 </div>
-                <div class="bold" style="font-size: 13px; margin-bottom: 5px; color: var(--accent);">${esc(res?.name || 'Unknown')}</div>
-                <div class="tiny muted" style="display:flex; gap:10px;">
+                <div class="bold" style="font-size: 12px; margin-bottom: 5px; color: var(--accent); line-height:1.2;">
+                    ${esc(res.name || 'Unknown')}
+                </div>
+                <div class="tiny muted" style="display:flex; gap:10px; font-size:9px;">
                     <span>📝 ${stepCount} Steps</span>
-                    <span>👤 ${item.responsibleParty || 'Sphynx'}</span>
-                </div>
-                <div class="card-progress-mini" style="height:3px; background:rgba(255,255,255,0.05); margin-top:10px; border-radius:10px; overflow:hidden;">
-                    <div style="width: ${res?.status === 'Live' ? '100%' : '30%'}; height:100%; background: ${res?.status === 'Live' ? 'var(--accent)' : 'var(--warn)'};"></div>
+                    <span>🟢 Live</span>
                 </div>
             </div>
         `;
     }).join('');
 };
 
-OL.unmapWorkflowFromStage = function(lineItemId) {
-    const client = getActiveClient();
-    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === lineItemId);
-    if (item) {
-        item.stageId = null; // Remove the time-mapping but keep the resource in the project
+// Update this helper to use Resource ID directly
+OL.unmapWorkflowFromStage = function(resId) {
+    const res = OL.getResourceById(resId);
+    if (res) {
+        res.stageId = null; 
         OL.persist();
         renderGlobalVisualizer(false);
     }
