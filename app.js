@@ -5190,49 +5190,44 @@ OL.renderVisualizer = function(resId) {
     const res = OL.getResourceById(resId);
     if (!canvas || !res) return;
 
-    // 1. Define our standard grid dimensions
-    const LANE_HEIGHT = 200;
+    // 🚀 TIGHTER SPACING
+    const LANE_HEIGHT = 140; // Shrunk from 200
     const COL_WIDTH = 280;
     const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    
-    // Calculate required width based on steps
     const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 4);
-    const canvasWidth = (maxCol + 2) * COL_WIDTH;
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
 
-    // 2. Generate Grid Background (Prior Level Style)
-    // Inside OL.renderVisualizer
+    // 1. Generate the Grid with DROP TARGETS
     const lanesHtml = lanes.map((lane, laneIdx) => `
-        <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05); position: relative;">
-            <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
+        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; display: flex; border-bottom: 1px solid rgba(56,189,248,0.05); position: relative;">
+            <div class="lane-label" style="position: sticky; left: 0; width: 120px; background: #0b0f1a; z-index: 40; display: flex; align-items: center; padding-left: 15px; font-size: 9px; font-weight: 800; color: var(--accent); text-transform: uppercase;">
                 ${lane}
             </div>
             ${Array.from({length: maxCol + 4}).map((_, colIdx) => `
                 <div class="grid-drop-target" 
-                    style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%; transition: background 0.2s;"
-                    ondragover="event.preventDefault(); this.style.background='rgba(56, 189, 248, 0.1)';" 
-                    ondragleave="this.style.background='transparent';"
-                    ondrop="this.style.background='transparent'; OL.handleFocusedCanvasDrop(event, '${resId}', ${laneIdx}, ${colIdx})">
+                     style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%; transition: background 0.2s;"
+                     ondragover="event.preventDefault(); this.style.background='rgba(56, 189, 248, 0.1)';" 
+                     ondragleave="this.style.background='transparent';"
+                     ondrop="this.style.background='transparent'; OL.handleFocusedCanvasDrop(event, '${resId}', ${laneIdx}, ${colIdx})">
                 </div>
             `).join('')}
         </div>
     `).join('');
 
-    // 3. Render Snapped Nodes
+    // 2. Render Cards
     const nodesHtml = steps.map((step) => {
         const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        const top = (laneIdx * LANE_HEIGHT) + 50; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 140; // Offset for the sticky label
+        const top = (laneIdx * LANE_HEIGHT) + 25; // Adjusted for shrunk height
+        const left = (step.gridCol || 0) * COL_WIDTH + 140;
 
         return `
             <div class="workflow-block-card grid-snapped" 
-                draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 30; cursor: grab;"
-                onmousedown="OL.loadInspector('${step.id}', '${res.id}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')"
-                onclick="OL.loadInspector('${step.id}', '${res.id}')">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type)}</span>
+                 draggable="true"
+                 style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 50; cursor: grab;"
+                 onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${res.id}')"
+                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${res.id}')">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px; pointer-events:none;">
+                    <span class="pill tiny vault" style="font-size:8px;">${esc(step.type)}</span>
                 </div>
                 <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
                     ${esc(step.name)}
@@ -5243,19 +5238,12 @@ OL.renderVisualizer = function(resId) {
 
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
-             style="width: ${canvasWidth}px; height: ${lanes.length * LANE_HEIGHT}px; position: relative; background: #050816;">
-            <div class="vis-swimlane-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-                ${lanesHtml}
-            </div>
-            <div class="vis-absolute-container">
-                ${nodesHtml}
-            </div>
-            <svg id="vis-links-layer" class="vis-svg" style="pointer-events: none; z-index: 25;"></svg>
+             style="width: ${(maxCol + 5) * COL_WIDTH}px; position: relative; background: #050816;">
+            <div class="vis-swimlane-layer">${lanesHtml}</div>
+            <div class="vis-absolute-container">${nodesHtml}</div>
+            <svg id="vis-links-layer" class="vis-svg" style="pointer-events: none; z-index: 45;"></svg>
         </div>
     `;
-
-    // 4. Auto-draw handoff lines
-    setTimeout(() => OL.drawVisualizerLines(resId), 50);
 };
 
 OL.autoGrowNode = function(element, resId) {
@@ -10902,55 +10890,55 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 };
 
 OL.loadInspector = function(targetId, parentWorkflowId = null) {
+    console.log("🔍 Inspecting:", targetId, "Parent:", parentWorkflowId);
     state.activeInspectorResId = targetId;
+    
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
     let displayData = null;
-    let titlePrefix = "Workflow";
+    let nestedSteps = [];
 
-    // 1. Resolve target: Is it a nested step or a top-level resource?
     if (parentWorkflowId) {
+        // Mode: Inspecting a Step inside a Workflow
         const parent = OL.getResourceById(parentWorkflowId);
         const step = parent?.steps?.find(s => s.id === targetId);
-        // Link to the actual technical asset to get its details
-        const technicalAsset = OL.getResourceById(step?.resourceLinkId);
-        displayData = technicalAsset || step;
-        titlePrefix = "Step Detail";
+        
+        // Find the actual technical resource (The Zap/Form) linked to this step
+        // Look in projectData.localResources or master.resources
+        displayData = OL.getResourceById(step?.resourceLinkId) || step;
+        nestedSteps = displayData?.steps || [];
     } else {
+        // Mode: Inspecting a top-level Workflow
         displayData = OL.getResourceById(targetId);
+        nestedSteps = displayData?.steps || [];
     }
 
-    if (!displayData) {
-        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
-        return;
-    }
-
-    const steps = displayData.steps || [];
+    if (!displayData) return;
 
     panel.innerHTML = `
         <div class="inspector-content fade-in" style="padding: 20px;">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <span class="tiny accent bold uppercase">${titlePrefix}</span>
+                <span class="tiny accent bold uppercase">Step Details</span>
                 <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(displayData.name)}</h2>
                 <div class="tiny muted">${esc(displayData.type || 'Action')}</div>
             </div>
 
             <section>
-                <label class="modal-section-label">Technical SOP / Steps</label>
+                <label class="modal-section-label">Internal Process Steps (${nestedSteps.length})</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
-                    ${steps.length > 0 ? steps.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                            <span class="tiny bold accent">${i + 1}</span>
-                            <div class="tiny" style="color:#eee;">${esc(s.name || s.text || 'Process Step')}</div>
+                    ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
+                        <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                            <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
+                            <div class="tiny" style="color:#eee;">${esc(s.name || s.text || 'Action')}</div>
                         </div>
-                    `).join('') : '<div class="tiny muted italic">No technical steps defined for this asset.</div>'}
+                    `).join('') : '<div class="tiny muted italic">No internal steps defined for this resource.</div>'}
                 </div>
             </section>
 
             <footer style="margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:20px;">
-                <button class="btn tiny primary full-width" onclick="OL.openResourceModal('${displayData.id}')">
-                    ⚙️ Configure Asset
+                <button class="btn tiny primary full-width" style="width:100%" onclick="OL.openResourceModal('${displayData.id}')">
+                    ⚙️ Edit Technical Resource
                 </button>
             </footer>
         </div>
