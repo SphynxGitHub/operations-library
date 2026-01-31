@@ -11242,76 +11242,31 @@ OL.handleStageDrop = function(e, stageId) {
 };
 
 // --- UNIFIED CANVAS DROP HANDLER ---
-OL.handleFocusedCanvasDrop = function(e, parentId) {
+OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
-    
-    // 1. Resolve Grid Placement (Calculation for snapped positioning)
     const wrapper = document.getElementById('fs-canvas-wrapper');
     const rect = wrapper.getBoundingClientRect();
-    const scrollLeft = wrapper.scrollLeft;
-    const scrollTop = wrapper.scrollTop;
     
-    // Offset by 140px to account for the sticky lane labels on the left
-    const x = e.clientX - rect.left - 140 + scrollLeft;
-    const y = e.clientY - rect.top + scrollTop;
-    
+    // 1. Calculate relative mouse position
+    const x = e.clientX - rect.left - 140 + wrapper.scrollLeft;
+    const y = e.clientY - rect.top + wrapper.scrollTop;
+
+    // 2. Identify the target cell
     const colIdx = Math.max(0, Math.floor(x / 280));
-    const laneNames = ["Lead/Client", "System/Auto", "Internal Ops"];
-    const laneIdx = Math.max(0, Math.min(laneNames.length - 1, Math.floor(y / 200)));
+    const laneIdx = Math.max(0, Math.min(2, Math.floor(y / 200)));
 
-    // 2. Identify the Parent (Workflow or Resource)
-    const parentObj = OL.getResourceById(parentId);
-    if (!parentObj) return;
-
-    // 3. Resolve Payload Type
-    const moveStepId = e.dataTransfer.getData("moveStepId");      // Re-positioning existing node
-    const resId = e.dataTransfer.getData("resId");                // Level 2: New Resource from sidebar
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Level 3: New Step from factory
-
-    // --- EXECUTION ---
+    // 3. Visual Highlight Effect
+    // Remove old highlights
+    document.querySelectorAll('.grid-drop-target').forEach(el => el.classList.remove('hovered'));
     
-    // Case A: Moving an existing card
-    if (moveStepId) {
-        const step = (parentObj.steps || []).find(s => s.id === moveStepId);
-        if (step) {
-            step.gridLane = laneNames[laneIdx];
-            step.gridCol = colIdx;
-        }
-    } 
-    // Case B: Dropping a Verb + Noun from the Factory (Level 3)
-    else if (atomicPayload) {
-        const data = JSON.parse(atomicPayload);
-        const newStep = {
-            id: uid(),
-            name: data.name,
-            type: data.type,
-            gridLane: laneNames[laneIdx],
-            gridCol: colIdx,
-            outcomes: [],
-            status: 'Draft'
-        };
-        if (!parentObj.steps) parentObj.steps = [];
-        parentObj.steps.push(newStep);
-    } 
-    // Case C: Dropping a Resource into a Workflow (Level 2)
-    else if (resId) {
-        const sourceRes = OL.getResourceById(resId);
-        const newStep = {
-            id: uid(),
-            name: sourceRes.name,
-            type: sourceRes.type || 'Action',
-            gridLane: laneNames[laneIdx],
-            gridCol: colIdx,
-            resourceLinkId: resId, // Crucial for drill-down and inspector
-            outcomes: []
-        };
-        if (!parentObj.steps) parentObj.steps = [];
-        parentObj.steps.push(newStep);
+    // Target the specific lane and column
+    const laneRows = wrapper.querySelectorAll('.vis-lane');
+    const targetLane = laneRows[laneIdx];
+    if (targetLane) {
+        // Find the Nth column marker (adjusting for sticky label)
+        const targetCell = targetLane.children[colIdx + 1]; 
+        if (targetCell) targetCell.classList.add('hovered');
     }
-
-    // 4. Finalize
-    OL.persist();
-    OL.renderVisualizer(parentId); // Re-draw the nodes on the grid
 };
 
 document.addEventListener('dragleave', (e) => {

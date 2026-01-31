@@ -2578,6 +2578,14 @@ body.is-visualizer #mainContent {
     background: rgba(56, 189, 248, 0.05) !important;
 }
 
+.workflow-block-card.grid-snapped {
+    width: 240px !important; /* Slightly narrower than the 280px column */
+    max-width: 90%;
+    min-height: 80px;
+    /* Pinned to top-left of its calculated grid coordinate */
+    transform: translate(20px, 60px); 
+}
+
 .draggable-workflow-item .btn-icon-only {
     display: none;
     background: rgba(255,255,255,0.1);
@@ -2601,6 +2609,17 @@ body.is-visualizer #mainContent {
     background: rgba(56, 189, 248, 0.08) !important;
     border: 2px solid var(--accent) !important;
     box-shadow: inset 0 0 20px rgba(56, 189, 248, 0.1);
+}
+
+.grid-column-marker {
+    transition: background 0.15s ease;
+    pointer-events: none; /* Let the drop hit the wrapper */
+}
+
+.grid-column-marker.hovered {
+    background: rgba(56, 189, 248, 0.15) !important;
+    box-shadow: inset 0 0 15px rgba(56, 189, 248, 0.1);
+    border: 1px solid var(--accent);
 }
 
 /*==================================================================
