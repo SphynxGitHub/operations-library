@@ -10786,6 +10786,16 @@ OL.deployRequirementsFromResource = function(resourceId) {
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
+const STEP_FACTORY_LIB = {
+    Triggers: [
+        "Meeting Booked", "Meeting Completed", "Task Completed", "Task Created", 
+        "Workflow Step Completed", "Workflow Completed", "Workflow Started", 
+        "Email Sent", "Form Completed", "Form Sent", "Document Uploaded"
+    ],
+    Verbs: ["Find", "Create", "Update", "Delete", "Send", "Launch", "Complete", "Request"],
+    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Table Row", "Tag", "Text", "Slack Message"]
+};
+
 window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
@@ -10795,103 +10805,69 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    let toolboxResources = [];
+    let toolboxHtml = "";
     let canvasHtml = "";
-    let breadcrumbLabel = "Global Lifecycle";
+    let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    if (state.focusedWorkflowId) {
-        // --- 1. FOCUSED MODE (Drilled Down) ---
+    // --- LEVEL 3: MECHANICAL VIEW (Resource -> Steps) ---
+    if (state.focusedResourceId) {
+        const res = OL.getResourceById(state.focusedResourceId);
+        
+        // Find parents for breadcrumbs
+        const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
+        const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
+
+        breadcrumbHtml += `
+            <span class="muted"> > </span> 
+            <span class="breadcrumb-item" onclick="OL.exitWorkflowFocus()">${esc(parentStage?.name || 'Stage')}</span>
+            <span class="muted"> > </span> 
+            <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
+            <span class="muted"> > </span> 
+            <span class="breadcrumb-current">${esc(res?.name)}</span>
+        `;
+
+        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
+        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
+
+    } 
+    // --- LEVEL 2: FLOW VIEW (Workflow -> Resources) ---
+    else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
-        breadcrumbLabel = `Lifecycle > ${focusedRes?.name}`;
-        toolboxResources = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
+        const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
 
-        // We determine how many columns to draw for the visual grid
-        const maxCol = (focusedRes.steps || []).reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+        breadcrumbHtml += `
+            <span class="muted"> > </span> 
+            <span class="breadcrumb-item" onclick="OL.exitWorkflowFocus()">${esc(parentStage?.name || 'Stage')}</span>
+            <span class="muted"> > </span> 
+            <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>
+        `;
 
-        canvasHtml = `
-            <div id="fs-canvas-wrapper" 
-                 style="height:100%; width:100%; overflow: auto; position: relative;"
-                 ondragover="OL.handleCanvasDragOver(event)"
-                 ondrop="OL.handleFocusedCanvasDrop(event, '${state.focusedWorkflowId}')">
-                
-                <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
-                    ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
-                        <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
-                            <div style="width: 120px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.05);"></div>
-                            ${Array.from({length: maxCol + 4}).map(() => `
-                                <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
-                            `).join('')}
-                        </div>
-                    `).join('')}
-                </div>
+        toolboxHtml = renderLevel2SidebarContent(allResources);
+        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId, allResources);
 
-                <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
-            </div>`;
-        
-        setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
-
-    } else {
-        // --- 2. STANDARD MODE (The Lifecycle Stages) ---
-        toolboxResources = allResources.filter(res => 
-            (res.type || "").toLowerCase() === 'workflow' && !res.stageId
-        );
-        
-        const stages = sourceData.stages || [];
-        canvasHtml = `
-            <div class="vertical-stage-canvas" id="fs-canvas"> 
-                <svg id="vis-links-layer" class="vis-svg"></svg>
-                ${stages.map((stage, sIdx) => `
-                    <div class="stage-container">
-                        <div class="stage-header-row">
-                            <span class="stage-number">${sIdx + 1}</span>
-                            <span class="stage-name" contenteditable="true" 
-                                  onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">
-                                ${esc(stage.name)}
-                            </span>
-                        </div>
-                        <div class="stage-workflow-stream" 
-                             ondragover="OL.handleCanvasDragOver(event)" 
-                             ondrop="OL.handleStageDrop(event, '${stage.id}')">
-                            ${renderWorkflowsInStage(stage.id, isVaultMode)}
-                        </div>
-                    </div>
-                `).join('')}
-                ${stages.length === 0 ? '<div class="empty-hint">No stages defined. Click "+ Add Stage" to begin.</div>' : ''}
-            </div>`;
+    } 
+    // --- LEVEL 1: LIFECYCLE VIEW (Stage -> Workflows) ---
+    else {
+        toolboxHtml = renderLevel1SidebarContent(allResources);
+        canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
+    // --- RENDER MAIN WRAPPER ---
     container.innerHTML = `
-        <div class="three-pane-layout vertical-lifecycle-mode">
+        <div class="three-pane-layout">
             <aside class="pane-drawer">
-                <div class="drawer-header">
-                    <h3 style="margin-bottom: 12px;">${state.focusedWorkflowId ? '📦 Technical Assets' : 'Workflow Library'}</h3>
-                    <input type="text" class="modal-input tiny" id="toolbox-search" placeholder="Search..." oninput="OL.filterToolbox(this.value)">
-                </div>
-                <div class="drawer-tools" id="toolbox-list">
-                    ${toolboxResources.map(res => `
-                        <div class="draggable-workflow-item" data-name="${res.name.toLowerCase()}" draggable="true" 
-                             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                            <span style="opacity: 0.6;">${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
-                            <span style="flex: 1;">${esc(res.name)}</span>
-                        </div>
-                    `).join('')}
-                </div>
-
-                <div class="return-to-library-zone" 
-                    ondragover="OL.handleCanvasDragOver(event)" 
-                    ondragleave="this.classList.remove('drag-over')"
-                    ondrop="OL.handleUnifiedDelete(event, '${state.focusedWorkflowId || ""}')">
+                ${toolboxHtml}
+                <div class="return-to-library-zone" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUnifiedDelete(event)">
                     🗑️ Drop to Unmap
                 </div>
             </aside>
 
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        ${state.focusedWorkflowId ? `<button class="btn tiny soft" onclick="OL.exitWorkflowFocus()">⬅ Back</button>` : ''}
-                        <span class="tiny muted bold">${breadcrumbLabel}</span>
+                    <div class="breadcrumb-trail">${breadcrumbHtml}</div>
+                    <div class="header-actions">
+                        ${!state.focusedWorkflowId && !state.focusedResourceId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
                     </div>
-                    ${!state.focusedWorkflowId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
                 </div>
                 ${canvasHtml}
             </main>
@@ -10902,7 +10878,22 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    if (state.activeInspectorResId) setTimeout(() => OL.loadInspector(state.activeInspectorResId), 10);
+    // Post-render triggers
+    if (state.focusedResourceId) setTimeout(() => OL.renderVisualizer(state.focusedResourceId), 50);
+    else if (state.focusedWorkflowId) setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
+};
+
+OL.exitToLifecycle = function() {
+    state.focusedWorkflowId = null;
+    state.focusedResourceId = null;
+    OL.clearInspector();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+OL.exitToWorkflow = function() {
+    state.focusedResourceId = null;
+    OL.clearInspector();
+    renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 OL.loadInspector = function(targetId, parentWorkflowId = null) {
@@ -11569,6 +11560,136 @@ window.renderStepsInCell = function(colId, rowId) {
             </div>
         `;
     }).join('');
+};
+
+window.renderLevel3SidebarContent = function(resourceId) {
+    const res = OL.getResourceById(resourceId);
+    return `
+        <div class="drawer-header">
+            <h3 style="color: var(--accent); margin-bottom: 4px;">🛠️ Step Factory</h3>
+            <p class="tiny muted" style="margin-bottom: 12px;">Internal Mechanics: ${esc(res?.name)}</p>
+            <input type="text" class="modal-input tiny" placeholder="Search factory..." oninput="OL.filterToolbox(this.value)">
+        </div>
+        
+        <div class="factory-scroll-zone" style="flex: 1; overflow-y: auto; padding: 15px;">
+            <section style="margin-bottom: 25px;">
+                <label class="modal-section-label" style="color: #ffbf00; margin-bottom: 10px;">⚡ Triggers</label>
+                <div class="factory-grid" style="display: flex; flex-direction: column; gap: 4px;">
+                    ${ATOMIC_STEP_LIB.Triggers.map(t => `
+                        <div class="draggable-factory-item trigger" draggable="true" 
+                             data-name="${t.toLowerCase()}"
+                             ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">
+                            ${t}
+                        </div>
+                    `).join('')}
+                </div>
+            </section>
+
+            <section>
+                <label class="modal-section-label">🎬 Action Builder</label>
+                <div class="builder-box" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--panel-border);">
+                    <div class="modal-column" style="margin-bottom: 10px;">
+                        <label class="tiny muted bold">VERB</label>
+                        <select id="builder-verb" class="modal-input tiny" style="text-align: left;">
+                            ${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="modal-column" style="margin-bottom: 15px;">
+                        <label class="tiny muted bold">OBJECT</label>
+                        <select id="builder-object" class="modal-input tiny" style="text-align: left;">
+                            ${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                        </select>
+                    </div>
+                    
+                    <div class="draggable-factory-item action" draggable="true" 
+                         style="text-align: center; background: var(--accent-glow); border: 1px dashed var(--accent); color: var(--accent); font-weight: bold; padding: 12px;"
+                         ondragstart="OL.handleModularAtomicDrag(event)">
+                         DRAG NEW ACTION +
+                    </div>
+                    <p class="tiny muted" style="text-align:center; margin-top:8px;">Combines Verb + Object</p>
+                </div>
+            </section>
+        </div>
+    `;
+};
+
+window.renderLevel3Canvas = function(resourceId) {
+    const res = OL.getResourceById(resourceId);
+    const steps = res?.steps || [];
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+
+    return `
+        <div id="fs-canvas-wrapper" style="height:100%; width:100%; overflow: auto; position: relative;"
+             ondragover="OL.handleCanvasDragOver(event)"
+             ondrop="OL.handleFocusedCanvasDrop(event, '${resourceId}')">
+            
+            <div class="visual-grid-bg" style="position: absolute; top: 0; left: 0; display: flex; flex-direction: column; width: ${(maxCol + 4) * 280}px;">
+                ${["Lead/Client", "System/Auto", "Internal Ops"].map(lane => `
+                    <div class="vis-lane" style="display: flex; height: 200px; border-bottom: 1px solid rgba(56, 189, 248, 0.05);">
+                        <div class="grid-label">${lane}</div>
+                        ${Array.from({length: maxCol + 4}).map(() => `
+                            <div class="grid-column-marker" style="width: 280px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                        `).join('')}
+                    </div>
+                `).join('')}
+            </div>
+
+            <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
+        </div>
+    `;
+};
+
+// Breadcrumb Navigation Functions
+OL.exitToLifecycle = function() {
+    state.focusedWorkflowId = null;
+    state.focusedResourceId = null;
+    OL.clearInspector();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+OL.exitToWorkflow = function() {
+    state.focusedResourceId = null;
+    OL.clearInspector();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+OL.handleAtomicDrag = function(e, type, name) {
+    const payload = { type, name, isAtomic: true };
+    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+};
+
+OL.handleModularAtomicDrag = function(e) {
+    const verb = document.getElementById('builder-verb').value;
+    const obj = document.getElementById('builder-object').value;
+    const payload = { type: 'Action', name: `${verb} ${obj}`, isAtomic: true };
+    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+};
+
+OL.handleFocusedCanvasDrop = function(e, resId) {
+    e.preventDefault();
+    const res = OL.getResourceById(resId);
+    const rawData = e.dataTransfer.getData("atomicPayload");
+    if (!rawData || !res) return;
+
+    const data = JSON.parse(rawData);
+    const rect = document.getElementById('fs-canvas-wrapper').getBoundingClientRect();
+    const colIdx = Math.max(0, Math.floor((e.clientX - rect.left - 140 + e.currentTarget.scrollLeft) / 280));
+    const laneIdx = Math.max(0, Math.min(2, Math.floor((e.clientY - rect.top + e.currentTarget.scrollTop) / 200)));
+    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
+
+    const newStep = {
+        id: uid(),
+        name: data.name,
+        type: data.type,
+        gridLane: lanes[laneIdx],
+        gridCol: colIdx,
+        outcomes: []
+    };
+
+    if (!res.steps) res.steps = [];
+    res.steps.push(newStep);
+    OL.persist();
+    OL.renderVisualizer(resId);
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
