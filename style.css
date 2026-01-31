@@ -2287,7 +2287,7 @@ body, #app-root {
 }
 
 .drawer-header {
-    padding: 20px;
+    padding: 5px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
