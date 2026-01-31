@@ -2409,6 +2409,31 @@ body, #app-root {
     border-color: var(--accent);
 }
 
+.return-to-library-zone {
+    margin: 15px;
+    padding: 20px;
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+}
+
+.return-to-library-zone.drag-over {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+    color: #ef4444;
+    transform: scale(1.02);
+}
+
+.stage-workflow-stream.drag-over {
+    background: rgba(56, 189, 248, 0.05) !important;
+    border-color: var(--accent) !important;
+}
+
 /*==================================================================
   4. WORKFLOW CARDS
 ==================================================================*/
@@ -2430,6 +2455,9 @@ body, #app-root {
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
 }
 
+.workflow-block-card:active {
+    cursor: grabbing;
+}
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/

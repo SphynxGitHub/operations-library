@@ -10853,35 +10853,38 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (!container) return;
 
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
-    const stages = sourceData.stages || []; // ⬇️ Vertical Rows
-    const workflows = sourceData.workflows || []; // ➡️ Horizontal Columns
+    const stages = sourceData.stages || [];
     
-    // The Toolbox now shows available Resources to be used as Workflows
-    const availableResources = isVaultMode ? state.master.resources : client.projectData.localResources;
+    // 🚀 THE FILTER: Only show resources that haven't been assigned a Stage yet
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const toolboxResources = allResources.filter(res => !res.stageId);
 
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">
                 <div class="drawer-header">
                     <h3 style="margin-bottom: 12px;">Workflow Library</h3>
-                    <div class="search-map-container" style="position: relative;">
-                        <input type="text" class="modal-input tiny" 
-                            id="toolbox-search"
-                            placeholder="🔍 Search templates..." 
-                            oninput="OL.filterToolbox(this.value)"
-                            style="width: 100%; padding-left: 30px;">
-                    </div>
+                    <input type="text" class="modal-input tiny" id="toolbox-search"
+                           placeholder="🔍 Search unmapped..." oninput="OL.filterToolbox(this.value)">
                 </div>
-                <div class="drawer-tools" id="toolbox-list">
-                    ${availableResources.map(res => `
+                
+                <div class="drawer-tools" id="toolbox-list" style="flex: 1; overflow-y: auto;">
+                    ${toolboxResources.map(res => `
                         <div class="draggable-workflow-item" 
-                            data-name="${res.name.toLowerCase()}"
-                            draggable="true" 
-                            ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                            <span style="opacity: 0.6;">📂</span>
-                            <span style="flex: 1;">${esc(res.name)}</span>
+                             data-name="${res.name.toLowerCase()}"
+                             draggable="true" 
+                             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                            <span>📂</span> <span style="flex: 1;">${esc(res.name)}</span>
                         </div>
                     `).join('')}
+                    ${toolboxResources.length === 0 ? '<div class="tiny muted italic p-10">All resources are mapped.</div>' : ''}
+                </div>
+
+                <div class="return-to-library-zone" 
+                     ondragover="OL.handleCanvasDragOver(event)"
+                     ondragleave="this.classList.remove('drag-over')"
+                     ondrop="OL.handleReturnToLibrary(event)">
+                    📥 Drop here to un-map
                 </div>
             </aside>
 
@@ -10892,6 +10895,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 </div>
 
                 <div class="vertical-stage-canvas">
+                    <svg id="vis-links-layer" class="vis-svg"></svg>
+                    
                     ${stages.map((stage, sIdx) => `
                         <div class="stage-container">
                             <div class="stage-header-row">
@@ -10904,13 +10909,12 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                             
                             <div class="stage-workflow-stream" 
                                  ondragover="OL.handleCanvasDragOver(event)"
+                                 ondragleave="this.classList.remove('drag-over')"
                                  ondrop="OL.handleStageDrop(event, '${stage.id}')">
                                 ${renderWorkflowsInStage(stage.id, isVaultMode)}
                             </div>
                         </div>
                     `).join('')}
-                    
-                    ${stages.length === 0 ? '<div class="empty-hint">Create your first Lifecycle Stage to begin.</div>' : ''}
                 </div>
             </main>
 
@@ -10919,11 +10923,17 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             </aside>
         </div>
     `;
+    
+    // Draw hand-off lines
+    setTimeout(() => { if(window.OL.drawGlobalTimelineLines) OL.drawGlobalTimelineLines(); }, 100);
 };
 
+// Universal Start Drag (Works for Toolbox AND Canvas Cards)
 OL.handleWorkflowDragStart = function(e, resId, resName) {
     e.dataTransfer.setData("resId", resId);
     e.dataTransfer.setData("resName", resName);
+    // Add a ghost effect to the element being dragged
+    e.target.style.opacity = "0.5";
 };
 
 OL.handleStageDrop = function(e, stageId) {
@@ -10948,40 +10958,42 @@ OL.handleStageDrop = function(e, stageId) {
     }
 };
 
+// Return to Library (Unmap)
+OL.handleReturnToLibrary = function(e) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId");
+    if (!resId) return;
+
+    const res = OL.getResourceById(resId);
+    if (res) {
+        res.stageId = null; // Wipe the stage assignment
+        OL.persist();
+        renderGlobalVisualizer(false);
+        console.log(`📥 Returned ${res.name} to Workflow Library`);
+    }
+    document.querySelector('.return-to-library-zone').classList.remove('drag-over');
+};
+
+// Ensure Canvas Cards are also draggable
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
-    if (!client) return "";
-
-    // 1. Grab all resources that have been assigned this Stage ID
-    const allResources = isVaultMode ? (state.master.resources || []) : (client.projectData.localResources || []);
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const matchedResources = allResources.filter(r => String(r.stageId) === String(stageId));
 
-    if (matchedResources.length === 0) {
-        return `<div class="tiny muted italic" style="padding:20px; opacity:0.5;">Drop Workflows Here</div>`;
-    }
+    if (matchedResources.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Workflows Here</div>`;
 
-    // 2. Map through ALL matched resources to show them side-by-side
-    return matchedResources.map(res => {
-        const stepCount = (res.steps || []).length;
-        
-        return `
-            <div class="workflow-block-card" 
-                 onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                    <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
-                    <button class="card-delete-btn" style="position:static; padding:0; margin:-5px -5px 0 0;" 
-                            onclick="event.stopPropagation(); OL.unmapWorkflowFromStage('${res.id}')">×</button>
-                </div>
-                <div class="bold" style="font-size: 12px; margin-bottom: 5px; color: var(--accent); line-height:1.2;">
-                    ${esc(res.name || 'Unknown')}
-                </div>
-                <div class="tiny muted" style="display:flex; gap:10px; font-size:9px;">
-                    <span>📝 ${stepCount} Steps</span>
-                    <span>🟢 Live</span>
-                </div>
+    return matchedResources.map(res => `
+        <div class="workflow-block-card" 
+             draggable="true" 
+             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
+             onclick="event.stopPropagation(); OL.loadInspector('${res.id}', null, true)">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
             </div>
-        `;
-    }).join('');
+            <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
+            <div class="tiny muted" style="margin-top:8px;">📝 ${(res.steps || []).length} Steps</div>
+        </div>
+    `).join('');
 };
 
 // Update this helper to use Resource ID directly
