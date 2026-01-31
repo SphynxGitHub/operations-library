@@ -11080,39 +11080,38 @@ OL.handleReturnToLibrary = function(e) {
 // Ensure Canvas Cards are also draggable
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
-    if (!client) return "";
-
-    const allResources = isVaultMode ? (state.master.resources || []) : (client.projectData.localResources || []);
-    
-    // 🚀 THE FIX: Sort by mapOrder
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const matchedResources = allResources
         .filter(r => String(r.stageId) === String(stageId))
         .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
     if (matchedResources.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Workflows Here</div>`;
 
-    return matchedResources.map(res => `
-        <div class="workflow-block-card" 
-            draggable="true" 
-            ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
-            onclick="event.stopPropagation(); OL.loadInspector('${res.id}', null, true); OL.highlightInventoryRow('${res.id}')">
-            
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
-                <button class="card-delete-btn" style="position:static; padding:0;" 
-                        onclick="event.stopPropagation(); OL.unmapWorkflowFromStage('${res.id}')">×</button>
+    return matchedResources.map(res => {
+        // Clean the name for the HTML attribute
+        const safeName = res.name.replace(/'/g, "\\'");
+        
+        return `
+            <div class="workflow-block-card" 
+                 draggable="true" 
+                 ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${safeName}')"
+                 onclick="console.log('Card Clicked:', '${res.id}'); OL.loadInspector('${res.id}')"
+                 style="position: relative; z-index: 10; pointer-events: auto;">
+                
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events: none;">
+                    <span class="pill tiny vault">${esc(res.type || 'SOP')}</span>
+                </div>
+                
+                <div class="bold" style="font-size: 12px; color: var(--accent); pointer-events: none;">
+                    ${esc(res.name)}
+                </div>
+                
+                <div class="tiny muted" style="margin-top:8px; pointer-events: none;">
+                    📝 ${(res.steps || []).length} Steps
+                </div>
             </div>
-            
-            <div class="bold" style="font-size: 12px; color: var(--accent); line-height:1.2;">
-                ${esc(res.name)}
-            </div>
-            
-            <div class="tiny muted" style="margin-top:8px; display:flex; gap:10px;">
-                <span>📝 ${(res.steps || []).length} Steps</span>
-                <span class="status-dot ${res.status === 'Live' ? 'primary' : 'evaluating'}"></span>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 };
 
 OL.highlightInventoryRow = function(resId) {
