@@ -2297,41 +2297,42 @@ body.fs-mode-active {
     flex-direction: column;
     gap: 8px;
 }
+
 .draggable-workflow-item {
-    display: grid !important;
-    /* Column 1: Icon (30px) | Column 2: Text (Auto) | Column 3: Buttons (30px) */
-    grid-template-columns: 30px 1fr 30px !important;
-    align-items: center; /* Vertical center alignment */
-    gap: 8px;
-    padding: 10px 12px;
+    display: flex !important;
+    flex-direction: row;
+    align-items: flex-start; /* Keeps icons at the top while text grows down */
+    gap: 12px;
+    padding: 12px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--panel-border);
     border-radius: 8px;
     cursor: grab;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     
-    /* 🚀 THE OVERLAP FIXES */
+    /* 🚀 THE "I DON'T CARE" GROWTH ENGINE */
     width: 100% !important;
-    height: auto !important; /* Allow growth */
-    min-height: 48px;
-    white-space: normal !important; /* Allow wrapping */
-    overflow: hidden;
+    height: auto !important;      /* Grows with text */
+    min-height: 50px;             /* Baseline */
+    white-space: normal !important; /* Forces wrapping */
+    overflow: visible !important;   /* No clipping allowed */
 }
 
 /* Lane 2: The Text */
 .draggable-workflow-item span:nth-child(2) {
-    font-size: 11px;
-    line-height: 1.4;
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.5; /* Breathable spacing between wrapped lines */
     color: var(--text-main);
-    word-break: break-word;
+    word-break: break-word; /* Prevents one long word from breaking the sidebar */
     display: block;
-    padding: 2px 0;
 }
 
 /* Lane 3: The Action Buttons */
 .item-actions {
-    display: none; /* Hidden until hover */
-    justify-content: flex-end;
+    display: none; 
+    flex-shrink: 0;
+    padding-top: 2px;
 }
 
 .draggable-workflow-item:hover .item-actions {
@@ -2343,13 +2344,8 @@ body.fs-mode-active {
     border: none;
     color: var(--accent);
     cursor: pointer;
-    font-size: 16px; /* Makes ⿻ easier to see */
+    font-size: 16px;
     padding: 0;
-    transition: transform 0.2s;
-}
-
-.lib-btn:hover {
-    transform: scale(1.3);
 }
 
 #toolbox-search {
