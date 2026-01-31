@@ -10960,6 +10960,29 @@ function renderGridCanvasShell(parentId) {
         </div>`;
 }
 
+window.renderWorkflowsInStage = function(stageId, isVaultMode) {
+    const client = getActiveClient();
+    const sourceResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    // Filter for workflows that belong to this specific stage
+    const matchedWorkflows = sourceResources
+        .filter(r => String(r.stageId) === String(stageId))
+        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+    if (matchedWorkflows.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
+
+    return matchedWorkflows.map(res => `
+        <div class="workflow-block-card" 
+             draggable="true" 
+             onmousedown="OL.loadInspector('${res.id}')"
+             ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
+             ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
+            <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
+            <div class="tiny muted">📝 ${(res.steps || []).length} Atomic Steps</div>
+        </div>
+    `).join('');
+};
+
 // --- NAVIGATION & STATE ---
 
 OL.drillDownIntoWorkflow = function(resId) {
