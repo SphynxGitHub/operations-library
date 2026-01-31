@@ -10950,17 +10950,38 @@ OL.handleStageDrop = function(e, stageId) {
     if (!resId) return;
 
     const client = getActiveClient();
-    const localResources = client.projectData.localResources || [];
-
-    // Find the specific resource being dragged
-    const res = localResources.find(r => r.id === resId);
+    const allResources = client.projectData.localResources || [];
+    const draggedRes = allResources.find(r => r.id === resId);
     
-    if (res) {
-        // 🚀 THE FIX: Simply assign the stageId to this resource.
-        // This allows infinite resources to share the same stageId.
-        res.stageId = stageId;
-        console.log(`✅ Linked ${res.name} to Stage ${stageId}`);
-        
+    if (draggedRes) {
+        // 1. Assign the Stage ID
+        draggedRes.stageId = stageId;
+
+        // 2. Calculate the new order within that stage
+        const stageWorkflows = allResources
+            .filter(r => r.stageId === stageId && r.id !== resId)
+            .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+        // 3. Find the insertion point based on mouse X position
+        const container = e.currentTarget;
+        const children = Array.from(container.querySelectorAll('.workflow-block-card'));
+        let newIndex = stageWorkflows.length;
+
+        for (let i = 0; i < children.length; i++) {
+            const rect = children[i].getBoundingClientRect();
+            const midPoint = rect.left + rect.width / 2;
+            if (e.clientX < midPoint) {
+                newIndex = i;
+                break;
+            }
+        }
+
+        // 4. Update the mapOrder of all items in this stage
+        stageWorkflows.splice(newIndex, 0, draggedRes);
+        stageWorkflows.forEach((r, idx) => {
+            r.mapOrder = idx;
+        });
+
         OL.persist();
         renderGlobalVisualizer(false);
     }
@@ -10985,8 +11006,14 @@ OL.handleReturnToLibrary = function(e) {
 // Ensure Canvas Cards are also draggable
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
-    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const matchedResources = allResources.filter(r => String(r.stageId) === String(stageId));
+    if (!client) return "";
+
+    const allResources = isVaultMode ? (state.master.resources || []) : (client.projectData.localResources || []);
+    
+    // 🚀 THE FIX: Sort by mapOrder
+    const matchedResources = allResources
+        .filter(r => String(r.stageId) === String(stageId))
+        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
     if (matchedResources.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Workflows Here</div>`;
 

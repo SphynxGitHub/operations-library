@@ -2447,6 +2447,8 @@ body, #app-root {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
+    pointer-events: auto; /* Required for click */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .workflow-block-card:hover {
@@ -2476,6 +2478,14 @@ body, #app-root {
     background: var(--accent);
     color: black;
 }
+
+/* Placeholder highlight when dragging over a stage */
+.stage-workflow-stream.drag-over {
+    background: rgba(56, 189, 248, 0.08) !important;
+    border: 2px solid var(--accent) !important;
+    box-shadow: inset 0 0 20px rgba(56, 189, 248, 0.1);
+}
+
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/
