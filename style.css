@@ -62,7 +62,7 @@ textarea {
 #mainContent {
     flex: 1;
     margin-left: 240px; 
-    padding: 40px;
+    padding-top: 10px;
     background: radial-gradient(circle at top right, #0f172a, transparent);
 }
 
@@ -2266,6 +2266,7 @@ body, #app-root {
     flex-direction: column;
     height: 100%;
     min-width: 0;
+    width: 75%;
     overflow: hidden;
 }
 
@@ -2442,7 +2443,7 @@ body, #app-root {
 /* 🚀 THE INTERNAL SCROLL WINDOW */
 #fs-canvas-wrapper {
     flex: 1 !important;
-    width: 100% !important;
+    width: 90% !important;
     overflow: auto !important; /* This is where the scrollbars should live */
     position: relative !important;
     background: #050816;
