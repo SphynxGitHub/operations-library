@@ -3766,14 +3766,25 @@ OL.getResourceById = function(id) {
     if (!id) return null;
     const idStr = String(id);
 
-    // Check Master
-    const fromMaster = (OL.state.master.resources || []).find(r => String(r.id) === idStr);
+    // 1. Resolve the global state (Check if it's in OL.state or just state)
+    const globalState = window.state || OL.state;
+    if (!globalState) {
+        console.error("❌ State not found. Ensure 'state' or 'OL.state' is defined.");
+        return null;
+    }
+
+    // 2. Check Master Library
+    const fromMaster = (globalState.master?.resources || []).find(r => String(r.id) === idStr);
     if (fromMaster) return fromMaster;
 
-    // Check Active Client
-    const client = getActiveClient();
+    // 3. Check Active Client Local Project
+    const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
     const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === idStr);
-    return fromLocal || null;
+    
+    if (fromLocal) return fromLocal;
+
+    console.warn(`⚠️ Resource ${idStr} not found in Master or Local storage.`);
+    return null;
 };
 
 // 3c. OPEN RESOURCE MODAL
