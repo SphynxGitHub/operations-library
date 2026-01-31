@@ -10978,16 +10978,18 @@ OL.loadIntoGlobalMapper = function(resId) {
 };
 
 OL.highlightResource = function(resId) {
-    // 1. Highlight the Row in the list
+    // 1. Highlight Row
     document.querySelectorAll('.inventory-row').forEach(r => r.classList.remove('active-row'));
     document.getElementById(`row-${resId}`)?.classList.add('active-row');
 
-    // 2. Pulse the Node on the map
+    // 2. Pulse Node on Map
     document.querySelectorAll('.vis-node').forEach(n => n.classList.remove('pulse-highlight'));
     const node = document.getElementById(`vis-node-${resId}`);
+    
     if (node) {
         node.classList.add('pulse-highlight');
-        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Smooth scroll canvas to center this node
+        node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }
 };
 
