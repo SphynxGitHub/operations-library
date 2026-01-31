@@ -10948,61 +10948,50 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     
     // Draw hand-off lines
     setTimeout(() => { if(window.OL.drawGlobalTimelineLines) OL.drawGlobalTimelineLines(); }, 100);
+
+    if (state.activeInspectorResId) {
+        setTimeout(() => {
+            OL.loadInspector(state.activeInspectorResId);
+        }, 10);
+    }
 };
 
 OL.loadInspector = function(resId) {
-    console.log("🔍 Triggering Inspector for:", resId);
-    
-    // 🚀 THE MASTER FIX: Find ALL panels and pick the last one (the active one)
+    // 🚀 THE STICKY FIX: Save the ID to state so it survives a Sync refresh
+    state.activeInspectorResId = resId; 
+
     const allPanels = document.querySelectorAll('#inspector-panel');
     const panel = allPanels[allPanels.length - 1];
-    
-    if (!panel) return console.error("❌ Panel physically missing from DOM");
+    if (!panel) return;
 
     const res = OL.getResourceById(resId);
     if (!res) {
-        panel.innerHTML = `<div style="padding:20px; color:#f87171;">⚠️ Resource ${resId} not found.</div>`;
+        panel.innerHTML = `<div style="padding:20px;">Resource not found</div>`;
         return;
     }
 
-    // Prepare steps
     const steps = res.steps || [];
-    const statusClass = res.status === 'Live' ? 'status-live' : 'status-draft';
-
-    // 🚀 THE PAINT: Force a hard wipe of the "select a node" text
-    panel.innerHTML = ""; 
-    
-    const contentHtml = `
-        <div class="inspector-content fade-in" style="display: block !important; opacity: 1 !important; visibility: visible !important;">
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny accent bold uppercase">Workflow Detail</span>
-                    <div class="node-status-badge ${statusClass}" style="position:static; display:inline-block;"></div>
-                </div>
-                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: white !important;">${esc(res.name)}</h2>
-                <div class="tiny muted">${esc(res.type || 'SOP')} • ${res.status || 'Draft'}</div>
-            </div>
-
-            <label class="modal-section-label" style="display:block; margin-bottom:12px;">Steps (${steps.length})</label>
+    panel.innerHTML = `
+        <div class="inspector-content fade-in" style="padding: 20px;">
+            <h3 style="color:var(--accent); font-size:10px; margin-bottom:15px; font-weight:900;">INSPECTOR</h3>
+            <h2 style="color:white; margin-bottom:5px; font-size:18px;">${esc(res.name)}</h2>
+            <div class="tiny muted" style="margin-bottom:20px;">${esc(res.type)}</div>
+            
+            <label class="modal-section-label">Sequence Steps</label>
             <div style="display:flex; flex-direction:column; gap:8px;">
                 ${steps.map((s, i) => `
-                    <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
+                    <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border-left:2px solid var(--accent);">
                         <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                        <div class="tiny" style="color:#eee !important; font-weight:600;">${esc(s.name || 'Untitled step')}</div>
+                        <div class="tiny" style="color:white;">${esc(s.name || 'Untitled Action')}</div>
                     </div>
-                `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+                `).join('') || '<div class="tiny muted italic">No steps mapped.</div>'}
             </div>
 
-            <footer style="margin-top: 30px;">
-                <button class="btn tiny primary full-width" style="width: 100%;" onclick="OL.openResourceModal('${res.id}')">
-                    ⚙️ Edit Full Workflow
-                </button>
-            </footer>
+            <button class="btn tiny primary full-width" style="margin-top:25px;" onclick="OL.openResourceModal('${res.id}')">
+                ⚙️ Full Configuration
+            </button>
         </div>
     `;
-
-    panel.innerHTML = contentHtml;
-    console.log("✅ Hard Paint Complete on DOM Node:", panel);
 };
 
 // Universal Start Drag (Works for Toolbox AND Canvas Cards)
