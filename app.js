@@ -10875,9 +10875,12 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = sourceData.stages || [];
     
-    // 🚀 THE FILTER: Only show resources that haven't been assigned a Stage yet
+    // 🚀 THE FILTER: Only workflows that haven't been assigned a Stage yet
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const toolboxResources = allResources.filter(res => !res.stageId);
+    const toolboxResources = allResources.filter(res => {
+        const isWorkflow = (res.type || "").toLowerCase() === 'workflow';
+        return isWorkflow && !res.stageId;
+    });
 
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
