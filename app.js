@@ -109,12 +109,18 @@ OL.sync = function() {
         }
 
         const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-        // 🚀 ADD THIS: Check if the inspector is currently showing content
-        const inspectorActive = !!document.querySelector('.inspector-content');
 
-        if (!isUserTyping && !inspectorActive) {
+        // 🚀 THE SHIELD: If someone is looking at the inspector, DO NOT rebuild the layout. 
+        // Rebuilding the layout is what causes the "select a node" reset.
+        if (!isUserTyping && !state.activeInspectorResId) {
             window.buildLayout();
             window.handleRoute(); 
+        } else {
+            console.log("🛡️ Sync blocked rebuild to preserve Inspector focus.");
+            // If we want the data to update inside the inspector WITHOUT rebuilding the whole screen:
+            if (state.activeInspectorResId) {
+                OL.loadInspector(state.activeInspectorResId);
+            }
         }
     });
 };
@@ -10957,41 +10963,64 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 };
 
 OL.loadInspector = function(resId) {
-    // 🚀 THE STICKY FIX: Save the ID to state so it survives a Sync refresh
+    // 1. Save the ID globally so it survives a rebuild
     state.activeInspectorResId = resId; 
+    console.log("📍 Inspector set to Sticky ID:", resId);
 
+    // 2. Resolve the active panel
     const allPanels = document.querySelectorAll('#inspector-panel');
     const panel = allPanels[allPanels.length - 1];
     if (!panel) return;
 
+    // 3. Resolve Data
     const res = OL.getResourceById(resId);
     if (!res) {
-        panel.innerHTML = `<div style="padding:20px;">Resource not found</div>`;
+        panel.innerHTML = `<div style="padding:20px; color:var(--danger);">⚠️ Data missing for ${resId}</div>`;
         return;
     }
 
     const steps = res.steps || [];
+    const statusClass = res.status === 'Live' ? 'status-live' : 'status-draft';
+
+    // 4. Force Render
     panel.innerHTML = `
-        <div class="inspector-content fade-in" style="padding: 20px;">
-            <h3 style="color:var(--accent); font-size:10px; margin-bottom:15px; font-weight:900;">INSPECTOR</h3>
-            <h2 style="color:white; margin-bottom:5px; font-size:18px;">${esc(res.name)}</h2>
-            <div class="tiny muted" style="margin-bottom:20px;">${esc(res.type)}</div>
-            
-            <label class="modal-section-label">Sequence Steps</label>
-            <div style="display:flex; flex-direction:column; gap:8px;">
-                ${steps.map((s, i) => `
-                    <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border-left:2px solid var(--accent);">
-                        <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
-                        <div class="tiny" style="color:white;">${esc(s.name || 'Untitled Action')}</div>
-                    </div>
-                `).join('') || '<div class="tiny muted italic">No steps mapped.</div>'}
+        <div class="inspector-content fade-in" style="padding: 20px; display: block !important;">
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="tiny accent bold uppercase">Workflow Detail</span>
+                    <div class="node-status-badge ${statusClass}" style="position:static; display:inline-block;"></div>
+                </div>
+                <h2 style="font-size: 18px; margin: 10px 0 5px 0; color: #fff !important;">${esc(res.name)}</h2>
+                <div class="tiny muted">${esc(res.type || 'SOP')} • ${res.status || 'Draft'}</div>
             </div>
 
-            <button class="btn tiny primary full-width" style="margin-top:25px;" onclick="OL.openResourceModal('${res.id}')">
-                ⚙️ Full Configuration
-            </button>
+            <section>
+                <label class="modal-section-label">Process Steps (${steps.length})</label>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+                    ${steps.map((s, i) => `
+                        <div class="preview-step-item" style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:3px solid var(--accent);">
+                            <span style="font-size:10px; font-weight:bold; color:var(--accent);">${i + 1}</span>
+                            <div class="tiny" style="color:#eee !important; font-weight:600;">${esc(s.name || 'Untitled Action')}</div>
+                        </div>
+                    `).join('') || '<div class="tiny muted italic">No steps mapped yet.</div>'}
+                </div>
+            </section>
+
+            <footer style="margin-top: 30px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:20px;">
+                <button class="btn tiny primary full-width" style="width:100%;" onclick="OL.openResourceModal('${res.id}')">
+                    ⚙️ Edit Full Resource
+                </button>
+            </footer>
         </div>
     `;
+};
+
+// Add this helper
+OL.clearInspector = function() {
+    state.activeInspectorResId = null;
+    if (document.getElementById('inspector-panel')) {
+        document.getElementById('inspector-panel').innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
+    }
 };
 
 // Universal Start Drag (Works for Toolbox AND Canvas Cards)
