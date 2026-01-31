@@ -10854,43 +10854,61 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (!container) return;
     container.style.padding = "0";
 
-    // 🚀 ARCHITECT DATA: Stages live at the Project/Vault level, not inside a resource
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
-    if (!sourceData.stages) sourceData.stages = [{ id: 'stg_1', name: 'Discovery', workflows: [] }];
+    
+    // Initialize defaults if empty
+    const columns = sourceData.stages || []; 
+    const rows = sourceData.workflows || [];
 
     container.innerHTML = `
-        <div class="three-pane-layout architect-mode">
+        <div class="three-pane-layout matrix-mode">
             <aside class="pane-drawer">
                 <div class="drawer-header"><h3>Toolbox</h3></div>
                 <div class="drawer-tools">
-                    <p class="tiny muted">Drag a resource type to create a new workflow</p>
                     ${renderDraggableTools()}
+                </div>
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
+                    <button class="btn tiny soft full-width" onclick="OL.addWorkflowRow('${isVaultMode}')">+ Add Workflow Row</button>
                 </div>
             </aside>
 
             <main class="pane-canvas-wrap">
-                <div class="canvas-header">
+                <div class="canvas-header" style="justify-content: space-between;">
                     ${renderBreadcrumbs(client)}
-                    <div class="spacer"></div>
-                    <button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage Row</button>
+                    <button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage Column</button>
                 </div>
 
-                <div id="architect-canvas" class="blueprint-canvas stage-canvas">
-                    <div class="structured-flow-container">
-                        ${sourceData.stages.map((stage, sIdx) => `
-                            <div class="stage-row" data-stage-id="${stage.id}">
-                                <div class="stage-label-vertical" contenteditable="true" 
-                                     onblur="OL.updateStageName('${stage.id}', this.innerText, ${isVaultMode})">
-                                    ${esc(stage.name)}
-                                </div>
-                                <div class="workflow-drop-zone" 
-                                     ondragover="OL.handleCanvasDragOver(event)" 
-                                     ondrop="OL.handleWorkflowDrop(event, '${stage.id}', ${isVaultMode})">
-                                    ${renderArchitectNodes(stage.workflows, isVaultMode)}
-                                </div>
+                <div class="matrix-canvas-area">
+                    <div class="matrix-grid" style="grid-template-columns: 200px repeat(${columns.length}, minmax(250px, 1fr));">
+                        <div class="matrix-corner" style="position: sticky; top: 0; left: 0; z-index: 10; background: var(--panel-dark); border: 1px solid var(--line);"></div>
+                        ${columns.map(col => `
+                            <div class="matrix-col-header" contenteditable="true" 
+                                 onblur="OL.updateStageName('${col.id}', this.innerText, ${isVaultMode})">
+                                ${esc(col.name)}
                             </div>
                         `).join('')}
+
+                        ${rows.map(row => `
+                            <div class="matrix-row-label" contenteditable="true" 
+                                 onblur="OL.updateWorkflowName('${row.id}', this.innerText, ${isVaultMode})">
+                                ${esc(row.name)}
+                            </div>
+                            ${columns.map(col => `
+                                <div class="matrix-cell" 
+                                     ondragover="OL.handleCanvasDragOver(event)"
+                                     ondrop="OL.handleMatrixDrop(event, '${col.id}', '${row.id}')">
+                                    ${renderStepsInCell(col.id, row.id)}
+                                </div>
+                            `).join('')}
+                        `).join('')}
                     </div>
+                    
+                    ${(columns.length === 0 || rows.length === 0) ? `
+                        <div class="empty-hint" style="padding: 100px; text-align: center;">
+                            <h3>Build your Blueprint</h3>
+                            <p class="muted">Add Stages (Columns) and Workflows (Rows) to begin mapping logic.</p>
+                        </div>
+                    ` : ''}
                 </div>
 
                 <section class="pane-inventory-split">
@@ -10899,7 +10917,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             </main>
 
             <aside id="inspector-panel" class="pane-inspector">
-                <div class="empty-inspector tiny muted">Select a Workflow Node to see SOP details</div>
+                 <div class="empty-inspector tiny muted">Select a node to inspect metadata</div>
             </aside>
         </div>
     `;
