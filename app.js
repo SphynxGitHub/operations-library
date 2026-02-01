@@ -11370,101 +11370,6 @@ OL.handleModularAtomicDrag = function(e) {
 };
 
 /*
-OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex=null) {
-    e.preventDefault();
-    e.currentTarget.style.background = ""; // Visual cleanup
-    
-    const resId = e.dataTransfer.getData("resId");               // Dropping a Resource/Workflow
-    const moveStepId = e.dataTransfer.getData("moveStepId");       // Moving an existing node
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Dropping from Factory
-    const isVaultMode = location.hash.includes('vault');
-
-    // 1. RE-POSITIONING / REARRANGING EXISTING ITEMS
-    if (moveStepId) {
-        const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-        if (parentObj && parentObj.steps) {
-            // Find the item and remove it from its old position
-            const oldIdx = parentObj.steps.findIndex(s => s.id === moveStepId);
-            if (oldIdx > -1) {
-                const [item] = parentObj.steps.splice(oldIdx, 1);
-                
-                // Update its metadata (lane or type)
-                item.gridLane = sectionId;
-                if (state.focusedResourceId) item.type = sectionId;
-
-                // Determine new position
-                // If dropped on a card, use that index. If dropped on lane, push to end.
-                if (targetIndex !== null) {
-                    parentObj.steps.splice(targetIndex, 0, item);
-                } else {
-                    parentObj.steps.push(item);
-                }
-            }
-        }
-    }
-    
-    // Level 1 (Dropping a Workflow into a Stage)
-    if (resId && !state.focusedWorkflowId && !state.focusedResourceId) {
-        const res = OL.getResourceById(resId);
-        if (res) {
-            res.stageId = sectionId;
-            console.log(`Level 1: Mapped ${res.name} to Stage ${sectionId}`);
-            OL.persist();
-        }
-    }
-    
-    // Level 2 (Dropping a Resource into a Workflow Lane)
-    else if (resId && state.focusedWorkflowId) {
-        const workflow = OL.getResourceById(state.focusedWorkflowId);
-        if (workflow) {
-            if (!workflow.steps) workflow.steps = [];
-            const sourceRes = OL.getResourceById(resId);
-            workflow.steps.push({ 
-                id: uid(), 
-                name: sourceRes.name, 
-                resourceLinkId: resId, 
-                gridLane: sectionId 
-            });
-            OL.persist()
-            console.log(`Level 2: Added Resource ${sourceRes.name} to Lane ${sectionId}`);
-        }
-    }
-
-    // Level 3 (Dropping Atomic Trigger/Action into Resource Lane)
-    else if (atomicPayload && state.focusedResourceId) {
-        const parentRes = OL.getResourceById(state.focusedResourceId);
-        if (parentRes) {
-            const data = JSON.parse(atomicPayload);
-            if (!parentRes.steps) parentRes.steps = [];
-            parentRes.steps.push({ 
-                id: uid(), 
-                name: data.name, 
-                type: sectionId, //data.type, 
-                gridLane: 'Sequence',
-                outcomes: [] 
-            });
-            OL.persist();
-            console.log(`Level 3: Added Atomic ${data.name} to Lane ${sectionId}`);
-        }
-    }
-
-    // Re-positioning existing items (Works for L2 and L3)
-    else if (moveStepId) {
-        const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-        if(parentObj && parentObj.steps) {
-            const step = parentObj.steps.find(s => s.id === moveStepId);
-            if (step) {
-                step.gridLane = sectionId;
-                OL.persist();
-            }
-        }
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
-*/
-
 OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
     e.preventDefault();
     e.currentTarget.style.background = ""; 
@@ -11544,6 +11449,111 @@ OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
+*/
+
+OL.handleUniversalDrop = function(e, parentId, sectionId) {
+    e.preventDefault();
+    e.currentTarget.style.background = ""; 
+    
+    const resId = e.dataTransfer.getData("resId");
+    const moveStepId = e.dataTransfer.getData("moveStepId");
+    const atomicPayload = e.dataTransfer.getData("atomicPayload");
+    const isVaultMode = location.hash.includes('vault');
+
+    if (moveStepId) {
+        if (!state.focusedWorkflowId && !state.focusedResourceId) {
+            const item = (isVaultMode ? state.master.resources : getActiveClient().projectData.localResources).find(r => r.id === moveStepId);
+            if (item) { item.stageId = sectionId; item.mapOrder = 999; }
+        } else {
+            const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
+            const step = parentObj?.steps.find(s => s.id === moveStepId);
+            if (step) {
+                if (state.focusedWorkflowId && !state.focusedResourceId) step.gridLane = sectionId;
+                // Move to end of array
+                const idx = parentObj.steps.indexOf(step);
+                parentObj.steps.push(parentObj.steps.splice(idx, 1)[0]);
+            }
+        }
+    }
+    // New additions from sidebar
+    else if (resId && !state.focusedWorkflowId) {
+        const res = OL.getResourceById(resId);
+        if (res) { res.stageId = sectionId; res.mapOrder = 99; }
+    }
+    else if (resId && state.focusedWorkflowId) {
+        const workflow = OL.getResourceById(state.focusedWorkflowId);
+        if (workflow) {
+            const sourceRes = OL.getResourceById(resId);
+            if (!workflow.steps) workflow.steps = [];
+            workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId });
+        }
+    }
+    else if (atomicPayload && state.focusedResourceId) {
+        const parentRes = OL.getResourceById(state.focusedResourceId);
+        if (parentRes) {
+            const data = JSON.parse(atomicPayload);
+            if (!parentRes.steps) parentRes.steps = [];
+            parentRes.steps.push({ id: uid(), name: data.name, type: 'Action', outcomes: [] });
+        }
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+};
+
+OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const moveStepId = e.dataTransfer.getData("moveStepId");
+    if (!moveStepId) return; 
+
+    const isVaultMode = location.hash.includes('vault');
+    const parentId = state.focusedWorkflowId || state.focusedResourceId;
+
+    // --- CASE A: Level 1 (Workflows across/within Stages) ---
+    if (!parentId) {
+        const client = getActiveClient();
+        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
+        
+        const item = source.find(r => r.id === moveStepId);
+        if (!item) return;
+
+        // Update the stage (allows dragging to a different stage card)
+        item.stageId = sectionId;
+
+        // Get the sibling list to calculate new mapOrder
+        let list = source.filter(r => String(r.stageId) === String(sectionId))
+                         .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+        const oldIdx = list.findIndex(r => r.id === moveStepId);
+        if (oldIdx > -1) list.splice(oldIdx, 1); // Remove if already in this stage
+        
+        list.splice(targetIndex, 0, item); // Insert at hover position
+        list.forEach((r, i) => r.mapOrder = i); // Save new sequence
+    } 
+    // --- CASE B: Level 2 & 3 (Steps within Resource) ---
+    else {
+        const parentObj = OL.getResourceById(parentId);
+        if (parentObj && parentObj.steps) {
+            const oldIdx = parentObj.steps.findIndex(s => s.id === moveStepId);
+            if (oldIdx > -1) {
+                const [item] = parentObj.steps.splice(oldIdx, 1);
+                
+                // Update Metadata for L2 lanes (L3 ignored as you have no sections)
+                if (state.focusedWorkflowId && !state.focusedResourceId) {
+                    item.gridLane = sectionId;
+                }
+
+                parentObj.steps.splice(targetIndex, 0, item);
+            }
+        }
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+};
+
 
 // --- UNMAPPING / TRASH LOGIC ---
 
