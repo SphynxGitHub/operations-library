@@ -11416,15 +11416,15 @@ OL.handleNodeRearrange = function(e, sectionId, targetIdentifier) {
     e.preventDefault(); 
     e.stopPropagation();
 
-    // 1. Define the missing variable first
     const isVaultMode = window.location.hash.includes('vault');
     const moveId = e.dataTransfer.getData("moveNodeId");
     
+    // Safety guard
     if (!moveId || moveId === targetIdentifier) return; 
 
     const parentId = state.focusedWorkflowId || state.focusedResourceId;
 
-    // --- CASE A: LEVEL 1 (Lifecycle - Stages) ---
+    // --- CASE A: TIER 1 (Lifecycle Stages) ---
     if (!parentId) {
         const client = getActiveClient();
         const source = isVaultMode ? state.master.resources : client.projectData.localResources;
@@ -11437,13 +11437,13 @@ OL.handleNodeRearrange = function(e, sectionId, targetIdentifier) {
             const oldIdx = list.findIndex(r => r.id === moveId);
             if (oldIdx > -1) {
                 const [moved] = list.splice(oldIdx, 1);
-                // Level 1 still uses index-based targetIdentifier from the map
+                // targetIdentifier here is the numeric idx passed from L1 renderer
                 list.splice(targetIdentifier, 0, moved);
                 list.forEach((r, i) => r.mapOrder = i);
             }
         }
     } 
-    // --- CASE B: LEVEL 2 & 3 (Nested Steps) ---
+    // --- CASE B: TIER 2 & 3 (Nested Steps) ---
     else {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
@@ -11452,14 +11452,17 @@ OL.handleNodeRearrange = function(e, sectionId, targetIdentifier) {
             const [item] = parent.steps.splice(oldIdx, 1);
 
             // Sync metadata (Is it now a Trigger or an Action?)
-            if (state.focusedResourceId) item.type = sectionId;
-            else item.gridLane = sectionId;
+            if (state.focusedResourceId) {
+                item.type = sectionId; // 'Trigger' or 'Action'
+            } else {
+                item.gridLane = sectionId; // L2 Lanes
+            }
 
-            // 🎯 ID-BASED TARGETING CHECK
-            // If targetIdentifier is a string (ID), find its index. 
-            // If it's a number (Index), use it directly.
+            // 🎯 ID-BASED TARGETING
+            // In L3, targetIdentifier is the ID of the card dropped onto.
+            // In L2, it might be the numeric index. We handle both.
             let insertIdx;
-            if (typeof targetIdentifier === 'string' && targetIdentifier.includes('_')) {
+            if (typeof targetIdentifier === 'string' && targetIdentifier.includes('id_')) {
                 insertIdx = parent.steps.findIndex(s => s.id === targetIdentifier);
             } else {
                 insertIdx = parseInt(targetIdentifier);

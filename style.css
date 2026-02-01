@@ -2599,6 +2599,22 @@ body.is-visualizer #mainContent {
     pointer-events: auto; /* Re-enable for cards */
 }
 
+/* 📏 Tier 3 Alignment Fix */
+.vertical-lifecycle-mode .stage-workflow-stream {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centers cards horizontally */
+    width: 100%;
+    min-height: 120px;
+    gap: 15px;
+    padding: 20px 10px;
+}
+
+.vertical-lifecycle-mode .workflow-block-card {
+    width: 280px; /* Fixed width matching Tier 1/2 */
+    margin: 0 auto; /* Horizontal centering */
+    flex-shrink: 0;
+}
 
 /*==================================================================
   4. WORKFLOW CARDS
