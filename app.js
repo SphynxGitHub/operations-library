@@ -11148,6 +11148,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     // 2. Identify Context (Workflow, Resource, or Atomic Step)
     const isStep = !!parentId;
     const isModule = data.type === 'module_block';
+    const technicalAssetId = isModule ? data.linkedResourceId : data.resourceLinkId;
     const technicalAsset = OL.getResourceById(data.resourceLinkId);
     const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (data.steps || []);
 
@@ -11171,12 +11172,12 @@ OL.loadInspector = function(targetId, parentId = null) {
                 
                 <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
                     <button class="btn tiny primary" style="width:100%;" 
-                            onclick="OL.openResourceModal('${technicalAsset.id || data.id}')">
+                            onclick="OL.openResourceModal('${technicalAssetId || data.id}')">
                         ⚙️ Edit Full SOP
                     </button>
                     ${isModule ? `
                         <button class="btn tiny soft" style="width:100%;" 
-                                onclick="OL.drillIntoResourceMechanics('${technicalAsset.id}')">
+                                onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
                             🔍 Open in Mapper
                         </button>
                     ` : ''}
