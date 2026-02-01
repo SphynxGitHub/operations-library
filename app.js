@@ -11149,7 +11149,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const isStep = !!parentId;
     const isModule = data.type === 'module_block';
     const technicalAssetId = isModule ? data.linkedResourceId : data.resourceLinkId;
-    const technicalAsset = OL.getResourceById(data.resourceLinkId);
+    const technicalAsset = technicalAssetId ? OL.getResourceById(technicalAssetId) : null;
     const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (data.steps || []);
 
     panel.innerHTML = `
