@@ -11290,48 +11290,62 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Dropping from Factory
 
     const isVaultMode = location.hash.includes('vault');
-    const parentObj = OL.getResourceById(parentId); // For L2 and L3
     
-    // CASE A: Level 1 (Dropping a Workflow into a Stage)
+    // Level 1 (Dropping a Workflow into a Stage)
     if (resId && !state.focusedWorkflowId && !state.focusedResourceId) {
         const res = OL.getResourceById(resId);
         if (res) {
             res.stageId = sectionId;
             console.log(`Level 1: Mapped ${res.name} to Stage ${sectionId}`);
+            OL.persist();
         }
     }
     
-    // CASE B: Level 2 (Dropping a Resource into a Workflow Lane)
+    // Level 2 (Dropping a Resource into a Workflow Lane)
     else if (resId && state.focusedWorkflowId) {
-        if (!parentObj.steps) parentObj.steps = [];
-        const sourceRes = OL.getResourceById(resId);
-        parentObj.steps.push({ 
-            id: uid(), 
-            name: sourceRes.name, 
-            resourceLinkId: resId, 
-            gridLane: sectionId 
-        });
-        console.log(`Level 2: Added Resource ${sourceRes.name} to Lane ${sectionId}`);
+        const workflow = OL.getResourceById(state.focusedWorkflowId);
+        if (workflow) {
+            if (!workflow.steps) workflow.steps = [];
+            const sourceRes = OL.getResourceById(resId);
+            workflow.steps.push({ 
+                id: uid(), 
+                name: sourceRes.name, 
+                resourceLinkId: resId, 
+                gridLane: sectionId 
+            });
+            OL.persist()
+            console.log(`Level 2: Added Resource ${sourceRes.name} to Lane ${sectionId}`);
+        }
     }
 
-    // CASE C: Level 3 (Dropping Atomic Trigger/Action into Resource Lane)
-    else if (atomicPayload) {
-        const data = JSON.parse(atomicPayload);
-        if (!parentObj.steps) parentObj.steps = [];
-        parentObj.steps.push({ 
-            id: uid(), 
-            name: data.name, 
-            type: data.type, 
-            gridLane: sectionId,
-            outcomes: [] 
-        });
-        console.log(`Level 3: Added Atomic ${data.name} to Lane ${sectionId}`);
+    // Level 3 (Dropping Atomic Trigger/Action into Resource Lane)
+    else if (atomicPayload && state.focusedResourceId) {
+        const parentRes = OL.getResourceById(state.focusedResourceId);
+        if (parentRes) {
+            const data = JSON.parse(atomicPayload);
+            if (!parentRes.steps) parentRes.steps = [];
+            parentRes.steps.push({ 
+                id: uid(), 
+                name: data.name, 
+                type: data.type, 
+                gridLane: sectionId,
+                outcomes: [] 
+            });
+            OL.persist();
+            console.log(`Level 3: Added Atomic ${data.name} to Lane ${sectionId}`);
+        }
     }
 
-    // CASE D: Re-positioning existing items (Works for L2 and L3)
-    else if (moveStepId && parentObj) {
-        const step = parentObj.steps.find(s => s.id === moveStepId);
-        if (step) step.gridLane = sectionId;
+    // Re-positioning existing items (Works for L2 and L3)
+    else if (moveStepId) {
+        const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
+        if(parentObj && parentObj.steps) {
+            const step = parentObj.steps.find(s => s.id === moveStepId);
+            if (step) {
+                step.gridLane = sectionId;
+                OL.persist();
+            }
+        }
     }
 
     OL.persist();
