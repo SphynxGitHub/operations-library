@@ -11326,14 +11326,9 @@ OL.filterResourceToolbox = function(q) {
 
 // 1. Source: When you start dragging a Workflow or Resource from the sidebar
 OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
-    if (index !== null) {
-        // 🚀 THIS IS THE KEY: If it has an index, it's a move!
-        e.dataTransfer.setData("moveStepId", resId); 
-        e.dataTransfer.setData("draggedIndex", index);
-    } else {
-        // New item from sidebar
-        e.dataTransfer.setData("resId", resId);
-    }
+    e.dataTransfer.setData("resId", resId);
+    e.dataTransfer.setData("resName", resName);
+    e.target.style.opacity = "0.5";
     console.log(`Dragging Source: ${resName}`);
 };
 
