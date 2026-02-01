@@ -10909,8 +10909,8 @@ window.renderLevel3Canvas = function(resourceId) {
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
     const groups = [
-        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00', icon: '⚡' },
-        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)', icon: '↓' }
+        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
+        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)' }
     ];
     
     return groups.map(group => {
@@ -10922,7 +10922,6 @@ window.renderLevel3Canvas = function(resourceId) {
         return `
             <div class="stage-container">
                 <div class="stage-header-row">
-                    <span class="stage-number" style="background:${group.color}; color:#000;">${group.icon}</span>
                     <span class="stage-name" style="color:${group.color}">${group.label}</span>
                 </div>
                 <div class="stage-workflow-stream"
@@ -10931,41 +10930,18 @@ window.renderLevel3Canvas = function(resourceId) {
                     
                     ${steps.map((step, idx) => {
                         const isModule = step.type === 'module_block';
-                        let subStepHtml = "";
-
-                        // 🚀 THE PEEK LOGIC: Pull children steps from the linked resource
-                        if (isModule && step.linkedResourceId) {
-                            const linkedRes = OL.getResourceById(step.linkedResourceId);
-                            const children = linkedRes?.steps || [];
-                            if (children.length > 0) {
-                                subStepHtml = `
-                                    <div class="module-peek-list" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.05);">
-                                        ${children.map((child, idx) => `
-                                            <div class="tiny muted" style="display:flex; gap:5px; margin-bottom:2px;">
-                                                <span class="accent" style="opacity:0.5;">${idx + 1}.</span>
-                                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(child.name || 'Unnamed Step')}</span>
-                                            </div>
-                                        `).join('')}
-                                    </div>`;
-                            }
-                        }
-
                         return `
                         <div class="workflow-block-card" draggable="true" 
-                             style="${isModule ? 'border-left: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.03);' : ''}"
+                             style="${isModule ? 'border-left: 3px solid #38bdf8;' : ''}"
                              onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragover="OL.handleCanvasDragOver(event)" 
-                             ondragstart="OL.handleNodeMoveStart(event, '${item.id || step.id}', ${idx})"
-                             ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}', ${idx})"   
+                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                             ondragover="OL.handleCanvasDragOver(event)"
+                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})"
                              ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
-                            <div class="bold accent" style="font-size:11px;">
-                                ${isModule ? '📦 ' : ''}${esc(step.name || "Untitled Step")}
-                            </div>
-                            ${isModule ? subStepHtml : `<div class="tiny muted">${esc(step.type)}</div>`}
+                            <div class="bold accent">${isModule ? '📦 ' : ''}${esc(step.name || "Untitled")}</div>
+                            <div class="tiny muted">${esc(step.type)}</div>
                         </div>`;
                     }).join('')}
-
-                    ${steps.length === 0 ? `<div class="tiny muted italic" style="padding:20px; opacity:0.3; width:100%; text-align:center;">Drop ${group.type}s Here</div>` : ''}
                 </div>
             </div>`;
     }).join('');
@@ -11274,22 +11250,19 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
         const triggerCount = (linkedRes?.triggers || []).length;
 
         return `
-        <div class="workflow-block-card"
-             draggable="true" 
+        <div class="workflow-block-card" draggable="true" 
              onmousedown="OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleStepMoveStart(event, '${item.id}', '${workflowId}', ${idx})"
+             ondragstart="OL.handleNodeMoveStart(event, '${item.id}', ${idx})"
              ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleUniversalDrop(event, '${workflowId}', '${lane}', ${idx})"
+             ondrop="OL.handleNodeRearrange(event, '${lane}', ${idx})"
              ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
             <div class="bold accent">${esc(item.name)}</div>
             <div class="tiny muted">
-                <span>⚡ ${triggerCount} Triggers</span>
-                <span>📝 ${stepCount} Steps</span>
+                <span>⚡ ${triggerCount}</span> | <span>📝 ${stepCount}</span>
             </div>
-        </div>
-    `;
+        </div>`;
     }).join('');
-};
+}
 
 // --- NAVIGATION & STATE ---
 
@@ -11367,29 +11340,24 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
 
     const isVaultMode = location.hash.includes('vault');
     
-    // LEVEL 1 REORDER
     if (!state.focusedWorkflowId) {
+        // L1 REORDER
         const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-        const item = source.find(r => r.id === moveId);
-        item.stageId = sectionId;
-        const list = source.filter(r => r.stageId === sectionId).sort((a,b) => a.mapOrder - b.mapOrder);
+        const list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
         const oldIdx = list.findIndex(r => r.id === moveId);
         if (oldIdx > -1) {
             const [moved] = list.splice(oldIdx, 1);
             list.splice(targetIndex, 0, moved);
             list.forEach((r, i) => r.mapOrder = i);
         }
-    } 
-    // LEVEL 2 & 3 REORDER
-    else {
+    } else {
+        // L2 & L3 REORDER
         const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
         const oldIdx = parent.steps.findIndex(s => s.id === moveId);
         if (oldIdx > -1) {
             const [moved] = parent.steps.splice(oldIdx, 1);
-            // Ensure type/lane is updated based on where it was dropped
             if (state.focusedResourceId) moved.type = sectionId;
             else moved.gridLane = sectionId;
-            
             parent.steps.splice(targetIndex, 0, moved);
         }
     }
@@ -11502,22 +11470,24 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     const isVaultMode = location.hash.includes('vault');
 
     // 🚀 TIER 1: GLOBAL LIFECYCLE (No parent workflow focused)
-    if (!state.focusedWorkflowId && !state.focusedResourceId) {
-        const client = getActiveClient();
-        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
-        const item = source.find(r => r.id === (moveId || resId)); // Works for new or move
-        
-        if (item) {
-            item.stageId = sectionId;
-            item.mapOrder = 999; // Default to bottom
-            // Re-sort the stage to ensure mapOrder is sequential
-            const stageItems = source.filter(r => r.stageId === sectionId).sort((a,b) => a.mapOrder - b.mapOrder);
-            stageItems.forEach((r, i) => r.mapOrder = i);
+    if (moveId) {
+        if (!state.focusedWorkflowId && !state.focusedResourceId) {
+            // L1: Move Workflow to a different Stage
+            const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
+            const item = source.find(r => r.id === moveId);
+            if (item) { item.stageId = sectionId; item.mapOrder = 999; }
+        } else {
+            // L2 or L3: Move Step to a different Lane/Group
+            const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
+            const step = parent?.steps.find(s => s.id === moveId);
+            if (step) {
+                if (state.focusedResourceId) step.type = sectionId; // L3: Trigger vs Action
+                else step.gridLane = sectionId; // L2: Swimlanes
+            }
         }
     } 
-
     // 🚀 TIER 2: WORKFLOW MAP (Inside a Workflow)
-    else if (state.focusedWorkflowId && !state.focusedResourceId) {
+    else if (resId) {
         const workflow = OL.getResourceById(state.focusedWorkflowId);
         if (moveId) {
             const step = workflow.steps.find(s => s.id === moveId);
