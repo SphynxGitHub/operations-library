@@ -11165,12 +11165,10 @@ OL.drillIntoResourceMechanics = function(resId) {
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
-/*
 OL.exitToWorkflow = function() {
     state.focusedResourceId = null;
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
-*/
 
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
