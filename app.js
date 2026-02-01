@@ -11333,7 +11333,8 @@ window.renderLevel3Canvas = function(resourceId) {
                              onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
                              ondragstart="OL.handleNodeMoveStart(event, '${step.id}')"
                              ondragover="OL.handleCanvasDragOver(event)"
-                             ondrop="OL.handleNodeRearrange(event, '${group.type}', '${step.id}')"> <div class="bold accent">${esc(step.name || "Untitled")}</div>
+                             ondrop="OL.handleNodeRearrange(event, '${group.type}', '${step.id}')"
+                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
                             <div class="tiny muted">${esc(step.type)}</div>
                         </div>`).join('')}
                 </div>
@@ -11411,45 +11412,58 @@ OL.handleNodeMoveStart = function(e, id, index) {
     setTimeout(() => e.target.classList.add('dragging'), 0);
 };
 
-OL.handleNodeRearrange = function(e, sectionId, targetId) {
+OL.handleNodeRearrange = function(e, sectionId, targetIdentifier) {
     e.preventDefault(); 
     e.stopPropagation();
 
+    // 1. Define the missing variable first
+    const isVaultMode = window.location.hash.includes('vault');
     const moveId = e.dataTransfer.getData("moveNodeId");
-    if (!moveId || moveId === targetId) return; 
+    
+    if (!moveId || moveId === targetIdentifier) return; 
 
     const parentId = state.focusedWorkflowId || state.focusedResourceId;
 
-    // --- CASE A: LEVEL 1 (Lifecycle - Siblings) ---
-    if (!state.focusedWorkflowId && !state.focusedResourceId) {
-        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
+    // --- CASE A: LEVEL 1 (Lifecycle - Stages) ---
+    if (!parentId) {
+        const client = getActiveClient();
+        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
         const item = source.find(r => r.id === moveId);
+        
         if (item) {
             item.stageId = sectionId;
             let list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+            
             const oldIdx = list.findIndex(r => r.id === moveId);
             if (oldIdx > -1) {
                 const [moved] = list.splice(oldIdx, 1);
-                list.splice(targetIndex, 0, moved);
+                // Level 1 still uses index-based targetIdentifier from the map
+                list.splice(targetIdentifier, 0, moved);
                 list.forEach((r, i) => r.mapOrder = i);
             }
         }
     } 
-    // --- CASE B: LEVEL 2 & 3 (The Neighbor Logic) ---
-   else {
+    // --- CASE B: LEVEL 2 & 3 (Nested Steps) ---
+    else {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
-            // 1. Find the moved item and remove it
             const oldIdx = parent.steps.findIndex(s => s.id === moveId);
             if (oldIdx === -1) return;
             const [item] = parent.steps.splice(oldIdx, 1);
 
-            // 2. Update Type (Trigger/Action) or Lane
+            // Sync metadata (Is it now a Trigger or an Action?)
             if (state.focusedResourceId) item.type = sectionId;
             else item.gridLane = sectionId;
 
-            // 3. 🎯 THE TARGET FIX: Find the absolute insertion point using the Target ID
-            const insertIdx = parent.steps.findIndex(s => s.id === targetId);
+            // 🎯 ID-BASED TARGETING CHECK
+            // If targetIdentifier is a string (ID), find its index. 
+            // If it's a number (Index), use it directly.
+            let insertIdx;
+            if (typeof targetIdentifier === 'string' && targetIdentifier.includes('_')) {
+                insertIdx = parent.steps.findIndex(s => s.id === targetIdentifier);
+            } else {
+                insertIdx = parseInt(targetIdentifier);
+            }
             
             if (insertIdx > -1) {
                 parent.steps.splice(insertIdx, 0, item);
@@ -11460,7 +11474,7 @@ OL.handleNodeRearrange = function(e, sectionId, targetId) {
     }
 
     OL.persist();
-    renderGlobalVisualizer(location.hash.includes('vault'));
+    renderGlobalVisualizer(isVaultMode);
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
