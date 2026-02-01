@@ -10926,7 +10926,7 @@ window.renderLevel3Canvas = function(resourceId) {
                      ${steps.map(step => `
                         <div class="workflow-block-card" draggable="true" 
                              onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')">
+                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')"
                              ondragover="OL.handleCanvasDragOver(event)"
                              ondrop="OL.handleUniversalDrop(event, '${resourceId}')">
                             <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
