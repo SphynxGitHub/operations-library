@@ -10906,35 +10906,64 @@ window.renderLevel2Canvas = function(workflowId) {
 // --- TIER 3 RENDERER ---
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
+    if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
+
     const groups = [
-        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
-        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)' }
+        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00', icon: '⚡' },
+        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)', icon: '↓' }
     ];
     
     return groups.map(group => {
         const steps = (res.steps || []).filter(s => {
             if (group.type === 'Trigger') return s.type === 'Trigger';
-            return s.type !== 'Trigger'; // Default catch-all for Actions/Legacy data
+            return s.type !== 'Trigger'; 
         });
-        
+
         return `
             <div class="stage-container">
                 <div class="stage-header-row">
-                    <span class="stage-number">${group.type === 'Trigger' ? '⚡' : '↓'}</span>
-                    <span class="stage-name">${group.label}</span>
+                    <span class="stage-number" style="background:${group.color}; color:#000;">${group.icon}</span>
+                    <span class="stage-name" style="color:${group.color}">${group.label}</span>
                 </div>
                 <div class="stage-workflow-stream"
                      ondragover="OL.handleCanvasDragOver(event)" 
                      ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     
-                     ${steps.map(step => `
+                    ${steps.map(step => {
+                        const isModule = step.type === 'module_block';
+                        let subStepHtml = "";
+
+                        // 🚀 THE PEEK LOGIC: Pull children steps from the linked resource
+                        if (isModule && step.linkedResourceId) {
+                            const linkedRes = OL.getResourceById(step.linkedResourceId);
+                            const children = linkedRes?.steps || [];
+                            if (children.length > 0) {
+                                subStepHtml = `
+                                    <div class="module-peek-list" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.05);">
+                                        ${children.map((child, idx) => `
+                                            <div class="tiny muted" style="display:flex; gap:5px; margin-bottom:2px;">
+                                                <span class="accent" style="opacity:0.5;">${idx + 1}.</span>
+                                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(child.name || 'Unnamed Step')}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>`;
+                            }
+                        }
+
+                        return `
                         <div class="workflow-block-card" draggable="true" 
-                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')">
-                            <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
-                            <div class="tiny muted">${esc(step.type)}</div>
-                        </div>
-                    `).join('')}
+                             style="${isModule ? 'border-left: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.03);' : ''}"
+                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')" 
+                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')"
+                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
+                            <div class="bold accent" style="font-size:11px;">
+                                ${isModule ? '📦 ' : ''}${esc(step.name || "Untitled Step")}
+                            </div>
+                            ${isModule ? subStepHtml : `<div class="tiny muted">${esc(step.type)}</div>`}
+                        </div>`;
+                    }).join('')}
+
+                    ${steps.length === 0 ? `<div class="tiny muted italic" style="padding:20px; opacity:0.3; width:100%; text-align:center;">Drop ${group.type}s Here</div>` : ''}
                 </div>
             </div>`;
     }).join('');
