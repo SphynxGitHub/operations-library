@@ -11150,7 +11150,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
              ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
              ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
-            <div class="tiny muted">📝 ${(res.steps || []).length} Atomic Steps</div>
+            <div class="tiny muted">📝 ${(res.steps || []).length} Resources</div>
         </div>
     `).join('');
 };
@@ -11176,11 +11176,20 @@ OL.exitToWorkflow = function() {
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
     const items = (workflow.steps || []).filter(s => s.gridLane === lane);
+    
     if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
-    return items.map(item => `<div class="workflow-block-card" ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
-        <div class="bold accent">${esc(item.name)}</div>
-    </div>`).join('');
-}
+    
+    return items.map(item => `
+        <div class="workflow-block-card"
+             draggable="true" 
+             onmousedown="OL.loadInspector('${item.resourceLinkId}')"
+             ondragstart="OL.handleWorkflowDragStart(event, '${item.resourceLinkId}', '${esc(item.name)}')" 
+             ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
+            <div class="bold accent">${esc(item.name)}</div>
+            <div class="tiny muted">📝 ${(item.steps || []).length} Steps</div>
+        </div>
+    `).join('');
+};
 
 OL.exitToLifecycle = function() {
     state.focusedWorkflowId = null;
