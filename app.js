@@ -11202,32 +11202,35 @@ OL.loadInspector = function(targetId, parentId = null) {
                         </div>
                     </section>`;
             }
-            
+
             // 5. Shared Module/SOP Actions
-            html +=`<section>
-                <label class="modal-section-label">Procedure Preview (${nestedSteps.length} Steps)</label>
-                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto; padding-right:5px;">
-                    ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                            <span class="tiny bold accent">${i + 1}</span>
-                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
-                        </div>
-                    `).join('') : `<div class="tiny muted italic">No procedures defined.</div>`}
-                </div>
-                
-                <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
-                    <button class="btn tiny primary" style="width:100%;" 
-                            onclick="OL.openResourceModal('${technicalAssetId || data.id}')">
-                        ⚙️ Edit Full SOP
-                    </button>
-                    ${isModule && technicalAssetId ? `
-                        <button class="btn tiny soft" style="width:100%;" 
-                                onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
-                            🔍 Open in Mapper
+            if (isModule) {
+                html +=`<section>
+                    <label class="modal-section-label">Procedure Preview (${nestedSteps.length} Steps)</label>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto; padding-right:5px;">
+                        ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
+                            <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                                <span class="tiny bold accent">${i + 1}</span>
+                                <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
+                            </div>
+                        `).join('') : `<div class="tiny muted italic">No procedures defined.</div>`}
+                    </div>
+                    
+                    <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
+                        <button class="btn tiny primary" style="width:100%;" 
+                                onclick="OL.openResourceModal('${technicalAssetId || data.id}')">
+                            ⚙️ Edit Full SOP
                         </button>
-                    ` : ''}
-                </div>
-            </section>
+                        ${isModule && technicalAssetId ? `
+                            <button class="btn tiny soft" style="width:100%;" 
+                                    onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
+                                🔍 Open in Mapper
+                            </button>
+                        ` : ''}
+                    </div>
+                </section>`
+            }
+        html +=`
         </div>
     `;
     panel.innerHTML = html;
