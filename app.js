@@ -11176,7 +11176,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                     </button>
                     ${isModule ? `
                         <button class="btn tiny soft" style="width:100%;" 
-                                onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
+                                onclick="OL.drillIntoResourceMechanics('${technicalAsset.id}')">
                             🔍 Open in Mapper
                         </button>
                     ` : ''}
