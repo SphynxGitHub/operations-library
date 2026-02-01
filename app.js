@@ -10932,12 +10932,13 @@ window.renderLevel3Canvas = function(resourceId) {
                         const isModule = step.type === 'module_block';
                         return `
                         <div class="workflow-block-card" draggable="true" 
-                             style="${isModule ? 'border-left: 3px solid #38bdf8;' : ''}"
-                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
-                             ondragover="OL.handleCanvasDragOver(event)"
-                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})"
-                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
+                            style="${isModule ? 'border-left: 3px solid #38bdf8;' : ''}"
+                            onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
+                            ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                            ondragover="OL.handleCanvasDragOver(event)"
+                            ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})"
+                            ondragend="this.classList.remove('dragging')"
+                            ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
                             <div class="bold accent">${isModule ? '📦 ' : ''}${esc(step.name || "Untitled")}</div>
                             <div class="tiny muted">${esc(step.type)}</div>
                         </div>`;
@@ -11328,37 +11329,72 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 };
 
 OL.handleNodeMoveStart = function(e, id, index) {
+    // Prevent dragging from inputs/buttons
+    if (['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(e.target.tagName)) {
+        e.preventDefault();
+        return;
+    }
+    
     e.dataTransfer.setData("moveNodeId", id);
     e.dataTransfer.setData("draggedIndex", index);
-    e.target.style.opacity = "0.4";
+    
+    // Add visual class
+    e.target.classList.add('dragging');
+    
+    // 💡 The "Timeout Hack": Allows the browser to create the drag image 
+    // before we dim the original element
+    setTimeout(() => e.target.classList.add('dragging'), 0);
 };
 
 OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault(); 
+    e.stopPropagation();
+    
+    // Remove "dragging" class from all cards immediately
+    document.querySelectorAll('.workflow-block-card').forEach(c => c.classList.remove('dragging'));
+
     const moveId = e.dataTransfer.getData("moveNodeId");
     if (!moveId) return;
 
     const isVaultMode = location.hash.includes('vault');
-    
-    if (!state.focusedWorkflowId) {
-        // L1 REORDER
-        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-        const list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-        const oldIdx = list.findIndex(r => r.id === moveId);
-        if (oldIdx > -1) {
-            const [moved] = list.splice(oldIdx, 1);
-            list.splice(targetIndex, 0, moved);
-            list.forEach((r, i) => r.mapOrder = i);
+    const parentId = state.focusedWorkflowId || state.focusedResourceId;
+
+    // --- CASE A: L1 (Siblings) ---
+    if (!state.focusedWorkflowId && !state.focusedResourceId) {
+        const client = getActiveClient();
+        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
+        
+        const item = source.find(r => r.id === moveId);
+        if (item) {
+            item.stageId = sectionId;
+            let list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+            
+            const oldIdx = list.findIndex(r => r.id === moveId);
+            if (oldIdx > -1) {
+                const [moved] = list.splice(oldIdx, 1);
+                list.splice(targetIndex, 0, moved);
+                list.forEach((r, i) => r.mapOrder = i);
+            }
         }
-    } else {
-        // L2 & L3 REORDER
-        const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-        const oldIdx = parent.steps.findIndex(s => s.id === moveId);
-        if (oldIdx > -1) {
-            const [moved] = parent.steps.splice(oldIdx, 1);
-            if (state.focusedResourceId) moved.type = sectionId;
-            else moved.gridLane = sectionId;
-            parent.steps.splice(targetIndex, 0, moved);
+    } 
+    // --- CASE B: L2 & L3 (Nested Steps) ---
+    else {
+        const parent = OL.getResourceById(parentId);
+        if (parent && parent.steps) {
+            // Find current item's index in the FULL master steps array
+            const masterIdx = parent.steps.findIndex(s => s.id === moveId);
+            
+            if (masterIdx > -1) {
+                const [moved] = parent.steps.splice(masterIdx, 1);
+                
+                // Sync metadata (Action vs Trigger or Lane)
+                if (state.focusedResourceId) moved.type = sectionId;
+                else moved.gridLane = sectionId;
+
+                // Insert at the visual target index
+                // Since L3 is now a single vertical stream, targetIndex IS the correct array slot
+                parent.steps.splice(targetIndex, 0, moved);
+            }
         }
     }
 
