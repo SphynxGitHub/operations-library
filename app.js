@@ -10817,7 +10817,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    // --- LOGIC ROUTER: LEVEL 3 (Mechanics) ---
+    /*// --- LOGIC ROUTER: LEVEL 3 (Mechanics i.e. Resource > Steps) ---
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         
@@ -10836,8 +10836,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
         canvasHtml = renderLevel3Canvas(state.focusedResourceId);
-    } 
-    // --- LOGIC ROUTER: LEVEL 2 (Flow) ---
+    }
+     
+    // --- LOGIC ROUTER: LEVEL 2 (Flow i.e. Workflow > Resources) ---
     else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
@@ -10852,7 +10853,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId, allResources);
     } 
-    // --- LOGIC ROUTER: LEVEL 1 (Lifecycle) ---
+    // --- LOGIC ROUTER: LEVEL 1 (Lifecycle i.e. Stage > Workflows) ---
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
@@ -10878,6 +10879,86 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     if (state.focusedResourceId) setTimeout(() => OL.renderVisualizer(state.focusedResourceId), 50);
     else if (state.focusedWorkflowId) setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
+};*/
+
+// --- TIER 3: RESOURCE > STEPS ---
+    if (state.focusedResourceId) {
+        const res = OL.getResourceById(state.focusedResourceId);
+        breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(res?.name)} (Steps)</span>`;
+        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
+        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
+    } 
+    // --- TIER 2: WORKFLOW > RESOURCES ---
+    else if (state.focusedWorkflowId) {
+        const focusedRes = OL.getResourceById(state.focusedWorkflowId);
+        breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(focusedRes?.name)} (Resources)</span>`;
+        toolboxHtml = renderLevel2SidebarContent(allResources);
+        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
+    } 
+    // --- TIER 1: STAGE > WORKFLOWS ---
+    else {
+        toolboxHtml = renderLevel1SidebarContent(allResources);
+        canvasHtml = renderLevel1Canvas(isVaultMode ? state.master : client.projectData, isVaultMode);
+    }
+
+    container.innerHTML = `
+        <div class="three-pane-layout vertical-lifecycle-mode">
+            <aside class="pane-drawer">${toolboxHtml}</aside>
+            <main class="pane-canvas-wrap">
+                <div class="canvas-header" style="padding:15px; border-bottom:1px solid rgba(255,255,255,0.05);">${breadcrumbHtml}</div>
+                <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
+            </main>
+            <aside id="inspector-panel" class="pane-inspector">
+                 <div class="empty-inspector tiny muted">Select a node to inspect</div>
+            </aside>
+        </div>
+    `;
+};
+
+// --- TIER 1 RENDERER ---
+window.renderLevel1Canvas = function(sourceData, isVaultMode) {
+    const stages = sourceData.stages || [];
+    return stages.map((stage, i) => `
+        <div class="stage-container">
+            <div class="stage-header-row">
+                <span class="stage-number">${i+1}</span><span class="stage-name">${esc(stage.name)}</span>
+            </div>
+            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
+                ${renderWorkflowsInStage(stage.id, isVaultMode)}
+            </div>
+        </div>`).join('');
+};
+
+// --- TIER 2 RENDERER ---
+window.renderLevel2Canvas = function(workflowId) {
+    const res = OL.getResourceById(workflowId);
+    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
+    return lanes.map((lane, i) => `
+        <div class="stage-container">
+            <div class="stage-header-row">
+                <span class="stage-number">${i+1}</span><span class="stage-name">${lane}</span>
+            </div>
+            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleResourceToWorkflowDrop(event, '${workflowId}', '${lane}')">
+                ${renderResourcesInWorkflowLane(workflowId, lane)}
+            </div>
+        </div>`).join('');
+};
+
+// --- TIER 3 RENDERER ---
+window.renderLevel3Canvas = function(resourceId) {
+    const res = OL.getResourceById(resourceId);
+    return `
+        <div class="stage-container">
+            <div class="stage-header-row"><span class="stage-number">⚙️</span><span class="stage-name">Step Sequence</span></div>
+            <div class="stage-workflow-stream">
+                ${(res.steps || []).map(step => `
+                    <div class="workflow-block-card">
+                        <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
+                        <div class="tiny muted">${esc(step.type)}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>`;
 };
 
 // --- SIDEBAR RENDERERS ---
@@ -10909,6 +10990,66 @@ window.renderLevel1SidebarContent = function(allResources) {
                 </div>
             `).join('')}
             ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No workflows available.</div>' : ''}
+        </div>
+        <div class="return-to-library-zone" 
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="OL.handleUnifiedDelete(event)">
+            🗑️ Drop to Unmap
+        </div>
+    `;
+};
+
+window.renderLevel2SidebarContent = function(allResources) {
+    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
+    return `
+        <div class="drawer-header">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
+                <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.promptCreateResource()" title="Create New Resource">+</button>
+            </div>
+            <input type="text" class="modal-input tiny" id="resource-toolbox-search" 
+                   placeholder="Search assets..." 
+                   oninput="OL.filterResourceToolbox(this.value)">
+        </div>
+        <div class="drawer-tools" id="resource-toolbox-list">
+            ${assets.map(res => `
+                <div class="draggable-workflow-item hover-trigger" 
+                     data-name="${res.name.toLowerCase()}" 
+                     draggable="true" 
+                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
+                    <span style="flex: 1;">${esc(res.name)}</span>
+                    
+                    <button class="btn tiny soft clone-btn" 
+                            style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
+                            onclick="event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                            title="Clone Resource">⿻</button>
+                </div>
+            `).join('')}
+            ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
+        </div>
+        <div class="return-to-library-zone" 
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="OL.handleUnifiedDelete(event)">
+            🗑️ Drop to Unmap
+        </div>
+    `;
+};
+
+window.renderLevel3SidebarContent = function(resourceId) {
+    return `
+        <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
+        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto;">
+            <label class="modal-section-label" style="color:#ffbf00">⚡ Triggers</label>
+            ${ATOMIC_STEP_LIB.Triggers.map(t => `<div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>`).join('')}
+            <label class="modal-section-label" style="margin-top:20px;">🎬 Action Builder</label>
+            <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px;">
+                <select id="builder-verb" class="modal-input tiny">${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
+            </div>
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
@@ -10983,66 +11124,6 @@ OL.cloneResourceWorkflow = function(resId) {
     console.log(`⿻ Cloned Workflow: ${clone.name}`);
 };
 
-window.renderLevel2SidebarContent = function(allResources) {
-    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
-    return `
-        <div class="drawer-header">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-                <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
-                <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.promptCreateResource()" title="Create New Resource">+</button>
-            </div>
-            <input type="text" class="modal-input tiny" id="resource-toolbox-search" 
-                   placeholder="Search assets..." 
-                   oninput="OL.filterResourceToolbox(this.value)">
-        </div>
-        <div class="drawer-tools" id="resource-toolbox-list">
-            ${assets.map(res => `
-                <div class="draggable-workflow-item hover-trigger" 
-                     data-name="${res.name.toLowerCase()}" 
-                     draggable="true" 
-                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
-                    <span style="flex: 1;">${esc(res.name)}</span>
-                    
-                    <button class="btn tiny soft clone-btn" 
-                            style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
-                            onclick="event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); OL.cloneResourceWorkflow('${res.id}')"
-                            title="Clone Resource">⿻</button>
-                </div>
-            `).join('')}
-            ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
-        </div>
-        <div class="return-to-library-zone" 
-            ondragover="OL.handleCanvasDragOver(event)" 
-            ondragleave="this.classList.remove('drag-over')"
-            ondrop="OL.handleUnifiedDelete(event)">
-            🗑️ Drop to Unmap
-        </div>
-    `;
-};
-
-window.renderLevel3SidebarContent = function(resourceId) {
-    return `
-        <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
-        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto;">
-            <label class="modal-section-label" style="color:#ffbf00">⚡ Triggers</label>
-            ${ATOMIC_STEP_LIB.Triggers.map(t => `<div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>`).join('')}
-            <label class="modal-section-label" style="margin-top:20px;">🎬 Action Builder</label>
-            <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px;">
-                <select id="builder-verb" class="modal-input tiny">${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
-                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
-                <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
-            </div>
-        </div>
-        <div class="return-to-library-zone" 
-            ondragover="OL.handleCanvasDragOver(event)" 
-            ondragleave="this.classList.remove('drag-over')"
-            ondrop="OL.handleUnifiedDelete(event)">
-            🗑️ Drop to Unmap
-        </div>
-    `;
-};
-
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
     state.activeInspectorResId = targetId;
@@ -11095,8 +11176,9 @@ OL.clearInspector = function() {
     if (panel) panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
 };
 
-// --- CANVAS RENDERERS ---
+/*// --- CANVAS RENDERERS ---
 
+// --- LEVEL 1: LIFECYCLE (Stage > Workflows)
 window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     const stages = sourceData.stages || [];
     return `
@@ -11113,31 +11195,15 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
         </div>`;
 };
 
-// --- LEVEL 2: FLOW (Workflows grouped by Stage) ---
-window.renderLevel2Canvas = function(parentId) {
+// --- LEVEL 2: FLOW (Workflow > Resources) ---
+window.renderLevel2Canvas = function(workflowId) {
+    // Mirroring Level 1: Showing Stages but filtered for specific logic if needed
     const client = getActiveClient();
     const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
-    const stages = sourceData.stages || [];
-
-    return `
-        <div class="vertical-stage-canvas" id="fs-canvas">
-            ${stages.map((stage, i) => `
-                <div class="stage-container">
-                    <div class="stage-header-row">
-                        <span class="stage-number">${i + 1}</span>
-                        <span class="stage-name">${esc(stage.name)}</span>
-                    </div>
-                    <div class="stage-workflow-stream" 
-                         ondragover="OL.handleCanvasDragOver(event)" 
-                         ondrop="OL.handleStageDrop(event, '${stage.id}')">
-                        ${renderWorkflowsInStage(stage.id, location.hash.includes('vault'))}
-                    </div>
-                </div>
-            `).join('')}
-        </div>`;
+    return renderLevel1Canvas(sourceData, location.hash.includes('vault'));
 };
 
-// --- LEVEL 3: MECHANICS (Atomic Steps grouped by Functional Lane) ---
+// --- LEVEL 3: MECHANICS (Resource > Steps) ---
 window.renderLevel3Canvas = function(resourceId) {
     // These are the "Stages" for your technical mechanics
     const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
@@ -11207,6 +11273,29 @@ OL.exitToWorkflow = function() {
     state.focusedResourceId = null;
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
+*/
+
+function renderResourcesInWorkflowLane(workflowId, lane) {
+    const workflow = OL.getResourceById(workflowId);
+    const items = (workflow.steps || []).filter(s => s.gridLane === lane);
+    if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
+    return items.map(item => `<div class="workflow-block-card" ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
+        <div class="bold accent">${esc(item.name)}</div>
+    </div>`).join('');
+}
+
+OL.handleResourceToWorkflowDrop = function(e, workflowId, lane) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId");
+    const workflow = OL.getResourceById(workflowId);
+    if (resId && workflow) {
+        const sourceRes = OL.getResourceById(resId);
+        if(!workflow.steps) workflow.steps = [];
+        workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: lane });
+        OL.persist();
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    }
+};
 
 OL.exitToLifecycle = function() {
     state.focusedWorkflowId = null;
@@ -11220,7 +11309,7 @@ OL.filterResourceToolbox = function(q) {
         el.style.display = el.getAttribute('data-name').includes(query) ? 'flex' : 'none';
     });
 };
-
+/*
 // --- DRAG & DROP ORCHESTRATION ---
 
 // 1. Source: When you start dragging a Workflow or Resource from the sidebar
@@ -11360,7 +11449,7 @@ document.addEventListener('dragleave', (e) => {
 document.addEventListener('dragend', (e) => {
     e.target.style.opacity = "1";
     document.querySelectorAll('.stage-workflow-stream, #fs-canvas-wrapper').forEach(el => el.style.background = "");
-});
+});*/
 
 // --- UNMAPPING / TRASH LOGIC ---
 
