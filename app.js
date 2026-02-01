@@ -11132,7 +11132,8 @@ OL.cloneResourceWorkflow = function(resId) {
     console.log(`⿻ Cloned Workflow: ${clone.name}`);
 };
 
-// --- INSPECTOR ENGINE ---
+// --- INSPECTOR ENGINE ---//
+/*
 OL.loadInspector = function(targetId, parentId = null) {
     state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
@@ -11191,6 +11192,101 @@ OL.loadInspector = function(targetId, parentId = null) {
             </section>
         </div>
     `;
+};
+*/
+// --- INSPECTOR ENGINE ---
+OL.loadInspector = function(targetId, parentId = null) {
+    state.activeInspectorResId = targetId;
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return;
+
+    // 1. Resolve the clicked node
+    const data = OL.getResourceById(targetId);
+    if (!data) {
+        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
+        return;
+    }
+
+    const client = getActiveClient();
+    // 🚀 THE LOGIC KEY: If parentId is passed, it is explicitly a "Step" on a canvas.
+    const isStepOnCanvas = !!parentId; 
+    const isModule = data.type === 'module_block';
+    const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
+
+    let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
+
+    // 🚀 SCENARIO A: MECHANICAL STEP (Tier 3)
+    // Show this if it's NOT a module block, OR if it's explicitly a step on the canvas
+    if (isStepOnCanvas && !isModule) {
+        html += `
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <span class="tiny accent bold uppercase">⚙️ Step Mechanics</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name)}</h2>
+                <div class="tiny muted">Type: ${esc(data.type || 'Action')}</div>
+            </div>
+            <section style="display: flex; flex-direction: column; gap: 20px;">
+                <div class="card-section">
+                    <label class="modal-section-label">📅 Relational Scheduling</label>
+                    <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+                        <input type="number" class="modal-input tiny" style="width:50px;" value="${num(data.timingValue)}" 
+                               onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingValue', this.value)">
+                        <select class="modal-input tiny" onchange="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingType', this.value)">
+                            <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>After Prev</option>
+                            <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>After Start</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-section">
+                    <label class="modal-section-label">🔗 Resources & Guides</label>
+                    <div id="step-resources-list-${data.id}" style="margin-top:8px;">
+                        ${renderStepResources(parentResId, data)}
+                    </div>
+                    <div class="search-map-container" style="margin-top:8px;">
+                        <input type="text" class="modal-input tiny" placeholder="+ Link Guide..." 
+                               onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
+                               oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
+                        <div id="resource-results-${data.id}" class="search-results-overlay"></div>
+                    </div>
+                </div>
+                <div class="card-section">
+                    <label class="modal-section-label">🎯 Conditional Logic</label>
+                    <div id="step-outcomes-list" style="margin-top:8px;">
+                        ${renderStepOutcomes(parentResId, data)}
+                    </div>
+                </div>
+            </section>`;
+    } 
+    // 🚀 SCENARIO B: CONTAINER PREVIEW (Tiers 1 & 2)
+    // Show this if it's a Workflow, a Resource Pointer, or a Module Block
+    else {
+        const techId = data.resourceLinkId || data.linkedResourceId || data.id;
+        const techAsset = OL.getResourceById(techId);
+        const children = techAsset?.steps || [];
+        
+        html += `
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <span class="tiny accent bold uppercase">${isModule ? '📦 Nested Module' : '📂 Container Preview'}</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || techAsset?.name)}</h2>
+            </div>
+            <section>
+                <label class="modal-section-label">PROCEDURE PREVIEW</label>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto;">
+                    ${children.map((s, i) => `
+                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                            <span class="tiny bold accent">${i + 1}</span>
+                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
+                        </div>
+                    `).join('') || '<div class="tiny muted italic">No procedures defined.</div>'}
+                </div>
+                <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
+                    <button class="btn tiny primary" onclick="OL.openResourceModal('${techId}')">⚙️ Edit Full SOP</button>
+                    <button class="btn tiny soft" onclick="OL.drillIntoResourceMechanics('${techId}')">🔍 Drill Down</button>
+                </div>
+            </section>`;
+    }
+
+    html += `</div>`;
+    panel.innerHTML = html;
 };
 
 OL.clearInspector = function() {
