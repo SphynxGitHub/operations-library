@@ -3782,13 +3782,15 @@ OL.getDraftById = function(id) {
 };
 
 OL.getResourceById = function(id) {
-    if (!id) return null;
+    // 🚀 THE FIX: Strict check for falsy values AND literal strings "undefined"/"null"
+    if (!id || id === "undefined" || id === "null") return null;
+    
     const idStr = String(id);
 
-    // 1. Resolve the global state (Check if it's in OL.state or just state)
+    // 1. Resolve the global state
     const globalState = window.state || OL.state;
     if (!globalState) {
-        console.error("❌ State not found. Ensure 'state' or 'OL.state' is defined.");
+        console.error("❌ State not found.");
         return null;
     }
 
@@ -3799,11 +3801,9 @@ OL.getResourceById = function(id) {
     // 3. Check Active Client Local Project
     const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
     const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === idStr);
-    
     if (fromLocal) return fromLocal;
 
-    // 4. Search inside Workflows for the step itself 
-    // (In case the ID being passed is the Step ID acting as a standalone resource)
+    // 4. Search inside Workflows for nested steps
     const allLocalResources = client?.projectData?.localResources || [];
     for (const res of allLocalResources) {
         if (res.steps && Array.isArray(res.steps)) {
@@ -3812,7 +3812,11 @@ OL.getResourceById = function(id) {
         }
     }
 
-    console.warn(`⚠️ Resource ${idStr} not found in Master, Local, or Nested Steps.`);
+    // 5. Final fallback (Silenced for Atomic Steps)
+    // Only warn if the ID looks like a real ID (e.g., contains 'res' or 'local')
+    if (idStr.includes('-')) {
+        console.warn(`⚠️ Resource ${idStr} not found in Master, Local, or Nested Steps.`);
+    }
     return null;
 };
 
