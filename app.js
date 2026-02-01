@@ -11107,14 +11107,14 @@ OL.loadInspector = function(targetId, parentId = null) {
             </div>
 
             <section>
-                <label class="modal-section-label">Sub-Procedures (${nestedSteps.length})</label>
+                <label class="modal-section-label">Resources/Steps (${nestedSteps.length})</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
                     ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
                         <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
                             <span class="tiny bold accent">${i + 1}</span>
                             <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
                         </div>
-                    `).join('') : `<div class="tiny muted italic">No procedures defined.</div>`}
+                    `).join('') : `<div class="tiny muted italic">No resources/steps defined.</div>`}
                 </div>
                 
                 <button class="btn tiny primary" style="margin-top:20px; width:100%;" 
