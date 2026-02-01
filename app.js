@@ -11355,7 +11355,7 @@ OL.handleModularAtomicDrag = function(e) {
     e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
     e.target.style.opacity = "0.4";
 };
-
+*/
 OL.handleStageDrop = function(e, stageId) {
     e.preventDefault();
     const resId = e.dataTransfer.getData("resId");
@@ -11368,7 +11368,7 @@ OL.handleStageDrop = function(e, stageId) {
         renderGlobalVisualizer(location.hash.includes('vault'));
     }
 };
-
+/*
 // Unified Drop Handler for Mechanics (Level 3)
 OL.handleMechanicDrop = function(e, parentId, laneName) {
     e.preventDefault();
