@@ -11340,7 +11340,7 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
             const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
-            console.log("parent and parent steps found")
+            console.log("parent and parent steps found:"+ parent.steps)
             if (currentItemIdx > -1) {
                 const [item] = parent.steps.splice(currentItemIdx, 1);
                 console.log("item index found")
@@ -11363,6 +11363,9 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
                     parent.steps.push(item);
                 }
                 console.log("section items found")
+            }
+            else {
+                console.log("Current Item index < 0")
             }
         }
     }
