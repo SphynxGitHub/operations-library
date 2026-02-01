@@ -10929,7 +10929,7 @@ window.renderLevel3Canvas = function(resourceId) {
                      ondragover="OL.handleCanvasDragOver(event)" 
                      ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     
-                    ${steps.map(step => {
+                    ${steps.map((step, idx) => {
                         const isModule = step.type === 'module_block';
                         let subStepHtml = "";
 
@@ -11309,7 +11309,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
 
     if (matchedWorkflows.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
 
-    return matchedWorkflows.map(res => `
+    return matchedWorkflows.map((res, idx) => `
         <div class="workflow-block-card" 
              draggable="true" 
              onmousedown="OL.loadInspector('${res.id}')"
@@ -11330,7 +11330,7 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
     
     if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
     
-    return items.map(item => {
+    return items.map((item, idx) => {
         const linkedRes = OL.getResourceById(item.resourceLinkId);
         const stepCount = (linkedRes?.steps || []).length;
         const triggerCount = (linkedRes?.triggers || []).length;
