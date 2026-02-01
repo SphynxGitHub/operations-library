@@ -11231,7 +11231,7 @@ function renderGridCanvasShell(parentId) {
         <div id="fs-canvas-wrapper" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleFocusedCanvasDrop(event, '${parentId}')">
             <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
         </div>`;
-}
+}*/
 
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
@@ -11255,7 +11255,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
         </div>
     `).join('');
 };
-
+/*
 // --- NAVIGATION & STATE ---
 
 OL.drillDownIntoWorkflow = function(resId) {
