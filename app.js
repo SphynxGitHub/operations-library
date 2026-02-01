@@ -11319,7 +11319,6 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     return groups.map(group => {
-        // 🚀 Filter logic: 'Trigger' type vs everything else
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
 
         return `
@@ -11329,13 +11328,12 @@ window.renderLevel3Canvas = function(resourceId) {
                      ondragover="OL.handleCanvasDragOver(event)" 
                      ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     
-                    ${steps.map((step, idx) => `
+                    ${steps.map((step) => `
                         <div class="workflow-block-card" draggable="true" 
                              onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}')"
                              ondragover="OL.handleCanvasDragOver(event)"
-                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
-                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
+                             ondrop="OL.handleNodeRearrange(event, '${group.type}', '${step.id}')"> <div class="bold accent">${esc(step.name || "Untitled")}</div>
                             <div class="tiny muted">${esc(step.type)}</div>
                         </div>`).join('')}
                 </div>
@@ -11413,14 +11411,13 @@ OL.handleNodeMoveStart = function(e, id, index) {
     setTimeout(() => e.target.classList.add('dragging'), 0);
 };
 
-OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
+OL.handleNodeRearrange = function(e, sectionId, targetId) {
     e.preventDefault(); 
     e.stopPropagation();
 
     const moveId = e.dataTransfer.getData("moveNodeId");
-    if (!moveId) return;
+    if (!moveId || moveId === targetId) return; 
 
-    const isVaultMode = location.hash.includes('vault');
     const parentId = state.focusedWorkflowId || state.focusedResourceId;
 
     // --- CASE A: LEVEL 1 (Lifecycle - Siblings) ---
@@ -11439,43 +11436,31 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
         }
     } 
     // --- CASE B: LEVEL 2 & 3 (The Neighbor Logic) ---
-    else {
+   else {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
-            // 1. Remove the item from its current spot
+            // 1. Find the moved item and remove it
             const oldIdx = parent.steps.findIndex(s => s.id === moveId);
             if (oldIdx === -1) return;
             const [item] = parent.steps.splice(oldIdx, 1);
 
-            // 2. Sync metadata (Is it now a Trigger or an Action?)
-            if (state.focusedResourceId) {
-                item.type = sectionId; // e.g., 'Trigger' or 'Action'
+            // 2. Update Type (Trigger/Action) or Lane
+            if (state.focusedResourceId) item.type = sectionId;
+            else item.gridLane = sectionId;
+
+            // 3. 🎯 THE TARGET FIX: Find the absolute insertion point using the Target ID
+            const insertIdx = parent.steps.findIndex(s => s.id === targetId);
+            
+            if (insertIdx > -1) {
+                parent.steps.splice(insertIdx, 0, item);
             } else {
-                item.gridLane = sectionId;
-            }
-
-            // 3. 🎯 THE FIX: Neighbors over Numbers
-            // Find all items visible in the box we just dropped into
-            const sectionItems = parent.steps.filter(s => 
-                state.focusedResourceId ? (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : (s.gridLane === sectionId)
-            );
-
-            // Find the "Neighbor" card we dropped onto
-            const neighbor = sectionItems[targetIndex];
-
-            if (neighbor) {
-                // Find where that neighbor sits in the REAL array
-                const absoluteInsertIdx = parent.steps.indexOf(neighbor);
-                parent.steps.splice(absoluteInsertIdx, 0, item);
-            } else {
-                // If the box is empty or we dropped at the very bottom
                 parent.steps.push(item);
             }
         }
     }
 
     OL.persist();
-    renderGlobalVisualizer(isVaultMode);
+    renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
