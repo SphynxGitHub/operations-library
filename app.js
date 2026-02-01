@@ -11336,42 +11336,65 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
     } 
     // --- TIER 2 & 3 REORDER (Nested steps) ---
     else {
-        console.log("running tier 2/3 node rearrange")
+        console.log("running tier 2/3 node rearrange");
         const parent = OL.getResourceById(parentId);
+    
         if (parent && parent.steps) {
+            // 1. HARDEN THE LOOKUP: Ensure we are looking for the step ID
             const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
-            console.log("parent and parent steps found:"+ parent.steps)
+            
+            console.log("Attempting to move:", moveId, "inside parent:", parentId);
+            
             if (currentItemIdx > -1) {
+                // Remove the item from the array
                 const [item] = parent.steps.splice(currentItemIdx, 1);
-                console.log("item index found")
+                console.log("Item found and removed from index:", currentItemIdx);
 
-                // Update Type/Lane based on drop target
-                if (state.focusedResourceId) item.type = sectionId;
-                else item.gridLane = sectionId;
+                // 2. SYNC METADATA
+                if (state.focusedResourceId) {
+                    item.type = sectionId; // 'Trigger' or 'Action'
+                } else {
+                    item.gridLane = sectionId; // L2 Swimlane
+                }
 
-                // 🎯 THE ABSOLUTE INDEX FIX:
-                // Find all existing items in the destination section
+                // 3. TARGETING LOGIC
+                // Filter the steps to match the destination section so targetIndex makes sense
                 const sectionItems = parent.steps.filter(s => 
-                    state.focusedResourceId ? (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : (s.gridLane === sectionId)
+                    state.focusedResourceId ? 
+                    (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : 
+                    (s.gridLane === sectionId)
                 );
 
-                if (sectionItems[targetIndex]) {
-                    // Find where that visual target sits in the actual array
-                    const absoluteInsertIdx = parent.steps.indexOf(sectionItems[targetIndex]);
+                const targetCard = sectionItems[targetIndex];
+
+                if (targetCard) {
+                    // Find where the neighbor card actually sits in the master array
+                    const absoluteInsertIdx = parent.steps.indexOf(targetCard);
                     parent.steps.splice(absoluteInsertIdx, 0, item);
+                    console.log("Inserted before neighbor at master index:", absoluteInsertIdx);
                 } else {
+                    // If section is empty or dropped at the end
                     parent.steps.push(item);
+                    console.log("Pushed to end of section");
                 }
-                console.log("section items found")
             }
             else {
-                console.log("Current Item index < 0")
+                // 🚨 THIS WAS YOUR ERROR:
+                console.error("CRITICAL: MoveId", moveId, "not found in parent steps array. Checking if moveId is actually the parent...");
+                
+                // EMERGENCY RECOVERY: If someone dragged the resource link instead of the step, 
+                // we find the step that points to that resource link.
+                const recoveryIdx = parent.steps.findIndex(s => s.resourceLinkId === moveId);
+                if (recoveryIdx > -1) {
+                    console.log("Recovery successful: Found step via resourceLinkId at index", recoveryIdx);
+                    // Re-run the function using the correct Step ID
+                    const actualStepId = parent.steps[recoveryIdx].id;
+                    return OL.handleNodeRearrange(e, sectionId, actualStepId); 
+                }
             }
         }
     }
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
+}
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
