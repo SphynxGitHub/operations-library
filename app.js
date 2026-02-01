@@ -11134,68 +11134,6 @@ OL.cloneResourceWorkflow = function(resId) {
     console.log(`⿻ Cloned Workflow: ${clone.name}`);
 };
 
-// --- INSPECTOR ENGINE ---//
-/*
-OL.loadInspector = function(targetId, parentId = null) {
-    state.activeInspectorResId = targetId;
-    const panel = document.getElementById('inspector-panel');
-    if (!panel) return;
-
-    // 1. Resolve Data (The clicked node)
-    const data = OL.getResourceById(targetId);
-    if (!data) {
-        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
-        return;
-    }
-
-    // 2. Identify Context
-    const isModule = data.type === 'module_block';
-    
-    // 🚀 THE FIX: Resolve the asset ID correctly based on type
-    const technicalAssetId = isModule ? data.linkedResourceId : data.resourceLinkId;
-    
-    // Safety check: only attempt to fetch the asset if an ID exists
-    const technicalAsset = technicalAssetId ? OL.getResourceById(technicalAssetId) : null;
-    
-    // 3. Resolve Nested Steps (Priority: Linked Asset > Current Node's own steps)
-    const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (data.steps || []);
-
-    panel.innerHTML = `
-        <div class="inspector-content fade-in" style="padding: 20px;">
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <span class="tiny accent bold uppercase">${isModule ? '📦 Linked Module' : '⚙️ Mechanical Step'}</span>
-                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || technicalAsset?.name || "Untitled")}</h2>
-                <div class="tiny muted">${isModule ? 'Composite Workflow' : esc(data.type || 'Action')}</div>
-            </div>
-
-            <section>
-                <label class="modal-section-label">Procedure Preview (${nestedSteps.length} Steps)</label>
-                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto; padding-right:5px;">
-                    ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                            <span class="tiny bold accent">${i + 1}</span>
-                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
-                        </div>
-                    `).join('') : `<div class="tiny muted italic">No procedures defined.</div>`}
-                </div>
-                
-                <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
-                    <button class="btn tiny primary" style="width:100%;" 
-                            onclick="OL.openResourceModal('${technicalAssetId || data.id}')">
-                        ⚙️ Edit Full SOP
-                    </button>
-                    ${isModule && technicalAssetId ? `
-                        <button class="btn tiny soft" style="width:100%;" 
-                                onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
-                            🔍 Open in Mapper
-                        </button>
-                    ` : ''}
-                </div>
-            </section>
-        </div>
-    `;
-};
-*/
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
     state.activeInspectorResId = targetId;
@@ -11387,10 +11325,15 @@ OL.filterResourceToolbox = function(q) {
 // --- DRAG & DROP ORCHESTRATION ---
 
 // 1. Source: When you start dragging a Workflow or Resource from the sidebar
-OL.handleWorkflowDragStart = function(e, resId, resName) {
-    e.dataTransfer.setData("resId", resId);
-    e.dataTransfer.setData("resName", resName);
-    e.target.style.opacity = "0.5";
+OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
+    if (index !== null) {
+        // 🚀 THIS IS THE KEY: If it has an index, it's a move!
+        e.dataTransfer.setData("moveStepId", resId); 
+        e.dataTransfer.setData("draggedIndex", index);
+    } else {
+        // New item from sidebar
+        e.dataTransfer.setData("resId", resId);
+    }
     console.log(`Dragging Source: ${resName}`);
 };
 
