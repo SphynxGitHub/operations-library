@@ -11171,7 +11171,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                 
                 <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
                     <button class="btn tiny primary" style="width:100%;" 
-                            onclick="OL.openResourceModal('${technicalAssetId || data.id}')">
+                            onclick="OL.openResourceModal('${technicalAsset.id || data.id}')">
                         ⚙️ Edit Full SOP
                     </button>
                     ${isModule ? `
