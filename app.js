@@ -11337,28 +11337,26 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
     // --- TIER 2 & 3 REORDER (Nested steps) ---
     else {
         console.log("running tier 2/3 node rearrange");
-        const parent = OL.getResourceById(parentId);
-    
+        
+        // 🚀 THE FIX: Prioritize focusedResourceId for Tier 3
+        const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
+        const parent = OL.getResourceById(actualParentId);
+        
         if (parent && parent.steps) {
-            // 1. HARDEN THE LOOKUP: Ensure we are looking for the step ID
+            // Now we look for the moveId in the CORRECT object
             const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
             
-            console.log("Attempting to move:", moveId, "inside parent:", parentId);
-            
+            console.log(`Searching for ${moveId} inside ${actualParentId}...`);
+
             if (currentItemIdx > -1) {
-                // Remove the item from the array
+                console.log("SUCCESS: Item found at index", currentItemIdx);
                 const [item] = parent.steps.splice(currentItemIdx, 1);
-                console.log("Item found and removed from index:", currentItemIdx);
 
-                // 2. SYNC METADATA
-                if (state.focusedResourceId) {
-                    item.type = sectionId; // 'Trigger' or 'Action'
-                } else {
-                    item.gridLane = sectionId; // L2 Swimlane
-                }
+                // Sync metadata
+                if (state.focusedResourceId) item.type = sectionId;
+                else item.gridLane = sectionId;
 
-                // 3. TARGETING LOGIC
-                // Filter the steps to match the destination section so targetIndex makes sense
+                // Target Index Logic
                 const sectionItems = parent.steps.filter(s => 
                     state.focusedResourceId ? 
                     (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : 
@@ -11366,31 +11364,14 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
                 );
 
                 const targetCard = sectionItems[targetIndex];
-
                 if (targetCard) {
-                    // Find where the neighbor card actually sits in the master array
                     const absoluteInsertIdx = parent.steps.indexOf(targetCard);
                     parent.steps.splice(absoluteInsertIdx, 0, item);
-                    console.log("Inserted before neighbor at master index:", absoluteInsertIdx);
                 } else {
-                    // If section is empty or dropped at the end
                     parent.steps.push(item);
-                    console.log("Pushed to end of section");
                 }
-            }
-            else {
-                // 🚨 THIS WAS YOUR ERROR:
-                console.error("CRITICAL: MoveId", moveId, "not found in parent steps array. Checking if moveId is actually the parent...");
-                
-                // EMERGENCY RECOVERY: If someone dragged the resource link instead of the step, 
-                // we find the step that points to that resource link.
-                const recoveryIdx = parent.steps.findIndex(s => s.resourceLinkId === moveId);
-                if (recoveryIdx > -1) {
-                    console.log("Recovery successful: Found step via resourceLinkId at index", recoveryIdx);
-                    // Re-run the function using the correct Step ID
-                    const actualStepId = parent.steps[recoveryIdx].id;
-                    return OL.handleNodeRearrange(e, sectionId, actualStepId); 
-                }
+            } else {
+                console.error("FAIL: MoveId still not found. Parent steps are:", parent.steps);
             }
         }
     }
