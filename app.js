@@ -11056,7 +11056,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px;">
                 <select id="builder-verb" class="modal-input tiny">${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
                 <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
-                <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
+                <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; border-radius: 4px; padding: 3%; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
             </div>
         </div>
         <div class="return-to-library-zone" 
