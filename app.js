@@ -11328,7 +11328,7 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             parentRes.steps.push({ 
                 id: uid(), 
                 name: data.name, 
-                type: sectionId //data.type, 
+                type: sectionId, //data.type, 
                 gridLane: 'Sequence',
                 outcomes: [] 
             });
