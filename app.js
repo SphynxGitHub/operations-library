@@ -11165,8 +11165,35 @@ OL.loadInspector = function(targetId, parentId = null) {
                 <div class="tiny muted">${isModule ? 'Composite Workflow' : esc(data.type || 'Action')}</div>
             </div>`;
 
-            // 4. INJECT TIER 3 CONTROLS (Only if it's an atomic step/nested item)
-            if (!isModule) {
+            // 4. Shared Module/SOP Actions
+            if (isModule) {
+                // --- VIEW A: MODULE PREVIEW (Nested Steps) ---
+                const nestedSteps = technicalAsset?.steps || [];
+                html += `
+                    <section>
+                        <label class="modal-section-label">Module Procedure Preview (${nestedSteps.length} Steps)</label>
+                        <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 350px; overflow-y: auto; padding-right:5px;">
+                            ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
+                                <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                                    <span class="tiny bold accent">${i + 1}</span>
+                                    <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
+                                </div>
+                            `).join('') : `<div class="tiny muted italic">No procedures defined inside this module.</div>`}
+                        </div>
+                        
+                        <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
+                            <button class="btn tiny primary" style="width:100%;" 
+                                    onclick="OL.openResourceModal('${technicalAssetId}')">
+                                ⚙️ Edit Module SOP
+                            </button>
+                            <button class="btn tiny soft" style="width:100%;" 
+                                    onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
+                                🔍 Open in Mapper
+                            </button>
+                        </div>
+                    </section>`;
+            } else {
+                // --- VIEW B: ATOMIC MECHANICS (Scheduling / Logic) ---
                 html += `
                     <section style="display: flex; flex-direction: column; gap: 20px;">
                         <div class="card-section">
@@ -11203,36 +11230,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                     </section>`;
             }
 
-            // 5. Shared Module/SOP Actions
-            
-                html +=`<section>
-                    <label class="modal-section-label">Procedure Preview (${nestedSteps.length} Steps)</label>
-                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto; padding-right:5px;">
-                        ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
-                            <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                                <span class="tiny bold accent">${i + 1}</span>
-                                <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
-                            </div>
-                        `).join('') : `<div class="tiny muted italic">No procedures defined.</div>`}
-                    </div>
-                    
-                    <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
-                        <button class="btn tiny primary" style="width:100%;" 
-                                onclick="OL.openResourceModal('${technicalAssetId || data.id}')">
-                            ⚙️ Edit Full SOP
-                        </button>
-                        ${isModule && technicalAssetId ? `
-                            <button class="btn tiny soft" style="width:100%;" 
-                                    onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
-                                🔍 Open in Mapper
-                            </button>
-                        ` : ''}
-                    </div>
-                </section>`
-            
-        html +=`
-        </div>
-    `;
+    html += `</div>`;
     panel.innerHTML = html;
 };
 
