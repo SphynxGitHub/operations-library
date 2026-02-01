@@ -11136,6 +11136,7 @@ OL.clearInspector = function() {
     if (panel) panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
 };
 
+// LEVEL 1 Show workflows in stage
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
     const sourceResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
@@ -11159,6 +11160,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     `).join('');
 };
 
+// LEVEL 2 Show resources in workflow
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
     const items = (workflow.steps || []).filter(s => s.gridLane === lane);
@@ -11174,7 +11176,7 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
         <div class="workflow-block-card"
              draggable="true" 
              onmousedown="OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleWorkflowDragStart(event, '${item.resourceLinkId}', '${esc(item.name)}')" 
+             ondragstart="OL.handleStepMoveStart(event, '${item.id}', '${workflowId}')"
              ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
             <div class="bold accent">${esc(item.name)}</div>
             <div class="tiny muted">
