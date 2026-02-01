@@ -11431,7 +11431,7 @@ OL.handleModularAtomicDrag = function(e) {
     e.target.style.opacity = "0.4";
 };
 
-OL.handleUniversalDrop = function(e, parentId, sectionId) {
+OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex=null) {
     e.preventDefault();
     e.currentTarget.style.background = ""; // Visual cleanup
     
