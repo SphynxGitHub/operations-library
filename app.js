@@ -11419,12 +11419,12 @@ OL.handleNodeRearrange = function(e, sectionId, targetId) {
     const isVaultMode = window.location.hash.includes('vault');
     const moveId = e.dataTransfer.getData("moveNodeId");
     
-    // Safety check: Don't do anything if you drop a card on itself
+    // 🚀 THE FIX: Use targetId (the name passed from the HTML)
     if (!moveId || moveId === targetId) return; 
 
     const parentId = state.focusedWorkflowId || state.focusedResourceId;
 
-    // --- CASE A: TIER 1 (Lifecycle Stages) ---
+    // --- CASE A: TIER 1 (Siblings) ---
     if (!parentId) {
         const client = getActiveClient();
         const source = isVaultMode ? state.master.resources : client.projectData.localResources;
@@ -11433,36 +11433,29 @@ OL.handleNodeRearrange = function(e, sectionId, targetId) {
         if (item) {
             item.stageId = sectionId;
             let list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-            
             const oldIdx = list.findIndex(r => r.id === moveId);
             if (oldIdx > -1) {
                 const [moved] = list.splice(oldIdx, 1);
-                // targetIdentifier here is the numeric idx passed from L1 renderer
-                list.splice(targetIdentifier, 0, moved);
+                // For L1, the targetId passed is actually the numeric index
+                list.splice(parseInt(targetId), 0, moved);
                 list.forEach((r, i) => r.mapOrder = i);
             }
         }
     } 
-    // --- CASE B: TIER 2 & 3 (Nested Steps) ---
+    // --- CASE B: TIER 2 & 3 (Steps) ---
     else {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
-            // 1. Find and remove the moved item
             const oldIdx = parent.steps.findIndex(s => s.id === moveId);
             if (oldIdx === -1) return;
             const [item] = parent.steps.splice(oldIdx, 1);
 
-            // 2. Determine insertion index via the Target ID
+            if (state.focusedResourceId) item.type = sectionId;
+            else item.gridLane = sectionId;
+
+            // Find absolute index by the Landmark ID
             const insertIdx = parent.steps.findIndex(s => s.id === targetId);
             
-            // 3. Update metadata (Is it now a Trigger or an Action?)
-            if (state.focusedResourceId) {
-                item.type = sectionId; 
-            } else {
-                item.gridLane = sectionId;
-            }
-
-            // 4. Inject into the new position
             if (insertIdx > -1) {
                 parent.steps.splice(insertIdx, 0, item);
             } else {
