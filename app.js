@@ -10957,7 +10957,7 @@ window.renderLevel3Canvas = function(resourceId) {
                              ondragover="OL.handleCanvasDragOver(event)" 
                              ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}', ${idx})"
                              ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}', ${idx})"   
-                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">                          ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
+                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
                             <div class="bold accent" style="font-size:11px;">
                                 ${isModule ? '📦 ' : ''}${esc(step.name || "Untitled Step")}
                             </div>
