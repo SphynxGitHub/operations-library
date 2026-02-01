@@ -11342,13 +11342,13 @@ OL.handleStepMoveStart = function(e, stepId, parentResId) {
     e.target.style.opacity = "0.4";
 };
 */
-// 4. Source: Atomic Step dragging (Level 3 Factory)
+// 4. Source: Atomic Step dragging (L3 Add triggers and steps to Canvas)
 OL.handleAtomicDrag = function(e, type, name) {
     const payload = { type, name, isAtomic: true };
     e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
     e.target.style.opacity = "0.4";
 };
-/*
+
 OL.handleModularAtomicDrag = function(e) {
     const verb = document.getElementById('builder-verb').value;
     const obj = document.getElementById('builder-object').value;
@@ -11356,7 +11356,7 @@ OL.handleModularAtomicDrag = function(e) {
     e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
     e.target.style.opacity = "0.4";
 };
-*/
+
 OL.handleStageDrop = function(e, stageId) {
     e.preventDefault();
     const resId = e.dataTransfer.getData("resId");
