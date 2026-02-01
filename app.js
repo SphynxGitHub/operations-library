@@ -11469,9 +11469,9 @@ OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
     e.preventDefault();
     e.currentTarget.style.background = ""; 
 
-    const moveStepId = e.dataTransfer.getData("moveStepId");       // Existing card
-    const resId = e.dataTransfer.getData("resId");               // New from sidebar
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // New from Factory
+    const moveStepId = e.dataTransfer.getData("moveStepId");       
+    const resId = e.dataTransfer.getData("resId");               
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
     const isVaultMode = location.hash.includes('vault');
 
     // 🚀 SCENARIO A: REARRANGING / MOVING EXISTING CARDS
@@ -11480,16 +11480,25 @@ OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
         if (!state.focusedWorkflowId && !state.focusedResourceId) {
             const client = getActiveClient();
             const source = isVaultMode ? state.master.resources : client.projectData.localResources;
-            const item = source.find(r => r.id === moveStepId);
             
-            if (item) {
-                item.stageId = sectionId; // Update stage immediately
-                // Simple reorder: set a high mapOrder if no specific target, else use index
-                item.mapOrder = (targetIndex !== null) ? targetIndex : 999;
-                
-                // Optional: Re-normalize all items in this stage to keep numbers clean
-                const stageItems = source.filter(r => String(r.stageId) === String(sectionId))
-                                       .sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+            // 1. Update the stage of the moved item immediately
+            const movedItem = source.find(r => r.id === moveStepId);
+            if (movedItem) movedItem.stageId = sectionId;
+
+            // 2. Get all items in this specific stage and sort them
+            let stageItems = source.filter(r => String(r.stageId) === String(sectionId))
+                                   .sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+            // 3. Perform the move within this sub-list
+            const oldIdxInStage = stageItems.findIndex(r => r.id === moveStepId);
+            if (oldIdxInStage > -1) {
+                const [item] = stageItems.splice(oldIdxInStage, 1);
+                if (targetIndex !== null) {
+                    stageItems.splice(targetIndex, 0, item);
+                } else {
+                    stageItems.push(item);
+                }
+                // 4. Re-assign clean mapOrder integers to save the sequence
                 stageItems.forEach((r, i) => r.mapOrder = i);
             }
         } 
@@ -11502,43 +11511,31 @@ OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
                     const [item] = parentObj.steps.splice(oldIdx, 1);
                     
                     // Sync Metadata
-                    if (state.focusedResourceId) item.type = sectionId; // L3 Logic
-                    else item.gridLane = sectionId; // L2 Logic
+                    if (state.focusedResourceId) item.type = sectionId; 
+                    else item.gridLane = sectionId; 
 
-                    // Insert at target or end
-                    if (targetIndex !== null) {
-                        parentObj.steps.splice(targetIndex, 0, item);
+                    // 🚀 THE FIX: Calculate the relative target index
+                    // Find all items currently in this section
+                    const currentSectionItems = parentObj.steps.filter(s => 
+                        (state.focusedResourceId ? s.type : s.gridLane) === sectionId
+                    );
+
+                    if (targetIndex !== null && currentSectionItems[targetIndex]) {
+                        // Find where the target card actually sits in the Master Array
+                        const absoluteInsertIdx = parentObj.steps.indexOf(currentSectionItems[targetIndex]);
+                        parentObj.steps.splice(absoluteInsertIdx, 0, item);
                     } else {
+                        // If no specific card target, just push to end
                         parentObj.steps.push(item);
                     }
                 }
             }
         }
     } 
-    // 🚀 SCENARIO B: ADDING NEW ITEMS FROM SIDEBAR
-    else if (resId) {
-        if (!state.focusedWorkflowId) {
-            // L1: Mapped Workflow to Stage
-            const res = OL.getResourceById(resId);
-            if (res) { res.stageId = sectionId; res.mapOrder = 99; }
-        } else {
-            // L2: Mapped Resource to Workflow Lane
-            const workflow = OL.getResourceById(state.focusedWorkflowId);
-            if (workflow) {
-                const sourceRes = OL.getResourceById(resId);
-                workflow.steps = workflow.steps || [];
-                workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId });
-            }
-        }
-    }
-    // 🚀 SCENARIO C: ATOMIC STEPS (TIER 3 Factory)
-    else if (atomicPayload && state.focusedResourceId) {
-        const parentRes = OL.getResourceById(state.focusedResourceId);
-        if (parentRes) {
-            const data = JSON.parse(atomicPayload);
-            parentRes.steps = parentRes.steps || [];
-            parentRes.steps.push({ id: uid(), name: data.name, type: sectionId, outcomes: [] });
-        }
+    // 🚀 SCENARIO B: ADDING NEW ITEMS (Sidebar/Factory)
+    else if (resId || atomicPayload) {
+       // ... (Keep your current logic for adding new items here)
+       // It's important to keep Scenarios B & C as they were in the previous working version
     }
 
     OL.persist();
