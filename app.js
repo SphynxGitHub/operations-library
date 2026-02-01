@@ -10817,7 +10817,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    /*// --- LOGIC ROUTER: LEVEL 3 (Mechanics i.e. Resource > Steps) ---
+// --- TIER 3: RESOURCE > STEPS ---
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         
@@ -10825,73 +10825,23 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
 
-        breadcrumbHtml += `
-            <span class="muted"> > </span> 
+        breadcrumbHtml += ` <span class="muted"> > </span> 
             <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
             <span class="muted"> > </span> 
             <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
-            <span class="muted"> > </span> 
-            <span class="breadcrumb-current">${esc(res?.name)}</span>
-        `;
-
-        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
-        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
-    }
-     
-    // --- LOGIC ROUTER: LEVEL 2 (Flow i.e. Workflow > Resources) ---
-    else if (state.focusedWorkflowId) {
-        const focusedRes = OL.getResourceById(state.focusedWorkflowId);
-        const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
-
-        breadcrumbHtml += `
-            <span class="muted"> > </span> 
-            <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
-            <span class="muted"> > </span> 
-            <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>
-        `;
-
-        toolboxHtml = renderLevel2SidebarContent(allResources);
-        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId, allResources);
-    } 
-    // --- LOGIC ROUTER: LEVEL 1 (Lifecycle i.e. Stage > Workflows) ---
-    else {
-        toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
-    }
-
-    container.innerHTML = `
-        <div class="three-pane-layout vertical-lifecycle-mode">
-            <aside class="pane-drawer">${toolboxHtml}</aside>
-            <main class="pane-canvas-wrap">
-                <div class="canvas-header">
-                    <div class="breadcrumb-trail" style="display:flex; align-items:center; gap:8px;">${breadcrumbHtml}</div>
-                    <div class="header-actions">
-                        ${!state.focusedWorkflowId && !state.focusedResourceId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
-                    </div>
-                </div>
-                ${canvasHtml}
-            </main>
-            <aside id="inspector-panel" class="pane-inspector">
-                 <div class="empty-inspector tiny muted">Select a node to inspect</div>
-            </aside>
-        </div>
-    `;
-
-    if (state.focusedResourceId) setTimeout(() => OL.renderVisualizer(state.focusedResourceId), 50);
-    else if (state.focusedWorkflowId) setTimeout(() => OL.renderVisualizer(state.focusedWorkflowId), 50);
-};*/
-
-// --- TIER 3: RESOURCE > STEPS ---
-    if (state.focusedResourceId) {
-        const res = OL.getResourceById(state.focusedResourceId);
-        breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(res?.name)} (Steps)</span>`;
+            <span class="muted"> > </span>  
+            <span class="breadcrumb-current">${esc(res?.name)}</span>`;
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
         canvasHtml = renderLevel3Canvas(state.focusedResourceId);
     } 
     // --- TIER 2: WORKFLOW > RESOURCES ---
     else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
-        breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(focusedRes?.name)} (Resources)</span>`;
+        const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
+        breadcrumbHtml += ` <span class="muted"> > </span> 
+            <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
+            <span class="muted"> > </span> 
+            <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
@@ -10906,6 +10856,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <aside class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="padding:15px; border-bottom:1px solid rgba(255,255,255,0.05);">${breadcrumbHtml}</div>
+                <div class="header-actions">
+                    ${!state.focusedWorkflowId && !state.focusedResourceId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
+                </div>
                 <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
             </main>
             <aside id="inspector-panel" class="pane-inspector">
@@ -11176,63 +11129,6 @@ OL.clearInspector = function() {
     if (panel) panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
 };
 
-/*// --- CANVAS RENDERERS ---
-
-// --- LEVEL 1: LIFECYCLE (Stage > Workflows)
-window.renderLevel1Canvas = function(sourceData, isVaultMode) {
-    const stages = sourceData.stages || [];
-    return `
-        <div class="vertical-stage-canvas" id="fs-canvas">
-            <svg id="vis-links-layer" class="vis-svg"></svg>
-            ${stages.map((stage, i) => `
-                <div class="stage-container">
-                    <div class="stage-header-row"><span class="stage-number">${i+1}</span><span class="stage-name">${esc(stage.name)}</span></div>
-                    <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
-                        ${renderWorkflowsInStage(stage.id, isVaultMode)}
-                    </div>
-                </div>
-            `).join('')}
-        </div>`;
-};
-
-// --- LEVEL 2: FLOW (Workflow > Resources) ---
-window.renderLevel2Canvas = function(workflowId) {
-    // Mirroring Level 1: Showing Stages but filtered for specific logic if needed
-    const client = getActiveClient();
-    const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
-    return renderLevel1Canvas(sourceData, location.hash.includes('vault'));
-};
-
-// --- LEVEL 3: MECHANICS (Resource > Steps) ---
-window.renderLevel3Canvas = function(resourceId) {
-    // These are the "Stages" for your technical mechanics
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-
-    return `
-        <div class="vertical-stage-canvas" id="fs-canvas">
-            ${lanes.map((lane, i) => `
-                <div class="stage-container">
-                    <div class="stage-header-row">
-                        <span class="stage-number">${i + 1}</span>
-                        <span class="stage-name">${lane}</span>
-                    </div>
-                    <div class="stage-workflow-stream" 
-                         ondragover="OL.handleCanvasDragOver(event)" 
-                         ondrop="OL.handleMechanicDrop(event, '${resourceId}', '${lane}')">
-                        ${renderMechanicStepsInLane(resourceId, lane)}
-                    </div>
-                </div>
-            `).join('')}
-        </div>`;
-};
-
-function renderGridCanvasShell(parentId) {
-    return `
-        <div id="fs-canvas-wrapper" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleFocusedCanvasDrop(event, '${parentId}')">
-            <div id="fs-canvas" style="position: relative; z-index: 1;"></div> 
-        </div>`;
-}*/
-
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
     const sourceResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
@@ -11369,88 +11265,6 @@ OL.handleStageDrop = function(e, stageId) {
         renderGlobalVisualizer(location.hash.includes('vault'));
     }
 };
-/*
-// Unified Drop Handler for Mechanics (Level 3)
-OL.handleMechanicDrop = function(e, parentId, laneName) {
-    e.preventDefault();
-    const moveStepId = e.dataTransfer.getData("moveStepId");
-    const atomicPayload = e.dataTransfer.getData("atomicPayload");
-    const parentObj = OL.getResourceById(parentId);
-
-    e.currentTarget.classList.remove('drag-over');
-
-    if (moveStepId && parentObj) {
-        const step = parentObj.steps.find(s => s.id === moveStepId);
-        if (step) step.gridLane = laneName;
-    } else if (atomicPayload && parentObj) {
-        const data = JSON.parse(atomicPayload);
-        if (!parentObj.steps) parentObj.steps = [];
-        parentObj.steps.push({ 
-            id: uid(), 
-            name: data.name, 
-            type: data.type, 
-            gridLane: laneName 
-        });
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(location.hash.includes('vault'));
-};
-
-function renderMechanicStepsInLane(resourceId, laneName) {
-    const res = OL.getResourceById(resourceId);
-    const steps = (res?.steps || []).filter(s => s.gridLane === laneName);
-
-    if (steps.length === 0) return `<div class="tiny muted italic" style="opacity:0.2; padding:20px;">Drop Step Here</div>`;
-
-    return steps.map(step => `
-        <div class="workflow-block-card" draggable="true" 
-             onmousedown="OL.loadInspector('${step.id}', '${resourceId}')"
-             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')">
-            <div class="bold accent" style="font-size:11px;">${esc(step.name)}</div>
-            <div class="tiny muted">${esc(step.type)}</div>
-        </div>
-    `).join('');
-}
-
-// --- UNIFIED CANVAS DROP HANDLER ---
-OL.handleCanvasDragOver = function(e) {
-    e.preventDefault();
-    const wrapper = document.getElementById('fs-canvas-wrapper');
-    const rect = wrapper.getBoundingClientRect();
-    
-    // 1. Calculate relative mouse position
-    const x = e.clientX - rect.left - 140 + wrapper.scrollLeft;
-    const y = e.clientY - rect.top + wrapper.scrollTop;
-
-    // 2. Identify the target cell
-    const colIdx = Math.max(0, Math.floor(x / 280));
-    const laneIdx = Math.max(0, Math.min(2, Math.floor(y / 200)));
-
-    // 3. Visual Highlight Effect
-    // Remove old highlights
-    document.querySelectorAll('.grid-drop-target').forEach(el => el.classList.remove('hovered'));
-    
-    // Target the specific lane and column
-    const laneRows = wrapper.querySelectorAll('.vis-lane');
-    const targetLane = laneRows[laneIdx];
-    if (targetLane) {
-        // Find the Nth column marker (adjusting for sticky label)
-        const targetCell = targetLane.children[colIdx + 1]; 
-        if (targetCell) targetCell.classList.add('hovered');
-    }
-};
-
-document.addEventListener('dragleave', (e) => {
-    if (e.target.classList.contains('stage-workflow-stream') || e.target.id === 'fs-canvas-wrapper') {
-        e.target.style.background = "";
-    }
-});
-
-document.addEventListener('dragend', (e) => {
-    e.target.style.opacity = "1";
-    document.querySelectorAll('.stage-workflow-stream, #fs-canvas-wrapper').forEach(el => el.style.background = "");
-});*/
 
 // --- UNMAPPING / TRASH LOGIC ---
 
