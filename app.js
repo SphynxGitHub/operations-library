@@ -10902,50 +10902,6 @@ window.renderLevel2Canvas = function(workflowId) {
             </div>
         </div>`).join('');
 };
-/*
-// --- TIER 3 RENDERER ---
-window.renderLevel3Canvas = function(resourceId) {
-    const res = OL.getResourceById(resourceId);
-    if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
-
-    const groups = [
-        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
-        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)' }
-    ];
-    
-    return groups.map(group => {
-        const steps = (res.steps || []).filter(s => {
-            if (group.type === 'Trigger') return s.type === 'Trigger';
-            return s.type !== 'Trigger'; 
-        });
-
-        return `
-            <div class="stage-container">
-                <div class="stage-header-row">
-                    <span class="stage-name" style="color:${group.color}">${group.label}</span>
-                </div>
-                <div class="stage-workflow-stream"
-                     ondragover="OL.handleCanvasDragOver(event)" 
-                     ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
-                    
-                    ${steps.map((step, idx) => {
-                        const isModule = step.type === 'module_block';
-                        return `
-                        <div class="workflow-block-card" draggable="true" 
-                             style="${isModule ? 'border-left: 3px solid #38bdf8;' : ''}"
-                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
-                             ondragover="OL.handleCanvasDragOver(event)"
-                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})"
-                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
-                            <div class="bold accent">${isModule ? '📦 ' : ''}${esc(step.name || "Untitled")}</div>
-                            <div class="tiny muted">${esc(step.type)}</div>
-                        </div>`;
-                    }).join('')}
-                </div>
-            </div>`;
-    }).join('');
-};*/
 
 // --- SIDEBAR RENDERERS ---
 
@@ -11211,61 +11167,6 @@ OL.clearInspector = function() {
     if (panel) panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
 };
 
-/*
-// LEVEL 1 Show workflows in stage lane
-window.renderWorkflowsInStage = function(stageId, isVaultMode) {
-    const client = getActiveClient();
-    const sourceResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    
-    // Filter for workflows that belong to this specific stage
-    const matchedWorkflows = sourceResources
-        .filter(r => String(r.stageId) === String(stageId))
-        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-
-    if (matchedWorkflows.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
-
-    return matchedWorkflows.map((res, idx) => `
-        <div class="workflow-block-card" 
-             draggable="true" 
-             onmousedown="OL.loadInspector('${res.id}')"
-             ondragstart="OL.handleNodeMoveStart(event, '${res.id}', ${idx})"
-             ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleUniversalDrop(event, null, '${stageId}', ${idx})"
-             ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
-            <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
-            <div class="tiny muted">📝 ${(res.steps || []).length} Resources</div>
-        </div>
-    `).join('');
-};
-
-// LEVEL 2 Show resources in workflow lane
-function renderResourcesInWorkflowLane(workflowId, lane) {
-    const workflow = OL.getResourceById(workflowId);
-    const items = (workflow.steps || []).filter(s => s.gridLane === lane);
-    
-    if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
-    
-    return items.map((item, idx) => {
-        const linkedRes = OL.getResourceById(item.resourceLinkId);
-        const stepCount = (linkedRes?.steps || []).length;
-        const triggerCount = (linkedRes?.triggers || []).length;
-
-        return `
-        <div class="workflow-block-card" draggable="true" 
-             onmousedown="OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleNodeMoveStart(event, '${item.id}', ${idx})"
-             ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleNodeRearrange(event, '${lane}', ${idx})"
-             ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
-            <div class="bold accent">${esc(item.name)}</div>
-            <div class="tiny muted">
-                <span>⚡ ${triggerCount}</span> | <span>📝 ${stepCount}</span>
-            </div>
-        </div>`;
-    }).join('');
-}
-*/
-
 // LEVEL 1: Workflows in Stages
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
@@ -11435,12 +11336,15 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
     } 
     // --- TIER 2 & 3 REORDER (Nested steps) ---
     else {
+        console.log("running tier 2/3 node rearrange")
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
             const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
+            console.log("parent and parent steps found")
             if (currentItemIdx > -1) {
                 const [item] = parent.steps.splice(currentItemIdx, 1);
-                
+                console.log("item index found")
+
                 // Update Type/Lane based on drop target
                 if (state.focusedResourceId) item.type = sectionId;
                 else item.gridLane = sectionId;
@@ -11458,6 +11362,7 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
                 } else {
                     parent.steps.push(item);
                 }
+                console.log("section items found")
             }
         }
     }
@@ -11494,195 +11399,6 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
-
-/*
-OL.handleNodeMoveStart = function(e, id, index) {
-    e.dataTransfer.setData("moveNodeId", id);
-    e.dataTransfer.setData("draggedIndex", index);
-    e.target.style.opacity = "0.4";
-};
-
-OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
-    e.preventDefault(); e.stopPropagation();
-    const moveId = e.dataTransfer.getData("moveNodeId");
-    if (!moveId) return;
-
-    const isVaultMode = location.hash.includes('vault');
-    
-    if (!state.focusedWorkflowId) {
-        // L1 REORDER
-        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-        const list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-        const oldIdx = list.findIndex(r => r.id === moveId);
-        if (oldIdx > -1) {
-            const [moved] = list.splice(oldIdx, 1);
-            list.splice(targetIndex, 0, moved);
-            list.forEach((r, i) => r.mapOrder = i);
-        }
-    } else {
-        // L2 & L3 REORDER
-        const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-        const oldIdx = parent.steps.findIndex(s => s.id === moveId);
-        if (oldIdx > -1) {
-            const [moved] = parent.steps.splice(oldIdx, 1);
-            if (state.focusedResourceId) moved.type = sectionId;
-            else moved.gridLane = sectionId;
-            parent.steps.splice(targetIndex, 0, moved);
-        }
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
-
-// 4. Source: Atomic Step dragging (L3 Add triggers and steps to Canvas)
-OL.handleAtomicDrag = function(e, type, name) {
-    const payload = { type, name, isAtomic: true };
-    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-    e.target.style.opacity = "0.4";
-};
-
-OL.handleModularAtomicDrag = function(e) {
-    const verb = document.getElementById('builder-verb').value;
-    const obj = document.getElementById('builder-object').value;
-    const payload = { type: 'Action', name: `${verb} ${obj}`, isAtomic: true };
-    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-    e.target.style.opacity = "0.4";
-};
-*/
-/*
-OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
-    e.preventDefault();
-    e.currentTarget.style.background = ""; 
-
-    const moveStepId = e.dataTransfer.getData("moveStepId");       // Existing card
-    const resId = e.dataTransfer.getData("resId");               // New from sidebar
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // New from Factory
-    const isVaultMode = location.hash.includes('vault');
-
-    // 🚀 SCENARIO A: REARRANGING / MOVING EXISTING CARDS
-    if (moveStepId) {
-        // --- LEVEL 1 (Workflows in Stages) ---
-        if (!state.focusedWorkflowId && !state.focusedResourceId) {
-            const client = getActiveClient();
-            const source = isVaultMode ? state.master.resources : client.projectData.localResources;
-            const item = source.find(r => r.id === moveStepId);
-            
-            if (item) {
-                item.stageId = sectionId; // Update stage immediately
-                // Simple reorder: set a high mapOrder if no specific target, else use index
-                item.mapOrder = (targetIndex !== null) ? targetIndex : 999;
-                
-                // Optional: Re-normalize all items in this stage to keep numbers clean
-                const stageItems = source.filter(r => String(r.stageId) === String(sectionId))
-                                       .sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-                stageItems.forEach((r, i) => r.mapOrder = i);
-            }
-        } 
-        // --- LEVEL 2 & 3 (Items inside a .steps array) ---
-        else {
-            const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-            if (parentObj && parentObj.steps) {
-                const oldIdx = parentObj.steps.findIndex(s => s.id === moveStepId);
-                if (oldIdx > -1) {
-                    const [item] = parentObj.steps.splice(oldIdx, 1);
-                    
-                    // Sync Metadata
-                    if (state.focusedResourceId) item.type = sectionId; // L3 Logic
-                    else item.gridLane = sectionId; // L2 Logic
-
-                    // Insert at target or end
-                    if (targetIndex !== null) {
-                        parentObj.steps.splice(targetIndex, 0, item);
-                    } else {
-                        parentObj.steps.push(item);
-                    }
-                }
-            }
-        }
-    } 
-    // 🚀 SCENARIO B: ADDING NEW ITEMS FROM SIDEBAR
-    else if (resId) {
-        if (!state.focusedWorkflowId) {
-            // L1: Mapped Workflow to Stage
-            const res = OL.getResourceById(resId);
-            if (res) { res.stageId = sectionId; res.mapOrder = 99; }
-        } else {
-            // L2: Mapped Resource to Workflow Lane
-            const workflow = OL.getResourceById(state.focusedWorkflowId);
-            if (workflow) {
-                const sourceRes = OL.getResourceById(resId);
-                workflow.steps = workflow.steps || [];
-                workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId });
-            }
-        }
-    }
-    // 🚀 SCENARIO C: ATOMIC STEPS (TIER 3 Factory)
-    else if (atomicPayload && state.focusedResourceId) {
-        const parentRes = OL.getResourceById(state.focusedResourceId);
-        if (parentRes) {
-            const data = JSON.parse(atomicPayload);
-            parentRes.steps = parentRes.steps || [];
-            parentRes.steps.push({ id: uid(), name: data.name, type: sectionId, outcomes: [] });
-        }
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
-*/
-/*
-OL.handleUniversalDrop = function(e, parentId, sectionId) {
-    e.preventDefault();
-    const moveId = e.dataTransfer.getData("moveNodeId"); // Existing card
-    const resId = e.dataTransfer.getData("resId");       // New from sidebar
-    const isVaultMode = location.hash.includes('vault');
-
-    // 🚀 TIER 1: GLOBAL LIFECYCLE (No parent workflow focused)
-    if (moveId) {
-        if (!state.focusedWorkflowId && !state.focusedResourceId) {
-            // L1: Move Workflow to a different Stage
-            const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-            const item = source.find(r => r.id === moveId);
-            if (item) { item.stageId = sectionId; item.mapOrder = 999; }
-        } else {
-            // L2 or L3: Move Step to a different Lane/Group
-            const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-            const step = parent?.steps.find(s => s.id === moveId);
-            if (step) {
-                if (state.focusedResourceId) step.type = sectionId; // L3: Trigger vs Action
-                else step.gridLane = sectionId; // L2: Swimlanes
-            }
-        }
-    } 
-    // 🚀 TIER 2: WORKFLOW MAP (Inside a Workflow)
-    else if (resId) {
-        const workflow = OL.getResourceById(state.focusedWorkflowId);
-        if (moveId) {
-            const step = workflow.steps.find(s => s.id === moveId);
-            if (step) step.gridLane = sectionId; // Move across lanes
-        } else if (resId) {
-            const sourceRes = OL.getResourceById(resId);
-            workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId });
-        }
-    }
-
-    // 🚀 TIER 3: MECHANICS (Inside a Resource)
-    else if (state.focusedResourceId) {
-        const parentRes = OL.getResourceById(state.focusedResourceId);
-        if (moveId) {
-            const step = parentRes.steps.find(s => s.id === moveId);
-            if (step) step.type = sectionId; // Switch between Trigger and Action
-        } else {
-            const atomic = JSON.parse(e.dataTransfer.getData("atomicPayload") || "{}");
-            parentRes.steps.push({ id: uid(), name: atomic.name, type: sectionId, outcomes: [] });
-        }
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
-*/
 
 // --- UNMAPPING / TRASH LOGIC ---
 

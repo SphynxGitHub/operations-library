@@ -2645,6 +2645,9 @@ body.is-visualizer #mainContent {
     min-height: 60px;
     /* Prevent shrinking */
     flex-shrink: 0; 
+    border: 1px solid white;
+    border-radius: 8px;
+    padding: 3%;
 }
 
 .workflow-block-card:hover {
