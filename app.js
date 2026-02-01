@@ -11341,14 +11341,14 @@ OL.handleStepMoveStart = function(e, stepId, parentResId) {
     e.dataTransfer.setData("parentResId", parentResId);
     e.target.style.opacity = "0.4";
 };
-
+*/
 // 4. Source: Atomic Step dragging (Level 3 Factory)
 OL.handleAtomicDrag = function(e, type, name) {
     const payload = { type, name, isAtomic: true };
     e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
     e.target.style.opacity = "0.4";
 };
-
+/*
 OL.handleModularAtomicDrag = function(e) {
     const verb = document.getElementById('builder-verb').value;
     const obj = document.getElementById('builder-object').value;
