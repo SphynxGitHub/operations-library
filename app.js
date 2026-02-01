@@ -5241,7 +5241,7 @@ OL.renderVisualizer = function(resId) {
         return `
             <div class="workflow-block-card grid-snapped" 
                 draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: 220px; z-index: 50; cursor: grab;"
+                style="position: absolute; top: ${top}px; left: ${left}px; width: auto; z-index: 50; cursor: grab;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
