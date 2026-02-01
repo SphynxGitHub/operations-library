@@ -11138,97 +11138,87 @@ OL.loadInspector = function(targetId, parentId = null) {
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    // 1. Resolve Data (The clicked node)
+    // 1. Resolve the clicked object
     const data = OL.getResourceById(targetId);
     if (!data) {
         panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
         return;
     }
 
-    // 2. Identify Context
     const client = getActiveClient();
-    const isModule = data.type === 'module_block';
     const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
+
+    let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
+
+    // 🚀 TIER 1 -> 2: Clicking a Workflow to see its Resources
+    // 🚀 TIER 2 -> 3: Clicking a Resource to see its Steps
+    // In both cases, we are looking at a "Container" that has nested children.
     
-    // 3. Resolve Technical Content
-    const technicalAssetId = isModule ? data.linkedResourceId : data.resourceLinkId;
-    const technicalAsset = technicalAssetId ? OL.getResourceById(technicalAssetId) : null;
-    const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (data.steps || []);
-    const linkedApp = [...state.master.apps, ...(client?.projectData?.localApps || [])].find(a => String(a.id) === String(data.appId));
+    const isModulePointer = !!data.resourceLinkId || data.type === 'module_block';
+    
+    if (isModulePointer || (!state.focusedResourceId && state.focusedWorkflowId)) {
+        // --- VIEW: CONTAINER PREVIEW ---
+        const techId = data.resourceLinkId || data.linkedResourceId || data.id;
+        const techAsset = OL.getResourceById(techId);
+        const children = techAsset?.steps || [];
 
-    // 3. Main Header & Preview Section
-    let html = `
-        <div class="inspector-content fade-in" style="padding: 20px;">
+        html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <span class="tiny accent bold uppercase">${isModule ? '📦 Linked Module' : '⚙️ Mechanical Step'}</span>
-                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || technicalAsset?.name || "Untitled")}</h2>
-                <div class="tiny muted">${isModule ? 'Composite Workflow' : esc(data.type || 'Action')}</div>
-            </div>`;
-
-            // 4. Shared Module/SOP Actions
-            if (isModule) {
-                // --- VIEW A: MODULE PREVIEW (Nested Steps) ---
-                const nestedSteps = technicalAsset?.steps || [];
-                html += `
-                    <section>
-                        <label class="modal-section-label">Module Procedure Preview (${nestedSteps.length} Steps)</label>
-                        <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 350px; overflow-y: auto; padding-right:5px;">
-                            ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
-                                <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                                    <span class="tiny bold accent">${i + 1}</span>
-                                    <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
-                                </div>
-                            `).join('') : `<div class="tiny muted italic">No procedures defined inside this module.</div>`}
+                <span class="tiny accent bold uppercase">📦 Container Preview</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || techAsset?.name)}</h2>
+                <div class="tiny muted">Linked Asset: ${esc(techAsset?.type || 'Resource')}</div>
+            </div>
+            <section>
+                <label class="modal-section-label">Internal Steps (${children.length})</label>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 350px; overflow-y: auto;">
+                    ${children.map((s, i) => `
+                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
+                            <span class="tiny bold accent">${i + 1}</span>
+                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
                         </div>
-                        
-                        <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
-                            <button class="btn tiny primary" style="width:100%;" 
-                                    onclick="OL.openResourceModal('${technicalAssetId}')">
-                                ⚙️ Edit Module SOP
-                            </button>
-                            <button class="btn tiny soft" style="width:100%;" 
-                                    onclick="OL.drillIntoResourceMechanics('${technicalAssetId}')">
-                                🔍 Open in Mapper
-                            </button>
-                        </div>
-                    </section>`;
-            } else {
-                // --- VIEW B: ATOMIC MECHANICS (Scheduling / Logic) ---
-                html += `
-                    <section style="display: flex; flex-direction: column; gap: 20px;">
-                        <div class="card-section">
-                            <label class="modal-section-label">📅 Relational Scheduling</label>
-                            <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-                                <input type="number" class="modal-input tiny" style="width:50px;" placeholder="0"
-                                    value="${num(data.timingValue)}" onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingValue', this.value)">
-                                <select class="modal-input tiny" onchange="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingType', this.value)">
-                                    <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>Days After Prev</option>
-                                    <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>Days After Start</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="card-section">
-                            <label class="modal-section-label">🔗 Resources & Guides</label>
-                            <div id="step-resources-list-${data.id}" style="margin-top:8px;">
-                                ${renderStepResources(parentResId, data)}
-                            </div>
-                            <div class="search-map-container" style="margin-top:8px;">
-                                <input type="text" class="modal-input tiny" placeholder="+ Link Guide..." 
-                                    onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
-                                    oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
-                                <div id="resource-results-${data.id}" class="search-results-overlay"></div>
-                            </div>
-                        </div>
-
-                        <div class="card-section">
-                            <label class="modal-section-label">🎯 Conditional Logic</label>
-                            <div id="step-outcomes-list" style="margin-top:8px;">
-                                ${renderStepOutcomes(parentResId, data)}
-                            </div>
-                        </div>
-                    </section>`;
-            }
+                    `).join('') || '<div class="tiny muted italic">No internal steps defined.</div>'}
+                </div>
+                <div style="margin-top:25px; display:flex; flex-direction:column; gap:8px;">
+                    <button class="btn tiny primary" onclick="OL.openResourceModal('${techId}')">⚙️ Edit Full SOP</button>
+                    <button class="btn tiny soft" onclick="OL.drillIntoResourceMechanics('${techId}')">🔍 Drill Down</button>
+                </div>
+            </section>`;
+    } 
+    else {
+        // 🚀 TIER 3: Clicking an actual ATOMIC STEP to see inner mechanics
+        // This only triggers when we are already focused on a Resource (Level 3)
+        html += `
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <span class="tiny accent bold uppercase">⚙️ Step Mechanics</span>
+                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name)}</h2>
+                <div class="tiny muted">Type: ${esc(data.type || 'Action')}</div>
+            </div>
+            <section style="display: flex; flex-direction: column; gap: 20px;">
+                <div class="card-section">
+                    <label class="modal-section-label">📅 Relational Scheduling</label>
+                    <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+                        <input type="number" class="modal-input tiny" style="width:50px;" value="${num(data.timingValue)}" 
+                               onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingValue', this.value)">
+                        <select class="modal-input tiny" onchange="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingType', this.value)">
+                            <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>After Prev</option>
+                            <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>After Start</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-section">
+                    <label class="modal-section-label">🔗 Linked Resources</label>
+                    <div id="step-resources-list-${data.id}" style="margin-top:8px;">
+                        ${renderStepResources(parentResId, data)}
+                    </div>
+                </div>
+                <div class="card-section">
+                    <label class="modal-section-label">🎯 Conditional Logic</label>
+                    <div id="step-outcomes-list" style="margin-top:8px;">
+                        ${renderStepOutcomes(parentResId, data)}
+                    </div>
+                </div>
+            </section>`;
+    }
 
     html += `</div>`;
     panel.innerHTML = html;
