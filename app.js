@@ -10912,7 +10912,11 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     return groups.map(group => {
-        const steps = (res?.steps || []).filter(s => s.type === group.type);
+        const steps = (res.steps || []).filter(s => {
+            if (group.type === 'Trigger') return s.type === 'Trigger';
+            return s.type !== 'Trigger'; // Default catch-all for Actions/Legacy data
+        });
+        
         return `
             <div class="stage-container">
                 <div class="stage-header-row">
@@ -10921,7 +10925,7 @@ window.renderLevel3Canvas = function(resourceId) {
                 </div>
                 <div class="stage-workflow-stream"
                      ondragover="OL.handleCanvasDragOver(event)" 
-                     ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">>
+                     ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     
                      ${steps.map(step => `
                         <div class="workflow-block-card" draggable="true" 
