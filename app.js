@@ -11146,26 +11146,65 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     // 2. Identify Context
+    const client = getActiveClient();
     const isModule = data.type === 'module_block';
+    const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
     
-    // 🚀 THE FIX: Resolve the asset ID correctly based on type
+    // 3. Resolve Technical Content
     const technicalAssetId = isModule ? data.linkedResourceId : data.resourceLinkId;
-    
-    // Safety check: only attempt to fetch the asset if an ID exists
     const technicalAsset = technicalAssetId ? OL.getResourceById(technicalAssetId) : null;
-    
-    // 3. Resolve Nested Steps (Priority: Linked Asset > Current Node's own steps)
     const nestedSteps = technicalAsset ? (technicalAsset.steps || []) : (data.steps || []);
+    const linkedApp = [...state.master.apps, ...(client?.projectData?.localApps || [])].find(a => String(a.id) === String(data.appId));
 
-    panel.innerHTML = `
+    // 3. Main Header & Preview Section
+    let html = `
         <div class="inspector-content fade-in" style="padding: 20px;">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
                 <span class="tiny accent bold uppercase">${isModule ? '📦 Linked Module' : '⚙️ Mechanical Step'}</span>
                 <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || technicalAsset?.name || "Untitled")}</h2>
                 <div class="tiny muted">${isModule ? 'Composite Workflow' : esc(data.type || 'Action')}</div>
-            </div>
+            </div>`;
 
-            <section>
+            // 4. INJECT TIER 3 CONTROLS (Only if it's an atomic step/nested item)
+            if (!isModule) {
+                html += `
+                    <section style="display: flex; flex-direction: column; gap: 20px;">
+                        <div class="card-section">
+                            <label class="modal-section-label">📅 Relational Scheduling</label>
+                            <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+                                <input type="number" class="modal-input tiny" style="width:50px;" placeholder="0"
+                                    value="${num(data.timingValue)}" onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingValue', this.value)">
+                                <select class="modal-input tiny" onchange="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingType', this.value)">
+                                    <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>Days After Prev</option>
+                                    <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>Days After Start</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="card-section">
+                            <label class="modal-section-label">🔗 Resources & Guides</label>
+                            <div id="step-resources-list-${data.id}" style="margin-top:8px;">
+                                ${renderStepResources(parentResId, data)}
+                            </div>
+                            <div class="search-map-container" style="margin-top:8px;">
+                                <input type="text" class="modal-input tiny" placeholder="+ Link Guide..." 
+                                    onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
+                                    oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
+                                <div id="resource-results-${data.id}" class="search-results-overlay"></div>
+                            </div>
+                        </div>
+
+                        <div class="card-section">
+                            <label class="modal-section-label">🎯 Conditional Logic</label>
+                            <div id="step-outcomes-list" style="margin-top:8px;">
+                                ${renderStepOutcomes(parentResId, data)}
+                            </div>
+                        </div>
+                    </section>`;
+            }
+            
+            // 5. Shared Module/SOP Actions
+            html +=`<section>
                 <label class="modal-section-label">Procedure Preview (${nestedSteps.length} Steps)</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto; padding-right:5px;">
                     ${nestedSteps.length > 0 ? nestedSteps.map((s, i) => `
@@ -11191,6 +11230,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             </section>
         </div>
     `;
+    panel.innerHTML = html;
 };
 
 OL.clearInspector = function() {
