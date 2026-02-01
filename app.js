@@ -10906,13 +10906,14 @@ window.renderLevel2Canvas = function(workflowId) {
 // --- TIER 3 RENDERER ---
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
+    
     return `
         <div class="stage-container">
             <div class="stage-header-row"><span class="stage-number">⚙️</span><span class="stage-name">Step Sequence</span></div>
             <div class="stage-workflow-stream">
                 ${(res.steps || []).map(step => `
                     <div class="workflow-block-card" ondragover="OL.handleCanvasDragOver(event)"
-                    ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${lane}')">
+                    ondrop="OL.handleUniversalDrop(event, '${resourceId}')">
                         <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
                         <div class="tiny muted">${esc(step.type)}</div>
                     </div>
@@ -11136,7 +11137,7 @@ OL.clearInspector = function() {
     if (panel) panel.innerHTML = `<div class="empty-inspector tiny muted">Select a node to inspect</div>`;
 };
 
-// LEVEL 1 Show workflows in stage
+// LEVEL 1 Show workflows in stage lane
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
     const sourceResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
@@ -11160,7 +11161,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     `).join('');
 };
 
-// LEVEL 2 Show resources in workflow
+// LEVEL 2 Show resources in workflow lane
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
     const items = (workflow.steps || []).filter(s => s.gridLane === lane);
