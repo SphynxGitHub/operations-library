@@ -2599,21 +2599,33 @@ body.is-visualizer #mainContent {
     pointer-events: auto; /* Re-enable for cards */
 }
 
-/* 📏 Tier 3 Alignment Fix */
+/* 📏 Fix for Tier 3 Vertical Alignment */
+.vertical-lifecycle-mode .stage-container {
+    height: auto;
+    min-height: 200px; /* Gives plenty of room to drop */
+    margin-bottom: 30px;
+    display: flex;
+    flex-direction: column;
+}
+
 .vertical-lifecycle-mode .stage-workflow-stream {
     display: flex;
     flex-direction: column;
-    align-items: center; /* Centers cards horizontally */
-    width: 100%;
-    min-height: 120px;
+    align-items: center; /* Centers the stack */
+    justify-content: flex-start;
     gap: 15px;
-    padding: 20px 10px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.02); /* Subtle visual area */
+    border: 1px dashed rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    flex-grow: 1; /* Allows container to expand with content */
 }
 
+/* Ensure cards take up the correct space in the center */
 .vertical-lifecycle-mode .workflow-block-card {
-    width: 280px; /* Fixed width matching Tier 1/2 */
-    margin: 0 auto; /* Horizontal centering */
-    flex-shrink: 0;
+    width: 320px; /* Fixed width for consistent columns */
+    position: relative !important; /* Overrides any accidental absolute positioning */
+    margin: 0 auto;
 }
 
 /*==================================================================

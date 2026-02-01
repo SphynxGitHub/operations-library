@@ -11412,15 +11412,15 @@ OL.handleNodeMoveStart = function(e, id, index) {
     setTimeout(() => e.target.classList.add('dragging'), 0);
 };
 
-OL.handleNodeRearrange = function(e, sectionId, targetIdentifier) {
+OL.handleNodeRearrange = function(e, sectionId, targetId) {
     e.preventDefault(); 
     e.stopPropagation();
 
     const isVaultMode = window.location.hash.includes('vault');
     const moveId = e.dataTransfer.getData("moveNodeId");
     
-    // Safety guard
-    if (!moveId || moveId === targetIdentifier) return; 
+    // Safety check: Don't do anything if you drop a card on itself
+    if (!moveId || moveId === targetId) return; 
 
     const parentId = state.focusedWorkflowId || state.focusedResourceId;
 
@@ -11447,27 +11447,22 @@ OL.handleNodeRearrange = function(e, sectionId, targetIdentifier) {
     else {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
+            // 1. Find and remove the moved item
             const oldIdx = parent.steps.findIndex(s => s.id === moveId);
             if (oldIdx === -1) return;
             const [item] = parent.steps.splice(oldIdx, 1);
 
-            // Sync metadata (Is it now a Trigger or an Action?)
+            // 2. Determine insertion index via the Target ID
+            const insertIdx = parent.steps.findIndex(s => s.id === targetId);
+            
+            // 3. Update metadata (Is it now a Trigger or an Action?)
             if (state.focusedResourceId) {
-                item.type = sectionId; // 'Trigger' or 'Action'
+                item.type = sectionId; 
             } else {
-                item.gridLane = sectionId; // L2 Lanes
+                item.gridLane = sectionId;
             }
 
-            // 🎯 ID-BASED TARGETING
-            // In L3, targetIdentifier is the ID of the card dropped onto.
-            // In L2, it might be the numeric index. We handle both.
-            let insertIdx;
-            if (typeof targetIdentifier === 'string' && targetIdentifier.includes('id_')) {
-                insertIdx = parent.steps.findIndex(s => s.id === targetIdentifier);
-            } else {
-                insertIdx = parseInt(targetIdentifier);
-            }
-            
+            // 4. Inject into the new position
             if (insertIdx > -1) {
                 parent.steps.splice(insertIdx, 0, item);
             } else {
