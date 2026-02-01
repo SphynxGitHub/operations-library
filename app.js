@@ -11263,12 +11263,13 @@ OL.drillDownIntoWorkflow = function(resId) {
     state.focusedResourceId = null; 
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
-/*
+
 OL.drillIntoResourceMechanics = function(resId) {
     state.focusedResourceId = resId; 
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
+/*
 OL.exitToWorkflow = function() {
     state.focusedResourceId = null;
     renderGlobalVisualizer(location.hash.includes('vault'));
