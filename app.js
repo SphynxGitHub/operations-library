@@ -5241,7 +5241,7 @@ OL.renderVisualizer = function(resId) {
         return `
             <div class="workflow-block-card grid-snapped" 
                 draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: auto; z-index: 50; cursor: grab;"
+                style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
@@ -11113,12 +11113,50 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
         </div>`;
 };
 
-window.renderLevel2Canvas = function(workflowId) {
-    return renderGridCanvasShell(workflowId);
+// --- LEVEL 2: FLOW (Workflows within Stages) ---
+window.renderLevel2Canvas = function(projectId) {
+    const client = getActiveClient();
+    const stages = client?.projectData?.stages || [];
+
+    return `
+        <div class="vertical-stage-canvas" id="fs-canvas">
+            ${stages.map((stage, i) => `
+                <div class="stage-container">
+                    <div class="stage-header-row">
+                        <span class="stage-number">${i + 1}</span>
+                        <span class="stage-name">${esc(stage.name)}</span>
+                    </div>
+                    <div class="stage-workflow-stream" 
+                         ondragover="OL.handleCanvasDragOver(event)" 
+                         ondrop="OL.handleStageDrop(event, '${stage.id}')">
+                        ${renderWorkflowsInStage(stage.id, false)}
+                    </div>
+                </div>
+            `).join('')}
+        </div>`;
 };
 
+// --- LEVEL 3: MECHANICS (Steps within Functional Lanes) ---
 window.renderLevel3Canvas = function(resourceId) {
-    return renderGridCanvasShell(resourceId);
+    // We define the "Lanes" as the vertical sections here
+    const lanes = ["Triggers", "Automation Logic", "Primary Actions", "Notifications"];
+
+    return `
+        <div class="vertical-stage-canvas" id="fs-canvas">
+            ${lanes.map((lane, i) => `
+                <div class="stage-container">
+                    <div class="stage-header-row">
+                        <span class="stage-number">${i + 1}</span>
+                        <span class="stage-name">${lane}</span>
+                    </div>
+                    <div class="lane-workflow-stream" 
+                         ondragover="OL.handleCanvasDragOver(event)" 
+                         ondrop="OL.handleMechanicDrop(event, '${resourceId}', '${lane}')">
+                        ${renderMechanicStepsInLane(resourceId, lane)}
+                    </div>
+                </div>
+            `).join('')}
+        </div>`;
 };
 
 function renderGridCanvasShell(parentId) {
@@ -11240,6 +11278,52 @@ OL.handleStageDrop = function(e, stageId) {
         renderGlobalVisualizer(location.hash.includes('vault'));
     }
 };
+
+// Generic Drop Handler for Vertical Sections
+OL.handleVerticalDrop = function(e, parentId, sectionId, type) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId"); // For moving workflows/resources
+    const moveStepId = e.dataTransfer.getData("moveStepId"); // For moving atomic steps
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // For new atomic steps
+    
+    const parentObj = OL.getResourceById(parentId);
+    e.currentTarget.classList.remove('drag-over');
+
+    // Logic for Level 3: Mechanics
+    if (type === 'mechanic') {
+        if (moveStepId) {
+            const step = parentObj.steps.find(s => s.id === moveStepId);
+            if (step) step.gridLane = sectionId;
+        } else if (atomicPayload) {
+            const data = JSON.parse(atomicPayload);
+            parentObj.steps.push({ id: uid(), name: data.name, type: data.type, gridLane: sectionId });
+        }
+    } 
+    // Logic for Level 2: Flow
+    else {
+        const res = OL.getResourceById(resId);
+        if (res) res.stageId = sectionId;
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+function renderMechanicStepsInLane(resourceId, laneName) {
+    const res = OL.getResourceById(resourceId);
+    const steps = (res?.steps || []).filter(s => s.gridLane === laneName);
+
+    if (steps.length === 0) return `<div class="tiny muted italic" style="opacity:0.2; padding:20px;">Drop Step Here</div>`;
+
+    return steps.map(step => `
+        <div class="workflow-block-card" draggable="true" 
+             onmousedown="OL.loadInspector('${step.id}', '${resourceId}')"
+             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')">
+            <div class="bold accent" style="font-size:11px;">${esc(step.name)}</div>
+            <div class="tiny muted">${esc(step.type)}</div>
+        </div>
+    `).join('');
+}
 
 // --- UNIFIED CANVAS DROP HANDLER ---
 OL.handleCanvasDragOver = function(e) {

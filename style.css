@@ -2441,21 +2441,26 @@ body.is-visualizer #mainContent {
     font-size: 14px;
 }
 
-.stage-workflow-stream {
+/* Unified Vertical Container for Level 1, 2, and 3 */
+.stage-workflow-stream, 
+.lane-workflow-stream {
     display: flex;
-    flex-direction: row; /* Ensure they stay horizontal */
-    flex-wrap: wrap;     /* 🚀 Allow them to jump to a new line if crowded */
+    flex-direction: row; 
+    flex-wrap: wrap;     
     gap: 12px;
     min-height: 100px;
     padding: 15px;
     background: rgba(255, 255, 255, 0.01);
     border-radius: 8px;
     border: 1px dashed rgba(255, 255, 255, 0.05);
+    transition: all 0.2s ease;
 }
 
-.stage-workflow-stream.drag-over {
-    background: rgba(56, 189, 248, 0.05);
-    border-color: var(--accent);
+/* Hover effect for all vertical sections */
+.stage-workflow-stream.drag-over,
+.lane-workflow-stream.drag-over {
+    background: rgba(56, 189, 248, 0.05) !important;
+    border-color: var(--accent) !important;
 }
 
 .return-to-library-zone {
@@ -2544,6 +2549,8 @@ body.is-visualizer #mainContent {
 .grid-snapped {
     pointer-events: auto; /* Re-enable for cards */
 }
+
+
 /*==================================================================
   4. WORKFLOW CARDS
 ==================================================================*/
