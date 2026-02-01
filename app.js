@@ -11319,12 +11319,16 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     return groups.map(group => {
+        // 🚀 Filter logic: 'Trigger' type vs everything else
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
 
         return `
             <div class="stage-container">
                 <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
-                <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
+                <div class="stage-workflow-stream" 
+                     ondragover="OL.handleCanvasDragOver(event)" 
+                     ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
+                    
                     ${steps.map((step, idx) => `
                         <div class="workflow-block-card" draggable="true" 
                              onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
@@ -11439,23 +11443,28 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
         if (parent && parent.steps) {
             const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
             if (currentItemIdx > -1) {
+                // 1. Remove the item from the array
                 const [item] = parent.steps.splice(currentItemIdx, 1);
                 
-                // Update Type/Lane based on drop target
-                if (state.focusedResourceId) item.type = sectionId;
-                else item.gridLane = sectionId;
+                // 2. Sync metadata based on where it landed
+                if (state.focusedResourceId) {
+                    item.type = sectionId; // Landed in Trigger or Action box
+                } else {
+                    item.gridLane = sectionId; // Landed in L2 Swimlane
+                }
 
-                // 🎯 THE ABSOLUTE INDEX FIX:
-                // Find all existing items in the destination section
+                // 🎯 3. THE ABSOLUTE INDEX CALCULATION
+                // Find all items currently in the target section
                 const sectionItems = parent.steps.filter(s => 
                     state.focusedResourceId ? (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : (s.gridLane === sectionId)
                 );
 
-                if (sectionItems[targetIndex]) {
-                    // Find where that visual target sits in the actual array
+                if (sectionItems.length > 0 && sectionItems[targetIndex]) {
+                    // Find the actual array index of the card we dropped onto
                     const absoluteInsertIdx = parent.steps.indexOf(sectionItems[targetIndex]);
                     parent.steps.splice(absoluteInsertIdx, 0, item);
                 } else {
+                    // Fallback: If section is empty or dropped at the end, just push
                     parent.steps.push(item);
                 }
             }
