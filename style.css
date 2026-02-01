@@ -2633,21 +2633,18 @@ body.is-visualizer #mainContent {
 /*==================================================================
   4. WORKFLOW CARDS
 ==================================================================*/
+.workflow-block-card * {
+    pointer-events: none; /* 🚀 CRITICAL: Forces the drop to hit the card, not the text */
+}
+
 .workflow-block-card {
-    width: 240px;
-    flex-shrink: 0;
-    background: #111827;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px;
-    padding: 15px;
-    cursor: grab;
-    user-select: none;
-    touch-action: none;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 10;
-    position: relative;
-    pointer-events: auto; /* Required for click */
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    pointer-events: auto !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 60px;
+    /* Prevent shrinking */
+    flex-shrink: 0; 
 }
 
 .workflow-block-card:hover {

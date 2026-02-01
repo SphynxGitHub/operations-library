@@ -11405,97 +11405,92 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
     e.target.style.opacity = "0.4";
 };
 
-OL.handleNodeMoveStart = function(e, id, index) {
-    e.dataTransfer.setData("moveNodeId", id);
-    e.dataTransfer.setData("draggedIndex", index);
+OL.handleNodeMoveStart = function(e, id) {
+    if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(e.target.tagName)) return;
+    
+    e.dataTransfer.setData("movedId", id);
+    // Determine context
+    const tier = state.focusedResourceId ? "L3" : (state.focusedWorkflowId ? "L2" : "L1");
+    e.dataTransfer.setData("tier", tier);
+    
     e.target.classList.add('dragging');
-    setTimeout(() => e.target.classList.add('dragging'), 0);
 };
 
 OL.handleNodeRearrange = function(e, sectionId, targetId) {
-    e.preventDefault(); 
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
+    const movedId = e.dataTransfer.getData("movedId");
+    const tier = e.dataTransfer.getData("tier");
+    const isVault = location.hash.includes('vault');
 
-    const isVaultMode = window.location.hash.includes('vault');
-    const moveId = e.dataTransfer.getData("moveNodeId");
-    
-    // 🚀 THE FIX: Use targetId (the name passed from the HTML)
-    if (!moveId || moveId === targetId) return; 
+    if (!movedId || movedId === targetId) return;
 
-    const parentId = state.focusedWorkflowId || state.focusedResourceId;
-
-    // --- CASE A: TIER 1 (Siblings) ---
-    if (!parentId) {
-        const client = getActiveClient();
-        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
-        const item = source.find(r => r.id === moveId);
+    if (tier === "L1") {
+        const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        const list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+        const movedItem = source.find(r => r.id === movedId);
+        const targetItem = source.find(r => r.id === targetId);
         
-        if (item) {
-            item.stageId = sectionId;
-            let list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-            const oldIdx = list.findIndex(r => r.id === moveId);
-            if (oldIdx > -1) {
-                const [moved] = list.splice(oldIdx, 1);
-                // For L1, the targetId passed is actually the numeric index
-                list.splice(parseInt(targetId), 0, moved);
-                list.forEach((r, i) => r.mapOrder = i);
-            }
+        if (movedItem && targetItem) {
+            movedItem.stageId = sectionId;
+            // Find target in the sorted list and insert before it
+            const targetIdx = list.indexOf(targetItem);
+            const oldIdx = list.indexOf(movedItem);
+            if (oldIdx > -1) list.splice(oldIdx, 1);
+            list.splice(targetIdx, 0, movedItem);
+            list.forEach((r, i) => r.mapOrder = i);
         }
-    } 
-    // --- CASE B: TIER 2 & 3 (Steps) ---
-    else {
-        const parent = OL.getResourceById(parentId);
+    } else {
+        const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
         if (parent && parent.steps) {
-            const oldIdx = parent.steps.findIndex(s => s.id === moveId);
-            if (oldIdx === -1) return;
-            const [item] = parent.steps.splice(oldIdx, 1);
-
-            if (state.focusedResourceId) item.type = sectionId;
-            else item.gridLane = sectionId;
-
-            // Find absolute index by the Landmark ID
-            const insertIdx = parent.steps.findIndex(s => s.id === targetId);
+            const movedIdx = parent.steps.findIndex(s => s.id === movedId);
+            const targetIdx = parent.steps.findIndex(s => s.id === targetId);
             
-            if (insertIdx > -1) {
-                parent.steps.splice(insertIdx, 0, item);
-            } else {
-                parent.steps.push(item);
+            if (movedIdx > -1 && targetIdx > -1) {
+                const [item] = parent.steps.splice(movedIdx, 1);
+                // Update meta based on the card we dropped on
+                if (tier === "L2") item.gridLane = sectionId;
+                if (tier === "L3") item.type = sectionId;
+                
+                // Re-find target index because removal might have shifted it
+                const newTargetIdx = parent.steps.findIndex(s => s.id === targetId);
+                parent.steps.splice(newTargetIdx, 0, item);
             }
         }
     }
 
     OL.persist();
-    renderGlobalVisualizer(isVaultMode);
+    renderGlobalVisualizer(isVault);
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
-    const moveId = e.dataTransfer.getData("moveNodeId");
-    const resId = e.dataTransfer.getData("resId"); 
-    const atomic = e.dataTransfer.getData("atomicPayload");
-    const isVaultMode = location.hash.includes('vault');
+    const movedId = e.dataTransfer.getData("movedId");
+    const tier = e.dataTransfer.getData("tier");
+    const isVault = location.hash.includes('vault');
 
-    if (moveId) {
-        // Just moving to a lane (no specific order)
-        if (!state.focusedWorkflowId && !state.focusedResourceId) {
-            const item = (isVaultMode ? state.master.resources : getActiveClient().projectData.localResources).find(r => r.id === moveId);
-            if (item) { item.stageId = sectionId; item.mapOrder = 999; }
-        } else {
-            const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-            const step = parent?.steps.find(s => s.id === moveId);
-            if (step) {
-                if (state.focusedResourceId) step.type = sectionId;
-                else step.gridLane = sectionId;
-                // Push to bottom
-                parent.steps.push(parent.steps.splice(parent.steps.indexOf(step), 1)[0]);
-            }
+    if (!movedId) return; // Ignore sidebar drops for this simplified move
+
+    // Logic: Just update the metadata and push to the bottom
+    if (tier === "L1") {
+        const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        const item = source.find(r => r.id === movedId);
+        if (item) {
+            item.stageId = sectionId;
+            item.mapOrder = 999;
         }
-    } else if (resId || atomic) {
-        // Handle Sidebar/Factory Drops (Keep your existing logic here)
+    } else {
+        const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
+        const step = parent?.steps.find(s => s.id === movedId);
+        if (step) {
+            if (tier === "L2") step.gridLane = sectionId;
+            if (tier === "L3") step.type = sectionId;
+            // Move to end of array
+            parent.steps.push(parent.steps.splice(parent.steps.indexOf(step), 1)[0]);
+        }
     }
 
     OL.persist();
-    renderGlobalVisualizer(isVaultMode);
+    renderGlobalVisualizer(isVault);
 };
 
 /*
