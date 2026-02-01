@@ -11431,6 +11431,7 @@ OL.handleModularAtomicDrag = function(e) {
     e.target.style.opacity = "0.4";
 };
 
+/*
 OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex=null) {
     e.preventDefault();
     e.currentTarget.style.background = ""; // Visual cleanup
@@ -11518,6 +11519,113 @@ OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex=null) {
                 step.gridLane = sectionId;
                 OL.persist();
             }
+        }
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+};
+*/
+
+OL.handleUniversalDrop = function(e, parentId, sectionId, targetIndex = null) {
+    e.preventDefault();
+    e.currentTarget.style.background = ""; 
+    
+    const resId = e.dataTransfer.getData("resId");               // From Sidebar
+    const moveStepId = e.dataTransfer.getData("moveStepId");       // Existing node
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // L3 Factory
+    const isVaultMode = location.hash.includes('vault');
+
+    // 1. REARRANGING EXISTING ITEMS
+    if (moveStepId) {
+        // --- LEVEL 1 REARRANGE (Workflows within Stages) ---
+        if (!state.focusedWorkflowId && !state.focusedResourceId) {
+            const client = getActiveClient();
+            const sourceResources = isVaultMode ? state.master.resources : (client?.projectData?.localResources || []);
+            
+            // Get all workflows currently in this stage, sorted by current order
+            let stageItems = sourceResources
+                .filter(r => String(r.stageId) === String(sectionId))
+                .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+            const itemToMove = sourceResources.find(r => r.id === moveStepId);
+            if (itemToMove) {
+                // Remove from current stage list if it exists there
+                stageItems = stageItems.filter(r => r.id !== moveStepId);
+                
+                // Update stage assignment
+                itemToMove.stageId = sectionId;
+
+                // Insert into new position
+                if (targetIndex !== null) {
+                    stageItems.splice(targetIndex, 0, itemToMove);
+                } else {
+                    stageItems.push(itemToMove);
+                }
+
+                // 🚀 CRITICAL: Re-assign mapOrder to every item in this stage to persist the sort
+                stageItems.forEach((r, i) => r.mapOrder = i);
+            }
+        } 
+        // --- LEVEL 2 & 3 REARRANGE (Steps inside a Resource) ---
+        else {
+            const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
+            if (parentObj && parentObj.steps) {
+                const oldIdx = parentObj.steps.findIndex(s => s.id === moveStepId);
+                if (oldIdx > -1) {
+                    const [item] = parentObj.steps.splice(oldIdx, 1);
+                    
+                    // Update Metadata based on Tier
+                    if (state.focusedResourceId) {
+                        item.type = sectionId; // L3 uses Type (Trigger/Action)
+                    } else {
+                        item.gridLane = sectionId; // L2 uses Lane
+                    }
+
+                    // Insert at target index or end
+                    if (targetIndex !== null) {
+                        // Find items already in this section to find the "real" array index
+                        // but since we want visual order, splicing at targetIndex usually works 
+                        // if the render function maps 1:1.
+                        parentObj.steps.splice(targetIndex, 0, item);
+                    } else {
+                        parentObj.steps.push(item);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 2. NEW ADDITIONS FROM SIDEBAR (Tier 1 & 2)
+    else if (resId) {
+        if (!state.focusedWorkflowId) {
+            // L1: Mapped Workflow to Stage
+            const res = OL.getResourceById(resId);
+            if (res) { 
+                res.stageId = sectionId; 
+                res.mapOrder = targetIndex !== null ? targetIndex : 99;
+            }
+        } else {
+            // L2: Mapped Resource to Workflow Lane
+            const workflow = OL.getResourceById(state.focusedWorkflowId);
+            if (workflow) {
+                if (!workflow.steps) workflow.steps = [];
+                const sourceRes = OL.getResourceById(resId);
+                const newItem = { id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId };
+                if (targetIndex !== null) workflow.steps.splice(targetIndex, 0, newItem);
+                else workflow.steps.push(newItem);
+            }
+        }
+    }
+
+    // 3. NEW ATOMIC STEPS (Tier 3)
+    else if (atomicPayload && state.focusedResourceId) {
+        const parentRes = OL.getResourceById(state.focusedResourceId);
+        if (parentRes) {
+            const data = JSON.parse(atomicPayload);
+            const newItem = { id: uid(), name: data.name, type: sectionId, outcomes: [] };
+            if (targetIndex !== null) parentRes.steps.splice(targetIndex, 0, newItem);
+            else parentRes.steps.push(newItem);
         }
     }
 
