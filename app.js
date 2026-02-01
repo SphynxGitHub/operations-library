@@ -10906,20 +10906,36 @@ window.renderLevel2Canvas = function(workflowId) {
 // --- TIER 3 RENDERER ---
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
+    const groups = [
+        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
+        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)' }
+    ];
     
-    return `
-        <div class="stage-container">
-            <div class="stage-header-row"><span class="stage-number">⚙️</span><span class="stage-name">Step Sequence</span></div>
-            <div class="stage-workflow-stream">
-                ${(res.steps || []).map(step => `
-                    <div class="workflow-block-card" ondragover="OL.handleCanvasDragOver(event)"
-                    ondrop="OL.handleUniversalDrop(event, '${resourceId}')">
-                        <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
-                        <div class="tiny muted">${esc(step.type)}</div>
-                    </div>
-                `).join('')}
-            </div>
-        </div>`;
+    return groups.map(group => {
+        const steps = (res.steps || []).filter(s => s.type === group.type);
+        return `
+            <div class="stage-container">
+                <div class="stage-header-row">
+                    <span class="stage-number">${group.type === 'Trigger' ? '⚡' : '↓'}</span>
+                    <span class="stage-name">${group.label}</span>
+                </div>
+                <div class="stage-workflow-stream"
+                     ondragover="OL.handleCanvasDragOver(event)" 
+                     ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">>
+                    
+                     ${steps.map(step => `
+                        <div class="workflow-block-card" draggable="true" 
+                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
+                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')">
+                             ondragover="OL.handleCanvasDragOver(event)"
+                             ondrop="OL.handleUniversalDrop(event, '${resourceId}')">
+                            <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
+                            <div class="tiny muted">${esc(step.type)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+    }).join('');
 };
 
 // --- SIDEBAR RENDERERS ---
@@ -11312,8 +11328,8 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             parentRes.steps.push({ 
                 id: uid(), 
                 name: data.name, 
-                type: data.type, 
-                gridLane: sectionId,
+                type: sectionId //data.type, 
+                gridLane: 'Sequence',
                 outcomes: [] 
             });
             OL.persist();
