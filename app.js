@@ -11113,8 +11113,8 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
         </div>`;
 };
 
-// --- LEVEL 2: FLOW (Workflows by Stage) ---
-window.renderLevel2Canvas = function(projectId) {
+// --- LEVEL 2: FLOW (Workflows grouped by Stage) ---
+window.renderLevel2Canvas = function(parentId) {
     const client = getActiveClient();
     const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
     const stages = sourceData.stages || [];
@@ -11137,8 +11137,9 @@ window.renderLevel2Canvas = function(projectId) {
         </div>`;
 };
 
-// --- LEVEL 3: MECHANICS (Steps by Functional Lane) ---
+// --- LEVEL 3: MECHANICS (Atomic Steps grouped by Functional Lane) ---
 window.renderLevel3Canvas = function(resourceId) {
+    // These are the "Stages" for your technical mechanics
     const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
 
     return `
@@ -11279,7 +11280,7 @@ OL.handleStageDrop = function(e, stageId) {
     }
 };
 
-// Generic Drop Handler for Vertical Sections
+// Unified Drop Handler for Mechanics (Level 3)
 OL.handleMechanicDrop = function(e, parentId, laneName) {
     e.preventDefault();
     const moveStepId = e.dataTransfer.getData("moveStepId");
@@ -11293,7 +11294,13 @@ OL.handleMechanicDrop = function(e, parentId, laneName) {
         if (step) step.gridLane = laneName;
     } else if (atomicPayload && parentObj) {
         const data = JSON.parse(atomicPayload);
-        parentObj.steps.push({ id: uid(), name: data.name, type: data.type, gridLane: laneName });
+        if (!parentObj.steps) parentObj.steps = [];
+        parentObj.steps.push({ 
+            id: uid(), 
+            name: data.name, 
+            type: data.type, 
+            gridLane: laneName 
+        });
     }
 
     OL.persist();
