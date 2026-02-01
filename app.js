@@ -10953,9 +10953,11 @@ window.renderLevel3Canvas = function(resourceId) {
                         return `
                         <div class="workflow-block-card" draggable="true" 
                              style="${isModule ? 'border-left: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.03);' : ''}"
-                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')" 
-                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}')"
-                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
+                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
+                             ondragover="OL.handleCanvasDragOver(event)" 
+                             ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resourceId}', ${idx})"
+                             ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}', ${idx})"   
+                             ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">                          ondblclick="${isModule ? `OL.drillIntoResourceMechanics('${step.linkedResourceId}')` : ''}">
                             <div class="bold accent" style="font-size:11px;">
                                 ${isModule ? '📦 ' : ''}${esc(step.name || "Untitled Step")}
                             </div>
@@ -11312,6 +11314,8 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
              draggable="true" 
              onmousedown="OL.loadInspector('${res.id}')"
              ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')"
+             ondragover="OL.handleCanvasDragOver(event)"
+             ondrop="OL.handleUniversalDrop(event, null, '${stageId}', ${idx})"
              ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
             <div class="tiny muted">📝 ${(res.steps || []).length} Resources</div>
@@ -11335,7 +11339,9 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
         <div class="workflow-block-card"
              draggable="true" 
              onmousedown="OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleStepMoveStart(event, '${item.id}', '${workflowId}')"
+             ondragstart="OL.handleStepMoveStart(event, '${item.id}', '${workflowId}', ${idx})"
+             ondragover="OL.handleCanvasDragOver(event)"
+             ondrop="OL.handleUniversalDrop(event, '${workflowId}', '${lane}', ${idx})"
              ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
             <div class="bold accent">${esc(item.name)}</div>
             <div class="tiny muted">
@@ -11401,11 +11407,12 @@ OL.handleCanvasDragOver = function(e) {
 };
 
 // 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
-OL.handleStepMoveStart = function(e, stepId, parentResId) {
+OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
     
     e.dataTransfer.setData("moveStepId", stepId);
     e.dataTransfer.setData("parentResId", parentResId);
+    e.dataTransfer.setData("draggedIndex", index);
     e.target.style.opacity = "0.4";
 };
 
@@ -11431,8 +11438,31 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     const resId = e.dataTransfer.getData("resId");               // Dropping a Resource/Workflow
     const moveStepId = e.dataTransfer.getData("moveStepId");       // Moving an existing node
     const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Dropping from Factory
-
     const isVaultMode = location.hash.includes('vault');
+
+    // 1. RE-POSITIONING / REARRANGING EXISTING ITEMS
+    if (moveStepId) {
+        const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
+        if (parentObj && parentObj.steps) {
+            // Find the item and remove it from its old position
+            const oldIdx = parentObj.steps.findIndex(s => s.id === moveStepId);
+            if (oldIdx > -1) {
+                const [item] = parentObj.steps.splice(oldIdx, 1);
+                
+                // Update its metadata (lane or type)
+                item.gridLane = sectionId;
+                if (state.focusedResourceId) item.type = sectionId;
+
+                // Determine new position
+                // If dropped on a card, use that index. If dropped on lane, push to end.
+                if (targetIndex !== null) {
+                    parentObj.steps.splice(targetIndex, 0, item);
+                } else {
+                    parentObj.steps.push(item);
+                }
+            }
+        }
+    }
     
     // Level 1 (Dropping a Workflow into a Stage)
     if (resId && !state.focusedWorkflowId && !state.focusedResourceId) {
