@@ -11455,31 +11455,57 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     e.currentTarget.style.background = ""; 
     
-    const resId = e.dataTransfer.getData("resId");
-    const moveStepId = e.dataTransfer.getData("moveStepId");
+    const resId = e.dataTransfer.getData("resId"); // For NEW items from sidebar
+    const moveStepId = e.dataTransfer.getData("moveStepId"); // For EXISTING cards
     const atomicPayload = e.dataTransfer.getData("atomicPayload");
     const isVaultMode = location.hash.includes('vault');
 
+    // 🚀 SCENARIO 1: MOVE EXISTING CARD
     if (moveStepId) {
+        // --- LEVEL 1: MOVE WORKFLOW ACROSS STAGES ---
         if (!state.focusedWorkflowId && !state.focusedResourceId) {
-            const item = (isVaultMode ? state.master.resources : getActiveClient().projectData.localResources).find(r => r.id === moveStepId);
-            if (item) { item.stageId = sectionId; item.mapOrder = 999; }
-        } else {
+            const client = getActiveClient();
+            const source = isVaultMode ? state.master.resources : client.projectData.localResources;
+            const item = source.find(r => r.id === moveStepId);
+            
+            if (item) {
+                item.stageId = sectionId;
+                // Move to "bottom" of new stage by setting a high mapOrder
+                item.mapOrder = 999; 
+                
+                // Re-normalize indices for the target stage
+                const stageItems = source.filter(r => String(r.stageId) === String(sectionId))
+                                       .sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+                stageItems.forEach((r, i) => r.mapOrder = i);
+            }
+        } 
+        // --- LEVEL 2 & 3: MOVE STEPS ACROSS LANES ---
+        else {
             const parentObj = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-            const step = parentObj?.steps.find(s => s.id === moveStepId);
-            if (step) {
-                if (state.focusedWorkflowId && !state.focusedResourceId) step.gridLane = sectionId;
-                // Move to end of array
-                const idx = parentObj.steps.indexOf(step);
-                parentObj.steps.push(parentObj.steps.splice(idx, 1)[0]);
+            if (parentObj && parentObj.steps) {
+                const step = parentObj.steps.find(s => s.id === moveStepId);
+                if (step) {
+                    // Update metadata
+                    if (state.focusedWorkflowId && !state.focusedResourceId) {
+                        step.gridLane = sectionId; // Tier 2 Lane change
+                    }
+                    
+                    // Move to end of array to reflect bottom position
+                    const currentIdx = parentObj.steps.indexOf(step);
+                    parentObj.steps.push(parentObj.steps.splice(currentIdx, 1)[0]);
+                }
             }
         }
     }
-    // New additions from sidebar
+    // 🚀 SCENARIO 2: ADD NEW WORKFLOW TO STAGE
     else if (resId && !state.focusedWorkflowId) {
         const res = OL.getResourceById(resId);
-        if (res) { res.stageId = sectionId; res.mapOrder = 99; }
+        if (res) {
+            res.stageId = sectionId;
+            res.mapOrder = 99;
+        }
     }
+    // 🚀 SCENARIO 3: ADD NEW RESOURCE TO WORKFLOW LANE
     else if (resId && state.focusedWorkflowId) {
         const workflow = OL.getResourceById(state.focusedWorkflowId);
         if (workflow) {
@@ -11488,6 +11514,7 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId });
         }
     }
+    // 🚀 SCENARIO 4: ADD NEW ATOMIC STEP (L3)
     else if (atomicPayload && state.focusedResourceId) {
         const parentRes = OL.getResourceById(state.focusedResourceId);
         if (parentRes) {
