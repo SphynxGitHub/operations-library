@@ -10876,7 +10876,8 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
             <div class="stage-header-row">
                 <span class="stage-number">${i+1}</span><span class="stage-name">${esc(stage.name)}</span>
             </div>
-            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleStageDrop(event, '${stage.id}')">
+            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
+            ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
                 ${renderWorkflowsInStage(stage.id, isVaultMode)}
             </div>
         </div>`).join('');
@@ -10891,7 +10892,8 @@ window.renderLevel2Canvas = function(workflowId) {
             <div class="stage-header-row">
                 <span class="stage-number">${i+1}</span><span class="stage-name">${lane}</span>
             </div>
-            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleResourceToWorkflowDrop(event, '${workflowId}', '${lane}')">
+            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
+            ondrop="OL.handleUniversalDrop(event, '${workflowId}', '${lane}')">
                 ${renderResourcesInWorkflowLane(workflowId, lane)}
             </div>
         </div>`).join('');
@@ -10905,7 +10907,8 @@ window.renderLevel3Canvas = function(resourceId) {
             <div class="stage-header-row"><span class="stage-number">⚙️</span><span class="stage-name">Step Sequence</span></div>
             <div class="stage-workflow-stream">
                 ${(res.steps || []).map(step => `
-                    <div class="workflow-block-card">
+                    <div class="workflow-block-card" ondragover="OL.handleCanvasDragOver(event)"
+                    ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${lane}')">
                         <div class="bold accent">${esc(step.name || "Untitled Step")}</div>
                         <div class="tiny muted">${esc(step.type)}</div>
                     </div>
@@ -11179,19 +11182,6 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
     </div>`).join('');
 }
 
-OL.handleResourceToWorkflowDrop = function(e, workflowId, lane) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("resId");
-    const workflow = OL.getResourceById(workflowId);
-    if (resId && workflow) {
-        const sourceRes = OL.getResourceById(resId);
-        if(!workflow.steps) workflow.steps = [];
-        workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: lane });
-        OL.persist();
-        renderGlobalVisualizer(location.hash.includes('vault'));
-    }
-};
-
 OL.exitToLifecycle = function() {
     state.focusedWorkflowId = null;
     state.focusedResourceId = null;
@@ -11226,7 +11216,7 @@ OL.handleCanvasDragOver = function(e) {
         container.style.background = "rgba(56, 189, 248, 0.05)";
     }
 };
-/*
+
 // 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
 OL.handleStepMoveStart = function(e, stepId, parentResId) {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
@@ -11235,7 +11225,7 @@ OL.handleStepMoveStart = function(e, stepId, parentResId) {
     e.dataTransfer.setData("parentResId", parentResId);
     e.target.style.opacity = "0.4";
 };
-*/
+
 // 4. Source: Atomic Step dragging (L3 Add triggers and steps to Canvas)
 OL.handleAtomicDrag = function(e, type, name) {
     const payload = { type, name, isAtomic: true };
@@ -11251,6 +11241,7 @@ OL.handleModularAtomicDrag = function(e) {
     e.target.style.opacity = "0.4";
 };
 
+/*
 OL.handleStageDrop = function(e, stageId) {
     e.preventDefault();
     const resId = e.dataTransfer.getData("resId");
@@ -11262,6 +11253,76 @@ OL.handleStageDrop = function(e, stageId) {
         OL.persist();
         renderGlobalVisualizer(location.hash.includes('vault'));
     }
+};
+
+OL.handleResourceToWorkflowDrop = function(e, workflowId, lane) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("resId");
+    const workflow = OL.getResourceById(workflowId);
+    if (resId && workflow) {
+        const sourceRes = OL.getResourceById(resId);
+        if(!workflow.steps) workflow.steps = [];
+        workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: lane });
+        OL.persist();
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    }
+};
+*/
+OL.handleUniversalDrop = function(e, parentId, sectionId) {
+    e.preventDefault();
+    e.currentTarget.style.background = ""; // Visual cleanup
+    
+    const resId = e.dataTransfer.getData("resId");               // Dropping a Resource/Workflow
+    const moveStepId = e.dataTransfer.getData("moveStepId");       // Moving an existing node
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // Dropping from Factory
+
+    const isVaultMode = location.hash.includes('vault');
+    const parentObj = OL.getResourceById(parentId); // For L2 and L3
+    
+    // CASE A: Level 1 (Dropping a Workflow into a Stage)
+    if (resId && !state.focusedWorkflowId && !state.focusedResourceId) {
+        const res = OL.getResourceById(resId);
+        if (res) {
+            res.stageId = sectionId;
+            console.log(`Level 1: Mapped ${res.name} to Stage ${sectionId}`);
+        }
+    }
+    
+    // CASE B: Level 2 (Dropping a Resource into a Workflow Lane)
+    else if (resId && state.focusedWorkflowId) {
+        if (!parentObj.steps) parentObj.steps = [];
+        const sourceRes = OL.getResourceById(resId);
+        parentObj.steps.push({ 
+            id: uid(), 
+            name: sourceRes.name, 
+            resourceLinkId: resId, 
+            gridLane: sectionId 
+        });
+        console.log(`Level 2: Added Resource ${sourceRes.name} to Lane ${sectionId}`);
+    }
+
+    // CASE C: Level 3 (Dropping Atomic Trigger/Action into Resource Lane)
+    else if (atomicPayload) {
+        const data = JSON.parse(atomicPayload);
+        if (!parentObj.steps) parentObj.steps = [];
+        parentObj.steps.push({ 
+            id: uid(), 
+            name: data.name, 
+            type: data.type, 
+            gridLane: sectionId,
+            outcomes: [] 
+        });
+        console.log(`Level 3: Added Atomic ${data.name} to Lane ${sectionId}`);
+    }
+
+    // CASE D: Re-positioning existing items (Works for L2 and L3)
+    else if (moveStepId && parentObj) {
+        const step = parentObj.steps.find(s => s.id === moveStepId);
+        if (step) step.gridLane = sectionId;
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
 };
 
 // --- UNMAPPING / TRASH LOGIC ---
