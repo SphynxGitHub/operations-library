@@ -11204,7 +11204,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             }
 
             // 5. Shared Module/SOP Actions
-            if (isModule) {
+            
                 html +=`<section>
                     <label class="modal-section-label">Procedure Preview (${nestedSteps.length} Steps)</label>
                     <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto; padding-right:5px;">
@@ -11229,7 +11229,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                         ` : ''}
                     </div>
                 </section>`
-            }
+            
         html +=`
         </div>
     `;
