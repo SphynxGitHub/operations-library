@@ -11159,6 +11159,33 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     `).join('');
 };
 
+function renderResourcesInWorkflowLane(workflowId, lane) {
+    const workflow = OL.getResourceById(workflowId);
+    const items = (workflow.steps || []).filter(s => s.gridLane === lane);
+    
+    if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
+    
+    return items.map(item => {
+        const linkedRes = OL.getResourceById(item.resourceLinkId);
+        const stepCount = (linkedRes?.steps || []).length;
+        const triggerCount = (linkedRes?.triggers || []).length;
+
+        return `
+        <div class="workflow-block-card"
+             draggable="true" 
+             onmousedown="OL.loadInspector('${item.resourceLinkId}')"
+             ondragstart="OL.handleWorkflowDragStart(event, '${item.resourceLinkId}', '${esc(item.name)}')" 
+             ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
+            <div class="bold accent">${esc(item.name)}</div>
+            <div class="tiny muted">
+                <span>⚡ ${triggerCount} Triggers</span>
+                <span>📝 ${stepCount} Steps</span>
+            </div>
+        </div>
+    `;
+    }).join('');
+};
+
 // --- NAVIGATION & STATE ---
 
 OL.drillDownIntoWorkflow = function(resId) {
@@ -11175,24 +11202,6 @@ OL.drillIntoResourceMechanics = function(resId) {
 OL.exitToWorkflow = function() {
     state.focusedResourceId = null;
     renderGlobalVisualizer(location.hash.includes('vault'));
-};
-
-function renderResourcesInWorkflowLane(workflowId, lane) {
-    const workflow = OL.getResourceById(workflowId);
-    const items = (workflow.steps || []).filter(s => s.gridLane === lane);
-    
-    if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
-    
-    return items.map(item => `
-        <div class="workflow-block-card"
-             draggable="true" 
-             onmousedown="OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleWorkflowDragStart(event, '${item.resourceLinkId}', '${esc(item.name)}')" 
-             ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
-            <div class="bold accent">${esc(item.name)}</div>
-            <div class="tiny muted">📝 ${(item.steps || []).length} Steps</div>
-        </div>
-    `).join('');
 };
 
 OL.exitToLifecycle = function() {
@@ -11254,33 +11263,6 @@ OL.handleModularAtomicDrag = function(e) {
     e.target.style.opacity = "0.4";
 };
 
-/*
-OL.handleStageDrop = function(e, stageId) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("resId");
-    if (!resId) return;
-
-    const res = OL.getResourceById(resId);
-    if (res) {
-        res.stageId = stageId;
-        OL.persist();
-        renderGlobalVisualizer(location.hash.includes('vault'));
-    }
-};
-
-OL.handleResourceToWorkflowDrop = function(e, workflowId, lane) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("resId");
-    const workflow = OL.getResourceById(workflowId);
-    if (resId && workflow) {
-        const sourceRes = OL.getResourceById(resId);
-        if(!workflow.steps) workflow.steps = [];
-        workflow.steps.push({ id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: lane });
-        OL.persist();
-        renderGlobalVisualizer(location.hash.includes('vault'));
-    }
-};
-*/
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     e.currentTarget.style.background = ""; // Visual cleanup
