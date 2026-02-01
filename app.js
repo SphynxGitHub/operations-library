@@ -11414,17 +11414,18 @@ OL.handleNodeMoveStart = function(e, id, index) {
 };
 
 OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault(); 
+    e.stopPropagation();
+
     const moveId = e.dataTransfer.getData("moveNodeId");
     if (!moveId) return;
 
     const isVaultMode = location.hash.includes('vault');
     const parentId = state.focusedWorkflowId || state.focusedResourceId;
 
-    // --- TIER 1 REORDER (Siblings in a stage) ---
-    if (!parentId) {
-        const client = getActiveClient();
-        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
+    // --- CASE A: LEVEL 1 (Lifecycle - Siblings) ---
+    if (!state.focusedWorkflowId && !state.focusedResourceId) {
+        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
         const item = source.find(r => r.id === moveId);
         if (item) {
             item.stageId = sectionId;
@@ -11437,39 +11438,42 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
             }
         }
     } 
-    // --- TIER 2 & 3 REORDER (Nested steps) ---
+    // --- CASE B: LEVEL 2 & 3 (The Neighbor Logic) ---
     else {
         const parent = OL.getResourceById(parentId);
         if (parent && parent.steps) {
-            const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
-            if (currentItemIdx > -1) {
-                // 1. Remove the item from the array
-                const [item] = parent.steps.splice(currentItemIdx, 1);
-                
-                // 2. Sync metadata based on where it landed
-                if (state.focusedResourceId) {
-                    item.type = sectionId; // Landed in Trigger or Action box
-                } else {
-                    item.gridLane = sectionId; // Landed in L2 Swimlane
-                }
+            // 1. Remove the item from its current spot
+            const oldIdx = parent.steps.findIndex(s => s.id === moveId);
+            if (oldIdx === -1) return;
+            const [item] = parent.steps.splice(oldIdx, 1);
 
-                // 🎯 3. THE ABSOLUTE INDEX CALCULATION
-                // Find all items currently in the target section
-                const sectionItems = parent.steps.filter(s => 
-                    state.focusedResourceId ? (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : (s.gridLane === sectionId)
-                );
+            // 2. Sync metadata (Is it now a Trigger or an Action?)
+            if (state.focusedResourceId) {
+                item.type = sectionId; // e.g., 'Trigger' or 'Action'
+            } else {
+                item.gridLane = sectionId;
+            }
 
-                if (sectionItems.length > 0 && sectionItems[targetIndex]) {
-                    // Find the actual array index of the card we dropped onto
-                    const absoluteInsertIdx = parent.steps.indexOf(sectionItems[targetIndex]);
-                    parent.steps.splice(absoluteInsertIdx, 0, item);
-                } else {
-                    // Fallback: If section is empty or dropped at the end, just push
-                    parent.steps.push(item);
-                }
+            // 3. 🎯 THE FIX: Neighbors over Numbers
+            // Find all items visible in the box we just dropped into
+            const sectionItems = parent.steps.filter(s => 
+                state.focusedResourceId ? (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : (s.gridLane === sectionId)
+            );
+
+            // Find the "Neighbor" card we dropped onto
+            const neighbor = sectionItems[targetIndex];
+
+            if (neighbor) {
+                // Find where that neighbor sits in the REAL array
+                const absoluteInsertIdx = parent.steps.indexOf(neighbor);
+                parent.steps.splice(absoluteInsertIdx, 0, item);
+            } else {
+                // If the box is empty or we dropped at the very bottom
+                parent.steps.push(item);
             }
         }
     }
+
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
