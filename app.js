@@ -11255,7 +11255,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
         </div>
     `).join('');
 };
-/*
+
 // --- NAVIGATION & STATE ---
 
 OL.drillDownIntoWorkflow = function(resId) {
@@ -11263,7 +11263,7 @@ OL.drillDownIntoWorkflow = function(resId) {
     state.focusedResourceId = null; 
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
-
+/*
 OL.drillIntoResourceMechanics = function(resId) {
     state.focusedResourceId = resId; 
     renderGlobalVisualizer(location.hash.includes('vault'));
@@ -11309,7 +11309,7 @@ OL.filterResourceToolbox = function(q) {
         el.style.display = el.getAttribute('data-name').includes(query) ? 'flex' : 'none';
     });
 };
-/*
+
 // --- DRAG & DROP ORCHESTRATION ---
 
 // 1. Source: When you start dragging a Workflow or Resource from the sidebar
@@ -11331,7 +11331,7 @@ OL.handleCanvasDragOver = function(e) {
         container.style.background = "rgba(56, 189, 248, 0.05)";
     }
 };
-
+/*
 // 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
 OL.handleStepMoveStart = function(e, stepId, parentResId) {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
