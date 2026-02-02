@@ -10950,7 +10950,6 @@ window.renderLevel1SidebarContent = function(allResources) {
             <div id="no-results-msg" class="tiny muted italic" style="display:none; padding:20px; text-align:center;">
                 No matching workflows found.
             </div>
-            ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No workflows available.</div>' : ''}
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
@@ -10998,7 +10997,6 @@ window.renderLevel2SidebarContent = function(allResources) {
             <div id="no-resource-results-msg" class="tiny muted italic" style="display:none; padding:20px; text-align:center;">
                 No matching resources found.
             </div>
-            ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
