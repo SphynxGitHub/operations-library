@@ -10949,7 +10949,7 @@ window.renderLevel1SidebarContent = function(allResources) {
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
-    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow');
+    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow' && !res.workflowId);
     return `
         <div class="drawer-header">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -10958,7 +10958,7 @@ window.renderLevel2SidebarContent = function(allResources) {
             </div>
             <input type="text" class="modal-input tiny" id="resource-toolbox-search" 
                    placeholder="Search assets..." 
-                   oninput="OL.filterResourceToolbox(this.value)">
+                   oninput="OL.filterToolbox(this.value)">
         </div>
         <div class="drawer-tools" id="resource-toolbox-list">
             ${assets.map(res => `
@@ -11285,41 +11285,44 @@ OL.exitToLifecycle = function() {
     if (searchInput) searchInput.value = "";
 };
 
-/// Filter for Level 1 Sidebar (Workflows)
 OL.filterToolbox = function(query) {
     const q = query.toLowerCase();
-    const list = document.getElementById('toolbox-list');
-    if (!list) return;
+    
+    // 1. Target the active drawer container
+    const drawer = document.querySelector('.pane-drawer');
+    if (!drawer) return;
 
-    const items = list.querySelectorAll('.draggable-workflow-item');
-    const emptyMsg = document.getElementById('no-results-msg');
+    // 2. Find all draggable items currently in the sidebar
+    const items = drawer.querySelectorAll('.draggable-workflow-item');
+    
+    // 3. Find the empty message (we'll create it on the fly if it's missing)
+    let emptyMsg = drawer.querySelector('.no-results-placeholder');
+    if (!emptyMsg) {
+        emptyMsg = document.createElement('div');
+        emptyMsg.className = 'no-results-placeholder tiny muted italic';
+        emptyMsg.style.cssText = 'padding:20px; text-align:center; display:none;';
+        emptyMsg.innerText = 'No matching items found.';
+        drawer.querySelector('.drawer-tools').appendChild(emptyMsg);
+    }
 
+    // 4. Filter
+    let visibleCount = 0;
     items.forEach(item => {
-        const name = item.getAttribute('data-name') || "";
-        item.style.display = name.includes(q) ? "flex" : "none";
+        const name = item.getAttribute('data-name') || item.innerText.toLowerCase();
+        if (name.includes(q)) {
+            item.style.display = "flex";
+            visibleCount++;
+        } else {
+            item.style.display = "none";
+        }
     });
 
-    const hasVisible = [...items].some(i => i.style.display !== 'none');
-    if (emptyMsg) emptyMsg.style.display = hasVisible ? "none" : "block";
+    // 5. Toggle Message
+    emptyMsg.style.display = (visibleCount === 0 && q !== "") ? "block" : "none";
 };
 
-// Filter for Level 2 Sidebar (Resources)
-OL.filterResourceToolbox = function(query) {
-    const q = query.toLowerCase();
-    const list = document.getElementById('resource-toolbox-list');
-    if (!list) return;
-
-    const items = list.querySelectorAll('.draggable-workflow-item');
-    const emptyMsg = document.getElementById('no-resource-results-msg');
-
-    items.forEach(item => {
-        const name = item.getAttribute('data-name') || "";
-        item.style.display = name.includes(q) ? "flex" : "none";
-    });
-
-    const hasVisible = [...items].some(i => i.style.display !== 'none');
-    if (emptyMsg) emptyMsg.style.display = hasVisible ? "none" : "block";
-};
+// Map the second function name to the same logic so Level 2 doesn't break
+OL.filterResourceToolbox = OL.filterToolbox;
 
 // --- DRAG & DROP ORCHESTRATION ---
 
