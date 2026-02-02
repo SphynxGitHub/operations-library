@@ -10932,6 +10932,9 @@ window.renderLevel1SidebarContent = function(allResources) {
                             title="Clone Workflow">⿻</button>
                 </div>
             `).join('')}
+            <div id="no-results-msg" class="tiny muted italic" style="display:none; padding:20px; text-align:center;">
+                No matching workflows found.
+            </div>
             ${workflows.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No workflows available.</div>' : ''}
         </div>
         <div class="return-to-library-zone" 
@@ -10972,6 +10975,9 @@ window.renderLevel2SidebarContent = function(allResources) {
                             title="Clone Resource">⿻</button>
                 </div>
             `).join('')}
+            <div id="no-resource-results-msg" class="tiny muted italic" style="display:none; padding:20px; text-align:center;">
+                No matching resources found.
+            </div>
             ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
         </div>
         <div class="return-to-library-zone" 
@@ -11253,6 +11259,10 @@ OL.drillDownIntoWorkflow = function(resId) {
     state.focusedWorkflowId = resId;
     state.focusedResourceId = null; 
     renderGlobalVisualizer(location.hash.includes('vault'));
+
+    // Add to your navigation functions
+    const searchInput = document.querySelector('.modal-input.tiny');
+    if (searchInput) searchInput.value = "";
 };
 
 OL.drillIntoResourceMechanics = function(resId) {
@@ -11269,13 +11279,46 @@ OL.exitToLifecycle = function() {
     state.focusedWorkflowId = null;
     state.focusedResourceId = null;
     renderGlobalVisualizer(location.hash.includes('vault'));
+
+    // Add to your navigation functions
+    const searchInput = document.querySelector('.modal-input.tiny');
+    if (searchInput) searchInput.value = "";
 };
 
-OL.filterResourceToolbox = function(q) {
-    const query = q.toLowerCase();
-    document.querySelectorAll('#resource-toolbox-list .draggable-workflow-item').forEach(el => {
-        el.style.display = el.getAttribute('data-name').includes(query) ? 'flex' : 'none';
+/// Filter for Level 1 Sidebar (Workflows)
+OL.filterToolbox = function(query) {
+    const q = query.toLowerCase();
+    const list = document.getElementById('toolbox-list');
+    if (!list) return;
+
+    const items = list.querySelectorAll('.draggable-workflow-item');
+    const emptyMsg = document.getElementById('no-results-msg');
+
+    items.forEach(item => {
+        const name = item.getAttribute('data-name') || "";
+        item.style.display = name.includes(q) ? "flex" : "none";
     });
+
+    const hasVisible = [...items].some(i => i.style.display !== 'none');
+    if (emptyMsg) emptyMsg.style.display = hasVisible ? "none" : "block";
+};
+
+// Filter for Level 2 Sidebar (Resources)
+OL.filterResourceToolbox = function(query) {
+    const q = query.toLowerCase();
+    const list = document.getElementById('resource-toolbox-list');
+    if (!list) return;
+
+    const items = list.querySelectorAll('.draggable-workflow-item');
+    const emptyMsg = document.getElementById('no-resource-results-msg');
+
+    items.forEach(item => {
+        const name = item.getAttribute('data-name') || "";
+        item.style.display = name.includes(q) ? "flex" : "none";
+    });
+
+    const hasVisible = [...items].some(i => i.style.display !== 'none');
+    if (emptyMsg) emptyMsg.style.display = hasVisible ? "none" : "block";
 };
 
 // --- DRAG & DROP ORCHESTRATION ---
