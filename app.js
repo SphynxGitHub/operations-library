@@ -10935,6 +10935,8 @@ window.renderLevel1SidebarContent = function(allResources) {
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
+            onlink="this.classList.add('drag-over')"
+            ondragenter="this.classList.add('drag-over')"
             ondragleave="this.classList.remove('drag-over')"
             ondrop="OL.handleUnifiedDelete(event)">
             🗑️ Drop to Unmap
@@ -10973,6 +10975,8 @@ window.renderLevel2SidebarContent = function(allResources) {
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
+            onlink="this.classList.add('drag-over')"
+            ondragenter="this.classList.add('drag-over')"
             ondragleave="this.classList.remove('drag-over')"
             ondrop="OL.handleUnifiedDelete(event)">
             🗑️ Drop to Unmap
@@ -10995,6 +10999,8 @@ window.renderLevel3SidebarContent = function(resourceId) {
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
+            onlink="this.classList.add('drag-over')"
+            ondragenter="this.classList.add('drag-over')"
             ondragleave="this.classList.remove('drag-over')"
             ondrop="OL.handleUnifiedDelete(event)">
             🗑️ Drop to Unmap
@@ -11450,16 +11456,30 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     }
     // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
     else if (atomicPayload && state.focusedResourceId) {
+        console.log("📥 Receiving Atomic Step from Factory...");
         const parentRes = OL.getResourceById(state.focusedResourceId);
+        
         if (parentRes) {
-            const data = JSON.parse(atomicPayload);
-            if (!parentRes.steps) parentRes.steps = [];
-            parentRes.steps.push({ 
-                id: uid(), 
-                name: data.name, 
-                type: sectionId, // 'Trigger' or 'Action'
-                outcomes: [] 
-            });
+            try {
+                const data = JSON.parse(atomicPayload);
+                if (!parentRes.steps) parentRes.steps = [];
+                
+                // We use sectionId (the drop target) to determine the type
+                // This ensures Triggers go in the Trigger box and Actions in Action box
+                const newStep = { 
+                    id: uid(), 
+                    name: data.name, 
+                    type: sectionId, // Automatically becomes 'Trigger' or 'Action' based on landing zone
+                    outcomes: [],
+                    timingValue: 0,
+                    timingType: 'after_prev'
+                };
+
+                parentRes.steps.push(newStep);
+                console.log(`✅ Added Atomic ${sectionId}: ${data.name}`);
+            } catch (err) {
+                console.error("❌ Failed to parse Atomic Payload", err);
+            }
         }
     }
 
@@ -11471,34 +11491,47 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 
 OL.handleUnifiedDelete = function(e) {
     e.preventDefault();
-    const resId = e.dataTransfer.getData("resId");             // Level 1: Workflow Card
-    const moveStepId = e.dataTransfer.getData("moveStepId");   // Level 2/3: Resource or Atomic Card
-    const parentId = state.focusedWorkflowId || state.focusedResourceId;
-
-    // Remove the hover effect class
+    e.stopPropagation();
+    
+    // 1. Extract IDs from the drag event
+    const moveId = e.dataTransfer.getData("moveNodeId") || e.dataTransfer.getData("moveStepId");
+    const resId = e.dataTransfer.getData("resId"); // Sidebar source
+    const isVaultMode = location.hash.includes('vault');
+    
+    // Clean up UI
     e.currentTarget.classList.remove('drag-over');
 
-    // SCENARIO 1: We are inside a focus view (Level 2 or 3) and moving a child node
-    if (parentId && moveStepId) {
-        const parentObj = OL.getResourceById(parentId);
-        if (parentObj && parentObj.steps) {
-            parentObj.steps = parentObj.steps.filter(s => s.id !== moveStepId);
-            console.log(`🗑️ Removed node ${moveStepId} from parent ${parentId}`);
-            OL.clearInspector();
+    // If we are dragging from the sidebar (resId), we don't need to delete anything
+    if (resId && !moveId) return;
+
+    const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
+
+    // --- SCENARIO A: UNMAPPING FROM TIER 1 (Lifecycle) ---
+    if (!actualParentId && moveId) {
+        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
+        const item = source.find(r => r.id === moveId);
+        if (item) {
+            item.stageId = null;
+            item.mapOrder = null;
+            console.log(`📥 Unmapped Workflow: ${item.name}`);
         }
     } 
-    // SCENARIO 2: We are in Global view and unmapping a Workflow from a Stage
-    else if (resId) {
-        const res = OL.getResourceById(resId);
-        if (res) {
-            res.stageId = null;
-            res.mapOrder = null;
-            console.log(`📥 Returned ${res.name} to Library`);
+    // --- SCENARIO B: DELETING STEPS FROM TIER 2 OR 3 ---
+    else if (actualParentId && moveId) {
+        const parent = OL.getResourceById(actualParentId);
+        if (parent && parent.steps) {
+            const originalLength = parent.steps.length;
+            parent.steps = parent.steps.filter(s => s.id !== moveId);
+            
+            if (parent.steps.length < originalLength) {
+                console.log(`🗑️ Deleted Step ${moveId} from ${actualParentId}`);
+                OL.clearInspector();
+            }
         }
     }
 
     OL.persist();
-    renderGlobalVisualizer(location.hash.includes('vault'));
+    renderGlobalVisualizer(isVaultMode);
 };
 
 // ===========================TASK RESOURCE OVERLAP===========================
