@@ -2299,7 +2299,7 @@ body.is-visualizer #mainContent {
 }
 
 .draggable-workflow-item {
-    display: flex !important;
+    display: flex;
     flex-direction: row;
     align-items: flex-start; /* Keeps icons at the top while text grows down */
     gap: 12px;
