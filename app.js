@@ -10971,43 +10971,57 @@ window.renderLevel1SidebarContent = function(allResources) {
 window.renderLevel2SidebarContent = function(allResources) {
     const currentWorkflow = OL.getResourceById(state.focusedWorkflowId);
     const existingStepResourceIds = (currentWorkflow?.steps || []).map(s => s.resourceLinkId);
+
+    // 1. Filter out workflows and items already on canvas
     const assets = allResources.filter(res => 
         (res.type || "").toLowerCase() !== 'workflow' && 
-        !existingStepResourceIds.includes(res.id) // Hide if already on canvas
+        !existingStepResourceIds.includes(res.id)
     );
+
+    // 2. Group by type
+    const grouped = assets.reduce((acc, res) => {
+        const type = res.type || "Other";
+        if (!acc[type]) acc[type] = [];
+        acc[type].push(res);
+        return acc;
+    }, {});
+
+    // 3. Generate HTML
+    const groupsHtml = Object.keys(grouped).sort().map(type => `
+        <div class="sidebar-type-group">
+            <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">${type}s</label>
+            ${grouped[type].map(res => `
+                <div class="draggable-workflow-item" 
+                     data-name="${res.name.toLowerCase()}" 
+                     draggable="true" 
+                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                    <span>${type.toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
+                    <span style="flex: 1;">${esc(res.name)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+
     return `
         <div class="drawer-header">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
                 <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
-                <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.promptCreateResource()" title="Create New Resource">+</button>
+                <button class="btn tiny primary" onclick="OL.promptCreateResource()">+</button>
             </div>
             <input type="text" class="modal-input tiny sidebar-search" 
-                    id="resource-toolbox-search" 
+                   id="resource-toolbox-search"
                    placeholder="Search assets..." 
-                   oninput="OL.filterToolbox(this.value)"
+                   oninput="OL.filterToolbox(this.value)">
         </div>
         <div class="drawer-tools" id="resource-toolbox-list">
-            ${assets.map(res => `
-                <div class="draggable-workflow-item hover-trigger" 
-                     data-name="${res.name.toLowerCase()}" 
-                     draggable="true" 
-                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>${(res.type || "").toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
-                    <span style="flex: 1;">${esc(res.name)}</span>
-                    
-                    <button class="btn tiny soft clone-btn" 
-                            style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
-                            onclick="event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); OL.cloneResourceWorkflow('${res.id}')"
-                            title="Clone Resource">⿻</button>
-                </div>
-            `).join('')}
-            <div id="no-resource-results-msg" class="tiny muted italic" style="display:none; padding:20px; text-align:center;">
+            ${groupsHtml}
+            <div id="no-resource-results-msg" class="no-results-placeholder tiny muted italic" style="display:none; padding:20px; text-align:center;">
                 No matching resources found.
             </div>
+            ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
         </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
-            onlink="this.classList.add('drag-over')"
             ondragenter="this.classList.add('drag-over')"
             ondragleave="this.classList.remove('drag-over')"
             ondrop="OL.handleUnifiedDelete(event)">
@@ -11308,51 +11322,43 @@ OL.exitToLifecycle = function() {
 const originalFilter = OL.filterToolbox;
 
 OL.filterToolbox = function(query) {
-    state.isFiltering = true; // 🚀 Tell the visualizer not to wipe the HTML
-    console.log("🔍 FILTER TRIGGERED | Query:", query);
-    
+    state.isFiltering = true; 
     state.lastSearchQuery = query; 
     const q = query.toLowerCase();
     
-    // 1. Check for the container
     const listContainer = document.getElementById('toolbox-list') || 
                           document.getElementById('resource-toolbox-list');
     
-    if (!listContainer) {
-        console.error("❌ ERROR: Could not find #toolbox-list or #resource-toolbox-list");
-        return;
-    }
+    if (!listContainer) return;
 
-    // 2. Check for items
+    // 1. Filter the actual cards
     const items = listContainer.querySelectorAll('.draggable-workflow-item');
-    console.log(`found ${items.length} items to filter in container:`, listContainer.id);
+    let totalVisibleCount = 0;
 
-    let visibleCount = 0;
-    items.forEach((item, index) => {
+    items.forEach(item => {
         const name = item.getAttribute('data-name') || item.innerText.toLowerCase();
         const matches = name.includes(q);
-        
-        if (matches) {
-            item.style.display = "flex";
-            visibleCount++;
-        } else {
-            item.style.display = "none";
-        }
-        
-        // Log the first few items to see what's happening
-        if (index < 3) {
-            console.log(`   Item ${index} ("${name.substring(0,15)}..."): ${matches ? "SHOW" : "HIDE"}`);
-        }
+        item.style.display = matches ? "flex" : "none";
+        if (matches) totalVisibleCount++;
     });
 
-    console.log(`✅ Filter Complete. Visible: ${visibleCount} / Total: ${items.length}`);
+    // 2. 🚀 NEW: Clean up the Group Containers
+    // If a group (e.g., "Forms") has 0 matching items, hide the whole group/label
+    const groups = listContainer.querySelectorAll('.sidebar-type-group');
+    groups.forEach(group => {
+        const groupItems = group.querySelectorAll('.draggable-workflow-item');
+        const hasVisibleInGroup = [...groupItems].some(item => item.style.display !== 'none');
+        group.style.display = hasVisibleInGroup ? "block" : "none";
+    });
 
-    // 3. Handle the empty message
+    // 3. Handle the global empty message
     const emptyMsg = document.getElementById('no-results-msg') || 
                      document.getElementById('no-resource-results-msg');
     if (emptyMsg) {
-        emptyMsg.style.display = (visibleCount === 0 && q !== "") ? "block" : "none";
+        emptyMsg.style.display = (totalVisibleCount === 0 && q !== "") ? "block" : "none";
     }
+
+    console.log(`✅ Filtered: ${totalVisibleCount} items visible.`);
 };
 
 // Ensure both levels call the same logic
