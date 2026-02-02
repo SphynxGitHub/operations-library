@@ -10797,6 +10797,7 @@ OL.deployRequirementsFromResource = function(resourceId) {
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
+state.currentDropIndex = null;
 
 const ATOMIC_STEP_LIB = {
     Triggers: [
@@ -11290,6 +11291,7 @@ OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
 // 2. Destination: Required to allow the canvas to receive the drop
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
+    
     e.dataTransfer.dropEffect = "move";
 
     const container = e.currentTarget;
@@ -11323,8 +11325,12 @@ OL.handleCanvasDragOver = function(e) {
     // 4. Insert Placeholder
     if (afterElement) {
         container.insertBefore(placeholder, afterElement);
+        // Find the index of the card we are slipping in front of
+        state.currentDropIndex = cards.indexOf(afterElement);
     } else {
         container.appendChild(placeholder);
+        // We are at the bottom
+        state.currentDropIndex = cards.length;
     }
 };
 
@@ -11439,86 +11445,81 @@ OL.handleModularAtomicDrag = function(e) {
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
-    cleanupUI();
     e.preventDefault();
-    e.currentTarget.style.background = ""; // Clean up hover effect
-    
-    const moveId = e.dataTransfer.getData("moveNodeId");      // Existing Card
-    const resId = e.dataTransfer.getData("resId");           // New Resource from Sidebar
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // New Step from Factory
+    const moveId = e.dataTransfer.getData("moveNodeId");      
+    const resId = e.dataTransfer.getData("resId");           
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
     const isVaultMode = location.hash.includes('vault');
+
+    // 🎯 Use the index captured by the Ghost Placeholder logic
+    // If no index was captured (e.g. dropped on empty space), default to the end
+    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
 
     // 🚀 SCENARIO 1: MOVE EXISTING CARD
     if (moveId) {
-        const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
-        
-        if (!actualParentId) {
-            // Tier 1: Move Workflow to Stage
-            const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-            const item = source.find(r => r.id === moveId);
-            if (item) { item.stageId = sectionId; item.mapOrder = 999; }
-        } else {
-            // Tier 2 or 3: Move Step to Lane/Type
-            const parent = OL.getResourceById(actualParentId);
-            const step = parent?.steps?.find(s => s.id === moveId);
-            if (step) {
-                if (state.focusedResourceId) step.type = sectionId;
-                else step.gridLane = sectionId;
-                // Move to end of array (Visual Bottom)
-                parent.steps.push(parent.steps.splice(parent.steps.indexOf(step), 1)[0]);
-            }
-        }
+        // We reuse the rearrange logic because it already handles Absolute Indexing
+        OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
+        // Note: handleNodeRearrange calls persist/render, so we return early
+        state.currentDropIndex = null;
+        cleanupUI();
+        return; 
     } 
-    // 🚀 SCENARIO 2: ADD NEW FROM SIDEBAR (Workflow or Resource)
+
+    // 🚀 SCENARIO 2: ADD NEW FROM SIDEBAR
     else if (resId) {
         if (!state.focusedWorkflowId) {
-            // Tier 1: Map existing Workflow to a Stage
             const res = OL.getResourceById(resId);
-            if (res) { res.stageId = sectionId; res.mapOrder = 99; }
+            if (res) { res.stageId = sectionId; res.mapOrder = targetIdx; }
         } else {
-            // Tier 2: Link a Resource to a Workflow Lane
             const workflow = OL.getResourceById(state.focusedWorkflowId);
             const sourceRes = OL.getResourceById(resId);
             if (workflow && sourceRes) {
                 if (!workflow.steps) workflow.steps = [];
-                workflow.steps.push({ 
-                    id: uid(), 
-                    name: sourceRes.name, 
-                    resourceLinkId: resId, 
-                    gridLane: sectionId 
-                });
+                const newStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId };
+                
+                // 🎯 Insert at Ghost position instead of push
+                if (targetIdx < workflow.steps.length) workflow.steps.splice(targetIdx, 0, newStep);
+                else workflow.steps.push(newStep);
             }
         }
     }
+
     // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
     else if (atomicPayload && state.focusedResourceId) {
-        console.log("📥 Receiving Atomic Step from Factory...");
         const parentRes = OL.getResourceById(state.focusedResourceId);
-        
         if (parentRes) {
             try {
                 const data = JSON.parse(atomicPayload);
                 if (!parentRes.steps) parentRes.steps = [];
                 
-                // We use sectionId (the drop target) to determine the type
-                // This ensures Triggers go in the Trigger box and Actions in Action box
                 const newStep = { 
                     id: uid(), 
                     name: data.name, 
-                    type: sectionId, // Automatically becomes 'Trigger' or 'Action' based on landing zone
+                    type: sectionId, 
                     outcomes: [],
                     timingValue: 0,
                     timingType: 'after_prev'
                 };
 
-                parentRes.steps.push(newStep);
-                console.log(`✅ Added Atomic ${sectionId}: ${data.name}`);
-            } catch (err) {
-                console.error("❌ Failed to parse Atomic Payload", err);
-            }
+                // 🎯 Insert at Ghost position instead of push
+                // For L3, we find the absolute index relative to the Trigger/Action filtered group
+                const sectionItems = parentRes.steps.filter(s => 
+                    (sectionId === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger')
+                );
+                const targetNeighbor = sectionItems[targetIdx];
+                
+                if (targetNeighbor) {
+                    const absoluteIdx = parentRes.steps.indexOf(targetNeighbor);
+                    parentRes.steps.splice(absoluteIdx, 0, newStep);
+                } else {
+                    parentRes.steps.push(newStep);
+                }
+            } catch (err) { console.error(err); }
         }
     }
 
+    state.currentDropIndex = null;
+    cleanupUI();
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
