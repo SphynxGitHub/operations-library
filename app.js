@@ -11356,17 +11356,23 @@ const cleanupUI = () => {
     document.querySelectorAll('.stage-workflow-stream').forEach(el => el.style.background = "");
 };
 
-OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
+OL.handleNodeRearrange = function(e, sectionId, targetIndex, forceId = null) {
     cleanupUI();
-    e.preventDefault(); e.stopPropagation();
-    const moveId = e.dataTransfer.getData("moveNodeId");
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    
+    // 1. Resolve which ID we are moving
+    const moveId = forceId || e.dataTransfer.getData("moveNodeId");
     if (!moveId) return;
 
-    const isVaultMode = location.hash.includes('vault');
-    const parentId = state.focusedWorkflowId || state.focusedResourceId;
+    // 2. Resolve where the Ghost sat (if applicable)
+    // If state.currentDropIndex is set, it means we used the ghost logic to find a gap
+    const finalIndex = (state.currentDropIndex !== null) ? state.currentDropIndex : targetIndex;
 
-    // --- TIER 1 REORDER (Siblings in a stage) ---
-    if (!parentId) {
+    const isVaultMode = location.hash.includes('vault');
+    const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
+
+    // --- TIER 1 REORDER (Global Lifecycle) ---
+    if (!actualParentId) {
         const client = getActiveClient();
         const source = isVaultMode ? state.master.resources : client.projectData.localResources;
         const item = source.find(r => r.id === moveId);
@@ -11376,53 +11382,49 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
             const oldIdx = list.findIndex(r => r.id === moveId);
             if (oldIdx > -1) {
                 const [moved] = list.splice(oldIdx, 1);
-                list.splice(targetIndex, 0, moved);
+                list.splice(finalIndex, 0, moved); // 🎯 Use Ghost Index
                 list.forEach((r, i) => r.mapOrder = i);
             }
         }
     } 
-    // --- TIER 2 & 3 REORDER (Nested steps) ---
+    // --- TIER 2 & 3 REORDER (Nested Steps) ---
     else {
-        console.log("running tier 2/3 node rearrange");
-        
-        // 🚀 THE FIX: Prioritize focusedResourceId for Tier 3
-        const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
         const parent = OL.getResourceById(actualParentId);
-        
         if (parent && parent.steps) {
-            // Now we look for the moveId in the CORRECT object
             const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
             
-            console.log(`Searching for ${moveId} inside ${actualParentId}...`);
-
             if (currentItemIdx > -1) {
-                console.log("SUCCESS: Item found at index", currentItemIdx);
                 const [item] = parent.steps.splice(currentItemIdx, 1);
 
-                // Sync metadata
+                // Update Metadata
                 if (state.focusedResourceId) item.type = sectionId;
                 else item.gridLane = sectionId;
 
-                // Target Index Logic
+                // Landmarking: Filter main array to match current visual section
                 const sectionItems = parent.steps.filter(s => 
                     state.focusedResourceId ? 
                     (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : 
                     (s.gridLane === sectionId)
                 );
 
-                const targetCard = sectionItems[targetIndex];
+                // 🎯 The Fix: Place it where the Ghost sat
+                const targetCard = sectionItems[finalIndex];
                 if (targetCard) {
                     const absoluteInsertIdx = parent.steps.indexOf(targetCard);
                     parent.steps.splice(absoluteInsertIdx, 0, item);
                 } else {
                     parent.steps.push(item);
                 }
-            } else {
-                console.error("FAIL: MoveId still not found. Parent steps are:", parent.steps);
             }
         }
     }
-}
+
+    // Reset ghost state for next drag
+    state.currentDropIndex = null;
+    
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+};
 
 // 🚀 Handle dragging a predefined Trigger from the Factory
 OL.handleAtomicDrag = function(e, type, name) {
