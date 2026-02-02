@@ -11377,6 +11377,26 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
     }
 }
 
+// 🚀 Handle dragging a predefined Trigger from the Factory
+OL.handleAtomicDrag = function(e, type, name) {
+    const payload = { type, name, isAtomic: true };
+    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+    e.target.style.opacity = "0.4";
+};
+
+// 🚀 Handle dragging a custom Action (Verb + Object) from the Factory
+OL.handleModularAtomicDrag = function(e) {
+    const verb = document.getElementById('builder-verb').value;
+    const obj = document.getElementById('builder-object').value;
+    const payload = { 
+        type: 'Action', 
+        name: `${verb} ${obj}`, 
+        isAtomic: true 
+    };
+    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
+    e.target.style.opacity = "0.4";
+};
+
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     e.currentTarget.style.background = ""; // Clean up hover effect
