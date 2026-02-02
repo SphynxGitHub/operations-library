@@ -11379,28 +11379,68 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
-    const moveId = e.dataTransfer.getData("moveNodeId");
-    const resId = e.dataTransfer.getData("resId"); 
-    const atomic = e.dataTransfer.getData("atomicPayload");
+    e.currentTarget.style.background = ""; // Clean up hover effect
+    
+    const moveId = e.dataTransfer.getData("moveNodeId");      // Existing Card
+    const resId = e.dataTransfer.getData("resId");           // New Resource from Sidebar
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); // New Step from Factory
     const isVaultMode = location.hash.includes('vault');
 
+    // 🚀 SCENARIO 1: MOVE EXISTING CARD
     if (moveId) {
-        // Just moving to a lane (no specific order)
-        if (!state.focusedWorkflowId && !state.focusedResourceId) {
-            const item = (isVaultMode ? state.master.resources : getActiveClient().projectData.localResources).find(r => r.id === moveId);
+        const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
+        
+        if (!actualParentId) {
+            // Tier 1: Move Workflow to Stage
+            const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
+            const item = source.find(r => r.id === moveId);
             if (item) { item.stageId = sectionId; item.mapOrder = 999; }
         } else {
-            const parent = OL.getResourceById(state.focusedWorkflowId || state.focusedResourceId);
-            const step = parent?.steps.find(s => s.id === moveId);
+            // Tier 2 or 3: Move Step to Lane/Type
+            const parent = OL.getResourceById(actualParentId);
+            const step = parent?.steps?.find(s => s.id === moveId);
             if (step) {
                 if (state.focusedResourceId) step.type = sectionId;
                 else step.gridLane = sectionId;
-                // Push to bottom
+                // Move to end of array (Visual Bottom)
                 parent.steps.push(parent.steps.splice(parent.steps.indexOf(step), 1)[0]);
             }
         }
-    } else if (resId || atomic) {
-        // Handle Sidebar/Factory Drops (Keep your existing logic here)
+    } 
+    // 🚀 SCENARIO 2: ADD NEW FROM SIDEBAR (Workflow or Resource)
+    else if (resId) {
+        if (!state.focusedWorkflowId) {
+            // Tier 1: Map existing Workflow to a Stage
+            const res = OL.getResourceById(resId);
+            if (res) { res.stageId = sectionId; res.mapOrder = 99; }
+        } else {
+            // Tier 2: Link a Resource to a Workflow Lane
+            const workflow = OL.getResourceById(state.focusedWorkflowId);
+            const sourceRes = OL.getResourceById(resId);
+            if (workflow && sourceRes) {
+                if (!workflow.steps) workflow.steps = [];
+                workflow.steps.push({ 
+                    id: uid(), 
+                    name: sourceRes.name, 
+                    resourceLinkId: resId, 
+                    gridLane: sectionId 
+                });
+            }
+        }
+    }
+    // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
+    else if (atomicPayload && state.focusedResourceId) {
+        const parentRes = OL.getResourceById(state.focusedResourceId);
+        if (parentRes) {
+            const data = JSON.parse(atomicPayload);
+            if (!parentRes.steps) parentRes.steps = [];
+            parentRes.steps.push({ 
+                id: uid(), 
+                name: data.name, 
+                type: sectionId, // 'Trigger' or 'Action'
+                outcomes: [] 
+            });
+        }
     }
 
     OL.persist();
