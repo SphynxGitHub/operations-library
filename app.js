@@ -11289,13 +11289,42 @@ OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
 
 // 2. Destination: Required to allow the canvas to receive the drop
 OL.handleCanvasDragOver = function(e) {
-    e.preventDefault(); // CRITICAL: Browsers block drops by default
-    e.dataTransfer.dropEffect = "copy";
-    
-    // Add a visual hint to the container being hovered over
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
     const container = e.currentTarget;
-    if (container.classList.contains('stage-workflow-stream') || container.id === 'fs-canvas-wrapper') {
-        container.style.background = "rgba(56, 189, 248, 0.05)";
+    // Only show placeholder in the vertical streams
+    if (!container.classList.contains('stage-workflow-stream')) return;
+
+    // 1. Highlight the container
+    container.style.background = "rgba(56, 189, 248, 0.03)";
+
+    // 2. Find or Create Placeholder
+    let placeholder = container.querySelector('.drop-placeholder');
+    if (!placeholder) {
+        placeholder = document.createElement('div');
+        placeholder.className = 'drop-placeholder';
+    }
+
+    // 3. Calculate positioning
+    const cards = [...container.querySelectorAll('.workflow-block-card:not(.dragging)')];
+    
+    // Find the card that is currently under the mouse
+    const afterElement = cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+    // 4. Insert Placeholder
+    if (afterElement) {
+        container.insertBefore(placeholder, afterElement);
+    } else {
+        container.appendChild(placeholder);
     }
 };
 
@@ -11316,7 +11345,13 @@ OL.handleNodeMoveStart = function(e, id, index) {
     setTimeout(() => e.target.classList.add('dragging'), 0);
 };
 
+const cleanupUI = () => {
+    document.querySelectorAll('.drop-placeholder').forEach(el => el.remove());
+    document.querySelectorAll('.stage-workflow-stream').forEach(el => el.style.background = "");
+};
+
 OL.handleNodeRearrange = function(e, sectionId, targetIndex) {
+    cleanupUI();
     e.preventDefault(); e.stopPropagation();
     const moveId = e.dataTransfer.getData("moveNodeId");
     if (!moveId) return;
@@ -11404,6 +11439,7 @@ OL.handleModularAtomicDrag = function(e) {
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
+    cleanupUI();
     e.preventDefault();
     e.currentTarget.style.background = ""; // Clean up hover effect
     
@@ -11486,6 +11522,8 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
+
+window.addEventListener('dragend', cleanupUI);
 
 // --- UNMAPPING / TRASH LOGIC ---
 

@@ -2586,6 +2586,17 @@ body.is-visualizer #mainContent {
     box-shadow: inset 0 0 15px rgba(56, 189, 248, 0.2);
 }
 
+.drop-placeholder {
+    width: 280px;
+    height: 60px;
+    background: rgba(56, 189, 248, 0.05);
+    border: 2px dashed var(--accent);
+    border-radius: 8px;
+    margin: 5px auto;
+    pointer-events: none; /* Crucial: so it doesn't interfere with drag events */
+    transition: all 0.2s ease;
+}
+
 .grid-content-layer {
     position: absolute;
     top: 0;
@@ -2658,6 +2669,11 @@ body.is-visualizer #mainContent {
 
 .workflow-block-card:active {
     cursor: grabbing;
+}
+
+.workflow-block-card.dragging {
+    opacity: 0.1;
+    transform: scale(0.95);
 }
 
 .workflow-block-card.active-node {
