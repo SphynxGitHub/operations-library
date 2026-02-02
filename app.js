@@ -10929,8 +10929,9 @@ window.renderLevel1SidebarContent = function(allResources) {
                 <h3 style="color: var(--accent); margin:0;">🔄 Workflows</h3>
                 <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.quickCreateWorkflow()" title="Create New Workflow">+</button>
             </div>
-            <input type="text" class="modal-input tiny" id="workflow-toolbox-search" 
+            <input type="text" class="modal-input tiny sidebar-search" id="workflow-toolbox-search" 
                    placeholder="Search..." 
+                   value="${state.lastSearchQuery || ''}"
                    oninput="OL.filterToolbox(this.value)">
         </div>
         <div class="drawer-tools" id="toolbox-list">
@@ -11276,11 +11277,8 @@ window.renderLevel3Canvas = function(resourceId) {
 OL.drillDownIntoWorkflow = function(resId) {
     state.focusedWorkflowId = resId;
     state.focusedResourceId = null; 
+    state.lastSearchQuery = ""; // 🚀 Reset the stored search state
     renderGlobalVisualizer(location.hash.includes('vault'));
-
-    // Add to your navigation functions
-    const searchInput = document.querySelector('.modal-input.tiny');
-    if (searchInput) searchInput.value = "";
 };
 
 OL.drillIntoResourceMechanics = function(resId) {
@@ -11296,34 +11294,31 @@ OL.exitToWorkflow = function() {
 OL.exitToLifecycle = function() {
     state.focusedWorkflowId = null;
     state.focusedResourceId = null;
+    state.lastSearchQuery = ""; // 🚀 Reset the stored search state
     renderGlobalVisualizer(location.hash.includes('vault'));
-
-    // Add to your navigation functions
-    const searchInput = document.querySelector('.modal-input.tiny');
-    if (searchInput) searchInput.value = "";
 };
-
 
 // Update the filter function to save the query to state
 const originalFilter = OL.filterToolbox;
 
 OL.filterToolbox = function(query) {
-    // 1. Save query to state so it persists across re-renders
-    state.lastSearchQuery = query;
+    // 1. Always sync the state immediately
+    state.lastSearchQuery = query; 
     const q = query.toLowerCase();
     
-    // 2. Determine which list to filter based on the current view
-    const listId = state.focusedWorkflowId ? 'resource-toolbox-list' : 'toolbox-list';
-    const listContainer = document.getElementById(listId);
+    // 2. Try to find the container, whether it's Tier 1 or Tier 2
+    const listContainer = document.getElementById('toolbox-list') || 
+                          document.getElementById('resource-toolbox-list');
     
-    if (!listContainer) return;
+    if (!listContainer) {
+        console.warn("Search target not found in DOM");
+        return;
+    }
 
+    // 3. Filter the items
     const items = listContainer.querySelectorAll('.draggable-workflow-item');
-    // Find the relevant 'No Results' message based on the container
-    const emptyMsgId = state.focusedWorkflowId ? 'no-resource-results-msg' : 'no-results-msg';
-    const emptyMsg = document.getElementById(emptyMsgId);
-
     let visibleCount = 0;
+
     items.forEach(item => {
         const name = item.getAttribute('data-name') || item.innerText.toLowerCase();
         if (name.includes(q)) {
@@ -11334,6 +11329,9 @@ OL.filterToolbox = function(query) {
         }
     });
 
+    // 4. Handle the empty message
+    const emptyMsg = document.getElementById('no-results-msg') || 
+                     document.getElementById('no-resource-results-msg');
     if (emptyMsg) {
         emptyMsg.style.display = (visibleCount === 0 && q !== "") ? "block" : "none";
     }
