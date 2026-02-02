@@ -10856,6 +10856,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         canvasHtml = renderLevel1Canvas(isVaultMode ? state.master : client.projectData, isVaultMode);
     }
 
+    if (state.isFiltering) {
+        state.isFiltering = false; // Reset flag
+        return; 
+    }
+
     container.innerHTML = `
         <div class="three-pane-layout vertical-lifecycle-mode">
             <aside class="pane-drawer">${toolboxHtml}</aside>
@@ -10976,7 +10981,8 @@ window.renderLevel2SidebarContent = function(allResources) {
                 <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
                 <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.promptCreateResource()" title="Create New Resource">+</button>
             </div>
-            <input type="text" class="modal-input tiny sidebar-search" id="resource-toolbox-search" 
+            <input type="text" class="modal-input tiny sidebar-search" 
+                    id="resource-toolbox-search" 
                    placeholder="Search assets..." 
                    oninput="OL.filterToolbox(this.value)"
         </div>
@@ -11302,34 +11308,46 @@ OL.exitToLifecycle = function() {
 const originalFilter = OL.filterToolbox;
 
 OL.filterToolbox = function(query) {
-    // 1. Always sync the state immediately
+    state.isFiltering = true; // 🚀 Tell the visualizer not to wipe the HTML
+    console.log("🔍 FILTER TRIGGERED | Query:", query);
+    
     state.lastSearchQuery = query; 
     const q = query.toLowerCase();
     
-    // 2. Try to find the container, whether it's Tier 1 or Tier 2
+    // 1. Check for the container
     const listContainer = document.getElementById('toolbox-list') || 
                           document.getElementById('resource-toolbox-list');
     
     if (!listContainer) {
-        console.warn("Search target not found in DOM");
+        console.error("❌ ERROR: Could not find #toolbox-list or #resource-toolbox-list");
         return;
     }
 
-    // 3. Filter the items
+    // 2. Check for items
     const items = listContainer.querySelectorAll('.draggable-workflow-item');
-    let visibleCount = 0;
+    console.log(`found ${items.length} items to filter in container:`, listContainer.id);
 
-    items.forEach(item => {
+    let visibleCount = 0;
+    items.forEach((item, index) => {
         const name = item.getAttribute('data-name') || item.innerText.toLowerCase();
-        if (name.includes(q)) {
+        const matches = name.includes(q);
+        
+        if (matches) {
             item.style.display = "flex";
             visibleCount++;
         } else {
             item.style.display = "none";
         }
+        
+        // Log the first few items to see what's happening
+        if (index < 3) {
+            console.log(`   Item ${index} ("${name.substring(0,15)}..."): ${matches ? "SHOW" : "HIDE"}`);
+        }
     });
 
-    // 4. Handle the empty message
+    console.log(`✅ Filter Complete. Visible: ${visibleCount} / Total: ${items.length}`);
+
+    // 3. Handle the empty message
     const emptyMsg = document.getElementById('no-results-msg') || 
                      document.getElementById('no-resource-results-msg');
     if (emptyMsg) {
