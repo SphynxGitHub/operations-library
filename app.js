@@ -10871,6 +10871,21 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             </aside>
         </div>
     `;
+    // Restore search query if user was typing
+    if (state.lastSearchQuery) {
+        // Look for whichever search bar is currently in the DOM
+        const searchInput = document.getElementById('workflow-toolbox-search') || 
+                           document.getElementById('resource-toolbox-search');
+        if (searchInput) {
+            searchInput.value = state.lastSearchQuery;
+            // Place cursor at the end of the text
+            searchInput.focus();
+            searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+            
+            // Run the filter immediately to hide items
+            OL.filterToolbox(state.lastSearchQuery);
+        }
+    }
 };
 
 // --- TIER 1 RENDERER ---
@@ -10949,16 +10964,21 @@ window.renderLevel1SidebarContent = function(allResources) {
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
-    const assets = allResources.filter(res => (res.type || "").toLowerCase() !== 'workflow' && !res.workflowId);
+    const currentWorkflow = OL.getResourceById(state.focusedWorkflowId);
+    const existingStepResourceIds = (currentWorkflow?.steps || []).map(s => s.resourceLinkId);
+    const assets = allResources.filter(res => 
+        (res.type || "").toLowerCase() !== 'workflow' && 
+        !existingStepResourceIds.includes(res.id) // Hide if already on canvas
+    );
     return `
         <div class="drawer-header">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
                 <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
                 <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.promptCreateResource()" title="Create New Resource">+</button>
             </div>
-            <input type="text" class="modal-input tiny" id="resource-toolbox-search" 
+            <input type="text" class="modal-input tiny sidebar-search" id="resource-toolbox-search" 
                    placeholder="Search assets..." 
-                   oninput="OL.filterToolbox(this.value)">
+                   oninput="OL.filterToolbox(this.value)"
         </div>
         <div class="drawer-tools" id="resource-toolbox-list">
             ${assets.map(res => `
@@ -11285,27 +11305,26 @@ OL.exitToLifecycle = function() {
     if (searchInput) searchInput.value = "";
 };
 
+
+// Update the filter function to save the query to state
+const originalFilter = OL.filterToolbox;
+
 OL.filterToolbox = function(query) {
+    // 1. Save query to state so it persists across re-renders
+    state.lastSearchQuery = query;
     const q = query.toLowerCase();
     
-    // 1. Target the active drawer container
-    const drawer = document.querySelector('.pane-drawer');
-    if (!drawer) return;
-
-    // 2. Find all draggable items currently in the sidebar
-    const items = drawer.querySelectorAll('.draggable-workflow-item');
+    // 2. Determine which list to filter based on the current view
+    const listId = state.focusedWorkflowId ? 'resource-toolbox-list' : 'toolbox-list';
+    const listContainer = document.getElementById(listId);
     
-    // 3. Find the empty message (we'll create it on the fly if it's missing)
-    let emptyMsg = drawer.querySelector('.no-results-placeholder');
-    if (!emptyMsg) {
-        emptyMsg = document.createElement('div');
-        emptyMsg.className = 'no-results-placeholder tiny muted italic';
-        emptyMsg.style.cssText = 'padding:20px; text-align:center; display:none;';
-        emptyMsg.innerText = 'No matching items found.';
-        drawer.querySelector('.drawer-tools').appendChild(emptyMsg);
-    }
+    if (!listContainer) return;
 
-    // 4. Filter
+    const items = listContainer.querySelectorAll('.draggable-workflow-item');
+    // Find the relevant 'No Results' message based on the container
+    const emptyMsgId = state.focusedWorkflowId ? 'no-resource-results-msg' : 'no-results-msg';
+    const emptyMsg = document.getElementById(emptyMsgId);
+
     let visibleCount = 0;
     items.forEach(item => {
         const name = item.getAttribute('data-name') || item.innerText.toLowerCase();
@@ -11317,11 +11336,12 @@ OL.filterToolbox = function(query) {
         }
     });
 
-    // 5. Toggle Message
-    emptyMsg.style.display = (visibleCount === 0 && q !== "") ? "block" : "none";
+    if (emptyMsg) {
+        emptyMsg.style.display = (visibleCount === 0 && q !== "") ? "block" : "none";
+    }
 };
 
-// Map the second function name to the same logic so Level 2 doesn't break
+// Ensure both levels call the same logic
 OL.filterResourceToolbox = OL.filterToolbox;
 
 // --- DRAG & DROP ORCHESTRATION ---
