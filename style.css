@@ -2276,7 +2276,7 @@ body.is-visualizer #mainContent {
 .pane-drawer {
     width: 180px;
     max-width: 25%;
-    height: 100%;
+    height: 100vh;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -2296,6 +2296,7 @@ body.is-visualizer #mainContent {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-height: 0;
 }
 
 .draggable-workflow-item {
