@@ -11557,14 +11557,14 @@ OL.renderVisualizer = function(resId) {
     }).join('');
 
     canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" 
-             style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;"
-             ondragover="OL.handleCanvasDragOver(event)" 
-             ondrop="OL.handleUniversalDrop(event, '${resId}', 'canvas')">
-            
-            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; margin: 0 !important;">
-                ${nodesHtml}
-            </div>
+    <div class="vis-workspace" id="vis-workspace" 
+         style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;"
+         ondragover="OL.handleCanvasDragOver(event)" 
+         ondrop="OL.handleUniversalDrop(event, '${resId}', 'canvas')">
+        
+        <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+            ${nodesHtml}
+        </div>
             <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
         </div>
     `;
@@ -11735,16 +11735,15 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 */
 
 OL.getSnappedCoords = function(e, workspace) {
+    // 🚀 THE FIX: We need the position of the scrollable WORKSPACE itself
     const rect = workspace.getBoundingClientRect();
     
-    // 🚀 THE FIX: 
-    // We calculate the local X/Y by subtracting the container's screen position.
-    // This effectively makes the top-left corner of the workspace 0,0 regardless of headers.
-    const x = (e.clientX - rect.left) + workspace.scrollLeft;
-    const y = (e.clientY - rect.top) + workspace.scrollTop;
+    // Calculate mouse position relative to the workspace's physical top-left corner
+    // We do NOT add scrollLeft/Top here because absolute children move WITH the parent
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     return {
-        // Rounding to your 70/50 grid
         x: Math.round(x / 70) * 70,
         y: Math.round(y / 50) * 50
     };
@@ -11755,23 +11754,16 @@ OL.updateSnapPreview = function(e, workspace) {
     if (!ghost) {
         ghost = document.createElement('div');
         ghost.id = 'grid-snap-preview';
+        // 🚀 MUST be absolute to the workspace
         ghost.style.cssText = `
-            position: absolute; 
-            width: 240px; 
-            height: 80px;
-            background: rgba(56, 189, 248, 0.15); 
-            border: 2px dashed var(--accent);
-            border-radius: 8px; 
-            pointer-events: none; 
-            z-index: 2000; 
-            display: block;
+            position: absolute; width: 240px; height: 80px;
+            background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent);
+            border-radius: 8px; pointer-events: none; z-index: 2000;
         `;
         workspace.appendChild(ghost);
     }
 
     const snapped = OL.getSnappedCoords(e, workspace);
-    
-    // Use transform for better performance and to avoid layout shifts
     ghost.style.left = snapped.x + 'px';
     ghost.style.top = snapped.y + 'px';
 };
