@@ -11735,18 +11735,18 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 */
 
 OL.getSnappedCoords = function(e, workspace) {
-    // 🚀 THE FIX: Get the position of the scrollable WORKSPACE itself
-    const rect = workspace.getBoundingClientRect();
+    // 🚀 THE RESET: We use offsetX/Y which is relative to the TARGET of the event.
+    // If the user is dragging over the workspace, e.offsetY is the exact pixel from the top of the canvas.
     
-    // Calculate mouse position relative to the workspace's physical top-left corner
-    // We add scrollLeft/Top to account for panning the large canvas
-    const x = (e.clientX - rect.left) + workspace.scrollLeft;
-    const y = (e.clientY - rect.top) + workspace.scrollTop;
+    // We check for 'layerY' as a fallback for some browsers during drag operations
+    const rawX = e.offsetX !== undefined ? e.offsetX : e.layerX;
+    const rawY = e.offsetY !== undefined ? e.offsetY : e.layerY;
 
-    // Use your specific 70/50 grid increments
+    // We do NOT subtract rect.top or add scroll here because offsetX 
+    // is already local to the div's coordinate space.
     return {
-        x: Math.round(x / 70) * 70,
-        y: Math.round(y / 50) * 50
+        x: Math.round(rawX / 70) * 70,
+        y: Math.round(rawY / 50) * 50
     };
 };
 
@@ -11755,7 +11755,6 @@ OL.updateSnapPreview = function(e, workspace) {
     if (!ghost) {
         ghost = document.createElement('div');
         ghost.id = 'grid-snap-preview';
-        // 🚀 CRITICAL: Must be absolute to match the cards
         ghost.style.cssText = `
             position: absolute; 
             width: 240px; 
@@ -11765,12 +11764,13 @@ OL.updateSnapPreview = function(e, workspace) {
             border-radius: 8px; 
             pointer-events: none; 
             z-index: 2000;
-            display: block;
         `;
         workspace.appendChild(ghost);
     }
 
     const snapped = OL.getSnappedCoords(e, workspace);
+    
+    // Apply the coordinates directly
     ghost.style.left = snapped.x + 'px';
     ghost.style.top = snapped.y + 'px';
 };
