@@ -3461,18 +3461,29 @@ OL.openResourceTypeManager = function () {
 // 1. Add New Type
 OL.addNewResourceTypeFlat = function () {
     const input = document.getElementById('new-type-input');
+    const iconInput = document.getElementById('new-type-icon'); // 🚀 Capture the emoji input
+    
     const val = (input.value || "").trim();
+    const iconVal = (iconInput.value || "⚙️").trim(); // Fallback to gear
+
     if (!val || val.toLowerCase() === "general") return;
 
     const typeKey = val.toLowerCase().replace(/[^a-z0-9]+/g, "");
     if (!state.master.resourceTypes) state.master.resourceTypes = [];
     
     // Check for duplicates
-    if (state.master.resourceTypes.some(t => t.typeKey === typeKey)) return alert("Type already exists.");
+    if (state.master.resourceTypes.some(t => t.typeKey === typeKey)) {
+        return alert("Type already exists.");
+    }
 
-    state.master.resourceTypes.push({ type: val, typeKey: typeKey });
+    // 1. Add to Registry with Icon
+    state.master.resourceTypes.push({ 
+        type: val, 
+        typeKey: typeKey,
+        icon: iconVal // 🚀 Save the icon here
+    });
 
-    // Create default base rate
+    // 2. Create default base rate in Pricing Library
     const safeKey = typeKey + "_" + Date.now().toString().slice(-4);
     if (!state.master.rates.variables) state.master.rates.variables = {};
     state.master.rates.variables[safeKey] = {
@@ -3483,8 +3494,10 @@ OL.addNewResourceTypeFlat = function () {
         category: "Resource Rates"
     };
 
+    // 3. Persist and Refresh
     OL.persist();
-    OL.openResourceTypeManager(); 
+    OL.openResourceTypeManager(); // Keep the modal open
+    renderGlobalVisualizer(location.hash.includes('vault')); // Update the Sidebar icons
 };
 
 // 2. Rename Type System-Wide
@@ -11004,6 +11017,12 @@ window.renderLevel1SidebarContent = function(allResources) {
     `;
 };
 
+OL.getRegistryIcon = function(typeName) {
+    const registry = state.master.resourceTypes || [];
+    const entry = registry.find(t => t.type === typeName);
+    return entry ? entry.icon : '⚙️'; // Fallback to gear if not found
+};
+
 window.renderLevel2SidebarContent = function(allResources) {
     const currentWorkflow = OL.getResourceById(state.focusedWorkflowId);
     const existingStepResourceIds = (currentWorkflow?.steps || []).map(s => s.resourceLinkId);
@@ -11029,13 +11048,15 @@ window.renderLevel2SidebarContent = function(allResources) {
     // 4. Generate HTML
     const groupsHtml = Object.keys(grouped).sort().map(type => `
         <div class="sidebar-type-group">
-            <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">${type}s</label>
+            <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">
+                ${icon} ${type}s
+            </label>
             ${grouped[type].map(res => `
                 <div class="draggable-workflow-item" 
                      data-name="${res.name.toLowerCase()}" 
                      draggable="true" 
                      ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>${OL.getTypeIcon(type)}</span>
+                    <span style="font-size: 1.2em;">${icon}</span>
                     <span style="flex: 1;">${esc(res.name)}</span>
                 </div>
             `).join('')}
