@@ -5290,7 +5290,7 @@ OL.renderVisualizer = function(resId) {
         const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
 
         return `
-            <div class="workflow-block-card grid-snapped" 
+            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
                 draggable="true"
                 style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
@@ -5300,6 +5300,11 @@ OL.renderVisualizer = function(resId) {
                 </div>
                 <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
                     ${esc(step.name)}
+                </div>
+                <div class="new-link-trigger" 
+                    title="Drag to create new logic branch"
+                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
+                    +
                 </div>
             </div>
         `;
@@ -5319,6 +5324,41 @@ OL.renderVisualizer = function(resId) {
     `;
 
     setTimeout(() => OL.drawVisualizerLines(resId), 10);
+};
+
+OL.createNewOutcomeFromNode = function(e, resId, stepId) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const res = OL.getResourceById(resId);
+    const step = res.steps.find(s => s.id === stepId);
+    
+    if (!step.outcomes) step.outcomes = [];
+    
+    // 1. Create the new "Pending" outcome
+    const newIdx = step.outcomes.length;
+    step.outcomes.push({
+        condition: "New Logic",
+        action: "next", // Default to next until dropped on a node
+        label: "New Branch",
+        endOffset: { x: 20, y: 0 }, // Offset slightly so the handle is visible
+        midOffset: { x: 0, y: 0 },
+        startOffset: { x: 0, y: 0 }
+    });
+
+    // 2. Force a quick redraw so the handles exist in the DOM
+    OL.drawVisualizerLines(res);
+
+    // 3. Manually trigger the drag state on the 'end' handle of the new outcome
+    OL.activeLinkDrag = { 
+        type: 'end', 
+        resId: resId, 
+        stepId: stepId, 
+        oIdx: newIdx 
+    };
+
+    document.addEventListener('mousemove', OL.handleLinkMove);
+    document.addEventListener('mouseup', OL.stopLinkMove);
 };
 
 OL.autoGrowNode = function(element, resId) {
@@ -5677,14 +5717,56 @@ OL.handleLinkMove = function(e) {
 
 OL.stopLinkMove = function() {
     if (OL.activeLinkDrag) {
+        const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
+        const res = OL.getResourceById(resId);
+        const step = res.steps.find(s => s.id === stepId);
+        const oc = step.outcomes[oIdx];
+
+        // 🚀 NEW: Check if we are dropping the 'end' handle on a DIFFERENT node
+        if (type === 'end') {
+            const workspace = document.getElementById('vis-workspace');
+            const cRect = workspace.getBoundingClientRect();
+            
+            // Find all nodes except the source node
+            const nodes = document.querySelectorAll(`.workflow-block-card:not(#vis-node-${stepId})`);
+            let closestNodeId = null;
+            let minDistance = 50; // Threshold for "snapping" a new link
+
+            nodes.forEach(nodeEl => {
+                const n = nodeEl.getBoundingClientRect();
+                const nodeCenterX = n.left + n.width / 2;
+                const nodeCenterY = n.top + n.height / 2;
+                
+                // Check distance between mouse and node center
+                const dist = Math.hypot(window.event.clientX - nodeCenterX, window.event.clientY - nodeCenterY);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    // Extract ID from the DOM element (assuming ID format vis-node-ID)
+                    closestNodeId = nodeEl.id.replace('vis-node-', '');
+                }
+            });
+
+            // If we found a new node to link to:
+            if (closestNodeId) {
+                oc.action = `jump_step_${closestNodeId}`;
+                oc.label = `Jump to Step`;
+                // Reset offsets so the line snaps perfectly to the new target
+                oc.endOffset = { x: 0, y: 0 };
+                oc.midOffset = { x: 0, y: 0 };
+                console.log(`🔗 Auto-linked to new node: ${closestNodeId}`);
+            }
+        }
+
         OL.persist();
-        // 🚀 RESTORE: Turn card dragging back on
         document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'true'));
     }
     
     OL.activeLinkDrag = null;
     document.removeEventListener('mousemove', OL.handleLinkMove);
     document.removeEventListener('mouseup', OL.stopLinkMove);
+    
+    // Final UI Refresh
+    OL.renderVisualizer(resId); 
 };
 
 // Helper to keep code clean
