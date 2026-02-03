@@ -11025,16 +11025,16 @@ window.renderLevel2SidebarContent = function(allResources) {
     const currentWorkflow = OL.getResourceById(state.focusedWorkflowId);
     const existingStepResourceIds = (currentWorkflow?.steps || []).map(s => s.resourceLinkId);
 
-    // 1. Filter out workflows and items already on canvas
+    // 1. Filter assets
     const assets = allResources.filter(res => 
         (res.type || "").toLowerCase() !== 'workflow' && 
         !existingStepResourceIds.includes(res.id)
     );
 
-    // 2. Get unique types for the filter buttons
+    // 2. Unique types for pills
     const uniqueTypes = [...new Set(assets.map(a => a.type || "Other"))].sort();
 
-    // 3. Group by type
+    // 3. Grouping
     const grouped = assets.reduce((acc, res) => {
         const type = res.type || "Other";
         if (!acc[type]) acc[type] = [];
@@ -11042,25 +11042,28 @@ window.renderLevel2SidebarContent = function(allResources) {
         return acc;
     }, {});
 
-    const icon = OL.getRegistryIcon(type);
+    // 4. Generate HTML (The icon lookup MUST be inside the map)
+    const groupsHtml = Object.keys(grouped).sort().map(type => {
+        // 🚀 MOVE THIS HERE:
+        const icon = OL.getRegistryIcon(type);
 
-    // 4. Generate HTML
-    const groupsHtml = Object.keys(grouped).sort().map(type => `
-        <div class="sidebar-type-group">
-            <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">
-                ${icon} ${type}s
-            </label>
-            ${grouped[type].map(res => `
-                <div class="draggable-workflow-item" 
-                     data-name="${res.name.toLowerCase()}" 
-                     draggable="true" 
-                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span style="font-size: 1.2em;">${icon}</span>
-                    <span style="flex: 1;">${esc(res.name)}</span>
-                </div>
-            `).join('')}
-        </div>
-    `).join('');
+        return `
+            <div class="sidebar-type-group">
+                <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">
+                    ${icon} ${type}s
+                </label>
+                ${grouped[type].map(res => `
+                    <div class="draggable-workflow-item" 
+                         data-name="${res.name.toLowerCase()}" 
+                         draggable="true" 
+                         ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                        <span style="font-size: 1.2em; width: 24px; text-align: center;">${icon}</span>
+                        <span style="flex: 1;">${esc(res.name)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }).join('');
     
     return `
         <div class="drawer-header">
@@ -11076,7 +11079,9 @@ window.renderLevel2SidebarContent = function(allResources) {
             <div class="filter-pill-bar" style="display:flex; gap:4px; overflow-x:auto; padding: 8px 0 4px 0;">
                 <div class="filter-pill active" onclick="OL.setSidebarTypeFilter('All', this)">All</div>
                 ${uniqueTypes.map(t => `
-                    <div class="filter-pill" onclick="OL.setSidebarTypeFilter('${t}', this)">${t}</div>
+                    <div class="filter-pill" onclick="OL.setSidebarTypeFilter('${t}', this)">
+                        ${OL.getRegistryIcon(t)} ${t}
+                    </div>
                 `).join('')}
             </div>
         </div>
