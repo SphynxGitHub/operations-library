@@ -3401,18 +3401,6 @@ window.renderResourceManager = function () {
 };
 
 //================ RESOURCE TYPES ========================//
-const RESOURCE_TYPE_MAP = {
-    'Form': { icon: '📄', label: 'Form' },
-    'Zap': { icon: '⚡', label: 'Automation' },
-    'Email': { icon: '📧', label: 'Email' },
-    'Document': { icon: '📁', label: 'Document' },
-    'Meeting': { icon: '📅', label: 'Meeting' },
-    'API': { icon: '🔌', label: 'Webhook/API' },
-    'Other': { icon: '⚙️', label: 'General' }
-};
-
-// Helper to safely get icon
-OL.getIcon = (type) => RESOURCE_TYPE_MAP[type]?.icon || RESOURCE_TYPE_MAP['Other'].icon;
 
 OL.openResourceTypeManager = function () {
     const registry = state.master.resourceTypes || [];
@@ -11043,7 +11031,6 @@ window.renderLevel2SidebarContent = function(allResources) {
         !existingStepResourceIds.includes(res.id)
     );
 
-     
     // 2. Get unique types for the filter buttons
     const uniqueTypes = [...new Set(assets.map(a => a.type || "Other"))].sort();
 
@@ -11073,6 +11060,8 @@ window.renderLevel2SidebarContent = function(allResources) {
         </div>
     `).join('');
 
+    const icon = OL.getRegistryIcon(type);
+    
     return `
         <div class="drawer-header">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -11212,6 +11201,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const client = getActiveClient();
     // 🚀 THE LOGIC KEY: If parentId is passed, it is explicitly a "Step" on a canvas.
     const isStepOnCanvas = !!parentId; 
+    const registry = state.master.resourceTypes || [];
     const isModule = data.type === 'module_block';
     const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
 
