@@ -11737,16 +11737,16 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 OL.getSnappedCoords = function(e, workspace) {
     const rect = workspace.getBoundingClientRect();
     
-    // 🚀 THE FIX: Calculate mouse position relative to the workspace's scrolling interior
-    // clientX - rect.left handles the sidebar/screen offset
-    // + workspace.scrollLeft handles the canvas panning
+    // 🚀 THE FIX: 
+    // We calculate the local X/Y by subtracting the container's screen position.
+    // This effectively makes the top-left corner of the workspace 0,0 regardless of headers.
     const x = (e.clientX - rect.left) + workspace.scrollLeft;
     const y = (e.clientY - rect.top) + workspace.scrollTop;
 
-    // Snapping to 1/4 card (70px wide, 50px high)
     return {
-        x: Math.max(0, Math.round(x / 70) * 70),
-        y: Math.max(0, Math.round(y / 50) * 50)
+        // Rounding to your 70/50 grid
+        x: Math.round(x / 70) * 70,
+        y: Math.round(y / 50) * 50
     };
 };
 
@@ -11756,20 +11756,25 @@ OL.updateSnapPreview = function(e, workspace) {
         ghost = document.createElement('div');
         ghost.id = 'grid-snap-preview';
         ghost.style.cssText = `
-            position: absolute; width: 250px; height: 80px;
-            background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent);
-            border-radius: 8px; pointer-events: none; z-index: 1000; display: block;
+            position: absolute; 
+            width: 240px; 
+            height: 80px;
+            background: rgba(56, 189, 248, 0.15); 
+            border: 2px dashed var(--accent);
+            border-radius: 8px; 
+            pointer-events: none; 
+            z-index: 2000; 
+            display: block;
         `;
         workspace.appendChild(ghost);
     }
 
     const snapped = OL.getSnappedCoords(e, workspace);
     
-    // 🎯 Snap the blue box
+    // Use transform for better performance and to avoid layout shifts
     ghost.style.left = snapped.x + 'px';
     ghost.style.top = snapped.y + 'px';
 };
-
 /*
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
