@@ -11983,9 +11983,12 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     
-    const moveId = e.dataTransfer.getData("moveNodeId");
-    const atomicPayload = e.dataTransfer.getData("atomicPayload");
+    const moveId = e.dataTransfer.getData("moveNodeId"); // For moving existing nodes
+    const resId = e.dataTransfer.getData("resId"); // For dragging new items from sidebar
+    const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
+    const isVaultMode = location.hash.includes('vault');
 
+    // 🚀 SCENARIO A: TIER 3 VISUAL CANVAS (Coordinate Mode)
     if (state.focusedResourceId) {
         const parent = OL.getResourceById(state.focusedResourceId);
         const workspace = document.getElementById('vis-workspace'); 
@@ -11993,12 +11996,11 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 
         const rect = workspace.getBoundingClientRect();
         
-        // 🚀 CALCULATE CLEAN COORDINATES
-        // This calculates the drop point relative to the top-left of the scrollable workspace
+        // Calculate drop point relative to the top-left of the workspace
         let rawX = e.clientX - rect.left;
         let rawY = e.clientY - rect.top;
 
-        // Snap to 1/4 card logic
+        // Snap to 1/4 card logic (70px wide, 50px high increments)
         const snapX = Math.round(rawX / 70) * 70;
         const snapY = Math.round(rawY / 50) * 50;
 
@@ -12009,6 +12011,13 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             const data = JSON.parse(atomicPayload);
             targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [], x: snapX, y: snapY };
             parent.steps.push(targetStep);
+        } else if (resId) {
+            // Dropping a resource from the sidebar onto the canvas as a new step
+            const sourceRes = OL.getResourceById(resId);
+            if (sourceRes) {
+                targetStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, outcomes: [], x: snapX, y: snapY };
+                parent.steps.push(targetStep);
+            }
         }
 
         if (targetStep) {
@@ -12016,14 +12025,59 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             targetStep.y = snapY;
         }
 
-        // 🧹 CLEANUP
-        document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+        document.querySelectorAll('.dragging, .is-dragging-source').forEach(el => {
+            el.classList.remove('dragging', 'is-dragging-source');
+            el.style.opacity = "1";
+        });
+
         cleanupUI(); 
-        
         OL.persist();
         OL.renderVisualizer(state.focusedResourceId);
         return;
     }
+
+    // 🚀 SCENARIO B: TIER 1 & 2 (Index-Based Streams)
+    // This part handles the "Global Lifecycle" and "Workflow View" vertical lists
+    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
+
+    if (moveId) {
+        // Rearranging existing nodes in a vertical list
+        OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
+        cleanupUI();
+        return; 
+    } 
+    else if (resId) {
+        // Adding a new item from the sidebar into a stage or lane
+        if (!state.focusedWorkflowId) {
+            // Tier 1: Moving a Workflow into a Lifecycle Stage
+            const res = OL.getResourceById(resId);
+            if (res) { 
+                res.stageId = sectionId; 
+                res.mapOrder = targetIdx; 
+            }
+        } else {
+            // Tier 2: Moving a Resource into a Workflow Lane
+            const workflow = OL.getResourceById(state.focusedWorkflowId);
+            const sourceRes = OL.getResourceById(resId);
+            if (workflow && sourceRes) {
+                if (!workflow.steps) workflow.steps = [];
+                const newStep = { 
+                    id: uid(), 
+                    name: sourceRes.name, 
+                    resourceLinkId: resId, 
+                    gridLane: sectionId 
+                };
+                
+                if (targetIdx < workflow.steps.length) workflow.steps.splice(targetIdx, 0, newStep);
+                else workflow.steps.push(newStep);
+            }
+        }
+    }
+
+    state.currentDropIndex = null;
+    cleanupUI();
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
 };
 window.addEventListener('dragend', cleanupUI);
 
