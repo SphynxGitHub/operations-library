@@ -11013,7 +11013,7 @@ window.renderLevel2SidebarContent = function(allResources) {
                      data-name="${res.name.toLowerCase()}" 
                      draggable="true" 
                      ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
-                    <span>${type.toLowerCase() === 'form' ? '📄' : '⚙️'}</span>
+                    <span>${OL.getTypeIcon(type)}</span>
                     <span style="flex: 1;">${esc(res.name)}</span>
                 </div>
             `).join('')}
@@ -11248,6 +11248,18 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+};
+
+OL.updateResourceType = function(resId, newType) {
+    const res = OL.getResourceById(resId);
+    if (res) {
+        res.type = newType;
+        console.log(`🏷️ Updated ${res.name} to Type: ${newType}`);
+        
+        OL.persist();
+        // Full refresh to update sidebar groups and icons
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    }
 };
 
 OL.clearInspector = function() {
