@@ -11644,9 +11644,11 @@ OL.drawVerticalLogicLines = function(resId) {
 
     steps.forEach((step, sIdx) => {
         const outcomes = step.outcomes || [];
-        // 🚀 THE SPACING ENGINE: Calculate vertical distribution
         const totalOutcomes = outcomes.length;
-        const portSpacing = 12; // Pixels between each line start
+        
+        // 🚀 THE WIRING HARNESS: Space out the starting points vertically
+        // This prevents the "blob" of lines at one point
+        const portSpacing = 14; 
         const startYBase = -((totalOutcomes - 1) * portSpacing) / 2;
 
         outcomes.forEach((oc, oIdx) => {
@@ -11656,10 +11658,9 @@ OL.drawVerticalLogicLines = function(resId) {
             const s = sourceEl.getBoundingClientRect();
             const x1 = s.left - wrapperRect.left;
             
-            // Apply the unique vertical offset for this specific outcome
+            // Apply unique vertical offset for this specific outcome
             const y1 = (s.top + s.height / 2) - wrapperRect.top + (startYBase + (oIdx * portSpacing));
 
-            // Resolve Destination
             let isExternal = false;
             let targetId = null;
             let externalName = "";
@@ -11678,55 +11679,57 @@ OL.drawVerticalLogicLines = function(resId) {
             const targetEl = document.getElementById(`step-node-${targetId}`);
 
             if (!isExternal && targetEl) {
-                // INTERNAL LINE
+                // --- INTERNAL JUMP ---
                 const t = targetEl.getBoundingClientRect();
                 const x2 = t.left - wrapperRect.left;
                 const y2 = (t.top + t.height / 2) - wrapperRect.top;
+                
+                // 🚀 THE SWING: Fan out horizontally so lines don't overlap
                 const dist = Math.abs(y2 - y1);
+                const curveWidth = 40 + (oIdx * 20) + (dist * 0.05); 
                 
-                // Offset curve width so lines don't overlap horizontally either
-                const curveWidth = 30 + (oIdx * 15) + (dist * 0.04);
                 const d = `M ${x1} ${y1} C ${x1 - curveWidth} ${y1}, ${x2 - curveWidth} ${y2}, ${x2} ${y2}`;
-                
                 const color = oc.condition ? "#fbbf24" : "#38bdf8";
-                pathsHtml += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowhead-l3)" />`;
 
-                // 📝 ADD "IF X" LABEL
+                pathsHtml += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" opacity="0.4" marker-end="url(#arrowhead-l3)" />`;
+
                 if (oc.condition) {
                     const midY = (y1 + y2) / 2;
-                    const midX = x1 - (curveWidth * 0.75); // Place label on the outermost part of the curve
+                    const midX = x1 - (curveWidth * 0.8);
                     pathsHtml += `
                         <g>
-                            <rect x="${midX - 30}" y="${midY - 8}" width="60" height="14" rx="3" fill="#050816" stroke="${color}" stroke-width="0.5" />
-                            <text x="${midX}" y="${midY + 3}" text-anchor="middle" fill="${color}" style="font-size: 7px; font-weight: bold; text-transform: uppercase;">
-                                IF: ${esc(oc.condition.substring(0, 12))}
+                            <rect x="${midX - 45}" y="${midY - 10}" width="90" height="18" rx="4" fill="#050816" stroke="${color}" stroke-width="1" />
+                            <text x="${midX}" y="${midY + 3}" text-anchor="middle" fill="${color}" style="font-size: 8px; font-weight: bold; text-transform: uppercase;">
+                                IF: ${esc(oc.condition.substring(0, 15))}
                             </text>
                         </g>`;
                 }
             } 
             else if (isExternal) {
-                // EXTERNAL EXIT LINE (Dotted Green)
-                const x2 = x1 - 60;
-                const y2 = y1 - (20 + (oIdx * 10)); // Stagger external labels vertically too
+                // --- EXTERNAL EXIT (The Green "Rocket" Links) ---
+                // 🚀 STAGGER: Shift the labels left and down based on their index
+                const x2 = x1 - (80 + (oIdx * 10)); 
+                const y2 = y1 - (40 + (oIdx * 25)); 
+                
                 const d = `M ${x1} ${y1} Q ${x1 - 40} ${y1}, ${x2} ${y2}`;
+                const displayLabel = (oc.condition ? `IF ${oc.condition.toUpperCase()}: ` : "") + externalName;
                 
                 pathsHtml += `
-                    <g class="external-exit-link is-clickable" style="cursor: pointer; pointer-events: auto;" onclick="event.stopPropagation(); OL.openResourceModal('${targetId}')">
-                        <path d="${d}" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="2,2" opacity="0.8" marker-end="url(#arrowhead-external)" />
-                        <rect x="${x2 - 110}" y="${y2 - 12}" width="110" height="20" rx="4" fill="#050816" stroke="#10b981" stroke-width="1" class="exit-label-bg" />
-                        <text x="${x2 - 10}" y="${y2 + 2}" text-anchor="end" fill="#10b981" style="font-size: 9px; font-weight: bold;">
-                            ${oc.condition ? `IF ${oc.condition.toUpperCase()}: ` : ''}🚀 ${esc(externalName.substring(0, 12))}
+                    <g class="external-exit-link is-clickable" onclick="event.stopPropagation(); OL.openResourceModal('${targetId}')">
+                        <path d="${d}" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="3,3" opacity="0.8" marker-end="url(#arrowhead-external)" />
+                        <rect x="${x2 - 160}" y="${y2 - 12}" width="160" height="24" rx="6" fill="#050816" stroke="#10b981" stroke-width="1.5" class="exit-label-bg" />
+                        <text x="${x2 - 10}" y="${y2 + 4}" text-anchor="end" fill="#10b981" style="font-size: 9px; font-weight: 800; font-family: var(--font-main);">
+                            🚀 ${esc(displayLabel.substring(0, 25))}
                         </text>
                     </g>`;
             }
         });
     });
 
-    // Final SVG assembly (re-injecting your arrowhead defs)
     svg.innerHTML = `
         <defs>
-            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.4)" /></marker>
-            <marker id="arrowhead-external" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" /></marker>
+            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.4)" /></marker>
+            <marker id="arrowhead-external" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" /></marker>
         </defs>
         ${pathsHtml}`;
 };
