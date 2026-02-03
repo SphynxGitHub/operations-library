@@ -5361,6 +5361,20 @@ OL.createNewOutcomeFromNode = function(e, resId, stepId) {
     document.addEventListener('mouseup', OL.stopLinkMove);
 };
 
+OL.removeOutcomeFromCanvas = function(resId, stepId, oIdx) {
+    if (!confirm("Remove this logic branch?")) return;
+    
+    const res = OL.getResourceById(resId);
+    const step = res?.steps?.find(s => s.id === stepId);
+    
+    if (step && step.outcomes) {
+        step.outcomes.splice(oIdx, 1);
+        OL.persist();
+        OL.renderVisualizer(resId); // Total redraw to clear the path
+        console.log(`🗑️ Logic branch ${oIdx} removed from step ${stepId}`);
+    }
+};
+
 OL.autoGrowNode = function(element, resId) {
     element.style.height = '1px';
     element.style.height = element.scrollHeight + 'px';
@@ -5566,6 +5580,9 @@ OL.drawVisualizerLines = function(resIdOrObj) {
                 const isConditional = oc.condition && oc.condition.trim() !== "";
                 path.setAttribute("class", isConditional ? "vis-path logic-path" : "vis-path standard-path");
                 path.setAttribute("marker-end", "url(#arrowhead)");
+                path.setAttribute("style", "pointer-events: visibleStroke; cursor: pointer;");
+                path.setAttribute("onclick", `OL.removeOutcomeFromCanvas('${res.id}', '${step.id}', ${oIdx})`);
+                path.setAttribute("title", "Click to delete this branch");
                 
                 // Optional: Add a label to the path if it's conditional
                 if (isConditional) {
