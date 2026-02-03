@@ -11332,7 +11332,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    // 1. Resolve the clicked node
     const data = OL.getResourceById(targetId);
     if (!data) {
         panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
@@ -11340,7 +11339,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     const client = getActiveClient();
-    // 🚀 THE LOGIC KEY: If parentId is passed, it is explicitly a "Step" on a canvas.
     const isStepOnCanvas = !!parentId; 
     const registry = state.master.resourceTypes || [];
     const isModule = data.type === 'module_block';
@@ -11348,16 +11346,39 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
 
-    // 🚀 SCENARIO A: MECHANICAL STEP (Tier 3)
-    // Show this if it's NOT a module block, OR if it's explicitly a step on the canvas
+    // 🚀 SCENARIO A: ATOMIC STEP (Mechanical View)
     if (isStepOnCanvas && !isModule) {
+        const isTrigger = data.type === 'Trigger';
+        
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <span class="tiny accent bold uppercase">⚙️ Step Mechanics</span>
-                <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name)}</h2>
-                <div class="tiny muted">Type: ${esc(data.type || 'Action')}</div>
+                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="margin-bottom:8px;">${esc(data.type || 'Action')}</span>
+                <input type="text" class="header-editable-input" 
+                       value="${esc(data.name)}" 
+                       style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'name', this.value)">
             </div>
+
             <section style="display: flex; flex-direction: column; gap: 20px;">
+                <div class="card-section">
+                    <label class="modal-section-label">👨‍💼 Assigned To</label>
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                        ${data.assigneeName ? `
+                            <div class="pill accent">
+                                👨‍💼 ${esc(data.assigneeName)}
+                                <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', '')">×</b>
+                            </div>
+                        ` : '<span class="tiny muted">Unassigned</span>'}
+                    </div>
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" placeholder="Assign member..." 
+                               onfocus="OL.filterAssignmentSearch('${parentResId}', '${data.id}', false, '')"
+                               oninput="OL.filterAssignmentSearch('${parentResId}', '${data.id}', false, this.value)">
+                        <div id="assignment-search-results" class="search-results-overlay"></div>
+                    </div>
+                </div>
+
+                ${!isTrigger ? `
                 <div class="card-section">
                     <label class="modal-section-label">📅 Relational Scheduling</label>
                     <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
@@ -11368,29 +11389,29 @@ OL.loadInspector = function(targetId, parentId = null) {
                             <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>After Start</option>
                         </select>
                     </div>
-                </div>
-                <div class="card-section">
-                    <label class="modal-section-label">🔗 Resources & Guides</label>
-                    <div id="step-resources-list-${data.id}" style="margin-top:8px;">
-                        ${renderStepResources(parentResId, data)}
-                    </div>
-                    <div class="search-map-container" style="margin-top:8px;">
-                        <input type="text" class="modal-input tiny" placeholder="+ Link Guide..." 
-                               onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
-                               oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
-                        <div id="resource-results-${data.id}" class="search-results-overlay"></div>
-                    </div>
-                </div>
+                </div>` : ''}
+
                 <div class="card-section">
                     <label class="modal-section-label">🎯 Conditional Logic</label>
                     <div id="step-outcomes-list" style="margin-top:8px;">
                         ${renderStepOutcomes(parentResId, data)}
                     </div>
+                    <div class="search-map-container" style="margin-top:10px;">
+                        <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add branch..." 
+                               onfocus="OL.filterOutcomeSearch('${parentResId}', '${data.id}', '')"
+                               oninput="OL.filterOutcomeSearch('${parentResId}', '${data.id}', this.value)">
+                        <div id="outcome-results" class="search-results-overlay"></div>
+                    </div>
+                </div>
+
+                <div class="card-section">
+                    <label class="modal-section-label">📝 Technical Instructions</label>
+                    <textarea class="modal-textarea" rows="3" style="font-size:11px;"
+                              onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
                 </div>
             </section>`;
     } 
-    // 🚀 SCENARIO B: CONTAINER PREVIEW (Tiers 1 & 2)
-    // Show this if it's a Workflow, a Resource Pointer, or a Module Block
+    // 🚀 SCENARIO B: CONTAINER PREVIEW
     else {
         const techId = data.resourceLinkId || data.linkedResourceId || data.id;
         const techAsset = OL.getResourceById(techId);
@@ -11542,22 +11563,35 @@ window.renderLevel3Canvas = function(resourceId) {
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
 
         return `
-            <div class="stage-container" style="position: relative; z-index: 10; margin-bottom: 40px;">
+            <div class="stage-container">
                 <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
                 <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
-                    ${steps.map((step, idx) => `
+                    ${steps.map((step, idx) => {
+                        // 🚀 THE FIX: Identify if this is a specialized Trigger or a standard Action
+                        const isTrigger = step.type === 'Trigger';
+                        const icon = isTrigger ? "⚡" : "🎬";
+                        
+                        return `
                         <div class="workflow-block-card" 
-                             id="step-node-${step.id}" 
-                             draggable="true" 
-                             style="position: relative; margin-bottom: 10px; width: 350px;"
-                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
-                             ondragover="OL.handleCanvasDragOver(event)"
-                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
-                             
-                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
-                            <div class="tiny muted">${esc(step.type)}</div>
-                        </div>`).join('')}
+                            id="step-node-${step.id}" 
+                            draggable="true" 
+                            onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
+                            ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                            ondragover="OL.handleCanvasDragOver(event)"
+                            ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
+                            
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}">${esc(step.type)}</span>
+                                <span style="font-size:12px;">${icon}</span>
+                            </div>
+
+                            <div class="bold accent" style="font-size: 13px;">${esc(step.name || "Untitled")}</div>
+                            
+                            <div class="tiny muted" style="margin-top:4px; border-top:1px solid rgba(255,255,255,0.05); padding-top:4px;">
+                                ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
+                            </div>
+                        </div>`;
+                    }).join('')}
                 </div>
             </div>`;
     }).join('');
