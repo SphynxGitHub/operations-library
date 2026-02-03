@@ -11680,7 +11680,25 @@ OL.drawVerticalLogicLines = function(resId) {
                 const curveWidth = 25 + (oIdx * 12) + (dist * 0.03);
                 
                 const d = `M ${x1} ${y1} C ${x1 - curveWidth} ${y1}, ${x2 - curveWidth} ${y2}, ${x2} ${y2}`;
-                pathsHtml += `<path d="${d}" fill="none" stroke="${oc.condition ? '#fbbf24' : '#38bdf8'}" stroke-width="1.5" opacity="0.5" marker-end="url(#arrowhead-l3)" />`;
+                pathsHtml += `
+                    <g class="external-exit-link is-clickable" 
+                    style="cursor: pointer; pointer-events: auto;" 
+                    onclick="event.stopPropagation(); OL.openResourceModal('${targetId}')">
+                        
+                        <path d="${d}" fill="none" stroke="#10b981" stroke-width="2" 
+                            stroke-dasharray="2,2" opacity="0.8" marker-end="url(#arrowhead-external)" />
+                        
+                        <rect x="${x2 - 110}" y="${y2 - 12}" width="110" height="20" rx="4" 
+                            fill="#050816" stroke="#10b981" stroke-width="1" class="exit-label-bg" />
+                        
+                        <text x="${x2 - 10}" y="${y2 + 2}" text-anchor="end" fill="#10b981" 
+                            style="font-size: 9px; font-weight: bold; text-transform: uppercase; font-family: var(--font-main);">
+                            🚀 ${esc(externalName.substring(0, 15))}${externalName.length > 15 ? '...' : ''}
+                        </text>
+                        
+                        <title>Jump to: ${esc(externalName)}</title>
+                    </g>
+                `;
             } 
             else if (isExternal) {
                 // --- EXTERNAL EXIT LINE ---

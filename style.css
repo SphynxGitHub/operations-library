@@ -2934,6 +2934,26 @@ body.is-visualizer #mainContent {
     pointer-events: none;
 }
 
+/* Add to your stylesheet */
+.external-exit-link:hover .exit-label-bg {
+    fill: rgba(16, 185, 129, 0.15) !important;
+    stroke-width: 1.5px !important;
+    filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.4));
+}
+
+.external-exit-link:hover text {
+    fill: #fff !important;
+    text-shadow: 0 0 5px var(--success);
+}
+
+#vis-links-layer {
+    pointer-events: none; /* Ignore the empty space */
+}
+
+#vis-links-layer .is-clickable {
+    pointer-events: auto; /* 🚀 ENABLE clicks for specifically marked groups */
+}
+
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/
