@@ -11644,37 +11644,77 @@ OL.drawVerticalLogicLines = function(resId) {
 
     steps.forEach((step, sIdx) => {
         (step.outcomes || []).forEach((oc, oIdx) => {
-            let targetId = oc.action?.startsWith('jump_step_') ? oc.action.replace('jump_step_', '') : (oc.action === 'next' ? steps[sIdx+1]?.id : null);
-            
             const sourceEl = document.getElementById(`step-node-${step.id}`);
+            if (!sourceEl) return;
+
+            const s = sourceEl.getBoundingClientRect();
+            const x1 = s.left - wrapperRect.left;
+            const y1 = (s.top + (s.height / 2)) - wrapperRect.top;
+
+            // 🔍 RESOLVE DESTINATION
+            let isExternal = false;
+            let targetId = null;
+            let externalName = "";
+
+            if (oc.action?.startsWith('jump_step_')) {
+                targetId = oc.action.replace('jump_step_', '');
+            } else if (oc.action?.startsWith('jump_res_')) {
+                // 🚀 EXTERNAL RESOURCE DETECTED
+                isExternal = true;
+                targetId = oc.action.replace('jump_res_', '');
+                const extRes = OL.getResourceById(targetId);
+                externalName = extRes ? extRes.name : "External Resource";
+            } else if (oc.action === 'next') {
+                targetId = steps[sIdx + 1]?.id;
+            }
+
             const targetEl = document.getElementById(`step-node-${targetId}`);
 
-            if (sourceEl && targetEl) {
-                const s = sourceEl.getBoundingClientRect();
+            // 🎨 DRAWING LOGIC
+            if (!isExternal && targetEl) {
+                // --- INTERNAL LINE (Existing Logic) ---
                 const t = targetEl.getBoundingClientRect();
-
-                // 🚀 PRECISION CENTER MATH
-                const x1 = s.left - wrapperRect.left;
-                const y1 = (s.top + (s.height / 2)) - wrapperRect.top;
                 const x2 = t.left - wrapperRect.left;
-                const y2 = (t.top + (t.height / 2)) - wrapperRect.top;
-
-                const distance = Math.abs(y2 - y1);
-                const curveWidth = 25 + (oIdx * 12) + (distance * 0.03); 
+                const y2 = (t.top + t.height / 2) - wrapperRect.top;
+                const dist = Math.abs(y2 - y1);
+                const curveWidth = 25 + (oIdx * 12) + (dist * 0.03);
                 
                 const d = `M ${x1} ${y1} C ${x1 - curveWidth} ${y1}, ${x2 - curveWidth} ${y2}, ${x2} ${y2}`;
-                const color = oc.condition ? "var(--vault-gold)" : "var(--accent)";
-
+                pathsHtml += `<path d="${d}" fill="none" stroke="${oc.condition ? '#fbbf24' : '#38bdf8'}" stroke-width="1.5" opacity="0.5" marker-end="url(#arrowhead-l3)" />`;
+            } 
+            else if (isExternal) {
+                // --- EXTERNAL EXIT LINE ---
+                // We draw a short line that points "out" and adds a label
+                const x2 = x1 - 50; // Points 50px to the left
+                const y2 = y1 - 20; // Tilts slightly up
+                
+                const d = `M ${x1} ${y1} Q ${x1 - 30} ${y1}, ${x2} ${y2}`;
+                
                 pathsHtml += `
-                    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" 
-                          stroke-dasharray="${oc.condition ? '4,2' : '0'}" 
-                          opacity="0.5" marker-end="url(#arrowhead-l3)" />
+                    <g class="external-exit-link">
+                        <path d="${d}" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="2,2" opacity="0.8" marker-end="url(#arrowhead-external)" />
+                        <rect x="${x2 - 100}" y="${y2 - 12}" width="100" height="20" rx="4" fill="#050816" stroke="#10b981" stroke-width="0.5" />
+                        <text x="${x2 - 5}" y="${y2 + 2}" text-anchor="end" fill="#10b981" style="font-size: 8px; font-weight: bold; text-transform: uppercase;">
+                            🚀 ${esc(externalName.substring(0, 15))}...
+                        </text>
+                    </g>
                 `;
             }
         });
     });
 
-    svg.innerHTML = `<defs><marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.4)" /></marker></defs>${pathsHtml}`;
+    // Update Defs with a green arrowhead for external exits
+    svg.innerHTML = `
+        <defs>
+            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.4)" />
+            </marker>
+            <marker id="arrowhead-external" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+            </marker>
+        </defs>
+        ${pathsHtml}
+    `;
 };
 
 // --- NAVIGATION & STATE ---
