@@ -2080,7 +2080,7 @@ body.fs-mode-active {
     left: 0;
     width: 100%;
     height: 100%;
-    margin-top: 100px; /* Extra padding for the top row */
+    margin-top: 0;
 }
 
 /* Optional: Alternate lane backgrounds */
@@ -2826,10 +2826,10 @@ body.is-visualizer #mainContent {
 
 .workflow-block-card.grid-snapped {
     width: 240px !important; /* Slightly narrower than the 280px column */
-    max-width: 90%;
     min-height: 80px;
     /* Pinned to top-left of its calculated grid coordinate */
-    transform: translate(20px, 60px); 
+    transform: none;
+    margin: 0;
 }
 
 .draggable-workflow-item .btn-icon-only {
@@ -2866,6 +2866,12 @@ body.is-visualizer #mainContent {
     background: rgba(56, 189, 248, 0.15) !important;
     box-shadow: inset 0 0 15px rgba(56, 189, 248, 0.1);
     border: 1px solid var(--accent);
+}
+
+/* Add this to ensure the blue preview is always visible */
+#grid-snap-preview {
+    z-index: 2000 !important;
+    pointer-events: none;
 }
 
 /*==================================================================

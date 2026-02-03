@@ -11533,23 +11533,15 @@ OL.renderVisualizer = function(resId) {
 
     const steps = res.steps || [];
 
-    // 1. Generate Nodes with Boundary Protection
     const nodesHtml = steps.map((step, idx) => {
-        // Safety: If X or Y is missing or weird, stagger them in the top left
-        let x = parseInt(step.x);
-        let y = parseInt(step.y);
-
-        if (isNaN(x)) x = 20 + (idx * 30);
-        if (isNaN(y)) y = 20 + (idx * 60);
-
-        // Hard limit: Don't let them render outside the workspace
-        x = Math.max(0, Math.min(x, 2400));
-        y = Math.max(0, Math.min(y, 1400));
+        // Fallback for new steps: staggered top-left
+        const x = (step.x !== undefined) ? step.x : (20 + (idx * 40));
+        const y = (step.y !== undefined) ? step.y : (20 + (idx * 80));
 
         return `
             <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
                 draggable="true"
-                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab; opacity: 1 !important;"
+                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab; margin: 0 !important; transform: none !important;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
                 
@@ -11564,19 +11556,19 @@ OL.renderVisualizer = function(resId) {
         `;
     }).join('');
 
-    // 2. Controlled Workspace Size
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
-            style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;"
-            ondragover="OL.handleCanvasDragOver(event)" 
-            ondrop="OL.handleUniversalDrop(event, '${resId}', 'canvas')">
+             style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;"
+             ondragover="OL.handleCanvasDragOver(event)" 
+             ondrop="OL.handleUniversalDrop(event, '${resId}', 'canvas')">
             
-            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; margin: 0 !important;">
                 ${nodesHtml}
             </div>
             <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
         </div>
     `;
+
     setTimeout(() => OL.drawVisualizerLines(resId), 20);
 };
 
@@ -11745,15 +11737,16 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 OL.getSnappedCoords = function(e, workspace) {
     const rect = workspace.getBoundingClientRect();
     
-    // 🚀 THE FIX: Calculate mouse position relative to the workspace element
-    // Subtracting rect.left/top removes the "Global Screen Offset"
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // 🚀 THE FIX: Calculate mouse position relative to the workspace's scrolling interior
+    // clientX - rect.left handles the sidebar/screen offset
+    // + workspace.scrollLeft handles the canvas panning
+    const x = (e.clientX - rect.left) + workspace.scrollLeft;
+    const y = (e.clientY - rect.top) + workspace.scrollTop;
 
-    // We round to your 1/4 card grid (70px / 50px)
+    // Snapping to 1/4 card (70px wide, 50px high)
     return {
-        x: Math.round(x / 70) * 70,
-        y: Math.round(y / 50) * 50
+        x: Math.max(0, Math.round(x / 70) * 70),
+        y: Math.max(0, Math.round(y / 50) * 50)
     };
 };
 
@@ -11772,7 +11765,7 @@ OL.updateSnapPreview = function(e, workspace) {
 
     const snapped = OL.getSnappedCoords(e, workspace);
     
-    // Apply coordinates
+    // 🎯 Snap the blue box
     ghost.style.left = snapped.x + 'px';
     ghost.style.top = snapped.y + 'px';
 };
