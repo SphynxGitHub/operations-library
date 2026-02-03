@@ -11600,19 +11600,21 @@ window.renderLevel3Canvas = function(resourceId) {
                         <div class="workflow-block-card" 
                             id="step-node-${step.id}" 
                             draggable="true" 
+                            style="position: relative;"
                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                            ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
-                            ondragover="OL.handleCanvasDragOver(event)"
-                            ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
+                            ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
                             
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}">${esc(step.type)}</span>
-                                <span style="font-size:12px;">${icon}</span>
+                            <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
+                            <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:8px; padding:1px 6px;">${esc(step.type)}</span>
+                                <span style="font-size:10px; opacity:0.5;">${icon}</span>
                             </div>
 
-                            <div class="bold accent" style="font-size: 13px;">${esc(step.name || "Untitled")}</div>
+                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
                             
-                            <div class="tiny muted" style="margin-top:4px; border-top:1px solid rgba(255,255,255,0.05); padding-top:4px;">
+                            <div class="tiny muted" style="font-size:8px; margin-top:2px; opacity:0.6;">
                                 ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
                             </div>
                         </div>`;
@@ -11642,17 +11644,8 @@ OL.drawVerticalLogicLines = function(resId) {
 
     steps.forEach((step, sIdx) => {
         (step.outcomes || []).forEach((oc, oIdx) => {
-            let targetId = null;
+            let targetId = oc.action?.startsWith('jump_step_') ? oc.action.replace('jump_step_', '') : (oc.action === 'next' ? steps[sIdx+1]?.id : null);
             
-            // 🚀 IMPROVED TARGET RESOLUTION
-            if (oc.action && oc.action.startsWith('jump_step_')) {
-                targetId = oc.action.replace('jump_step_', '');
-            } else if (oc.action === 'next') {
-                targetId = steps[sIdx + 1]?.id;
-            }
-
-            if (!targetId) return; // Skip if no target found
-
             const sourceEl = document.getElementById(`step-node-${step.id}`);
             const targetEl = document.getElementById(`step-node-${targetId}`);
 
@@ -11660,43 +11653,28 @@ OL.drawVerticalLogicLines = function(resId) {
                 const s = sourceEl.getBoundingClientRect();
                 const t = targetEl.getBoundingClientRect();
 
-                // Start from the LEFT center of the card
+                // 🚀 PRECISION CENTER MATH
                 const x1 = s.left - wrapperRect.left;
-                const y1 = (s.top + s.height / 2) - wrapperRect.top;
-                
-                // End at the LEFT center of the target
+                const y1 = (s.top + (s.height / 2)) - wrapperRect.top;
                 const x2 = t.left - wrapperRect.left;
-                const y2 = (t.top + t.height / 2) - wrapperRect.top;
+                const y2 = (t.top + (t.height / 2)) - wrapperRect.top;
 
-                // 🎨 THE ARC MATH: Arc out to the left margin
                 const distance = Math.abs(y2 - y1);
-                // Each line gets a slightly different curve width so they don't overlap
-                const curveWidth = 30 + (oIdx * 15) + (distance * 0.05); 
+                const curveWidth = 25 + (oIdx * 12) + (distance * 0.03); 
                 
-                const d = `M ${x1} ${y1} 
-                           C ${x1 - curveWidth} ${y1}, 
-                             ${x2 - curveWidth} ${y2}, 
-                             ${x2} ${y2}`;
-
-                const color = oc.condition ? "#fbbf24" : "#38bdf8";
+                const d = `M ${x1} ${y1} C ${x1 - curveWidth} ${y1}, ${x2 - curveWidth} ${y2}, ${x2} ${y2}`;
+                const color = oc.condition ? "var(--vault-gold)" : "var(--accent)";
 
                 pathsHtml += `
-                    <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" 
-                          stroke-dasharray="${oc.condition ? '6,3' : '0'}" 
-                          opacity="0.7" marker-end="url(#arrowhead-l3)" />
+                    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" 
+                          stroke-dasharray="${oc.condition ? '4,2' : '0'}" 
+                          opacity="0.5" marker-end="url(#arrowhead-l3)" />
                 `;
             }
         });
     });
 
-    svg.innerHTML = `
-        <defs>
-            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.6)" />
-            </marker>
-        </defs>
-        ${pathsHtml}
-    `;
+    svg.innerHTML = `<defs><marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.4)" /></marker></defs>${pathsHtml}`;
 };
 
 // --- NAVIGATION & STATE ---

@@ -2845,13 +2845,23 @@ body.is-visualizer #mainContent {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-height: 60px;
+    min-height: 50px;
+    width: 280px;
     /* Prevent shrinking */
     flex-shrink: 0; 
     border: 1px solid white;
     border-radius: 8px;
-    padding: 3%;
+    padding: 8px 12px;
+    gap: 4px;
 }
+
+.workflow-block-card .bold.accent {
+    font-size: 11.5px !important;
+    line-height: 1.2;
+}
+
+.workflow-block-card .tiny.muted {
+    font-size: 9px !important;
 
 .workflow-block-card:hover {
     border-color: var(--accent);
