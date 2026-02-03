@@ -5255,7 +5255,7 @@ OL.printSop = function(resId) {
         });
     });
 };
-
+/*
 OL.renderVisualizer = function(resId) {
     const canvas = document.getElementById('fs-canvas');
     const res = OL.getResourceById(resId);
@@ -5324,6 +5324,76 @@ OL.renderVisualizer = function(resId) {
     `;
 
     setTimeout(() => OL.drawVisualizerLines(resId), 10);
+};*/
+
+OL.renderVisualizer = function(resId, targetId = 'fs-canvas') {
+    const canvas = document.getElementById(targetId);
+    const res = OL.getResourceById(resId);
+    if (!canvas || !res) return;
+
+    const LANE_HEIGHT = 200;
+    const COL_WIDTH = 280;
+    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
+    const steps = res.steps || [];
+
+    // 🚀 1. GHOST PREVENTION: Ensure every step has a valid lane/col before rendering
+    steps.forEach((step, idx) => {
+        if (!step.gridLane || !lanes.includes(step.gridLane)) {
+            step.gridLane = (step.type === 'Trigger') ? "Lead/Client" : "System/Auto";
+        }
+        if (step.gridCol === undefined || step.gridCol === null) {
+            step.gridCol = idx; // Spread them out horizontally by default
+        }
+    });
+
+    // 2. Map Nodes
+    const nodesHtml = steps.map((step, idx) => {
+        const laneIdx = lanes.indexOf(step.gridLane);
+        const top = (laneIdx * LANE_HEIGHT) + 60;
+        const left = (step.gridCol * COL_WIDTH) + 170;
+
+        return `
+            <div class="workflow-block-card grid-snapped" 
+                id="vis-node-${step.id}"
+                draggable="true"
+                style="position: absolute; top: ${top}px; left: ${left}px; z-index: 50; cursor: grab;"
+                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}', ${idx})">
+                
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
+                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
+                </div>
+                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
+                    ${esc(step.name || "Untitled Step")}
+                </div>
+
+                <div class="new-link-trigger" 
+                     title="Drag to create logic"
+                     onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">+</div>
+            </div>
+        `;
+    }).join('');
+
+    // 3. Render Canvas Shell
+    canvas.innerHTML = `
+        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: 5000px; height: 1000px; overflow: auto;">
+            <div class="vis-swimlane-layer" style="position: absolute; top:0; left:0; width: 100%; height: 100%; z-index: 1;">
+                ${lanes.map(lane => `
+                    <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative;">
+                        <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
+                            ${lane}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;">
+                ${nodesHtml}
+            </div>
+            <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 10;"></svg>
+        </div>
+    `;
+
+    setTimeout(() => OL.drawVisualizerLines(resId), 50);
 };
 
 OL.createNewOutcomeFromNode = function(e, resId, stepId) {
@@ -11020,7 +11090,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <span class="muted"> > </span>  
             <span class="breadcrumb-current">${esc(res?.name)}</span>`;
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
-        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
+        //canvasHtml = renderLevel3Canvas(state.focusedResourceId);
+        canvasHtml = `<div id="tier3-canvas-root" style="width:100%; height:100%;"></div>`;
+        setTimeout(() => OL.renderVisualizer(state.focusedResourceId, 'tier3-canvas-root'), 10);
     } 
     // --- TIER 2: WORKFLOW > RESOURCES ---
     else if (state.focusedWorkflowId) {
