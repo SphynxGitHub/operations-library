@@ -200,6 +200,28 @@ OL.initializeSecurityContext = function() {
 };
 
 // 4. LAYOUT & ROUTING ENGINE
+
+OL.toggleSidebar = function() {
+    const sidebar = document.querySelector('.sidebar');
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    
+    // Save to memory so it sticks on refresh
+    localStorage.setItem('sidebarCollapsed', isCollapsed);
+    
+    // Redraw the visualizer lines if we are in Tier 3, 
+    // because the card positions physically shifted on screen.
+    if (state.focusedResourceId) {
+        setTimeout(() => OL.drawVerticalLogicLines(state.focusedResourceId), 350);
+    }
+};
+
+// Run this on page load to restore state
+window.addEventListener('load', () => {
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        document.querySelector('.sidebar').classList.add('collapsed');
+    }
+});
+
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
   if (!root) {
@@ -313,6 +335,9 @@ window.buildLayout = function () {
 
   root.innerHTML = `
         <aside class="sidebar">
+            <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
+                <span class="toggle-icon">◀</span>
+            </button>
             ${!isPublic ? `
                 <div class="admin-nav-zone">
                     <nav class="menu">

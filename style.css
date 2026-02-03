@@ -147,6 +147,56 @@ textarea {
     color: var(--text-main);
 }
 
+/* Sidebar Transition */
+.sidebar {
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Collapsed State Styles */
+.sidebar.collapsed {
+    width: 65px;
+}
+
+/* Hide text labels and metadata when collapsed */
+.sidebar.collapsed span, 
+.sidebar.collapsed .client-info, 
+.sidebar.collapsed .menu-category-label,
+.sidebar.collapsed .client-meta {
+    display: none;
+}
+
+/* Adjust the main content margin to match */
+#mainContent {
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body:has(.sidebar.collapsed) #mainContent {
+    margin-left: 65px;
+}
+
+/* Center icons in the rail */
+.sidebar.collapsed .menu a {
+    justify-content: center;
+    padding: 10px 0;
+}
+
+.sidebar.collapsed .client-avatar {
+    margin: 0 auto;
+}
+
+/* The Toggle Button Styling */
+.sidebar-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 10px;
+    text-align: right;
+    font-size: 18px;
+    outline: none;
+}
+.sidebar-toggle:hover { color: var(--accent); }
+
 /* ============================================================
    CLIENT PROFILE CARD (Inside Project Workspace)
    ============================================================ */
