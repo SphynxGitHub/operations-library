@@ -3416,6 +3416,7 @@ OL.getIcon = (type) => RESOURCE_TYPE_MAP[type]?.icon || RESOURCE_TYPE_MAP['Other
 
 OL.openResourceTypeManager = function () {
     const registry = state.master.resourceTypes || [];
+    const quickIcons = ["⚡", "📄", "📧", "📅", "🔌", "📖", "🏠", "💬", "🛠️", "🎯", "🤖", "📈"];
 
     let html = `
         <div class="modal-head">
@@ -3427,13 +3428,13 @@ OL.openResourceTypeManager = function () {
                 Define categories and icons. Every resource assigned to these types will inherit the icon automatically.
             </p>
             
-            <div class="dp-manager-list">
+            <div class="dp-manager-list" style="max-height: 300px; overflow-y: auto; padding-right: 5px;">
                 ${registry.map(t => {
                     const encType = btoa(t.type);
                     return `
                     <div class="dp-manager-row" style="margin-bottom: 8px; background: var(--panel-soft); padding: 10px; border-radius: 6px; display:flex; gap:12px; align-items:center;">
                         <span contenteditable="true" 
-                              style="font-size: 18px; cursor: pointer; width: 30px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 4px;"
+                              class="icon-edit-box"
                               onblur="OL.updateResourceTypeProp('${t.typeKey}', 'icon', this.innerText)">
                             ${t.icon || '⚙️'}
                         </span>
@@ -3449,10 +3450,19 @@ OL.openResourceTypeManager = function () {
                 }).join('')}
             </div>
 
-            <div style="display:flex; gap:8px; margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                <input type="text" id="new-type-icon" class="modal-input" style="width:50px; text-align:center;" placeholder="⚙️">
-                <input type="text" id="new-type-input" class="modal-input" style="flex:1;" placeholder="New Type Name...">
-                <button class="btn primary" onclick="OL.addNewResourceTypeFlat()">Add Type</button>
+            <div style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--panel-border);">
+                <label class="modal-section-label">Quick Add New Type</label>
+                <div style="display:flex; gap:8px; margin-bottom: 12px;">
+                    <input type="text" id="new-type-icon" class="modal-input" style="width:50px; text-align:center; font-size: 18px;" placeholder="⚙️" maxlength="2">
+                    <input type="text" id="new-type-input" class="modal-input" style="flex:1;" placeholder="New Type Name...">
+                    <button class="btn primary" onclick="OL.addNewResourceTypeFlat()">Add Type</button>
+                </div>
+                
+                <div class="emoji-quick-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px;">
+                    ${quickIcons.map(icon => `
+                        <div class="emoji-option" onclick="document.getElementById('new-type-icon').value='${icon}'">${icon}</div>
+                    `).join('')}
+                </div>
             </div>
         </div>`;
     openModal(html);
