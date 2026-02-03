@@ -11080,7 +11080,7 @@ window.renderLevel2SidebarContent = function(allResources) {
                 <div class="filter-pill active" onclick="OL.setSidebarTypeFilter('All', this)">All</div>
                 ${uniqueTypes.map(t => `
                     <div class="filter-pill" onclick="OL.setSidebarTypeFilter('${t}', this)">
-                        ${OL.getRegistryIcon(t)} ${t}
+                        ${OL.getRegistryIcon(t)}
                     </div>
                 `).join('')}
             </div>
