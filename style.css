@@ -1522,11 +1522,45 @@ body.fs-mode-active {
     z-index: 10;
 }
 
+/* 🔷 Logic Node Styling */
+.vis-node.is-logic {
+    border: 2px solid var(--vault-gold) !important;
+    background: rgba(251, 191, 36, 0.05) !important;
+    width: 200px !important;
+    border-radius: 50% / 10% !important; /* Slight diamond curve */
+}
+
+.vis-node.is-logic .vis-node-header {
+    background: rgba(251, 191, 36, 0.1) !important;
+    border-bottom: 1px solid var(--vault-gold);
+    color: var(--vault-gold);
+    justify-content: center;
+}
+
+/* 🔌 Exit Ports for Logic */
+.vis-port.logic-true { color: var(--success); font-weight: 800; }
+.vis-port.logic-false { color: var(--danger); font-weight: 800; }
+
 .vis-card-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     margin-bottom: 8px;
+}
+
+/* Standard sequential path */
+.vis-path.standard-path {
+    stroke: var(--accent);
+    stroke-width: 2;
+    opacity: 0.4;
+}
+
+/* Conditional logic path */
+.vis-path.logic-path {
+    stroke: var(--vault-gold); /* Or your preferred logic color */
+    stroke-width: 2;
+    stroke-dasharray: 6, 4; /* Dashed line */
+    opacity: 0.8;
 }
 
 .vis-meta-pill {

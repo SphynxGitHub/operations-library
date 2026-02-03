@@ -5520,8 +5520,18 @@ OL.drawVisualizerLines = function(resIdOrObj) {
                 
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", d);
-                path.setAttribute("class", "vis-path editable-path");
+               
+                // 🎨 NEW: LOGIC STYLING
+                // If there's a condition (e.g., "Approved"), make it a dashed line
+                const isConditional = oc.condition && oc.condition.trim() !== "";
+                path.setAttribute("class", isConditional ? "vis-path logic-path" : "vis-path standard-path");
                 path.setAttribute("marker-end", "url(#arrowhead)");
+                
+                // Optional: Add a label to the path if it's conditional
+                if (isConditional) {
+                    OL.drawPathLabel(svg, cx, cy, oc.condition);
+                }
+
                 svg.appendChild(path);
 
                 // Create the 3 interactive handles (Green Start, Blue Mid, Red End)
@@ -5541,6 +5551,33 @@ OL.drawVisualizerLines = function(resIdOrObj) {
             </marker>
         </defs>
     `;
+};
+
+OL.drawPathLabel = function(svg, x, y, text) {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    
+    // Background capsule for the text
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", x - 25);
+    rect.setAttribute("y", y - 10);
+    rect.setAttribute("width", "50");
+    rect.setAttribute("height", "16");
+    rect.setAttribute("rx", "8");
+    rect.setAttribute("fill", "#0b0f1a");
+    rect.setAttribute("stroke", "var(--accent)");
+    rect.setAttribute("stroke-width", "1");
+    
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", x);
+    txt.setAttribute("y", y + 2);
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("fill", "var(--accent)");
+    txt.setAttribute("style", "font-size: 8px; font-weight: bold; pointer-events: none;");
+    txt.textContent = text.toUpperCase();
+
+    group.appendChild(rect);
+    group.appendChild(txt);
+    svg.appendChild(group);
 };
 
 OL.createHandle = function(svg, x, y, type, resId, stepId, oIdx) {
