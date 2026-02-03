@@ -11742,37 +11742,36 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 };
 */
 
+OL.getSnappedCoords = function(e, workspace) {
+    const rect = workspace.getBoundingClientRect();
+    
+    // Calculate raw mouse position relative to the workspace's top-left
+    // We add scrollLeft/Top to ensure it works even if you've panned the canvas
+    const x = (e.clientX - rect.left) + workspace.scrollLeft;
+    const y = (e.clientY - rect.top) + workspace.scrollTop;
+
+    return {
+        x: Math.round(x / 70) * 70,
+        y: Math.round(y / 50) * 50
+    };
+};
+
 OL.updateSnapPreview = function(e, workspace) {
     let ghost = document.getElementById('grid-snap-preview');
-    
-    // Create the ghost if it doesn't exist
     if (!ghost) {
         ghost = document.createElement('div');
         ghost.id = 'grid-snap-preview';
         ghost.style.cssText = `
-            position: absolute;
-            width: 250px; 
-            height: 80px;
-            background: rgba(56, 189, 248, 0.15);
-            border: 2px dashed var(--accent);
-            border-radius: 8px;
-            pointer-events: none;
-            z-index: 10;
-            display: block;
+            position: absolute; width: 250px; height: 80px;
+            background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent);
+            border-radius: 8px; pointer-events: none; z-index: 10; display: block;
         `;
         workspace.appendChild(ghost);
     }
 
-    const rect = workspace.getBoundingClientRect();
-    
-    // Calculate snapped coordinates (matching your drop math)
-    let rawX = e.clientX - rect.left;
-    let rawY = e.clientY - rect.top;
-    const snapX = Math.round(rawX / 70) * 70;
-    const snapY = Math.round(rawY / 50) * 50;
-
-    ghost.style.left = snapX + 'px';
-    ghost.style.top = snapY + 'px';
+    const snapped = OL.getSnappedCoords(e, workspace);
+    ghost.style.left = snapped.x + 'px';
+    ghost.style.top = snapped.y + 'px';
 };
 
 /*
@@ -12066,36 +12065,30 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
         const workspace = document.getElementById('vis-workspace'); 
         if (!workspace || !parent) return;
 
-        const rect = workspace.getBoundingClientRect();
-        
-        // Calculate drop point relative to the top-left of the workspace
-        let rawX = e.clientX - rect.left;
-        let rawY = e.clientY - rect.top;
-
-        // Snap to 1/4 card logic (70px wide, 50px high increments)
-        const snapX = Math.round(rawX / 70) * 70;
-        const snapY = Math.round(rawY / 50) * 50;
+        // 🚀 USE THE UNIFIED MATH
+        const snapped = OL.getSnappedCoords(e, workspace);
 
         let targetStep;
         if (moveId) {
             targetStep = parent.steps.find(s => s.id === moveId);
         } else if (atomicPayload) {
             const data = JSON.parse(atomicPayload);
-            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [], x: snapX, y: snapY };
+            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [] };
             parent.steps.push(targetStep);
         } else if (resId) {
-            // Dropping a resource from the sidebar onto the canvas as a new step
             const sourceRes = OL.getResourceById(resId);
-            if (sourceRes) {
-                targetStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, outcomes: [], x: snapX, y: snapY };
-                parent.steps.push(targetStep);
-            }
+            targetStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, outcomes: [] };
+            parent.steps.push(targetStep);
         }
 
         if (targetStep) {
-            targetStep.x = snapX;
-            targetStep.y = snapY;
+            targetStep.x = snapped.x;
+            targetStep.y = snapped.y;
         }
+
+        // Remove the preview ghost
+        const ghost = document.getElementById('grid-snap-preview');
+        if (ghost) ghost.remove();
 
         document.querySelectorAll('.dragging, .is-dragging-source').forEach(el => {
             el.classList.remove('dragging', 'is-dragging-source');
