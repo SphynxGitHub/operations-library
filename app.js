@@ -11024,8 +11024,7 @@ OL.getRegistryIcon = function(typeName) {
 window.renderLevel2SidebarContent = function(allResources) {
     const currentWorkflow = OL.getResourceById(state.focusedWorkflowId);
     const existingStepResourceIds = (currentWorkflow?.steps || []).map(s => s.resourceLinkId);
-    const icon = OL.getRegistryIcon(type);
-    
+
     // 1. Filter out workflows and items already on canvas
     const assets = allResources.filter(res => 
         (res.type || "").toLowerCase() !== 'workflow' && 
@@ -11034,7 +11033,8 @@ window.renderLevel2SidebarContent = function(allResources) {
 
     // 2. Get unique types for the filter buttons
     const uniqueTypes = [...new Set(assets.map(a => a.type || "Other"))].sort();
-
+    const icon = OL.getRegistryIcon(type);
+    
     // 3. Group by type
     const grouped = assets.reduce((acc, res) => {
         const type = res.type || "Other";
