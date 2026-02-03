@@ -11742,9 +11742,42 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 };
 */
 
+OL.updateSnapPreview = function(e, workspace) {
+    let ghost = document.getElementById('grid-snap-preview');
+    
+    // Create the ghost if it doesn't exist
+    if (!ghost) {
+        ghost = document.createElement('div');
+        ghost.id = 'grid-snap-preview';
+        ghost.style.cssText = `
+            position: absolute;
+            width: 250px; 
+            height: 80px;
+            background: rgba(56, 189, 248, 0.15);
+            border: 2px dashed var(--accent);
+            border-radius: 8px;
+            pointer-events: none;
+            z-index: 10;
+            display: block;
+        `;
+        workspace.appendChild(ghost);
+    }
+
+    const rect = workspace.getBoundingClientRect();
+    
+    // Calculate snapped coordinates (matching your drop math)
+    let rawX = e.clientX - rect.left;
+    let rawY = e.clientY - rect.top;
+    const snapX = Math.round(rawX / 70) * 70;
+    const snapY = Math.round(rawY / 50) * 50;
+
+    ghost.style.left = snapX + 'px';
+    ghost.style.top = snapY + 'px';
+};
+
+/*
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
-    
     e.dataTransfer.dropEffect = "move";
 
     if (state.focusedResourceId) {
@@ -11780,6 +11813,45 @@ OL.handleCanvasDragOver = function(e) {
     } else {
         container.appendChild(placeholder);
         // We are at the bottom
+        state.currentDropIndex = cards.length;
+    }
+};*/
+
+OL.handleCanvasDragOver = function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const container = e.currentTarget;
+
+    // 🚀 TIER 3: Visual Grid Preview
+    if (state.focusedResourceId) {
+        const workspace = document.getElementById('vis-workspace');
+        if (workspace) OL.updateSnapPreview(e, workspace);
+        return; 
+    }
+
+    // 🚀 TIER 1 & 2: Vertical List Placeholder (Existing Logic)
+    if (!container.classList.contains('stage-workflow-stream')) return;
+    container.style.background = "rgba(56, 189, 248, 0.03)";
+
+    let placeholder = container.querySelector('.drop-placeholder');
+    if (!placeholder) {
+        placeholder = document.createElement('div');
+        placeholder.className = 'drop-placeholder';
+    }
+
+    const cards = [...container.querySelectorAll('.workflow-block-card:not(.dragging)')];
+    const afterElement = cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+        else return closest;
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+    if (afterElement) {
+        container.insertBefore(placeholder, afterElement);
+        state.currentDropIndex = cards.indexOf(afterElement);
+    } else {
+        container.appendChild(placeholder);
         state.currentDropIndex = cards.length;
     }
 };
@@ -12078,6 +12150,9 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     cleanupUI();
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
+    // Add this to your cleanup logic
+    const ghost = document.getElementById('grid-snap-preview');
+    if (ghost) ghost.remove();
 };
 window.addEventListener('dragend', cleanupUI);
 
