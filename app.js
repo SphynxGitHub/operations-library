@@ -11745,11 +11745,12 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 OL.getSnappedCoords = function(e, workspace) {
     const rect = workspace.getBoundingClientRect();
     
-    // Calculate raw mouse position relative to the workspace's top-left
-    // We add scrollLeft/Top to ensure it works even if you've panned the canvas
-    const x = (e.clientX - rect.left) + workspace.scrollLeft;
-    const y = (e.clientY - rect.top) + workspace.scrollTop;
+    // 🚀 THE FIX: Calculate mouse position relative to the workspace element
+    // Subtracting rect.left/top removes the "Global Screen Offset"
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
+    // We round to your 1/4 card grid (70px / 50px)
     return {
         x: Math.round(x / 70) * 70,
         y: Math.round(y / 50) * 50
@@ -11764,12 +11765,14 @@ OL.updateSnapPreview = function(e, workspace) {
         ghost.style.cssText = `
             position: absolute; width: 250px; height: 80px;
             background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent);
-            border-radius: 8px; pointer-events: none; z-index: 10; display: block;
+            border-radius: 8px; pointer-events: none; z-index: 1000; display: block;
         `;
         workspace.appendChild(ghost);
     }
 
     const snapped = OL.getSnappedCoords(e, workspace);
+    
+    // Apply coordinates
     ghost.style.left = snapped.x + 'px';
     ghost.style.top = snapped.y + 'px';
 };
@@ -12065,7 +12068,7 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
         const workspace = document.getElementById('vis-workspace'); 
         if (!workspace || !parent) return;
 
-        // 🚀 USE THE UNIFIED MATH
+        // 🎯 USE THE EXACT SAME HELPER
         const snapped = OL.getSnappedCoords(e, workspace);
 
         let targetStep;
@@ -12075,10 +12078,6 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             const data = JSON.parse(atomicPayload);
             targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [] };
             parent.steps.push(targetStep);
-        } else if (resId) {
-            const sourceRes = OL.getResourceById(resId);
-            targetStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, outcomes: [] };
-            parent.steps.push(targetStep);
         }
 
         if (targetStep) {
@@ -12086,15 +12085,10 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             targetStep.y = snapped.y;
         }
 
-        // Remove the preview ghost
+        // Cleanup
         const ghost = document.getElementById('grid-snap-preview');
         if (ghost) ghost.remove();
-
-        document.querySelectorAll('.dragging, .is-dragging-source').forEach(el => {
-            el.classList.remove('dragging', 'is-dragging-source');
-            el.style.opacity = "1";
-        });
-
+        
         cleanupUI(); 
         OL.persist();
         OL.renderVisualizer(state.focusedResourceId);
