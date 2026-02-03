@@ -11493,6 +11493,7 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
 };
 
 // LEVEL 3: Atomic Steps (Triggers/Actions)
+/*
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
@@ -11521,6 +11522,116 @@ window.renderLevel3Canvas = function(resourceId) {
                 </div>
             </div>`;
     }).join('');
+};*/
+
+window.renderLevel3Canvas = function(resourceId) {
+    const res = OL.getResourceById(resourceId);
+    if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
+
+    // 🚀 NEW: Wrapper for the whole canvas to allow SVG overlay
+    let html = `<div id="l3-canvas-wrapper" style="position: relative; width: 100%; min-height: 100%;">
+        <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 5;"></svg>`;
+
+    const groups = [
+        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
+        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)' }
+    ];
+    
+    html += groups.map(group => {
+        const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
+
+        return `
+            <div class="stage-container" style="position: relative; z-index: 10;">
+                <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
+                <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
+                    ${steps.map((step, idx) => `
+                        <div class="workflow-block-card" 
+                             id="step-node-${step.id}" 
+                             draggable="true" 
+                             style="position: relative;"
+                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
+                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                             ondragover="OL.handleCanvasDragOver(event)"
+                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
+                             
+                            <div id="port-in-${step.id}" class="vis-port-in" style="position:absolute; left:-5px; top:50%;"></div>
+                            <div id="port-out-${step.id}" class="vis-port-out" style="position:absolute; right:-5px; top:50%;"></div>
+
+                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
+                            <div class="tiny muted">${esc(step.type)}</div>
+                        </div>`).join('')}
+                </div>
+            </div>`;
+    }).join('');
+
+    html += `</div>`;
+    
+    // 🚀 Trigger the line drawing after the DOM paints
+    setTimeout(() => OL.drawVerticalLogicLines(resourceId), 100);
+    
+    return html;
+};
+
+OL.drawVerticalLogicLines = function(resId) {
+    const svg = document.getElementById('vis-links-layer');
+    const wrapper = document.getElementById('l3-canvas-wrapper');
+    if (!svg || !wrapper) return;
+    
+    svg.innerHTML = ''; // Clear old lines
+    const res = OL.getResourceById(resId);
+    const steps = res.steps || [];
+    const cRect = wrapper.getBoundingClientRect();
+
+    steps.forEach((step, sIdx) => {
+        (step.outcomes || []).forEach((oc) => {
+            let targetId = null;
+            // Handle Jump Logic
+            if (oc.action?.startsWith('jump_step_')) {
+                targetId = oc.action.replace('jump_step_', '');
+            } else if (oc.action === 'next') {
+                targetId = steps[sIdx + 1]?.id;
+            }
+
+            const sourceEl = document.getElementById(`port-out-${step.id}`);
+            const targetEl = document.getElementById(`port-in-${targetId}`);
+
+            if (sourceEl && targetEl) {
+                const s = sourceEl.getBoundingClientRect();
+                const t = targetEl.getBoundingClientRect();
+
+                // Relative coordinates within the wrapper
+                const x1 = s.left - cRect.left;
+                const y1 = s.top - cRect.top;
+                const x2 = t.left - cRect.left;
+                const y2 = t.top - cRect.top;
+
+                // 🎨 Curved "Loop" Logic
+                // If the target is below, curve outward. If above (loop back), curve wider.
+                const isLoopBack = y2 < y1;
+                const curveOffset = isLoopBack ? -150 : -80;
+                
+                const d = `M ${x1} ${y1} C ${x1 + curveOffset} ${y1}, ${x2 + curveOffset} ${y2}, ${x2} ${y2}`;
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", d);
+                path.setAttribute("fill", "none");
+                path.setAttribute("stroke", oc.condition ? "var(--vault-gold)" : "var(--accent)");
+                path.setAttribute("stroke-width", "2");
+                path.setAttribute("stroke-dasharray", oc.condition ? "5,3" : "none");
+                path.setAttribute("opacity", "0.4");
+                path.setAttribute("marker-end", "url(#arrowhead-l3)");
+                svg.appendChild(path);
+            }
+        });
+    });
+
+    // Add Arrowhead definition
+    svg.innerHTML += `
+        <defs>
+            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.3)" />
+            </marker>
+        </defs>`;
 };
 
 // --- NAVIGATION & STATE ---
