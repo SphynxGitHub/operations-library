@@ -11048,7 +11048,7 @@ window.renderLevel2SidebarContent = function(allResources) {
         const icon = OL.getRegistryIcon(type);
 
         return `
-            <div class="sidebar-type-group">
+            <div class="sidebar-type-group" data-group-type="${type}">
                 <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">
                     ${icon} ${type}s
                 </label>
