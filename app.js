@@ -11079,7 +11079,7 @@ window.renderLevel2SidebarContent = function(allResources) {
             <div class="filter-pill-bar" style="display:flex; gap:4px; overflow-x:auto; padding: 8px 0 4px 0;">
                 <div class="filter-pill active" onclick="OL.setSidebarTypeFilter('All', this)">All</div>
                 ${uniqueTypes.map(t => `
-                    <div class="filter-pill" onclick="OL.setSidebarTypeFilter('${t}', this)">
+                    <div class="filter-pill" onclick="OL.setSidebarTypeFilter('${t}', this)" title="${t}">
                         ${OL.getRegistryIcon(t)}
                     </div>
                 `).join('')}

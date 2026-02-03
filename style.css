@@ -2493,6 +2493,8 @@ body.is-visualizer #mainContent {
 .filter-pill-bar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+    display: flex;
+    flex-wrap: wrap;
 }
 
 /*==================================================================
