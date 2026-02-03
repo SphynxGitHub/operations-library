@@ -3424,26 +3424,34 @@ OL.openResourceTypeManager = function () {
         </div>
         <div class="modal-body">
             <p class="tiny muted" style="margin-bottom:20px;">
-                Define categories for your resources. Each type automatically gets a standard base rate in the Pricing library.
+                Define categories and icons. Every resource assigned to these types will inherit the icon automatically.
             </p>
             
             <div class="dp-manager-list">
                 ${registry.map(t => {
                     const encType = btoa(t.type);
                     return `
-                    <div class="dp-manager-row" style="margin-bottom: 8px; background: var(--panel-soft); padding: 10px; border-radius: 6px; display:flex; justify-content:space-between; align-items:center;">
+                    <div class="dp-manager-row" style="margin-bottom: 8px; background: var(--panel-soft); padding: 10px; border-radius: 6px; display:flex; gap:12px; align-items:center;">
                         <span contenteditable="true" 
-                              style="font-weight:600; cursor: text; border-bottom: 1px dashed transparent;"
+                              style="font-size: 18px; cursor: pointer; width: 30px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 4px;"
+                              onblur="OL.updateResourceTypeProp('${t.typeKey}', 'icon', this.innerText)">
+                            ${t.icon || '⚙️'}
+                        </span>
+
+                        <span contenteditable="true" 
+                              style="font-weight:600; flex:1; cursor: text;"
                               onblur="OL.renameResourceTypeFlat('${encType}', this.innerText)">
                             ${esc(t.type)}
                         </span>
+                        
                         <button class="card-delete-btn" style="position:static" onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">×</button>
                     </div>`;
                 }).join('')}
             </div>
 
             <div style="display:flex; gap:8px; margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                <input type="text" id="new-type-input" class="modal-input" placeholder="e.g. Email Campaign, Zap, Form...">
+                <input type="text" id="new-type-icon" class="modal-input" style="width:50px; text-align:center;" placeholder="⚙️">
+                <input type="text" id="new-type-input" class="modal-input" style="flex:1;" placeholder="New Type Name...">
                 <button class="btn primary" onclick="OL.addNewResourceTypeFlat()">Add Type</button>
             </div>
         </div>`;
@@ -3518,6 +3526,20 @@ OL.renameResourceTypeFlat = function (oldNameEncoded, newName) {
     console.log(`✅ Renamed type: ${oldName} -> ${cleanNewName}`);
 };
 
+// 3. Add Icon
+OL.updateResourceTypeProp = function(typeKey, prop, value) {
+    const registry = state.master.resourceTypes || [];
+    const entry = registry.find(t => t.typeKey === typeKey);
+    if (entry) {
+        entry[prop] = value;
+        OL.persist();
+        console.log(`✅ Updated Type Registry: ${entry.type} is now ${value}`);
+        // Refresh the visualizer so the sidebar/inspector immediately reflect the new icon
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    }
+};
+
+//4. Remove Type
 OL.removeRegistryTypeByKey = function (typeKey) {
   if (!confirm(`Delete "${typeKey}" type? Resources will reset to "General".`))
     return;
@@ -11218,14 +11240,12 @@ OL.loadInspector = function(targetId, parentId = null) {
                 <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || techAsset?.name)}</h2>
             </div>
             <section>
-                <div class="card-section" style="margin-bottom: 20px;">
-                    <label class="modal-section-label">🏷️ Classification & Icon</label>
-                    <select class="modal-input tiny" 
-                            style="text-align: left; padding: 8px 12px; width: 100%;"
-                            onchange="OL.updateResourceType('${techId}', this.value)">
-                        ${Object.entries(RESOURCE_TYPE_MAP).map(([key, cfg]) => `
-                            <option value="${key}" ${techAsset?.type === key ? 'selected' : ''}>
-                                ${cfg.icon} ${cfg.label}
+                <div class="card-section">
+                    <label class="modal-section-label">🏷️ Classification</label>
+                    <select class="modal-input tiny" onchange="OL.updateResourceType('${techId}', this.value)">
+                        ${registry.map(t => `
+                            <option value="${t.type}" ${techAsset?.type === t.type ? 'selected' : ''}>
+                                ${t.icon || '⚙️'} ${t.type}
                             </option>
                         `).join('')}
                     </select>
