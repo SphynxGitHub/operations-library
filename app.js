@@ -11536,9 +11536,8 @@ OL.renderVisualizer = function(resId) {
     // 1. Generate Nodes using saved X/Y coordinates
     const nodesHtml = steps.map((step) => {
         // Default starting position if never moved
-        const x = step.x !== undefined ? step.x : 50;
-        const y = step.y !== undefined ? step.y : 50;
-
+        const x = (step.x !== undefined) ? step.x : (20 + (idx * 40));
+        const y = (step.y !== undefined) ? step.y : (20 + (idx * 80));
         return `
             <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
                 draggable="true"
@@ -11560,7 +11559,7 @@ OL.renderVisualizer = function(resId) {
     // 2. Render Blank Canvas (No Swimlanes)
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
-             style="position: relative; background: #050816; width: 5000px; height: 3000px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;">
+             style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;">
             <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
                 ${nodesHtml}
             </div>
@@ -11928,23 +11927,28 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
-    const moveId = e.dataTransfer.getData("moveNodeId") || e.dataTransfer.getData("moveStepId");
+    cleanupUI(); // Remove grey highlights immediately
+    
+    const moveId = e.dataTransfer.getData("moveNodeId");
     const atomicPayload = e.dataTransfer.getData("atomicPayload");
 
     if (state.focusedResourceId) {
         const parent = OL.getResourceById(state.focusedResourceId);
-        const workspace = document.getElementById('vis-workspace');
+        // 🚀 THE FIX: Use the Canvas Wrapper for coordinate relative math
+        const workspace = document.getElementById('fs-canvas'); 
         if (!workspace || !parent) return;
 
         const rect = workspace.getBoundingClientRect();
         
-        // 1. Get raw mouse coordinates relative to workspace
-        let rawX = e.clientX - rect.left;
-        let rawY = e.clientY - rect.top;
+        // Use scrollLeft/Top to account for user panning the canvas
+        const scrollX = workspace.scrollLeft;
+        const scrollY = workspace.scrollTop;
 
-        // 2. 🚀 THE SNAP LOGIC (1/4 card increments)
-        // Horizontal Card is 280px -> Snap to 70px
-        // Vertical Card is ~100px -> Snap to 50px
+        // Calculate position relative to the container, accounting for zoom/scroll
+        let rawX = (e.clientX - rect.left) + scrollX;
+        let rawY = (e.clientY - rect.top) + scrollY;
+
+        // 🎯 SNAP LOGIC: 70px horizontal, 50px vertical
         const snapX = Math.round(rawX / 70) * 70;
         const snapY = Math.round(rawY / 50) * 50;
 
@@ -11960,18 +11964,13 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
         if (targetStep) {
             targetStep.x = snapX;
             targetStep.y = snapY;
-            // Clean up old swimlane data so it doesn't conflict
-            delete targetStep.gridLane;
-            delete targetStep.gridCol;
+            console.log(`📍 Card Set to: ${snapX}, ${snapY}`);
         }
 
-        cleanupUI();
         OL.persist();
         OL.renderVisualizer(state.focusedResourceId);
         return;
     }
-    
-    // ... (Keep existing T1/T2 logic below) ...
 };
 
 window.addEventListener('dragend', cleanupUI);
