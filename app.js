@@ -5256,6 +5256,76 @@ OL.printSop = function(resId) {
     });
 };
 
+OL.renderVisualizer = function(resId) {
+    const canvas = document.getElementById('fs-canvas');
+    const res = OL.getResourceById(resId);
+    if (!canvas || !res) return;
+
+    const LANE_HEIGHT = 200;
+    const COL_WIDTH = 280;
+    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
+    
+    const steps = res.steps || [];
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+
+    // 1. Generate the Grid Layer (Background only)
+    const lanesHtml = lanes.map(lane => `
+        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; width: 100%;">
+            <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
+                ${lane}
+            </div>
+            <div style="position: absolute; top: 0; left: 140px; display: flex; height: 100%;">
+                ${Array.from({length: maxCol + 2}).map(() => `
+                    <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    // 2. Generate the Node Layer (Absolute coordinates)
+    const nodesHtml = steps.map((step) => {
+        const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
+        // Center the card vertically in the 200px lane (card is ~80px tall)
+        const top = (laneIdx * LANE_HEIGHT) + 60; 
+        const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
+
+        return `
+            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
+                draggable="true"
+                style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
+                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
+                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
+                </div>
+                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
+                    ${esc(step.name)}
+                </div>
+                <div class="new-link-trigger" 
+                    title="Drag to create new logic branch"
+                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
+                    +
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 3. One-Pass Paint
+    canvas.innerHTML = `
+        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: fit-content; min-width: 100%;">
+            <div class="vis-swimlane-layer" style="position: relative; z-index: 1;">
+                ${lanesHtml}
+            </div>
+            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                ${nodesHtml}
+            </div>
+            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
+        </div>
+    `;
+
+    setTimeout(() => OL.drawVisualizerLines(resId), 10);
+};
+
 OL.createNewOutcomeFromNode = function(e, resId, stepId) {
     e.preventDefault();
     e.stopPropagation();
@@ -10950,9 +11020,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <span class="muted"> > </span>  
             <span class="breadcrumb-current">${esc(res?.name)}</span>`;
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
-        //canvasHtml = renderLevel3Canvas(state.focusedResourceId);
-        canvasHtml = `<div id="tier3-canvas-root" style="width:100%; height:100%;"></div>`;
-        setTimeout(() => OL.renderVisualizer(state.focusedResourceId, 'tier3-canvas-root'), 10);
+        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
     } 
     // --- TIER 2: WORKFLOW > RESOURCES ---
     else if (state.focusedWorkflowId) {
@@ -11455,128 +11523,6 @@ window.renderLevel3Canvas = function(resourceId) {
     }).join('');
 };
 
-/*
-OL.renderVisualizer = function(resId) {
-    const canvas = document.getElementById('fs-canvas');
-    const res = OL.getResourceById(resId);
-    if (!canvas || !res) return;
-
-    const LANE_HEIGHT = 200;
-    const COL_WIDTH = 280;
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    
-    const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
-
-    // 1. Generate the Grid Layer (Background only)
-    const lanesHtml = lanes.map(lane => `
-        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; width: 100%;">
-            <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
-                ${lane}
-            </div>
-            <div style="position: absolute; top: 0; left: 140px; display: flex; height: 100%;">
-                ${Array.from({length: maxCol + 2}).map(() => `
-                    <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
-
-    // 2. Generate the Node Layer (Absolute coordinates)
-    const nodesHtml = steps.map((step) => {
-        const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        // Center the card vertically in the 200px lane (card is ~80px tall)
-        const top = (laneIdx * LANE_HEIGHT) + 60; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
-
-        return `
-            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
-                draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
-                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
-                </div>
-                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name)}
-                </div>
-                <div class="new-link-trigger" 
-                    title="Drag to create new logic branch"
-                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
-                    +
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    // 3. One-Pass Paint
-    canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: fit-content; min-width: 100%;">
-            <div class="vis-swimlane-layer" style="position: relative; z-index: 1;">
-                ${lanesHtml}
-            </div>
-            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
-                ${nodesHtml}
-            </div>
-            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
-        </div>
-    `;
-
-    setTimeout(() => OL.drawVisualizerLines(resId), 10);
-};*/
-
-OL.renderVisualizer = function(resId) {
-    const canvas = document.getElementById('fs-canvas');
-    const res = OL.getResourceById(resId);
-    if (!canvas || !res) return;
-
-    const steps = res.steps || [];
-
-    // 1. Prepare Nodes
-    const nodesHtml = steps.map((step, idx) => {
-        const x = (step.x !== undefined) ? step.x : (50 + (idx * 40));
-        const y = (step.y !== undefined) ? step.y : (50 + (idx * 80));
-
-        return `
-            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
-                draggable="true"
-                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab; margin: 0 !important;"
-                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
-                </div>
-                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name || "Untitled Step")}
-                </div>
-                <div class="new-link-trigger" onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">+</div>
-            </div>
-        `;
-    }).join('');
-
-    // 2. Setup the Canvas (No more nested #vis-workspace)
-    canvas.style.position = 'relative';
-    canvas.style.width = '3000px';
-    canvas.style.height = '2000px';
-    canvas.style.background = '#050816';
-    canvas.style.backgroundImage = 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0)';
-    canvas.style.backgroundSize = '70px 50px';
-    canvas.style.overflow = 'auto'; // Allow scrolling the big plane
-
-    canvas.setAttribute('ondragover', 'OL.handleCanvasDragOver(event)');
-    canvas.setAttribute('ondrop', `OL.handleUniversalDrop(event, '${resId}', 'canvas')`);
-
-    canvas.innerHTML = `
-        <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
-            ${nodesHtml}
-        </div>
-        <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
-    `;
-
-    setTimeout(() => OL.drawVisualizerLines(resId), 20);
-};
-
 // --- NAVIGATION & STATE ---
 
 OL.drillDownIntoWorkflow = function(resId) {
@@ -11682,7 +11628,6 @@ OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
 };
 
 // 2. Destination: Required to allow the canvas to receive the drop
-/*
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
     
@@ -11736,132 +11681,6 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
     e.dataTransfer.setData("parentResId", parentResId);
     e.dataTransfer.setData("draggedIndex", index);
     e.target.style.opacity = "0.4";
-};
-*/
-
-OL.getSnappedCoords = function(e, canvas) {
-    const rect = canvas.getBoundingClientRect();
-    
-    // We saved these in handleStepMoveStart
-    const grabX = parseFloat(e.dataTransfer?.getData("grabX")) || 0;
-    const grabY = parseFloat(e.dataTransfer?.getData("grabY")) || 0;
-
-    // 🎯 THE ONLY MATH YOU NEED:
-    // (Mouse Pos - Canvas Screen Pos) + How far we've scrolled - Where we grabbed the card
-    const x = (e.clientX - rect.left) + canvas.scrollLeft - grabX;
-    const y = (e.clientY - rect.top) + canvas.scrollTop - grabY;
-
-    return {
-        x: Math.round(x / 70) * 70,
-        y: Math.round(y / 50) * 50
-    };
-};
-
-OL.updateSnapPreview = function(e, canvas) {
-    let ghost = document.getElementById('grid-snap-preview');
-    if (!ghost) {
-        ghost = document.createElement('div');
-        ghost.id = 'grid-snap-preview';
-        ghost.style.cssText = `position: absolute; width: 240px; height: 80px; background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent); border-radius: 8px; pointer-events: none; z-index: 2000;`;
-        canvas.appendChild(ghost);
-    }
-    const snapped = OL.getSnappedCoords(e, canvas);
-    ghost.style.left = snapped.x + 'px';
-    ghost.style.top = snapped.y + 'px';
-};
-
-/*
-OL.handleCanvasDragOver = function(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-
-    if (state.focusedResourceId) {
-        return; 
-    }
-
-    // 2. Find or Create Placeholder
-    let placeholder = container.querySelector('.drop-placeholder');
-    if (!placeholder) {
-        placeholder = document.createElement('div');
-        placeholder.className = 'drop-placeholder';
-    }
-
-    // 3. Calculate positioning
-    const cards = [...container.querySelectorAll('.workflow-block-card:not(.dragging)')];
-    
-    // Find the card that is currently under the mouse
-    const afterElement = cards.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = e.clientY - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-
-    // 4. Insert Placeholder
-    if (afterElement) {
-        container.insertBefore(placeholder, afterElement);
-        // Find the index of the card we are slipping in front of
-        state.currentDropIndex = cards.indexOf(afterElement);
-    } else {
-        container.appendChild(placeholder);
-        // We are at the bottom
-        state.currentDropIndex = cards.length;
-    }
-};*/
-
-OL.handleCanvasDragOver = function(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const container = e.currentTarget;
-
-    // 🚀 TIER 3: Visual Grid Preview
-    if (state.focusedResourceId) {
-        const workspace = document.getElementById('vis-workspace');
-        if (workspace) OL.updateSnapPreview(e, workspace);
-        return; 
-    }
-
-    // 🚀 TIER 1 & 2: Vertical List Placeholder (Existing Logic)
-    if (!container.classList.contains('stage-workflow-stream')) return;
-    container.style.background = "rgba(56, 189, 248, 0.03)";
-
-    let placeholder = container.querySelector('.drop-placeholder');
-    if (!placeholder) {
-        placeholder = document.createElement('div');
-        placeholder.className = 'drop-placeholder';
-    }
-
-    const cards = [...container.querySelectorAll('.workflow-block-card:not(.dragging)')];
-    const afterElement = cards.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = e.clientY - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
-        else return closest;
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-
-    if (afterElement) {
-        container.insertBefore(placeholder, afterElement);
-        state.currentDropIndex = cards.indexOf(afterElement);
-    } else {
-        container.appendChild(placeholder);
-        state.currentDropIndex = cards.length;
-    }
-};
-
-OL.handleStepMoveStart = function(e, id, resId) {
-    // 1. Identify the element
-    const target = e.currentTarget;
-    target.classList.add('is-dragging-source');
-    
-    // 2. Set the data (Required for the drop to work)
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("moveNodeId", id);
-    
-    // 3. Optional: Create a cleaner drag image
-    target.style.opacity = "0.4";
 };
 
 OL.handleNodeMoveStart = function(e, id, index) {
@@ -11966,7 +11785,6 @@ OL.handleModularAtomicDrag = function(e) {
     e.target.style.opacity = "0.4";
 };
 
-/*
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     const moveId = e.dataTransfer.getData("moveNodeId");      
@@ -12045,100 +11863,8 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     cleanupUI();
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
-};*/
-
-OL.handleUniversalDrop = function(e, parentId, sectionId) {
-    e.preventDefault();
-    
-    // 1. Identification
-    const moveId = e.dataTransfer.getData("moveNodeId"); 
-    const resId = e.dataTransfer.getData("resId"); 
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
-    const canvas = document.getElementById('fs-canvas');
-
-    // 🚀 SCENARIO: TIER 3 VISUAL CANVAS
-    if (state.focusedResourceId) {
-        const parent = OL.getResourceById(state.focusedResourceId);
-        if (!canvas || !parent) return;
-
-        // 🎯 Use the exact same math as the Preview
-        const snapped = OL.getSnappedCoords(e, canvas);
-
-        let targetStep;
-        if (moveId) {
-            targetStep = parent.steps.find(s => s.id === moveId);
-        } else if (atomicPayload) {
-            const data = JSON.parse(atomicPayload);
-            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [] };
-            parent.steps.push(targetStep);
-        } else if (resId) {
-            const sourceRes = OL.getResourceById(resId);
-            targetStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, outcomes: [] };
-            parent.steps.push(targetStep);
-        }
-
-        if (targetStep) {
-            targetStep.x = snapped.x;
-            targetStep.y = snapped.y;
-            console.log(`📍 Card saved at: ${snapped.x}, ${snapped.y}`);
-        }
-
-        // Cleanup Ghost and UI
-        const ghost = document.getElementById('grid-snap-preview');
-        if (ghost) ghost.remove();
-        cleanupUI();
-        
-        OL.persist();
-        OL.renderVisualizer(state.focusedResourceId);
-        return;
-    }
-
-    // 🚀 SCENARIO B: TIER 1 & 2 (Index-Based Streams)
-    // This part handles the "Global Lifecycle" and "Workflow View" vertical lists
-    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
-
-    if (moveId) {
-        // Rearranging existing nodes in a vertical list
-        OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
-        cleanupUI();
-        return; 
-    } 
-    else if (resId) {
-        // Adding a new item from the sidebar into a stage or lane
-        if (!state.focusedWorkflowId) {
-            // Tier 1: Moving a Workflow into a Lifecycle Stage
-            const res = OL.getResourceById(resId);
-            if (res) { 
-                res.stageId = sectionId; 
-                res.mapOrder = targetIdx; 
-            }
-        } else {
-            // Tier 2: Moving a Resource into a Workflow Lane
-            const workflow = OL.getResourceById(state.focusedWorkflowId);
-            const sourceRes = OL.getResourceById(resId);
-            if (workflow && sourceRes) {
-                if (!workflow.steps) workflow.steps = [];
-                const newStep = { 
-                    id: uid(), 
-                    name: sourceRes.name, 
-                    resourceLinkId: resId, 
-                    gridLane: sectionId 
-                };
-                
-                if (targetIdx < workflow.steps.length) workflow.steps.splice(targetIdx, 0, newStep);
-                else workflow.steps.push(newStep);
-            }
-        }
-    }
-
-    state.currentDropIndex = null;
-    cleanupUI();
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-    // Add this to your cleanup logic
-    const ghost = document.getElementById('grid-snap-preview');
-    if (ghost) ghost.remove();
 };
+
 window.addEventListener('dragend', cleanupUI);
 
 // --- UNMAPPING / TRASH LOGIC ---
