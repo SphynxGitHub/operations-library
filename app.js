@@ -5347,29 +5347,48 @@ OL.renderVisualizer = function(resId, targetId = 'fs-canvas') {
     });
 
     // 2. Map Nodes
-    const nodesHtml = steps.map((step, idx) => {
-        const laneIdx = lanes.indexOf(step.gridLane);
-        const top = (laneIdx * LANE_HEIGHT) + 60;
-        const left = (step.gridCol * COL_WIDTH) + 170;
+    const laneCounters = {
+        "Lead/Client": 0,
+        "System/Auto": 0,
+        "Internal Ops": 0
+    };
+
+    const nodesHtml = steps.map((step) => {
+        const laneName = step.gridLane || "System/Auto";
+        const laneIdx = lanes.indexOf(laneName);
+        
+        // Use saved gridCol if it exists, otherwise use the next available slot in that specific lane
+        let colIdx = step.gridCol;
+        if (colIdx === undefined || colIdx === null) {
+            colIdx = laneCounters[laneName];
+            // Update the step object so the position is remembered next time
+            step.gridCol = colIdx; 
+        }
+        
+        // Increment the counter for this specific lane
+        laneCounters[laneName]++;
+
+        // Calculate Pixel Positions
+        const top = (laneIdx * LANE_HEIGHT) + 60; 
+        const left = (colIdx * COL_WIDTH) + 170;
 
         return `
-            <div class="workflow-block-card grid-snapped" 
-                id="vis-node-${step.id}"
+            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
                 draggable="true"
                 style="position: absolute; top: ${top}px; left: ${left}px; z-index: 50; cursor: grab;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}', ${idx})">
-                
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
                     <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
                 </div>
                 <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name || "Untitled Step")}
+                    ${esc(step.name)}
                 </div>
-
                 <div class="new-link-trigger" 
-                     title="Drag to create logic"
-                     onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">+</div>
+                    title="Drag to create new logic branch"
+                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
+                    +
+                </div>
             </div>
         `;
     }).join('');
