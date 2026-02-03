@@ -3400,6 +3400,20 @@ window.renderResourceManager = function () {
     `;
 };
 
+//================ RESOURCE TYPES ========================//
+const RESOURCE_TYPE_MAP = {
+    'Form': { icon: '📄', label: 'Form' },
+    'Zap': { icon: '⚡', label: 'Automation' },
+    'Email': { icon: '📧', label: 'Email' },
+    'Document': { icon: '📁', label: 'Document' },
+    'Meeting': { icon: '📅', label: 'Meeting' },
+    'API': { icon: '🔌', label: 'Webhook/API' },
+    'Other': { icon: '⚙️', label: 'General' }
+};
+
+// Helper to safely get icon
+OL.getIcon = (type) => RESOURCE_TYPE_MAP[type]?.icon || RESOURCE_TYPE_MAP['Other'].icon;
+
 OL.openResourceTypeManager = function () {
     const registry = state.master.resourceTypes || [];
 
@@ -10978,7 +10992,11 @@ window.renderLevel2SidebarContent = function(allResources) {
         !existingStepResourceIds.includes(res.id)
     );
 
-    // 2. Group by type
+     
+    // 2. Get unique types for the filter buttons
+    const uniqueTypes = [...new Set(assets.map(a => a.type || "Other"))].sort();
+
+    // 3. Group by type
     const grouped = assets.reduce((acc, res) => {
         const type = res.type || "Other";
         if (!acc[type]) acc[type] = [];
@@ -10986,7 +11004,7 @@ window.renderLevel2SidebarContent = function(allResources) {
         return acc;
     }, {});
 
-    // 3. Generate HTML
+    // 4. Generate HTML
     const groupsHtml = Object.keys(grouped).sort().map(type => `
         <div class="sidebar-type-group">
             <label class="modal-section-label" style="margin: 15px 0 8px 5px; opacity: 0.8;">${type}s</label>
@@ -11012,6 +11030,13 @@ window.renderLevel2SidebarContent = function(allResources) {
                    id="resource-toolbox-search"
                    placeholder="Search assets..." 
                    oninput="OL.filterToolbox(this.value)">
+
+            <div class="filter-pill-bar" style="display:flex; gap:4px; overflow-x:auto; padding: 8px 0 4px 0;">
+                <div class="filter-pill active" onclick="OL.setSidebarTypeFilter('All', this)">All</div>
+                ${uniqueTypes.map(t => `
+                    <div class="filter-pill" onclick="OL.setSidebarTypeFilter('${t}', this)">${t}</div>
+                `).join('')}
+            </div>
         </div>
         <div class="drawer-tools" id="resource-toolbox-list">
             ${groupsHtml}
@@ -11193,6 +11218,18 @@ OL.loadInspector = function(targetId, parentId = null) {
                 <h2 style="font-size: 18px; margin: 8px 0; color: #fff;">${esc(data.name || techAsset?.name)}</h2>
             </div>
             <section>
+                <div class="card-section" style="margin-bottom: 20px;">
+                    <label class="modal-section-label">🏷️ Classification & Icon</label>
+                    <select class="modal-input tiny" 
+                            style="text-align: left; padding: 8px 12px; width: 100%;"
+                            onchange="OL.updateResourceType('${techId}', this.value)">
+                        ${Object.entries(RESOURCE_TYPE_MAP).map(([key, cfg]) => `
+                            <option value="${key}" ${techAsset?.type === key ? 'selected' : ''}>
+                                ${cfg.icon} ${cfg.label}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
                 <label class="modal-section-label">PROCEDURE PREVIEW</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto;">
                     ${children.map((s, i) => `
@@ -11320,6 +11357,21 @@ OL.exitToLifecycle = function() {
 
 // Update the filter function to save the query to state
 const originalFilter = OL.filterToolbox;
+state.activeSidebarType = 'All';
+
+OL.setSidebarTypeFilter = function(type, el) {
+    // UI Update: Toggle active class on pills
+    const parent = el.parentElement;
+    parent.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+
+    // State Update
+    state.activeSidebarType = type;
+
+    // Trigger the existing filter logic (respects search query + new type filter)
+    const searchVal = document.getElementById('resource-toolbox-search')?.value || "";
+    OL.filterToolbox(searchVal);
+};
 
 OL.filterToolbox = function(query) {
     state.isFiltering = true; 
@@ -11337,18 +11389,25 @@ OL.filterToolbox = function(query) {
 
     items.forEach(item => {
         const name = item.getAttribute('data-name') || item.innerText.toLowerCase();
-        const matches = name.includes(q);
-        item.style.display = matches ? "flex" : "none";
-        if (matches) totalVisibleCount++;
+        const parentGroup = item.closest('.sidebar-type-group');
+        const groupType = parentGroup?.getAttribute('data-group-type');
+
+        const matchesSearch = name.includes(q);
+        const matchesType = (state.activeSidebarType === 'All' || state.activeSidebarType === groupType);
+
+        if (matchesSearch && matchesType) {
+            item.style.display = "flex";
+            totalVisibleCount++;
+        } else {
+            item.style.display = "none";
+        }
     });
 
     // 2. 🚀 NEW: Clean up the Group Containers
     // If a group (e.g., "Forms") has 0 matching items, hide the whole group/label
-    const groups = listContainer.querySelectorAll('.sidebar-type-group');
-    groups.forEach(group => {
-        const groupItems = group.querySelectorAll('.draggable-workflow-item');
-        const hasVisibleInGroup = [...groupItems].some(item => item.style.display !== 'none');
-        group.style.display = hasVisibleInGroup ? "block" : "none";
+    listContainer.querySelectorAll('.sidebar-type-group').forEach(group => {
+        const hasVisible = [...group.querySelectorAll('.draggable-workflow-item')].some(i => i.style.display !== 'none');
+        group.style.display = hasVisible ? "block" : "none";
     });
 
     // 3. Handle the global empty message

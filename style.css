@@ -2424,6 +2424,39 @@ body.is-visualizer #mainContent {
     background: rgba(255,255,255,0.01);
 }
 
+.filter-pill {
+    padding: 3px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.filter-pill:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+.filter-pill.active {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Hide scrollbar on the pill bar but keep scrolling active */
+.filter-pill-bar::-webkit-scrollbar {
+    display: none;
+}
+.filter-pill-bar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
 /*==================================================================
   3. VERTICAL TIMELINE CANVAS (Stages & Workflows)
 ==================================================================*/
