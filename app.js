@@ -11033,8 +11033,7 @@ window.renderLevel2SidebarContent = function(allResources) {
 
     // 2. Get unique types for the filter buttons
     const uniqueTypes = [...new Set(assets.map(a => a.type || "Other"))].sort();
-    const icon = OL.getRegistryIcon(type);
-    
+
     // 3. Group by type
     const grouped = assets.reduce((acc, res) => {
         const type = res.type || "Other";
@@ -11042,6 +11041,8 @@ window.renderLevel2SidebarContent = function(allResources) {
         acc[type].push(res);
         return acc;
     }, {});
+
+    const icon = OL.getRegistryIcon(type);
 
     // 4. Generate HTML
     const groupsHtml = Object.keys(grouped).sort().map(type => `
