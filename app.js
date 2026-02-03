@@ -11533,18 +11533,17 @@ OL.renderVisualizer = function(resId) {
 
     const steps = res.steps || [];
 
+    // 1. Prepare Nodes
     const nodesHtml = steps.map((step, idx) => {
-        // Fallback for new steps: staggered top-left
-        const x = (step.x !== undefined) ? step.x : (20 + (idx * 40));
-        const y = (step.y !== undefined) ? step.y : (20 + (idx * 80));
+        const x = (step.x !== undefined) ? step.x : (50 + (idx * 40));
+        const y = (step.y !== undefined) ? step.y : (50 + (idx * 80));
 
         return `
             <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
                 draggable="true"
-                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab; margin: 0 !important; transform: none !important;"
+                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab; margin: 0 !important;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
-                
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
                     <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
                 </div>
@@ -11556,17 +11555,23 @@ OL.renderVisualizer = function(resId) {
         `;
     }).join('');
 
+    // 2. Setup the Canvas (No more nested #vis-workspace)
+    canvas.style.position = 'relative';
+    canvas.style.width = '3000px';
+    canvas.style.height = '2000px';
+    canvas.style.background = '#050816';
+    canvas.style.backgroundImage = 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0)';
+    canvas.style.backgroundSize = '70px 50px';
+    canvas.style.overflow = 'auto'; // Allow scrolling the big plane
+
+    canvas.setAttribute('ondragover', 'OL.handleCanvasDragOver(event)');
+    canvas.setAttribute('ondrop', `OL.handleUniversalDrop(event, '${resId}', 'canvas')`);
+
     canvas.innerHTML = `
-    <div class="vis-workspace" id="vis-workspace" 
-         style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;"
-         ondragover="OL.handleCanvasDragOver(event)" 
-         ondrop="OL.handleUniversalDrop(event, '${resId}', 'canvas')">
-        
         <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
             ${nodesHtml}
         </div>
-            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
-        </div>
+        <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
     `;
 
     setTimeout(() => OL.drawVisualizerLines(resId), 20);
@@ -11734,46 +11739,37 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 };
 */
 
-OL.getSnappedCoords = function(e, workspace) {
-    // 🚀 THE RESET: We use offsetX/Y which is relative to the TARGET of the event.
-    // If the user is dragging over the workspace, e.offsetY is the exact pixel from the top of the canvas.
+OL.getSnappedCoords = function(e, canvas) {
+    const rect = canvas.getBoundingClientRect();
     
-    // We check for 'layerY' as a fallback for some browsers during drag operations
-    const rawX = e.offsetX !== undefined ? e.offsetX : e.layerX;
-    const rawY = e.offsetY !== undefined ? e.offsetY : e.layerY;
+    // We saved these in handleStepMoveStart
+    const grabX = parseFloat(e.dataTransfer?.getData("grabX")) || 0;
+    const grabY = parseFloat(e.dataTransfer?.getData("grabY")) || 0;
 
-    // We do NOT subtract rect.top or add scroll here because offsetX 
-    // is already local to the div's coordinate space.
+    // 🎯 THE ONLY MATH YOU NEED:
+    // (Mouse Pos - Canvas Screen Pos) + How far we've scrolled - Where we grabbed the card
+    const x = (e.clientX - rect.left) + canvas.scrollLeft - grabX;
+    const y = (e.clientY - rect.top) + canvas.scrollTop - grabY;
+
     return {
-        x: Math.round(rawX / 70) * 70,
-        y: Math.round(rawY / 50) * 50
+        x: Math.round(x / 70) * 70,
+        y: Math.round(y / 50) * 50
     };
 };
 
-OL.updateSnapPreview = function(e, workspace) {
+OL.updateSnapPreview = function(e, canvas) {
     let ghost = document.getElementById('grid-snap-preview');
     if (!ghost) {
         ghost = document.createElement('div');
         ghost.id = 'grid-snap-preview';
-        ghost.style.cssText = `
-            position: absolute; 
-            width: 240px; 
-            height: 80px;
-            background: rgba(56, 189, 248, 0.15); 
-            border: 2px dashed var(--accent);
-            border-radius: 8px; 
-            pointer-events: none; 
-            z-index: 2000;
-        `;
-        workspace.appendChild(ghost);
+        ghost.style.cssText = `position: absolute; width: 240px; height: 80px; background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent); border-radius: 8px; pointer-events: none; z-index: 2000;`;
+        canvas.appendChild(ghost);
     }
-
-    const snapped = OL.getSnappedCoords(e, workspace);
-    
-    // Apply the coordinates directly
+    const snapped = OL.getSnappedCoords(e, canvas);
     ghost.style.left = snapped.x + 'px';
     ghost.style.top = snapped.y + 'px';
 };
+
 /*
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
