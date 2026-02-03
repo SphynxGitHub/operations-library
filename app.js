@@ -12050,39 +12050,44 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     
-    const moveId = e.dataTransfer.getData("moveNodeId"); // For moving existing nodes
-    const resId = e.dataTransfer.getData("resId"); // For dragging new items from sidebar
+    // 1. Identification
+    const moveId = e.dataTransfer.getData("moveNodeId"); 
+    const resId = e.dataTransfer.getData("resId"); 
     const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
-    const isVaultMode = location.hash.includes('vault');
+    const canvas = document.getElementById('fs-canvas');
 
-    // 🚀 SCENARIO A: TIER 3 VISUAL CANVAS (Coordinate Mode)
+    // 🚀 SCENARIO: TIER 3 VISUAL CANVAS
     if (state.focusedResourceId) {
         const parent = OL.getResourceById(state.focusedResourceId);
-        const workspace = document.getElementById('vis-workspace'); 
-        if (!workspace || !parent) return;
+        if (!canvas || !parent) return;
 
-        // 🎯 USE THE UNIFIED MATH
-        const snapped = OL.getSnappedCoords(e, workspace);
+        // 🎯 Use the exact same math as the Preview
+        const snapped = OL.getSnappedCoords(e, canvas);
 
         let targetStep;
         if (moveId) {
             targetStep = parent.steps.find(s => s.id === moveId);
         } else if (atomicPayload) {
             const data = JSON.parse(atomicPayload);
-            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [], x: snapped.x, y: snapped.y };
+            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [] };
+            parent.steps.push(targetStep);
+        } else if (resId) {
+            const sourceRes = OL.getResourceById(resId);
+            targetStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, outcomes: [] };
             parent.steps.push(targetStep);
         }
 
         if (targetStep) {
             targetStep.x = snapped.x;
             targetStep.y = snapped.y;
+            console.log(`📍 Card saved at: ${snapped.x}, ${snapped.y}`);
         }
 
-        // Cleanup
+        // Cleanup Ghost and UI
         const ghost = document.getElementById('grid-snap-preview');
         if (ghost) ghost.remove();
+        cleanupUI();
         
-        cleanupUI(); 
         OL.persist();
         OL.renderVisualizer(state.focusedResourceId);
         return;
