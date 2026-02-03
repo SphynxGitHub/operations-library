@@ -11735,14 +11735,15 @@ OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
 */
 
 OL.getSnappedCoords = function(e, workspace) {
-    // 🚀 THE FIX: We need the position of the scrollable WORKSPACE itself
+    // 🚀 THE FIX: Get the position of the scrollable WORKSPACE itself
     const rect = workspace.getBoundingClientRect();
     
     // Calculate mouse position relative to the workspace's physical top-left corner
-    // We do NOT add scrollLeft/Top here because absolute children move WITH the parent
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // We add scrollLeft/Top to account for panning the large canvas
+    const x = (e.clientX - rect.left) + workspace.scrollLeft;
+    const y = (e.clientY - rect.top) + workspace.scrollTop;
 
+    // Use your specific 70/50 grid increments
     return {
         x: Math.round(x / 70) * 70,
         y: Math.round(y / 50) * 50
@@ -11754,11 +11755,17 @@ OL.updateSnapPreview = function(e, workspace) {
     if (!ghost) {
         ghost = document.createElement('div');
         ghost.id = 'grid-snap-preview';
-        // 🚀 MUST be absolute to the workspace
+        // 🚀 CRITICAL: Must be absolute to match the cards
         ghost.style.cssText = `
-            position: absolute; width: 240px; height: 80px;
-            background: rgba(56, 189, 248, 0.15); border: 2px dashed var(--accent);
-            border-radius: 8px; pointer-events: none; z-index: 2000;
+            position: absolute; 
+            width: 240px; 
+            height: 80px;
+            background: rgba(56, 189, 248, 0.15); 
+            border: 2px dashed var(--accent);
+            border-radius: 8px; 
+            pointer-events: none; 
+            z-index: 2000;
+            display: block;
         `;
         workspace.appendChild(ghost);
     }
@@ -12058,7 +12065,7 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
         const workspace = document.getElementById('vis-workspace'); 
         if (!workspace || !parent) return;
 
-        // 🎯 USE THE EXACT SAME HELPER
+        // 🎯 USE THE UNIFIED MATH
         const snapped = OL.getSnappedCoords(e, workspace);
 
         let targetStep;
@@ -12066,7 +12073,7 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             targetStep = parent.steps.find(s => s.id === moveId);
         } else if (atomicPayload) {
             const data = JSON.parse(atomicPayload);
-            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [] };
+            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [], x: snapped.x, y: snapped.y };
             parent.steps.push(targetStep);
         }
 
