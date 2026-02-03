@@ -11528,9 +11528,9 @@ window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
-    // 🚀 THE FIX: Ensure the SVG is absolute and fills the entire relative parent
+    // 🚀 THE FIX: Use display: inline-block so the wrapper expands to match the height of the list
     let html = `
-    <div id="l3-canvas-wrapper" style="position: relative; width: 100%; min-height: 500px;">
+    <div id="l3-canvas-wrapper" style="position: relative; display: inline-block; min-width: 100%; min-height: 100%; padding-left: 100px;">
         <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 1; overflow: visible;"></svg>`;
 
     const groups = [
@@ -11542,22 +11542,19 @@ window.renderLevel3Canvas = function(resourceId) {
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
 
         return `
-            <div class="stage-container" style="position: relative; z-index: 10; margin-left: 80px;">
+            <div class="stage-container" style="position: relative; z-index: 10; margin-bottom: 40px;">
                 <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
                 <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     ${steps.map((step, idx) => `
                         <div class="workflow-block-card" 
                              id="step-node-${step.id}" 
                              draggable="true" 
-                             style="position: relative;"
+                             style="position: relative; margin-bottom: 10px; width: 350px;"
                              onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
                              ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
                              ondragover="OL.handleCanvasDragOver(event)"
                              ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
                              
-                            <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%;"></div>
-                            <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%;"></div>
-
                             <div class="bold accent">${esc(step.name || "Untitled")}</div>
                             <div class="tiny muted">${esc(step.type)}</div>
                         </div>`).join('')}
@@ -11567,9 +11564,8 @@ window.renderLevel3Canvas = function(resourceId) {
 
     html += `</div>`;
     
-    // 🚀 REDRAW TRIGGER: Run multiple times to ensure the DOM is settled
-    setTimeout(() => OL.drawVerticalLogicLines(resourceId), 50);
-    setTimeout(() => OL.drawVerticalLogicLines(resourceId), 300);
+    // Trigger redraw
+    setTimeout(() => OL.drawVerticalLogicLines(resourceId), 100);
     
     return html;
 };
@@ -11581,16 +11577,12 @@ OL.drawVerticalLogicLines = function(resId) {
     
     const res = OL.getResourceById(resId);
     const steps = res.steps || [];
-    const cRect = wrapper.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
 
-    // Set SVG internal dimensions to match physical dimensions
-    svg.setAttribute('width', wrapper.offsetWidth);
-    svg.setAttribute('height', wrapper.offsetHeight);
-    
     let pathsHtml = "";
 
     steps.forEach((step, sIdx) => {
-        (step.outcomes || []).forEach((oc) => {
+        (step.outcomes || []).forEach((oc, oIdx) => {
             let targetId = null;
             if (oc.action?.startsWith('jump_step_')) {
                 targetId = oc.action.replace('jump_step_', '');
@@ -11605,25 +11597,29 @@ OL.drawVerticalLogicLines = function(resId) {
                 const s = sourceEl.getBoundingClientRect();
                 const t = targetEl.getBoundingClientRect();
 
-                // 🎯 Calculate coordinates relative to the L3 Wrapper
-                const x1 = s.left - cRect.left;
-                const y1 = (s.top + s.height / 2) - cRect.top;
-                const x2 = t.left - cRect.left;
-                const y2 = (t.top + t.height / 2) - cRect.top;
+                // 🎯 Calculate coordinates relative to the wrapper origin
+                const x1 = s.left - wrapperRect.left;
+                const y1 = (s.top + s.height / 2) - wrapperRect.top;
+                const x2 = t.left - wrapperRect.left;
+                const y2 = (t.top + t.height / 2) - wrapperRect.top;
 
+                // Loop back lines curve further out than forward lines
                 const isLoopBack = y2 < y1;
-                const curveWidth = isLoopBack ? 60 : 40;
+                const curveWidth = isLoopBack ? (80 + (oIdx * 15)) : (40 + (oIdx * 10));
                 
-                // Draw a curve that arcs out to the left
+                // M = Start, C = Bezier Curve Control Points
                 const d = `M ${x1} ${y1} C ${x1 - curveWidth} ${y1}, ${x2 - curveWidth} ${y2}, ${x2} ${y2}`;
                 const color = oc.condition ? "#fbbf24" : "#38bdf8";
 
-                pathsHtml += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="${oc.condition ? '5,3' : '0'}" opacity="0.6" marker-end="url(#arrowhead-l3)" />`;
+                pathsHtml += `
+                    <path d="${d}" fill="none" stroke="${color}" stroke-width="2" 
+                          stroke-dasharray="${oc.condition ? '5,3' : '0'}" 
+                          opacity="0.6" marker-end="url(#arrowhead-l3)" />
+                `;
             }
         });
     });
 
-    // Inject the paths and the marker definition
     svg.innerHTML = `
         <defs>
             <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
