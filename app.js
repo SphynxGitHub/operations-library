@@ -11533,15 +11533,23 @@ OL.renderVisualizer = function(resId) {
 
     const steps = res.steps || [];
 
-    // 1. Generate Nodes using saved X/Y coordinates
-    const nodesHtml = steps.map((step) => {
-        // Default starting position if never moved
-        const x = (step.x !== undefined) ? step.x : (20 + (idx * 40));
-        const y = (step.y !== undefined) ? step.y : (20 + (idx * 80));
+    // 1. Generate Nodes with Boundary Protection
+    const nodesHtml = steps.map((step, idx) => {
+        // Safety: If X or Y is missing or weird, stagger them in the top left
+        let x = parseInt(step.x);
+        let y = parseInt(step.y);
+
+        if (isNaN(x)) x = 20 + (idx * 30);
+        if (isNaN(y)) y = 20 + (idx * 60);
+
+        // Hard limit: Don't let them render outside the workspace
+        x = Math.max(0, Math.min(x, 2400));
+        y = Math.max(0, Math.min(y, 1400));
+
         return `
             <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
                 draggable="true"
-                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab;"
+                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 50; cursor: grab; opacity: 1 !important;"
                 onmousedown="OL.loadInspector('${step.id}', '${resId}')"
                 ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
                 
@@ -11549,14 +11557,14 @@ OL.renderVisualizer = function(resId) {
                     <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
                 </div>
                 <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name)}
+                    ${esc(step.name || "Untitled Step")}
                 </div>
                 <div class="new-link-trigger" onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">+</div>
             </div>
         `;
     }).join('');
 
-    // 2. Render Blank Canvas (No Swimlanes)
+    // 2. Controlled Workspace Size
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
              style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;">
@@ -11567,7 +11575,7 @@ OL.renderVisualizer = function(resId) {
         </div>
     `;
 
-    setTimeout(() => OL.drawVisualizerLines(resId), 10);
+    setTimeout(() => OL.drawVisualizerLines(resId), 20);
 };
 
 // --- NAVIGATION & STATE ---
@@ -11927,28 +11935,23 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
-    cleanupUI(); // Remove grey highlights immediately
     
     const moveId = e.dataTransfer.getData("moveNodeId");
     const atomicPayload = e.dataTransfer.getData("atomicPayload");
 
     if (state.focusedResourceId) {
         const parent = OL.getResourceById(state.focusedResourceId);
-        // 🚀 THE FIX: Use the Canvas Wrapper for coordinate relative math
-        const workspace = document.getElementById('fs-canvas'); 
+        const workspace = document.getElementById('vis-workspace'); 
         if (!workspace || !parent) return;
 
         const rect = workspace.getBoundingClientRect();
         
-        // Use scrollLeft/Top to account for user panning the canvas
-        const scrollX = workspace.scrollLeft;
-        const scrollY = workspace.scrollTop;
+        // 🚀 CALCULATE CLEAN COORDINATES
+        // This calculates the drop point relative to the top-left of the scrollable workspace
+        let rawX = e.clientX - rect.left;
+        let rawY = e.clientY - rect.top;
 
-        // Calculate position relative to the container, accounting for zoom/scroll
-        let rawX = (e.clientX - rect.left) + scrollX;
-        let rawY = (e.clientY - rect.top) + scrollY;
-
-        // 🎯 SNAP LOGIC: 70px horizontal, 50px vertical
+        // Snap to 1/4 card logic
         const snapX = Math.round(rawX / 70) * 70;
         const snapY = Math.round(rawY / 50) * 50;
 
@@ -11957,22 +11960,24 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             targetStep = parent.steps.find(s => s.id === moveId);
         } else if (atomicPayload) {
             const data = JSON.parse(atomicPayload);
-            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [] };
+            targetStep = { id: uid(), name: data.name, type: data.type, outcomes: [], x: snapX, y: snapY };
             parent.steps.push(targetStep);
         }
 
         if (targetStep) {
             targetStep.x = snapX;
             targetStep.y = snapY;
-            console.log(`📍 Card Set to: ${snapX}, ${snapY}`);
         }
 
+        // 🧹 CLEANUP
+        document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+        cleanupUI(); 
+        
         OL.persist();
         OL.renderVisualizer(state.focusedResourceId);
         return;
     }
 };
-
 window.addEventListener('dragend', cleanupUI);
 
 // --- UNMAPPING / TRASH LOGIC ---
