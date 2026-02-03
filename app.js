@@ -11584,11 +11584,15 @@ OL.drawVerticalLogicLines = function(resId) {
     steps.forEach((step, sIdx) => {
         (step.outcomes || []).forEach((oc, oIdx) => {
             let targetId = null;
-            if (oc.action?.startsWith('jump_step_')) {
+            
+            // 🚀 IMPROVED TARGET RESOLUTION
+            if (oc.action && oc.action.startsWith('jump_step_')) {
                 targetId = oc.action.replace('jump_step_', '');
             } else if (oc.action === 'next') {
                 targetId = steps[sIdx + 1]?.id;
             }
+
+            if (!targetId) return; // Skip if no target found
 
             const sourceEl = document.getElementById(`step-node-${step.id}`);
             const targetEl = document.getElementById(`step-node-${targetId}`);
@@ -11597,24 +11601,30 @@ OL.drawVerticalLogicLines = function(resId) {
                 const s = sourceEl.getBoundingClientRect();
                 const t = targetEl.getBoundingClientRect();
 
-                // 🎯 Calculate coordinates relative to the wrapper origin
+                // Start from the LEFT center of the card
                 const x1 = s.left - wrapperRect.left;
                 const y1 = (s.top + s.height / 2) - wrapperRect.top;
+                
+                // End at the LEFT center of the target
                 const x2 = t.left - wrapperRect.left;
                 const y2 = (t.top + t.height / 2) - wrapperRect.top;
 
-                // Loop back lines curve further out than forward lines
-                const isLoopBack = y2 < y1;
-                const curveWidth = isLoopBack ? (80 + (oIdx * 15)) : (40 + (oIdx * 10));
+                // 🎨 THE ARC MATH: Arc out to the left margin
+                const distance = Math.abs(y2 - y1);
+                // Each line gets a slightly different curve width so they don't overlap
+                const curveWidth = 30 + (oIdx * 15) + (distance * 0.05); 
                 
-                // M = Start, C = Bezier Curve Control Points
-                const d = `M ${x1} ${y1} C ${x1 - curveWidth} ${y1}, ${x2 - curveWidth} ${y2}, ${x2} ${y2}`;
+                const d = `M ${x1} ${y1} 
+                           C ${x1 - curveWidth} ${y1}, 
+                             ${x2 - curveWidth} ${y2}, 
+                             ${x2} ${y2}`;
+
                 const color = oc.condition ? "#fbbf24" : "#38bdf8";
 
                 pathsHtml += `
-                    <path d="${d}" fill="none" stroke="${color}" stroke-width="2" 
-                          stroke-dasharray="${oc.condition ? '5,3' : '0'}" 
-                          opacity="0.6" marker-end="url(#arrowhead-l3)" />
+                    <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" 
+                          stroke-dasharray="${oc.condition ? '6,3' : '0'}" 
+                          opacity="0.7" marker-end="url(#arrowhead-l3)" />
                 `;
             }
         });
@@ -11622,8 +11632,8 @@ OL.drawVerticalLogicLines = function(resId) {
 
     svg.innerHTML = `
         <defs>
-            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.5)" />
+            <marker id="arrowhead-l3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.6)" />
             </marker>
         </defs>
         ${pathsHtml}
