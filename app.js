@@ -11567,14 +11567,16 @@ OL.renderVisualizer = function(resId) {
     // 2. Controlled Workspace Size
     canvas.innerHTML = `
         <div class="vis-workspace" id="vis-workspace" 
-             style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;">
+            style="position: relative; background: #050816; width: 2500px; height: 1500px; overflow: auto; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 0); background-size: 70px 50px;"
+            ondragover="OL.handleCanvasDragOver(event)" 
+            ondrop="OL.handleUniversalDrop(event, '${resId}', 'canvas')">
+            
             <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
                 ${nodesHtml}
             </div>
             <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
         </div>
     `;
-
     setTimeout(() => OL.drawVisualizerLines(resId), 20);
 };
 
@@ -11683,6 +11685,7 @@ OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
 };
 
 // 2. Destination: Required to allow the canvas to receive the drop
+/*
 OL.handleCanvasDragOver = function(e) {
     e.preventDefault();
     
@@ -11729,7 +11732,7 @@ OL.handleCanvasDragOver = function(e) {
 };
 
 // 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
-/*OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
+OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
     
     e.dataTransfer.setData("moveStepId", stepId);
@@ -11739,15 +11742,59 @@ OL.handleCanvasDragOver = function(e) {
 };
 */
 
-OL.handleStepMoveStart = function(e, id, resId) {
-    // Prevent dragging when clicking buttons/triggers
-    if (e.target.classList.contains('new-link-trigger')) return;
-
-    e.dataTransfer.setData("moveNodeId", id);
-    e.dataTransfer.setData("parentResId", resId);
+OL.handleCanvasDragOver = function(e) {
+    e.preventDefault();
     
-    // Create a ghost image or just set opacity
-    e.target.style.opacity = "0.4";
+    e.dataTransfer.dropEffect = "move";
+
+    if (state.focusedResourceId) {
+        return; 
+    }
+
+    // 2. Find or Create Placeholder
+    let placeholder = container.querySelector('.drop-placeholder');
+    if (!placeholder) {
+        placeholder = document.createElement('div');
+        placeholder.className = 'drop-placeholder';
+    }
+
+    // 3. Calculate positioning
+    const cards = [...container.querySelectorAll('.workflow-block-card:not(.dragging)')];
+    
+    // Find the card that is currently under the mouse
+    const afterElement = cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+    // 4. Insert Placeholder
+    if (afterElement) {
+        container.insertBefore(placeholder, afterElement);
+        // Find the index of the card we are slipping in front of
+        state.currentDropIndex = cards.indexOf(afterElement);
+    } else {
+        container.appendChild(placeholder);
+        // We are at the bottom
+        state.currentDropIndex = cards.length;
+    }
+};
+
+OL.handleStepMoveStart = function(e, id, resId) {
+    // 1. Identify the element
+    const target = e.currentTarget;
+    target.classList.add('is-dragging-source');
+    
+    // 2. Set the data (Required for the drop to work)
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("moveNodeId", id);
+    
+    // 3. Optional: Create a cleaner drag image
+    target.style.opacity = "0.4";
 };
 
 OL.handleNodeMoveStart = function(e, id, index) {
