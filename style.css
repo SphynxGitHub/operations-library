@@ -2716,6 +2716,14 @@ body.is-visualizer #mainContent {
     outline: 1px solid var(--accent);
 }
 
+.stage-delete-x:hover {
+    transform: scale(1.2);
+}
+
+.stage-header-row:hover .stage-delete-x {
+    opacity: 0.6; /* Makes the X visible when hovering over the header */
+}
+
 /* Unified Vertical Container for Level 1, 2, and 3 */
 .stage-workflow-stream, 
 .lane-workflow-stream {

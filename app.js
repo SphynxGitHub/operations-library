@@ -11260,15 +11260,25 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     const stages = sourceData.stages || [];
     return stages.map((stage, i) => `
         <div class="stage-container">
-            <div class="stage-header-row">
-                <span class="stage-number">${i+1}</span>
-                <span class="stage-name" 
-                      contenteditable="true" 
-                      spellcheck="false"
-                      onblur="OL.renameLifecycleStage(${isVaultMode}, '${stage.id}', this.innerText)"
-                      onkeydown="if(event.key==='Enter'){ event.preventDefault(); this.blur(); }">
-                    ${esc(stage.name)}
-                </span>
+            <div class="stage-header-row" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                    <span class="stage-number">${i+1}</span>
+                    <span class="stage-name" 
+                          contenteditable="true" 
+                          spellcheck="false"
+                          style="flex:1; outline:none;"
+                          onblur="OL.renameLifecycleStage(${isVaultMode}, '${stage.id}', this.innerText)"
+                          onkeydown="if(event.key==='Enter'){ event.preventDefault(); this.blur(); }">
+                        ${esc(stage.name)}
+                    </span>
+                </div>
+                <div class="stage-delete-x" 
+                     style="cursor:pointer; padding:0 5px; opacity:0.3; font-weight:bold; font-size:14px; transition:0.2s;" 
+                     onclick="event.stopPropagation(); OL.deleteLifecycleStage(${isVaultMode}, '${stage.id}')"
+                     onmouseover="this.style.opacity=1; this.style.color='#ef4444'"
+                     onmouseout="this.style.opacity=0.3; this.style.color='inherit'">
+                    ×
+                </div>
             </div>
             <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
             ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
@@ -11289,6 +11299,32 @@ OL.renameLifecycleStage = function(isVaultMode, stageId, newName) {
         OL.persist();
         console.log(`✅ Stage ${stageId} renamed to: ${newName}`);
     }
+};
+
+OL.deleteLifecycleStage = function(isVaultMode, stageId) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    if (!confirm("Remove this stage? Workflows in this column will be moved back to the library.")) return;
+
+    // 1. Remove the stage from the list
+    if (sourceData.stages) {
+        sourceData.stages = sourceData.stages.filter(s => s.id !== stageId);
+    }
+
+    // 2. Unmap workflows so they return to the sidebar
+    allResources.forEach(res => {
+        if (res.stageId === stageId) {
+            res.stageId = null;
+            res.mapOrder = null;
+        }
+    });
+
+    // 3. Save and Refresh
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+    console.log(`🗑️ Stage ${stageId} removed and workflows unmapped.`);
 };
 
 // --- TIER 2 RENDERER ---
