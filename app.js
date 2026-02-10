@@ -95,6 +95,11 @@ OL.sync = function() {
         state.master = cloudData.master;
         state.clients = cloudData.clients;
 
+        // 🚀 NEW: Check if there is "Fresh AI Content" waiting
+        if (cloudData.ai_inbox && cloudData.ai_inbox.targetResId === state.focusedResourceId) {
+            OL.processIncomingAI(cloudData.ai_inbox);
+        }
+
         // 🚀 THE LOGIC FIX: 
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('access');
@@ -123,6 +128,48 @@ OL.sync = function() {
             }
         }
     });
+};
+
+OL.processIncomingAI = async function(inboxData) {
+    const res = OL.getResourceById(inboxData.targetResId);
+    if (!res) return;
+
+    // 🚀 THE PARSE: Zapier sends a string, we need an array.
+    let newSteps = [];
+    try {
+        newSteps = typeof inboxData.steps === 'string' ? JSON.parse(inboxData.steps) : inboxData.steps;
+    } catch(e) {
+        console.error("AI JSON Parse Error:", e);
+        return;
+    }
+
+    // 1. Assign real UIDs to every new step
+    newSteps.forEach(s => s.id = uid());
+
+    // 2. Resolve targetIdx to actual jump_step_IDs
+    newSteps.forEach(step => {
+        if (step.outcomes) {
+            step.outcomes.forEach(oc => {
+                if (oc.targetIdx !== undefined) {
+                    const targetStep = newSteps.find(s => s.tempIdx === oc.targetIdx);
+                    if (targetStep) oc.action = `jump_step_${targetStep.id}`;
+                }
+            });
+        }
+        // Clean up temp mapping data
+        delete step.tempIdx;
+    });
+
+    // 3. Append to sequence and Persist
+    res.steps = [...(res.steps || []), ...newSteps];
+    
+    // 🧹 CLEAR THE INBOX: Delete the ai_inbox field so we don't repeat this
+    await db.collection('systems').doc('main_state').update({
+        ai_inbox: firebase.firestore.FieldValue.delete()
+    });
+
+    console.log("✨ AI Workflow integrated successfully.");
+    renderGlobalVisualizer(false);
 };
 
 window.addEventListener("load", () => {
@@ -11264,9 +11311,19 @@ window.renderLevel2SidebarContent = function(allResources) {
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
+    const aiButtonHtml = `
+        <div class="card-section" style="margin-bottom: 20px; padding: 10px; background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; border-radius: 8px;">
+            <label class="modal-section-label" style="color: #a78bfa;">✨ AI AUTO-BUILDER</label>
+            <button class="btn tiny primary" style="width:100%; background:#8b5cf6; color:white;" onclick="OL.openAIImportModal('${resourceId}')">
+                🪄 Import from Transcript
+            </button>
+        </div>
+    `;
+
     return `
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
         <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto;">
+            ${aiButtonHtml}
             <label class="modal-section-label" style="color:#ffbf00">⚡ Triggers</label>
             ${ATOMIC_STEP_LIB.Triggers.map(t => `<div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>`).join('')}
             <label class="modal-section-label" style="margin-top:20px;">🎬 Action Builder</label>
@@ -11285,6 +11342,58 @@ window.renderLevel3SidebarContent = function(resourceId) {
             🗑️ Drop to Unmap
         </div>
     `;
+};
+
+OL.openAIImportModal = function(resId) {
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">🪄 AI Workflow Generator</div></div>
+        <div class="modal-body">
+            <p class="tiny muted">Paste a transcript or process notes. AI will map the steps and logic branches.</p>
+            <textarea id="ai-raw-input" class="modal-textarea" style="min-height: 200px;" 
+                      placeholder="e.g. When a client books a meeting, we check if they are a VIP. If they are, send a gift. If not, just send the confirmation email."></textarea>
+            
+            <div id="ai-status" style="margin-top:15px; display:none; text-align:center;">
+                <div class="spinner" style="margin-bottom:10px;"></div>
+                <div class="tiny accent">Architecting workflow logic...</div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" id="ai-generate-btn" onclick="OL.executeAIImport('${resId}')">Generate Workflow</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.executeAIImport = async function(resId) {
+    const text = document.getElementById('ai-raw-input').value;
+    const btn = document.getElementById('ai-generate-btn');
+    const status = document.getElementById('ai-status');
+
+    if (!text) return alert("Please provide text.");
+
+    btn.style.display = "none";
+    status.style.display = "block";
+
+    try {
+        // Send to Zapier
+        await fetch('https://hooks.zapier.com/hooks/catch/2702450/ueswo5t/', {
+            method: 'POST',
+            mode: 'no-cors', 
+            body: JSON.stringify({ 
+                transcript: text, 
+                targetResId: resId // 🚀 Zapier will pass this back to Firestore
+            })
+        });
+
+        status.innerHTML = "🧠 AI is architecting... Closing in 3s.";
+        setTimeout(() => OL.closeModal(), 3000);
+        
+    } catch (err) {
+        console.error("AI Trigger Error:", err);
+        btn.style.display = "block";
+    }
 };
 
 OL.quickCreateWorkflow = function() {
