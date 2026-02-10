@@ -779,12 +779,12 @@ window.renderClientDashboard = function() {
     }
 
     container.innerHTML = `
-        <div class="setion-header">
+        <div class="section-header search-header">     
             <div style="flex: 1;">
                 <h2>Registry & Command</h2>
                 <div class="small muted">Quick access to projects and master systems</div>
             </div>
-        <div class="section-header search-header">           
+              
             <div class="search-map-container" style="position: relative; flex: 1; max-width: 400px;">
                 <input type="text" id="global-command-search" class="modal-input" 
                       placeholder="Search clients or apps..." 
@@ -819,7 +819,14 @@ window.renderClientDashboard = function() {
             ${clients.map(client => `
                 <div class="card client-card is-clickable" onclick="OL.switchClient('${client.id}')">
                     <div class="card-header">
-                        <div class="card-title">${esc(client.meta.name)}</div>
+                        <div class="card-title" 
+                            contenteditable="true" 
+                            spellcheck="false"
+                            onclick="event.stopPropagation()"
+                            onblur="OL.updateClientNameInline('${client.id}', this.innerText)"
+                            onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">
+                            ${esc(client.meta.name)}
+                        </div>
                         <div class="status-pill">${esc(client.meta.status || 'Discovery')}</div>
                     </div>
                     <div class="card-body">
@@ -976,6 +983,25 @@ OL.switchClient = function (id) {
     window.location.hash = "#/client-tasks";
     window.handleRoute();
 }
+
+OL.updateClientNameInline = function(clientId, newName) {
+    const client = state.clients[clientId];
+    if (!client) return;
+    
+    const cleanName = newName.trim();
+    if (!cleanName || cleanName === client.meta.name) return;
+
+    // Update the local state
+    client.meta.name = cleanName;
+
+    // Persist to Firebase
+    OL.persist();
+    
+    console.log(`✅ Client renamed to: ${cleanName}`);
+    
+    // Note: buildLayout() will be triggered by your OL.sync engine 
+    // when the Firestore write completes.
+};
 
 OL.deleteClient = function(clientId) {
     const client = state.clients[clientId];
