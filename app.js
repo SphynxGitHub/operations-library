@@ -766,9 +766,17 @@ window.renderClientDashboard = function() {
     const container = document.getElementById("mainContent");
     if (!container) return;
 
-    const clients = state.clients ? Object.values(state.clients) : [];
+    // 🚀 FILTER LOGIC
+    const activeFilter = state.dashboardFilter || 'All';
+    let clients = state.clients ? Object.values(state.clients) : [];
     
-    if (clients.length === 0) {
+    // Apply Status Filter
+    if (activeFilter !== 'All') {
+        clients = clients.filter(c => c.meta.status === activeFilter);
+    }
+    
+    // Empty State
+    if (clients.length === 0 && activeFilter === 'All') {
         container.innerHTML = `
             <div style="padding:40px; text-align:center; opacity:0.5;">
                 <p>Registry is empty.</p>
@@ -778,7 +786,7 @@ window.renderClientDashboard = function() {
     }
 
     container.innerHTML = `
-        <div class="section-header search-header" style="display: flex; align-items: flex-end; gap: 20px; margin-bottom: 30px;">
+        <div class="section-header search-header" style="display: flex; align-items: flex-end; gap: 20px; margin-bottom: 10px;">
             <div style="flex: 1;">
                 <h2 style="margin:0;">Registry & Command</h2>
                 <div class="small muted">Quick access to projects and master systems</div>
@@ -795,6 +803,16 @@ window.renderClientDashboard = function() {
                 <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
                 <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>
             </div>
+        </div>
+
+        <div class="filter-bar" style="display:flex; gap:10px; margin-bottom:25px; padding-left: 5px;">
+            ${['All', 'Discovery', 'Active', 'On Hold', 'Review', 'Completed'].map(f => `
+                <span class="pill tiny ${activeFilter === f ? 'accent' : 'soft'}" 
+                      style="cursor:pointer; border: 1px solid ${activeFilter === f ? 'var(--accent)' : 'transparent'}; padding: 4px 12px; border-radius: 20px;"
+                      onclick="OL.setDashboardFilter('${f}')">
+                    ${f}
+                </span>
+            `).join('')}
         </div>
 
         <div class="cards-grid">
@@ -814,7 +832,11 @@ window.renderClientDashboard = function() {
                 </div>
             </div>
 
-            ${clients.map(client => `
+            ${clients.map(client => {
+                // Get 3 most recent tasks for the hover preview
+                const recentTasks = (client.projectData?.clientTasks || []).slice(-3).reverse();
+
+                return `
                 <div class="card client-card is-clickable" onclick="OL.switchClient('${client.id}')">
                     <div class="card-header">
                         <div class="card-title" 
@@ -827,13 +849,25 @@ window.renderClientDashboard = function() {
                              onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">
                              ${esc(client.meta.name)}
                         </div>
-                        <div class="status-pill">${esc(client.meta.status || 'Discovery')}</div>
+                        <select class="status-pill-dropdown" 
+                                onclick="event.stopPropagation()" 
+                                onchange="OL.updateClientStatus('${client.id}', this.value)"
+                                style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
+                            ${['Discovery', 'Active', 'On Hold', 'Review', 'Completed'].map(status => `
+                                <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
+                            `).join('')}
+                        </select>
                     </div>
                     <div class="card-body">
-                        <div class="small muted" style="margin-bottom: 20px;">
-                            Onboarded: ${client.meta.onboarded}
+                        <div class="hover-preview-zone" style="position:relative; display:inline-block;">
+                            <div class="small muted">Onboarded: ${client.meta.onboarded}</div>
+                            <div class="task-preview-tooltip">
+                                <div class="bold tiny accent" style="margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:3px;">Recent Activity</div>
+                                ${recentTasks.length ? recentTasks.map(t => `<div class="tiny muted" style="margin-bottom:2px;">• ${esc(t.task)}</div>`).join('') : '<div class="tiny muted">No recent tasks</div>'}
+                            </div>
                         </div>
-                        <div class="card-footer-actions">
+
+                        <div class="card-footer-actions" style="margin-top:20px;">
                             <button class="btn small soft flex-1">Enter Project</button>
                             <button class="btn tiny soft" style="margin-left:8px;"
                                     onclick="event.stopPropagation(); OL.openClientProfileModal('${client.id}')">
@@ -841,8 +875,8 @@ window.renderClientDashboard = function() {
                             </button>
                         </div>
                     </div>
-                </div>
-            `).join('')}
+                </div>`;
+            }).join('')}
         </div>
     `;
 };
@@ -981,6 +1015,26 @@ OL.switchClient = function (id) {
     window.location.hash = "#/client-tasks";
     window.handleRoute();
 }
+
+OL.setDashboardFilter = function(filterName) {
+    state.dashboardFilter = filterName;
+    // We don't necessarily need to persist this to Firebase (local session is fine)
+    window.renderClientDashboard();
+};
+
+OL.updateClientStatus = function(clientId, newStatus) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    client.meta.status = newStatus;
+    
+    // Save to Firestore
+    OL.persist();
+    
+    console.log(`📡 Status updated for ${client.meta.name}: ${newStatus}`);
+    
+    // The sync engine will automatically refresh the UI across all tabs
+};
 
 OL.updateClientNameInline = function(clientId, newName) {
     const client = state.clients[clientId];

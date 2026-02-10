@@ -264,6 +264,24 @@ body:has(.sidebar.collapsed) #mainContent {
 .public-nav a.active { background: var(--accent); color: white; }
 .public-content { padding: 40px; overflow-y: auto; flex: 1; }
 
+.status-pill-dropdown {
+    padding: 2px 8px;
+    height: 22px;
+    appearance: none; /* Removes default arrow */
+    -webkit-appearance: none;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.status-pill-dropdown:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+}
+
+/* Optional: Color-coding the border based on status */
+.status-pill-dropdown[value="Active"] { border-color: var(--success); }
+.status-pill-dropdown[value="On Hold"] { border-color: var(--warn); }
+
 /* ============================================================
    UTILITIES & STATE
    ============================================================ */
