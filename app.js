@@ -11781,23 +11781,39 @@ OL.clearInspector = function() {
 window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     const client = getActiveClient();
     const sourceResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
     const matchedWorkflows = sourceResources
         .filter(r => String(r.stageId) === String(stageId))
         .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
     if (matchedWorkflows.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
 
-    return matchedWorkflows.map((res, idx) => `
-        <div class="workflow-block-card" draggable="true" 
-             onmousedown="OL.loadInspector('${res.id}')"
+    return matchedWorkflows.map((res, idx) => {
+        // 🚀 THE LOGIC DESCRIPTOR:
+        // Check if there is a condition defined for this workflow
+        const entryCondition = (res.outcomes && res.outcomes.length > 0) ? res.outcomes[0].condition : null;
+
+        return `
+        <div class="workflow-block-card l1-workflow-node" 
+             id="l1-node-${res.id}"
+             draggable="true" 
+             onmousedown="event.stopPropagation(); OL.loadInspector('${res.id}')"
              ondragstart="OL.handleNodeMoveStart(event, '${res.id}', ${idx})"
-             ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleNodeRearrange(event, '${stageId}', ${idx})"
              ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
+            
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
-            <div class="tiny muted">📝 ${(res.steps || []).length} Resources</div>
+            
+            ${entryCondition ? `
+                <div class="tiny" style="color: var(--vault-gold); font-style: italic; margin-top: 4px; border-top: 1px solid rgba(251, 191, 36, 0.1); padding-top: 4px;">
+                    <span style="opacity: 0.7;">IF:</span> ${esc(entryCondition)}
+                </div>
+            ` : ''}
+            
+            <div class="tiny muted" style="margin-top: 8px; font-size: 9px; opacity: 0.6;">
+                📝 ${(res.steps || []).length} Resources
+            </div>
         </div>
-    `).join('');
+    `}).join('');
 };
 
 // LEVEL 2: Resources in Workflow Lanes

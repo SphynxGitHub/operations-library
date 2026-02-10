@@ -2910,6 +2910,19 @@ body.is-visualizer #mainContent {
     pointer-events: none; /* 🚀 CRITICAL: Forces the drop to hit the card, not the text */
 }
 
+.l1-workflow-node .tiny {
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+}
+
+/* Optional: Make the card slightly taller if logic is present to avoid crowding */
+.l1-workflow-node {
+    min-height: 65px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
 .workflow-block-card {
     pointer-events: auto !important;
     display: flex;
