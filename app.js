@@ -462,6 +462,11 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const main = document.getElementById("mainContent");
+
+    if (state.focusedWorkflowId || state.focusedResourceId) {
+        renderGlobalVisualizer(hash.includes('vault'));
+        return;
+    }
     
     if (main) {
         if (hash.includes('visualizer')) {
@@ -3796,23 +3801,43 @@ window.renderResourceCard = function (res) {
 };
 
 // 3. CREATE DRAFT RESOURCE MODAL
-OL.promptCreateResource = function () {
-    const hash = window.location.hash;
-    const isVault = hash.startsWith('#/vault');
-    const tempId = 'draft-' + Date.now();
+OL.promptCreateResource = function() {
+    const name = prompt("Enter Resource Name:");
+    if (!name) return;
     
-    const draftRes = {
-        id: tempId,
-        name: "",
-        type: "General",
-        archetype: "Base",
-        isDraft: true,
-        // 🚀 THE KEY: Tag the draft with its intended home
-        originContext: isVault ? 'vault' : 'project',
-        returnRoute: hash 
+    // ... your logic to determine type/archetype ...
+    const isVaultMode = location.hash.includes('vault');
+    const timestamp = Date.now();
+    const newId = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+
+    const newRes = {
+        id: newId,
+        name: name,
+        type: "SOP", // Default
+        steps: [],
+        createdDate: new Date().toISOString()
     };
 
-    OL.openResourceModal(tempId, draftRes);
+    // 1. Save to state
+    if (isVaultMode) {
+        state.master.resources.push(newRes);
+    } else {
+        const client = getActiveClient();
+        if (client) client.projectData.localResources.push(newRes);
+    }
+
+    // 2. Persist to Firebase
+    OL.persist();
+
+    // 🚀 THE FIX: Instead of letting the app redirect, 
+    // explicitly tell it to stay in the Visualizer
+    if (state.focusedWorkflowId || state.focusedResourceId) {
+        console.log("🛠️ Resource created while in Flow Map. Maintaining context.");
+        renderGlobalVisualizer(isVaultMode);
+    } else {
+        // Only go to library if we aren't in the Flow Map
+        location.hash = isVaultMode ? "#/vault/resources" : "#/resources";
+    }
 };
 
 // 3a. HANDLE THE FIRST UPDATE / SAVE DRAFT
@@ -11449,7 +11474,11 @@ window.renderLevel2SidebarContent = function(allResources) {
         <div class="drawer-header">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
                 <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
-                <button class="btn tiny primary" onclick="OL.promptCreateResource()">+</button>
+                <button class="btn tiny primary" 
+                        type="button" 
+                        onclick="event.preventDefault(); OL.promptCreateResource()">
+                    +
+                </button>
             </div>
             <input type="text" class="modal-input tiny sidebar-search" 
                    id="resource-toolbox-search"
@@ -12042,8 +12071,15 @@ OL.drillDownIntoWorkflow = function(resId) {
 };
 
 OL.drillIntoResourceMechanics = function(resId) {
+    console.log("🔍 Drilling into Resource:", resId);
+    
+    // We keep the focusedWorkflowId so we know where we came from
     state.focusedResourceId = resId; 
-    renderGlobalVisualizer(location.hash.includes('vault'));
+    
+    // 🚀 THE FIX: Explicitly call the visualizer renderer
+    // This ensures we stay in the "Flow Map" area
+    const isVaultMode = location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVaultMode);
 };
 
 OL.exitToWorkflow = function() {
