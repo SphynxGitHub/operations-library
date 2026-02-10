@@ -11148,6 +11148,31 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 };
 
+OL.addStage = function(resId) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    // Initialize stages if they don't exist
+    if (!res.stages) {
+        res.stages = [
+            { id: uid(), label: "Entry", type: "Trigger", color: "var(--vault-gold)" },
+            { id: uid(), label: "Process", type: "Action", color: "var(--accent)" }
+        ];
+    } else {
+        // Add a new generic stage
+        res.stages.push({
+            id: uid(),
+            label: "New Stage",
+            type: "Action",
+            color: "var(--accent)"
+        });
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(false); // Refresh the canvas
+    console.log("✅ New stage added to resource:", resId);
+};
+
 // --- TIER 1 RENDERER ---
 window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     const stages = sourceData.stages || [];
