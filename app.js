@@ -768,7 +768,6 @@ window.renderClientDashboard = function() {
 
     const clients = state.clients ? Object.values(state.clients) : [];
     
-    // 🛡️ Guard: Show onboarding if no clients exist
     if (clients.length === 0) {
         container.innerHTML = `
             <div style="padding:40px; text-align:center; opacity:0.5;">
@@ -779,24 +778,23 @@ window.renderClientDashboard = function() {
     }
 
     container.innerHTML = `
-        <div class="section-header search-header">     
+        <div class="section-header search-header" style="display: flex; align-items: flex-end; gap: 20px; margin-bottom: 30px;">
             <div style="flex: 1;">
-                <h2>Registry & Command</h2>
+                <h2 style="margin:0;">Registry & Command</h2>
                 <div class="small muted">Quick access to projects and master systems</div>
             </div>
               
             <div class="search-map-container" style="position: relative; flex: 1; max-width: 400px;">
                 <input type="text" id="global-command-search" class="modal-input" 
-                      placeholder="Search clients or apps..." 
-                      onfocus="OL.handleGlobalSearch(this.value)"
-                      oninput="OL.handleGlobalSearch(this.value)">
+                       placeholder="Search clients or apps..." 
+                       oninput="OL.handleGlobalSearch(this.value)">
                 <div id="global-search-results" class="search-results-overlay"></div>
             </div>
 
-            <div class="header-actions" style="margin-left: 20px;">
-                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add New Client</button>
+            <div class="header-actions" style="display: flex; gap: 10px;">
+                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
+                <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>
             </div>
-            <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()">⚙️ System Migration</button>
         </div>
 
         <div class="cards-grid">
@@ -820,12 +818,14 @@ window.renderClientDashboard = function() {
                 <div class="card client-card is-clickable" onclick="OL.switchClient('${client.id}')">
                     <div class="card-header">
                         <div class="card-title" 
-                            contenteditable="true" 
-                            spellcheck="false"
-                            onclick="event.stopPropagation()"
-                            onblur="OL.updateClientNameInline('${client.id}', this.innerText)"
-                            onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">
-                            ${esc(client.meta.name)}
+                             contenteditable="true" 
+                             spellcheck="false"
+                             style="outline: none; border-bottom: 1px dashed transparent; transition: border 0.2s;"
+                             onfocus="this.style.borderBottom='1px dashed var(--accent)'"
+                             onclick="event.stopPropagation()"
+                             onblur="this.style.borderBottom='1px dashed transparent'; OL.updateClientNameInline('${client.id}', this.innerText)"
+                             onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">
+                             ${esc(client.meta.name)}
                         </div>
                         <div class="status-pill">${esc(client.meta.status || 'Discovery')}</div>
                     </div>
@@ -834,9 +834,7 @@ window.renderClientDashboard = function() {
                             Onboarded: ${client.meta.onboarded}
                         </div>
                         <div class="card-footer-actions">
-                            <button class="btn small soft flex-1">
-                                Enter Project
-                            </button>
+                            <button class="btn small soft flex-1">Enter Project</button>
                             <button class="btn tiny soft" style="margin-left:8px;"
                                     onclick="event.stopPropagation(); OL.openClientProfileModal('${client.id}')">
                                 ⚙️
