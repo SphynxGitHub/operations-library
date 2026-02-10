@@ -11363,17 +11363,124 @@ OL.deleteLifecycleStage = function(isVaultMode, stageId) {
 // --- TIER 2 RENDERER ---
 window.renderLevel2Canvas = function(workflowId) {
     const res = OL.getResourceById(workflowId);
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    return lanes.map((lane, i) => `
-        <div class="stage-container">
-            <div class="stage-header-row">
-                <span class="stage-number">${i+1}</span><span class="stage-name">${lane}</span>
+    if (!res) return `<div class="p-20 muted text-center">Workflow not found</div>`;
+
+    // 🚀 FILTER STATE
+    const activeTypeFilter = state.l2TypeFilter || 'All';
+    let steps = (res.steps || []).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+    // Filter logic
+    if (activeTypeFilter !== 'All') {
+        steps = steps.filter(s => {
+            const asset = OL.getResourceById(s.resourceLinkId);
+            return asset?.type === activeTypeFilter;
+        });
+    }
+
+    // Identify unique types present in this specific workflow for the filter bar
+    const typesPresent = [...new Set((res.steps || []).map(s => OL.getResourceById(s.resourceLinkId)?.type))].filter(Boolean);
+
+    let html = `
+        <div class="canvas-filter-bar" style="padding: 10px 20px; display:flex; gap:8px; border-bottom:1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
+            <span class="pill tiny ${activeTypeFilter === 'All' ? 'accent' : 'soft'}" onclick="OL.setL2Filter('All')">All Assets</span>
+            ${typesPresent.map(t => `
+                <span class="pill tiny ${activeTypeFilter === t ? 'accent' : 'soft'}" onclick="OL.setL2Filter('${t}')">
+                    ${OL.getRegistryIcon(t)} ${t}
+                </span>
+            `).join('')}
+        </div>
+
+        <div id="l2-canvas-wrapper" style="position: relative; padding: 60px; min-height: 100vh; display: flex; flex-direction: column; align-items: center;">
+            <svg id="vis-links-layer-l2" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; overflow: visible; z-index: 1;"></svg>
+            
+            <div class="vertical-process-spine" 
+                 style="width: 400px; display: flex; flex-direction: column; gap: 30px;"
+                 ondragover="OL.handleCanvasDragOver(event)" 
+                 ondrop="OL.handleUniversalDrop(event, '${workflowId}', 'stream')">
+                
+                ${steps.map((step, idx) => {
+                    const techAsset = OL.getResourceById(step.resourceLinkId);
+                    const icon = OL.getRegistryIcon(techAsset?.type);
+                    const isInspecting = state.activeInspectorResId === step.resourceLinkId;
+
+                    return `
+                    <div class="workflow-block-card l2-resource-node ${isInspecting ? 'is-inspecting' : ''}" 
+                         id="l2-node-${step.id}"
+                         draggable="true" 
+                         onclick="event.stopPropagation(); OL.loadInspector('${step.resourceLinkId}', '${workflowId}')"
+                         ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                         ondblclick="OL.drillIntoResourceMechanics('${step.resourceLinkId}')"
+                         style="width: 100%; position: relative; z-index: 2;">
+                        
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                             <span class="tiny muted">STEP ${idx + 1}</span>
+                             <span class="pill tiny soft" style="font-size:9px;">${icon} ${techAsset?.type || 'Asset'}</span>
+                        </div>
+                        <div class="bold accent" style="margin: 8px 0; font-size: 14px;">${esc(step.name)}</div>
+                        
+                        ${(step.outcomes || []).length > 0 ? `
+                            <div class="tiny" style="color:var(--vault-gold); font-weight: bold; margin-top: 5px;">
+                                🌲 ${step.outcomes.length} Logic Branches
+                            </div>
+                        ` : ''}
+                    </div>
+                    `;
+                }).join('')}
+
+                ${steps.length === 0 ? `<div class="p-40 muted italic text-center" style="border: 2px dashed rgba(255,255,255,0.05); border-radius: 12px;">Drop Resources here to build the sequence</div>` : ''}
             </div>
-            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
-            ondrop="OL.handleUniversalDrop(event, '${workflowId}', '${lane}')">
-                ${renderResourcesInWorkflowLane(workflowId, lane)}
-            </div>
-        </div>`).join('');
+        </div>
+    `;
+
+    // Re-draw connection lines for jumps/logic
+    setTimeout(() => OL.drawLevel2LogicLines(workflowId), 100);
+    return html;
+};
+
+OL.setL2Filter = function(type) {
+    state.l2TypeFilter = type;
+    // We pass true/false based on whether the current URL includes 'vault'
+    window.renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+OL.drawLevel2LogicLines = function(workflowId) {
+    const svg = document.getElementById('vis-links-layer-l2');
+    const wrapper = document.getElementById('l2-canvas-wrapper');
+    if (!svg || !wrapper) return;
+    
+    const workflow = OL.getResourceById(workflowId);
+    const steps = workflow.steps || [];
+    const wrapperRect = wrapper.getBoundingClientRect();
+    let pathsHtml = "";
+
+    steps.forEach((step) => {
+        (step.outcomes || []).forEach((oc, oIdx) => {
+            // Find the target node on the canvas
+            const targetId = oc.action?.replace('jump_res_', '').replace('jump_step_', '');
+            const sourceEl = document.getElementById(`l2-node-${step.id}`);
+            const targetEl = document.getElementById(`l2-node-${targetId}`);
+
+            if (sourceEl && targetEl) {
+                const s = sourceEl.getBoundingClientRect();
+                const t = targetEl.getBoundingClientRect();
+                
+                const x1 = s.left - wrapperRect.left;
+                const y1 = (s.top + s.height / 2) - wrapperRect.top;
+                const x2 = t.left - wrapperRect.left;
+                const y2 = (t.top + t.height / 2) - wrapperRect.top;
+
+                // Create a 'Skip' curve to the left
+                const curveOffset = 60 + (oIdx * 20);
+                const d = `M ${x1} ${y1} C ${x1 - curveOffset} ${y1}, ${x2 - curveOffset} ${y2}, ${x2} ${y2}`;
+                
+                pathsHtml += `
+                    <path d="${d}" fill="none" stroke="var(--vault-gold)" stroke-width="2" opacity="0.4" stroke-dasharray="6,3" />
+                    <text x="${x1 - (curveOffset/2)}" y="${(y1+y2)/2}" fill="var(--vault-gold)" style="font-size:9px; font-weight:bold;">${esc(oc.condition || 'IF')}</text>
+                `;
+            }
+        });
+    });
+    svg.innerHTML = pathsHtml;
 };
 
 // --- SIDEBAR RENDERERS ---
