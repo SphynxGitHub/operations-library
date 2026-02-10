@@ -11859,10 +11859,18 @@ OL.loadInspector = function(targetId, parentId = null) {
         const techAsset = OL.getResourceById(techId);
         const children = techAsset?.steps || [];
         
+        // 🚀 VIEW CONTEXT CHECK
+        // If focusedWorkflowId exists, we are inside Level 2 (Resource Level)
+        const isAtResourceLevel = !!state.focusedWorkflowId; 
+        // If neither focused ID exists, we are at Level 1 (Stage Level)
+        const isAtStageLevel = !state.focusedWorkflowId && !state.focusedResourceId;
+
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny accent bold uppercase">${isModule ? '📦 Nested Module' : '📂 Workflow'}</span>
+                    <span class="tiny accent bold uppercase">
+                        ${isAtStageLevel ? '📂 Workflow Lifecycle' : `📦 ${techAsset?.type || 'Resource'}`}
+                    </span>
                 </div>
                 
                 <input type="text" class="header-editable-input" 
@@ -11871,15 +11879,29 @@ OL.loadInspector = function(targetId, parentId = null) {
                     onblur="OL.updateResourceMetadata('${techId}', 'name', this.value)">
 
                 <div style="margin-top:12px;">
-                    <label class="modal-section-label" style="font-size:9px; opacity:0.5; margin-bottom:4px; display:block;">Card Subtitle / Logic Description</label>
+                    <label class="modal-section-label" style="font-size:9px; opacity:0.5; margin-bottom:4px; display:block;">
+                        ${isAtStageLevel ? 'Lifecycle Logic / Subtitle' : 'Resource Description'}
+                    </label>
                     <textarea class="modal-textarea" rows="2" 
                         style="font-size:11px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); width:100%; padding:8px; border-radius:4px; color:#ccc;"
-                        placeholder="Describe the entry logic or subtitle..."
                         onblur="OL.updateResourceMetadata('${techId}', 'description', this.value)">${esc(techAsset?.description || '')}</textarea>
                 </div>
             </div>
 
             <section>
+                ${isAtResourceLevel ? `
+                    <div class="card-section" style="margin-bottom: 20px;">
+                        <label class="modal-section-label">🏷️ Classification</label>
+                        <select class="modal-input tiny" onchange="OL.updateResourceType('${techId}', this.value)">
+                            ${registry.map(t => `
+                                <option value="${t.type}" ${techAsset?.type === t.type ? 'selected' : ''}>
+                                    ${t.icon || '⚙️'} ${t.type}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+                ` : ''}
+
                 <label class="modal-section-label">PROCEDURE PREVIEW</label>
                 <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto;">
                     ${children.map((s, i) => `
@@ -11891,7 +11913,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                 </div>
                 
                 <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
-                    <button class="btn tiny primary" onclick="OL.openResourceModal('${techId}')">⚙️ Edit Full Workflow</button>
+                    <button class="btn tiny primary" onclick="OL.openResourceModal('${techId}')">⚙️ Edit Full Details</button>
                     <button class="btn tiny soft" onclick="OL.drillIntoResourceMechanics('${techId}')">🔍 Drill Down</button>
                 </div>
             </section>`;
