@@ -11338,17 +11338,118 @@ OL.deleteLifecycleStage = function(isVaultMode, stageId) {
 // --- TIER 2 RENDERER ---
 window.renderLevel2Canvas = function(workflowId) {
     const res = OL.getResourceById(workflowId);
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    return lanes.map((lane, i) => `
-        <div class="stage-container">
-            <div class="stage-header-row">
-                <span class="stage-number">${i+1}</span><span class="stage-name">${lane}</span>
+    if (!res) return "";
+
+    const activeTypeFilter = state.l2TypeFilter || 'All';
+    let steps = (res.steps || []).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+    // Apply Filter
+    if (activeTypeFilter !== 'All') {
+        steps = steps.filter(s => {
+            const techAsset = OL.getResourceById(s.resourceLinkId);
+            return techAsset?.type === activeTypeFilter;
+        });
+    }
+
+    // 🚀 THE FILTER BAR
+    const uniqueTypes = [...new Set((res.steps || []).map(s => OL.getResourceById(s.resourceLinkId)?.type))].filter(Boolean);
+
+    let html = `
+        <div class="l2-workflow-header" style="padding: 10px 20px; display:flex; gap:10px; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span class="pill tiny ${activeTypeFilter === 'All' ? 'accent' : 'soft'}" onclick="OL.setL2Filter('All')">All Assets</span>
+            ${uniqueTypes.map(t => `
+                <span class="pill tiny ${activeTypeFilter === t ? 'accent' : 'soft'}" onclick="OL.setL2Filter('${t}')">
+                    ${OL.getRegistryIcon(t)} ${t}
+                </span>
+            `).join('')}
+        </div>
+        
+        <div id="l2-canvas-wrapper" style="position: relative; padding: 40px; min-height: 100vh;">
+            <svg id="vis-links-layer-l2" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; overflow: visible;"></svg>
+            
+            <div class="vertical-process-stream" 
+                 ondragover="OL.handleCanvasDragOver(event)" 
+                 ondrop="OL.handleUniversalDrop(event, '${workflowId}', 'stream')">
+                ${steps.map((step, idx) => {
+                    const techAsset = OL.getResourceById(step.resourceLinkId);
+                    const icon = OL.getRegistryIcon(techAsset?.type);
+
+                    return `
+                    <div class="workflow-block-card l2-resource-node" 
+                         id="l2-node-${step.id}"
+                         draggable="true" 
+                         onmousedown="event.stopPropagation(); OL.loadInspector('${step.resourceLinkId}')"
+                         ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                         ondblclick="OL.drillIntoResourceMechanics('${step.resourceLinkId}')">
+                        
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                             <span class="tiny muted">Step ${idx + 1}</span>
+                             <span class="pill tiny soft">${icon} ${techAsset?.type || 'Asset'}</span>
+                        </div>
+                        <div class="bold accent" style="margin: 5px 0;">${esc(step.name)}</div>
+                        
+                        ${(step.outcomes || []).length > 0 ? `
+                            <div class="tiny" style="color:var(--vault-gold)">🌲 ${step.outcomes.length} Logic Branches</div>
+                        ` : ''}
+                    </div>
+                    `;
+                }).join('')}
             </div>
-            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
-            ondrop="OL.handleUniversalDrop(event, '${workflowId}', '${lane}')">
-                ${renderResourcesInWorkflowLane(workflowId, lane)}
-            </div>
-        </div>`).join('');
+        </div>
+    `;
+
+    // Trigger SVG line drawing for resource-level jumps
+    setTimeout(() => OL.drawLevel2LogicLines(workflowId), 100);
+    return html;
+};
+
+// 🔍 Filter Logic
+OL.setL2Filter = function(type) {
+    state.l2TypeFilter = type;
+    renderGlobalVisualizer(false);
+};
+
+// 🌲 Level 2 Logic Lines (Connecting Resources)
+OL.drawLevel2LogicLines = function(workflowId) {
+    const svg = document.getElementById('vis-links-layer-l2');
+    const wrapper = document.getElementById('l2-canvas-wrapper');
+    if (!svg || !wrapper) return;
+    
+    const workflow = OL.getResourceById(workflowId);
+    const steps = workflow.steps || [];
+    const wrapperRect = wrapper.getBoundingClientRect();
+    let pathsHtml = "";
+
+    steps.forEach((step) => {
+        (step.outcomes || []).forEach((oc, oIdx) => {
+            if (oc.action?.startsWith('jump_res_') || oc.action?.startsWith('jump_step_')) {
+                const targetId = oc.action.replace('jump_res_', '').replace('jump_step_', '');
+                
+                const sourceEl = document.getElementById(`l2-node-${step.id}`);
+                const targetEl = document.getElementById(`l2-node-${targetId}`);
+
+                if (sourceEl && targetEl) {
+                    const s = sourceEl.getBoundingClientRect();
+                    const t = targetEl.getBoundingClientRect();
+                    
+                    const x1 = s.left - wrapperRect.left;
+                    const y1 = (s.top + s.height / 2) - wrapperRect.top;
+                    const x2 = t.left - wrapperRect.left;
+                    const y2 = (t.top + t.height / 2) - wrapperRect.top;
+
+                    // Draw a sweeping curve to the left to show the "Jump"
+                    const curve = 50 + (oIdx * 15);
+                    const d = `M ${x1} ${y1} C ${x1 - curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`;
+                    
+                    pathsHtml += `
+                        <path d="${d}" fill="none" stroke="#fbbf24" stroke-width="2" opacity="0.5" stroke-dasharray="4,2" />
+                        <text x="${x1 - curve}" y="${(y1+y2)/2}" fill="#fbbf24" style="font-size:8px;">${esc(oc.condition || 'IF')}</text>
+                    `;
+                }
+            }
+        });
+    });
+    svg.innerHTML = pathsHtml;
 };
 
 // --- SIDEBAR RENDERERS ---
