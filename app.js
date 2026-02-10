@@ -11199,8 +11199,13 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <aside class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="padding:15px; border-bottom:1px solid rgba(255,255,255,0.05);">${breadcrumbHtml}</div>
-                <div class="header-actions">
-                    ${!state.focusedWorkflowId && !state.focusedResourceId ? `<button class="btn tiny primary" onclick="OL.addStage('${isVaultMode}')">+ Add Stage</button>` : ''}
+                <div class="header-actions" style="padding: 10px 15px;">
+                    ${(!state.focusedWorkflowId && !state.focusedResourceId) ? `
+                        <button class="btn tiny primary" 
+                                onclick="event.stopPropagation(); OL.addLifecycleStage(${isVaultMode})">
+                            + Add Stage
+                        </button>
+                    ` : ''}
                 </div>
                 <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
             </main>
@@ -11226,29 +11231,28 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 };
 
-OL.addStage = function(resId) {
-    const res = OL.getResourceById(resId);
-    if (!res) return;
+OL.addLifecycleStage = function(isVaultMode) {
+    console.log("🛠️ Adding Level 1 Stage. Vault Mode:", isVaultMode);
+    
+    const client = getActiveClient();
+    // Identify if we are updating the Master Vault or a Client Project
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    
+    if (!sourceData.stages) sourceData.stages = [];
 
-    // Initialize stages if they don't exist
-    if (!res.stages) {
-        res.stages = [
-            { id: uid(), label: "Entry", type: "Trigger", color: "var(--vault-gold)" },
-            { id: uid(), label: "Process", type: "Action", color: "var(--accent)" }
-        ];
-    } else {
-        // Add a new generic stage
-        res.stages.push({
-            id: uid(),
-            label: "New Stage",
-            type: "Action",
-            color: "var(--accent)"
-        });
-    }
+    const newStage = {
+        id: "stage-" + Date.now(),
+        name: "New Phase",
+        order: sourceData.stages.length
+    };
 
+    sourceData.stages.push(newStage);
+
+    // 💾 Save to Firebase
     OL.persist();
-    renderGlobalVisualizer(false); // Refresh the canvas
-    console.log("✅ New stage added to resource:", resId);
+    
+    // 🔄 Force UI refresh
+    renderGlobalVisualizer(isVaultMode);
 };
 
 // --- TIER 1 RENDERER ---
