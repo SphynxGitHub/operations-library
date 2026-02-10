@@ -11258,10 +11258,14 @@ OL.addLifecycleStage = function(isVaultMode) {
 // --- TIER 1 RENDERER ---
 window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     const stages = sourceData.stages || [];
+    // Ensure stages have an order property
+    stages.sort((a, b) => (a.order || 0) - (b.order || 0));
+
     return stages.map((stage, i) => `
-        <div class="stage-container">
+        <div class="stage-container" draggable="true" ondragstart="OL.handleStageReorderStart(event, '${stage.id}')">
             <div class="stage-header-row" style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                    <span class="muted" style="cursor: grab; font-size: 12px;">⋮⋮</span>
                     <span class="stage-number">${i+1}</span>
                     <span class="stage-name" 
                           contenteditable="true" 
@@ -11273,15 +11277,13 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
                     </span>
                 </div>
                 <div class="stage-delete-x" 
-                     style="cursor:pointer; padding:0 5px; opacity:0.3; font-weight:bold; font-size:14px; transition:0.2s;" 
-                     onclick="event.stopPropagation(); OL.deleteLifecycleStage(${isVaultMode}, '${stage.id}')"
-                     onmouseover="this.style.opacity=1; this.style.color='#ef4444'"
-                     onmouseout="this.style.opacity=0.3; this.style.color='inherit'">
+                     onclick="event.stopPropagation(); OL.deleteLifecycleStage(${isVaultMode}, '${stage.id}')">
                     ×
                 </div>
             </div>
-            <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
-            ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
+            <div class="stage-workflow-stream" 
+                 ondragover="OL.handleCanvasDragOver(event)" 
+                 ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
                 ${renderWorkflowsInStage(stage.id, isVaultMode)}
             </div>
         </div>`).join('');
@@ -11301,19 +11303,27 @@ OL.renameLifecycleStage = function(isVaultMode, stageId, newName) {
     }
 };
 
+// ✥ Stage Reordering Logic
+OL.handleStageReorderStart = function(e, stageId) {
+    // Only allow drag if clicking the handle/header, not a workflow card
+    if (e.target.closest('.workflow-block-card')) return;
+    e.dataTransfer.setData("moveStageId", stageId);
+};
+
+// 🗑️ Stage Deletion Logic
 OL.deleteLifecycleStage = function(isVaultMode, stageId) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    if (!confirm("Remove this stage? Workflows in this column will be moved back to the library.")) return;
+    if (!confirm("Remove this stage? Workflows will be moved back to the library.")) return;
 
-    // 1. Remove the stage from the list
     if (sourceData.stages) {
         sourceData.stages = sourceData.stages.filter(s => s.id !== stageId);
+        // Re-index remaining stages
+        sourceData.stages.forEach((s, idx) => s.order = idx);
     }
 
-    // 2. Unmap workflows so they return to the sidebar
     allResources.forEach(res => {
         if (res.stageId === stageId) {
             res.stageId = null;
@@ -11321,10 +11331,8 @@ OL.deleteLifecycleStage = function(isVaultMode, stageId) {
         }
     });
 
-    // 3. Save and Refresh
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
-    console.log(`🗑️ Stage ${stageId} removed and workflows unmapped.`);
 };
 
 // --- TIER 2 RENDERER ---
