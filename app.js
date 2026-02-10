@@ -11925,10 +11925,6 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
     if (matchedWorkflows.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
 
     return matchedWorkflows.map((res, idx) => {
-        // 🚀 THE LOGIC DESCRIPTOR:
-        // Check if there is a condition defined for this workflow
-        const entryCondition = (res.outcomes && res.outcomes.length > 0) ? res.outcomes[0].condition : null;
-
         return `
         <div class="workflow-block-card l1-workflow-node" 
              id="l1-node-${res.id}"
@@ -11939,14 +11935,14 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
             
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
             
-            ${entryCondition ? `
-                <div class="tiny" style="color: var(--vault-gold); font-style: italic; margin-top: 4px; border-top: 1px solid rgba(251, 191, 36, 0.1); padding-top: 4px;">
-                    <span style="opacity: 0.7;">IF:</span> ${esc(entryCondition)}
+            ${res.description ? `
+                <div class="tiny" style="color: var(--text-muted); font-style: italic; margin-top: 4px; opacity: 0.8; line-height: 1.2;">
+                    ${esc(res.description)}
                 </div>
             ` : ''}
             
-            <div class="tiny muted" style="margin-top: 8px; font-size: 9px; opacity: 0.6;">
-                📝 ${(res.steps || []).length} Resources
+            <div class="tiny muted" style="margin-top: 8px; font-size: 9px; opacity: 0.5; display: flex; justify-content: space-between;">
+                <span>📝 ${(res.steps || []).length} Resources</span>
             </div>
         </div>
     `}).join('');
