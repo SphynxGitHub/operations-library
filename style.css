@@ -2700,6 +2700,22 @@ body.is-visualizer #mainContent {
     font-size: 14px;
 }
 
+.stage-name[contenteditable="true"] {
+    cursor: text;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.stage-name[contenteditable="true"]:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.stage-name[contenteditable="true"]:focus {
+    background: rgba(var(--accent-rgb), 0.1);
+    outline: 1px solid var(--accent);
+}
+
 /* Unified Vertical Container for Level 1, 2, and 3 */
 .stage-workflow-stream, 
 .lane-workflow-stream {

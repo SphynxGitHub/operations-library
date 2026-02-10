@@ -11261,13 +11261,34 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     return stages.map((stage, i) => `
         <div class="stage-container">
             <div class="stage-header-row">
-                <span class="stage-number">${i+1}</span><span class="stage-name">${esc(stage.name)}</span>
+                <span class="stage-number">${i+1}</span>
+                <span class="stage-name" 
+                      contenteditable="true" 
+                      spellcheck="false"
+                      onblur="OL.renameLifecycleStage(${isVaultMode}, '${stage.id}', this.innerText)"
+                      onkeydown="if(event.key==='Enter'){ event.preventDefault(); this.blur(); }">
+                    ${esc(stage.name)}
+                </span>
             </div>
             <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" 
             ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
                 ${renderWorkflowsInStage(stage.id, isVaultMode)}
             </div>
         </div>`).join('');
+};
+
+OL.renameLifecycleStage = function(isVaultMode, stageId, newName) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    
+    if (!sourceData.stages) return;
+
+    const stage = sourceData.stages.find(s => s.id === stageId);
+    if (stage && newName.trim() !== "") {
+        stage.name = newName.trim();
+        OL.persist();
+        console.log(`✅ Stage ${stageId} renamed to: ${newName}`);
+    }
 };
 
 // --- TIER 2 RENDERER ---
