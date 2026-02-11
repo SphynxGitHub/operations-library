@@ -12124,28 +12124,29 @@ window.renderLevel3Canvas = function(resourceId) {
                         <div class="workflow-block-card" 
                             id="step-node-${step.id}" 
                             draggable="true" 
-                            style="position: relative; min-height: 80px; display: flex; flex-direction: column;"
+                            style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px;"
                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
 
                             <button class="card-delete-btn" 
-                                style="position:absolute; top:5px; right:5px; opacity:0.3;" 
+                                style="position:absolute; top:6px; right:8px; opacity:0.4; background:none; border:none; color:white; cursor:pointer; font-size:14px;" 
                                 onclick="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">×</button>
                             
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:8px; padding:1px 6px;">${esc(step.type)}</span>
-                                <span style="font-size:10px; opacity:0.5;">${typeIcon}</span>
+                            <div style="display:flex; align-items:center; margin-bottom:8px;">
+                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:9px; padding:2px 8px; display:flex; align-items:center; gap:4px;">
+                                    <span style="font-size:10px;">${typeIcon}</span> ${esc(step.type).toUpperCase()}
+                                </span>
                             </div>
 
-                            <div class="bold accent" style="line-height:1.2; display:flex; align-items:center;">
+                            <div class="bold accent" style="line-height:1.2; font-size: 13px; display:flex; align-items:center; flex-wrap:wrap;">
                                 ${esc(step.name || "Untitled")} ${appIconHtml}
                             </div>
 
-                            <div class="node-linked-assets" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px;">
+                            <div class="node-linked-assets" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; min-height: 12px;">
                                 ${linkedAssetsHtml}
                             </div>
                             
-                            <div class="tiny muted" style="font-size:8px; margin-top:auto; padding-top:6px; opacity:0.6;">
+                            <div class="tiny muted" style="font-size:9px; margin-top:auto; padding-top:8px; opacity:0.6;">
                                 ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
                             </div>
 
