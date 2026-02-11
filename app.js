@@ -6063,75 +6063,75 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
     
-    // 🚀 THE SCOPE: Local Project Data Only
     const team = client?.projectData?.teamMembers || [];
     const localApps = client?.projectData?.localApps || [];
-
-    // 1. Get Unique Roles existing in the current project team
     const roles = [...new Set(team.flatMap(m => m.roles || []))];
 
     let html = "";
 
-    // 🟢 Section: People (Team Members)
+    // 🟢 Section: People
     const matchPeople = team.filter(m => m.name.toLowerCase().includes(q));
     if (matchPeople.length > 0) {
         html += `<div class="search-group-header">Team Members</div>`;
         html += matchPeople.map(m => `
-            <div class="search-result-item" onmousedown="event.stopPropagation(); onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'person', '${m.id}', '${esc(m.name)}')">
+            <div class="search-result-item" 
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'person', '${m.id}', '${esc(m.name)}')">
                 👨‍💼 ${esc(m.name)}
             </div>`).join('');
     }
 
-    // 🔵 Section: Roles (Derived from local team)
+    // 🔵 Section: Roles
     const matchRoles = roles.filter(r => r.toLowerCase().includes(q));
     if (matchRoles.length > 0) {
         html += `<div class="search-group-header">Roles</div>`;
         html += matchRoles.map(r => `
-            <div class="search-result-item" onmousedown="event.stopPropagation(); onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'role', '${esc(r)}', '${esc(r)}')">
+            <div class="search-result-item" 
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'role', '${esc(r)}', '${esc(r)}')">
                 🎭 ${esc(r)}
             </div>`).join('');
     }
 
-    // 🟠 Section: Systems (Local Apps Only)
+    // 🟠 Section: Systems
     const matchApps = localApps.filter(a => a.name.toLowerCase().includes(q));
     if (matchApps.length > 0) {
         html += `<div class="search-group-header">Project Apps</div>`;
         html += matchApps.map(a => `
-            <div class="search-result-item" onmousedown="event.stopPropagation(); onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'system', '${a.id}', '${esc(a.name)}')">
+            <div class="search-result-item" 
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'system', '${a.id}', '${esc(a.name)}')">
                 📱 ${esc(a.name)}
             </div>`).join('');
     }
 
-    listEl.innerHTML = html || `<div class="search-result-item muted">No matching local assignments found</div>`;
+    listEl.innerHTML = html || `<div class="search-result-item muted">No results</div>`;
 };
 
 OL.executeAssignment = function(resId, stepId, isTrigger, memberId, memberName, memberAvatar) {
-    const res = OL.getResourceById(resId);
-    if (!res) return;
+    const activeResId = resId || state.activeInspectorParentId;
+    const res = OL.getResourceById(activeResId);
+    if (!res) return console.error("Assignment Failed: No Resource Context");
 
-    // 1. Find the target (Step or Trigger)
+    // Locate the Step
     const step = res.steps?.find(s => String(s.id) === String(stepId));
-    
-    if (step) {
-        step.assigneeId = memberId;
-        step.assigneeName = memberName;
-        step.assigneeAvatar = memberAvatar;
-    }
+    if (!step) return console.error("Assignment Failed: Step not found");
 
-    // 2. Persist quietly
+    // Update the data
+    step.assigneeId = memberId;
+    step.assigneeName = memberName;
+    step.assigneeAvatar = memberAvatar || '';
+
     OL.persist();
 
-    // 3. Update the Canvas Card face immediately
-    const canvas = document.getElementById('level-3-canvas-container'); 
-    if (canvas) {
-        canvas.innerHTML = renderLevel3Canvas(resId);
+    // 🚀 Refresh Canvas Card face
+    const wrapper = document.getElementById('l3-canvas-wrapper');
+    if (wrapper && typeof renderLevel3Canvas === 'function') {
+        // Re-render the canvas content
+        wrapper.parentElement.innerHTML = renderLevel3Canvas(activeResId);
     }
 
-    // 🚀 THE FIX: Stay in the Inspector
-    // Remove any calls to OL.openResourceModal(resId) here!
-    OL.loadInspector(stepId, resId); 
-    
-    console.log(`👤 Assigned ${memberName} to ${step?.name}`);
+    // 🚀 RE-LOAD INSPECTOR: Pass activeResId to keep it in Scenario A
+    setTimeout(() => {
+        OL.loadInspector(stepId, activeResId);
+    }, 10);
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
@@ -6365,28 +6365,22 @@ OL.updateSopStep = function (resId, stepId, field, value) {
 };
 
 OL.updateAtomicStep = function(resId, stepId, field, value) {
-    const res = OL.getResourceById(resId);
+    const activeResId = resId || state.activeInspectorParentId;
+    const res = OL.getResourceById(activeResId);
     if (!res) return;
 
-    const step = res.steps.find(s => String(s.id) === String(stepId));
-    if (!step) return;
-
-    // 1. Apply the update
-    step[field] = value;
-    OL.persist();
-
-    // 2. Refresh the Canvas (Level 3)
-    // We do this so the icon 📱 appears on the card face immediately
-    const canvas = document.getElementById('level-3-canvas-container'); 
-    if (canvas) {
-        canvas.innerHTML = renderLevel3Canvas(resId);
+    const step = res.steps?.find(s => String(s.id) === String(stepId));
+    if (step) {
+        step[field] = value;
+        OL.persist();
     }
 
-    // 3. 🎯 THE LOCK: Re-load Inspector with BOTH IDs
-    // This ensures Scenario A (Atomic Step) is re-rendered, not Scenario B
-    OL.loadInspector(stepId, resId); 
-    
-    console.log(`✅ ${field} updated for ${step.name}. Inspector locked.`);
+    // 1. Refresh Canvas
+    const canvas = document.getElementById('l3-canvas-wrapper');
+    if (canvas) canvas.parentElement.innerHTML = renderLevel3Canvas(activeResId);
+
+    // 2. 🚀 LOCK THE VIEW: Pass BOTH IDs to keep Scenario A active
+    OL.loadInspector(stepId, activeResId);
 };
 
 OL.removeSopStep = function (resId, stepId) {
@@ -11774,6 +11768,10 @@ OL.cloneResourceWorkflow = function(resId) {
 
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
+    if (parentId) {
+        state.activeInspectorParentId = parentId;
+    }
+
     state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
