@@ -12171,8 +12171,15 @@ window.renderLevel3Canvas = function(resourceId) {
                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
 
                             <button class="card-delete-btn" 
-                                style="position:absolute; top:6px; right:8px; opacity:0.4; background:none; border:none; color:white; cursor:pointer; font-size:14px;" 
-                                onclick="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">×</button>
+                                style="position:absolute; top:4px; right:4px; z-index: 10; width: 20px; height: 20px; 
+                                    display: flex; align-items: center; justify-content: center;
+                                    background: rgba(255,255,255,0.05); border: none; color: #fff; 
+                                    border-radius: 4px; cursor: pointer; font-size: 14px; opacity: 0.4;" 
+                                onmouseover="this.style.opacity='1'; this.style.background='rgba(239, 68, 68, 0.2)';"
+                                onmouseout="this.style.opacity='0.4'; this.style.background='rgba(255,255,255,0.05)';"
+                                onmousedown="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">
+                                &times;
+                            </button>
                             
                             <div style="display:flex; align-items:center; margin-bottom:8px;">
                                 <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:9px; padding:2px 8px; display:flex; align-items:center; gap:4px;">
