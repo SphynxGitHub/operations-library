@@ -12712,7 +12712,8 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
 
             if (finalName) {
                 if (!parentRes.steps) parentRes.steps = [];
-                
+                if (!parentRes.triggers) parentRes.triggers = []; // 🚀 Ensure triggers array exists
+
                 const newStep = { 
                     id: uid(), 
                     name: finalName, 
@@ -12722,7 +12723,7 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
                     timingType: 'after_prev'
                 };
 
-                // Insert logic
+                // 1. Handle Canvas Steps (for the Visualizer)
                 const sectionItems = parentRes.steps.filter(s => 
                     (finalType === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger')
                 );
@@ -12735,10 +12736,18 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
                     parentRes.steps.push(newStep);
                 }
 
+                // 2. 🚀 THE FIX: Handle the Triggers array (for the Modal List)
+                if (finalType === 'Trigger') {
+                    // Add to triggers array so it shows up in the yellow dashed box in the modal
+                    parentRes.triggers.push({
+                        name: newStep.name,
+                        type: 'manual', // default
+                        assigneeName: 'Unassigned'
+                    });
+                }
+
                 // 🔥 SMART MAPPING TRIGGER
-                // If an object like "Email" or "Meeting" was detected, prompt for resource link
                 if (objContext) {
-                    // We wrap in a tiny timeout so the UI renders the new card before the prompt appears
                     setTimeout(() => {
                         OL.triggerSmartResourceMap(newStep, objContext);
                     }, 200);
