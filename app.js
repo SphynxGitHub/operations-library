@@ -5363,15 +5363,20 @@ OL.addSopStep = function(resId) {
 // HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
 // Global Workspace Logic
 OL.launchDirectToVisual = function(resId) {
-    // 1. Trigger the standard fullscreen opening logic
-    OL.toggleWorkflowFullscreen(resId);
+    console.log("🚀 Launching Level 3 Visualizer for Resource:", resId);
     
-    // 2. Immediately switch the mode to visual
-    // We wrap this in a tiny timeout to ensure the DOM elements 
-    // from toggleWorkflowFullscreen are painted first
-    setTimeout(() => {
-        OL.switchFSMode('visual', resId);
-    }, 10);
+    // 1. Close the current modal layer
+    OL.closeModal();
+    
+    // 2. Set the Level 3 Focus
+    state.focusedResourceId = resId; 
+    
+    // 3. Ensure we have a Level 2 parent context if possible
+    // (If we came from the library, focusedWorkflowId might be null, which is fine)
+    
+    // 4. Trigger the unified visualizer
+    const isVaultMode = location.hash.includes('vault');
+    renderGlobalVisualizer(isVaultMode);
 };
 
 OL.toggleWorkflowFullscreen = function(resId) {
