@@ -3622,35 +3622,6 @@ OL.quickCreateInLibrary = function(type) {
     }, 50);
 };
 
-// 🚀 1. CREATE + INSTANT MODAL
-OL.createAndOpenResource = function() {
-    const name = prompt("Enter Resource Name:");
-    if (!name) return;
-
-    const isVault = location.hash.includes('vault');
-    const timestamp = Date.now();
-    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
-
-    const newRes = {
-        id: newId,
-        name: name,
-        type: "SOP", // Default type
-        steps: [],
-        description: "",
-        createdDate: new Date().toISOString()
-    };
-
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-    source.push(newRes);
-
-    OL.persist();
-    
-    // Refresh the grid
-    renderResourceManager();
-    
-    // 💥 IMMEDIATELY OPEN MODAL
-    setTimeout(() => OL.openResourceModal(newId), 50);
-};
 
 // 📦 2. BULK RECLASSIFY
 OL.promptBulkReclassify = function(oldType) {
@@ -3877,6 +3848,8 @@ OL.closeResourceTypeManager = function() {
         }
     }
 };
+
+//================RESOURCE CARD AND MODAL===================//
 
 // 2. RESOURCE CARD AND MODAL
 window.renderResourceCard = function (res) {
@@ -4435,6 +4408,25 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+// HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
+// Global Workspace Logic
+OL.launchDirectToVisual = function(resId) {
+    console.log("🚀 Launching Level 3 Visualizer for Resource:", resId);
+    
+    // 1. Close the current modal layer
+    OL.closeModal();
+    
+    // 2. Set the Level 3 Focus
+    state.focusedResourceId = resId; 
+    
+    // 3. Ensure we have a Level 2 parent context if possible
+    // (If we came from the library, focusedWorkflowId might be null, which is fine)
+    
+    // 4. Trigger the unified visualizer
+    const isVaultMode = location.hash.includes('vault');
+    renderGlobalVisualizer(isVaultMode);
 };
 
 OL.navigateBack = function() {
@@ -5167,51 +5159,6 @@ window.renderSopStepList = function (res) {
     return html;
 };
 
-OL.setEditingTrigger = function(idx) {
-    state.editingTriggerIdx = idx;
-    state.editingStepId = null; // Clear other editing states
-    OL.refreshModal();
-    if (idx !== null) {
-        setTimeout(() => {
-            const el = document.getElementById(`edit-trigger-${idx}`);
-            if (el) { el.focus(); el.select(); }
-        }, 50);
-    }
-};
-
-OL.setEditingStep = function(stepId) {
-    state.editingStepId = stepId;
-    state.editingTriggerIdx = null; // Clear other editing states
-    OL.refreshModal();
-    if (stepId !== null) {
-        setTimeout(() => {
-            const el = document.getElementById(`edit-step-${stepId}`);
-            if (el) { el.focus(); el.select(); }
-        }, 50);
-    }
-};
-
-// Toggle Controller
-OL.toggleInlineEdit = function(event, resId, stepId) {
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
-    if (event) event.stopPropagation();
-
-    const res = OL.getResourceById(resId);
-    
-    // Accordion Logic: If clicking a new step, collapse others. 
-    // If clicking the current step, close it.
-    if (state.editingStepId === stepId) {
-        state.editingStepId = null;
-        state.expandedSteps.delete(stepId);
-    } else {
-        state.editingStepId = stepId;
-        state.expandedSteps.clear(); // 🚀 THE FIX: Clear all other expanded states
-        state.expandedSteps.add(stepId);
-    }
-    
-    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
-};
-
 // Helper for Trigger Toggle
 OL.toggleTrigDetails = function(event, resId, trigId) {
     if (event) event.stopPropagation();
@@ -5228,6 +5175,7 @@ OL.toggleTrigDetails = function(event, resId, trigId) {
     const res = OL.getResourceById(resId);
     document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
 };
+
 
 OL.openStepDetailModal = function(resId, stepId) {
     OL.trackNav(stepId, 'step', resId);
@@ -5419,25 +5367,6 @@ OL.addSopStep = function(resId) {
     }, 150);
 };
 
-// HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
-// Global Workspace Logic
-OL.launchDirectToVisual = function(resId) {
-    console.log("🚀 Launching Level 3 Visualizer for Resource:", resId);
-    
-    // 1. Close the current modal layer
-    OL.closeModal();
-    
-    // 2. Set the Level 3 Focus
-    state.focusedResourceId = resId; 
-    
-    // 3. Ensure we have a Level 2 parent context if possible
-    // (If we came from the library, focusedWorkflowId might be null, which is fine)
-    
-    // 4. Trigger the unified visualizer
-    const isVaultMode = location.hash.includes('vault');
-    renderGlobalVisualizer(isVaultMode);
-};
-
 OL.toggleWorkflowFullscreen = function(resId) {
     const res = OL.getResourceById(resId);
     if (!res) {
@@ -5489,6 +5418,7 @@ OL.toggleWorkflowFullscreen = function(resId) {
     }
 };
 
+
 OL.switchFSMode = function(mode, resId) {
     const canvas = document.getElementById('fs-canvas');
     const res = OL.getResourceById(resId);
@@ -5516,7 +5446,7 @@ OL.switchFSMode = function(mode, resId) {
             </div>
         `;
     } else {
-        OL.renderVisualizer(resId);
+        OL.launchDirectToVisual(resId);
     }
 };
 
@@ -5555,687 +5485,6 @@ OL.printSop = function(resId) {
             }, 600); 
         });
     });
-};
-
-OL.renderVisualizer = function(resId) {
-    const canvas = document.getElementById('fs-canvas');
-    const res = OL.getResourceById(resId);
-    if (!canvas || !res) return;
-
-    const LANE_HEIGHT = 200;
-    const COL_WIDTH = 280;
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    
-    const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
-
-    // 1. Generate the Grid Layer (Background only)
-    const lanesHtml = lanes.map(lane => `
-        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; width: 100%;">
-            <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
-                ${lane}
-            </div>
-            <div style="position: absolute; top: 0; left: 140px; display: flex; height: 100%;">
-                ${Array.from({length: maxCol + 2}).map(() => `
-                    <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
-
-    // 2. Generate the Node Layer (Absolute coordinates)
-    const nodesHtml = steps.map((step) => {
-        const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        // Center the card vertically in the 200px lane (card is ~80px tall)
-        const top = (laneIdx * LANE_HEIGHT) + 60; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
-
-        return `
-            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
-                draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
-                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
-                </div>
-                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name)}
-                </div>
-                <div class="new-link-trigger" 
-                    title="Drag to create new logic branch"
-                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
-                    +
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    // 3. One-Pass Paint
-    canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: fit-content; min-width: 100%;">
-            <div class="vis-swimlane-layer" style="position: relative; z-index: 1;">
-                ${lanesHtml}
-            </div>
-            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
-                ${nodesHtml}
-            </div>
-            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
-        </div>
-    `;
-
-    setTimeout(() => OL.drawVisualizerLines(resId), 10);
-};
-
-OL.createNewOutcomeFromNode = function(e, resId, stepId) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const res = OL.getResourceById(resId);
-    const step = res.steps.find(s => s.id === stepId);
-    
-    if (!step.outcomes) step.outcomes = [];
-    
-    // 1. Create the new "Pending" outcome
-    const newIdx = step.outcomes.length;
-    step.outcomes.push({
-        condition: "New Logic",
-        action: "next", // Default to next until dropped on a node
-        label: "New Branch",
-        endOffset: { x: 20, y: 0 }, // Offset slightly so the handle is visible
-        midOffset: { x: 0, y: 0 },
-        startOffset: { x: 0, y: 0 }
-    });
-
-    // 2. Force a quick redraw so the handles exist in the DOM
-    OL.drawVisualizerLines(res);
-
-    // 3. Manually trigger the drag state on the 'end' handle of the new outcome
-    OL.activeLinkDrag = { 
-        type: 'end', 
-        resId: resId, 
-        stepId: stepId, 
-        oIdx: newIdx 
-    };
-
-    document.addEventListener('mousemove', OL.handleLinkMove);
-    document.addEventListener('mouseup', OL.stopLinkMove);
-};
-
-OL.removeOutcomeFromCanvas = function(resId, stepId, oIdx) {
-    if (!confirm("Remove this logic branch?")) return;
-    
-    const res = OL.getResourceById(resId);
-    const step = res?.steps?.find(s => s.id === stepId);
-    
-    if (step && step.outcomes) {
-        step.outcomes.splice(oIdx, 1);
-        OL.persist();
-        OL.renderVisualizer(resId); // Total redraw to clear the path
-        console.log(`🗑️ Logic branch ${oIdx} removed from step ${stepId}`);
-    }
-};
-
-OL.autoGrowNode = function(element, resId) {
-    element.style.height = '1px';
-    element.style.height = element.scrollHeight + 'px';
-    
-    // 🚀 REDRAW: Ensure lines stay attached while typing
-    OL.drawVisualizerLines(resId);
-};
-
-OL.toggleVisNodeDetails = function(stepId, resId) {
-    // Safety check for Set
-    if (!(state.expandedVisualNodes instanceof Set)) {
-        state.expandedVisualNodes = new Set();
-    }
-
-    if (state.expandedVisualNodes.has(stepId)) {
-        state.expandedVisualNodes.delete(stepId);
-    } else {
-        state.expandedVisualNodes.add(stepId);
-    }
-
-    // 🚀 Redraw the visualizer to reflect the expanded/collapsed state
-    OL.renderVisualizer(resId);
-};
-
-OL.openStepConfigFromVis = function(resId, stepId) {
-    console.log("🛠️ Switching from Visualizer to Full Config...");
-    
-    const modalLayer = document.getElementById('modal-layer');
-    if (modalLayer) {
-        modalLayer.style.display = 'flex';
-        // Redundant safety check to ensure it beats the FS Overlay
-        modalLayer.style.zIndex = '10001'; 
-    }
-
-    // Call the standard modal system
-    OL.openStepDetailModal(resId, stepId);
-};
-
-OL.updateLaneTitle = function(resId, laneId, newTitle) {
-    const res = OL.getResourceById(resId);
-    const lane = res.lanes.find(l => l.id === laneId);
-    if (lane) {
-        lane.title = newTitle.trim();
-        OL.persist();
-    }
-};
-
-// HANDLE CARD MOVEMENT ON CANVAS
-OL.startCardMove = function(e, resId, stepId) {
-    // Only drag if clicking the header or empty space, not buttons/inputs
-    if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(e.target.tagName)) return;
-    
-    e.preventDefault();
-    const node = document.getElementById(`vis-node-${stepId}`);
-    
-    activeCardDrag = {
-        resId,
-        stepId,
-        node,
-        offsetX: e.clientX - node.offsetLeft,
-        offsetY: e.clientY - node.offsetTop
-    };
-
-    document.addEventListener('mousemove', OL.handleCardMove);
-    document.addEventListener('mouseup', OL.stopCardMove);
-};
-
-OL.handleCardMove = function(e) {
-    if (!activeCardDrag) return;
-    const { node, offsetX, offsetY, resId } = activeCardDrag;
-
-    let newX = e.clientX - offsetX;
-    let newY = e.clientY - offsetY;
-
-    // Optional: 20px Grid Snap
-    newX = Math.round(newX / 20) * 20;
-    newY = Math.round(newY / 20) * 20;
-
-    node.style.left = `${newX}px`;
-    node.style.top = `${newY}px`;
-
-    // 🚀 REDRAW: Pass resId to the engine
-    OL.drawVisualizerLines(resId);
-};
-
-OL.stopCardMove = function() {
-    if (activeCardDrag) {
-        const { resId, stepId, node } = activeCardDrag;
-        const res = OL.getResourceById(resId);
-        const step = res.steps.find(s => s.id === stepId);
-        
-        // Save final coordinates to state
-        if (!step.position) step.position = {};
-        step.position.x = parseInt(node.style.left);
-        step.position.y = parseInt(node.style.top);
-
-        OL.persist(); // Sync to Firebase
-    }
-    
-    activeCardDrag = null;
-    document.removeEventListener('mousemove', OL.handleCardMove);
-    document.removeEventListener('mouseup', OL.stopCardMove);
-};
-
-// HANDLE VISUALIZER LINES
-// Add this to your initialization or global scope
-document.addEventListener('mousedown', (e) => {
-    const handle = e.target.closest('.path-handle');
-    if (!handle) return;
-
-    // 🚀 THE MAGIC: Kill the card drag before it starts
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Identify handle data from attributes we'll add in the next step
-    const type = handle.getAttribute('data-type');
-    const resId = handle.getAttribute('data-res-id');
-    const stepId = handle.getAttribute('data-step-id');
-    const oIdx = parseInt(handle.getAttribute('data-oidx'));
-
-    // Temporarily disable draggability of all nodes so they stay frozen
-    document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'false'));
-
-    OL.activeLinkDrag = { type, resId, stepId, oIdx };
-    
-    document.addEventListener('mousemove', OL.handleLinkMove);
-    document.addEventListener('mouseup', OL.stopLinkMove);
-    
-    console.log(`🎯 Locked ${type} handle - Card movement suppressed`);
-}, true); // <--- 'true' enables the Capture Phase
-
-OL.drawVisualizerLines = function(resIdOrObj) {
-    const svg = document.getElementById('vis-links-layer');
-    if (!svg) return;
-    
-    // Resolve 'res' context: handle both string IDs and direct objects
-    let res = (typeof resIdOrObj === 'string') 
-        ? OL.getResourceById(resIdOrObj) 
-        : resIdOrObj;
-
-    // Safety guard to prevent ReferenceErrors
-    if (!res || !res.steps) {
-        console.warn("Drawing aborted: Resource data is missing or invalid.");
-        return;
-    }
-
-    // 1. Clear previous SVG content to avoid 'ghost' lines
-    svg.innerHTML = ''; 
-
-    const workspace = document.getElementById('vis-workspace');
-    if (!workspace) return;
-    const cRect = workspace.getBoundingClientRect();
-
-    // 2. Draw Step Outcomes (Sequential and Jump logic)
-    res.steps.forEach((step, sIdx) => {
-        (step.outcomes || []).forEach((oc, oIdx) => {
-            const sourceEl = document.getElementById(`vis-node-${step.id}`);
-            
-            // Resolve Target ID for "Next" or "Jump"
-            let targetId = null;
-            if (oc.action === 'next') {
-                targetId = res.steps[sIdx + 1]?.id;
-            } else if (oc.action?.startsWith('jump_')) {
-                targetId = oc.action.replace('jump_', '');
-            }
-
-            const targetEl = document.getElementById(`vis-node-${targetId}`);
-            
-            if (sourceEl && targetEl) {
-                const s = sourceEl.getBoundingClientRect();
-                const t = targetEl.getBoundingClientRect();
-
-                // Calculate relative anchor points (Base Ports)
-                const baseStartX = s.right - cRect.left;
-                const baseStartY = s.top + (s.height / 2) - cRect.top;
-                const baseEndX = t.left - cRect.left;
-                const baseEndY = t.top + (t.height / 2) - cRect.top;
-
-                // Ensure manual offset objects exist in the data
-                if (!oc.startOffset) oc.startOffset = { x: 0, y: 0 };
-                if (!oc.midOffset) oc.midOffset = { x: 0, y: 0 };
-                if (!oc.endOffset) oc.endOffset = { x: 0, y: 0 };
-
-                // Apply manual offsets from user dragging
-                const x1 = baseStartX + (oc.startOffset?.x || 0);
-                const y1 = baseStartY + (oc.startOffset?.y || 0);
-                const x2 = baseEndX + (oc.endOffset?.x || 0);
-                const y2 = baseEndY + (oc.endOffset?.y || 0);
-
-                // Quadratic Bezier Calculation (The "Bend")
-                const naturalMidX = (x1 + x2) / 2;
-                const naturalMidY = (y1 + y2) / 2;
-                const cx = naturalMidX + (oc.midOffset?.x || 0);
-                const cy = naturalMidY + (oc.midOffset?.y || 0);
-
-                const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
-                
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                path.setAttribute("d", d);
-               
-                // 🎨 NEW: LOGIC STYLING
-                // If there's a condition (e.g., "Approved"), make it a dashed line
-                const isConditional = oc.condition && oc.condition.trim() !== "";
-                path.setAttribute("class", isConditional ? "vis-path logic-path" : "vis-path standard-path");
-                path.setAttribute("marker-end", "url(#arrowhead)");
-                path.setAttribute("style", "pointer-events: visibleStroke; cursor: pointer;");
-                path.setAttribute("onclick", `OL.removeOutcomeFromCanvas('${res.id}', '${step.id}', ${oIdx})`);
-                path.setAttribute("title", "Click to delete this branch");
-                
-                // Optional: Add a label to the path if it's conditional
-                if (isConditional) {
-                    OL.drawPathLabel(svg, cx, cy, oc.condition);
-                }
-
-                svg.appendChild(path);
-
-                // Create the 3 interactive handles (Green Start, Blue Mid, Red End)
-                OL.createHandle(svg, x1, y1, 'start', res.id, step.id, oIdx);
-                OL.createHandle(svg, cx, cy, 'mid', res.id, step.id, oIdx);
-                OL.createHandle(svg, x2, y2, 'end', res.id, step.id, oIdx);
-            }
-        });
-    });
-
-    // 3. Inject Arrowhead markers
-    svg.innerHTML += `
-        <defs>
-            <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" 
-                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
-            </marker>
-        </defs>
-    `;
-};
-
-OL.drawPathLabel = function(svg, x, y, text) {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    
-    // Background capsule for the text
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", x - 25);
-    rect.setAttribute("y", y - 10);
-    rect.setAttribute("width", "50");
-    rect.setAttribute("height", "16");
-    rect.setAttribute("rx", "8");
-    rect.setAttribute("fill", "#0b0f1a");
-    rect.setAttribute("stroke", "var(--accent)");
-    rect.setAttribute("stroke-width", "1");
-    
-    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    txt.setAttribute("x", x);
-    txt.setAttribute("y", y + 2);
-    txt.setAttribute("text-anchor", "middle");
-    txt.setAttribute("fill", "var(--accent)");
-    txt.setAttribute("style", "font-size: 8px; font-weight: bold; pointer-events: none;");
-    txt.textContent = text.toUpperCase();
-
-    group.appendChild(rect);
-    group.appendChild(txt);
-    svg.appendChild(group);
-};
-
-OL.createHandle = function(svg, x, y, type, resId, stepId, oIdx) {
-    const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    handle.setAttribute("cx", x);
-    handle.setAttribute("cy", y);
-    handle.setAttribute("r", "8"); // Slightly larger for mobile/ease
-    handle.setAttribute("class", `path-handle handle-${type}`);
-    
-    // Store metadata for the capture listener
-    handle.setAttribute('data-type', type);
-    handle.setAttribute('data-res-id', resId);
-    handle.setAttribute('data-step-id', stepId);
-    handle.setAttribute('data-oidx', oIdx);
-    
-    svg.appendChild(handle);
-};
-
-OL.activeLinkDrag = null;
-
-OL.handleLinkMove = function(e) {
-    if (!OL.activeLinkDrag) return;
-    const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
-    const res = OL.getResourceById(resId);
-    const step = res.steps.find(s => s.id === stepId);
-    const oc = step.outcomes[oIdx];
-    
-    // Initialize offsets
-    if (!oc.startOffset) oc.startOffset = { x: 0, y: 0 };
-    if (!oc.midOffset) oc.midOffset = { x: 0, y: 0 };
-    if (!oc.endOffset) oc.endOffset = { x: 0, y: 0 };
-
-    const workspace = document.getElementById('vis-workspace');
-    const cRect = workspace.getBoundingClientRect();
-    const mouseX = e.clientX - cRect.left;
-    const mouseY = e.clientY - cRect.top;
-
-    // Resolve target node for 'end' handles
-    let targetNodeId = stepId; 
-    if (type === 'end') {
-        const curIdx = res.steps.findIndex(s => s.id === stepId);
-        targetNodeId = oc.action === 'next' ? res.steps[curIdx + 1]?.id : oc.action.replace('jump_', '');
-    }
-
-    const nodeEl = document.getElementById(`vis-node-${targetNodeId}`);
-    if (!nodeEl) return;
-
-    const n = nodeEl.getBoundingClientRect();
-    const snapPadding = 40; // Increased padding for better 'catch'
-
-    // 1. Define the 4 Snap Points (Relative to Workspace)
-    const ports = {
-        right:  { x: n.right - cRect.left,              y: n.top + n.height / 2 - cRect.top },
-        left:   { x: n.left - cRect.left,               y: n.top + n.height / 2 - cRect.top },
-        top:    { x: n.left + n.width / 2 - cRect.left, y: n.top - cRect.top },
-        bottom: { x: n.left + n.width / 2 - cRect.left, y: n.bottom - cRect.top }
-    };
-
-    // 2. Identify Base Port (where offset is 0,0)
-    // Start handles default to 'right', End handles default to 'left'
-    const basePort = type === 'start' ? ports.right : ports.left;
-
-    if (type === 'start' || type === 'end') {
-        const offset = (type === 'start') ? oc.startOffset : oc.endOffset;
-        
-        // 3. Find the closest port to the current mouse position
-        let closestPort = null;
-        let minDistance = snapPadding;
-
-        Object.keys(ports).forEach(key => {
-            const dist = Math.hypot(mouseX - ports[key].x, mouseY - ports[key].y);
-            if (dist < minDistance) {
-                minDistance = dist;
-                closestPort = ports[key];
-            }
-        });
-
-        // 4. Snap or Free Move
-        if (closestPort) {
-            // SNAP: Set offset to exactly reach the port from the base
-            offset.x = closestPort.x - basePort.x;
-            offset.y = closestPort.y - basePort.y;
-        } else {
-            // FREE MOVE: Standard mouse tracking
-            offset.x = mouseX - basePort.x;
-            offset.y = mouseY - basePort.y;
-        }
-    } else if (type === 'mid') {
-        oc.midOffset.x += e.movementX;
-        oc.midOffset.y += e.movementY;
-        if (Math.abs(oc.midOffset.x) < 15) oc.midOffset.x = 0;
-        if (Math.abs(oc.midOffset.y) < 15) oc.midOffset.y = 0;
-    }
-
-    OL.drawVisualizerLines(res);
-};
-
-OL.stopLinkMove = function() {
-    if (OL.activeLinkDrag) {
-        const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
-        const res = OL.getResourceById(resId);
-        const step = res.steps.find(s => s.id === stepId);
-        const oc = step.outcomes[oIdx];
-
-        // 🚀 NEW: Check if we are dropping the 'end' handle on a DIFFERENT node
-        if (type === 'end') {
-            const workspace = document.getElementById('vis-workspace');
-            const cRect = workspace.getBoundingClientRect();
-            
-            // Find all nodes except the source node
-            const nodes = document.querySelectorAll(`.workflow-block-card:not(#vis-node-${stepId})`);
-            let closestNodeId = null;
-            let minDistance = 50; // Threshold for "snapping" a new link
-
-            nodes.forEach(nodeEl => {
-                const n = nodeEl.getBoundingClientRect();
-                const nodeCenterX = n.left + n.width / 2;
-                const nodeCenterY = n.top + n.height / 2;
-                
-                // Check distance between mouse and node center
-                const dist = Math.hypot(window.event.clientX - nodeCenterX, window.event.clientY - nodeCenterY);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    // Extract ID from the DOM element (assuming ID format vis-node-ID)
-                    closestNodeId = nodeEl.id.replace('vis-node-', '');
-                }
-            });
-
-            // If we found a new node to link to:
-            if (closestNodeId) {
-                oc.action = `jump_step_${closestNodeId}`;
-                oc.label = `Jump to Step`;
-                // Reset offsets so the line snaps perfectly to the new target
-                oc.endOffset = { x: 0, y: 0 };
-                oc.midOffset = { x: 0, y: 0 };
-                console.log(`🔗 Auto-linked to new node: ${closestNodeId}`);
-            }
-        }
-
-        OL.persist();
-        document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'true'));
-    }
-    
-    OL.activeLinkDrag = null;
-    document.removeEventListener('mousemove', OL.handleLinkMove);
-    document.removeEventListener('mouseup', OL.stopLinkMove);
-    
-    // Final UI Refresh
-    OL.renderVisualizer(resId); 
-};
-
-// Helper to keep code clean
-OL.createBezierPath = function(svg, x1, y1, x2, y2, className) {
-    // If it's a trigger (vertical flow), use a vertical curve
-    // If it's a step outcome (side-to-side), use a horizontal curve
-    const isVertical = className === 'trigger-path';
-    
-    let d;
-    if (isVertical) {
-        const cp = y1 + (y2 - y1) / 2;
-        d = `M ${x1} ${y1} C ${x1} ${cp}, ${x2} ${cp}, ${x2} ${y2}`;
-    } else {
-        const cp = x1 + (x2 - x1) / 2;
-        d = `M ${x1} ${y1} C ${cp} ${y1}, ${cp} ${y2}, ${x2} ${y2}`;
-    }
-
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    path.setAttribute("class", className);
-    path.setAttribute("marker-end", "url(#arrowhead)");
-    svg.appendChild(path);
-};
-
-let activePathDrag = null;
-
-OL.startPathDrag = function(e, resId, stepId, outcomeIdx) {
-    e.stopPropagation();
-    e.preventDefault();
-    
-    activePathDrag = { resId, stepId, outcomeIdx };
-    
-    document.addEventListener('mousemove', OL.handlePathDrag);
-    document.addEventListener('mouseup', OL.stopPathDrag);
-};
-
-OL.handlePathDrag = function(e) {
-    if (!activePathDrag) return;
-    
-    const { resId, stepId, outcomeIdx } = activePathDrag;
-    const res = OL.getResourceById(resId);
-    const step = res.steps.find(s => s.id === stepId);
-    const oc = step.outcomes[outcomeIdx];
-    
-    const workspace = document.getElementById('vis-workspace');
-    const cRect = workspace.getBoundingClientRect();
-    
-    // Identify natural mid-point to calculate relative offset
-    const sourcePort = document.getElementById(`port-${stepId}-${outcomeIdx}`).getBoundingClientRect();
-    // Simplified target lookup for math
-    const targetNode = document.querySelector('.vis-node:not(.is-dragging)'); 
-    
-    const x1 = sourcePort.right - cRect.left;
-    const y1 = (sourcePort.top + sourcePort.height / 2) - cRect.top;
-    // Note: In real use, you'd find the specific target node coordinates here
-    
-    // Update data relative to mouse
-    if (!oc.offset) oc.offset = { x: 0, y: 0 };
-    
-    const mouseX = e.clientX - cRect.left;
-    const mouseY = e.clientY - cRect.top;
-    
-    // We calculate offset from the straight-line midpoint
-    // This is a simplified version; you can refine the midX calculation
-    oc.offset.x = mouseX - x1; 
-    oc.offset.y = mouseY - y1;
-
-    // Real-time redraw
-    OL.drawVisualizerLines(res);
-};
-
-OL.stopPathDrag = function() {
-    if (activePathDrag) {
-        OL.persist(); // Save the bend to Firebase
-    }
-    activePathDrag = null;
-    document.removeEventListener('mousemove', OL.handlePathDrag);
-    document.removeEventListener('mouseup', OL.stopPathDrag);
-};
-
-// Universal Step Updater
-OL.updateStepFromWorkspace = function(resId, stepId, field, value) {
-    const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
-    
-    if (step) {
-        step[field] = value.trim();
-        OL.persist();
-        
-        // 🚀 SMART REFRESH: If we are in the Visualizer, redraw lines 
-        // to reflect any logic changes immediately.
-        if (document.getElementById('vis-links-layer')) {
-            OL.drawVisualizerLines(res);
-        }
-    }
-};
-
-OL.removeStepFromVisualizer = function(resId, stepId) {
-    if (!confirm("Are you sure you want to delete this step? This will also remove any branching logic pointing to it.")) return;
-
-    const res = OL.getResourceById(resId);
-    if (res && res.steps) {
-        // 1. Remove the actual step
-        res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
-        
-        // 2. Clean up outcomes in other steps that might point to this deleted step
-        res.steps.forEach(s => {
-            if (s.outcomes) {
-                s.outcomes.forEach(oc => {
-                    if (oc.action === `jump_${stepId}`) {
-                        oc.action = 'next'; // Reset to default "Next Step" logic
-                        oc.label = 'Proceed to Next Step';
-                    }
-                });
-            }
-        });
-
-        OL.persist();
-
-        // 3. 🚀 Trigger a total redraw of the Visualizer
-        OL.renderVisualizer(resId);
-        
-        console.log(`🗑️ Step ${stepId} removed via Visualizer.`);
-    }
-};
-
-// HANDLE APP LINKING
-OL.filterStepAppSearch = function(resId, stepId, query) {
-    const listEl = document.getElementById("step-app-results");
-    if (!listEl) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const client = getActiveClient();
-    
-    // 🚀 THE FIX: Only look at local project apps
-    const localApps = client?.projectData?.localApps || [];
-
-    // Filter by name
-    const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
-
-    if (matches.length > 0) {
-        listEl.innerHTML = matches.map(app => `
-            <div class="search-result-item" 
-                 onmousedown="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${app.id}'); OL.openStepDetailModal('${resId}', '${stepId}')">
-                📱 ${esc(app.name)} 
-                <span class="tiny muted">(Project App)</span>
-            </div>
-        `).join('');
-    } else {
-        listEl.innerHTML = `<div class="search-result-item muted">No local apps found matching "${esc(q)}"</div>`;
-    }
 };
 
 // HANDLE RESOURCE AND SOP LINKING
@@ -6420,37 +5669,6 @@ OL.removeTriggerLink = function(resId, trigIdx, linkIdx) {
     }
 };
 
-// HANDLE EDITING, INCLUDING DRAG AND DROP
-OL.toggleInlineEdit = function(event, resId, stepId) {
-    // If the user clicked an input or textarea inside the row, don't collapse/expand
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
-    
-    if (event) event.stopPropagation();
-    state.editingStepId = (state.editingStepId === stepId) ? null : stepId;
-    
-    const res = OL.getResourceById(resId);
-    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
-};
-
-OL.handleStepDragStart = function(event, index) {
-    // 1. Store the index for the drop handler
-    event.dataTransfer.setData("draggedIndex", index);
-    
-    // 2. Identify the element actually being dragged
-    // currentTarget is the element that has the ondragstart attribute
-    const dragTarget = event.currentTarget;
-    
-    if (dragTarget) {
-        dragTarget.style.opacity = '0.4';
-        // Optional: set the drag image to the whole row
-        event.dataTransfer.setDragImage(dragTarget, 0, 0);
-    } else {
-        // Fallback to finding the closest row if currentTarget fails
-        const fallback = event.target.closest('.dp-manager-row') || event.target.closest('.step-group');
-        if (fallback) fallback.style.opacity = '0.4';
-    }
-};
-
 OL.handleStepDrop = function(event, targetIndex, resId) {
     event.preventDefault();
 
@@ -6495,6 +5713,27 @@ OL.handleDragOver = function(event) {
         targetCard.classList.add('drop-target-active');
     }
 };
+
+
+OL.handleStepDragStart = function(event, index) {
+    // 1. Store the index for the drop handler
+    event.dataTransfer.setData("draggedIndex", index);
+    
+    // 2. Identify the element actually being dragged
+    // currentTarget is the element that has the ondragstart attribute
+    const dragTarget = event.currentTarget;
+    
+    if (dragTarget) {
+        dragTarget.style.opacity = '0.4';
+        // Optional: set the drag image to the whole row
+        event.dataTransfer.setDragImage(dragTarget, 0, 0);
+    } else {
+        // Fallback to finding the closest row if currentTarget fails
+        const fallback = event.target.closest('.dp-manager-row') || event.target.closest('.step-group');
+        if (fallback) fallback.style.opacity = '0.4';
+    }
+};
+
 
 // HANDLE OUTCOMES
 state.expandedSteps = state.expandedSteps || new Set();
@@ -7077,6 +6316,497 @@ OL.removeSopStep = function (resId, stepId) {
         OL.refreshActiveView();
     }
 };
+
+/*
+OL.setEditingTrigger = function(idx) {
+    state.editingTriggerIdx = idx;
+    state.editingStepId = null; // Clear other editing states
+    OL.refreshModal();
+    if (idx !== null) {
+        setTimeout(() => {
+            const el = document.getElementById(`edit-trigger-${idx}`);
+            if (el) { el.focus(); el.select(); }
+        }, 50);
+    }
+};
+
+OL.setEditingStep = function(stepId) {
+    state.editingStepId = stepId;
+    state.editingTriggerIdx = null; // Clear other editing states
+    OL.refreshModal();
+    if (stepId !== null) {
+        setTimeout(() => {
+            const el = document.getElementById(`edit-step-${stepId}`);
+            if (el) { el.focus(); el.select(); }
+        }, 50);
+    }
+};
+
+// Toggle Controller
+OL.toggleInlineEdit = function(event, resId, stepId) {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+    if (event) event.stopPropagation();
+
+    const res = OL.getResourceById(resId);
+    
+    // Accordion Logic: If clicking a new step, collapse others. 
+    // If clicking the current step, close it.
+    if (state.editingStepId === stepId) {
+        state.editingStepId = null;
+        state.expandedSteps.delete(stepId);
+    } else {
+        state.editingStepId = stepId;
+        state.expandedSteps.clear(); // 🚀 THE FIX: Clear all other expanded states
+        state.expandedSteps.add(stepId);
+    }
+    
+    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
+};
+
+// HANDLE EDITING, INCLUDING DRAG AND DROP
+OL.toggleInlineEdit = function(event, resId, stepId) {
+    // If the user clicked an input or textarea inside the row, don't collapse/expand
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+    
+    if (event) event.stopPropagation();
+    state.editingStepId = (state.editingStepId === stepId) ? null : stepId;
+    
+    const res = OL.getResourceById(resId);
+    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
+};
+*/
+
+/*
+
+
+OL.renderVisualizer = function(resId) {
+    const canvas = document.getElementById('fs-canvas');
+    const res = OL.getResourceById(resId);
+    if (!canvas || !res) return;
+
+    const LANE_HEIGHT = 200;
+    const COL_WIDTH = 280;
+    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
+    
+    const steps = res.steps || [];
+    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
+
+    // 1. Generate the Grid Layer (Background only)
+    const lanesHtml = lanes.map(lane => `
+        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; width: 100%;">
+            <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
+                ${lane}
+            </div>
+            <div style="position: absolute; top: 0; left: 140px; display: flex; height: 100%;">
+                ${Array.from({length: maxCol + 2}).map(() => `
+                    <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    // 2. Generate the Node Layer (Absolute coordinates)
+    const nodesHtml = steps.map((step) => {
+        const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
+        // Center the card vertically in the 200px lane (card is ~80px tall)
+        const top = (laneIdx * LANE_HEIGHT) + 60; 
+        const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
+
+        return `
+            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
+                draggable="true"
+                style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
+                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
+                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
+                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
+                </div>
+                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
+                    ${esc(step.name)}
+                </div>
+                <div class="new-link-trigger" 
+                    title="Drag to create new logic branch"
+                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
+                    +
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 3. One-Pass Paint
+    canvas.innerHTML = `
+        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: fit-content; min-width: 100%;">
+            <div class="vis-swimlane-layer" style="position: relative; z-index: 1;">
+                ${lanesHtml}
+            </div>
+            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                ${nodesHtml}
+            </div>
+            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
+        </div>
+    `;
+
+    setTimeout(() => OL.drawVisualizerLines(resId), 10);
+};
+
+OL.createNewOutcomeFromNode = function(e, resId, stepId) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const res = OL.getResourceById(resId);
+    const step = res.steps.find(s => s.id === stepId);
+    
+    if (!step.outcomes) step.outcomes = [];
+    
+    // 1. Create the new "Pending" outcome
+    const newIdx = step.outcomes.length;
+    step.outcomes.push({
+        condition: "New Logic",
+        action: "next", // Default to next until dropped on a node
+        label: "New Branch",
+        endOffset: { x: 20, y: 0 }, // Offset slightly so the handle is visible
+        midOffset: { x: 0, y: 0 },
+        startOffset: { x: 0, y: 0 }
+    });
+
+    // 2. Force a quick redraw so the handles exist in the DOM
+    OL.drawVisualizerLines(res);
+
+    // 3. Manually trigger the drag state on the 'end' handle of the new outcome
+    OL.activeLinkDrag = { 
+        type: 'end', 
+        resId: resId, 
+        stepId: stepId, 
+        oIdx: newIdx 
+    };
+
+    document.addEventListener('mousemove', OL.handleLinkMove);
+    document.addEventListener('mouseup', OL.stopLinkMove);
+};
+
+OL.removeOutcomeFromCanvas = function(resId, stepId, oIdx) {
+    if (!confirm("Remove this logic branch?")) return;
+    
+    const res = OL.getResourceById(resId);
+    const step = res?.steps?.find(s => s.id === stepId);
+    
+    if (step && step.outcomes) {
+        step.outcomes.splice(oIdx, 1);
+        OL.persist();
+        OL.renderVisualizer(resId); // Total redraw to clear the path
+        console.log(`🗑️ Logic branch ${oIdx} removed from step ${stepId}`);
+    }
+};
+
+
+// HANDLE VISUALIZER LINES
+// Add this to your initialization or global scope
+document.addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.path-handle');
+    if (!handle) return;
+
+    // 🚀 THE MAGIC: Kill the card drag before it starts
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Identify handle data from attributes we'll add in the next step
+    const type = handle.getAttribute('data-type');
+    const resId = handle.getAttribute('data-res-id');
+    const stepId = handle.getAttribute('data-step-id');
+    const oIdx = parseInt(handle.getAttribute('data-oidx'));
+
+    // Temporarily disable draggability of all nodes so they stay frozen
+    document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'false'));
+
+    OL.activeLinkDrag = { type, resId, stepId, oIdx };
+    
+    document.addEventListener('mousemove', OL.handleLinkMove);
+    document.addEventListener('mouseup', OL.stopLinkMove);
+    
+    console.log(`🎯 Locked ${type} handle - Card movement suppressed`);
+}, true); // <--- 'true' enables the Capture Phase
+
+OL.drawVisualizerLines = function(resIdOrObj) {
+    const svg = document.getElementById('vis-links-layer');
+    if (!svg) return;
+    
+    // Resolve 'res' context: handle both string IDs and direct objects
+    let res = (typeof resIdOrObj === 'string') 
+        ? OL.getResourceById(resIdOrObj) 
+        : resIdOrObj;
+
+    // Safety guard to prevent ReferenceErrors
+    if (!res || !res.steps) {
+        console.warn("Drawing aborted: Resource data is missing or invalid.");
+        return;
+    }
+
+    // 1. Clear previous SVG content to avoid 'ghost' lines
+    svg.innerHTML = ''; 
+
+    const workspace = document.getElementById('vis-workspace');
+    if (!workspace) return;
+    const cRect = workspace.getBoundingClientRect();
+
+    // 2. Draw Step Outcomes (Sequential and Jump logic)
+    res.steps.forEach((step, sIdx) => {
+        (step.outcomes || []).forEach((oc, oIdx) => {
+            const sourceEl = document.getElementById(`vis-node-${step.id}`);
+            
+            // Resolve Target ID for "Next" or "Jump"
+            let targetId = null;
+            if (oc.action === 'next') {
+                targetId = res.steps[sIdx + 1]?.id;
+            } else if (oc.action?.startsWith('jump_')) {
+                targetId = oc.action.replace('jump_', '');
+            }
+
+            const targetEl = document.getElementById(`vis-node-${targetId}`);
+            
+            if (sourceEl && targetEl) {
+                const s = sourceEl.getBoundingClientRect();
+                const t = targetEl.getBoundingClientRect();
+
+                // Calculate relative anchor points (Base Ports)
+                const baseStartX = s.right - cRect.left;
+                const baseStartY = s.top + (s.height / 2) - cRect.top;
+                const baseEndX = t.left - cRect.left;
+                const baseEndY = t.top + (t.height / 2) - cRect.top;
+
+                // Ensure manual offset objects exist in the data
+                if (!oc.startOffset) oc.startOffset = { x: 0, y: 0 };
+                if (!oc.midOffset) oc.midOffset = { x: 0, y: 0 };
+                if (!oc.endOffset) oc.endOffset = { x: 0, y: 0 };
+
+                // Apply manual offsets from user dragging
+                const x1 = baseStartX + (oc.startOffset?.x || 0);
+                const y1 = baseStartY + (oc.startOffset?.y || 0);
+                const x2 = baseEndX + (oc.endOffset?.x || 0);
+                const y2 = baseEndY + (oc.endOffset?.y || 0);
+
+                // Quadratic Bezier Calculation (The "Bend")
+                const naturalMidX = (x1 + x2) / 2;
+                const naturalMidY = (y1 + y2) / 2;
+                const cx = naturalMidX + (oc.midOffset?.x || 0);
+                const cy = naturalMidY + (oc.midOffset?.y || 0);
+
+                const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+                
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", d);
+               
+                // 🎨 NEW: LOGIC STYLING
+                // If there's a condition (e.g., "Approved"), make it a dashed line
+                const isConditional = oc.condition && oc.condition.trim() !== "";
+                path.setAttribute("class", isConditional ? "vis-path logic-path" : "vis-path standard-path");
+                path.setAttribute("marker-end", "url(#arrowhead)");
+                path.setAttribute("style", "pointer-events: visibleStroke; cursor: pointer;");
+                path.setAttribute("onclick", `OL.removeOutcomeFromCanvas('${res.id}', '${step.id}', ${oIdx})`);
+                path.setAttribute("title", "Click to delete this branch");
+                
+                // Optional: Add a label to the path if it's conditional
+                if (isConditional) {
+                    OL.drawPathLabel(svg, cx, cy, oc.condition);
+                }
+
+                svg.appendChild(path);
+
+                // Create the 3 interactive handles (Green Start, Blue Mid, Red End)
+                OL.createHandle(svg, x1, y1, 'start', res.id, step.id, oIdx);
+                OL.createHandle(svg, cx, cy, 'mid', res.id, step.id, oIdx);
+                OL.createHandle(svg, x2, y2, 'end', res.id, step.id, oIdx);
+            }
+        });
+    });
+
+    // 3. Inject Arrowhead markers
+    svg.innerHTML += `
+        <defs>
+            <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" 
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+            </marker>
+        </defs>
+    `;
+};
+
+OL.drawPathLabel = function(svg, x, y, text) {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    
+    // Background capsule for the text
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", x - 25);
+    rect.setAttribute("y", y - 10);
+    rect.setAttribute("width", "50");
+    rect.setAttribute("height", "16");
+    rect.setAttribute("rx", "8");
+    rect.setAttribute("fill", "#0b0f1a");
+    rect.setAttribute("stroke", "var(--accent)");
+    rect.setAttribute("stroke-width", "1");
+    
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", x);
+    txt.setAttribute("y", y + 2);
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("fill", "var(--accent)");
+    txt.setAttribute("style", "font-size: 8px; font-weight: bold; pointer-events: none;");
+    txt.textContent = text.toUpperCase();
+
+    group.appendChild(rect);
+    group.appendChild(txt);
+    svg.appendChild(group);
+};
+
+OL.createHandle = function(svg, x, y, type, resId, stepId, oIdx) {
+    const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    handle.setAttribute("cx", x);
+    handle.setAttribute("cy", y);
+    handle.setAttribute("r", "8"); // Slightly larger for mobile/ease
+    handle.setAttribute("class", `path-handle handle-${type}`);
+    
+    // Store metadata for the capture listener
+    handle.setAttribute('data-type', type);
+    handle.setAttribute('data-res-id', resId);
+    handle.setAttribute('data-step-id', stepId);
+    handle.setAttribute('data-oidx', oIdx);
+    
+    svg.appendChild(handle);
+};
+
+OL.activeLinkDrag = null;
+
+OL.handleLinkMove = function(e) {
+    if (!OL.activeLinkDrag) return;
+    const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
+    const res = OL.getResourceById(resId);
+    const step = res.steps.find(s => s.id === stepId);
+    const oc = step.outcomes[oIdx];
+    
+    // Initialize offsets
+    if (!oc.startOffset) oc.startOffset = { x: 0, y: 0 };
+    if (!oc.midOffset) oc.midOffset = { x: 0, y: 0 };
+    if (!oc.endOffset) oc.endOffset = { x: 0, y: 0 };
+
+    const workspace = document.getElementById('vis-workspace');
+    const cRect = workspace.getBoundingClientRect();
+    const mouseX = e.clientX - cRect.left;
+    const mouseY = e.clientY - cRect.top;
+
+    // Resolve target node for 'end' handles
+    let targetNodeId = stepId; 
+    if (type === 'end') {
+        const curIdx = res.steps.findIndex(s => s.id === stepId);
+        targetNodeId = oc.action === 'next' ? res.steps[curIdx + 1]?.id : oc.action.replace('jump_', '');
+    }
+
+    const nodeEl = document.getElementById(`vis-node-${targetNodeId}`);
+    if (!nodeEl) return;
+
+    const n = nodeEl.getBoundingClientRect();
+    const snapPadding = 40; // Increased padding for better 'catch'
+
+    // 1. Define the 4 Snap Points (Relative to Workspace)
+    const ports = {
+        right:  { x: n.right - cRect.left,              y: n.top + n.height / 2 - cRect.top },
+        left:   { x: n.left - cRect.left,               y: n.top + n.height / 2 - cRect.top },
+        top:    { x: n.left + n.width / 2 - cRect.left, y: n.top - cRect.top },
+        bottom: { x: n.left + n.width / 2 - cRect.left, y: n.bottom - cRect.top }
+    };
+
+    // 2. Identify Base Port (where offset is 0,0)
+    // Start handles default to 'right', End handles default to 'left'
+    const basePort = type === 'start' ? ports.right : ports.left;
+
+    if (type === 'start' || type === 'end') {
+        const offset = (type === 'start') ? oc.startOffset : oc.endOffset;
+        
+        // 3. Find the closest port to the current mouse position
+        let closestPort = null;
+        let minDistance = snapPadding;
+
+        Object.keys(ports).forEach(key => {
+            const dist = Math.hypot(mouseX - ports[key].x, mouseY - ports[key].y);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestPort = ports[key];
+            }
+        });
+
+        // 4. Snap or Free Move
+        if (closestPort) {
+            // SNAP: Set offset to exactly reach the port from the base
+            offset.x = closestPort.x - basePort.x;
+            offset.y = closestPort.y - basePort.y;
+        } else {
+            // FREE MOVE: Standard mouse tracking
+            offset.x = mouseX - basePort.x;
+            offset.y = mouseY - basePort.y;
+        }
+    } else if (type === 'mid') {
+        oc.midOffset.x += e.movementX;
+        oc.midOffset.y += e.movementY;
+        if (Math.abs(oc.midOffset.x) < 15) oc.midOffset.x = 0;
+        if (Math.abs(oc.midOffset.y) < 15) oc.midOffset.y = 0;
+    }
+
+    OL.drawVisualizerLines(res);
+};
+
+OL.stopLinkMove = function() {
+    if (OL.activeLinkDrag) {
+        const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
+        const res = OL.getResourceById(resId);
+        const step = res.steps.find(s => s.id === stepId);
+        const oc = step.outcomes[oIdx];
+
+        // 🚀 NEW: Check if we are dropping the 'end' handle on a DIFFERENT node
+        if (type === 'end') {
+            const workspace = document.getElementById('vis-workspace');
+            const cRect = workspace.getBoundingClientRect();
+            
+            // Find all nodes except the source node
+            const nodes = document.querySelectorAll(`.workflow-block-card:not(#vis-node-${stepId})`);
+            let closestNodeId = null;
+            let minDistance = 50; // Threshold for "snapping" a new link
+
+            nodes.forEach(nodeEl => {
+                const n = nodeEl.getBoundingClientRect();
+                const nodeCenterX = n.left + n.width / 2;
+                const nodeCenterY = n.top + n.height / 2;
+                
+                // Check distance between mouse and node center
+                const dist = Math.hypot(window.event.clientX - nodeCenterX, window.event.clientY - nodeCenterY);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    // Extract ID from the DOM element (assuming ID format vis-node-ID)
+                    closestNodeId = nodeEl.id.replace('vis-node-', '');
+                }
+            });
+
+            // If we found a new node to link to:
+            if (closestNodeId) {
+                oc.action = `jump_step_${closestNodeId}`;
+                oc.label = `Jump to Step`;
+                // Reset offsets so the line snaps perfectly to the new target
+                oc.endOffset = { x: 0, y: 0 };
+                oc.midOffset = { x: 0, y: 0 };
+                console.log(`🔗 Auto-linked to new node: ${closestNodeId}`);
+            }
+        }
+
+        OL.persist();
+        document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'true'));
+    }
+    
+    OL.activeLinkDrag = null;
+    document.removeEventListener('mousemove', OL.handleLinkMove);
+    document.removeEventListener('mouseup', OL.stopLinkMove);
+    
+    // Final UI Refresh
+    OL.renderVisualizer(resId); 
+};
+ */
+
 //======================= ANALYSIS MATRIX SECTION =======================//
 
 // 1. RENDER WEIGHTED ANALYSIS MODULE
