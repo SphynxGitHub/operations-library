@@ -11799,10 +11799,20 @@ OL.loadInspector = function(targetId, parentId = null) {
         }).join('');
         const emptyLinksHtml = `
             <div class="tiny muted italic" style="margin-bottom: 8px;">No assets linked.</div>
-            <button class="btn tiny soft" style="width: 100%; border: 1px dashed rgba(255,255,255,0.2);" 
-                    onclick="OL.promptQuickCreateAsset('${parentResId}', '${data.id}')">
-                + Create New Asset
-            </button>
+            <div class="dropdown-plus-container" style="display:inline-block; position:relative;">
+                    <button class="btn primary" style="font-weight:bold;">+ New Resource</button>
+                    <div class="dropdown-plus-menu" style="right: 0; left: auto;">
+                        <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
+                        ${(state.master.resourceTypes || []).map(t => `
+                            <div class="dropdown-item" onclick="OL.quickCreateInLibrary('${t.type}')">
+                                ${OL.getRegistryIcon(t.type)} ${t.type}
+                            </div>
+                        `).join('')}
+                        <div class="dropdown-item" onclick="OL.quickCreateInLibrary('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                            📄 Basic SOP
+                        </div>
+                    </div>
+                </div>
         `;
         const stepApp = allApps.find(a => String(a.id) === String(data.appId));
         
