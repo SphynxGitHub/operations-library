@@ -4922,7 +4922,7 @@ OL.executeResourceImport = function(masterId) {
 
 //======================= SOP STEP LOGIC =======================//
 
-window.renderSopStepList = function (res) {
+/*window.renderSopStepList = function (res) {
     if (!res) return "";
 
     // --- 🛡️ INITIALIZATION SAFETY ---
@@ -5184,6 +5184,73 @@ window.renderSopStepList = function (res) {
                         }).join('')}
                     </div>
                 ` : ''}
+            </div>`;
+        }).join("");
+    }
+    return html;
+};*/
+
+window.renderSopStepList = function (res) {
+    if (!res) return "";
+
+    const triggers = res.triggers || [];
+    const steps = res.steps || [];
+    let html = "";
+
+    // --- ⚡ SECTION 1: TRIGGERS (Simplified Summary) ---
+    html += `
+        <div class="triggers-container" style="margin-bottom: 20px; border: 1px dashed #ffbf00; border-radius: 8px; padding: 12px; background: rgba(255, 191, 0, 0.02);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
+                <button class="btn tiny soft" onclick="OL.addResourceTrigger('${res.id}')">+ Add</button>
+            </div>
+            <div id="triggers-list">
+                ${triggers.map((t, idx) => `
+                    <div class="dp-manager-row is-clickable" style="padding: 8px; margin-bottom:4px; border: 1px solid var(--line); border-radius:4px;"
+                         onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
+                        <span style="font-size:12px; margin-right:8px;">${t.type === 'auto' ? '⚡' : '👨‍💼'}</span>
+                        <span class="bold tiny">${esc(t.name || "New Trigger")}</span>
+                    </div>
+                `).join("")}
+                ${triggers.length === 0 ? '<div class="tiny muted italic">No entry triggers.</div>' : ''}
+            </div>
+        </div>
+    `;
+
+    // --- 📝 SECTION 2: SEQUENTIAL STEPS (Summary Index) ---
+    html += `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <label class="tiny muted bold uppercase">📝 Sequence Overview</label>
+            <div style="display:flex; gap:5px;">
+                <button class="btn tiny soft" onclick="OL.openResourceLinker('${res.id}')">📦 Link Module</button>
+                <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
+            </div>
+        </div>
+    `;
+
+    if (steps.length === 0) {
+        html += '<div class="empty-hint">No workflow steps defined.</div>';
+    } else {
+        html += steps.map((step, idx) => {
+            const isModule = step.type === 'module_block';
+            
+            return `
+            <div class="step-group" style="margin-bottom: 6px;">
+                <div class="dp-manager-row is-clickable" 
+                     style="padding: 10px; border: 1px solid ${isModule ? 'var(--accent)' : 'var(--line)'}; border-radius: 6px; display:flex; align-items:center; gap:10px;"
+                     onclick="${isModule ? `OL.openResourceModal('${step.linkedResourceId}')` : `OL.openStepDetailModal('${res.id}', '${step.id}')`}">
+                    
+                    <span class="tiny muted" style="width:20px;">${idx + 1}</span>
+                    <span style="font-size:12px;">${isModule ? '📦' : '🔹'}</span>
+                    
+                    <div style="flex:1;">
+                        <div class="bold tiny" style="color: ${isModule ? 'var(--accent)' : 'inherit'}">${esc(step.name || "Untitled Step")}</div>
+                        <div class="tiny muted" style="font-size:9px;">${esc(step.assigneeName || "Unassigned")}</div>
+                    </div>
+
+                    ${isModule ? `<button class="btn tiny primary" style="font-size:8px;" onclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${step.linkedResourceId}')">Drill Down</button>` : ''}
+                    <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
+                </div>
             </div>`;
         }).join("");
     }
@@ -11747,6 +11814,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                        onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
                 </div>`;
         }).join('');
+        const stepApp = allApps.find(a => String(a.id) === String(data.appId));
         
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
@@ -11768,6 +11836,25 @@ OL.loadInspector = function(targetId, parentId = null) {
                         onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
                         oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
                     <div id="resource-results-${data.id}" class="search-results-overlay"></div>
+                </div>
+            </div>
+
+            <div class="card-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <label class="modal-section-label">📱 Linked Application</label>
+                <div id="inspector-app-zone" style="margin-top:10px;">
+                    ${stepApp ? `
+                        <div class="pill accent is-clickable" onclick="OL.openAppModal('${stepApp.id}')">
+                            📱 ${esc(stepApp.name)}
+                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateAtomicStep('${parentResId}', '${data.id}', 'appId', '')">×</b>
+                        </div>
+                    ` : `
+                        <div class="search-map-container">
+                            <input type="text" class="modal-input tiny" placeholder="Link App (Slack, Zapier...)" 
+                                onfocus="OL.filterAppSearch('${parentResId}', '${data.id}', this.value)"
+                                oninput="OL.filterAppSearch('${parentResId}', '${data.id}', this.value)">
+                            <div id="app-search-results" class="search-results-overlay"></div>
+                        </div>
+                    `}
                 </div>
             </div>
 
@@ -11884,6 +11971,23 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+};
+
+OL.filterAppSearch = function(resId, stepId, query) {
+    const results = document.getElementById('app-search-results');
+    if (!results) return;
+    
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    
+    const matches = allApps.filter(a => a.name.toLowerCase().includes(q));
+    
+    results.innerHTML = matches.map(a => `
+        <div class="search-result-item" onmousedown="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${a.id}')">
+            📱 ${esc(a.name)}
+        </div>
+    `).join('') || '<div class="p-10 tiny muted">No apps found</div>';
 };
 
 OL.updateResourceMetadata = function(resId, field, value) {
@@ -12017,6 +12121,10 @@ window.renderLevel3Canvas = function(resourceId) {
                             style="position: relative;"
                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
+
+                            <button class="card-delete-btn" 
+                                style="position:absolute; top:5px; right:5px; opacity:0.3;" 
+                                onclick="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">×</button>
                             
                             <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
                             <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
@@ -12045,6 +12153,27 @@ window.renderLevel3Canvas = function(resourceId) {
     
     setTimeout(() => OL.drawVerticalLogicLines(resourceId), 100);
     return html;
+};
+
+OL.removeStepFromCanvas = function(resId, stepId) {
+    if (!confirm("Delete this step? This will also remove any logic branches pointing to it.")) return;
+
+    const res = OL.getResourceById(resId);
+    if (!res || !res.steps) return;
+
+    // 1. Remove the step
+    res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
+
+    // 2. Clean up logic branches (Outcomes) pointing to this ID
+    res.steps.forEach(s => {
+        if (s.outcomes) {
+            s.outcomes = s.outcomes.filter(oc => oc.action !== `jump_step_${stepId}`);
+        }
+    });
+
+    OL.persist();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+    if (typeof OL.clearInspector === 'function') OL.clearInspector();
 };
 
 OL.drawVerticalLogicLines = function(resId) {
