@@ -463,18 +463,33 @@ window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const main = document.getElementById("mainContent");
 
-    if (state.focusedWorkflowId || state.focusedResourceId) {
+    // 🚀 NEW: BREAKOUT LOGIC
+    // If the hash is a standard library or dashboard link, clear the "Focus"
+    const isLibraryRoute = hash.includes("resources") || hash.includes("apps") || 
+                           hash.includes("functions") || hash.includes("team") || 
+                           hash.includes("scoping-sheet");
+    const isDashboardRoute = hash === "#/" || hash === "#/clients";
+
+    if (isLibraryRoute || isDashboardRoute) {
+        state.focusedWorkflowId = null;
+        state.focusedResourceId = null;
+        // Also clean up the inspector UI if it's open
+        const inspector = document.getElementById('inspector-panel');
+        if (inspector) inspector.innerHTML = '<div class="empty-inspector">Select an item to inspect</div>';
+    }
+
+    // Now, only trigger the visualizer redirect if we still have focus 
+    // AND the user isn't trying to go somewhere specific.
+    if ((state.focusedWorkflowId || state.focusedResourceId) && hash.includes('visualizer')) {
         renderGlobalVisualizer(hash.includes('vault'));
         return;
     }
     
     if (main) {
         if (hash.includes('visualizer')) {
-            // Apply your specific padding: Top 10, Right 10, Bottom 40, Left 10
             document.body.classList.add('is-visualizer');
             document.body.classList.add('fs-mode-active');
         } else {
-            // Standard padding for Apps, Scoping, etc.
             document.body.classList.remove('is-visualizer');
             document.body.classList.remove('fs-mode-active');
         }
@@ -483,29 +498,28 @@ window.handleRoute = function () {
     buildLayout();
 
     if (hash.startsWith("#/vault")) {
-    if (hash.includes("resources")) renderResourceManager();
-    else if (hash.includes("apps")) renderAppsGrid();
-    else if (hash.includes("functions")) renderFunctionsGrid();
-    else if (hash.includes("rates")) renderVaultRatesPage();
-    else if (hash.includes("analyses")) renderAnalysisModule(true);
-    else if (hash.includes("how-to")) renderHowToLibrary(); // 🚀 Changed from ===
-    else if (hash.includes("tasks")) renderBlueprintManager();
-    else if (hash.includes("visualizer")) renderGlobalVisualizer(true)
-    else renderAppsGrid();
+        if (hash.includes("resources")) renderResourceManager();
+        else if (hash.includes("apps")) renderAppsGrid();
+        else if (hash.includes("functions")) renderFunctionsGrid();
+        else if (hash.includes("rates")) renderVaultRatesPage();
+        else if (hash.includes("analyses")) renderAnalysisModule(true);
+        else if (hash.includes("how-to")) renderHowToLibrary(); 
+        else if (hash.includes("tasks")) renderBlueprintManager();
+        else if (hash.includes("visualizer")) renderGlobalVisualizer(true);
+        else renderAppsGrid();
     } else if (hash === "#/") {
-    renderClientDashboard();
+        renderClientDashboard();
     } else if (getActiveClient()) {
-    if (hash.includes("#/resources")) renderResourceManager();
-    else if (hash.includes("#/applications")) renderAppsGrid();
-    else if (hash.includes("#/functions")) renderFunctionsGrid();
-    else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
-    else if (hash.includes("#/analyze")) renderAnalysisModule();
-    else if (hash.includes("#/client-tasks")) renderChecklistModule();
-    else if (hash.includes("#/team")) renderTeamManager();
-    else if (hash.includes("#/how-to")) renderHowToLibrary();
-    else if (hash.includes("#/visualizer")) renderGlobalVisualizer(false);
+        if (hash.includes("#/resources")) renderResourceManager();
+        else if (hash.includes("#/applications")) renderAppsGrid();
+        else if (hash.includes("#/functions")) renderFunctionsGrid();
+        else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("#/analyze")) renderAnalysisModule();
+        else if (hash.includes("#/client-tasks")) renderChecklistModule();
+        else if (hash.includes("#/team")) renderTeamManager();
+        else if (hash.includes("#/how-to")) renderHowToLibrary();
+        else if (hash.includes("#/visualizer")) renderGlobalVisualizer(false);
     } else {
-        // 🛡️ Fallback: If no client and no vault, show the dashboard or an error
         main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
             <h3>Loading Project...</h3>
             <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
