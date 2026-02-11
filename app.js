@@ -3501,8 +3501,12 @@ OL.removeClientTask = function(clientId, taskId) {
 // 1. RESOURCE MANAGER
 if (!state.master.resourceTypes) {
   state.master.resourceTypes = [
-    { type: "Zap", typeKey: "zap", archetype: "Multi-Step" },
-    { type: "Form", typeKey: "form", archetype: "Base" },
+    { type: "Zap", typeKey: "zap", archetype: "Multi-Step", icon: "⚡" },
+    { type: "Form", typeKey: "form", archetype: "Base", icon: "📄" },
+    { type: "Email", typeKey: "email", archetype: "Base", icon: "📧" },
+    { type: "Event", typeKey: "event", archetype: "Base", icon: "🗓️" },
+    { type: "SOP", typeKey: "sop", archetype: "Base", icon: "📖" },
+    { type: "Signature", typeKey: "signature", archetype: "Base", icon: "✍️" }
   ];
 }
 
@@ -11402,8 +11406,18 @@ window.renderLevel1SidebarContent = function(allResources) {
 
 OL.getRegistryIcon = function(typeName) {
     const registry = state.master.resourceTypes || [];
-    const entry = registry.find(t => t.type === typeName);
-    return entry ? entry.icon : '⚙️'; // Fallback to gear if not found
+    // 🛡️ Case-insensitive find
+    const entry = registry.find(t => t.type.toLowerCase() === (typeName || "").toLowerCase());
+    
+    if (entry && entry.icon) return entry.icon;
+    
+    // 🔍 Hardcoded fallback if the registry hasn't loaded yet
+    const fuzzy = (typeName || "").toLowerCase();
+    if (fuzzy.includes('email')) return "📧";
+    if (fuzzy.includes('form')) return "📄";
+    if (fuzzy.includes('zap')) return "⚡";
+    
+    return '⚙️'; 
 };
 
 window.renderLevel2SidebarContent = function(allResources) {
@@ -11987,23 +12001,15 @@ window.renderLevel3Canvas = function(resourceId) {
                         const isTrigger = step.type === 'Trigger';
                         const icon = isTrigger ? "⚡" : "🎬";
                         
-                        // 🚀 1. PRE-GENERATE WITH FALLBACKS
+                        // 🚀 STEP 1: Define links INSIDE the map
                         const links = step.links || [];
+                        
+                        // 🚀 STEP 2: Generate the HTML string for this specific step
                         const linkedAssetsHtml = links.map(link => {
-                            // Fallback to a generic box if the icon helper fails
-                            const assetIcon = (typeof OL.getRegistryIcon === 'function') 
-                                ? OL.getRegistryIcon(link.type) 
-                                : "📦"; 
-                                
-                            return `
-                                <span class="pill tiny soft" 
-                                    style="font-size: 10px; padding: 2px 6px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: #fff; display: inline-flex; align-items: center; justify-content: center;" 
-                                    title="${esc(link.name)}">
-                                    ${assetIcon}
-                                </span>
-                            `;
+                            const assetIcon = OL.getRegistryIcon(link.type);
+                            return `<span class="pill tiny soft" style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05);">${assetIcon}</span>`;
                         }).join('');
-                                                
+                                                         
                         return `
                         <div class="workflow-block-card" 
                             id="step-node-${step.id}" 
