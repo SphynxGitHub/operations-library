@@ -6077,7 +6077,7 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     if (matchPeople.length > 0) {
         html += `<div class="search-group-header">Team Members</div>`;
         html += matchPeople.map(m => `
-            <div class="search-result-item" onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'person', '${m.id}', '${esc(m.name)}')">
+            <div class="search-result-item" onmousedown="event.stopPropagation(); onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'person', '${m.id}', '${esc(m.name)}')">
                 👨‍💼 ${esc(m.name)}
             </div>`).join('');
     }
@@ -6087,7 +6087,7 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     if (matchRoles.length > 0) {
         html += `<div class="search-group-header">Roles</div>`;
         html += matchRoles.map(r => `
-            <div class="search-result-item" onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'role', '${esc(r)}', '${esc(r)}')">
+            <div class="search-result-item" onmousedown="event.stopPropagation(); onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'role', '${esc(r)}', '${esc(r)}')">
                 🎭 ${esc(r)}
             </div>`).join('');
     }
@@ -6097,7 +6097,7 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     if (matchApps.length > 0) {
         html += `<div class="search-group-header">Project Apps</div>`;
         html += matchApps.map(a => `
-            <div class="search-result-item" onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'system', '${a.id}', '${esc(a.name)}')">
+            <div class="search-result-item" onmousedown="event.stopPropagation(); onmousedown="OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'system', '${a.id}', '${esc(a.name)}')">
                 📱 ${esc(a.name)}
             </div>`).join('');
     }
@@ -6105,27 +6105,33 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     listEl.innerHTML = html || `<div class="search-result-item muted">No matching local assignments found</div>`;
 };
 
-OL.executeAssignment = function(resId, targetId, isTrigger, type, id, name) {
+OL.executeAssignment = function(resId, stepId, isTrigger, memberId, memberName, memberAvatar) {
     const res = OL.getResourceById(resId);
-    let target = isTrigger 
-        ? res.triggers[targetId] 
-        : res.steps.find(s => s.id === targetId);
+    if (!res) return;
 
-    if (target) {
-        target.assigneeType = type; // 'person', 'role', or 'system'
-        target.assigneeId = id;
-        target.assigneeName = name;
-        
-        OL.persist();
-        
-        // Refresh the detail modal to show the new assignee
-        if (isTrigger) OL.openTriggerDetailModal(resId, targetId);
-        else OL.openStepDetailModal(resId, targetId);
-        
-        // Refresh the background list surgically
-        const listEl = document.getElementById('sop-step-list');
-        if (listEl) listEl.innerHTML = renderSopStepList(res);
+    // 1. Find the target (Step or Trigger)
+    const step = res.steps?.find(s => String(s.id) === String(stepId));
+    
+    if (step) {
+        step.assigneeId = memberId;
+        step.assigneeName = memberName;
+        step.assigneeAvatar = memberAvatar;
     }
+
+    // 2. Persist quietly
+    OL.persist();
+
+    // 3. Update the Canvas Card face immediately
+    const canvas = document.getElementById('level-3-canvas-container'); 
+    if (canvas) {
+        canvas.innerHTML = renderLevel3Canvas(resId);
+    }
+
+    // 🚀 THE FIX: Stay in the Inspector
+    // Remove any calls to OL.openResourceModal(resId) here!
+    OL.loadInspector(stepId, resId); 
+    
+    console.log(`👤 Assigned ${memberName} to ${step?.name}`);
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
