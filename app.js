@@ -12097,7 +12097,6 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     html += groups.map(group => {
-        // Filter steps for this specific lane (Trigger vs Action)
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
 
         return `
@@ -12106,26 +12105,26 @@ window.renderLevel3Canvas = function(resourceId) {
                 <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     ${steps.map((step, idx) => {
                         const isTrigger = step.type === 'Trigger';
-                        const icon = isTrigger ? "⚡" : "🎬";
+                        const typeIcon = isTrigger ? "⚡" : "🎬";
                         
-                        // 🚀 STEP 1: Define links INSIDE the map
+                        // 📱 Resolve Application Icon
+                        const client = getActiveClient();
+                        const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+                        const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
+                        const appIconHtml = linkedApp ? `<span title="${esc(linkedApp.name)}" style="font-size:10px; margin-left:5px; opacity:0.8;">📱</span>` : '';
+
+                        // 🔗 Generate Asset Icons
                         const links = step.links || [];
-                        
-                        // 🚀 STEP 2: Generate the HTML string for this specific step
                         const linkedAssetsHtml = links.map(link => {
                             const assetIcon = OL.getRegistryIcon(link.type);
-                            return `
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:8px; padding:1px 6px;">${esc(step.type)}</span>
-                                <span style="font-size:10px; opacity:0.5;">${icon}</span>
-                            </div>`;
+                            return `<span class="pill tiny soft" style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05);">${assetIcon}</span>`;
                         }).join('');
-                                                         
+
                         return `
                         <div class="workflow-block-card" 
                             id="step-node-${step.id}" 
                             draggable="true" 
-                            style="position: relative;"
+                            style="position: relative; min-height: 80px; display: flex; flex-direction: column;"
                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
 
@@ -12133,18 +12132,25 @@ window.renderLevel3Canvas = function(resourceId) {
                                 style="position:absolute; top:5px; right:5px; opacity:0.3;" 
                                 onclick="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">×</button>
                             
-                            <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
-                            <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:8px; padding:1px 6px;">${esc(step.type)}</span>
+                                <span style="font-size:10px; opacity:0.5;">${typeIcon}</span>
+                            </div>
 
-                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
+                            <div class="bold accent" style="line-height:1.2; display:flex; align-items:center;">
+                                ${esc(step.name || "Untitled")} ${appIconHtml}
+                            </div>
 
-                            <div class="node-linked-assets" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; padding: 2px 0;">
-                                ${linkedAssetsHtml || ''}
+                            <div class="node-linked-assets" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px;">
+                                ${linkedAssetsHtml}
                             </div>
                             
-                            <div class="tiny muted" style="font-size:8px; margin-top:4px; opacity:0.6;">
+                            <div class="tiny muted" style="font-size:8px; margin-top:auto; padding-top:6px; opacity:0.6;">
                                 ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
                             </div>
+
+                            <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
+                            <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
                         </div>`;
                     }).join('')}
                 </div>
