@@ -12163,45 +12163,46 @@ window.renderLevel3Canvas = function(resourceId) {
                         }).join('');
 
                         return `
-                        <div class="workflow-block-card" 
-                            id="step-node-${step.id}" 
-                            draggable="true" 
-                            style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px;"
-                            onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                            ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
+                            <div class="workflow-block-card" 
+                                id="step-node-${step.id}" 
+                                draggable="true" 
+                                style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px; cursor: pointer; z-index: 5;"
+                                onmousedown="OL.loadInspector('${step.id}', '${resourceId}')"
+                                ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
 
-                            <button class="card-delete-btn" 
-                                style="position:absolute; top:4px; right:4px; z-index: 10; width: 20px; height: 20px; 
-                                    display: flex; align-items: center; justify-content: center;
-                                    background: rgba(255,255,255,0.05); border: none; color: #fff; 
-                                    border-radius: 4px; cursor: pointer; font-size: 14px; opacity: 0.4;" 
-                                onmouseover="this.style.opacity='1'; this.style.background='rgba(239, 68, 68, 0.2)';"
-                                onmouseout="this.style.opacity='0.4'; this.style.background='rgba(255,255,255,0.05)';"
-                                onmousedown="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">
-                                &times;
-                            </button>
-                            
-                            <div style="display:flex; align-items:center; margin-bottom:8px;">
-                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:9px; padding:2px 8px; display:flex; align-items:center; gap:4px;">
-                                    <span style="font-size:10px;">${typeIcon}</span> ${esc(step.type).toUpperCase()}
-                                </span>
-                            </div>
+                                <div class="card-delete-hitbox" 
+                                    style="position: absolute; top: 0; right: 0; width: 30px; height: 30px; 
+                                            display: flex; align-items: center; justify-content: center; 
+                                            z-index: 999; pointer-events: auto;"
+                                    onmousedown="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">
+                                    
+                                    <span class="delete-icon" 
+                                        style="font-size: 16px; color: rgba(255,255,255,0.4); transition: color 0.2s, transform 0.2s;"
+                                        onmouseover="this.style.color='#ef4444'; this.style.transform='scale(1.2)';"
+                                        onmouseout="this.style.color='rgba(255,255,255,0.4)'; this.style.transform='scale(1)';"
+                                        title="Delete Step">
+                                        &times;
+                                    </span>
+                                </div>
+                                
+                                <div style="display:flex; align-items:center; margin-bottom:8px; pointer-events: none;">
+                                    <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:9px; padding:2px 8px; display:flex; align-items:center; gap:4px;">
+                                        <span style="font-size:10px;">${typeIcon}</span> ${esc(step.type).toUpperCase()}
+                                    </span>
+                                </div>
 
-                            <div class="bold accent" style="line-height:1.2; font-size: 13px; display:flex; align-items:center; flex-wrap:wrap;">
-                                ${esc(step.name || "Untitled")} ${appIconHtml}
-                            </div>
+                                <div class="bold accent" style="line-height:1.2; font-size: 13px; display:flex; align-items:center; flex-wrap:wrap; pointer-events: none;">
+                                    ${esc(step.name || "Untitled")} ${appIconHtml}
+                                </div>
 
-                            <div class="node-linked-assets" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; min-height: 12px;">
-                                ${linkedAssetsHtml}
-                            </div>
-                            
-                            <div class="tiny muted" style="font-size:9px; margin-top:auto; padding-top:8px; opacity:0.6;">
-                                ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
-                            </div>
-
-                            <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
-                            <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
-                        </div>`;
+                                <div class="node-linked-assets" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; min-height: 12px; pointer-events: none;">
+                                    ${linkedAssetsHtml}
+                                </div>
+                                
+                                <div class="tiny muted" style="font-size:9px; margin-top:auto; padding-top:8px; opacity:0.6; pointer-events: none;">
+                                    ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
+                                </div>
+                            </div>`;
                     }).join('')}
                 </div>
             </div>`;
