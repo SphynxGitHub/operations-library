@@ -11707,6 +11707,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     // 🚀 SCENARIO A: ATOMIC STEP (Mechanical View)
     if (isStepOnCanvas && !isModule) {
         const isTrigger = data.type === 'Trigger';
+        const linkedResources = data.links || [];
         
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
@@ -11973,6 +11974,7 @@ window.renderLevel3Canvas = function(resourceId) {
                         // 🚀 THE FIX: Identify if this is a specialized Trigger or a standard Action
                         const isTrigger = step.type === 'Trigger';
                         const icon = isTrigger ? "⚡" : "🎬";
+                        const linkedResources = step.links || [];
                         
                         return `
                         <div class="workflow-block-card" 
