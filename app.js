@@ -11528,12 +11528,13 @@ OL.processQuickPaste = function() {
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
-    // 🛡️ Safe Fallback: If atomicLibrary is missing in state, use these defaults
-    const lib = state.master?.atomicLibrary || {
-        Verbs: ["Create", "Send", "Update", "Notify", "Review", "Collect"],
-        Objects: ["Lead", "Email", "Form", "Signature Request", "KYC Pack", "Task"],
-        Triggers: ["Form Submitted", "WebHook Received", "Manual Trigger", "Schedule Reached"]
-    };
+    // 🛠️ MERGE LOGIC: Combine your hardcoded const with database additions
+    const dbLib = state.master?.atomicLibrary || { Verbs: [], Objects: [], Triggers: [] };
+    
+    // Create unique combined lists
+    const verbs = [...new Set([...ATOMIC_STEP_LIB.Verbs, ...(dbLib.Verbs || [])])].sort();
+    const objects = [...new Set([...ATOMIC_STEP_LIB.Objects, ...(dbLib.Objects || [])])].sort();
+    const triggers = [...new Set([...ATOMIC_STEP_LIB.Triggers, ...(dbLib.Triggers || [])])].sort();
 
     return `
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
@@ -11548,7 +11549,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
                          <span class="tiny accent is-clickable" onclick="OL.promptAddAtomic('Verbs')">+ Add</span>
                     </div>
                     <select id="builder-verb" class="modal-input tiny">
-                        ${lib.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                        ${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
                     </select>
                 </div>
 
@@ -11558,7 +11559,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
                          <span class="tiny accent is-clickable" onclick="OL.promptAddAtomic('Objects')">+ Add</span>
                     </div>
                     <select id="builder-object" class="modal-input tiny">
-                        ${lib.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                        ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
                     </select>
                 </div>
 
@@ -11571,7 +11572,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
             </div>
 
             <label class="modal-section-label" style="margin-top:25px; color:#ffbf00">⚡ Triggers</label>
-            ${(lib.Triggers || []).map(t => `
+            ${triggers.map(t => `
                 <div class="draggable-factory-item trigger" draggable="true" 
                      ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>
             `).join('')}
