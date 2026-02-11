@@ -11987,17 +11987,18 @@ window.renderLevel3Canvas = function(resourceId) {
                         const isTrigger = step.type === 'Trigger';
                         const icon = isTrigger ? "⚡" : "🎬";
                         
-                        // 🚀 GENERATE LINKED ASSET PILLS FIRST
-                        // This prevents scope errors inside the template literal
+                        // 🚀 1. PRE-GENERATE WITH FALLBACKS
                         const links = step.links || [];
                         const linkedAssetsHtml = links.map(link => {
-                            // Use the registry icon helper
-                            const assetIcon = OL.getRegistryIcon(link.type); 
+                            // Fallback to a generic box if the icon helper fails
+                            const assetIcon = (typeof OL.getRegistryIcon === 'function') 
+                                ? OL.getRegistryIcon(link.type) 
+                                : "📦"; 
+                                
                             return `
                                 <span class="pill tiny soft" 
-                                    style="font-size: 8px; padding: 1px 5px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);" 
-                                    title="${esc(link.name)}"
-                                    onclick="event.stopPropagation(); OL.openResourceModal('${link.id}')">
+                                    style="font-size: 10px; padding: 2px 6px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: #fff; display: inline-flex; align-items: center; justify-content: center;" 
+                                    title="${esc(link.name)}">
                                     ${assetIcon}
                                 </span>
                             `;
@@ -12021,8 +12022,8 @@ window.renderLevel3Canvas = function(resourceId) {
 
                             <div class="bold accent">${esc(step.name || "Untitled")}</div>
 
-                            <div class="node-linked-assets" style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
-                                ${linkedAssetsHtml}
+                            <div class="node-linked-assets" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; padding: 2px 0;">
+                                ${linkedAssetsHtml || ''}
                             </div>
                             
                             <div class="tiny muted" style="font-size:8px; margin-top:4px; opacity:0.6;">
