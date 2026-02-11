@@ -2584,10 +2584,6 @@ body.is-visualizer #mainContent {
     border-left: 3px solid #ffbf00;
 }
 
-.draggable-factory-item.trigger::before {
-    content: "⚡";
-}
-
 /* Specific styling for the Action Builder Drag button */
 .draggable-factory-item.action {
     border-left: 3px solid var(--accent);
