@@ -12073,18 +12073,33 @@ OL.updateResourceMetadata = function(resId, field, value) {
     const res = OL.getResourceById(resId);
     if (!res) return;
 
-    // Only update if the value actually changed
-    if (res[field] === value) return;
+    const cleanValue = value.trim();
+    // 1. Only update if the value actually changed
+    if (res[field] === cleanValue) return;
 
-    res[field] = value;
-    console.log(`📡 Updated ${field} to: ${value}`);
+    res[field] = cleanValue;
+    console.log(`📡 Updated ${field} to: ${cleanValue}`);
 
-    // Save to Firebase
+    // 2. Persist to Firebase (Silent)
     OL.persist();
 
-    // 🔄 Refresh the canvas to show the new title/subtitle on the cards
-    const isVaultMode = location.hash.includes('vault');
-    renderGlobalVisualizer(isVaultMode);
+    // 3. 🚀 THE SURGICAL FIX: 
+    // Update the specific UI elements instead of a full renderGlobalVisualizer()
+    
+    // Update the card title on the canvas if it exists
+    const canvasCardTitle = document.querySelector(`#l1-node-${resId} .bold, #l2-node-${resId} .bold`);
+    if (canvasCardTitle && field === 'name') {
+        canvasCardTitle.innerText = cleanValue;
+    }
+
+    // Update any sidebar items that display this name
+    const sidebarItem = document.querySelector(`.draggable-workflow-item[onclick*="${resId}"] span:last-child`);
+    if (sidebarItem && field === 'name') {
+        sidebarItem.innerText = cleanValue;
+    }
+
+    // Note: We DO NOT call renderGlobalVisualizer here. 
+    // This keeps the Inspector open and the cursor focus stable.
 };
 
 OL.updateResourceType = function(resId, newType) {
