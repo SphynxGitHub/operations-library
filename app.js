@@ -173,21 +173,34 @@ OL.processIncomingAI = async function(inboxData) {
 };
 
 window.addEventListener("load", () => {
-    // Re-verify admin status
+    // 1. Admin Verification
     if (window.location.search.includes('admin=pizza123')) {
         state.adminMode = true;
         OL.state.adminMode = true;
     }
     
-    // 🚩 THE RECALL: Check if we were previously looking at a client
-    const savedId = sessionStorage.getItem('lastActiveClientId');
-    if (savedId) {
-        state.activeClientId = savedId;
-        console.log("📍 Recalled Active Project:", savedId);
+    // 2. Recall Client
+    const savedClientId = sessionStorage.getItem('lastActiveClientId');
+    if (savedClientId) state.activeClientId = savedClientId;
+
+    // 3. 🚩 RECALL VISUALIZER DEPTH
+    const savedWorkflowId = sessionStorage.getItem('active_workflow_id');
+    const savedResourceId = sessionStorage.getItem('active_resource_id');
+
+    if (savedWorkflowId || savedResourceId) {
+        console.log("♻️ Restoring depth:", { savedWorkflowId, savedResourceId });
+        state.focusedWorkflowId = savedWorkflowId;
+        state.focusedResourceId = savedResourceId;
+        
+        // Only force redirect if we aren't explicitly trying to go to a library page
+        if (!location.hash.includes('resources') && !location.hash.includes('apps')) {
+            const isVault = location.hash.includes('vault');
+            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+        }
     }
     
     OL.sync(); 
-})
+});
 
 const getActiveClient = () => state.clients[state.activeClientId] || null;
 
@@ -11977,15 +11990,19 @@ window.renderLevel3Canvas = function(resourceId) {
                         // 🚀 GENERATE LINKED ASSET PILLS FIRST
                         // This prevents scope errors inside the template literal
                         const links = step.links || [];
-                        const linkedAssetsHtml = links.map(link => `
-                            <span class="pill tiny soft" 
-                                  style="font-size: 8px; padding: 1px 5px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);" 
-                                  title="${esc(link.name)}"
-                                  onclick="event.stopPropagation(); OL.openResourceModal('${link.id}')">
-                                ${OL.getRegistryIcon(link.type)}
-                            </span>
-                        `).join('');
-                        
+                        const linkedAssetsHtml = links.map(link => {
+                            // Use the registry icon helper
+                            const assetIcon = OL.getRegistryIcon(link.type); 
+                            return `
+                                <span class="pill tiny soft" 
+                                    style="font-size: 8px; padding: 1px 5px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);" 
+                                    title="${esc(link.name)}"
+                                    onclick="event.stopPropagation(); OL.openResourceModal('${link.id}')">
+                                    ${assetIcon}
+                                </span>
+                            `;
+                        }).join('');
+                                                
                         return `
                         <div class="workflow-block-card" 
                             id="step-node-${step.id}" 
@@ -12138,25 +12155,25 @@ OL.drillDownIntoWorkflow = function(resId) {
 
 OL.drillIntoResourceMechanics = function(resId) {
     console.log("🔍 Drilling into Resource:", resId);
-    
-    // We keep the focusedWorkflowId so we know where we came from
     state.focusedResourceId = resId; 
+    sessionStorage.setItem('active_resource_id', resId); // 💾 Save for refresh
     
-    // 🚀 THE FIX: Explicitly call the visualizer renderer
-    // This ensures we stay in the "Flow Map" area
     const isVaultMode = location.hash.includes('vault');
     window.renderGlobalVisualizer(isVaultMode);
 };
 
 OL.exitToWorkflow = function() {
     state.focusedResourceId = null;
+    sessionStorage.removeItem('active_resource_id'); // 🧹 Clear Resource level
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
 OL.exitToLifecycle = function() {
     state.focusedWorkflowId = null;
     state.focusedResourceId = null;
-    state.lastSearchQuery = ""; // 🚀 Reset the stored search state
+    sessionStorage.removeItem('active_workflow_id'); // 🧹 Clear Workflow level
+    sessionStorage.removeItem('active_resource_id'); // 🧹 Clear Resource level
+    state.lastSearchQuery = ""; 
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
