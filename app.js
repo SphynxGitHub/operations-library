@@ -11528,7 +11528,12 @@ OL.processQuickPaste = function() {
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
-    const lib = state.master.atomicLibrary;
+    // 🛡️ Safe Fallback: If atomicLibrary is missing in state, use these defaults
+    const lib = state.master?.atomicLibrary || {
+        Verbs: ["Create", "Send", "Update", "Notify", "Review", "Collect"],
+        Objects: ["Lead", "Email", "Form", "Signature Request", "KYC Pack", "Task"],
+        Triggers: ["Form Submitted", "WebHook Received", "Manual Trigger", "Schedule Reached"]
+    };
 
     return `
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
@@ -11559,14 +11564,14 @@ window.renderLevel3SidebarContent = function(resourceId) {
 
                 <div class="draggable-factory-item action" 
                      draggable="true" 
-                     style="margin-top:15px; background:var(--accent-glow); border: 1px solid var(--accent);" 
+                     style="margin-top:15px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center;" 
                      ondragstart="OL.handleModularAtomicDrag(event)">
                      🚀 DRAG NEW ACTION
                 </div>
             </div>
 
             <label class="modal-section-label" style="margin-top:25px; color:#ffbf00">⚡ Triggers</label>
-            ${ATOMIC_STEP_LIB.Triggers.map(t => `
+            ${(lib.Triggers || []).map(t => `
                 <div class="draggable-factory-item trigger" draggable="true" 
                      ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>
             `).join('')}
