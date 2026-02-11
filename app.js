@@ -3488,56 +3488,64 @@ window.renderResourceManager = function () {
     const isVaultView = hash.startsWith('#/vault');
     const isAdmin = state.adminMode === true;
 
-    let displayRes = [];
+    let displayRes = isVaultView ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    if (isVaultView) {
-        displayRes = state.master.resources || [];
-    } else if (client) {
-        if (!client.projectData.localResources) {
-            client.projectData.localResources = [];
-        }
-        displayRes = client.projectData.localResources;
-    }
+    // 🔎 SEARCH & FILTER LOGIC
+    const query = (state.libSearch || "").toLowerCase();
+    const activeType = state.libTypeFilter || 'All';
 
-    // 🚀 THE GROUPING LOGIC
-    // Reduce the array into an object where keys are the resource types
-    const grouped = displayRes.reduce((acc, res) => {
+    const filtered = displayRes.filter(res => {
+        const matchesSearch = (res.name || "").toLowerCase().includes(query) || 
+                             (res.description || "").toLowerCase().includes(query);
+        const matchesType = activeType === 'All' || res.type === activeType;
+        // Optional: Hide workflows from this view if you only want technical assets
+        const isNotWorkflow = res.type !== 'Workflow'; 
+        return matchesSearch && matchesType && isNotWorkflow;
+    });
+
+    const uniqueTypes = [...new Set(displayRes.map(r => r.type).filter(t => t && t !== 'Workflow'))].sort();
+
+    // Grouping logic
+    const grouped = filtered.reduce((acc, res) => {
         const type = res.type || "General";
         if (!acc[type]) acc[type] = [];
         acc[type].push(res);
         return acc;
     }, {});
 
-    // Sort the types alphabetically
     const sortedTypes = Object.keys(grouped).sort();
 
     container.innerHTML = `
         <div class="section-header">
             <div>
                 <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
-                <div class="small muted">${displayRes.length} items grouped by category</div>
+                <div class="small muted">${filtered.length} items found</div>
             </div>
             <div class="header-actions">
-                ${isAdmin ? `<button class="btn small soft" style="color:black !important;" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
-                
-                <button class="btn small soft" style="color: black !important;" onclick="OL.promptCreateResource()">
-                    + Create ${isVaultView ? 'Master' : 'Local'} Resource
-                </button>
-
-                ${!isVaultView && isAdmin ? `
-                    <button class="btn primary" style="background:#38bdf8; color:black; font-weight:bold;" onclick="OL.importFromMaster()">⬇️ Import from Master</button>
-                ` : ''}
+                ${isAdmin ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
+                <button class="btn primary" onclick="OL.createAndOpenResource()">+ New Resource</button>
             </div>
+        </div>
+
+        <div class="toolbar" style="display:flex; gap:15px; margin: 20px 0; background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border: 1px solid var(--line);">
+            <input type="text" class="modal-input" placeholder="Search keywords, descriptions, or names..." 
+                   style="flex:2;" value="${state.libSearch || ''}"
+                   oninput="state.libSearch = this.value; renderResourceManager()">
+            
+            <select class="modal-input" style="flex:1;" onchange="state.libTypeFilter = this.value; renderResourceManager()">
+                <option value="All">All Categories</option>
+                ${uniqueTypes.map(t => `<option value="${t}" ${activeType === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
         </div>
 
         <div class="resource-sections-wrapper">
             ${sortedTypes.length > 0 ? sortedTypes.map(type => `
-                <div class="resource-group" style="margin-bottom: 30px;">
-                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+                <div class="resource-group" style="margin-bottom: 40px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
                         <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">
-                            ${esc(type)}
+                            ${OL.getRegistryIcon(type)} ${esc(type)}s
                         </h3>
-                        <span class="pill tiny soft" style="font-size: 9px; opacity: 0.5;">${grouped[type].length}</span>
+                        <button class="btn tiny soft" onclick="OL.promptBulkReclassify('${type}')">Bulk Move</button>
                     </div>
                     <div class="cards-grid">
                         ${grouped[type]
@@ -3548,11 +3556,65 @@ window.renderResourceManager = function () {
                 </div>
             `).join("") : `
                 <div class="empty-hint" style="padding: 40px; text-align: center; opacity: 0.5;">
-                    No resources found in this ${isVaultView ? 'Vault' : 'Project'}.
+                    No resources matching your search.
                 </div>
             `}
         </div>
     `;
+};
+
+// 🚀 1. CREATE + INSTANT MODAL
+OL.createAndOpenResource = function() {
+    const name = prompt("Enter Resource Name:");
+    if (!name) return;
+
+    const isVault = location.hash.includes('vault');
+    const timestamp = Date.now();
+    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+
+    const newRes = {
+        id: newId,
+        name: name,
+        type: "SOP", // Default type
+        steps: [],
+        description: "",
+        createdDate: new Date().toISOString()
+    };
+
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    source.push(newRes);
+
+    OL.persist();
+    
+    // Refresh the grid
+    renderResourceManager();
+    
+    // 💥 IMMEDIATELY OPEN MODAL
+    setTimeout(() => OL.openResourceModal(newId), 50);
+};
+
+// 📦 2. BULK RECLASSIFY
+OL.promptBulkReclassify = function(oldType) {
+    const newType = prompt(`Move all resources from "${oldType}" to which category?`, "Zap");
+    if (!newType || newType === oldType) return;
+
+    const isVault = location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+
+    let count = 0;
+    source.forEach(res => {
+        if (res.type === oldType) {
+            res.type = newType;
+            res.typeKey = newType.toLowerCase().replace(/[^a-z0-9]+/g, "");
+            count++;
+        }
+    });
+
+    if (count > 0) {
+        OL.persist();
+        renderResourceManager();
+        alert(`Successfully moved ${count} items to ${newType}.`);
+    }
 };
 
 //================ RESOURCE TYPES ========================//
