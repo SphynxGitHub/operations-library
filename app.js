@@ -11013,16 +11013,6 @@ OL.deployRequirementsFromResource = function(resourceId) {
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 state.currentDropIndex = null;
 
-const ATOMIC_STEP_LIB = {
-    Triggers: [
-        "Meeting Booked", "Meeting Completed", "Task Completed", "Task Created", 
-        "Workflow Step Completed", "Workflow Completed", "Workflow Started", 
-        "Email Sent", "Form Completed", "Form Sent", "Document Uploaded"
-    ],
-    Verbs: ["Find", "Create", "Update", "Delete", "Send", "Launch", "Complete", "Request"],
-    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Table Row", "Tag", "Text", "Slack Message", "Signature Request"]
-};
-
 window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
@@ -11527,10 +11517,24 @@ OL.processQuickPaste = function() {
     window.renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
+const ATOMIC_STEP_LIB = {
+    Triggers: [
+        "Meeting Booked", "Meeting Completed", "Task Completed", "Task Created", 
+        "Workflow Step Completed", "Workflow Completed", "Workflow Started", 
+        "Email Sent", "Form Completed", "Form Sent", "Document Uploaded"
+    ],
+    TriggerVerbs: ["Found", "Created", "Updated", "Deleted", "Sent", "Launched", "Completed", "Requested", "Tagged", "Added to List", "Added to Group", "Moved", "Submitted",
+        "Passed","Reached","Approaching","Scheduled"
+    ],
+    ActionVerbs: ["Find", "Create", "Update", "Delete", "Send", "Launch", "Complete", "Request","Tag","Add to List","Add to Group","Move","Submit","Wait","Schedule"],
+    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Table Row", "Tag", "Text", "Slack Message", "Signature Request"]
+};
+
 window.renderLevel3SidebarContent = function(resourceId) {
     const dbLib = state.master?.atomicLibrary || { Verbs: [], Objects: [], Triggers: [] };
     
-    const verbs = [...new Set([...ATOMIC_STEP_LIB.Verbs, ...(dbLib.Verbs || [])])].sort();
+    const triggerVerbs = [...new Set([...ATOMIC_STEP_LIB.TriggerVerbs, ...(dbLib.Verbs || [])])].sort();
+    const actionVerbs = [...new Set([...ATOMIC_STEP_LIB.ActionVerbs, ...(dbLib.Verbs || [])])].sort();
     const objects = [...new Set([...ATOMIC_STEP_LIB.Objects, ...(dbLib.Objects || [])])].sort();
 
     return `
@@ -11539,8 +11543,8 @@ window.renderLevel3SidebarContent = function(resourceId) {
             
             <label class="modal-section-label" style="color:#ffbf00">⚡ Trigger Builder</label>
             <div class="builder-box" style="background:rgba(255, 191, 0, 0.03); padding:12px; border-radius:8px; border: 1px solid rgba(255, 191, 0, 0.2); margin-bottom: 20px;">
-                <select id="trigger-verb" class="modal-input tiny">${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
                 <select id="trigger-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <select id="trigger-verb" class="modal-input tiny">${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
                 <div class="draggable-factory-item trigger" draggable="true" 
                      style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center;" 
                      ondragstart="OL.handleModularTriggerDrag(event)">
@@ -11550,7 +11554,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
 
             <label class="modal-section-label">🎬 Action Builder</label>
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
-                <select id="builder-verb" class="modal-input tiny">${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="builder-verb" class="modal-input tiny">${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
                 <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
                 <div class="draggable-factory-item action" draggable="true" 
                      style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center;" 
@@ -12420,6 +12424,27 @@ OL.filterLinkerByType = function(parentResId, stepId, type, query) {
             </div>
         </div>
     `).join('') || `<div class="search-result-item muted">No ${type}s found.</div>`;
+};
+
+OL.addResourceLinkToStep = function(parentResId, stepId, targetId, targetName) {
+    const res = OL.getResourceById(parentResId);
+    const step = res?.steps.find(s => s.id === stepId);
+    const targetRes = OL.getResourceById(targetId);
+
+    if (step && targetRes) {
+        if (!step.links) step.links = [];
+        if (step.links.some(l => l.id === targetId)) return alert("Already linked.");
+
+        step.links.push({
+            id: targetId,
+            name: targetName,
+            type: (targetRes.type || 'SOP').toLowerCase()
+        });
+
+        OL.persist();
+        OL.closeModal();
+        OL.loadInspector(stepId, parentResId);
+    }
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
