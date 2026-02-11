@@ -11020,7 +11020,7 @@ const ATOMIC_STEP_LIB = {
         "Email Sent", "Form Completed", "Form Sent", "Document Uploaded"
     ],
     Verbs: ["Find", "Create", "Update", "Delete", "Send", "Launch", "Complete", "Request"],
-    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Table Row", "Tag", "Text", "Slack Message"]
+    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Table Row", "Tag", "Text", "Slack Message", "Signature Request"]
 };
 
 window.renderGlobalVisualizer = function(isVaultMode) {
@@ -11528,27 +11528,66 @@ OL.processQuickPaste = function() {
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
+    const lib = state.master.atomicLibrary;
+
     return `
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
-        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto;">
-            <label class="modal-section-label" style="color:#ffbf00">⚡ Triggers</label>
-            ${ATOMIC_STEP_LIB.Triggers.map(t => `<div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>`).join('')}
-            <label class="modal-section-label" style="margin-top:20px;">🎬 Action Builder</label>
-            <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px;">
-                <select id="builder-verb" class="modal-input tiny">${ATOMIC_STEP_LIB.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
-                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${ATOMIC_STEP_LIB.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
-                <div class="draggable-factory-item action" draggable="true" style="margin-top:10px; border-radius: 4px; padding: 3%; text-align:center; background:var(--accent-glow)" ondragstart="OL.handleModularAtomicDrag(event)">+ DRAG ACTION</div>
+        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto; height: calc(100vh - 200px);">
+            
+            <label class="modal-section-label">🎬 Action Builder</label>
+            <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
+                
+                <div style="margin-bottom: 10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                         <label class="tiny muted bold">VERB</label>
+                         <span class="tiny accent is-clickable" onclick="OL.promptAddAtomic('Verbs')">+ Add</span>
+                    </div>
+                    <select id="builder-verb" class="modal-input tiny">
+                        ${lib.Verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                         <label class="tiny muted bold">OBJECT</label>
+                         <span class="tiny accent is-clickable" onclick="OL.promptAddAtomic('Objects')">+ Add</span>
+                    </div>
+                    <select id="builder-object" class="modal-input tiny">
+                        ${lib.Objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div class="draggable-factory-item action" 
+                     draggable="true" 
+                     style="margin-top:15px; background:var(--accent-glow); border: 1px solid var(--accent);" 
+                     ondragstart="OL.handleModularAtomicDrag(event)">
+                     🚀 DRAG NEW ACTION
+                </div>
             </div>
-        </div>
-        <div class="return-to-library-zone" 
-            ondragover="OL.handleCanvasDragOver(event)" 
-            onlink="this.classList.add('drag-over')"
-            ondragenter="this.classList.add('drag-over')"
-            ondragleave="this.classList.remove('drag-over')"
-            ondrop="OL.handleUnifiedDelete(event)">
-            🗑️ Drop to Unmap
+
+            <label class="modal-section-label" style="margin-top:25px; color:#ffbf00">⚡ Triggers</label>
+            ${ATOMIC_STEP_LIB.Triggers.map(t => `
+                <div class="draggable-factory-item trigger" draggable="true" 
+                     ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>
+            `).join('')}
         </div>
     `;
+};
+
+OL.promptAddAtomic = function(category) {
+    const newVal = prompt(`Add new ${category.slice(0, -1)}:`);
+    if (!newVal) return;
+
+    if (!state.master.atomicLibrary[category].includes(newVal)) {
+        state.master.atomicLibrary[category].push(newVal);
+        state.master.atomicLibrary[category].sort();
+        
+        OL.persist();
+        // Refresh the visualizer to show the new dropdown option
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    } else {
+        alert("Item already exists in the library.");
+    }
 };
 
 OL.quickCreateWorkflow = function() {
