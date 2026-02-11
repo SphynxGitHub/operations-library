@@ -12019,20 +12019,23 @@ OL.promptQuickCreateAsset = async function(parentResId, stepId) {
 };
 
 OL.filterAppSearch = function(resId, stepId, query) {
-    const results = document.getElementById('app-search-results');
-    if (!results) return;
+    const resultsOverlay = document.getElementById('app-search-results');
+    if (!resultsOverlay) return;
     
     const q = (query || "").toLowerCase();
     const client = getActiveClient();
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
     
-    const matches = allApps.filter(a => a.name.toLowerCase().includes(q));
+    // 🚀 THE FIX: Filter only localApps
+    const localApps = client?.projectData?.localApps || [];
     
-    results.innerHTML = matches.map(a => `
-        <div class="search-result-item" onmousedown="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${a.id}')">
+    const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
+
+    resultsOverlay.innerHTML = matches.map(a => `
+        <div class="search-result-item" 
+             onmousedown="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${a.id}')">
             📱 ${esc(a.name)}
         </div>
-    `).join('') || '<div class="p-10 tiny muted">No apps found</div>';
+    `).join('') || `<div class="p-10 tiny muted">No local apps found.</div>`;
 };
 
 OL.updateResourceMetadata = function(resId, field, value) {
