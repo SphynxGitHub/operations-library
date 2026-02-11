@@ -6365,24 +6365,22 @@ OL.updateAtomicStep = function(resId, stepId, field, value) {
     const step = res.steps.find(s => String(s.id) === String(stepId));
     if (!step) return;
 
-    // 1. Update the data
+    // 1. Apply the update
     step[field] = value;
-
-    // 2. Persist to DB (Quietly)
     OL.persist();
 
-    // 3. SURGICAL UI UPDATE: 
-    // Instead of re-rendering everything, just refresh the canvas and re-load inspector
-    if (typeof renderLevel3Canvas === 'function') {
-        const canvas = document.getElementById('level-3-canvas-container'); 
-        if (canvas) canvas.innerHTML = renderLevel3Canvas(resId);
+    // 2. Refresh the Canvas (Level 3)
+    // We do this so the icon 📱 appears on the card face immediately
+    const canvas = document.getElementById('level-3-canvas-container'); 
+    if (canvas) {
+        canvas.innerHTML = renderLevel3Canvas(resId);
     }
 
-    // 🚀 THE FIX: Immediately re-open the inspector for this step
-    // This keeps the scroll position and the "active" state
-    OL.loadInspector(stepId, resId);
+    // 3. 🎯 THE LOCK: Re-load Inspector with BOTH IDs
+    // This ensures Scenario A (Atomic Step) is re-rendered, not Scenario B
+    OL.loadInspector(stepId, resId); 
     
-    console.log(`✅ Updated ${field} for ${step.name}`);
+    console.log(`✅ ${field} updated for ${step.name}. Inspector locked.`);
 };
 
 OL.removeSopStep = function (resId, stepId) {
@@ -12042,8 +12040,8 @@ OL.filterAppSearch = function(resId, stepId, query) {
 
     resultsOverlay.innerHTML = matches.map(a => `
         <div class="search-result-item" 
-             onmousedown="OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${a.id}')">
-            📱 ${esc(a.name)}
+            onmousedown="event.stopPropagation(); OL.updateAtomicStep('${resId}', '${stepId}', 'appId', '${a.id}')">
+            <span style="margin-right:8px;">📱</span> ${esc(a.name)}
         </div>
     `).join('') || `<div class="p-10 tiny muted">No local apps found.</div>`;
 };
