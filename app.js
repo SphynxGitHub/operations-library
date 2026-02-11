@@ -11795,7 +11795,10 @@ OL.loadInspector = function(targetId, parentId = null) {
     const registry = state.master.resourceTypes || [];
     const isModule = data.type === 'module_block';
     const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
-
+    const allApps = [
+            ...(state.master.apps || []), 
+            ...(client?.projectData?.localApps || [])
+        ];
     let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
 
     // 🚀 SCENARIO A: ATOMIC STEP (Mechanical View)
@@ -12111,7 +12114,11 @@ window.renderLevel3Canvas = function(resourceId) {
                         // 🚀 STEP 2: Generate the HTML string for this specific step
                         const linkedAssetsHtml = links.map(link => {
                             const assetIcon = OL.getRegistryIcon(link.type);
-                            return `<span class="pill tiny soft" style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05);">${assetIcon}</span>`;
+                            return `
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:8px; padding:1px 6px;">${esc(step.type)}</span>
+                                <span style="font-size:10px; opacity:0.5;">${icon}</span>
+                            </div>`;
                         }).join('');
                                                          
                         return `
@@ -12128,11 +12135,6 @@ window.renderLevel3Canvas = function(resourceId) {
                             
                             <div id="port-in-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
                             <div id="port-out-${step.id}" style="position:absolute; left:0; top:50%; visibility:hidden;"></div>
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:8px; padding:1px 6px;">${esc(step.type)}</span>
-                                <span style="font-size:10px; opacity:0.5;">${icon}</span>
-                            </div>
 
                             <div class="bold accent">${esc(step.name || "Untitled")}</div>
 
