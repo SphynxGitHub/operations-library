@@ -6097,7 +6097,7 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
         html += `<div class="search-group-header">Project Apps</div>`;
         html += matchApps.map(a => `
             <div class="search-result-item" 
-                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, '${a.id}', '${esc(a.name)}', 'system')">
+                onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, '${a.id}', '${esc(a.name)}', 'system')">
                 📱 ${esc(a.name)}
             </div>`).join('');
     }
@@ -11760,6 +11760,7 @@ OL.cloneResourceWorkflow = function(resId) {
 
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
+    
     // ⚓ THE ANCHOR: Lock the parent context so refreshes don't jump back to Level 2
     if (parentId) {
         state.activeInspectorParentId = parentId;
@@ -11783,6 +11784,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const registry = state.master.resourceTypes || [];
     const isModule = data.type === 'module_block';
     const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
+    let displayAssigneeName = data.assigneeName;
 
     // 📱 RESOLVE APP NAME: Gather all apps and find the linked one to show the NAME, not ID
     const allApps = [
@@ -11790,6 +11792,10 @@ OL.loadInspector = function(targetId, parentId = null) {
         ...(client?.projectData?.localApps || [])
     ];
     const stepApp = allApps.find(a => String(a.id) === String(data.appId));
+    if (data.assigneeType === 'system') {
+        const matchedApp = allApps.find(a => String(a.id) === String(data.assigneeId));
+        if (matchedApp) displayAssigneeName = matchedApp.name;
+    }
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
 
@@ -11884,7 +11890,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                         ${data.assigneeName ? `
                             <div class="pill accent">
                                 ${getAssigneeIcon(data.assigneeType)} ${esc(data.assigneeName)}
-                                <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', '')">×</b>
+                                <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', 'person')">×</b>
                             </div>
                         ` : '<span class="tiny muted">Unassigned</span>'}
                     </div>
