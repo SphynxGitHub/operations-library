@@ -12207,36 +12207,31 @@ window.renderLevel3Canvas = function(resourceId) {
 };
 
 OL.removeStepFromCanvas = function(resId, stepId) {
-    if (!confirm("Are you sure you want to delete this step?")) return;
+    // 1. Immediate confirmation
+    if (!confirm("Delete this step?")) return;
 
     const res = OL.getResourceById(resId);
     if (!res) return;
 
-    // 1. Identify the step before we kill it
+    // 2. Identify and Clean Dual-Homed Triggers
     const stepToDelete = res.steps.find(s => String(s.id) === String(stepId));
-    if (!stepToDelete) return;
-
-    // 2. If it's a Trigger, sync the deletion with the triggers array
-    if (stepToDelete.type === 'Trigger') {
+    if (stepToDelete && stepToDelete.type === 'Trigger') {
+        // Remove from the list view array if it exists
         res.triggers = (res.triggers || []).filter(t => t.name !== stepToDelete.name);
     }
 
-    // 3. Remove from the primary steps array
+    // 3. Remove from Steps
     res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
-    
-    // 4. Cleanup logic branches pointing to this ID
-    res.steps.forEach(s => {
-        if (s.outcomes) {
-            s.outcomes = s.outcomes.filter(o => o.action !== `jump_step_${stepId}`);
-        }
-    });
 
+    // 4. Persistence & UI Reset
     OL.persist();
     renderGlobalVisualizer(location.hash.includes('vault'));
     
-    // Reset Inspector
+    // Clear the inspector so it doesn't show deleted data
     const panel = document.getElementById('inspector-panel');
-    if (panel) panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
+    if (panel) panel.innerHTML = `<div class="p-20 muted text-center">Step removed.</div>`;
+    
+    console.log(`🗑️ Step ${stepId} removed.`);
 };
 
 OL.drawVerticalLogicLines = function(resId) {
