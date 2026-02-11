@@ -6075,7 +6075,7 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
         html += `<div class="search-group-header">Team Members</div>`;
         html += matchPeople.map(m => `
             <div class="search-result-item" 
-                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'person', '${m.id}', '${esc(m.name)}')">
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, '${m.id}', '${esc(m.name)}', 'person')">
                 👨‍💼 ${esc(m.name)}
             </div>`).join('');
     }
@@ -6086,7 +6086,7 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
         html += `<div class="search-group-header">Roles</div>`;
         html += matchRoles.map(r => `
             <div class="search-result-item" 
-                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'role', '${esc(r)}', '${esc(r)}')">
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, '${esc(r)}', '${esc(r)}', 'role')">
                 🎭 ${esc(r)}
             </div>`).join('');
     }
@@ -6097,41 +6097,33 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
         html += `<div class="search-group-header">Project Apps</div>`;
         html += matchApps.map(a => `
             <div class="search-result-item" 
-                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, 'system', '${a.id}', '${esc(a.name)}')">
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, '${a.id}', '${esc(a.name)}', 'system')">
                 📱 ${esc(a.name)}
             </div>`).join('');
     }
 
-    listEl.innerHTML = html || `<div class="search-result-item muted">No results</div>`;
+    listEl.innerHTML = html || `<div class="search-result-item muted">No matching local assignments found</div>`;
 };
 
-OL.executeAssignment = function(resId, stepId, isTrigger, memberId, memberName, memberAvatar) {
-    const activeResId = resId || state.activeInspectorParentId;
+OL.executeAssignment = function(resId, stepId, isTrigger, memberId, memberName, type) {
+    const activeResId = resId || state.lastUsedParentId;
     const res = OL.getResourceById(activeResId);
-    if (!res) return console.error("Assignment Failed: No Resource Context");
+    if (!res) return;
 
-    // Locate the Step
     const step = res.steps?.find(s => String(s.id) === String(stepId));
-    if (!step) return console.error("Assignment Failed: Step not found");
-
-    // Update the data
-    step.assigneeId = memberId;
-    step.assigneeName = memberName;
-    step.assigneeAvatar = memberAvatar || '';
-
-    OL.persist();
-
-    // 🚀 Refresh Canvas Card face
-    const wrapper = document.getElementById('l3-canvas-wrapper');
-    if (wrapper && typeof renderLevel3Canvas === 'function') {
-        // Re-render the canvas content
-        wrapper.parentElement.innerHTML = renderLevel3Canvas(activeResId);
+    if (step) {
+        step.assigneeId = memberId;
+        step.assigneeName = memberName;
+        step.assigneeType = type; // Store if it's a person, role, or system
+        OL.persist();
     }
 
-    // 🚀 RE-LOAD INSPECTOR: Pass activeResId to keep it in Scenario A
-    setTimeout(() => {
-        OL.loadInspector(stepId, activeResId);
-    }, 10);
+    // 🚀 SURGICAL UI SYNC
+    const wrapper = document.getElementById('l3-canvas-wrapper');
+    if (wrapper) wrapper.parentElement.innerHTML = renderLevel3Canvas(activeResId);
+
+    // ⚓ LOCK CONTEXT
+    OL.loadInspector(stepId, activeResId);
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
@@ -11768,8 +11760,12 @@ OL.cloneResourceWorkflow = function(resId) {
 
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
+    // ⚓ THE ANCHOR: Lock the parent context so refreshes don't jump back to Level 2
     if (parentId) {
         state.activeInspectorParentId = parentId;
+    } else {
+        // Fallback to the last known parent if we are refreshing/updating
+        parentId = state.activeInspectorParentId;
     }
 
     state.activeInspectorResId = targetId;
@@ -11787,17 +11783,21 @@ OL.loadInspector = function(targetId, parentId = null) {
     const registry = state.master.resourceTypes || [];
     const isModule = data.type === 'module_block';
     const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
+
+    // 📱 RESOLVE APP NAME: Gather all apps and find the linked one to show the NAME, not ID
     const allApps = [
-            ...(state.master.apps || []), 
-            ...(client?.projectData?.localApps || [])
-        ];
+        ...(state.master.apps || []), 
+        ...(client?.projectData?.localApps || [])
+    ];
+    const stepApp = allApps.find(a => String(a.id) === String(data.appId));
+
     let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
 
     // 🚀 SCENARIO A: ATOMIC STEP (Mechanical View)
     if (isStepOnCanvas && !isModule) {
         const isTrigger = data.type === 'Trigger';
         
-        // 🚀 THE FIX: Pre-generate the links HTML to avoid scope ReferenceErrors
+        // 🔗 LINKED ASSETS HTML
         const links = data.links || [];
         const linksHtml = links.map((link, lIdx) => {
             const icon = OL.getRegistryIcon(link.type);
@@ -11809,24 +11809,31 @@ OL.loadInspector = function(targetId, parentId = null) {
                        onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
                 </div>`;
         }).join('');
+
         const emptyLinksHtml = `
             <div class="tiny muted italic" style="margin-bottom: 8px;">No assets linked.</div>
             <div class="dropdown-plus-container" style="display:inline-block; position:relative;">
-                    <button class="btn primary" style="font-weight:bold;">+ New Resource</button>
-                    <div class="dropdown-plus-menu" style="right: 0; left: auto;">
-                        <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
-                        ${(state.master.resourceTypes || []).map(t => `
-                            <div class="dropdown-item" onclick="OL.quickCreateInLibrary('${t.type}')">
-                                ${OL.getRegistryIcon(t.type)} ${t.type}
-                            </div>
-                        `).join('')}
-                        <div class="dropdown-item" onclick="OL.quickCreateInLibrary('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
-                            📄 Basic SOP
+                <button class="btn primary" style="font-weight:bold;">+ New Resource</button>
+                <div class="dropdown-plus-menu" style="right: 0; left: auto;">
+                    <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
+                    ${(state.master.resourceTypes || []).map(t => `
+                        <div class="dropdown-item" onclick="OL.quickCreateInLibrary('${t.type}')">
+                            ${OL.getRegistryIcon(t.type)} ${t.type}
                         </div>
+                    `).join('')}
+                    <div class="dropdown-item" onclick="OL.quickCreateInLibrary('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                        📄 Basic SOP
                     </div>
                 </div>
+            </div>
         `;
-        const stepApp = allApps.find(a => String(a.id) === String(data.appId));
+
+        // 🎭 ASSIGNEE ICON LOGIC
+        const getAssigneeIcon = (type) => {
+            if (type === 'role') return '🎭';
+            if (type === 'system') return '📱';
+            return '👨‍💼';
+        };
         
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
@@ -11851,7 +11858,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                 </div>
             </div>
 
-            <div class="card-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="card-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;">
                 <label class="modal-section-label">📱 Linked Application</label>
                 <div id="inspector-app-zone" style="margin-top:10px;">
                     ${stepApp ? `
@@ -11876,13 +11883,13 @@ OL.loadInspector = function(targetId, parentId = null) {
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                         ${data.assigneeName ? `
                             <div class="pill accent">
-                                👨‍💼 ${esc(data.assigneeName)}
+                                ${getAssigneeIcon(data.assigneeType)} ${esc(data.assigneeName)}
                                 <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', '')">×</b>
                             </div>
                         ` : '<span class="tiny muted">Unassigned</span>'}
                     </div>
                     <div class="search-map-container">
-                        <input type="text" class="modal-input tiny" placeholder="Assign member..." 
+                        <input type="text" class="modal-input tiny" placeholder="Assign member, role, or system..." 
                                onfocus="OL.filterAssignmentSearch('${parentResId}', '${data.id}', false, '')"
                                oninput="OL.filterAssignmentSearch('${parentResId}', '${data.id}', false, this.value)">
                         <div id="assignment-search-results" class="search-results-overlay"></div>
@@ -11942,7 +11949,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                     onblur="OL.updateResourceMetadata('${techId}', 'name', this.value)">
                 <div style="margin-top:12px;">
                     <label class="modal-section-label" style="font-size:9px; opacity:0.5; margin-bottom:4px; display:block;">
-                        ${isAtResourceLevel ? 'Resource Description' : 'Lifecycle Subtitle (IF: xyz)'}
+                        ${isAtResourceLevel ? 'Resource Description' : 'Lifecycle Subtitle'}
                     </label>
                     <textarea class="modal-textarea" rows="2" 
                         style="font-size:11px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); width:100%; padding:8px; border-radius:4px; color:#ccc;"
