@@ -12147,9 +12147,18 @@ OL.drawVerticalLogicLines = function(resId) {
 // --- NAVIGATION & STATE ---
 
 OL.drillDownIntoWorkflow = function(resId) {
+    console.log("📂 Drilling into Workflow (L2):", resId);
+    
     state.focusedWorkflowId = resId;
     state.focusedResourceId = null; 
-    state.lastSearchQuery = ""; // 🚀 Reset the stored search state
+    state.lastSearchQuery = ""; 
+
+    // 💾 Persist Level 2 state for refresh
+    sessionStorage.setItem('active_workflow_id', resId);
+    
+    // 🧹 Clean up Level 3 state to ensure we start at the top of the workflow
+    sessionStorage.removeItem('active_resource_id');
+
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
