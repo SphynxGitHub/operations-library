@@ -11528,53 +11528,40 @@ OL.processQuickPaste = function() {
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
-    // 🛠️ MERGE LOGIC: Combine your hardcoded const with database additions
     const dbLib = state.master?.atomicLibrary || { Verbs: [], Objects: [], Triggers: [] };
     
-    // Create unique combined lists
     const verbs = [...new Set([...ATOMIC_STEP_LIB.Verbs, ...(dbLib.Verbs || [])])].sort();
     const objects = [...new Set([...ATOMIC_STEP_LIB.Objects, ...(dbLib.Objects || [])])].sort();
-    const triggers = [...new Set([...ATOMIC_STEP_LIB.Triggers, ...(dbLib.Triggers || [])])].sort();
 
     return `
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
-        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto; height: calc(100vh - 200px);">
+        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto; height: calc(100vh - 100px);">
             
-        <label class="modal-section-label" style="margin-top:25px; color:#ffbf00">⚡ Triggers</label>
-            ${triggers.map(t => `
+            <label class="modal-section-label" style="color:#ffbf00">⚡ Trigger Builder</label>
+            <div class="builder-box" style="background:rgba(255, 191, 0, 0.03); padding:12px; border-radius:8px; border: 1px solid rgba(255, 191, 0, 0.2); margin-bottom: 20px;">
+                <select id="trigger-verb" class="modal-input tiny">${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="trigger-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
                 <div class="draggable-factory-item trigger" draggable="true" 
-                     ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>
-            `).join('')}
+                     style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center;" 
+                     ondragstart="OL.handleModularTriggerDrag(event)">
+                     ⚡ DRAG NEW TRIGGER
+                </div>
+            </div>
 
             <label class="modal-section-label">🎬 Action Builder</label>
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
-                
-                <div style="margin-bottom: 10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                         <label class="tiny muted bold">VERB</label>
-                         <span class="tiny accent is-clickable" onclick="OL.promptAddAtomic('Verbs')">+ Add</span>
-                    </div>
-                    <select id="builder-verb" class="modal-input tiny">
-                        ${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
-                    </select>
-                </div>
-
-                <div style="margin-bottom: 10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                         <label class="tiny muted bold">OBJECT</label>
-                         <span class="tiny accent is-clickable" onclick="OL.promptAddAtomic('Objects')">+ Add</span>
-                    </div>
-                    <select id="builder-object" class="modal-input tiny">
-                        ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
-                    </select>
-                </div>
-
-                <div class="draggable-factory-item action" 
-                     draggable="true" 
-                     style="margin-top:15px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center;" 
+                <select id="builder-verb" class="modal-input tiny">${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <div class="draggable-factory-item action" draggable="true" 
+                     style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center;" 
                      ondragstart="OL.handleModularAtomicDrag(event)">
                      🚀 DRAG NEW ACTION
                 </div>
+            </div>
+            
+            <div style="margin-top:20px; text-align:center;">
+                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Verbs')">+ Add Verb</button>
+                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Objects')">+ Add Object</button>
             </div>
         </div>
     `;
@@ -12349,24 +12336,90 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex, forceId = null) {
     renderGlobalVisualizer(isVaultMode);
 };
 
-// 🚀 Handle dragging a predefined Trigger from the Factory
-OL.handleAtomicDrag = function(e, type, name) {
-    const payload = { type, name, isAtomic: true };
-    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-    e.target.style.opacity = "0.4";
+// 1. Capture the Drag for Triggers
+OL.handleModularTriggerDrag = function(event) {
+    const verb = document.getElementById('trigger-verb').value;
+    const obj = document.getElementById('trigger-object').value;
+    event.dataTransfer.setData("stepType", "Trigger");
+    event.dataTransfer.setData("stepName", `${obj} ${verb}`);
+    event.dataTransfer.setData("objectContext", obj);
 };
 
-// 🚀 Handle dragging a custom Action (Verb + Object) from the Factory
-OL.handleModularAtomicDrag = function(e) {
+// 2. Capture the Drag for Actions (updated to include context)
+OL.handleModularAtomicDrag = function(event) {
     const verb = document.getElementById('builder-verb').value;
     const obj = document.getElementById('builder-object').value;
-    const payload = { 
-        type: 'Action', 
-        name: `${verb} ${obj}`, 
-        isAtomic: true 
+    event.dataTransfer.setData("stepType", "Action");
+    event.dataTransfer.setData("stepName", `${verb} ${obj}`);
+    event.dataTransfer.setData("objectContext", obj);
+};
+
+// 3. The "Smart Prompt" Logic (Run this inside your handleCanvasDrop function)
+OL.triggerSmartResourceMap = function(newStep, objectContext) {
+    const mapping = {
+        "Email": "Email",
+        "Form": "Form",
+        "Meeting": "Event",
+        "Signature Request": "Signature",
+        "Contact": "SOP",
+        "Opportunity": "SOP"
     };
-    e.dataTransfer.setData("atomicPayload", JSON.stringify(payload));
-    e.target.style.opacity = "0.4";
+
+    const targetType = mapping[objectContext];
+    if (!targetType) return;
+
+    if (confirm(`Detected "${objectContext}". Would you like to link an existing ${targetType} or create a new one?`)) {
+        // Here you would trigger your existing resource linker or quick-create logic
+        // For example:
+        OL.openResourceLinkerForStep(newStep.id, targetType);
+    }
+};
+
+OL.openResourceLinkerForStep = function(stepId, targetType) {
+    const parentResId = state.focusedResourceId;
+    
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔗 Link ${targetType} Asset</div>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted">Link an existing ${targetType} or create a new one to represent the object of this step.</p>
+            <div class="search-map-container">
+                <input type="text" class="modal-input" placeholder="Search ${targetType}s..." 
+                       onfocus="OL.filterLinkerByType('${parentResId}', '${stepId}', '${targetType}', '')"
+                       oninput="OL.filterLinkerByType('${parentResId}', '${stepId}', '${targetType}', this.value)"
+                       autofocus>
+                <div id="res-linker-results" class="search-results-overlay"></div>
+            </div>
+            <div style="margin-top: 15px; border-top: 1px solid var(--line); padding-top: 15px;">
+                <button class="btn tiny primary" onclick="OL.quickCreateAndLink('${stepId}', '${targetType}')">+ Create New ${targetType}</button>
+            </div>
+        </div>`;
+    openModal(html);
+};
+
+OL.filterLinkerByType = function(parentResId, stepId, type, query) {
+    const listEl = document.getElementById("res-linker-results");
+    if (!listEl) return;
+    
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    
+    // Filter local resources by the specific type detected in the drag
+    const available = client.projectData.localResources.filter(r => 
+        r.id !== parentResId && 
+        r.type === type &&
+        (r.name || "").toLowerCase().includes(q)
+    );
+
+    listEl.innerHTML = available.map(r => `
+        <div class="search-result-item" onmousedown="OL.addResourceLinkToStep('${parentResId}', '${stepId}', '${r.id}', '${esc(r.name)}')">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <span>${OL.getRegistryIcon(r.type)} ${esc(r.name)}</span>
+                <span class="pill tiny soft">LINK</span>
+            </div>
+        </div>
+    `).join('') || `<div class="search-result-item muted">No ${type}s found.</div>`;
 };
 
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
@@ -12374,23 +12427,22 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     const moveId = e.dataTransfer.getData("moveNodeId");      
     const resId = e.dataTransfer.getData("resId");           
     const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
+    const stepName = e.dataTransfer.getData("stepName"); // 🚀 New modular drag name
+    const objContext = e.dataTransfer.getData("objectContext"); // 🚀 New modular drag context
+    const stepType = e.dataTransfer.getData("stepType"); // 🚀 Trigger vs Action
     const isVaultMode = location.hash.includes('vault');
 
-    // 🎯 Use the index captured by the Ghost Placeholder logic
-    // If no index was captured (e.g. dropped on empty space), default to the end
     const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
 
     // 🚀 SCENARIO 1: MOVE EXISTING CARD
     if (moveId) {
-        // We reuse the rearrange logic because it already handles Absolute Indexing
         OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
-        // Note: handleNodeRearrange calls persist/render, so we return early
         state.currentDropIndex = null;
         cleanupUI();
         return; 
     } 
 
-    // 🚀 SCENARIO 2: ADD NEW FROM SIDEBAR
+    // 🚀 SCENARIO 2: ADD NEW FROM SIDEBAR (Linking existing SOPs)
     else if (resId) {
         if (!state.focusedWorkflowId) {
             const res = OL.getResourceById(resId);
@@ -12401,8 +12453,6 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
             if (workflow && sourceRes) {
                 if (!workflow.steps) workflow.steps = [];
                 const newStep = { id: uid(), name: sourceRes.name, resourceLinkId: resId, gridLane: sectionId };
-                
-                // 🎯 Insert at Ghost position instead of push
                 if (targetIdx < workflow.steps.length) workflow.steps.splice(targetIdx, 0, newStep);
                 else workflow.steps.push(newStep);
             }
@@ -12410,26 +12460,39 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
     }
 
     // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
-    else if (atomicPayload && state.focusedResourceId) {
+    else if ((atomicPayload || stepName) && state.focusedResourceId) {
         const parentRes = OL.getResourceById(state.focusedResourceId);
         if (parentRes) {
-            try {
-                const data = JSON.parse(atomicPayload);
+            let finalName = "";
+            let finalType = sectionId; // Lane context
+
+            // Handle legacy JSON payload or new Modular Builder
+            if (atomicPayload) {
+                try {
+                    const data = JSON.parse(atomicPayload);
+                    finalName = data.name;
+                } catch(err) { console.error(err); }
+            } else {
+                finalName = stepName;
+                // If the drag source specifies Trigger/Action, we can override or use sectionId
+                if (stepType) finalType = stepType; 
+            }
+
+            if (finalName) {
                 if (!parentRes.steps) parentRes.steps = [];
                 
                 const newStep = { 
                     id: uid(), 
-                    name: data.name, 
-                    type: sectionId, 
+                    name: finalName, 
+                    type: finalType, 
                     outcomes: [],
                     timingValue: 0,
                     timingType: 'after_prev'
                 };
 
-                // 🎯 Insert at Ghost position instead of push
-                // For L3, we find the absolute index relative to the Trigger/Action filtered group
+                // Insert logic
                 const sectionItems = parentRes.steps.filter(s => 
-                    (sectionId === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger')
+                    (finalType === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger')
                 );
                 const targetNeighbor = sectionItems[targetIdx];
                 
@@ -12439,7 +12502,16 @@ OL.handleUniversalDrop = function(e, parentId, sectionId) {
                 } else {
                     parentRes.steps.push(newStep);
                 }
-            } catch (err) { console.error(err); }
+
+                // 🔥 SMART MAPPING TRIGGER
+                // If an object like "Email" or "Meeting" was detected, prompt for resource link
+                if (objContext) {
+                    // We wrap in a tiny timeout so the UI renders the new card before the prompt appears
+                    setTimeout(() => {
+                        OL.triggerSmartResourceMap(newStep, objContext);
+                    }, 200);
+                }
+            }
         }
     }
 
