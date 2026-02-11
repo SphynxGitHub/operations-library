@@ -5210,66 +5210,39 @@ window.renderSopStepList = function (res) {
     if (!res) return "";
 
     const triggers = res.triggers || [];
-    const steps = res.steps || [];
+    // 🚀 THE FIX: Filter out Triggers from the Steps array for this view
+    const steps = (res.steps || []).filter(s => s.type !== 'Trigger'); 
+    
     let html = "";
 
-    // --- ⚡ SECTION 1: TRIGGERS (Simplified Summary) ---
+    // --- ⚡ SECTION 1: ENTRY TRIGGERS ---
+    // (This part stays the same, it uses res.triggers)
     html += `
-        <div class="triggers-container" style="margin-bottom: 20px; border: 1px dashed #ffbf00; border-radius: 8px; padding: 12px; background: rgba(255, 191, 0, 0.02);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
-                <button class="btn tiny soft" onclick="OL.addResourceTrigger('${res.id}')">+ Add</button>
-            </div>
+        <div class="triggers-container" ...>
+            <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
             <div id="triggers-list">
                 ${triggers.map((t, idx) => `
-                    <div class="dp-manager-row is-clickable" style="padding: 8px; margin-bottom:4px; border: 1px solid var(--line); border-radius:4px;"
-                         onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
-                        <span style="font-size:12px; margin-right:8px;">${t.type === 'auto' ? '⚡' : '👨‍💼'}</span>
-                        <span class="bold tiny">${esc(t.name || "New Trigger")}</span>
+                    <div class="dp-manager-row">
+                        <span class="bold tiny" style="color:#ffbf00">${esc(t.name)}</span>
                     </div>
                 `).join("")}
-                ${triggers.length === 0 ? '<div class="tiny muted italic">No entry triggers.</div>' : ''}
             </div>
         </div>
     `;
 
-    // --- 📝 SECTION 2: SEQUENTIAL STEPS (Summary Index) ---
-    html += `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <label class="tiny muted bold uppercase">📝 Sequence Overview</label>
-            <div style="display:flex; gap:5px;">
-                <button class="btn tiny soft" onclick="OL.openResourceLinker('${res.id}')">📦 Link Module</button>
-                <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
+    // --- 📝 SECTION 2: SEQUENTIAL STEPS ---
+    // (Now this only shows Actions/Steps, not Triggers)
+    html += `<label class="tiny muted bold uppercase">📝 Sequence Overview</label>`;
+    
+    html += steps.map((step, idx) => `
+        <div class="step-group">
+            <div class="dp-manager-row">
+                <span class="tiny muted">${idx + 1}</span>
+                <div class="bold tiny">${esc(step.name)}</div>
             </div>
         </div>
-    `;
+    `).join("");
 
-    if (steps.length === 0) {
-        html += '<div class="empty-hint">No workflow steps defined.</div>';
-    } else {
-        html += steps.map((step, idx) => {
-            const isModule = step.type === 'module_block';
-            
-            return `
-            <div class="step-group" style="margin-bottom: 6px;">
-                <div class="dp-manager-row is-clickable" 
-                     style="padding: 10px; border: 1px solid ${isModule ? 'var(--accent)' : 'var(--line)'}; border-radius: 6px; display:flex; align-items:center; gap:10px;"
-                     onclick="${isModule ? `OL.openResourceModal('${step.linkedResourceId}')` : `OL.openStepDetailModal('${res.id}', '${step.id}')`}">
-                    
-                    <span class="tiny muted" style="width:20px;">${idx + 1}</span>
-                    <span style="font-size:12px;">${isModule ? '📦' : '🔹'}</span>
-                    
-                    <div style="flex:1;">
-                        <div class="bold tiny" style="color: ${isModule ? 'var(--accent)' : 'inherit'}">${esc(step.name || "Untitled Step")}</div>
-                        <div class="tiny muted" style="font-size:9px;">${esc(step.assigneeName || "Unassigned")}</div>
-                    </div>
-
-                    ${isModule ? `<button class="btn tiny primary" style="font-size:8px;" onclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${step.linkedResourceId}')">Drill Down</button>` : ''}
-                    <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
-                </div>
-            </div>`;
-        }).join("");
-    }
     return html;
 };
 
