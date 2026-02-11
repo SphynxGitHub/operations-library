@@ -11608,6 +11608,14 @@ window.renderLevel2SidebarContent = function(allResources) {
             </div>
             ${assets.length === 0 ? '<div class="tiny muted italic" style="padding:10px; text-align:center;">No assets available.</div>' : ''}
         </div>
+        <div class="quick-build-section" style="padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.15);">
+            <label class="modal-section-label" style="color: var(--vault-gold);">⚡ Quick-Build Stream</label>
+            <textarea id="quick-paste-box" class="modal-textarea" 
+                      placeholder="1. Receive Lead&#10;2. KYC Verification&#10;3. DocuSign Signature" 
+                      style="height:80px; font-size:11px; margin-top:8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; width: 100%; border-radius: 4px; padding: 5px;"></textarea>
+            <button class="btn tiny primary" style="width:100%; margin-top:8px; font-weight: bold;" 
+                    onclick="OL.processQuickPaste()">Build Sequence</button>
+        </div>
         <div class="return-to-library-zone" 
             ondragover="OL.handleCanvasDragOver(event)" 
             ondragenter="this.classList.add('drag-over')"
@@ -11618,20 +11626,55 @@ window.renderLevel2SidebarContent = function(allResources) {
     `;
 };
 
-window.renderLevel3SidebarContent = function(resourceId) {
-    const aiButtonHtml = `
-        <div class="card-section" style="margin-bottom: 20px; padding: 10px; background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; border-radius: 8px;">
-            <label class="modal-section-label" style="color: #a78bfa;">✨ AI AUTO-BUILDER</label>
-            <button class="btn tiny primary" style="width:100%; background:#8b5cf6; color:white;" onclick="OL.openAIImportModal('${resourceId}')">
-                🪄 Import from Transcript
-            </button>
-        </div>
-    `;
+OL.processQuickPaste = function() {
+    const box = document.getElementById('quick-paste-box');
+    const text = box.value.trim();
+    if (!text) return;
 
+    const workflow = OL.getResourceById(state.focusedWorkflowId);
+    if (!workflow) return alert("Select a workflow first!");
+
+    // 1. Split by new lines and clean up numbers/bullets
+    const lines = text.split('\n').map(line => {
+        return line.replace(/^[\d\.\-\*\>\s]+/, '').trim();
+    }).filter(line => line.length > 0);
+
+    // 2. Convert lines to Steps
+    lines.forEach((line, index) => {
+        const newResId = `local-prj-${Date.now()}-${index}`;
+        
+        // Create the Resource (The SOP)
+        const newRes = {
+            id: newResId,
+            name: line,
+            type: "SOP",
+            steps: []
+        };
+        
+        // Save it to the library
+        const client = getActiveClient();
+        client.projectData.localResources.push(newRes);
+
+        // Map it to this Workflow (Level 2)
+        if (!workflow.steps) workflow.steps = [];
+        workflow.steps.push({
+            id: uid(),
+            name: line,
+            resourceLinkId: newResId,
+            mapOrder: workflow.steps.length
+        });
+    });
+
+    // 3. Save & Refresh
+    OL.persist();
+    box.value = ""; // Clear the box
+    window.renderGlobalVisualizer(location.hash.includes('vault'));
+};
+
+window.renderLevel3SidebarContent = function(resourceId) {
     return `
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
         <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto;">
-            ${aiButtonHtml}
             <label class="modal-section-label" style="color:#ffbf00">⚡ Triggers</label>
             ${ATOMIC_STEP_LIB.Triggers.map(t => `<div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>`).join('')}
             <label class="modal-section-label" style="margin-top:20px;">🎬 Action Builder</label>
@@ -11650,58 +11693,6 @@ window.renderLevel3SidebarContent = function(resourceId) {
             🗑️ Drop to Unmap
         </div>
     `;
-};
-
-OL.openAIImportModal = function(resId) {
-    const html = `
-        <div class="modal-head"><div class="modal-title-text">🪄 AI Workflow Generator</div></div>
-        <div class="modal-body">
-            <p class="tiny muted">Paste a transcript or process notes. AI will map the steps and logic branches.</p>
-            <textarea id="ai-raw-input" class="modal-textarea" style="min-height: 200px;" 
-                      placeholder="e.g. When a client books a meeting, we check if they are a VIP. If they are, send a gift. If not, just send the confirmation email."></textarea>
-            
-            <div id="ai-status" style="margin-top:15px; display:none; text-align:center;">
-                <div class="spinner" style="margin-bottom:10px;"></div>
-                <div class="tiny accent">Architecting workflow logic...</div>
-            </div>
-
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary" id="ai-generate-btn" onclick="OL.executeAIImport('${resId}')">Generate Workflow</button>
-            </div>
-        </div>
-    `;
-    openModal(html);
-};
-
-OL.executeAIImport = async function(resId) {
-    const text = document.getElementById('ai-raw-input').value;
-    const btn = document.getElementById('ai-generate-btn');
-    const status = document.getElementById('ai-status');
-
-    if (!text) return alert("Please provide text.");
-
-    btn.style.display = "none";
-    status.style.display = "block";
-
-    try {
-        // Send to Zapier
-        await fetch('https://hooks.zapier.com/hooks/catch/2702450/ueswo5t/', {
-            method: 'POST',
-            mode: 'no-cors', 
-            body: JSON.stringify({ 
-                transcript: text, 
-                targetResId: resId // 🚀 Zapier will pass this back to Firestore
-            })
-        });
-
-        status.innerHTML = "🧠 AI is architecting... Closing in 3s.";
-        setTimeout(() => OL.closeModal(), 3000);
-        
-    } catch (err) {
-        console.error("AI Trigger Error:", err);
-        btn.style.display = "block";
-    }
 };
 
 OL.quickCreateWorkflow = function() {
