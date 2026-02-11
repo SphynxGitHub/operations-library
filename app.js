@@ -11717,6 +11717,27 @@ OL.loadInspector = function(targetId, parentId = null) {
                        onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'name', this.value)">
             </div>
 
+            <div class="card-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <label class="modal-section-label">🔗 Linked Assets & SOPs</label>
+                <div id="inspector-links-list" style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
+                    ${linkedResources.map((link, lIdx) => `
+                        <div class="pill soft is-clickable" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 10px;" 
+                            onclick="OL.openResourceModal('${link.id}')">
+                            <span style="font-size: 11px;">${OL.getRegistryIcon(link.type)} ${esc(link.name)}</span>
+                            <b class="pill-remove-x" style="opacity: 0.5;" 
+                            onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
+                        </div>
+                    `).join('') || '<div class="tiny muted italic">No assets linked to this step.</div>'}
+                </div>
+                
+                <div class="search-map-container" style="margin-top:12px;">
+                    <input type="text" class="modal-input tiny" placeholder="+ Link an asset (Email, Form, SOP)..." 
+                        onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
+                        oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
+                    <div id="resource-results-${data.id}" class="search-results-overlay"></div>
+                </div>
+            </div>
+
             <section style="display: flex; flex-direction: column; gap: 20px;">
                 <div class="card-section">
                     <label class="modal-section-label">👨‍💼 Assigned To</label>
@@ -11927,38 +11948,6 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
     `).join('');
 };
 
-// LEVEL 3: Atomic Steps (Triggers/Actions)
-/*
-window.renderLevel3Canvas = function(resourceId) {
-    const res = OL.getResourceById(resourceId);
-    if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
-
-    const groups = [
-        { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
-        { type: 'Action', label: '🎬 SEQUENCE ACTIONS', color: 'var(--accent)' }
-    ];
-    
-    return groups.map(group => {
-        const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
-
-        return `
-            <div class="stage-container">
-                <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
-                <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
-                    ${steps.map((step, idx) => `
-                        <div class="workflow-block-card" draggable="true" 
-                             onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                             ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
-                             ondragover="OL.handleCanvasDragOver(event)"
-                             ondrop="OL.handleNodeRearrange(event, '${group.type}', ${idx})">
-                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
-                            <div class="tiny muted">${esc(step.type)}</div>
-                        </div>`).join('')}
-                </div>
-            </div>`;
-    }).join('');
-};*/
-
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
@@ -11975,7 +11964,7 @@ window.renderLevel3Canvas = function(resourceId) {
     
     html += groups.map(group => {
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
-
+        const linkedResources = step.links || [];
         return `
             <div class="stage-container">
                 <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
@@ -12002,6 +11991,19 @@ window.renderLevel3Canvas = function(resourceId) {
                             </div>
 
                             <div class="bold accent">${esc(step.name || "Untitled")}</div>
+
+                            <div class="node-linked-assets" style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
+                                ${linkedResources.map(link => {
+                                    const icon = OL.getRegistryIcon(link.type); // Uses your registry icon logic
+                                    return `
+                                        <span class="pill tiny soft" 
+                                            style="font-size: 8px; padding: 1px 5px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);" 
+                                            title="${esc(link.name)}"
+                                            onclick="event.stopPropagation(); OL.openResourceModal('${link.id}')">
+                                            ${icon}
+                                        </span>`;
+                                }).join('')}
+                            </div>
                             
                             <div class="tiny muted" style="font-size:8px; margin-top:2px; opacity:0.6;">
                                 ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
