@@ -4648,12 +4648,28 @@ OL.toggleTriggerType = function(resId, idx) {
     }
 };
 
-OL.removeTrigger = function(resId, idx) {
+OL.removeTrigger = function(resId, index) {
     const res = OL.getResourceById(resId);
-    if (res && res.triggers) {
-        res.triggers.splice(idx, 1);
-        OL.persist();
-        document.getElementById('resource-triggers-zone').innerHTML = renderResourceTriggers(res);
+    if (!res || !res.triggers) return;
+
+    const triggerToDelete = res.triggers[index];
+    
+    // 1. Remove from triggers array
+    res.triggers.splice(index, 1);
+
+    // 2. 🚀 THE SYNC: Remove from steps array (Canvas)
+    if (triggerToDelete) {
+        res.steps = (res.steps || []).filter(s => 
+            !(s.type === 'Trigger' && s.name === triggerToDelete.name)
+        );
+    }
+
+    OL.persist();
+    
+    // Re-render both views if open
+    OL.openResourceModal(resId); 
+    if (state.focusedResourceId === resId) {
+        renderGlobalVisualizer(location.hash.includes('vault'));
     }
 };
 
@@ -6274,15 +6290,6 @@ OL.updateTriggerMeta = function(resId, idx, field, value, extraData = null) {
 
         // ALWAYS refresh the Trigger Modal to show the new Pill state
         OL.openTriggerDetailModal(resId, idx);
-    }
-};
-
-OL.removeTrigger = function(resId, idx) {
-    const res = OL.getResourceById(resId);
-    if (res && res.triggers) {
-        res.triggers.splice(idx, 1);
-        OL.persist();
-        document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
     }
 };
 
@@ -12165,24 +12172,36 @@ window.renderLevel3Canvas = function(resourceId) {
 };
 
 OL.removeStepFromCanvas = function(resId, stepId) {
-    if (!confirm("Delete this step? This will also remove any logic branches pointing to it.")) return;
+    if (!confirm("Are you sure you want to delete this step?")) return;
 
     const res = OL.getResourceById(resId);
-    if (!res || !res.steps) return;
+    if (!res) return;
 
-    // 1. Remove the step
+    // 1. Identify the step before we kill it
+    const stepToDelete = res.steps.find(s => String(s.id) === String(stepId));
+    if (!stepToDelete) return;
+
+    // 2. If it's a Trigger, sync the deletion with the triggers array
+    if (stepToDelete.type === 'Trigger') {
+        res.triggers = (res.triggers || []).filter(t => t.name !== stepToDelete.name);
+    }
+
+    // 3. Remove from the primary steps array
     res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
-
-    // 2. Clean up logic branches (Outcomes) pointing to this ID
+    
+    // 4. Cleanup logic branches pointing to this ID
     res.steps.forEach(s => {
         if (s.outcomes) {
-            s.outcomes = s.outcomes.filter(oc => oc.action !== `jump_step_${stepId}`);
+            s.outcomes = s.outcomes.filter(o => o.action !== `jump_step_${stepId}`);
         }
     });
 
     OL.persist();
     renderGlobalVisualizer(location.hash.includes('vault'));
-    if (typeof OL.clearInspector === 'function') OL.clearInspector();
+    
+    // Reset Inspector
+    const panel = document.getElementById('inspector-panel');
+    if (panel) panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
 };
 
 OL.drawVerticalLogicLines = function(resId) {
