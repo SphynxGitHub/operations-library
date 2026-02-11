@@ -11784,14 +11784,20 @@ OL.loadInspector = function(targetId, parentId = null) {
     const registry = state.master.resourceTypes || [];
     const isModule = data.type === 'module_block';
     const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
+    
+    // 🎨 DISPLAY NAME RESOLUTION
     let displayAssigneeName = data.assigneeName;
 
-    // 📱 RESOLVE APP NAME: Gather all apps and find the linked one to show the NAME, not ID
+    // 📱 RESOLVE APP LIST: Gather all apps and find the linked one to show the NAME, not ID
     const allApps = [
         ...(state.master.apps || []), 
         ...(client?.projectData?.localApps || [])
     ];
+    
+    // Resolution for "Linked Application" section
     const stepApp = allApps.find(a => String(a.id) === String(data.appId));
+
+    // 🚀 THE FIX: If assigned to a system, lookup the actual name for the "Assigned To" pill
     if (data.assigneeType === 'system') {
         const matchedApp = allApps.find(a => String(a.id) === String(data.assigneeId));
         if (matchedApp) displayAssigneeName = matchedApp.name;
@@ -11889,8 +11895,8 @@ OL.loadInspector = function(targetId, parentId = null) {
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                         ${data.assigneeName ? `
                             <div class="pill accent">
-                                ${getAssigneeIcon(data.assigneeType)} ${esc(data.assigneeName)}
-                                <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', 'person')">×</b>
+                                ${getAssigneeIcon(data.assigneeType)} ${esc(displayAssigneeName)}
+                                <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', '')">×</b>
                             </div>
                         ` : '<span class="tiny muted">Unassigned</span>'}
                     </div>
