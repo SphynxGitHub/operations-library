@@ -11797,6 +11797,13 @@ OL.loadInspector = function(targetId, parentId = null) {
                        onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
                 </div>`;
         }).join('');
+        const emptyLinksHtml = `
+            <div class="tiny muted italic" style="margin-bottom: 8px;">No assets linked.</div>
+            <button class="btn tiny soft" style="width: 100%; border: 1px dashed rgba(255,255,255,0.2);" 
+                    onclick="OL.promptQuickCreateAsset('${parentResId}', '${data.id}')">
+                + Create New Asset
+            </button>
+        `;
         const stepApp = allApps.find(a => String(a.id) === String(data.appId));
         
         html += `
@@ -11811,7 +11818,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             <div class="card-section" style="margin-top: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;">
                 <label class="modal-section-label">🔗 Linked Assets & SOPs</label>
                 <div id="inspector-links-list" style="display:flex; flex-direction:column; margin-top:10px;">
-                    ${linksHtml || '<div class="tiny muted italic">No assets linked to this step.</div>'}
+                    ${linksHtml || emptyLinksHtml}
                 </div>
                 
                 <div class="search-map-container" style="margin-top:12px;">
@@ -11954,6 +11961,51 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+};
+
+OL.promptQuickCreateAsset = async function(parentResId, stepId) {
+    const assetName = prompt("Enter Name for New Asset:", "New Resource");
+    if (!assetName) return;
+
+    // Build Type Options from your registry
+    const types = state.master.resourceTypes || [];
+    const typeList = types.map((t, i) => `${i + 1}. ${t.type}`).join('\n');
+    const typeChoice = prompt(`Select Type (Enter Number):\n${typeList}`, "1");
+    
+    const selectedType = types[parseInt(typeChoice) - 1] || types[0];
+
+    // 1. Create the new Resource in the Global Library
+    const newAsset = {
+        id: uid(),
+        name: assetName,
+        type: selectedType.type,
+        archetype: 'Base',
+        createdDate: new Date().toISOString(),
+        data: {}
+    };
+
+    if (!state.master.resources) state.master.resources = [];
+    state.master.resources.push(newAsset);
+
+    // 2. Link it to the Step
+    const parentRes = OL.getResourceById(parentResId);
+    const step = parentRes.steps.find(s => String(s.id) === String(stepId));
+    
+    if (step) {
+        if (!step.links) step.links = [];
+        step.links.push({
+            id: newAsset.id,
+            name: newAsset.name,
+            type: newAsset.type
+        });
+    }
+
+    // 3. Persist and Refresh
+    OL.persist();
+    OL.loadInspector(stepId, parentResId); // Refresh Inspector
+    renderGlobalVisualizer(location.hash.includes('vault'));
+    
+    console.log(`✅ Created and Linked: ${newAsset.name}`);
 };
 
 OL.filterAppSearch = function(resId, stepId, query) {
