@@ -11707,7 +11707,19 @@ OL.loadInspector = function(targetId, parentId = null) {
     // 🚀 SCENARIO A: ATOMIC STEP (Mechanical View)
     if (isStepOnCanvas && !isModule) {
         const isTrigger = data.type === 'Trigger';
-        const linkedResources = data.links || [];
+        
+        // 🚀 THE FIX: Pre-generate the links HTML to avoid scope ReferenceErrors
+        const links = data.links || [];
+        const linksHtml = links.map((link, lIdx) => {
+            const icon = OL.getRegistryIcon(link.type);
+            return `
+                <div class="pill soft is-clickable" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 10px; margin-bottom: 4px;" 
+                    onclick="OL.openResourceModal('${link.id}')">
+                    <span style="font-size: 11px;">${icon} ${esc(link.name)}</span>
+                    <b class="pill-remove-x" style="opacity: 0.5;" 
+                       onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
+                </div>`;
+        }).join('');
         
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
@@ -11718,17 +11730,10 @@ OL.loadInspector = function(targetId, parentId = null) {
                        onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'name', this.value)">
             </div>
 
-            <div class="card-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="card-section" style="margin-top: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;">
                 <label class="modal-section-label">🔗 Linked Assets & SOPs</label>
-                <div id="inspector-links-list" style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
-                    ${linkedResources.map((link, lIdx) => `
-                        <div class="pill soft is-clickable" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 10px;" 
-                            onclick="OL.openResourceModal('${link.id}')">
-                            <span style="font-size: 11px;">${OL.getRegistryIcon(link.type)} ${esc(link.name)}</span>
-                            <b class="pill-remove-x" style="opacity: 0.5;" 
-                            onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
-                        </div>
-                    `).join('') || '<div class="tiny muted italic">No assets linked to this step.</div>'}
+                <div id="inspector-links-list" style="display:flex; flex-direction:column; margin-top:10px;">
+                    ${linksHtml || '<div class="tiny muted italic">No assets linked to this step.</div>'}
                 </div>
                 
                 <div class="search-map-container" style="margin-top:12px;">
@@ -11796,9 +11801,6 @@ OL.loadInspector = function(targetId, parentId = null) {
         const techId = data.resourceLinkId || data.linkedResourceId || data.id;
         const techAsset = OL.getResourceById(techId);
         const children = techAsset?.steps || [];
-        
-        // 🚀 IMPROVED CONTEXT CHECK
-        // If we have a focusedWorkflowId, we are definitely at Level 2 (Resource Level)
         const isAtResourceLevel = !!state.focusedWorkflowId; 
 
         html += `
@@ -11808,12 +11810,10 @@ OL.loadInspector = function(targetId, parentId = null) {
                         ${isAtResourceLevel ? `📦 ${techAsset?.type || 'Resource'}` : '📂 Workflow Lifecycle'}
                     </span>
                 </div>
-                
                 <input type="text" class="header-editable-input" 
                     value="${esc(techAsset?.name || data.name)}" 
                     style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none; margin-top:8px;"
                     onblur="OL.updateResourceMetadata('${techId}', 'name', this.value)">
-
                 <div style="margin-top:12px;">
                     <label class="modal-section-label" style="font-size:9px; opacity:0.5; margin-bottom:4px; display:block;">
                         ${isAtResourceLevel ? 'Resource Description' : 'Lifecycle Subtitle (IF: xyz)'}
@@ -11953,7 +11953,6 @@ window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
-    // 🚀 THE FIX: Use display: inline-block so the wrapper expands to match the height of the list
     let html = `
     <div id="l3-canvas-wrapper" style="position: relative; display: inline-block; min-width: 100%; min-height: 100%; padding-left: 100px;">
         <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 1; overflow: visible;"></svg>`;
@@ -11964,17 +11963,28 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     html += groups.map(group => {
+        // Filter steps for this specific lane (Trigger vs Action)
         const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
-        const linkedResources = step.links || [];
+
         return `
             <div class="stage-container">
                 <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
                 <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
                     ${steps.map((step, idx) => {
-                        // 🚀 THE FIX: Identify if this is a specialized Trigger or a standard Action
                         const isTrigger = step.type === 'Trigger';
                         const icon = isTrigger ? "⚡" : "🎬";
-                        const linkedResources = step.links || [];
+                        
+                        // 🚀 GENERATE LINKED ASSET PILLS FIRST
+                        // This prevents scope errors inside the template literal
+                        const links = step.links || [];
+                        const linkedAssetsHtml = links.map(link => `
+                            <span class="pill tiny soft" 
+                                  style="font-size: 8px; padding: 1px 5px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);" 
+                                  title="${esc(link.name)}"
+                                  onclick="event.stopPropagation(); OL.openResourceModal('${link.id}')">
+                                ${OL.getRegistryIcon(link.type)}
+                            </span>
+                        `).join('');
                         
                         return `
                         <div class="workflow-block-card" 
@@ -11995,19 +12005,10 @@ window.renderLevel3Canvas = function(resourceId) {
                             <div class="bold accent">${esc(step.name || "Untitled")}</div>
 
                             <div class="node-linked-assets" style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
-                                ${linkedResources.map(link => {
-                                    const icon = OL.getRegistryIcon(link.type); // Uses your registry icon logic
-                                    return `
-                                        <span class="pill tiny soft" 
-                                            style="font-size: 8px; padding: 1px 5px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);" 
-                                            title="${esc(link.name)}"
-                                            onclick="event.stopPropagation(); OL.openResourceModal('${link.id}')">
-                                            ${icon}
-                                        </span>`;
-                                }).join('')}
+                                ${linkedAssetsHtml}
                             </div>
                             
-                            <div class="tiny muted" style="font-size:8px; margin-top:2px; opacity:0.6;">
+                            <div class="tiny muted" style="font-size:8px; margin-top:4px; opacity:0.6;">
                                 ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
                             </div>
                         </div>`;
@@ -12018,9 +12019,7 @@ window.renderLevel3Canvas = function(resourceId) {
 
     html += `</div>`;
     
-    // Trigger redraw
     setTimeout(() => OL.drawVerticalLogicLines(resourceId), 100);
-    
     return html;
 };
 
