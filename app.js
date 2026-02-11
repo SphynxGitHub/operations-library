@@ -6358,21 +6358,31 @@ OL.updateSopStep = function (resId, stepId, field, value) {
   }
 };
 
-OL.updateAtomicStep = function (resId, stepId, field, value) {
+OL.updateAtomicStep = function(resId, stepId, field, value) {
     const res = OL.getResourceById(resId);
-    if (res && res.steps) {
-        const step = res.steps.find(s => String(s.id) === String(stepId));
-        if (step) {
-            step[field] = value.trim();
-            OL.persist();
-            
-            // Sync the background step list inside the Resource Modal
-            const listEl = document.getElementById('sop-step-list');
-            if (listEl) listEl.innerHTML = renderSopStepList(res);
-            
-            console.log(`✅ Atomic Update: Step ${stepId} [${field}] saved.`);
-        }
+    if (!res) return;
+
+    const step = res.steps.find(s => String(s.id) === String(stepId));
+    if (!step) return;
+
+    // 1. Update the data
+    step[field] = value;
+
+    // 2. Persist to DB (Quietly)
+    OL.persist();
+
+    // 3. SURGICAL UI UPDATE: 
+    // Instead of re-rendering everything, just refresh the canvas and re-load inspector
+    if (typeof renderLevel3Canvas === 'function') {
+        const canvas = document.getElementById('level-3-canvas-container'); 
+        if (canvas) canvas.innerHTML = renderLevel3Canvas(resId);
     }
+
+    // 🚀 THE FIX: Immediately re-open the inspector for this step
+    // This keeps the scroll position and the "active" state
+    OL.loadInspector(stepId, resId);
+    
+    console.log(`✅ Updated ${field} for ${step.name}`);
 };
 
 OL.removeSopStep = function (resId, stepId) {
