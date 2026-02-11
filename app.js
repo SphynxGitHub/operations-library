@@ -11540,6 +11540,12 @@ window.renderLevel3SidebarContent = function(resourceId) {
         <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
         <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto; height: calc(100vh - 200px);">
             
+        <label class="modal-section-label" style="margin-top:25px; color:#ffbf00">⚡ Triggers</label>
+            ${triggers.map(t => `
+                <div class="draggable-factory-item trigger" draggable="true" 
+                     ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>
+            `).join('')}
+
             <label class="modal-section-label">🎬 Action Builder</label>
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
                 
@@ -11570,12 +11576,6 @@ window.renderLevel3SidebarContent = function(resourceId) {
                      🚀 DRAG NEW ACTION
                 </div>
             </div>
-
-            <label class="modal-section-label" style="margin-top:25px; color:#ffbf00">⚡ Triggers</label>
-            ${triggers.map(t => `
-                <div class="draggable-factory-item trigger" draggable="true" 
-                     ondragstart="OL.handleAtomicDrag(event, 'Trigger', '${t}')">${t}</div>
-            `).join('')}
         </div>
     `;
 };
