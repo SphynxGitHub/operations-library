@@ -11527,7 +11527,7 @@ const ATOMIC_STEP_LIB = {
         "Passed","Reached","Approaching","Scheduled"
     ],
     ActionVerbs: ["Find", "Create", "Update", "Delete", "Send", "Launch", "Complete", "Request","Tag","Add to List","Add to Group","Move","Submit","Wait","Schedule"],
-    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Table Row", "Tag", "Text", "Slack Message", "Signature Request"]
+    Objects: ["Email", "Task", "Workflow", "Document", "Contact", "Event", "Opportunity", "Folder", "Form", "Table Row", "Tag", "Text", "Slack Message", "Signature Request"]
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
@@ -11575,12 +11575,31 @@ OL.promptAddAtomic = function(category) {
     const newVal = prompt(`Add new ${category.slice(0, -1)}:`);
     if (!newVal) return;
 
-    if (!state.master.atomicLibrary[category].includes(newVal)) {
+    // 1. 🛡️ BOOTSTRAP CHECK
+    // If the database library doesn't exist yet, initialize it using your CONST values
+    if (!state.master.atomicLibrary) {
+        console.log("🛠️ Initializing Atomic Library in database from constant...");
+        state.master.atomicLibrary = {
+            TriggerVerbs: [...ATOMIC_STEP_LIB.TriggerVerbs],
+            ActionVerbs: [...ATOMIC_STEP_LIB.ActionVerbs],
+            Objects: [...ATOMIC_STEP_LIB.Objects]
+        };
+    }
+
+    // 2. Ensure the specific category array exists (safety for future updates)
+    if (!state.master.atomicLibrary[category]) {
+        state.master.atomicLibrary[category] = [];
+    }
+    
+    // 3. Check for duplicates (Search both the DB and the hardcoded Const)
+    const exists = state.master.atomicLibrary[category].includes(newVal) || 
+                   (ATOMIC_STEP_LIB[category] && ATOMIC_STEP_LIB[category].includes(newVal));
+
+    if (!exists) {
         state.master.atomicLibrary[category].push(newVal);
         state.master.atomicLibrary[category].sort();
         
-        OL.persist();
-        // Refresh the visualizer to show the new dropdown option
+        OL.persist(); // 💾 Save to Firestore
         renderGlobalVisualizer(location.hash.includes('vault'));
     } else {
         alert("Item already exists in the library.");
