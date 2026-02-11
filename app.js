@@ -3523,7 +3523,25 @@ window.renderResourceManager = function () {
             </div>
             <div class="header-actions">
                 ${isAdmin ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
-                <button class="btn primary" onclick="OL.createAndOpenResource()">+ New Resource</button>
+                
+                <div class="dropdown-plus-container" style="display:inline-block; position:relative;">
+                    <button class="btn primary" style="font-weight:bold;">+ New Resource</button>
+                    <div class="dropdown-plus-menu" style="right: 0; left: auto;">
+                        <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
+                        ${(state.master.resourceTypes || []).map(t => `
+                            <div class="dropdown-item" onclick="OL.quickCreateInLibrary('${t.type}')">
+                                ${OL.getRegistryIcon(t.type)} ${t.type}
+                            </div>
+                        `).join('')}
+                        <div class="dropdown-item" onclick="OL.quickCreateInLibrary('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                            📄 Basic SOP
+                        </div>
+                    </div>
+                </div>
+
+                ${!isVaultView && isAdmin ? `
+                    <button class="btn primary" style="background:#38bdf8; color:black; font-weight:bold;" onclick="OL.importFromMaster()">⬇️ Import</button>
+                ` : ''}
             </div>
         </div>
 
@@ -3561,6 +3579,47 @@ window.renderResourceManager = function () {
             `}
         </div>
     `;
+};
+
+OL.quickCreateInLibrary = function(type) {
+    const isVault = location.hash.startsWith('#/vault');
+    const timestamp = Date.now();
+    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    
+    const newRes = {
+        id: newId,
+        name: `New ${type}`,
+        type: type,
+        steps: [],
+        description: "",
+        createdDate: new Date().toISOString()
+    };
+
+    // 1. Save to the correct list
+    if (isVault) {
+        if (!state.master.resources) state.master.resources = [];
+        state.master.resources.push(newRes);
+    } else {
+        const client = getActiveClient();
+        if (client) {
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources.push(newRes);
+        }
+    }
+
+    OL.persist();
+    
+    // 2. Refresh the Library Grid
+    renderResourceManager();
+
+    // 3. 💥 Open Modal & Focus Name
+    setTimeout(() => {
+        OL.openResourceModal(newId);
+        const nameInput = document.getElementById('modal-res-name');
+        if (nameInput) {
+            nameInput.select(); // Highlight "New [Type]" so they can just start typing
+        }
+    }, 50);
 };
 
 // 🚀 1. CREATE + INSTANT MODAL
