@@ -3158,6 +3158,26 @@ body.is-visualizer #mainContent {
     100% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0); }
 }
 
+/* Highlight for priced items */
+.asset-mini-card.is-in-scope {
+    position: relative;
+    background: rgba(16, 185, 129, 0.05) !important;
+}
+
+.asset-mini-card.is-in-scope::after {
+    content: 'PRICED';
+    position: absolute;
+    top: -8px;
+    right: 10px;
+    background: #10b981;
+    color: #000;
+    font-size: 7px;
+    font-weight: 900;
+    padding: 1px 4px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+}
+
 /*==================================================================
   6. BOTTOM INVENTORY & RIGHT INSPECTOR (STABILIZED)
 ==================================================================*/
