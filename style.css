@@ -2480,6 +2480,7 @@ body.is-visualizer #mainContent {
     overflow: hidden;
     padding-left: 15px;
     padding-bottom: 10px;
+    width: 50vh;
 }
 
 /*==================================================================
@@ -2695,13 +2696,6 @@ body.is-visualizer #mainContent {
     overflow-x: auto; /* Horizontal scroll happens here */
     overflow-y: auto; /* Vertical scroll happens here */
     padding-bottom: 50px;
-}
-
-.pane-canvas-wrap {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden; /* Stops the whole pane from moving */
 }
 
 .canvas-header {
