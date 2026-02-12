@@ -1328,24 +1328,24 @@ OL.createMasterAppFromGrid = function() {
     OL.openAppModal(draftId, draftApp);
 };
 
-OL.handleAppSave = function(id, name) {
-    const cleanName = name.trim();
-    if (!cleanName) return; 
+// 🚀 THE FIX: Added 'field' as a 3rd parameter, defaulting to 'name'
+OL.handleAppSave = function(id, value, field = 'name') {
+    const cleanValue = value.trim();
+    if (!cleanValue && field === 'name') return; // Don't allow empty names
 
     const isDraft = id.startsWith('draft-');
     const client = getActiveClient();
 
     if (isDraft) {
         const isVault = id.includes('-vlt-');
-        // 🚀 FIX: Use 'master-' prefix so the UI recognizes it as a Vault item
         const newId = (isVault ? 'master-app-' : 'local-app-') + Date.now();
         
         const newApp = {
             id: newId,
-            name: cleanName,
+            name: field === 'name' ? cleanValue : "New App", // Handle non-name first entry
             category: "", 
             monthlyCost: 0,
-            description: "",
+            description: field === 'description' ? cleanValue : "",
             functionIds: [],
             capabilities: [],
             createdDate: new Date().toISOString()
@@ -1364,7 +1364,8 @@ OL.handleAppSave = function(id, name) {
         OL.refreshActiveView(); 
         
     } else {
-        OL.updateAppMeta(id, 'name', cleanName);
+        // 🚀 THE FIX: Use the 'field' variable instead of hardcoded 'name'
+        OL.updateAppMeta(id, field, cleanValue);
     }
 };
 
@@ -1377,14 +1378,26 @@ OL.updateAppMeta = function(appId, field, value) {
     }
 
     if (app) {
-        // Update data
-        app[field] = (field === 'monthlyCost') ? parseFloat(value) || 0 : value;
+        const cleanValue = value.trim();
+        
+        // 1. Only update if the value actually changed
+        if (app[field] === cleanValue) return;
+
+        // 2. Update the data
+        app[field] = (field === 'monthlyCost') ? parseFloat(cleanValue) || 0 : cleanValue;
+        
+        // 3. Persist to Firebase (Silent)
         OL.persist();
         
-        // 🚀 THE FIX: Redraw the active background view instantly
-        OL.refreshActiveView();
+        // 🚀 THE SURGICAL FIX: 
+        // Manually update the card title in the background grid if the name changed.
+        // We DO NOT call OL.refreshActiveView() here.
+        if (field === 'name') {
+            const cardTitles = document.querySelectorAll(`.app-card-title-${appId}`);
+            cardTitles.forEach(el => el.innerText = cleanValue);
+        }
         
-        console.log(`✅ App ${appId} updated: ${field} = ${value}`);
+        console.log(`✅ App ${field} updated for: ${app.name}`);
     }
 };
 
@@ -1459,9 +1472,9 @@ function renderAppModalInnerContent(app, client) {
         </div>
 
         <div class="card-section" style="margin-top: 20px;">
-            <label class="modal-section-label">App Notes & Project Instructions</label>
-            <textarea class="modal-textarea" rows="3" onblur="OL.handleAppSave('${app.id}', this.value, 'notes')">${esc(app.notes || '')}</textarea>
-        </div>
+                    <label class="modal-section-label">App Notes & Project Instructions</label>
+                                <textarea class="modal-textarea" rows="3" onblur="OL.handleAppSave('${app.id}', this.value, 'notes')">${esc(app.notes || '')}</textarea>
+                                        </div>
 
         <div class="card-section" style="margin-top: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
