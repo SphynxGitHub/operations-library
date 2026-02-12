@@ -8097,7 +8097,7 @@ window.renderScopingSheet = function () {
     
     if (!container || !client) return;
 
-    // 1. INITIALIZE DATA STRUCTURES FIRST
+    // 1. INITIALIZE DATA STRUCTURES
     if (!client.projectData) client.projectData = {};
     if (!client.projectData.localResources) client.projectData.localResources = [];
     if (!client.projectData.scopingSheets) {
@@ -8115,7 +8115,7 @@ window.renderScopingSheet = function () {
     const statusF = state.scopingStatusFilter || "All";
     const partyF = state.scopingPartyFilter || "All";
 
-    // 1. ADVANCED FILTERING LOGIC
+    // 2. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
         const res = OL.getResourceById(item.resourceId);
         if (!res) return false;
@@ -8128,16 +8128,14 @@ window.renderScopingSheet = function () {
         return matchesSearch && matchesType && matchesStatus && matchesParty;
     });
 
-    // 2. DATA FOR DROPDOWNS
+    // 3. DATA FOR DROPDOWNS (Pulled from full list so you can always see options)
     const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
     const availableParties = [...new Set(sheet.lineItems.map(i => i.responsibleParty))].filter(Boolean).sort();
 
-    // 2. DYNAMIC ROUND GROUPING
-    // We create a map of rounds based on whatever is currently in the lineItems
+    // 4. DYNAMIC ROUND GROUPING (🚀 FIXED: Now uses filteredItems)
     const roundGroups = {};
-    sheet.lineItems.forEach((item) => {
+    filteredItems.forEach((item) => {
         const r = parseInt(item.round, 10) || 1;
-        item.round = r; // Normalize to integer
         if (!roundGroups[r]) roundGroups[r] = [];
         roundGroups[r].push(item);
     });
@@ -8147,7 +8145,7 @@ window.renderScopingSheet = function () {
         .map((n) => parseInt(n, 10))
         .sort((a, b) => a - b);
 
-    // 3. RENDER HTML
+    // 5. RENDER HTML
     container.innerHTML = `
     <div class="section-header">
         <div>
@@ -8176,11 +8174,7 @@ window.renderScopingSheet = function () {
             </div>
             <button class="btn tiny primary" onclick="location.hash='#/visualizer'">View Map ➔</button>
         </div>
-    ` : `
-        <div class="workflow-context-widget muted italic" style="padding: 10px; font-size: 11px; opacity: 0.5;">
-            💡 Pro-tip: Select a workflow in the Flow Map to see specific implementation details here.
-        </div>
-    `}
+    ` : ''}
     
     <div class="toolbar" style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap:10px; margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--line);">
         <input type="text" id="scoping-search-input" class="modal-input tiny" 
@@ -8220,21 +8214,23 @@ window.renderScopingSheet = function () {
             ? sortedRoundKeys.map((r) =>
                 renderRoundGroup(
                     `Round ${r}`,
-                    roundGroups[r],
+                    roundGroups[r], // 🚀 Now contains only filtered items for this round
                     baseRate,
                     showUnits,
                     client.meta.name,
                     r
                 )
             ).join("")
-            : `<div class="p-20 muted italic">No items in scope. Click 'Add From Library' to begin.</div>`
+            : `<div class="p-40 muted italic text-center">No items match your current filters.</div>`
         }
     </div>
 
     <div id="grand-totals-area"></div>
     `;
 
-    // 4. TRIGGER TOTALS
+    // 💰 TRIGGER TOTALS
+    // Note: Totals usually reflect the FULL project, not just filtered results. 
+    // If you want totals to change with the filters, pass filteredItems here instead.
     renderGrandTotals(sheet.lineItems, baseRate);
 };
 
