@@ -10729,20 +10729,22 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
     
-    // 🔥 CRITICAL: Get ALL resources for this client/vault to ensure nothing is hidden
+    // 🔍 AGGREGATE ALL RESOURCES: This ensures local and master resources are available for lookup
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     return `
-        <div class="global-macro-map" style="display: flex; gap: 40px; padding: 40px; overflow-x: auto; height: 100%; align-items: flex-start;">
+        <div class="global-macro-map" style="display: flex; gap: 40px; padding: 40px; overflow-x: auto; height: 100%; align-items: flex-start; background: #050816;">
             ${stages.map((stage, sIdx) => {
-                // Find workflows mapped to this specific stage
-                const workflowsInStage = allResources.filter(r => r.type === 'Workflow' && String(r.stageId) === String(stage.id));
+                // 1. Find Workflows (Tier 2) mapped to this Stage (Tier 1)
+                const workflowsInStage = allResources.filter(r => 
+                    r.type === 'Workflow' && String(r.stageId) === String(stage.id)
+                ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                 
                 return `
                 <div class="macro-stage-col" style="min-width: 320px; flex-shrink: 0;">
                     <div style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px;">
                         <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
-                        <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase; letter-spacing: 1px;">${esc(stage.name)}</h3>
+                        <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
                     </div>
                     
                     <div style="display: flex; flex-direction: column; gap: 25px;">
@@ -10751,39 +10753,47 @@ window.renderGlobalCanvas = function(isVaultMode) {
                     </div>
                 </div>
             `}).join('')}
+            ${stages.length === 0 ? '<div class="p-40 muted italic">No stages found. Add Stages in Focus Mode first.</div>' : ''}
         </div>
     `;
 };
 
 function renderGlobalWorkflowNode(wf, allResources) {
-    // Tier 2: The Workflow Box
+    // 2. Resolve Tier 2 Steps into Tier 3 Resources
+    // We map the steps inside the workflow to the actual resource objects in the library
+    const workflowSteps = (wf.steps || []).map(step => {
+        const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
+        return { ...step, asset: linkedAsset };
+    });
+
     return `
-        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; position: relative;">
+        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
             <div style="color: var(--accent); font-weight: 900; font-size: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
                 <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
             </div>
 
-            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 8px;">
-                ${(wf.steps || []).map(step => {
-                    // Tier 3: Lookup the specific technical Resource (Zap, Form, SOP)
-                    const asset = allResources.find(r => r.id === step.resourceLinkId);
-                    if (!asset) return '';
+            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">
+                ${workflowSteps.map(step => {
+                    const asset = step.asset;
+                    
+                    // If the step exists in the workflow but the resource is missing from library
+                    if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
                     return `
-                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 8px; border-left: 3px solid #38bdf8;">
-                            <div style="font-size: 11px; font-weight: bold; color: #eee; margin-bottom: 6px;">
+                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; border-left: 3px solid #38bdf8;">
+                            <div style="font-size: 11px; font-weight: bold; color: #eee; margin-bottom: 8px;">
                                 ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                             </div>
                             
-                            <div style="display: flex; flex-direction: column; gap: 3px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);">
                                 ${(asset.steps || []).map(atomic => `
-                                    <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.7;">
-                                        <span style="color: ${atomic.type === 'Trigger' ? '#fbbf24' : '#38bdf8'};">
+                                    <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.8; display:flex; align-items:center; gap:5px;">
+                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
                                         </span> 
-                                        ${esc(atomic.name)}
+                                        ${esc(atomic.name || "Unnamed Step")}
                                     </div>
-                                `).join('')}
+                                `).join('') || '<div class="tiny muted" style="font-size:8px;">No atomic steps defined</div>'}
                             </div>
                         </div>
                     `;
