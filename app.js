@@ -10730,34 +10730,81 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
-    
-    // 🔍 AGGREGATE ALL RESOURCES: This ensures local and master resources are available for lookup
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     return `
-        <div class="global-macro-map" style="display: flex; gap: 40px; padding: 40px; overflow-x: auto; height: 100%; align-items: flex-start; background: #050816;">
+        <div class="global-macro-map" style="display: flex; padding: 40px; align-items: flex-start;">
             ${stages.map((stage, sIdx) => {
-                // 1. Find Workflows (Tier 2) mapped to this Stage (Tier 1)
                 const workflowsInStage = allResources.filter(r => 
                     r.type === 'Workflow' && String(r.stageId) === String(stage.id)
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                 
                 return `
-                <div class="macro-stage-col" style="min-width: 320px; flex-shrink: 0;">
-                    <div style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px;">
-                        <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
-                        <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
+                <div class="macro-stage-col" style="display: flex; align-items: flex-start;">
+                    <div style="min-width: 320px;">
+                        <div class="stage-header hover-reveal-container" style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
+                                <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
+                            </div>
+                            <button class="reveal-btn tiny-x" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
+                        </div>
+                        
+                        <div class="workflow-stack">
+                            ${workflowsInStage.map((wf, wIdx) => `
+                                ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
+                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                            `).join('')}
+                            ${workflowsInStage.length === 0 ? `<div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})"><span>+ Add Workflow</span></div>` : ''}
+                        </div>
                     </div>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 25px;">
-                        ${workflowsInStage.map(wf => renderGlobalWorkflowNode(wf, allResources)).join('')}
-                        ${workflowsInStage.length === 0 ? '<div class="tiny muted italic" style="padding: 20px; border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px;">No workflows mapped</div>' : ''}
+
+                    <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
+                        <span>+</span>
                     </div>
                 </div>
             `}).join('')}
-            ${stages.length === 0 ? '<div class="p-40 muted italic">No stages found. Add Stages in Focus Mode first.</div>' : ''}
         </div>
     `;
+};
+
+// 🗑️ Handle Stage Deletion & Unmapping
+OL.handleStageDelete = async function(stageId, isVault) {
+    const resCount = (isVault ? state.master.resources : getActiveClient().projectData.localResources)
+        .filter(r => String(r.stageId) === String(stageId)).length;
+
+    if (resCount > 0) {
+        if (!confirm(`Confirm: This will delete the stage and unmap ${resCount} workflows. They will return to your sidebar library.`)) return;
+    }
+
+    await OL.updateAndSync(() => {
+        const source = isVault ? state.master : getActiveClient().projectData;
+        source.stages = source.stages.filter(s => s.id !== stageId);
+        // Unmap workflows
+        const resources = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        resources.forEach(r => { if(String(r.stageId) === String(stageId)) { r.stageId = null; r.mapOrder = null; } });
+    });
+    renderGlobalVisualizer(isVault);
+};
+
+// ➕ Insert Stage at specific index
+OL.addLifecycleStageAt = function(index, isVault) {
+    const source = isVault ? state.master : getActiveClient().projectData;
+    const newStage = { id: "stage-" + Date.now(), name: "New Phase", order: index };
+    
+    // Shift existing orders
+    source.stages.forEach(s => { if(s.order >= index) s.order++; });
+    source.stages.push(newStage);
+    
+    OL.persist();
+    renderGlobalVisualizer(isVault);
+};
+
+// ➕ Prompt for Workflow/Resource Insertion
+OL.promptInsertWorkflow = function(stageId, order, isVault) {
+    // We reuse the existing Add logic but pass the stage/order
+    state.lastDropContext = { stageId, mapOrder: order };
+    OL.quickCreateWorkflow(); // This will need a slight tweak to check state.lastDropContext
 };
 
 function renderGlobalWorkflowNode(wf, allResources) {
