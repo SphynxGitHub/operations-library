@@ -10747,7 +10747,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                                 <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
                                 <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
                             </div>
-                            <button class="reveal-btn tiny-x" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
+                            <button class="card-delete-btn" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
                         </div>
                         
                         <div class="workflow-stack">
