@@ -8776,7 +8776,7 @@ function renderScopingRow (item, idx, showUnits) {
             <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
             ${esc(res.name || "Manual Item")}
             </div>
-            ${res.notes ? `<div class="row-note">${esc(res.notes)}</div>` : ""}
+            ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
             ${unitsHtml}
         </div>
       
@@ -8784,6 +8784,7 @@ function renderScopingRow (item, idx, showUnits) {
             <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
             <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
             <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
+            <option value="Don't Do" ${item.status === "Don't Do" ? "selected" : ""}>Don't Do</option>
             <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
             </select>
             <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
