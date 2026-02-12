@@ -2691,8 +2691,26 @@ body.is-visualizer #mainContent {
 }
 
 .global-scroll-canvas {
-    height: calc(100vh - 120px);
-    overflow-y: auto;
+    flex-grow: 1;
+    overflow-x: auto; /* Horizontal scroll happens here */
+    overflow-y: auto; /* Vertical scroll happens here */
+    padding-bottom: 50px;
+}
+
+.pane-canvas-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden; /* Stops the whole pane from moving */
+}
+
+.canvas-header {
+    flex-shrink: 0; /* Ensures header never squishes */
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #050816; /* Match your background color */
+    width: 100%;
 }
 
 /* Style for the horizontal columns */
