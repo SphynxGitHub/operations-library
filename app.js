@@ -10733,45 +10733,34 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     return `
-        <div class="global-macro-map" style="display: flex; gap: 50px; padding: 40px; align-items: flex-start; background: #050816;">
+        <div class="global-macro-map" style="display: flex; padding: 40px; align-items: flex-start;">
             ${stages.map((stage, sIdx) => {
                 const workflowsInStage = allResources.filter(r => 
                     r.type === 'Workflow' && String(r.stageId) === String(stage.id)
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                 
                 return `
-                <div class="macro-stage-col" style="min-width: 320px;">
-                    <div class="stage-header">
-                        <div>
-                            <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
-                            <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
+                <div class="macro-stage-col" style="display: flex; align-items: flex-start;">
+                    <div style="min-width: 320px;">
+                        <div class="stage-header hover-reveal-container" style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
+                                <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
+                            </div>
+                            <button class="reveal-btn tiny-x" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
                         </div>
                         
-                        <div style="display:flex; align-items:center; gap:5px;">
-                            <button class="card-delete-btn" style="opacity:0;" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
-                        </div>
-
-                        <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
-                            <span style="background:var(--accent); color:#000; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:bold;">+</span>
+                        <div class="workflow-stack">
+                            ${workflowsInStage.map((wf, wIdx) => `
+                                ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
+                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                            `).join('')}
+                            ${workflowsInStage.length === 0 ? `<div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})"><span>+ Add Workflow</span></div>` : ''}
                         </div>
                     </div>
-                    
-                    <div class="workflow-stack" style="display:flex; flex-direction:column;">
-                        ${workflowsInStage.map((wf, wIdx) => `
-                            <div class="wf-global-node-wrapper">
-                                ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
-                                
-                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})">
-                                    <span style="background:var(--accent); color:#000; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px;">+</span>
-                                </div>
-                            </div>
-                        `).join('')}
-                        
-                        ${workflowsInStage.length === 0 ? `
-                            <div onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})" 
-                                 style="cursor:pointer; border:1px dashed rgba(255,255,255,0.1); border-radius:8px; padding:15px; text-align:center; margin-top:10px;">
-                                <span class="tiny muted">+ ADD WORKFLOW</span>
-                            </div>` : ''}
+
+                    <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
+                        <span>+</span>
                     </div>
                 </div>
             `}).join('')}
@@ -10779,46 +10768,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
     `;
 };
 
-// 🗑️ Handle Stage Deletion & Unmapping
-OL.handleStageDelete = async function(stageId, isVault) {
-    const resCount = (isVault ? state.master.resources : getActiveClient().projectData.localResources)
-        .filter(r => String(r.stageId) === String(stageId)).length;
-
-    if (resCount > 0) {
-        if (!confirm(`Confirm: This will delete the stage and unmap ${resCount} workflows. They will return to your sidebar library.`)) return;
-    }
-
-    await OL.updateAndSync(() => {
-        const source = isVault ? state.master : getActiveClient().projectData;
-        source.stages = source.stages.filter(s => s.id !== stageId);
-        // Unmap workflows
-        const resources = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-        resources.forEach(r => { if(String(r.stageId) === String(stageId)) { r.stageId = null; r.mapOrder = null; } });
-    });
-    renderGlobalVisualizer(isVault);
-};
-
-// ➕ Insert Stage at specific index
-OL.addLifecycleStageAt = function(index, isVault) {
-    const source = isVault ? state.master : getActiveClient().projectData;
-    const newStage = { id: "stage-" + Date.now(), name: "New Phase", order: index };
-    
-    // Shift existing orders
-    source.stages.forEach(s => { if(s.order >= index) s.order++; });
-    source.stages.push(newStage);
-    
-    OL.persist();
-    renderGlobalVisualizer(isVault);
-};
-
-// ➕ Prompt for Workflow/Resource Insertion
-OL.promptInsertWorkflow = function(stageId, order, isVault) {
-    // We reuse the existing Add logic but pass the stage/order
-    state.lastDropContext = { stageId, mapOrder: order };
-    OL.quickCreateWorkflow(); // This will need a slight tweak to check state.lastDropContext
-};
-
-function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
+function renderGlobalWorkflowNode(wf, allResources) {
     // 2. Resolve Tier 2 Steps into Tier 3 Resources
     // We map the steps inside the workflow to the actual resource objects in the library
     const workflowSteps = (wf.steps || []).map(step => {
@@ -10827,13 +10777,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     });
 
     return `
-       <div class="wf-global-node" style="position:relative; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
-                </div>
-                <button class="card-delete-btn" style="opacity:0; position:static;" 
-                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
+        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
+            <div style="color: var(--accent); font-weight: 900; font-size: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
             </div>
 
             <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">
@@ -10847,7 +10793,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const isInScope = !!scopingItem;
                     
                     return `
-                        <div class="asset-mini-card hover-reveal-container ${isInScope ? 'is-in-scope' : ''}" 
+                        <div class="asset-mini-card ${isInScope ? 'is-in-scope' : ''}" 
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; margin-bottom:5px; 
                                     border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
                                     ${isInScope ? 'box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);' : 'border: 1px solid rgba(255,255,255,0.05);'}">
@@ -10864,9 +10810,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                         $
                                     </button>
                                 ` : ''}
-
-                                <button class="card-delete-btn" style="position:static; font-size:14px; opacity:0;" 
-                                        onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">×</button>
                             </div>
                             
                             <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);">
@@ -10886,25 +10829,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         </div>
     `;
 }
-
-OL.handleResourceUnmap = async function(workflowId, resourceId, isVault) {
-    const res = OL.getResourceById(resourceId);
-    const stepCount = (res?.steps || []).length;
-    
-    const msg = stepCount > 0 
-        ? `Unmap "${res.name}"? This workflow segment will be removed, and its ${stepCount} atomic steps will remain in the Step Factory for future use.`
-        : `Unmap "${res.name}" from this workflow?`;
-
-    if (!confirm(msg)) return;
-
-    const workflow = OL.getResourceById(workflowId);
-    if (workflow) {
-        // Remove the step that links to this resource
-        workflow.steps = workflow.steps.filter(s => String(s.resourceLinkId) !== String(resourceId));
-        OL.persist();
-        renderGlobalVisualizer(isVault);
-    }
-};
 
 OL.isResourceInScope = function(resId) {
     const client = getActiveClient();
