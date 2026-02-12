@@ -8237,44 +8237,45 @@ window.renderScopingSheet = function () {
 // 2. RENDER ROUND GROUPS
 // CHANGE THIS:
 window.renderRoundGroup = function(roundName, items, baseRate, showUnits, clientName, roundNum) {
-    // Note: I added 'baseRate' as the 3rd argument to match your .map call
-    
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    let roundGross = 0;
-    let netAfterLineItems = 0;
+    let roundGrossValue = 0;   // 🚀 Includes EVERYTHING (Total Value)
+    let billableSubtotal = 0;  // 💸 Only billable "Do Now" items
 
-    // 1. Sum up the items in THIS round
+    // 1. Process items with distinct logic for Gross vs Net
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
+        if (!res) return;
+
+        // 🟢 ALWAYS add to Gross (Regardless of status or party)
+        const itemStickerPrice = OL.calculateBaseFeeWithMultiplier(item, res);
+        roundGrossValue += itemStickerPrice;
+
+        // 🔵 ONLY add to Net if 'Do Now' AND billable party
         const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
-        
         if (item.status === 'Do Now' && isBillable) {
-            const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
-            const itemNet = OL.calculateRowFee(item, res);
-            
-            roundGross += itemGross;
-            netAfterLineItems += itemNet;
+            billableSubtotal += OL.calculateRowFee(item, res);
         }
     });
 
-    // 2. Lookup the discount using the now-correct roundNum (6th argument)
+    // 2. Calculate Round Discount (applied against the Billable Subtotal)
     let roundDeductionAmt = 0;
     const rKey = String(roundNum);
     
     if (sheet.roundDiscounts && sheet.roundDiscounts[rKey]) {
         const rDisc = sheet.roundDiscounts[rKey];
-        const val = parseFloat(rDisc.value) || 0;
+        const discVal = parseFloat(rDisc.value) || 0;
         
         roundDeductionAmt = (rDisc.type === '%') 
-            ? Math.round(netAfterLineItems * (val / 100)) 
-            : val;
+            ? Math.round(billableSubtotal * (discVal / 100)) 
+            : discVal;
     }
 
-    // 3. Math for the header
-    const finalRoundNet = netAfterLineItems - roundDeductionAmt;
-    const totalPhaseSavings = (roundGross - netAfterLineItems) + roundDeductionAmt;
+    // 3. Final Header Calculations
+    const finalRoundNet = billableSubtotal - roundDeductionAmt;
+    // Total Savings = (The difference between everything's sticker price and what we are charging)
+    const totalRoundSavings = roundGrossValue - finalRoundNet;
 
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
@@ -8288,11 +8289,11 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
                 <div class="col-team"></div>
                 
                 <div class="col-gross tiny muted bold" style="text-align:center; line-height: 1.1;">
-                    $${roundGross.toLocaleString()}
+                    $${roundGrossValue.toLocaleString()}
                 </div>
                 
                 <div class="col-discount tiny accent bold" style="text-align:center; line-height: 1.1;">
-                    -$${totalPhaseSavings.toLocaleString()}
+                    -$${totalRoundSavings.toLocaleString()}
                 </div>
                 
                 <div class="col-numeric bold" style="color: white; font-size: 12px; text-align:right; line-height: 1.1;">
@@ -8847,31 +8848,35 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     const area = document.getElementById("grand-totals-area");
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
-    const isAdmin = state.adminMode === true; // 🔐 Permission check
+    const isAdmin = state.adminMode === true;
 
     if (!area || !client || !sheet) return;
 
-    let totalGross = 0;
-    let netAfterLineItems = 0;
+    let totalGross = 0; // 🚀 Include EVERYTHING
+    let netAfterLineItems = 0; // 💸 Only billable "Do Now"
 
-    // 1. Calculate base totals
     lineItems.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
+        if (!res) return;
+
+        // 1. Calculate Gross (Total potential value regardless of status/party)
+        totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
+
+        // 2. Calculate Net (Only "Do Now" and billable parties)
         const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
-        
         if (item.status === 'Do Now' && isBillable) {
-            totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
             netAfterLineItems += OL.calculateRowFee(item, res);
         }
     });
 
-    // 2. Subtract Round Discounts
+    // 3. Subtract Adjustments/Discounts from the Net
     let netAfterRounds = netAfterLineItems;
     if (sheet.roundDiscounts) {
         Object.keys(sheet.roundDiscounts).forEach(rNum => {
             const rDisc = sheet.roundDiscounts[rNum];
             const roundItems = lineItems.filter(i => i.round == rNum && i.status === 'Do Now');
             const roundSubtotal = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
+            
             const rDeduct = rDisc.type === '%' 
                 ? Math.round(roundSubtotal * (parseFloat(rDisc.value) / 100)) 
                 : parseFloat(rDisc.value) || 0;
@@ -8879,46 +8884,36 @@ window.renderGrandTotals = function(lineItems, baseRate) {
         });
     }
 
-    // 3. Subtract Global Project Discount
     const gVal = client.projectData.totalDiscountValue || 0;
     const gType = client.projectData.totalDiscountType || '$';
     const globalAdjustment = gType === '%' ? Math.round(netAfterRounds * (gVal / 100)) : Math.min(netAfterRounds, gVal);
     const finalApproved = netAfterRounds - globalAdjustment;
 
-    // 4. Calculate total delta for the "Adjustments" column
+    // The "Adjustments" display shows the gap between Gross and Final Net
     const totalAdjustments = totalGross - finalApproved;
 
     area.innerHTML = `
     <div class="grand-totals-bar">
       <div class="grand-actions">
         <button class="btn tiny soft" onclick="window.print()">🖨️ PDF</button>
-        
-        ${isAdmin ? `
-            <button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>
-        ` : ''}
+        ${isAdmin ? `<button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>` : ''}
       </div>
 
       <div class="total-item-gross">
-        <div class="tiny muted uppercase bold">Gross</div>
+        <div class="tiny muted uppercase bold">Gross Value</div>
         <div style="font-size: 14px; font-weight: 600;">$${totalGross.toLocaleString()}</div>
       </div>
 
       <div class="total-item-disc">
-        <div class="tiny accent uppercase bold">Adjustments</div>
+        <div class="tiny accent uppercase bold">Savings/Adjustments</div>
         <div class="accent" style="font-size: 14px; font-weight: 600;">-$${totalAdjustments.toLocaleString()}</div>
       </div>
 
       <div class="total-item-net">
         <div class="tiny muted uppercase bold" style="color: var(--accent);">Final Approved</div>
         <div style="font-size: 22px; font-weight: 900; color: #fff; line-height: 1;">$${finalApproved.toLocaleString()}</div>
-        <div class="tiny muted" style="margin-top: 2px;">
-          (${(finalApproved / baseRate).toFixed(1)}h)
-        </div>
       </div>
-      
-      <div></div>
-    </div>
-  `;
+    </div>`;
 };
 
 // 12. DISCOUNT MANAGEMENT
