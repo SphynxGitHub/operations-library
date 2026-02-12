@@ -12430,68 +12430,71 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex, forceId = null) {
     cleanupUI();
     if (e) { e.preventDefault(); e.stopPropagation(); }
     
-    // 1. Resolve which ID we are moving
     const moveId = forceId || e.dataTransfer.getData("moveNodeId");
     if (!moveId) return;
 
-    // 2. Resolve where the Ghost sat (if applicable)
-    // If state.currentDropIndex is set, it means we used the ghost logic to find a gap
+    // Use the Ghost Index from dragover, or the passed target
     const finalIndex = (state.currentDropIndex !== null) ? state.currentDropIndex : targetIndex;
-
     const isVaultMode = location.hash.includes('vault');
     const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
 
-    // --- TIER 1 REORDER (Global Lifecycle) ---
+    // --- 🟢 TIER 1: Reordering Workflows across Stages ---
     if (!actualParentId) {
         const client = getActiveClient();
         const source = isVaultMode ? state.master.resources : client.projectData.localResources;
-        const item = source.find(r => r.id === moveId);
+        const item = source.find(r => String(r.id) === String(moveId));
+
         if (item) {
+            // 1. Assign to new Stage
             item.stageId = sectionId;
-            let list = source.filter(r => r.stageId === sectionId).sort((a,b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-            const oldIdx = list.findIndex(r => r.id === moveId);
-            if (oldIdx > -1) {
-                const [moved] = list.splice(oldIdx, 1);
-                list.splice(finalIndex, 0, moved); // 🎯 Use Ghost Index
-                list.forEach((r, i) => r.mapOrder = i);
-            }
+            
+            // 2. Get all other items in that TARGET stage (excluding the one we are moving)
+            let siblings = source.filter(r => String(r.stageId) === String(sectionId) && String(r.id) !== String(moveId))
+                                 .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+            
+            // 3. Insert into the sibling array at the ghost index
+            siblings.splice(finalIndex, 0, item);
+            
+            // 4. Re-index mapOrder for the whole lane to ensure no gaps (0, 1, 2...)
+            siblings.forEach((r, i) => r.mapOrder = i);
         }
     } 
-    // --- TIER 2 & 3 REORDER (Nested Steps) ---
+    // --- 🔵 TIER 2 & 3: Reordering within a Workflow or Resource ---
     else {
         const parent = OL.getResourceById(actualParentId);
         if (parent && parent.steps) {
-            const currentItemIdx = parent.steps.findIndex(s => s.id === moveId);
+            const oldIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
             
-            if (currentItemIdx > -1) {
-                const [item] = parent.steps.splice(currentItemIdx, 1);
+            if (oldIdx > -1) {
+                const [item] = parent.steps.splice(oldIdx, 1);
 
-                // Update Metadata
+                // Update Metadata (Lane or Type)
                 if (state.focusedResourceId) item.type = sectionId;
                 else item.gridLane = sectionId;
 
-                // Landmarking: Filter main array to match current visual section
+                // Find relevant siblings in the target section
                 const sectionItems = parent.steps.filter(s => 
                     state.focusedResourceId ? 
-                    (s.type === sectionId || (sectionId === 'Action' && s.type !== 'Trigger')) : 
+                    (item.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger') : 
                     (s.gridLane === sectionId)
                 );
 
-                // 🎯 The Fix: Place it where the Ghost sat
-                const targetCard = sectionItems[finalIndex];
-                if (targetCard) {
-                    const absoluteInsertIdx = parent.steps.indexOf(targetCard);
+                // Insert at the ghost position
+                const targetNeighbor = sectionItems[finalIndex];
+                if (targetNeighbor) {
+                    const absoluteInsertIdx = parent.steps.indexOf(targetNeighbor);
                     parent.steps.splice(absoluteInsertIdx, 0, item);
                 } else {
                     parent.steps.push(item);
                 }
+                
+                // Re-index mapOrder if your steps use it
+                parent.steps.forEach((s, i) => s.mapOrder = i);
             }
         }
     }
 
-    // Reset ghost state for next drag
     state.currentDropIndex = null;
-    
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
@@ -12503,15 +12506,18 @@ OL.handleModularTriggerDrag = function(event) {
     event.dataTransfer.setData("stepType", "Trigger");
     event.dataTransfer.setData("stepName", `${obj} ${verb}`);
     event.dataTransfer.setData("objectContext", obj);
+    // Visual feedback for drag
+    event.target.classList.add('is-dragging-source');
 };
 
-// 2. Capture the Drag for Actions (updated to include context)
+// 2. Capture the Drag for Actions
 OL.handleModularAtomicDrag = function(event) {
     const verb = document.getElementById('builder-verb').value;
     const obj = document.getElementById('builder-object').value;
     event.dataTransfer.setData("stepType", "Action");
     event.dataTransfer.setData("stepName", `${verb} ${obj}`);
     event.dataTransfer.setData("objectContext", obj);
+    event.target.classList.add('is-dragging-source');
 };
 
 // 3. The "Smart Prompt" Logic (Run this inside your handleCanvasDrop function)
@@ -12520,8 +12526,9 @@ OL.triggerSmartResourceMap = function(newStep, objectContext) {
         "Email": "Email",
         "Form": "Form",
         "Meeting": "Event",
+        "Event": "Event",
+        "Workflow": "Workflow",
         "Signature Request": "Signature",
-        "Contact": "SOP",
         "Opportunity": "SOP"
     };
 
