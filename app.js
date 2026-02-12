@@ -8588,6 +8588,27 @@ window.renderScopingSheet = function () {
     const baseRate = client.projectData.customBaseRate || state.master.rates.baseHourlyRate || 300;
     const showUnits = !!state.ui?.showScopingUnits;
 
+    // 🚀 FILTER STATE (Initialize if missing)
+    const searchQuery = (state.scopingSearch || "").toLowerCase();
+    const typeFilter = state.scopingTypeFilter || "All";
+
+    const wfContext = OL.getScopingWorkflowContext();
+
+    // 1. Gather all items and filter them
+    const filteredItems = sheet.lineItems.filter(item => {
+        const res = OL.getResourceById(item.resourceId);
+        if (!res) return false;
+        
+        const matchesSearch = res.name.toLowerCase().includes(searchQuery) || 
+                              (res.description || "").toLowerCase().includes(searchQuery);
+        const matchesType = typeFilter === "All" || res.type === typeFilter;
+        
+        return matchesSearch && matchesType;
+    });
+
+    // 2. Identify unique types present for the dropdown
+    const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
+
     // 2. DYNAMIC ROUND GROUPING
     // We create a map of rounds based on whatever is currently in the lineItems
     const roundGroups = {};
@@ -8602,8 +8623,6 @@ window.renderScopingSheet = function () {
     const sortedRoundKeys = Object.keys(roundGroups)
         .map((n) => parseInt(n, 10))
         .sort((a, b) => a - b);
-
-    const wfContext = OL.getScopingWorkflowContext();
 
     // 3. RENDER HTML
     container.innerHTML = `
@@ -8639,7 +8658,20 @@ window.renderScopingSheet = function () {
             💡 Pro-tip: Select a workflow in the Flow Map to see specific implementation details here.
         </div>
     `}
-
+    
+    <div class="toolbar" style="display:flex; gap:12px; margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--line);">
+        <input type="text" class="modal-input tiny" style="flex: 2;" 
+               placeholder="Search deliverables or descriptions..." 
+               value="${state.scopingSearch || ''}"
+               oninput="state.scopingSearch = this.value; renderScopingSheet()">
+        
+        <select class="modal-input tiny" style="flex: 1;" 
+                onchange="state.scopingTypeFilter = this.value; renderScopingSheet()">
+            <option value="All">All Types</option>
+            ${availableTypes.map(t => `<option value="${t}" ${typeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+    </div>
+    
     <div class="scoping-grid">
         <div class="grid-row grid-header">
             <div class="col-expand">Deliverable</div>
