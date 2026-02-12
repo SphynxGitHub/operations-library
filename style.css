@@ -3232,62 +3232,61 @@ body.is-visualizer #mainContent {
     border-left: 3px solid var(--accent);
 }
 
-/* Container for hover reveals */
-.hover-reveal-container .reveal-btn {
-    opacity: 0;
-    transition: opacity 0.2s;
-    background: #ef4444;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-}
-
-.hover-reveal-container:hover .reveal-btn {
-    opacity: 1;
-}
-
-/* Center the Stage '+' in the gap */
-.macro-stage-col {
+/* 1. Ensure the Stage Header is the anchor for the Stage + */
+.stage-header {
     position: relative; /* Anchor for the horizontal + */
     display: flex;
-    gap: 0; 
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid var(--accent);
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    min-height: 50px;
 }
 
+/* 2. Position the Stage + exactly in the gutter between titles */
 .insert-divider.horizontal {
     position: absolute;
-    right: -25px; /* Halfway between the 40px gap */
+    right: -35px; /* Adjust based on your gap */
     top: 50%;
     transform: translateY(-50%);
     width: 30px;
-    height: 100px;
-    z-index: 10;
+    height: 30px;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.2s;
 }
 
-/* Center the Workflow '+' between cards */
+/* 3. Position the Workflow + between cards */
 .wf-global-node-wrapper {
     position: relative;
+    padding-bottom: 20px; /* Space for the + */
 }
 
 .insert-divider.vertical {
     position: absolute;
-    bottom: -18px; /* Halfway between the 25px gap */
+    bottom: -10px;
     left: 50%;
     transform: translateX(-50%);
-    width: 100%;
-    height: 20px;
-    z-index: 10;
+    width: 24px;
+    height: 24px;
+    z-index: 100;
+    opacity: 0;
 }
 
-/* Make sure the delete button is visible on hover for headers */
+/* 4. Show controls on hover */
+.stage-header:hover .insert-divider.horizontal,
 .stage-header:hover .card-delete-btn,
+.wf-global-node-wrapper:hover .insert-divider.vertical,
 .wf-global-node:hover .card-delete-btn {
     opacity: 1 !important;
 }
 
-.insert-divider:hover span {
-    transform: scale(1.2);
-    background: var(--vault-gold); /* Pop color on hover */
+/* 5. Force 'x' visibility (Ensures it's not hidden by global styles) */
+.card-delete-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 101;
 }

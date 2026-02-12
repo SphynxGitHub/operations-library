@@ -10740,43 +10740,39 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                 
                 return `
-                <div class="macro-stage-col">
-                    <div style="min-width: 320px;">
-                        <div class="stage-header" style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center; position:relative;">
-                            <div>
-                                <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
-                                <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
-                            </div>
-                            <button class="card-delete-btn" style="position:static; opacity:0;" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
+                <div class="macro-stage-col" style="min-width: 320px;">
+                    <div class="stage-header">
+                        <div>
+                            <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
+                            <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
                         </div>
                         
-                        <div class="workflow-stack" style="display:flex; flex-direction:column; gap:25px;">
-                            ${workflowsInStage.map((wf, wIdx) => `
-                                <div class="wf-global-node-wrapper">
-                                    ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
-                                    
-                                    <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})">
-                                        <span>+</span>
-                                    </div>
-                                </div>
-                            `).join('')}
-                            
-                            ${workflowsInStage.length === 0 ? `
-                                <div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})" style="opacity:1; border:1px dashed var(--line); border-radius:8px; padding:15px; height:auto;">
-                                    <span style="background:transparent; color:var(--text-dim); font-size:10px;">+ ADD WORKFLOW</span>
-                                </div>` : ''}
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <button class="card-delete-btn" style="opacity:0;" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
+                        </div>
+
+                        <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
+                            <span style="background:var(--accent); color:#000; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:bold;">+</span>
                         </div>
                     </div>
-
-                    ${sIdx < stages.length - 1 ? `
-                        <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
-                            <span>+</span>
-                        </div>
-                    ` : `
-                        <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${stages.length}, ${isVaultMode})">
-                            <span>+</span>
-                        </div>
-                    `}
+                    
+                    <div class="workflow-stack" style="display:flex; flex-direction:column;">
+                        ${workflowsInStage.map((wf, wIdx) => `
+                            <div class="wf-global-node-wrapper">
+                                ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
+                                
+                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})">
+                                    <span style="background:var(--accent); color:#000; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px;">+</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                        
+                        ${workflowsInStage.length === 0 ? `
+                            <div onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})" 
+                                 style="cursor:pointer; border:1px dashed rgba(255,255,255,0.1); border-radius:8px; padding:15px; text-align:center; margin-top:10px;">
+                                <span class="tiny muted">+ ADD WORKFLOW</span>
+                            </div>` : ''}
+                    </div>
                 </div>
             `}).join('')}
         </div>
@@ -10831,9 +10827,13 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     });
 
     return `
-        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
-            <div style="color: var(--accent); font-weight: 900; font-size: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
+       <div class="wf-global-node" style="position:relative; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
+                </div>
+                <button class="card-delete-btn" style="opacity:0; position:static;" 
+                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
             </div>
 
             <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">
