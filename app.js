@@ -10722,6 +10722,84 @@ OL.deployRequirementsFromResource = function(resourceId) {
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
+
+// Ensure this function returns the HTML string instead of setting it
+window.renderGlobalCanvas = function(isVaultMode) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    return `
+        <div class="global-macro-map" style="display: flex; gap: 30px; padding: 30px; overflow-x: auto; height: 100%;">
+            ${stages.map((stage, sIdx) => `
+                <div class="macro-stage-col" style="min-width: 300px; flex-shrink: 0;">
+                    <div style="border-bottom: 2px solid var(--accent); margin-bottom: 15px; padding-bottom: 5px;">
+                        <span class="tiny accent bold">PHASE ${sIdx + 1}</span>
+                        <h3 style="margin: 0; font-size: 14px; color: #fff;">${esc(stage.name)}</h3>
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        ${allResources.filter(r => r.type === 'Workflow' && r.stageId === stage.id)
+                            .map(wf => renderGlobalWorkflowNode(wf))
+                            .join('')}
+                    </div>
+                </div>
+            `).join('')}
+            ${stages.length === 0 ? '<div class="p-20 muted italic">No stages defined. Drag workflows here to begin.</div>' : ''}
+        </div>
+    `;
+};
+
+// 🛰️ Internal Helper for Tier 2/3/4 Nesting
+function renderGlobalWorkflowNode(wf) {
+    const steps = wf.steps || [];
+    
+    return `
+        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px;">
+            <div class="wf-title" style="color: var(--accent); font-weight: 800; font-size: 13px; margin-bottom: 15px; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 8px;">
+                🔄 ${esc(wf.name).toUpperCase()}
+            </div>
+
+            <div class="resource-stream" style="display: flex; flex-direction: column; gap: 10px;">
+                ${steps.map(s => {
+                    const asset = OL.getResourceById(s.resourceLinkId);
+                    if (!asset) return '';
+                    return `
+                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 10px; border-left: 3px solid #38bdf8;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span class="bold" style="font-size: 11px;">${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}</span>
+                            </div>
+                            
+                            <div class="atomic-steps-preview" style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;">
+                                ${(asset.steps || []).map(atomic => `
+                                    <div class="tiny muted" style="font-size: 9px; display: flex; align-items: center; gap: 5px;">
+                                        <span style="color: #fbbf24;">${atomic.type === 'Trigger' ? '⚡' : '•'}</span>
+                                        ${esc(atomic.name)}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+OL.toggleGlobalView = function(isVaultMode) {
+    // Switch between 'focus' and 'global'
+    state.viewMode = (state.viewMode === 'global') ? 'focus' : 'global';
+    
+    // If going to global, we clear specific focuses so the map shows everything
+    if (state.viewMode === 'global') {
+        state.focusedWorkflowId = null;
+        state.focusedResourceId = null;
+    }
+    
+    renderGlobalVisualizer(isVaultMode);
+};
+
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
@@ -10782,6 +10860,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="padding:15px; border-bottom:1px solid rgba(255,255,255,0.05);">${breadcrumbHtml}</div>
                 <div class="header-actions" style="padding: 10px 15px;">
+                    <button class="btn tiny ${state.viewMode === 'global' ? 'accent' : 'soft'}" 
+                        onclick="OL.toggleGlobalView(${isVaultMode})"
+                        style="font-weight: bold; letter-spacing: 0.5px;">
+                        ${state.viewMode === 'global' ? '🔍 Focus Mode' : '🌐 Global View'}
+                    </button>
                     ${(!state.focusedWorkflowId && !state.focusedResourceId) ? `
                         <button class="btn tiny primary" 
                                 onclick="event.stopPropagation(); OL.addLifecycleStage(${isVaultMode})">

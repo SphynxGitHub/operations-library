@@ -2670,6 +2670,30 @@ body.is-visualizer #mainContent {
 /*==================================================================
   3. VERTICAL TIMELINE CANVAS (Stages & Workflows)
 ==================================================================*/
+.global-canvas-wrapper {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) transparent;
+}
+
+.wf-global-node {
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+.wf-global-node:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+}
+
+.asset-mini-card {
+    transition: background 0.2s;
+    cursor: zoom-in;
+}
+
+.asset-mini-card:hover {
+    background: rgba(56, 189, 248, 0.1);
+}
+
 .vertical-stage-canvas {
     flex: 1;
     overflow-y: auto;
