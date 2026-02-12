@@ -2685,6 +2685,24 @@ body.is-visualizer #mainContent {
     box-shadow: 0 10px 20px rgba(0,0,0,0.4);
 }
 
+/* Ensure the Global View can scroll sideways */
+.global-macro-layout .pane-canvas-wrap {
+    overflow-x: auto;
+}
+
+.global-scroll-canvas {
+    height: calc(100vh - 120px);
+    overflow-y: auto;
+}
+
+/* Style for the horizontal columns */
+.global-macro-map {
+    display: flex;
+    gap: 40px;
+    padding: 20px;
+    min-width: max-content;
+}
+
 .asset-mini-card {
     transition: background 0.2s;
     cursor: zoom-in;

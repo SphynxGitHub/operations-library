@@ -10826,6 +10826,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const isGlobalMode = state.viewMode === 'global';
 
     let toolboxHtml = "";
     let canvasHtml = "";
@@ -10862,7 +10863,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     // --- TIER 1: STAGE > WORKFLOWS ---
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = renderLevel1Canvas(isVaultMode ? state.master : client.projectData, isVaultMode);
+        canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
     }
 
     if (state.isFiltering) {
@@ -10871,24 +10872,21 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 
     container.innerHTML = `
-        <div class="three-pane-layout vertical-lifecycle-mode">
+       <div class="three-pane-layout ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
             <aside class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
-                <div class="canvas-header" style="padding:15px; border-bottom:1px solid rgba(255,255,255,0.05);">${breadcrumbHtml}</div>
-                <div class="header-actions" style="padding: 10px 15px;">
-                    <button class="btn tiny ${state.viewMode === 'global' ? 'accent' : 'soft'}" 
-                        onclick="OL.toggleGlobalView(${isVaultMode})"
-                        style="font-weight: bold; letter-spacing: 0.5px;">
-                        ${state.viewMode === 'global' ? '🔍 Focus Mode' : '🌐 Global View'}
+                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <div class="breadcrumbs">${breadcrumbHtml}</div>
+                    
+                    <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
+                            onclick="OL.toggleGlobalView(${isVaultMode})">
+                        ${isGlobalMode ? '🔍 Focus Mode' : '🌐 Global View'}
                     </button>
-                    ${(!state.focusedWorkflowId && !state.focusedResourceId) ? `
-                        <button class="btn tiny primary" 
-                                onclick="event.stopPropagation(); OL.addLifecycleStage(${isVaultMode})">
-                            + Add Stage
-                        </button>
-                    ` : ''}
                 </div>
-                <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
+                
+                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">
+                    ${canvasHtml}
+                </div>
             </main>
             <aside id="inspector-panel" class="pane-inspector">
                  <div class="empty-inspector tiny muted">Select a node to inspect</div>
