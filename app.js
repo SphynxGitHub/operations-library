@@ -10838,7 +10838,7 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
     renderGlobalVisualizer(isVault);
 };
 
-function renderGlobalWorkflowNode(wf, allResources) {
+function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     // 2. Resolve Tier 2 Steps into Tier 3 Resources
     // We map the steps inside the workflow to the actual resource objects in the library
     const workflowSteps = (wf.steps || []).map(step => {
@@ -10925,20 +10925,36 @@ OL.promptInsertAtomicStep = function(resId, order, isVault) {
     const newStep = {
         id: uid(),
         name: name,
-        type: "Action", // Default to Action
+        type: "Action",
         outcomes: [],
         timingValue: 0,
         timingType: 'after_prev'
     };
 
-    // 🚀 INLINE INSERTION: Splicing into the exact position
+    // 1. Inline Insertion
     res.steps.splice(order, 0, newStep);
-
-    // 🧹 Normalizing mapOrder if used at this level
     res.steps.forEach((s, idx) => s.mapOrder = idx);
+
+    // 2. 🚀 SMART SCAN: Check for keywords in the name
+    const keywords = ["Email", "Form", "Meeting", "Signature", "Contract", "Zap", "SOP"];
+    const detectedKeyword = keywords.find(word => name.toLowerCase().includes(word.toLowerCase()));
 
     OL.persist();
     renderGlobalVisualizer(isVault);
+
+    // 3. 💡 Trigger Linker if keyword matched
+    if (detectedKeyword) {
+        // Normalizing 'Contract' or 'Signature' to 'Signature' etc.
+        let targetType = detectedKeyword === "Contract" ? "Signature" : 
+                         detectedKeyword === "Zap" ? "Zap" : detectedKeyword;
+        
+        // Slight delay to ensure the canvas has re-rendered the new node
+        requestAnimationFrame(() => {
+            if (confirm(`Detected "${detectedKeyword}" in step name. Would you like to link a technical asset now?`)) {
+                OL.openResourceLinkerForStep(newStep.id, targetType);
+            }
+        });
+    }
 };
 
 OL.isResourceInScope = function(resId) {
@@ -12584,23 +12600,25 @@ OL.triggerSmartResourceMap = function(newStep, objectContext) {
 };
 
 OL.openResourceLinkerForStep = function(stepId, targetType) {
-    const parentResId = state.focusedResourceId;
+    // Note: stepId is used to identify where the link will be saved
+    const parentResId = state.focusedResourceId || state.activeInspectorParentId;
     
     const html = `
         <div class="modal-head">
             <div class="modal-title-text">🔗 Link ${targetType} Asset</div>
         </div>
         <div class="modal-body">
-            <p class="tiny muted">Link an existing ${targetType} or create a new one to represent the object of this step.</p>
+            <p class="tiny muted">Filtering library for: <b>${targetType}s</b></p>
             <div class="search-map-container">
-                <input type="text" class="modal-input" placeholder="Search ${targetType}s..." 
+                <input type="text" class="modal-input" placeholder="Search your ${targetType}s..." 
                        onfocus="OL.filterLinkerByType('${parentResId}', '${stepId}', '${targetType}', '')"
                        oninput="OL.filterLinkerByType('${parentResId}', '${stepId}', '${targetType}', this.value)"
                        autofocus>
                 <div id="res-linker-results" class="search-results-overlay"></div>
             </div>
-            <div style="margin-top: 15px; border-top: 1px solid var(--line); padding-top: 15px;">
+            <div style="margin-top: 15px; border-top: 1px solid var(--line); padding-top: 15px; display:flex; gap:10px;">
                 <button class="btn tiny primary" onclick="OL.quickCreateAndLink('${stepId}', '${targetType}')">+ Create New ${targetType}</button>
+                <button class="btn tiny soft" onclick="OL.closeModal()">Skip</button>
             </div>
         </div>`;
     openModal(html);
