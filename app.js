@@ -10768,6 +10768,45 @@ window.renderGlobalCanvas = function(isVaultMode) {
     `;
 };
 
+// 🗑️ Handle Stage Deletion & Unmapping
+OL.handleStageDelete = async function(stageId, isVault) {
+    const resCount = (isVault ? state.master.resources : getActiveClient().projectData.localResources)
+        .filter(r => String(r.stageId) === String(stageId)).length;
+
+    if (resCount > 0) {
+        if (!confirm(`Confirm: This will delete the stage and unmap ${resCount} workflows. They will return to your sidebar library.`)) return;
+    }
+
+    await OL.updateAndSync(() => {
+        const source = isVault ? state.master : getActiveClient().projectData;
+        source.stages = source.stages.filter(s => s.id !== stageId);
+        // Unmap workflows
+        const resources = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        resources.forEach(r => { if(String(r.stageId) === String(stageId)) { r.stageId = null; r.mapOrder = null; } });
+    });
+    renderGlobalVisualizer(isVault);
+};
+
+// ➕ Insert Stage at specific index
+OL.addLifecycleStageAt = function(index, isVault) {
+    const source = isVault ? state.master : getActiveClient().projectData;
+    const newStage = { id: "stage-" + Date.now(), name: "New Phase", order: index };
+    
+    // Shift existing orders
+    source.stages.forEach(s => { if(s.order >= index) s.order++; });
+    source.stages.push(newStage);
+    
+    OL.persist();
+    renderGlobalVisualizer(isVault);
+};
+
+// ➕ Prompt for Workflow/Resource Insertion
+OL.promptInsertWorkflow = function(stageId, order, isVault) {
+    // We reuse the existing Add logic but pass the stage/order
+    state.lastDropContext = { stageId, mapOrder: order };
+    OL.quickCreateWorkflow(); // This will need a slight tweak to check state.lastDropContext
+};
+
 function renderGlobalWorkflowNode(wf, allResources) {
     // 2. Resolve Tier 2 Steps into Tier 3 Resources
     // We map the steps inside the workflow to the actual resource objects in the library
