@@ -1328,10 +1328,10 @@ OL.createMasterAppFromGrid = function() {
     OL.openAppModal(draftId, draftApp);
 };
 
-// 🚀 THE FIX: Added 'field' as a 3rd parameter, defaulting to 'name'
+// 🚀 THE FIX: Added 'field' parameter (defaults to 'name' for the header input)
 OL.handleAppSave = function(id, value, field = 'name') {
     const cleanValue = value.trim();
-    if (!cleanValue && field === 'name') return; // Don't allow empty names
+    if (!cleanValue && field === 'name') return; 
 
     const isDraft = id.startsWith('draft-');
     const client = getActiveClient();
@@ -1342,10 +1342,12 @@ OL.handleAppSave = function(id, value, field = 'name') {
         
         const newApp = {
             id: newId,
-            name: field === 'name' ? cleanValue : "New App", // Handle non-name first entry
+            name: field === 'name' ? cleanValue : "New App", 
             category: "", 
             monthlyCost: 0,
-            description: field === 'description' ? cleanValue : "",
+            // 🚀 Logic to handle if notes are entered before the name
+            notes: field === 'notes' ? cleanValue : "",
+            description: "",
             functionIds: [],
             capabilities: [],
             createdDate: new Date().toISOString()
@@ -1364,7 +1366,8 @@ OL.handleAppSave = function(id, value, field = 'name') {
         OL.refreshActiveView(); 
         
     } else {
-        // 🚀 THE FIX: Use the 'field' variable instead of hardcoded 'name'
+        // 🚀 THE CRITICAL CHANGE: Use the dynamic 'field' variable 
+        // instead of the hardcoded string 'name'
         OL.updateAppMeta(id, field, cleanValue);
     }
 };
