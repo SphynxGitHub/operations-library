@@ -10728,53 +10728,59 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    // 🔥 CRITICAL: Get ALL resources for this client/vault to ensure nothing is hidden
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     return `
-        <div class="global-macro-map" style="display: flex; gap: 30px; padding: 30px; overflow-x: auto; height: 100%;">
-            ${stages.map((stage, sIdx) => `
-                <div class="macro-stage-col" style="min-width: 300px; flex-shrink: 0;">
-                    <div style="border-bottom: 2px solid var(--accent); margin-bottom: 15px; padding-bottom: 5px;">
-                        <span class="tiny accent bold">PHASE ${sIdx + 1}</span>
-                        <h3 style="margin: 0; font-size: 14px; color: #fff;">${esc(stage.name)}</h3>
+        <div class="global-macro-map" style="display: flex; gap: 40px; padding: 40px; overflow-x: auto; height: 100%; align-items: flex-start;">
+            ${stages.map((stage, sIdx) => {
+                // Find workflows mapped to this specific stage
+                const workflowsInStage = allResources.filter(r => r.type === 'Workflow' && String(r.stageId) === String(stage.id));
+                
+                return `
+                <div class="macro-stage-col" style="min-width: 320px; flex-shrink: 0;">
+                    <div style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px;">
+                        <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
+                        <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase; letter-spacing: 1px;">${esc(stage.name)}</h3>
                     </div>
                     
-                    <div style="display: flex; flex-direction: column; gap: 20px;">
-                        ${allResources.filter(r => r.type === 'Workflow' && r.stageId === stage.id)
-                            .map(wf => renderGlobalWorkflowNode(wf))
-                            .join('')}
+                    <div style="display: flex; flex-direction: column; gap: 25px;">
+                        ${workflowsInStage.map(wf => renderGlobalWorkflowNode(wf, allResources)).join('')}
+                        ${workflowsInStage.length === 0 ? '<div class="tiny muted italic" style="padding: 20px; border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px;">No workflows mapped</div>' : ''}
                     </div>
                 </div>
-            `).join('')}
-            ${stages.length === 0 ? '<div class="p-20 muted italic">No stages defined. Drag workflows here to begin.</div>' : ''}
+            `}).join('')}
         </div>
     `;
 };
 
-// 🛰️ Internal Helper for Tier 2/3/4 Nesting
-function renderGlobalWorkflowNode(wf) {
-    const steps = wf.steps || [];
-    
+function renderGlobalWorkflowNode(wf, allResources) {
+    // Tier 2: The Workflow Box
     return `
-        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px;">
-            <div class="wf-title" style="color: var(--accent); font-weight: 800; font-size: 13px; margin-bottom: 15px; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 8px;">
-                🔄 ${esc(wf.name).toUpperCase()}
+        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; position: relative;">
+            <div style="color: var(--accent); font-weight: 900; font-size: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
             </div>
 
-            <div class="resource-stream" style="display: flex; flex-direction: column; gap: 10px;">
-                ${steps.map(s => {
-                    const asset = OL.getResourceById(s.resourceLinkId);
+            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 8px;">
+                ${(wf.steps || []).map(step => {
+                    // Tier 3: Lookup the specific technical Resource (Zap, Form, SOP)
+                    const asset = allResources.find(r => r.id === step.resourceLinkId);
                     if (!asset) return '';
+                    
                     return `
-                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.3); border-radius: 6px; padding: 10px; border-left: 3px solid #38bdf8;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span class="bold" style="font-size: 11px;">${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}</span>
+                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 8px; border-left: 3px solid #38bdf8;">
+                            <div style="font-size: 11px; font-weight: bold; color: #eee; margin-bottom: 6px;">
+                                ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                             </div>
                             
-                            <div class="atomic-steps-preview" style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;">
+                            <div style="display: flex; flex-direction: column; gap: 3px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.1);">
                                 ${(asset.steps || []).map(atomic => `
-                                    <div class="tiny muted" style="font-size: 9px; display: flex; align-items: center; gap: 5px;">
-                                        <span style="color: #fbbf24;">${atomic.type === 'Trigger' ? '⚡' : '•'}</span>
+                                    <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.7;">
+                                        <span style="color: ${atomic.type === 'Trigger' ? '#fbbf24' : '#38bdf8'};">
+                                            ${atomic.type === 'Trigger' ? '⚡' : '•'}
+                                        </span> 
                                         ${esc(atomic.name)}
                                     </div>
                                 `).join('')}
