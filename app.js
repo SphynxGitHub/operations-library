@@ -8723,6 +8723,8 @@ function renderScopingRow (item, idx, showUnits) {
     const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
     const isCounted = item.status === 'Do Now' && isBillable;
 
+    const typeIcon = OL.getRegistryIcon(res.type);
+
     const gross = OL.calculateBaseFeeWithMultiplier(item, res);
     const net = isCounted ? OL.calculateRowFee(item, res) : 0;
     const discountAmt = gross - net;
@@ -8774,7 +8776,8 @@ function renderScopingRow (item, idx, showUnits) {
         <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
             <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
-            ${esc(res.name || "Manual Item")}
+                <span style="font-size: 1.2em; line-height: 1; margin-top: 2px;">${typeIcon}</span>
+                ${esc(res.name || "Manual Item")}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
             ${unitsHtml}
