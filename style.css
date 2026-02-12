@@ -3255,6 +3255,7 @@ body.is-visualizer #mainContent {
     z-index: 100;
     opacity: 0;
     transition: opacity 0.2s;
+    padding-left: 6%
 }
 
 /* 3. Position the Workflow + between cards */
@@ -3272,6 +3273,8 @@ body.is-visualizer #mainContent {
     height: 24px;
     z-index: 100;
     opacity: 0;
+    padding-top: 3%;
+    padding-bottom: 3%;
 }
 
 /* 4. Show controls on hover */
