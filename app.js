@@ -597,6 +597,19 @@ OL.handleGlobalSearch = function(query) {
     resultsEl.innerHTML = html;
 };
 
+OL.refocus = function(id) {
+    requestAnimationFrame(() => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.focus();
+            // Move cursor to the end
+            const val = el.value;
+            el.value = '';
+            el.value = val;
+        }
+    });
+};
+
 // 🛡️ UNIVERSAL SEARCH OVERLAY CLOSER
 document.addEventListener('mousedown', (e) => {
     // 1. Find every element currently on the screen that acts as an overlay
@@ -3606,9 +3619,9 @@ window.renderResourceManager = function () {
         </div>
 
         <div class="toolbar" style="display:flex; gap:15px; margin: 20px 0; background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border: 1px solid var(--line);">
-            <input type="text" class="modal-input" placeholder="Search keywords, descriptions, or names..." 
-                   style="flex:2;" value="${state.libSearch || ''}"
-                   oninput="state.libSearch = this.value; renderResourceManager()">
+            <input type="text" id="resource-lib-search" class="modal-input" 
+                placeholder="Search..." value="${state.libSearch || ''}"
+                oninput="state.libSearch = this.value; renderResourceManager(); OL.refocus('resource-lib-search')">
             
             <select class="modal-input" style="flex:1;" onchange="state.libTypeFilter = this.value; renderResourceManager()">
                 <option value="All">All Categories</option>
@@ -5292,7 +5305,6 @@ OL.toggleTrigDetails = function(event, resId, trigId) {
     document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
 };
 
-
 OL.openStepDetailModal = function(resId, stepId) {
     OL.trackNav(stepId, 'step', resId);
 
@@ -5532,8 +5544,7 @@ OL.toggleWorkflowFullscreen = function(resId) {
         // Return to the standard modal view for continuity
         OL.openResourceModal(resId);
     }
-};
-
+}
 
 OL.switchFSMode = function(mode, resId) {
     const canvas = document.getElementById('fs-canvas');
@@ -5830,7 +5841,6 @@ OL.handleDragOver = function(event) {
     }
 };
 
-
 OL.handleStepDragStart = function(event, index) {
     // 1. Store the index for the drop handler
     event.dataTransfer.setData("draggedIndex", index);
@@ -5849,7 +5859,6 @@ OL.handleStepDragStart = function(event, index) {
         if (fallback) fallback.style.opacity = '0.4';
     }
 };
-
 
 // HANDLE OUTCOMES
 state.expandedSteps = state.expandedSteps || new Set();
@@ -5935,6 +5944,7 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
 
     listEl.innerHTML = html || `<div class="search-result-item muted">No outcomes found</div>`;
 };
+
 OL.getOutcomeLabel = function(action, res) {
     if (!action || action === 'next') return "➡️ Proceed to Next Step";
     if (action === 'close') return "🏁 Close Workflow";
@@ -6423,496 +6433,6 @@ OL.removeSopStep = function (resId, stepId) {
         OL.refreshActiveView();
     }
 };
-
-/*
-OL.setEditingTrigger = function(idx) {
-    state.editingTriggerIdx = idx;
-    state.editingStepId = null; // Clear other editing states
-    OL.refreshModal();
-    if (idx !== null) {
-        setTimeout(() => {
-            const el = document.getElementById(`edit-trigger-${idx}`);
-            if (el) { el.focus(); el.select(); }
-        }, 50);
-    }
-};
-
-OL.setEditingStep = function(stepId) {
-    state.editingStepId = stepId;
-    state.editingTriggerIdx = null; // Clear other editing states
-    OL.refreshModal();
-    if (stepId !== null) {
-        setTimeout(() => {
-            const el = document.getElementById(`edit-step-${stepId}`);
-            if (el) { el.focus(); el.select(); }
-        }, 50);
-    }
-};
-
-// Toggle Controller
-OL.toggleInlineEdit = function(event, resId, stepId) {
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
-    if (event) event.stopPropagation();
-
-    const res = OL.getResourceById(resId);
-    
-    // Accordion Logic: If clicking a new step, collapse others. 
-    // If clicking the current step, close it.
-    if (state.editingStepId === stepId) {
-        state.editingStepId = null;
-        state.expandedSteps.delete(stepId);
-    } else {
-        state.editingStepId = stepId;
-        state.expandedSteps.clear(); // 🚀 THE FIX: Clear all other expanded states
-        state.expandedSteps.add(stepId);
-    }
-    
-    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
-};
-
-// HANDLE EDITING, INCLUDING DRAG AND DROP
-OL.toggleInlineEdit = function(event, resId, stepId) {
-    // If the user clicked an input or textarea inside the row, don't collapse/expand
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
-    
-    if (event) event.stopPropagation();
-    state.editingStepId = (state.editingStepId === stepId) ? null : stepId;
-    
-    const res = OL.getResourceById(resId);
-    document.getElementById('sop-step-list').innerHTML = renderSopStepList(res);
-};
-*/
-
-/*
-
-
-OL.renderVisualizer = function(resId) {
-    const canvas = document.getElementById('fs-canvas');
-    const res = OL.getResourceById(resId);
-    if (!canvas || !res) return;
-
-    const LANE_HEIGHT = 200;
-    const COL_WIDTH = 280;
-    const lanes = ["Lead/Client", "System/Auto", "Internal Ops"];
-    
-    const steps = res.steps || [];
-    const maxCol = steps.reduce((max, s) => Math.max(max, s.gridCol || 0), 5);
-
-    // 1. Generate the Grid Layer (Background only)
-    const lanesHtml = lanes.map(lane => `
-        <div class="vis-lane" style="height: ${LANE_HEIGHT}px; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; width: 100%;">
-            <div class="lane-label" style="position: sticky; left: 0; width: 140px; height: 100%; background: #0b0f1a; z-index: 20; display: flex; align-items: center; padding-left: 15px; font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; border-right: 1px solid rgba(255,255,255,0.1);">
-                ${lane}
-            </div>
-            <div style="position: absolute; top: 0; left: 140px; display: flex; height: 100%;">
-                ${Array.from({length: maxCol + 2}).map(() => `
-                    <div style="width: ${COL_WIDTH}px; border-right: 1px solid rgba(255,255,255,0.02); height: 100%;"></div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
-
-    // 2. Generate the Node Layer (Absolute coordinates)
-    const nodesHtml = steps.map((step) => {
-        const laneIdx = lanes.indexOf(step.gridLane || "System/Auto");
-        // Center the card vertically in the 200px lane (card is ~80px tall)
-        const top = (laneIdx * LANE_HEIGHT) + 60; 
-        const left = (step.gridCol || 0) * COL_WIDTH + 170; // 140 label width + 30 padding
-
-        return `
-            <div class="workflow-block-card grid-snapped" id="vis-node-${step.id}"
-                draggable="true"
-                style="position: absolute; top: ${top}px; left: ${left}px; width: ; z-index: 50; cursor: grab;"
-                onmousedown="OL.loadInspector('${step.id}', '${resId}')"
-                ondragstart="OL.handleStepMoveStart(event, '${step.id}', '${resId}')">
-                <div style="display:flex; justify-content:space-between; margin-bottom:8px; pointer-events:none;">
-                    <span class="pill tiny vault">${esc(step.type || 'Action')}</span>
-                </div>
-                <div class="bold" style="font-size: 11px; color: var(--accent); pointer-events:none;">
-                    ${esc(step.name)}
-                </div>
-                <div class="new-link-trigger" 
-                    title="Drag to create new logic branch"
-                    onmousedown="OL.createNewOutcomeFromNode(event, '${resId}', '${step.id}')">
-                    +
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    // 3. One-Pass Paint
-    canvas.innerHTML = `
-        <div class="vis-workspace" id="vis-workspace" style="position: relative; background: #050816; width: fit-content; min-width: 100%;">
-            <div class="vis-swimlane-layer" style="position: relative; z-index: 1;">
-                ${lanesHtml}
-            </div>
-            <div class="vis-absolute-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
-                ${nodesHtml}
-            </div>
-            <svg id="vis-links-layer" class="vis-svg" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 45;"></svg>
-        </div>
-    `;
-
-    setTimeout(() => OL.drawVisualizerLines(resId), 10);
-};
-
-OL.createNewOutcomeFromNode = function(e, resId, stepId) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const res = OL.getResourceById(resId);
-    const step = res.steps.find(s => s.id === stepId);
-    
-    if (!step.outcomes) step.outcomes = [];
-    
-    // 1. Create the new "Pending" outcome
-    const newIdx = step.outcomes.length;
-    step.outcomes.push({
-        condition: "New Logic",
-        action: "next", // Default to next until dropped on a node
-        label: "New Branch",
-        endOffset: { x: 20, y: 0 }, // Offset slightly so the handle is visible
-        midOffset: { x: 0, y: 0 },
-        startOffset: { x: 0, y: 0 }
-    });
-
-    // 2. Force a quick redraw so the handles exist in the DOM
-    OL.drawVisualizerLines(res);
-
-    // 3. Manually trigger the drag state on the 'end' handle of the new outcome
-    OL.activeLinkDrag = { 
-        type: 'end', 
-        resId: resId, 
-        stepId: stepId, 
-        oIdx: newIdx 
-    };
-
-    document.addEventListener('mousemove', OL.handleLinkMove);
-    document.addEventListener('mouseup', OL.stopLinkMove);
-};
-
-OL.removeOutcomeFromCanvas = function(resId, stepId, oIdx) {
-    if (!confirm("Remove this logic branch?")) return;
-    
-    const res = OL.getResourceById(resId);
-    const step = res?.steps?.find(s => s.id === stepId);
-    
-    if (step && step.outcomes) {
-        step.outcomes.splice(oIdx, 1);
-        OL.persist();
-        OL.renderVisualizer(resId); // Total redraw to clear the path
-        console.log(`🗑️ Logic branch ${oIdx} removed from step ${stepId}`);
-    }
-};
-
-
-// HANDLE VISUALIZER LINES
-// Add this to your initialization or global scope
-document.addEventListener('mousedown', (e) => {
-    const handle = e.target.closest('.path-handle');
-    if (!handle) return;
-
-    // 🚀 THE MAGIC: Kill the card drag before it starts
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Identify handle data from attributes we'll add in the next step
-    const type = handle.getAttribute('data-type');
-    const resId = handle.getAttribute('data-res-id');
-    const stepId = handle.getAttribute('data-step-id');
-    const oIdx = parseInt(handle.getAttribute('data-oidx'));
-
-    // Temporarily disable draggability of all nodes so they stay frozen
-    document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'false'));
-
-    OL.activeLinkDrag = { type, resId, stepId, oIdx };
-    
-    document.addEventListener('mousemove', OL.handleLinkMove);
-    document.addEventListener('mouseup', OL.stopLinkMove);
-    
-    console.log(`🎯 Locked ${type} handle - Card movement suppressed`);
-}, true); // <--- 'true' enables the Capture Phase
-
-OL.drawVisualizerLines = function(resIdOrObj) {
-    const svg = document.getElementById('vis-links-layer');
-    if (!svg) return;
-    
-    // Resolve 'res' context: handle both string IDs and direct objects
-    let res = (typeof resIdOrObj === 'string') 
-        ? OL.getResourceById(resIdOrObj) 
-        : resIdOrObj;
-
-    // Safety guard to prevent ReferenceErrors
-    if (!res || !res.steps) {
-        console.warn("Drawing aborted: Resource data is missing or invalid.");
-        return;
-    }
-
-    // 1. Clear previous SVG content to avoid 'ghost' lines
-    svg.innerHTML = ''; 
-
-    const workspace = document.getElementById('vis-workspace');
-    if (!workspace) return;
-    const cRect = workspace.getBoundingClientRect();
-
-    // 2. Draw Step Outcomes (Sequential and Jump logic)
-    res.steps.forEach((step, sIdx) => {
-        (step.outcomes || []).forEach((oc, oIdx) => {
-            const sourceEl = document.getElementById(`vis-node-${step.id}`);
-            
-            // Resolve Target ID for "Next" or "Jump"
-            let targetId = null;
-            if (oc.action === 'next') {
-                targetId = res.steps[sIdx + 1]?.id;
-            } else if (oc.action?.startsWith('jump_')) {
-                targetId = oc.action.replace('jump_', '');
-            }
-
-            const targetEl = document.getElementById(`vis-node-${targetId}`);
-            
-            if (sourceEl && targetEl) {
-                const s = sourceEl.getBoundingClientRect();
-                const t = targetEl.getBoundingClientRect();
-
-                // Calculate relative anchor points (Base Ports)
-                const baseStartX = s.right - cRect.left;
-                const baseStartY = s.top + (s.height / 2) - cRect.top;
-                const baseEndX = t.left - cRect.left;
-                const baseEndY = t.top + (t.height / 2) - cRect.top;
-
-                // Ensure manual offset objects exist in the data
-                if (!oc.startOffset) oc.startOffset = { x: 0, y: 0 };
-                if (!oc.midOffset) oc.midOffset = { x: 0, y: 0 };
-                if (!oc.endOffset) oc.endOffset = { x: 0, y: 0 };
-
-                // Apply manual offsets from user dragging
-                const x1 = baseStartX + (oc.startOffset?.x || 0);
-                const y1 = baseStartY + (oc.startOffset?.y || 0);
-                const x2 = baseEndX + (oc.endOffset?.x || 0);
-                const y2 = baseEndY + (oc.endOffset?.y || 0);
-
-                // Quadratic Bezier Calculation (The "Bend")
-                const naturalMidX = (x1 + x2) / 2;
-                const naturalMidY = (y1 + y2) / 2;
-                const cx = naturalMidX + (oc.midOffset?.x || 0);
-                const cy = naturalMidY + (oc.midOffset?.y || 0);
-
-                const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
-                
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                path.setAttribute("d", d);
-               
-                // 🎨 NEW: LOGIC STYLING
-                // If there's a condition (e.g., "Approved"), make it a dashed line
-                const isConditional = oc.condition && oc.condition.trim() !== "";
-                path.setAttribute("class", isConditional ? "vis-path logic-path" : "vis-path standard-path");
-                path.setAttribute("marker-end", "url(#arrowhead)");
-                path.setAttribute("style", "pointer-events: visibleStroke; cursor: pointer;");
-                path.setAttribute("onclick", `OL.removeOutcomeFromCanvas('${res.id}', '${step.id}', ${oIdx})`);
-                path.setAttribute("title", "Click to delete this branch");
-                
-                // Optional: Add a label to the path if it's conditional
-                if (isConditional) {
-                    OL.drawPathLabel(svg, cx, cy, oc.condition);
-                }
-
-                svg.appendChild(path);
-
-                // Create the 3 interactive handles (Green Start, Blue Mid, Red End)
-                OL.createHandle(svg, x1, y1, 'start', res.id, step.id, oIdx);
-                OL.createHandle(svg, cx, cy, 'mid', res.id, step.id, oIdx);
-                OL.createHandle(svg, x2, y2, 'end', res.id, step.id, oIdx);
-            }
-        });
-    });
-
-    // 3. Inject Arrowhead markers
-    svg.innerHTML += `
-        <defs>
-            <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" 
-                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
-            </marker>
-        </defs>
-    `;
-};
-
-OL.drawPathLabel = function(svg, x, y, text) {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    
-    // Background capsule for the text
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", x - 25);
-    rect.setAttribute("y", y - 10);
-    rect.setAttribute("width", "50");
-    rect.setAttribute("height", "16");
-    rect.setAttribute("rx", "8");
-    rect.setAttribute("fill", "#0b0f1a");
-    rect.setAttribute("stroke", "var(--accent)");
-    rect.setAttribute("stroke-width", "1");
-    
-    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    txt.setAttribute("x", x);
-    txt.setAttribute("y", y + 2);
-    txt.setAttribute("text-anchor", "middle");
-    txt.setAttribute("fill", "var(--accent)");
-    txt.setAttribute("style", "font-size: 8px; font-weight: bold; pointer-events: none;");
-    txt.textContent = text.toUpperCase();
-
-    group.appendChild(rect);
-    group.appendChild(txt);
-    svg.appendChild(group);
-};
-
-OL.createHandle = function(svg, x, y, type, resId, stepId, oIdx) {
-    const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    handle.setAttribute("cx", x);
-    handle.setAttribute("cy", y);
-    handle.setAttribute("r", "8"); // Slightly larger for mobile/ease
-    handle.setAttribute("class", `path-handle handle-${type}`);
-    
-    // Store metadata for the capture listener
-    handle.setAttribute('data-type', type);
-    handle.setAttribute('data-res-id', resId);
-    handle.setAttribute('data-step-id', stepId);
-    handle.setAttribute('data-oidx', oIdx);
-    
-    svg.appendChild(handle);
-};
-
-OL.activeLinkDrag = null;
-
-OL.handleLinkMove = function(e) {
-    if (!OL.activeLinkDrag) return;
-    const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
-    const res = OL.getResourceById(resId);
-    const step = res.steps.find(s => s.id === stepId);
-    const oc = step.outcomes[oIdx];
-    
-    // Initialize offsets
-    if (!oc.startOffset) oc.startOffset = { x: 0, y: 0 };
-    if (!oc.midOffset) oc.midOffset = { x: 0, y: 0 };
-    if (!oc.endOffset) oc.endOffset = { x: 0, y: 0 };
-
-    const workspace = document.getElementById('vis-workspace');
-    const cRect = workspace.getBoundingClientRect();
-    const mouseX = e.clientX - cRect.left;
-    const mouseY = e.clientY - cRect.top;
-
-    // Resolve target node for 'end' handles
-    let targetNodeId = stepId; 
-    if (type === 'end') {
-        const curIdx = res.steps.findIndex(s => s.id === stepId);
-        targetNodeId = oc.action === 'next' ? res.steps[curIdx + 1]?.id : oc.action.replace('jump_', '');
-    }
-
-    const nodeEl = document.getElementById(`vis-node-${targetNodeId}`);
-    if (!nodeEl) return;
-
-    const n = nodeEl.getBoundingClientRect();
-    const snapPadding = 40; // Increased padding for better 'catch'
-
-    // 1. Define the 4 Snap Points (Relative to Workspace)
-    const ports = {
-        right:  { x: n.right - cRect.left,              y: n.top + n.height / 2 - cRect.top },
-        left:   { x: n.left - cRect.left,               y: n.top + n.height / 2 - cRect.top },
-        top:    { x: n.left + n.width / 2 - cRect.left, y: n.top - cRect.top },
-        bottom: { x: n.left + n.width / 2 - cRect.left, y: n.bottom - cRect.top }
-    };
-
-    // 2. Identify Base Port (where offset is 0,0)
-    // Start handles default to 'right', End handles default to 'left'
-    const basePort = type === 'start' ? ports.right : ports.left;
-
-    if (type === 'start' || type === 'end') {
-        const offset = (type === 'start') ? oc.startOffset : oc.endOffset;
-        
-        // 3. Find the closest port to the current mouse position
-        let closestPort = null;
-        let minDistance = snapPadding;
-
-        Object.keys(ports).forEach(key => {
-            const dist = Math.hypot(mouseX - ports[key].x, mouseY - ports[key].y);
-            if (dist < minDistance) {
-                minDistance = dist;
-                closestPort = ports[key];
-            }
-        });
-
-        // 4. Snap or Free Move
-        if (closestPort) {
-            // SNAP: Set offset to exactly reach the port from the base
-            offset.x = closestPort.x - basePort.x;
-            offset.y = closestPort.y - basePort.y;
-        } else {
-            // FREE MOVE: Standard mouse tracking
-            offset.x = mouseX - basePort.x;
-            offset.y = mouseY - basePort.y;
-        }
-    } else if (type === 'mid') {
-        oc.midOffset.x += e.movementX;
-        oc.midOffset.y += e.movementY;
-        if (Math.abs(oc.midOffset.x) < 15) oc.midOffset.x = 0;
-        if (Math.abs(oc.midOffset.y) < 15) oc.midOffset.y = 0;
-    }
-
-    OL.drawVisualizerLines(res);
-};
-
-OL.stopLinkMove = function() {
-    if (OL.activeLinkDrag) {
-        const { type, resId, stepId, oIdx } = OL.activeLinkDrag;
-        const res = OL.getResourceById(resId);
-        const step = res.steps.find(s => s.id === stepId);
-        const oc = step.outcomes[oIdx];
-
-        // 🚀 NEW: Check if we are dropping the 'end' handle on a DIFFERENT node
-        if (type === 'end') {
-            const workspace = document.getElementById('vis-workspace');
-            const cRect = workspace.getBoundingClientRect();
-            
-            // Find all nodes except the source node
-            const nodes = document.querySelectorAll(`.workflow-block-card:not(#vis-node-${stepId})`);
-            let closestNodeId = null;
-            let minDistance = 50; // Threshold for "snapping" a new link
-
-            nodes.forEach(nodeEl => {
-                const n = nodeEl.getBoundingClientRect();
-                const nodeCenterX = n.left + n.width / 2;
-                const nodeCenterY = n.top + n.height / 2;
-                
-                // Check distance between mouse and node center
-                const dist = Math.hypot(window.event.clientX - nodeCenterX, window.event.clientY - nodeCenterY);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    // Extract ID from the DOM element (assuming ID format vis-node-ID)
-                    closestNodeId = nodeEl.id.replace('vis-node-', '');
-                }
-            });
-
-            // If we found a new node to link to:
-            if (closestNodeId) {
-                oc.action = `jump_step_${closestNodeId}`;
-                oc.label = `Jump to Step`;
-                // Reset offsets so the line snaps perfectly to the new target
-                oc.endOffset = { x: 0, y: 0 };
-                oc.midOffset = { x: 0, y: 0 };
-                console.log(`🔗 Auto-linked to new node: ${closestNodeId}`);
-            }
-        }
-
-        OL.persist();
-        document.querySelectorAll('.vis-node').forEach(n => n.setAttribute('draggable', 'true'));
-    }
-    
-    OL.activeLinkDrag = null;
-    document.removeEventListener('mousemove', OL.handleLinkMove);
-    document.removeEventListener('mouseup', OL.stopLinkMove);
-    
-    // Final UI Refresh
-    OL.renderVisualizer(resId); 
-};
- */
 
 //======================= ANALYSIS MATRIX SECTION =======================//
 
@@ -8588,26 +8108,28 @@ window.renderScopingSheet = function () {
     const baseRate = client.projectData.customBaseRate || state.master.rates.baseHourlyRate || 300;
     const showUnits = !!state.ui?.showScopingUnits;
 
-    // 🚀 FILTER STATE (Initialize if missing)
-    const searchQuery = (state.scopingSearch || "").toLowerCase();
-    const typeFilter = state.scopingTypeFilter || "All";
+    // 🚀 FILTER STATE INITIALIZATION
+    const q = (state.scopingSearch || "").toLowerCase();
+    const typeF = state.scopingTypeFilter || "All";
+    const statusF = state.scopingStatusFilter || "All";
+    const partyF = state.scopingPartyFilter || "All";
 
-    const wfContext = OL.getScopingWorkflowContext();
-
-    // 1. Gather all items and filter them
+    // 1. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
         const res = OL.getResourceById(item.resourceId);
         if (!res) return false;
-        
-        const matchesSearch = res.name.toLowerCase().includes(searchQuery) || 
-                              (res.description || "").toLowerCase().includes(searchQuery);
-        const matchesType = typeFilter === "All" || res.type === typeFilter;
-        
-        return matchesSearch && matchesType;
+
+        const matchesSearch = res.name.toLowerCase().includes(q) || (res.description || "").toLowerCase().includes(q);
+        const matchesType = typeF === "All" || res.type === typeF;
+        const matchesStatus = statusF === "All" || item.status === statusF;
+        const matchesParty = partyF === "All" || item.responsibleParty === partyF;
+
+        return matchesSearch && matchesType && matchesStatus && matchesParty;
     });
 
-    // 2. Identify unique types present for the dropdown
+    // 2. DATA FOR DROPDOWNS
     const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
+    const availableParties = [...new Set(sheet.lineItems.map(i => i.responsibleParty))].filter(Boolean).sort();
 
     // 2. DYNAMIC ROUND GROUPING
     // We create a map of rounds based on whatever is currently in the lineItems
@@ -8659,19 +8181,27 @@ window.renderScopingSheet = function () {
         </div>
     `}
     
-    <div class="toolbar" style="display:flex; gap:12px; margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--line);">
-        <input type="text" class="modal-input tiny" style="flex: 2;" 
-               placeholder="Search deliverables or descriptions..." 
-               value="${state.scopingSearch || ''}"
-               oninput="state.scopingSearch = this.value; renderScopingSheet()">
+    <div class="toolbar" style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap:10px; margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--line);">
+        <input type="text" id="scoping-search-input" class="modal-input tiny" 
+               placeholder="Search..." value="${state.scopingSearch || ''}"
+               oninput="state.scopingSearch = this.value; renderScopingSheet(); OL.refocus('scoping-search-input')">
         
-        <select class="modal-input tiny" style="flex: 1;" 
-                onchange="state.scopingTypeFilter = this.value; renderScopingSheet()">
+        <select class="modal-input tiny" onchange="state.scopingTypeFilter = this.value; renderScopingSheet()">
             <option value="All">All Types</option>
-            ${availableTypes.map(t => `<option value="${t}" ${typeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+            ${availableTypes.map(t => `<option value="${t}" ${typeF === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+
+        <select class="modal-input tiny" onchange="state.scopingStatusFilter = this.value; renderScopingSheet()">
+            <option value="All">All Statuses</option>
+            ${['Do Now', 'Do Later', 'Done'].map(s => `<option value="${s}" ${statusF === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+
+        <select class="modal-input tiny" onchange="state.scopingPartyFilter = this.value; renderScopingSheet()">
+            <option value="All">All Parties</option>
+            ${availableParties.map(p => `<option value="${p}" ${partyF === p ? 'selected' : ''}>${p}</option>`).join('')}
         </select>
     </div>
-    
+
     <div class="scoping-grid">
         <div class="grid-row grid-header">
             <div class="col-expand">Deliverable</div>
