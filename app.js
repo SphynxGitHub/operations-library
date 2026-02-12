@@ -8541,6 +8541,33 @@ OL.selectEditCategory = function(catName) {
 
 //======================= SCOPING AND PRICING SECTION =======================//
 
+OL.getScopingWorkflowContext = function() {
+    const workflowId = state.focusedWorkflowId;
+    if (!workflowId) return null;
+
+    const workflow = OL.getResourceById(workflowId);
+    if (!workflow) return null;
+
+    const stepCount = (workflow.steps || []).length;
+    const assets = (workflow.steps || []).map(s => OL.getResourceById(s.resourceLinkId)).filter(Boolean);
+    
+    // Count types (e.g., 3 Emails, 2 Zaps)
+    const typeCounts = assets.reduce((acc, a) => {
+        acc[a.type] = (acc[a.type] || 0) + 1;
+        return acc;
+    }, {});
+
+    const typeSummary = Object.entries(typeCounts)
+        .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
+        .join(', ');
+
+    return {
+        name: workflow.name,
+        summary: typeSummary || "No assets mapped yet",
+        count: stepCount
+    };
+};
+
 // 1. RENDER SCOPING SHEET TABLE
 window.renderScopingSheet = function () {
     OL.registerView(renderScopingSheet);
@@ -8576,6 +8603,8 @@ window.renderScopingSheet = function () {
         .map((n) => parseInt(n, 10))
         .sort((a, b) => a - b);
 
+    const wfContext = OL.getScopingWorkflowContext();
+
     // 3. RENDER HTML
     container.innerHTML = `
     <div class="section-header">
@@ -8593,6 +8622,23 @@ window.renderScopingSheet = function () {
             ` : ''}
         </div>
     </div>
+
+    ${wfContext ? `
+        <div class="workflow-context-widget" 
+             style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); padding: 12px 15px; border-radius: 8px; margin-bottom: 25px; display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 20px;">🕸️</div>
+            <div style="flex: 1;">
+                <div class="tiny accent bold uppercase" style="font-size: 9px;">Active Mapping Context</div>
+                <div style="font-weight: bold; color: white; font-size: 14px;">${esc(wfContext.name)}</div>
+                <div class="tiny muted">${wfContext.summary}</div>
+            </div>
+            <button class="btn tiny primary" onclick="location.hash='#/visualizer'">View Map ➔</button>
+        </div>
+    ` : `
+        <div class="workflow-context-widget muted italic" style="padding: 10px; font-size: 11px; opacity: 0.5;">
+            💡 Pro-tip: Select a workflow in the Flow Map to see specific implementation details here.
+        </div>
+    `}
 
     <div class="scoping-grid">
         <div class="grid-row grid-header">
