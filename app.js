@@ -10822,7 +10822,7 @@ OL.promptInsertWorkflow = function(stageId, order, isVault) {
     OL.quickCreateWorkflow(); // This will need a slight tweak to check state.lastDropContext
 };
 
-function renderGlobalWorkflowNode(wf, allResources) {
+function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     // 2. Resolve Tier 2 Steps into Tier 3 Resources
     // We map the steps inside the workflow to the actual resource objects in the library
     const workflowSteps = (wf.steps || []).map(step => {
