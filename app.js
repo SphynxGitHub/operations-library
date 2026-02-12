@@ -183,20 +183,19 @@ window.addEventListener("load", () => {
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
     if (savedClientId) state.activeClientId = savedClientId;
 
-    // 3. 🚩 RECALL VISUALIZER DEPTH
-    const savedWorkflowId = sessionStorage.getItem('active_workflow_id');
-    const savedResourceId = sessionStorage.getItem('active_resource_id');
+    // 3. 🚩 RECALL VISUALIZER DEPTH (The Correct Way)
+    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
 
-    if (savedWorkflowId || savedResourceId) {
-        console.log("♻️ Restoring depth:", { savedWorkflowId, savedResourceId });
-        state.focusedWorkflowId = savedWorkflowId;
-        state.focusedResourceId = savedResourceId;
-        
-        // Only force redirect if we aren't explicitly trying to go to a library page
-        if (!location.hash.includes('resources') && !location.hash.includes('apps')) {
-            const isVault = location.hash.includes('vault');
-            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
-        }
+    // 🚀 THE FIX: Only redirect if the user is on the Dashboard or explicitly on the Visualizer
+    const currentHash = location.hash;
+    const isDashboard = currentHash === "" || currentHash === "#/";
+    const isVisualizer = currentHash.includes('visualizer');
+
+    if ((state.focusedWorkflowId || state.focusedResourceId) && (isDashboard || isVisualizer)) {
+        console.log("♻️ Resuming Flow Map depth");
+        const isVault = currentHash.includes('vault');
+        location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
     }
     
     OL.sync(); 
@@ -475,6 +474,20 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const main = document.getElementById("mainContent");
+
+    // 🚀 NEW: REFINED BREAKOUT LOGIC
+    // We only clear the focus if we are going back to the HOME Dashboard.
+    // If we are just switching project tabs (Scoping, Team, Tasks), we keep the memory
+    // so that when you click "Flow Map" again, you are still at the same depth.
+    if (hash === "#/" || hash === "#/clients") {
+        state.focusedWorkflowId = null;
+        state.focusedResourceId = null;
+        sessionStorage.removeItem('active_workflow_id');
+        sessionStorage.removeItem('active_resource_id');
+        
+        const inspector = document.getElementById('inspector-panel');
+        if (inspector) inspector.innerHTML = '<div class="empty-inspector">Select an item to inspect</div>';
+    }
 
     // 🚀 NEW: BREAKOUT LOGIC
     // If the hash is a standard library or dashboard link, clear the "Focus"
