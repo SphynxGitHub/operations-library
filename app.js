@@ -3937,6 +3937,9 @@ window.renderResourceCard = function (res) {
     // 2. Logic: Admins can delete anything. 
     // Clients can ONLY delete if it's not a Master/Synced item.
     const canDelete = isAdmin || !isMaster;
+
+    const scopingItem = OL.isResourceInScope(res.id);
+    const isInScope = !!scopingItem;
     
     const tagLabel = isMaster ? "MASTER" : "LOCAL";
     const tagStyle = isMaster 
@@ -3944,24 +3947,23 @@ window.renderResourceCard = function (res) {
         : "background: var(--panel-border); color: var(--text-dim); border: 1px solid var(--line);";
 
     return `
-        <div class="card is-clickable" onclick="OL.openResourceModal('${res.id}')">
+        <div class="card is-clickable ${isInScope ? 'is-priced' : ''}" 
+             onclick="OL.openResourceModal('${res.id}')"
+             style="${isInScope ? 'border-left: 3px solid #10b981 !important;' : ''}">
             <div class="card-header">
                 <div class="card-title">${esc(res.name || "Unnamed")}</div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="vault-tag" style="${tagStyle}">
-                        ${tagLabel}
-                    </span>
-                    
-                    ${canDelete ? `
-                        <button class="card-delete-btn" 
-                                onclick="event.stopPropagation(); OL.deleteResource('${res.id}')">×</button>
+                    ${isInScope ? `
+                        <button class="btn tiny" style="background:#10b981; color:white; padding:2px 6px; font-size:10px; border:none;" 
+                                onclick="event.stopPropagation(); OL.jumpToScopingItem('${res.id}')">$</button>
                     ` : ''}
+                    <span class="vault-tag" style="${tagStyle}">${tagLabel}</span>
+                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.deleteResource('${res.id}')">×</button>
                 </div>
             </div>
             <div class="card-body">
                 <div class="tiny accent bold uppercase">${esc(res.archetype || "Base")}</div>
                 <div class="tiny muted">${esc(res.type || "General")}</div>
-                ${isLinkedToMaster && !isVaultItem ? `<div class="tiny muted" style="margin-top:4px; font-style:italic;">⛓️ Synced to Vault</div>` : ''}
             </div>
         </div>
     `;
@@ -11087,19 +11089,21 @@ window.renderLevel2Canvas = function(workflowId) {
                     const techAsset = OL.getResourceById(step.resourceLinkId);
                     const icon = OL.getRegistryIcon(techAsset?.type);
                     const isInspecting = state.activeInspectorResId === step.resourceLinkId;
+                    const scopingItem = OL.isResourceInScope(techAsset?.id);
+                    const isInScope = !!scopingItem;
 
                     return `
-                    <div class="workflow-block-card l2-resource-node ${isInspecting ? 'is-inspecting' : ''}" 
-                         id="l2-node-${step.id}"
-                         draggable="true" 
-                         onclick="event.stopPropagation(); OL.loadInspector('${step.resourceLinkId}', '${workflowId}')"
-                         ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
-                         ondblclick="OL.drillIntoResourceMechanics('${step.resourceLinkId}')"
-                         style="width: 100%; position: relative; z-index: 2;">
+                    <div class="workflow-block-card l2-resource-node ${isInScope ? 'is-priced' : ''}" 
+                        id="l2-node-${step.id}"
+                        style="${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}"
+                        onclick="...">
                         
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                             <span class="tiny muted">STEP ${idx + 1}</span>
-                             <span class="pill tiny soft" style="font-size:9px;">${icon} ${techAsset?.type || 'Asset'}</span>
+                            <span class="tiny muted">STEP ${idx + 1}</span>
+                            ${isInScope ? `
+                                <span class="pill tiny" style="background:#10b981; color:white; font-size:8px; cursor:pointer;" 
+                                    onclick="event.stopPropagation(); OL.jumpToScopingItem('${techAsset.id}')">PRICED $</span>
+                            ` : ''}
                         </div>
                         <div class="bold accent" style="margin: 8px 0; font-size: 14px;">${esc(step.name)}</div>
                         
