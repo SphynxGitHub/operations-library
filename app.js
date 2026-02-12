@@ -10906,12 +10906,78 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 `}
                             </div>
                         </div>
+                        <div class="insert-divider resource-gap" 
+                             onclick="event.stopPropagation(); OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})">
+                            <span>+</span>
+                        </div>
                     `;
                 }).join('')}
+                ${workflowSteps.length === 0 ? `
+                    <div class="insert-divider initial" onclick="OL.promptInsertResourceInWorkflow('${wf.id}', 0, ${isVaultMode})" 
+                         style="opacity:1; border:1px dashed #38bdf8; border-radius:6px; padding:10px; text-align:center; cursor:pointer;">
+                        <span class="tiny" style="color:#38bdf8">+ ADD RESOURCE</span>
+                    </div>` : ''}
             </div>
         </div>
     `;
 }
+
+OL.promptInsertResourceInWorkflow = async function(workflowId, order, isVault) {
+    const name = prompt("Enter Resource/Asset Name (e.g. 'Customer Onboarding Form'):");
+    if (!name) return;
+
+    const workflow = OL.getResourceById(workflowId);
+    if (!workflow) return;
+
+    // 1. Create the permanent technical resource in the library
+    const timestamp = Date.now();
+    const newResId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    
+    const newRes = {
+        id: newResId,
+        name: name,
+        type: "SOP", // Default
+        steps: [],
+        createdDate: new Date().toISOString()
+    };
+
+    const client = getActiveClient();
+    if (isVault) state.master.resources.push(newRes);
+    else client.projectData.localResources.push(newRes);
+
+    // 2. Map it into the Workflow steps array at the specific position
+    if (!workflow.steps) workflow.steps = [];
+    
+    const newStepLink = {
+        id: uid(),
+        name: name,
+        resourceLinkId: newResId,
+        mapOrder: order
+    };
+
+    // Inline Splice
+    workflow.steps.splice(order, 0, newStepLink);
+
+    // 3. Clean up the indexing
+    workflow.steps.forEach((s, idx) => s.mapOrder = idx);
+
+    OL.persist();
+    renderGlobalVisualizer(isVault);
+
+    // 4. 🧠 TRIGGER SMART SCAN
+    // Reusing your logic: If they named it "Email", it will prompt to link/type it.
+    const keywords = ["Email", "Form", "Meeting", "Signature", "Zap"];
+    const detected = keywords.find(word => name.toLowerCase().includes(word.toLowerCase()));
+    
+    if (detected) {
+        requestAnimationFrame(() => {
+            if (confirm(`Detected "${detected}". Want to classify and link this immediately?`)) {
+                // Classify the resource and open the modal
+                OL.updateResourceMeta(newResId, 'type', detected);
+            }
+        });
+    }
+};
 
 OL.promptInsertAtomicStep = function(resId, order, isVault) {
     const res = OL.getResourceById(resId);
