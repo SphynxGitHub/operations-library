@@ -8107,7 +8107,8 @@ window.renderScopingSheet = function () {
     const sheet = client.projectData.scopingSheets[0];
     const baseRate = client.projectData.customBaseRate || state.master.rates.baseHourlyRate || 300;
     const showUnits = !!state.ui?.showScopingUnits;
-
+    const wfContext = OL.getScopingWorkflowContext();
+    
     // 🚀 FILTER STATE INITIALIZATION
     const q = (state.scopingSearch || "").toLowerCase();
     const typeF = state.scopingTypeFilter || "All";
