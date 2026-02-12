@@ -10839,8 +10839,6 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
 };
 
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
-    // 2. Resolve Tier 2 Steps into Tier 3 Resources
-    // We map the steps inside the workflow to the actual resource objects in the library
     const workflowSteps = (wf.steps || []).map(step => {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
         return { ...step, asset: linkedAsset };
@@ -10848,75 +10846,74 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
     return `
         <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
-            <div style="color: var(--accent); font-weight: 900; font-size: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
+                </div>
+                <button class="card-delete-btn" style="opacity:0; position:static;" 
+                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
             </div>
 
-            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">
-                ${workflowSteps.map(step => {
+            <div class="tier-3-resource-stack" 
+                 style="display: flex; flex-direction: column; gap: 15px;"
+                 ondragover="OL.handleCanvasDragOver(event)" 
+                 ondrop="OL.handleUniversalDrop(event, '${wf.id}', 'resource-stack')">
+                
+                ${workflowSteps.map((step, rIdx) => {
                     const asset = step.asset;
-                    
-                    // If the step exists in the workflow but the resource is missing from library
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
                     
                     return `
+                    <div class="wf-resource-wrapper" 
+                         draggable="true" 
+                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
+                         ondragend="this.classList.remove('dragging-now')">
+                        
                         <div class="asset-mini-card ${isInScope ? 'is-in-scope' : ''}" 
-                            style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; margin-bottom:5px; 
+                            style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative;
                                     border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
                                     ${isInScope ? 'box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);' : 'border: 1px solid rgba(255,255,255,0.05);'}">
                             
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom:8px;">
                                 <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
                                     ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                                 </div>
-                                
-                                ${isInScope ? `
-                                    <button class="btn tiny" title="View in Scoping Sheet"
-                                            style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;"
-                                            onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')">
-                                        $
-                                    </button>
-                                ` : ''}
+                                ${isInScope ? `<button class="btn tiny" onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')" style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;">$</button>` : ''}
+                                <button class="card-delete-btn" style="position:static; font-size:14px; opacity:0;" 
+                                        onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">×</button>
                             </div>
                             
-                            <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);">
+                            <div class="atomic-step-container" 
+                                 style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);"
+                                 ondragover="OL.handleCanvasDragOver(event)"
+                                 ondrop="event.stopPropagation(); OL.handleUniversalDrop(event, '${asset.id}', 'atomic-stack')">
                                 ${(asset.steps || []).map((atomic, aIdx) => `
-                                    <div class="atomic-step-wrapper">
+                                    <div class="atomic-step-wrapper" 
+                                         draggable="true"
+                                         ondragstart="OL.handleUniversalDragStart(event, '${atomic.id}', 'atomic', '${asset.id}')">
                                         <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.8; display:flex; align-items:center; gap:5px;">
                                             <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                                 ${atomic.type === 'Trigger' ? '⚡' : '•'}
                                             </span> 
                                             ${esc(atomic.name || "Unnamed Step")}
                                         </div>
-
-                                        <div class="insert-divider atomic" 
-                                            onclick="event.stopPropagation(); OL.promptInsertAtomicStep('${asset.id}', ${aIdx + 1}, ${isVaultMode})">
+                                        <div class="insert-divider atomic" onclick="event.stopPropagation(); OL.promptInsertAtomicStep('${asset.id}', ${aIdx + 1}, ${isVaultMode})">
                                             <span>+</span>
                                         </div>
                                     </div>
-                                `).join('') || `
-                                    <div class="insert-divider initial" 
-                                        style="opacity:0.3; font-size:8px; cursor:pointer;" 
-                                        onclick="OL.promptInsertAtomicStep('${asset.id}', 0, ${isVaultMode})">
-                                        + ADD ATOMIC STEP
-                                    </div>
-                                `}
+                                `).join('') || `<div class="tiny muted italic" style="font-size:8px; opacity:0.5;">No steps defined</div>`}
                             </div>
                         </div>
+
                         <div class="insert-divider resource-gap" 
                              onclick="event.stopPropagation(); OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})">
                             <span>+</span>
                         </div>
-                    `;
+                    </div>`;
                 }).join('')}
-                ${workflowSteps.length === 0 ? `
-                    <div class="insert-divider initial" onclick="OL.promptInsertResourceInWorkflow('${wf.id}', 0, ${isVaultMode})" 
-                         style="opacity:1; border:1px dashed #38bdf8; border-radius:6px; padding:10px; text-align:center; cursor:pointer;">
-                        <span class="tiny" style="color:#38bdf8">+ ADD RESOURCE</span>
-                    </div>` : ''}
             </div>
         </div>
     `;
