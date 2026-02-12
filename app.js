@@ -10872,10 +10872,11 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                          ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
                          ondragend="this.classList.remove('dragging-now')">
                         
-                        <div class="asset-mini-card ${isInScope ? 'is-in-scope' : ''}" 
-                            style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative;
+                        <div class="asset-mini-card is-navigable ${isInScope ? 'is-in-scope' : ''}" 
+                            onclick="OL.drillIntoResourceMechanics('${asset.id}')"
+                            style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
                                     border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
-                                    ${isInScope ? 'box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);' : 'border: 1px solid rgba(255,255,255,0.05);'}">
+                                    ${isInScope ? 'box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1);' : ''} border: 1px solid rgba(255,255,255,0.05);">
                             
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom:8px;">
                                 <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
@@ -10918,6 +10919,17 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         </div>
     `;
 }
+
+OL.handleResourceUnmap = async function(workflowId, resourceId, isVault) {
+    if (!confirm("Remove this resource from this workflow? It will remain in the library.")) return;
+
+    const workflow = OL.getResourceById(workflowId);
+    if (workflow && workflow.steps) {
+        workflow.steps = workflow.steps.filter(s => String(s.resourceLinkId) !== String(resourceId));
+        await OL.persist();
+        renderGlobalVisualizer(isVault);
+    }
+};
 
 OL.promptInsertResourceInWorkflow = async function(workflowId, order, isVault) {
     const name = prompt("Enter Resource/Asset Name (e.g. 'Customer Onboarding Form'):");
