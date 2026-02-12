@@ -10778,11 +10778,28 @@ function renderGlobalWorkflowNode(wf, allResources) {
                     
                     // If the step exists in the workflow but the resource is missing from library
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
+
+                    const scopingItem = OL.isResourceInScope(asset.id);
+                    const isInScope = !!scopingItem;
                     
                     return `
-                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; border-left: 3px solid #38bdf8;">
-                            <div style="font-size: 11px; font-weight: bold; color: #eee; margin-bottom: 8px;">
-                                ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
+                        <div class="asset-mini-card ${isInScope ? 'is-in-scope' : ''}" 
+                            style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; margin-bottom:5px; 
+                                    border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
+                                    ${isInScope ? 'box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);' : 'border: 1px solid rgba(255,255,255,0.05);'}">
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                                <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
+                                    ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
+                                </div>
+                                
+                                ${isInScope ? `
+                                    <button class="btn tiny" title="View in Scoping Sheet"
+                                            style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;"
+                                            onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')">
+                                        $
+                                    </button>
+                                ` : ''}
                             </div>
                             
                             <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);">
@@ -10802,6 +10819,20 @@ function renderGlobalWorkflowNode(wf, allResources) {
         </div>
     `;
 }
+
+OL.isResourceInScope = function(resId) {
+    const client = getActiveClient();
+    const lineItems = client?.projectData?.scopingSheets?.[0]?.lineItems || [];
+    // Check if any line item points to this resource
+    return lineItems.find(item => String(item.resourceId) === String(resId));
+};
+
+OL.jumpToScopingItem = function(resId) {
+    // 1. Set a temporary filter or focus state so the scoping sheet highlights it
+    state.scopingSearch = OL.getResourceById(resId)?.name || "";
+    // 2. Switch tabs
+    location.hash = "#/scoping-sheet";
+};
 
 OL.toggleGlobalView = function(isVaultMode) {
     // Switch between 'focus' and 'global'
