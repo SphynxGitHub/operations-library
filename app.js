@@ -10883,14 +10883,27 @@ function renderGlobalWorkflowNode(wf, allResources) {
                             </div>
                             
                             <div style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);">
-                                ${(asset.steps || []).map(atomic => `
-                                    <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.8; display:flex; align-items:center; gap:5px;">
-                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
-                                            ${atomic.type === 'Trigger' ? '⚡' : '•'}
-                                        </span> 
-                                        ${esc(atomic.name || "Unnamed Step")}
+                                ${(asset.steps || []).map((atomic, aIdx) => `
+                                    <div class="atomic-step-wrapper">
+                                        <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.8; display:flex; align-items:center; gap:5px;">
+                                            <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
+                                                ${atomic.type === 'Trigger' ? '⚡' : '•'}
+                                            </span> 
+                                            ${esc(atomic.name || "Unnamed Step")}
+                                        </div>
+
+                                        <div class="insert-divider atomic" 
+                                            onclick="event.stopPropagation(); OL.promptInsertAtomicStep('${asset.id}', ${aIdx + 1}, ${isVaultMode})">
+                                            <span>+</span>
+                                        </div>
                                     </div>
-                                `).join('') || '<div class="tiny muted" style="font-size:8px;">No atomic steps defined</div>'}
+                                `).join('') || `
+                                    <div class="insert-divider initial" 
+                                        style="opacity:0.3; font-size:8px; cursor:pointer;" 
+                                        onclick="OL.promptInsertAtomicStep('${asset.id}', 0, ${isVaultMode})">
+                                        + ADD ATOMIC STEP
+                                    </div>
+                                `}
                             </div>
                         </div>
                     `;
@@ -10899,6 +10912,34 @@ function renderGlobalWorkflowNode(wf, allResources) {
         </div>
     `;
 }
+
+OL.promptInsertAtomicStep = function(resId, order, isVault) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    const name = prompt("Enter Step Name (e.g. 'Send Confirmation Email'):");
+    if (!name) return;
+
+    if (!res.steps) res.steps = [];
+
+    const newStep = {
+        id: uid(),
+        name: name,
+        type: "Action", // Default to Action
+        outcomes: [],
+        timingValue: 0,
+        timingType: 'after_prev'
+    };
+
+    // 🚀 INLINE INSERTION: Splicing into the exact position
+    res.steps.splice(order, 0, newStep);
+
+    // 🧹 Normalizing mapOrder if used at this level
+    res.steps.forEach((s, idx) => s.mapOrder = idx);
+
+    OL.persist();
+    renderGlobalVisualizer(isVault);
+};
 
 OL.isResourceInScope = function(resId) {
     const client = getActiveClient();
