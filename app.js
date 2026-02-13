@@ -10901,9 +10901,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                             </span> 
                                             ${esc(atomic.name || "Unnamed Step")}
                                         </div>
-                                        <div class="insert-divider atomic" onclick="event.stopPropagation(); OL.promptInsertAtomicStep('${asset.id}', ${aIdx + 1}, ${isVaultMode})">
-                                            <span>+</span>
-                                        </div>
                                     </div>
                                 `).join('') || `<div class="tiny muted italic" style="font-size:8px; opacity:0.5;">No steps defined</div>`}
                             </div>
