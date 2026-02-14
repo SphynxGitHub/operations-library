@@ -10869,7 +10869,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
-                    const hasLogic = (data.outcomes || []).length > 0;
+                    const hasLogic = (wf.outcomes || []).length > 0;
                     
                     return `
                     <div class="wf-resource-wrapper" 
