@@ -10868,9 +10868,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     
                     return `
                     <div class="wf-resource-wrapper" 
-                         draggable="true" 
-                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
-                         ondragend="this.classList.remove('dragging-now')">
+                        draggable="true" 
+                        ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
+                        ondragend="this.classList.remove('dragging-now')">
                         
                         <div class="asset-mini-card is-navigable ${isInScope ? 'is-in-scope' : ''}" 
                             onclick="OL.drillIntoResourceMechanics('${asset.id}')"
@@ -10882,32 +10882,33 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
                                     ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                                 </div>
-                                ${isInScope ? `<button class="btn tiny" onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')" style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;">$</button>` : ''}
-                                <button class="card-delete-btn" style="position:static; font-size:14px; opacity:0;" 
-                                        onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">×</button>
+
+                                <div style="display:flex; gap:5px; align-items:center;">
+                                    ${isInScope ? `
+                                        <button class="btn tiny" title="View in Scoping"
+                                                style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;"
+                                                onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')">$</button>
+                                    ` : ''}
+
+                                    <button class="card-delete-btn" style="opacity:0; position:static; font-size:14px;" 
+                                            onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">×</button>
+                                </div>
                             </div>
                             
-                            <div class="atomic-step-container" 
-                                 style="display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);"
-                                 ondragover="OL.handleCanvasDragOver(event)"
-                                 ondrop="event.stopPropagation(); OL.handleUniversalDrop(event, '${asset.id}', 'atomic-stack')">
-                                ${(asset.steps || []).map((atomic, aIdx) => `
-                                    <div class="atomic-step-wrapper" 
-                                         draggable="true"
-                                         ondragstart="OL.handleUniversalDragStart(event, '${atomic.id}', 'atomic', '${asset.id}')">
-                                        <div class="tiny" style="font-size: 9px; color: var(--text-dim); opacity: 0.8; display:flex; align-items:center; gap:5px;">
-                                            <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
-                                                ${atomic.type === 'Trigger' ? '⚡' : '•'}
-                                            </span> 
-                                            ${esc(atomic.name || "Unnamed Step")}
-                                        </div>
+                            <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
+                                ${(asset.steps || []).map(atomic => `
+                                    <div class="tiny" style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;">
+                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
+                                            ${atomic.type === 'Trigger' ? '⚡' : '•'}
+                                        </span> 
+                                        ${esc(atomic.name || "Unnamed Step")}
                                     </div>
-                                `).join('') || `<div class="tiny muted italic" style="font-size:8px; opacity:0.5;">No steps defined</div>`}
+                                `).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
                             </div>
                         </div>
 
                         <div class="insert-divider resource-gap" 
-                             onclick="event.stopPropagation(); OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})">
+                            onclick="event.stopPropagation(); OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})">
                             <span>+</span>
                         </div>
                     </div>`;
