@@ -4179,6 +4179,11 @@ OL.getResourceById = function(id) {
     const idStr = String(id);
 
     // 1. Resolve the global state
+    const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
+    const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
+    const stage = (sourceData.stages || []).find(s => String(s.id) === idStr);
+    if (stage) return stage;
+
     const globalState = window.state || OL.state;
     if (!globalState) {
         console.error("❌ State not found.");
@@ -4190,7 +4195,6 @@ OL.getResourceById = function(id) {
     if (fromMaster) return fromMaster;
 
     // 3. Check Active Client Local Project
-    const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
     const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === idStr);
     if (fromLocal) return fromLocal;
 
@@ -10865,6 +10869,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
+                    const hasLogic = (data.outcomes || []).length > 0;
                     
                     return `
                     <div class="wf-resource-wrapper" 
@@ -10901,6 +10906,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             </div>
 
                             <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
+                                ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🌲</span>` : ''}
                                 ${(asset.steps || []).map(atomic => `
                                     <div class="tiny" style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;">
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
@@ -11762,150 +11768,67 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     const data = OL.getResourceById(targetId);
     if (!data) {
-        panel.innerHTML = `<div class="p-20 muted">Select a node to inspect</div>`;
+        panel.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
         return;
     }
 
+    // 🚀 RECURSIVE LEVEL DETECTION
+    const isStage = targetId.startsWith('stage-');
+    const isWorkflow = data.type === 'Workflow';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
-    const isModule = data.type === 'module_block'; 
+    const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource;
+    
+    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
     const isVaultMode = location.hash.includes('vault');
-    const client = getActiveClient();
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
-    // ==========================================
-    // SCENARIO 1: TECHNICAL RESOURCE (📦)
-    // ==========================================
-    if (isTechnicalResource) {
-        const scopingItem = OL.isResourceInScope(data.id);
-        const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
-            String(v.applyTo).toLowerCase() === String(data.type).toLowerCase()
-        );
+    // --- SHARED HEADER ---
+    html += `
+        <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+            <span class="pill tiny accent" style="margin-bottom:8px;">${levelLabel.toUpperCase()}</span>
+            <input type="text" class="header-editable-input" value="${esc(data.name || data.title)}" 
+                   style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                   onblur="OL.updateResourceMetadata('${targetId}', 'name', this.value)">
+        </div>`;
 
+    // --- 🎯 UNIVERSAL LOGIC BLOCK (RECURSIVE) ---
+    // This injects the Outcomes manager into every level automatically
+    html += `
+        <div class="card-section" style="margin-top:10px; border-top: 2px solid var(--accent); padding-top:15px; background: rgba(56, 189, 248, 0.03);">
+            <label class="modal-section-label">🎯 ${levelLabel.toUpperCase()} EXIT PATHS</label>
+            <div id="step-outcomes-list" style="margin-top:8px;">
+                ${renderStepOutcomes(targetId, data)} 
+            </div>
+            <div class="search-map-container" style="margin-top:10px;">
+                <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add branch from this ${levelLabel}..." 
+                       onfocus="OL.filterOutcomeSearch('${targetId}', '${targetId}', '')"
+                       oninput="OL.filterOutcomeSearch('${targetId}', '${targetId}', this.value)">
+                <div id="outcome-results" class="search-results-overlay"></div>
+            </div>
+        </div>
+    `;
+
+    // --- SPECIFIC SUB-SECTIONS ---
+    if (isTechnicalResource || isWorkflow) {
         html += `
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span class="pill tiny accent">📦 ${esc(data.type)}</span>
-                    <button class="btn tiny soft" onclick="OL.openResourceModal('${data.id}')">↗ Full Modal</button>
-                </div>
-                <input type="text" class="header-editable-input" value="${esc(data.name)}" 
-                       style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                       onblur="OL.updateResourceMetadata('${data.id}', 'name', this.value)">
-            </div>
-            
-            <div class="card-section">
-                <label class="modal-section-label">📝 Description</label>
-                <textarea class="modal-textarea" rows="2" style="width:100%; font-size:11px;"
-                          onblur="OL.updateResourceMetadata('${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
-            </div>
-
             <div class="card-section" style="margin-top:25px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <label class="modal-section-label">⚙️ Procedure Steps</label>
-                    <button class="btn tiny primary" onclick="OL.promptInsertAtomicStep('${data.id}', ${data.steps?.length || 0}, ${isVaultMode})">+</button>
-                </div>
-                
+                <label class="modal-section-label">⚙️ Internal Procedure</label>
                 <div id="inspector-step-list" style="display:flex; flex-direction:column; gap:5px;">
                     ${(data.steps || []).map((step, idx) => `
-                        <div class="inspector-step-row" 
-                             draggable="true"
-                             ondragstart="event.dataTransfer.setData('dragIdx', ${idx}); event.target.style.opacity='0.5'"
-                             ondragover="event.preventDefault()"
-                             ondrop="OL.handleInspectorStepDrop(event, '${data.id}', ${idx})"
-                             style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border: 1px solid rgba(255,255,255,0.05);">
-                            <span class="muted" style="cursor:grab; font-size:10px;">⋮⋮</span>
-                            <span class="tiny bold accent" style="width:15px;">${idx + 1}</span>
-                            <div class="is-clickable" style="flex:1; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
-                                 onclick="OL.loadInspector('${step.id}', '${data.id}')">
+                        <div class="inspector-step-row" style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px;">
+                            <span class="tiny bold accent">${idx + 1}</span>
+                            <div class="is-clickable" style="flex:1; font-size:11px;" onclick="OL.loadInspector('${step.id}', '${data.id}')">
                                 ${esc(step.name || 'Unnamed Step')}
                             </div>
-                            <button class="card-delete-btn" style="position:static; font-size:14px;" 
-                                    onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
-                        </div>
-                    `).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
-                <label class="modal-section-label">🎯 Logic Branches (Outcomes)</label>
-                <div id="step-outcomes-list" style="margin-top:8px;">
-                    ${renderStepOutcomes(data.id, data)} 
-                </div>
-                <div class="search-map-container" style="margin-top:10px;">
-                    <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add branch..." 
-                        onfocus="OL.filterOutcomeSearch('${data.id}', '${data.id}', '')"
-                        oninput="OL.filterOutcomeSearch('${data.id}', '${data.id}', this.value)">
-                    <div id="outcome-results" class="search-results-overlay"></div>
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top:25px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1);">
-                <label class="modal-section-label">💰 Scoping</label>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
-                    ${relevantVars.map(([varKey, v]) => `
-                        <div class="modal-column">
-                            <label class="tiny muted" style="font-size:8px;">${esc(v.label)}</label>
-                            <input type="number" class="modal-input tiny" style="width:100%;"
-                                   value="${num(data.data?.[varKey])}" 
-                                   oninput="OL.updateResourcePricingData('${data.id}', '${varKey}', this.value)">
-                        </div>`).join("")}
+                        </div>`).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
                 </div>
             </div>
         `;
     }
 
-    // ==========================================
-    // SCENARIO 2: ATOMIC STEP (⚙️)
-    // ==========================================
-    else if (parentId && !isModule) {
-        const isTrigger = data.type === 'Trigger';
-        const stepApp = allApps.find(a => String(a.id) === String(data.appId));
-
-        html += `
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px; width: 100%;">
-                <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="margin-bottom:8px;">${esc(data.type || 'Action')}</span>
-                <input type="text" class="header-editable-input" 
-                       value="${esc(data.name)}" 
-                       style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                       onblur="OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)">
-            </div>
-
-            <div class="card-section" style="width: 100%; margin-bottom: 20px;">
-                <label class="modal-section-label">📱 Linked Application</label>
-                <div style="margin-top:8px; width: 100%;">
-                    ${stepApp ? `
-                        <div class="pill accent is-clickable" onclick="OL.openAppModal('${stepApp.id}')" style="display:flex; align-items:center; width: 100%; justify-content: space-between;">
-                            <span>📱 ${esc(stepApp.name)}</span>
-                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateAtomicStep('${parentId}', '${data.id}', 'appId', '')">×</b>
-                        </div>
-                    ` : `
-                        <div class="search-map-container" style="width: 100%;">
-                            <input type="text" class="modal-input tiny" style="width: 100%;" placeholder="Link App..." 
-                                   onfocus="OL.filterAppSearch('${parentId}', '${data.id}', this.value)"
-                                   oninput="OL.filterAppSearch('${parentId}', '${data.id}', this.value)">
-                            <div id="app-search-results" class="search-results-overlay"></div>
-                        </div>
-                    `}
-                </div>
-            </div>
-
-            <div class="card-section" style="width: 100%;">
-                <label class="modal-section-label">👨‍💼 Assignment</label>
-                <div class="search-map-container" style="width: 100%; margin-top: 8px;">
-                    <input type="text" class="modal-input tiny" style="width: 100%;" placeholder="Assign member..." 
-                           onfocus="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, '')"
-                           oninput="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, this.value)">
-                    <div id="assignment-search-results" class="search-results-overlay"></div>
-                </div>
-            </div>
-
-            <div class="card-section" style="width: 100%; margin-top: 20px;">
-                <label class="modal-section-label">📝 Technical Notes</label>
-                <textarea class="modal-textarea" rows="4" style="width:100%; font-size:11px; margin-top: 8px;"
-                          onblur="OL.updateAtomicStep('${parentId}', '${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
-            </div>
-        `;
+    if (isTechnicalResource) {
+        // [Inject pricing variables logic here if needed]
     }
 
     html += `</div>`;
