@@ -10894,6 +10894,10 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                             onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">×</button>
                                 </div>
                             </div>
+
+                            <div class = "resource-description">
+                                        ${asset.descripiton}
+                            </div>
                             
                             <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
                                 ${(asset.steps || []).map(atomic => `
