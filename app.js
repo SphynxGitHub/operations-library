@@ -11962,6 +11962,18 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+
+    if (!document.getElementById('modal-layer')) {
+        // If we are in the Global Macro Map (L1)
+        if (state.viewMode === 'global') {
+            renderGlobalVisualizer(isVaultMode);
+        } 
+        // If we are in the Workflow Stream (L2)
+        else if (state.viewMode === 'workflow' && state.activeWorkflowId) {
+            const canvas = document.getElementById('fs-canvas');
+            if (canvas) canvas.innerHTML = window.renderLevel2Canvas(state.activeWorkflowId);
+        }
+    }
 };
 
 OL.handleInspectorStepDrop = function(e, resId, targetIdx) {

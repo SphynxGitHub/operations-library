@@ -3174,7 +3174,7 @@ body.is-visualizer #mainContent {
 
 /* The "Parent" card glows blue when you are inside its steps */
 .asset-mini-card.parent-active {
-    border: 1px solid var(--accent) !important;
+    border: 2px solid var(--accent) !important;
     background: rgba(56, 189, 248, 0.1) !important;
     box-shadow: 0 0 15px var(--accent-glow);
     transition: all 0.3s ease;
