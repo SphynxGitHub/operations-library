@@ -2464,8 +2464,8 @@ body.is-visualizer #mainContent {
 .three-pane-layout {
     display: flex;
     flex-direction: row;
-    width: 100% !important;
-    height: calc(100vh); /* Adjust based on your top nav height */
+    width: 100vw !important;
+    height: 100vh !important;
     overflow: hidden;
     background-color: #050816;
 }
@@ -2474,7 +2474,7 @@ body.is-visualizer #mainContent {
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 100vh;
     min-width: 0;
     width: 100%;
     overflow: hidden;
@@ -2695,7 +2695,10 @@ body.is-visualizer #mainContent {
     flex-grow: 1;
     overflow-x: auto; /* Horizontal scroll happens here */
     overflow-y: auto; /* Vertical scroll happens here */
+    height: 100%;
     padding-bottom: 50px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) transparent;
 }
 
 .canvas-header {
