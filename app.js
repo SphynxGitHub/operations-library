@@ -10873,10 +10873,10 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         ondragend="this.classList.remove('dragging-now')">
                         
                         <div class="asset-mini-card is-navigable ${isInScope ? 'is-in-scope' : ''}" 
-                            onclick="OL.drillIntoResourceMechanics('${asset.id}')"
+                            onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
                                     border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
-                                    ${isInScope ? 'box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1);' : ''} border: 1px solid rgba(255,255,255,0.05);">
+                                    border: 1px solid rgba(255,255,255,0.05);">
                             
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom:8px;">
                                 <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
@@ -11733,12 +11733,10 @@ OL.cloneResourceWorkflow = function(resId) {
 
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
-    
-    // ⚓ THE ANCHOR: Lock the parent context so refreshes don't jump back to Level 2
+    // ⚓ THE ANCHOR: Lock the parent context
     if (parentId) {
         state.activeInspectorParentId = parentId;
     } else {
-        // Fallback to the last known parent if we are refreshing/updating
         parentId = state.activeInspectorParentId;
     }
 
@@ -11753,224 +11751,135 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     const client = getActiveClient();
-    const isStepOnCanvas = !!parentId; 
     const registry = state.master.resourceTypes || [];
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    
+    // 🔍 TYPE DETECTION
+    const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
     const isModule = data.type === 'module_block';
-    const parentResId = parentId || state.focusedResourceId || state.focusedWorkflowId;
-    
-    // 🎨 DISPLAY NAME RESOLUTION
-    let displayAssigneeName = data.assigneeName;
-
-    // 📱 RESOLVE APP LIST: Gather all apps and find the linked one to show the NAME, not ID
-    const allApps = [
-        ...(state.master.apps || []), 
-        ...(client?.projectData?.localApps || [])
-    ];
-    
-    // Resolution for "Linked Application" section
-    const stepApp = allApps.find(a => String(a.id) === String(data.appId));
-
-    // 🚀 THE FIX: If assigned to a system, lookup the actual name for the "Assigned To" pill
-    if (data.assigneeType === 'system') {
-        const matchedApp = allApps.find(a => String(a.id) === String(data.assigneeId));
-        if (matchedApp) displayAssigneeName = matchedApp.name;
-    }
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
 
-    // 🚀 SCENARIO A: ATOMIC STEP (Mechanical View)
-    if (isStepOnCanvas && !isModule) {
-        const isTrigger = data.type === 'Trigger';
+    // ==========================================
+    // SCENARIO 1: TECHNICAL RESOURCE (📦)
+    // ==========================================
+    if (isTechnicalResource) {
+        const scopingItem = OL.isResourceInScope(data.id);
+        const isInScope = !!scopingItem;
         
-        // 🔗 LINKED ASSETS HTML
-        const links = data.links || [];
-        const linksHtml = links.map((link, lIdx) => {
-            const icon = OL.getRegistryIcon(link.type);
-            return `
-                <div class="pill soft is-clickable" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 10px; margin-bottom: 4px;" 
-                    onclick="OL.openResourceModal('${link.id}')">
-                    <span style="font-size: 11px;">${icon} ${esc(link.name)}</span>
-                    <b class="pill-remove-x" style="opacity: 0.5;" 
-                       onclick="event.stopPropagation(); OL.removeStepLink('${parentResId}', '${data.id}', ${lIdx})">×</b>
-                </div>`;
-        }).join('');
+        // Lookup pricing variables for this specific resource type
+        const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
+            String(v.applyTo).toLowerCase() === String(data.type).toLowerCase()
+        );
 
-        const emptyLinksHtml = `
-            <div class="tiny muted italic" style="margin-bottom: 8px;">No assets linked.</div>
-            <div class="dropdown-plus-container" style="display:inline-block; position:relative;">
-                <button class="btn primary" style="font-weight:bold;">+ New Resource</button>
-                <div class="dropdown-plus-menu" style="right: 0; left: auto;">
-                    <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
-                    ${(state.master.resourceTypes || []).map(t => `
-                        <div class="dropdown-item" onclick="OL.quickCreateInLibrary('${t.type}')">
-                            ${OL.getRegistryIcon(t.type)} ${t.type}
-                        </div>
-                    `).join('')}
-                    <div class="dropdown-item" onclick="OL.quickCreateInLibrary('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
-                        📄 Basic SOP
-                    </div>
+        html += `
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="pill tiny accent" style="margin-bottom:8px;">📦 ${esc(data.type)}</span>
+                    ${isInScope ? `<span class="pill tiny" style="background:#10b981; color:white; font-size:8px;">PRICED $</span>` : ''}
                 </div>
+                <input type="text" class="header-editable-input" value="${esc(data.name)}" 
+                       style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       onblur="OL.updateResourceMetadata('${data.id}', 'name', this.value)">
+            </div>
+            
+            <div class="card-section">
+                <label class="modal-section-label">📝 Description & Access</label>
+                <textarea class="modal-textarea" rows="3" style="font-size:11px;"
+                          placeholder="Technical notes or login requirements..."
+                          onblur="OL.updateResourceMetadata('${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
+            </div>
+
+            <div class="card-section" style="margin-top:20px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1);">
+                <label class="modal-section-label">💰 Pricing Variables</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                    ${relevantVars.length > 0 ? relevantVars.map(([varKey, v]) => `
+                        <div class="modal-column">
+                            <label class="tiny muted" style="font-size:8px; display:block; margin-bottom:2px;">${esc(v.label)}</label>
+                            <input type="number" class="modal-input tiny" 
+                                   style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.05);"
+                                   value="${num(data.data?.[varKey])}" 
+                                   oninput="OL.updateResourcePricingData('${data.id}', '${varKey}', this.value)">
+                        </div>`).join("") : '<div class="tiny muted italic">No pricing variables for this type.</div>'}
+                </div>
+                ${!isInScope ? `
+                    <button class="btn tiny primary" style="width:100%; margin-top:12px; background:#10b981; color:white;" 
+                            onclick="OL.executeScopeAdd('${data.id}')">+ Add to Scoping Sheet</button>
+                ` : `
+                    <button class="btn tiny soft" style="width:100%; margin-top:12px;" 
+                            onclick="OL.jumpToScopingItem('${data.id}')">View on Scoping Sheet ➔</button>
+                `}
+            </div>
+
+            <div class="card-section" style="margin-top:20px;">
+                <button class="btn tiny primary full-width" onclick="OL.drillIntoResourceMechanics('${data.id}')">
+                    🔍 Open Full Visual Editor
+                </button>
             </div>
         `;
+    } 
 
-        // 🎭 ASSIGNEE ICON LOGIC
-        const getAssigneeIcon = (type) => {
-            if (type === 'role') return '🎭';
-            if (type === 'system') return '📱';
-            return '👨‍💼';
-        };
-        
+    // ==========================================
+    // SCENARIO 2: ATOMIC STEP (⚙️)
+    // ==========================================
+    else if (parentId && !isModule) {
+        const isTrigger = data.type === 'Trigger';
+        const stepApp = allApps.find(a => String(a.id) === String(data.appId));
+        const links = data.links || [];
+
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
                 <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="margin-bottom:8px;">${esc(data.type || 'Action')}</span>
                 <input type="text" class="header-editable-input" 
                        value="${esc(data.name)}" 
                        style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                       onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'name', this.value)">
+                       onblur="OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)">
             </div>
 
-            <div class="card-section" style="margin-top: 15px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;">
-                <label class="modal-section-label">🔗 Linked Assets & SOPs</label>
-                <div id="inspector-links-list" style="display:flex; flex-direction:column; margin-top:10px;">
-                    ${linksHtml || emptyLinksHtml}
-                </div>
-                
-                <div class="search-map-container" style="margin-top:12px;">
-                    <input type="text" class="modal-input tiny" placeholder="+ Link an asset (Email, Form, SOP)..." 
-                        onfocus="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)"
-                        oninput="OL.filterResourceSearch('${parentResId}', '${data.id}', this.value)">
-                    <div id="resource-results-${data.id}" class="search-results-overlay"></div>
-                </div>
-            </div>
-
-            <div class="card-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;">
+            <div class="card-section">
                 <label class="modal-section-label">📱 Linked Application</label>
-                <div id="inspector-app-zone" style="margin-top:10px;">
+                <div id="inspector-app-zone" style="margin-top:8px;">
                     ${stepApp ? `
-                        <div class="pill accent is-clickable" onclick="OL.openAppModal('${stepApp.id}')">
+                        <div class="pill accent is-clickable" onclick="OL.openAppModal('${stepApp.id}')" style="display:flex; align-items:center; gap:8px;">
                             📱 ${esc(stepApp.name)}
-                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateAtomicStep('${parentResId}', '${data.id}', 'appId', '')">×</b>
+                            <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateAtomicStep('${parentId}', '${data.id}', 'appId', '')">×</b>
                         </div>
                     ` : `
                         <div class="search-map-container">
-                            <input type="text" class="modal-input tiny" placeholder="Link App (Slack, Zapier...)" 
-                                onfocus="OL.filterAppSearch('${parentResId}', '${data.id}', this.value)"
-                                oninput="OL.filterAppSearch('${parentResId}', '${data.id}', this.value)">
+                            <input type="text" class="modal-input tiny" placeholder="Link App..." 
+                                   onfocus="OL.filterAppSearch('${parentId}', '${data.id}', this.value)"
+                                   oninput="OL.filterAppSearch('${parentId}', '${data.id}', this.value)">
                             <div id="app-search-results" class="search-results-overlay"></div>
                         </div>
                     `}
                 </div>
             </div>
 
-            <section style="display: flex; flex-direction: column; gap: 20px;">
-                <div class="card-section">
-                    <label class="modal-section-label">👨‍💼 Assigned To</label>
-                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                        ${data.assigneeName ? `
-                            <div class="pill accent">
-                                ${getAssigneeIcon(data.assigneeType)} ${esc(displayAssigneeName)}
-                                <b class="pill-remove-x" onclick="OL.executeAssignment('${parentResId}', '${data.id}', false, '', '', '')">×</b>
-                            </div>
-                        ` : '<span class="tiny muted">Unassigned</span>'}
-                    </div>
-                    <div class="search-map-container">
-                        <input type="text" class="modal-input tiny" placeholder="Assign member, role, or system..." 
-                               onfocus="OL.filterAssignmentSearch('${parentResId}', '${data.id}', false, '')"
-                               oninput="OL.filterAssignmentSearch('${parentResId}', '${data.id}', false, this.value)">
-                        <div id="assignment-search-results" class="search-results-overlay"></div>
-                    </div>
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">👨‍💼 Assigned To</label>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    ${data.assigneeName ? `
+                        <div class="pill accent">
+                            ${data.assigneeType === 'system' ? '📱' : '👨‍💼'} ${esc(data.assigneeName)}
+                            <b class="pill-remove-x" onclick="OL.executeAssignment('${parentId}', '${data.id}', false, '', '', '')">×</b>
+                        </div>
+                    ` : '<span class="tiny muted">Unassigned</span>'}
                 </div>
-
-                ${!isTrigger ? `
-                <div class="card-section">
-                    <label class="modal-section-label">📅 Relational Scheduling</label>
-                    <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-                        <input type="number" class="modal-input tiny" style="width:50px;" value="${num(data.timingValue)}" 
-                               onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingValue', this.value)">
-                        <select class="modal-input tiny" onchange="OL.updateAtomicStep('${parentResId}', '${data.id}', 'timingType', this.value)">
-                            <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>After Prev</option>
-                            <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>After Start</option>
-                        </select>
-                    </div>
-                </div>` : ''}
-
-                <div class="card-section">
-                    <label class="modal-section-label">🎯 Conditional Logic</label>
-                    <div id="step-outcomes-list" style="margin-top:8px;">
-                        ${renderStepOutcomes(parentResId, data)}
-                    </div>
-                    <div class="search-map-container" style="margin-top:10px;">
-                        <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add branch..." 
-                               onfocus="OL.filterOutcomeSearch('${parentResId}', '${data.id}', '')"
-                               oninput="OL.filterOutcomeSearch('${parentResId}', '${data.id}', this.value)">
-                        <div id="outcome-results" class="search-results-overlay"></div>
-                    </div>
-                </div>
-
-                <div class="card-section">
-                    <label class="modal-section-label">📝 Technical Instructions</label>
-                    <textarea class="modal-textarea" rows="3" style="font-size:11px;"
-                              onblur="OL.updateAtomicStep('${parentResId}', '${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
-                </div>
-            </section>`;
-    } 
-    // 🚀 SCENARIO B: CONTAINER PREVIEW
-    else {
-        const techId = data.resourceLinkId || data.linkedResourceId || data.id;
-        const techAsset = OL.getResourceById(techId);
-        const children = techAsset?.steps || [];
-        const isAtResourceLevel = !!state.focusedWorkflowId; 
-
-        html += `
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="tiny accent bold uppercase">
-                        ${isAtResourceLevel ? `📦 ${techAsset?.type || 'Resource'}` : '📂 Workflow Lifecycle'}
-                    </span>
-                </div>
-                <input type="text" class="header-editable-input" 
-                    value="${esc(techAsset?.name || data.name)}" 
-                    style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none; margin-top:8px;"
-                    onblur="OL.updateResourceMetadata('${techId}', 'name', this.value)">
-                <div style="margin-top:12px;">
-                    <label class="modal-section-label" style="font-size:9px; opacity:0.5; margin-bottom:4px; display:block;">
-                        ${isAtResourceLevel ? 'Resource Description' : 'Lifecycle Subtitle'}
-                    </label>
-                    <textarea class="modal-textarea" rows="2" 
-                        style="font-size:11px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); width:100%; padding:8px; border-radius:4px; color:#ccc;"
-                        onblur="OL.updateResourceMetadata('${techId}', 'description', this.value)">${esc(techAsset?.description || '')}</textarea>
+                <div class="search-map-container">
+                    <input type="text" class="modal-input tiny" placeholder="Assign member..." 
+                           onfocus="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, '')"
+                           oninput="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, this.value)">
+                    <div id="assignment-search-results" class="search-results-overlay"></div>
                 </div>
             </div>
 
-            <section>
-                ${isAtResourceLevel ? `
-                    <div class="card-section" style="margin-bottom: 20px;">
-                        <label class="modal-section-label">🏷️ Classification</label>
-                        <select class="modal-input tiny" onchange="OL.updateResourceType('${techId}', this.value)">
-                            ${registry.map(t => `
-                                <option value="${t.type}" ${techAsset?.type === t.type ? 'selected' : ''}>
-                                    ${t.icon || '⚙️'} ${t.type}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-                ` : ''}
-
-                <label class="modal-section-label">PROCEDURE PREVIEW</label>
-                <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 400px; overflow-y: auto;">
-                    ${children.map((s, i) => `
-                        <div style="display:flex; gap:10px; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; border-left:2px solid var(--accent);">
-                            <span class="tiny bold accent">${i + 1}</span>
-                            <div class="tiny" style="color:#eee; font-weight:600;">${esc(s.name || 'Step')}</div>
-                        </div>
-                    `).join('') || '<div class="tiny muted italic">No procedures defined.</div>'}
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">🎯 Conditional Logic</label>
+                <div id="step-outcomes-list" style="margin-top:8px;">
+                    ${renderStepOutcomes(parentId, data)}
                 </div>
-                
-                <div style="margin-top:25px; display:flex; flex-direction:column; gap:10px;">
-                    <button class="btn tiny primary" onclick="OL.openResourceModal('${techId}')">⚙️ Edit Full SOP</button>
-                    <button class="btn tiny soft" onclick="OL.drillIntoResourceMechanics('${techId}')">🔍 Drill Down</button>
-                </div>
-            </section>`;
+            </div>
+        `;
     }
 
     html += `</div>`;
