@@ -11751,14 +11751,13 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     const client = getActiveClient();
-    const registry = state.master.resourceTypes || [];
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
     
     // 🔍 TYPE DETECTION
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
     const isModule = data.type === 'module_block';
 
-    let html = `<div class="inspector-content fade-in" style="padding: 20px;">`;
+    let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
     // ==========================================
     // SCENARIO 1: TECHNICAL RESOURCE (📦)
@@ -11825,10 +11824,9 @@ OL.loadInspector = function(targetId, parentId = null) {
     else if (parentId && !isModule) {
         const isTrigger = data.type === 'Trigger';
         const stepApp = allApps.find(a => String(a.id) === String(data.appId));
-        const links = data.links || [];
 
         html += `
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
+            <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px; width: 100%;">
                 <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="margin-bottom:8px;">${esc(data.type || 'Action')}</span>
                 <input type="text" class="header-editable-input" 
                        value="${esc(data.name)}" 
@@ -11836,17 +11834,17 @@ OL.loadInspector = function(targetId, parentId = null) {
                        onblur="OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)">
             </div>
 
-            <div class="card-section">
+            <div class="card-section" style="width: 100%; margin-bottom: 20px;">
                 <label class="modal-section-label">📱 Linked Application</label>
-                <div id="inspector-app-zone" style="margin-top:8px;">
+                <div style="margin-top:8px; width: 100%;">
                     ${stepApp ? `
-                        <div class="pill accent is-clickable" onclick="OL.openAppModal('${stepApp.id}')" style="display:flex; align-items:center; gap:8px;">
-                            📱 ${esc(stepApp.name)}
+                        <div class="pill accent is-clickable" onclick="OL.openAppModal('${stepApp.id}')" style="display:flex; align-items:center; width: 100%; justify-content: space-between;">
+                            <span>📱 ${esc(stepApp.name)}</span>
                             <b class="pill-remove-x" onclick="event.stopPropagation(); OL.updateAtomicStep('${parentId}', '${data.id}', 'appId', '')">×</b>
                         </div>
                     ` : `
-                        <div class="search-map-container">
-                            <input type="text" class="modal-input tiny" placeholder="Link App..." 
+                        <div class="search-map-container" style="width: 100%;">
+                            <input type="text" class="modal-input tiny" style="width: 100%;" placeholder="Link App..." 
                                    onfocus="OL.filterAppSearch('${parentId}', '${data.id}', this.value)"
                                    oninput="OL.filterAppSearch('${parentId}', '${data.id}', this.value)">
                             <div id="app-search-results" class="search-results-overlay"></div>
@@ -11855,29 +11853,20 @@ OL.loadInspector = function(targetId, parentId = null) {
                 </div>
             </div>
 
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">👨‍💼 Assigned To</label>
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                    ${data.assigneeName ? `
-                        <div class="pill accent">
-                            ${data.assigneeType === 'system' ? '📱' : '👨‍💼'} ${esc(data.assigneeName)}
-                            <b class="pill-remove-x" onclick="OL.executeAssignment('${parentId}', '${data.id}', false, '', '', '')">×</b>
-                        </div>
-                    ` : '<span class="tiny muted">Unassigned</span>'}
-                </div>
-                <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" placeholder="Assign member..." 
+            <div class="card-section" style="width: 100%;">
+                <label class="modal-section-label">👨‍💼 Assignment</label>
+                <div class="search-map-container" style="width: 100%; margin-top: 8px;">
+                    <input type="text" class="modal-input tiny" style="width: 100%;" placeholder="Assign member..." 
                            onfocus="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, '')"
                            oninput="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, this.value)">
                     <div id="assignment-search-results" class="search-results-overlay"></div>
                 </div>
             </div>
 
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">🎯 Conditional Logic</label>
-                <div id="step-outcomes-list" style="margin-top:8px;">
-                    ${renderStepOutcomes(parentId, data)}
-                </div>
+            <div class="card-section" style="width: 100%; margin-top: 20px;">
+                <label class="modal-section-label">📝 Technical Notes</label>
+                <textarea class="modal-textarea" rows="4" style="width:100%; font-size:11px; margin-top: 8px;"
+                          onblur="OL.updateAtomicStep('${parentId}', '${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
             </div>
         `;
     }
