@@ -3037,6 +3037,7 @@ body.is-visualizer #mainContent {
 
 .workflow-block-card .tiny.muted {
     font-size: 9px !important;
+}
 
 .workflow-block-card:hover {
     border-color: var(--accent);
