@@ -6019,39 +6019,55 @@ OL.openOutcomePicker = function(event, resId, stepId, idx) {
     }
 };
 
-OL.executeAssignmentOutcome = function(resId, stepId, actionCode, destinationLabel) {
-    const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
-    if (!step) return;
+OL.executeAssignmentOutcome = function(parentId, itemId, actionCode, destinationLabel) {
+    // 1. Resolve the specific target (Stage, Workflow, Resource, or Step)
+    const targetObj = OL.getResourceById(itemId);
+    const parentObj = OL.getResourceById(parentId);
+    
+    if (!targetObj) {
+        console.error("❌ Target object not found for ID:", itemId);
+        return;
+    }
 
-    if (!step.outcomes) step.outcomes = [];
+    // 2. Initialize the outcomes array if missing
+    if (!targetObj.outcomes) targetObj.outcomes = [];
 
     // 🚀 Check if we are remapping an existing row or adding a new one
     if (state.activeRemap && state.activeRemap.idx !== undefined) {
         const idx = state.activeRemap.idx;
-        step.outcomes[idx].action = actionCode;
-        step.outcomes[idx].label = destinationLabel;
-        state.activeRemap = null; // Clear state
+        targetObj.outcomes[idx].action = actionCode;
+        targetObj.outcomes[idx].label = destinationLabel;
+        state.activeRemap = null; // Clear remap state
     } else {
-        step.outcomes.push({ 
+        targetObj.outcomes.push({ 
             condition: "", 
             action: actionCode, 
             label: destinationLabel 
         });
     }
 
+    // 💾 Push to Cloud
     OL.persist();
     
-    // Surgical Refresh
+    // 🔄 SURGICAL UI REFRESH
+    // Update the outcomes list in the inspector
     const detailList = document.getElementById('step-outcomes-list');
-    if (detailList) detailList.innerHTML = renderStepOutcomes(resId, step);
+    if (detailList) detailList.innerHTML = renderStepOutcomes(parentId, targetObj);
 
+    // If we are inside a Resource Modal/Fullscreen, refresh the sequence list
     const mainList = document.getElementById('sop-step-list');
-    if (mainList) mainList.innerHTML = renderSopStepList(res);
+    if (mainList && parentObj) {
+        mainList.innerHTML = renderSopStepList(parentObj);
+    }
 
-    // Clear search
+    // Clear the search overlay results
     const results = document.getElementById('outcome-results');
     if (results) results.innerHTML = "";
+
+    // 🌲 Update the Tree icons on the Global Map
+    renderGlobalVisualizer(location.hash.includes('vault'));
+    
+    console.log(`✅ Logic path added to ${itemId}: leads to ${destinationLabel}`);
 };
 
 OL.updateOutcomeValue = function(resId, stepId, idx, field, value) {
