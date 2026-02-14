@@ -11733,12 +11733,8 @@ OL.cloneResourceWorkflow = function(resId) {
 
 // --- INSPECTOR ENGINE ---
 OL.loadInspector = function(targetId, parentId = null) {
-    // ⚓ THE ANCHOR: Lock the parent context
-    if (parentId) {
-        state.activeInspectorParentId = parentId;
-    } else {
-        parentId = state.activeInspectorParentId;
-    }
+    if (parentId) state.activeInspectorParentId = parentId;
+    else parentId = state.activeInspectorParentId;
 
     state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
@@ -11751,11 +11747,8 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     const client = getActiveClient();
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-    
-    // 🔍 TYPE DETECTION
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
-    const isModule = data.type === 'module_block';
+    const isVaultMode = location.hash.includes('vault');
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
@@ -11764,18 +11757,15 @@ OL.loadInspector = function(targetId, parentId = null) {
     // ==========================================
     if (isTechnicalResource) {
         const scopingItem = OL.isResourceInScope(data.id);
-        const isInScope = !!scopingItem;
-        
-        // Lookup pricing variables for this specific resource type
         const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
             String(v.applyTo).toLowerCase() === String(data.type).toLowerCase()
         );
 
         html += `
             <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="pill tiny accent" style="margin-bottom:8px;">📦 ${esc(data.type)}</span>
-                    ${isInScope ? `<span class="pill tiny" style="background:#10b981; color:white; font-size:8px;">PRICED $</span>` : ''}
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span class="pill tiny accent">📦 ${esc(data.type)}</span>
+                    <button class="btn tiny soft" onclick="OL.openResourceModal('${data.id}')">↗ Full Modal</button>
                 </div>
                 <input type="text" class="header-editable-input" value="${esc(data.name)}" 
                        style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
@@ -11783,40 +11773,52 @@ OL.loadInspector = function(targetId, parentId = null) {
             </div>
             
             <div class="card-section">
-                <label class="modal-section-label">📝 Description & Access</label>
-                <textarea class="modal-textarea" rows="3" style="font-size:11px;"
-                          placeholder="Technical notes or login requirements..."
+                <label class="modal-section-label">📝 Description</label>
+                <textarea class="modal-textarea" rows="2" style="width:100%; font-size:11px;"
                           onblur="OL.updateResourceMetadata('${data.id}', 'description', this.value)">${esc(data.description || '')}</textarea>
             </div>
 
-            <div class="card-section" style="margin-top:20px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1);">
-                <label class="modal-section-label">💰 Pricing Variables</label>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
-                    ${relevantVars.length > 0 ? relevantVars.map(([varKey, v]) => `
-                        <div class="modal-column">
-                            <label class="tiny muted" style="font-size:8px; display:block; margin-bottom:2px;">${esc(v.label)}</label>
-                            <input type="number" class="modal-input tiny" 
-                                   style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.05);"
-                                   value="${num(data.data?.[varKey])}" 
-                                   oninput="OL.updateResourcePricingData('${data.id}', '${varKey}', this.value)">
-                        </div>`).join("") : '<div class="tiny muted italic">No pricing variables for this type.</div>'}
+            <div class="card-section" style="margin-top:25px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <label class="modal-section-label">⚙️ Procedure Steps</label>
+                    <button class="btn tiny primary" onclick="OL.promptInsertAtomicStep('${data.id}', ${data.steps?.length || 0}, ${isVaultMode})">+</button>
                 </div>
-                ${!isInScope ? `
-                    <button class="btn tiny primary" style="width:100%; margin-top:12px; background:#10b981; color:white;" 
-                            onclick="OL.executeScopeAdd('${data.id}')">+ Add to Scoping Sheet</button>
-                ` : `
-                    <button class="btn tiny soft" style="width:100%; margin-top:12px;" 
-                            onclick="OL.jumpToScopingItem('${data.id}')">View on Scoping Sheet ➔</button>
-                `}
+                
+                <div id="inspector-step-list" style="display:flex; flex-direction:column; gap:5px;">
+                    ${(data.steps || []).map((step, idx) => `
+                        <div class="inspector-step-row" 
+                             draggable="true"
+                             ondragstart="event.dataTransfer.setData('dragIdx', ${idx}); event.target.style.opacity='0.5'"
+                             ondragover="event.preventDefault()"
+                             ondrop="OL.handleInspectorStepDrop(event, '${data.id}', ${idx})"
+                             style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border: 1px solid rgba(255,255,255,0.05);">
+                            <span class="muted" style="cursor:grab; font-size:10px;">⋮⋮</span>
+                            <span class="tiny bold accent" style="width:15px;">${idx + 1}</span>
+                            <div class="is-clickable" style="flex:1; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                                 onclick="OL.loadInspector('${step.id}', '${data.id}')">
+                                ${esc(step.name || 'Unnamed Step')}
+                            </div>
+                            <button class="card-delete-btn" style="position:static; font-size:14px;" 
+                                    onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
+                        </div>
+                    `).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
+                </div>
             </div>
 
-            <div class="card-section" style="margin-top:20px;">
-                <button class="btn tiny primary full-width" onclick="OL.drillIntoResourceMechanics('${data.id}')">
-                    🔍 Open Full Visual Editor
-                </button>
+            <div class="card-section" style="margin-top:25px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1);">
+                <label class="modal-section-label">💰 Scoping</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                    ${relevantVars.map(([varKey, v]) => `
+                        <div class="modal-column">
+                            <label class="tiny muted" style="font-size:8px;">${esc(v.label)}</label>
+                            <input type="number" class="modal-input tiny" style="width:100%;"
+                                   value="${num(data.data?.[varKey])}" 
+                                   oninput="OL.updateResourcePricingData('${data.id}', '${varKey}', this.value)">
+                        </div>`).join("")}
+                </div>
             </div>
         `;
-    } 
+    }
 
     // ==========================================
     // SCENARIO 2: ATOMIC STEP (⚙️)
@@ -11873,6 +11875,24 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+};
+
+OL.handleInspectorStepDrop = function(e, resId, targetIdx) {
+    e.preventDefault();
+    const dragIdx = parseInt(e.dataTransfer.getData('dragIdx'));
+    if (dragIdx === targetIdx) return;
+
+    const res = OL.getResourceById(resId);
+    if (!res || !res.steps) return;
+
+    // Move the item
+    const [movedStep] = res.steps.splice(dragIdx, 1);
+    res.steps.splice(targetIdx, 0, movedStep);
+
+    // Save and Re-render
+    OL.persist();
+    OL.loadInspector(resId); // Refresh the list
+    renderGlobalVisualizer(location.hash.includes('vault')); // Sync the canvas
 };
 
 OL.promptQuickCreateAsset = async function(parentResId, stepId) {
