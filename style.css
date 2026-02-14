@@ -62,7 +62,7 @@ textarea {
 #mainContent {
     flex: 1;
     margin-left: 240px; 
-    padding: 40px;
+    padding: 0 40px 40px 40px;
     background: radial-gradient(circle at top right, #0f172a, transparent);
 }
 
