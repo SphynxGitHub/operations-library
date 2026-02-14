@@ -10874,6 +10874,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         
                         <div class="asset-mini-card is-navigable ${isInScope ? 'is-in-scope' : ''}" 
                             onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
+                            ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
                                     border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
                                     border: 1px solid rgba(255,255,255,0.05);">
