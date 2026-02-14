@@ -10863,7 +10863,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
         return { ...step, asset: linkedAsset };
     });
-    const isParentActive = state.activeInspectorParentId === asset.id;
 
     return `
         <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
@@ -10887,6 +10886,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
                     const hasLogic = (wf.outcomes || []).length > 0;
+                    const isParentActive = state.activeInspectorParentId === asset.id;
                     
                     return `
                     <div class="wf-resource-wrapper" 
