@@ -10896,7 +10896,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             </div>
 
                             <div class = "resource-description">
-                                        ${asset.note}
+                                        ${esc(asset.description)}
                             </div>
 
                             <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
