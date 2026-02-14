@@ -11751,6 +11751,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     const client = getActiveClient();
+    const isModule = data.type === 'module_block';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
     const isVaultMode = location.hash.includes('vault');
 
