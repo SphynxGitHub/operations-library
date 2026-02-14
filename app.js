@@ -11276,7 +11276,6 @@ window.renderLevel2Canvas = function(workflowId) {
         });
     }
 
-    // Identify unique types present in this specific workflow for the filter bar
     const typesPresent = [...new Set((res.steps || []).map(s => OL.getResourceById(s.resourceLinkId)?.type))].filter(Boolean);
 
     let html = `
@@ -11299,31 +11298,46 @@ window.renderLevel2Canvas = function(workflowId) {
                 
                 ${steps.map((step, idx) => {
                     const techAsset = OL.getResourceById(step.resourceLinkId);
-                    const icon = OL.getRegistryIcon(techAsset?.type);
-                    const isInspecting = state.activeInspectorResId === step.resourceLinkId;
-                    const scopingItem = OL.isResourceInScope(techAsset?.id);
+                    // 🛡️ Safety fallback if resource was deleted from library
+                    if (!techAsset) return `<div class="tiny danger">⚠️ Missing Resource: ${esc(step.name)}</div>`;
+                    
+                    const isInspecting = state.activeInspectorResId === techAsset.id;
+                    const scopingItem = OL.isResourceInScope(techAsset.id);
                     const isInScope = !!scopingItem;
 
                     return `
-                    <div class="workflow-block-card l2-resource-node ${isInScope ? 'is-priced' : ''}" 
+                    <div class="workflow-block-card l2-resource-node ${isInScope ? 'is-priced' : ''} ${isInspecting ? 'is-inspecting' : ''}" 
                         id="l2-node-${step.id}"
-                        style="${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}"
-                        onclick="...">
+                        draggable="true"
+                        ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
+                        onclick="OL.loadInspector('${techAsset.id}', '${workflowId}')"
+                        style="cursor: pointer; ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
                         
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; pointer-events: none;">
                             <span class="tiny muted">STEP ${idx + 1}</span>
                             ${isInScope ? `
-                                <span class="pill tiny" style="background:#10b981; color:white; font-size:8px; cursor:pointer;" 
-                                    onclick="event.stopPropagation(); OL.jumpToScopingItem('${techAsset.id}')">PRICED $</span>
+                                <span class="pill tiny" style="background:#10b981; color:white; font-size:8px;">PRICED $</span>
                             ` : ''}
                         </div>
-                        <div class="bold accent" style="margin: 8px 0; font-size: 14px;">${esc(step.name)}</div>
+
+                        <div class="bold accent" style="margin: 8px 0; font-size: 14px; pointer-events: none;">
+                            ${OL.getRegistryIcon(techAsset.type)} ${esc(techAsset.name)}
+                        </div>
                         
+                        <div class="tiny muted" style="font-size: 9px; line-height: 1.3; margin-bottom: 8px; pointer-events: none;">
+                             ${esc(techAsset.description || '')}
+                        </div>
+
                         ${(step.outcomes || []).length > 0 ? `
-                            <div class="tiny" style="color:var(--vault-gold); font-weight: bold; margin-top: 5px;">
+                            <div class="tiny" style="color:var(--vault-gold); font-weight: bold; margin-top: 5px; pointer-events: none;">
                                 🌲 ${step.outcomes.length} Logic Branches
                             </div>
                         ` : ''}
+
+                        <div class="card-footer-meta" style="margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; pointer-events: none;">
+                             <span class="tiny muted">👤 ${esc(techAsset.assigneeName || 'Unassigned')}</span>
+                             <span class="tiny muted" style="opacity:0.5;">ID: ...${techAsset.id.slice(-4)}</span>
+                        </div>
                     </div>
                     `;
                 }).join('')}
@@ -11750,10 +11764,11 @@ OL.loadInspector = function(targetId, parentId = null) {
         return;
     }
 
-    const client = getActiveClient();
-    const isModule = data.type === 'module_block';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
+    const isModule = data.type === 'module_block'; 
     const isVaultMode = location.hash.includes('vault');
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
