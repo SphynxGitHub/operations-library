@@ -2457,17 +2457,16 @@ body.fs-mode-active {
     overflow: hidden !important;
 }
 
-body.is-visualizer {
-    overflow: hidden !important;
-    height: 100vh;
+body.is-visualizer #mainContent {
+    padding: 10px 10px 40px 10px !important;
 }
 
 .three-pane-layout {
     display: flex;
     flex-direction: row;
-    width: 100vw !important;
-    height: 100vh !important; /* Force to screen height */
-    overflow: hidden !important; /* Kill window-level scroll */
+    width: 100% !important;
+    height: calc(100vh); /* Adjust based on your top nav height */
+    overflow: hidden;
     background-color: #050816;
 }
 
@@ -2475,23 +2474,27 @@ body.is-visualizer {
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 100vh; /* Must match parent */
+    height: 100%;
     min-width: 0;
-    overflow: hidden; /* Header stays, body scrolls */
+    width: 100%;
+    overflow: hidden;
+    padding-left: 15px;
+    padding-bottom: 10px;
+    width: 50vh;
 }
 
 /*==================================================================
   2. LEFT SIDEBAR (The Workflow Library Toolbox)
 ==================================================================*/
 .pane-drawer {
-    position: fixed;
-    top: 0;
-    left: 65px; /* Offset for your main app sidebar */
-    width: 220px;
+    width: 180px;
+    max-width: 25%;
     height: 100vh;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
     background: #0b0f1a;
     border-right: 1px solid rgba(255,255,255,0.1);
-    z-index: 1000;
 }
 
 .drawer-header {
@@ -2688,19 +2691,11 @@ body.is-visualizer {
     overflow-x: auto;
 }
 
-.global-scroll-canvas, 
-.vertical-stage-canvas {
-    flex: 1;
-    overflow-y: auto !important; /* 🚀 This brings the scrollbar back to the canvas */
-    overflow-x: auto; /* Allow horizontal scroll for the global map */
-    height: 100%;
-    width: 100%;
-    padding-bottom: 100px;
-    background: #050816;
-    
-    /* Optional: Custom scrollbar for a cleaner look */
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent) transparent;
+.global-scroll-canvas {
+    flex-grow: 1;
+    overflow-x: auto; /* Horizontal scroll happens here */
+    overflow-y: auto; /* Vertical scroll happens here */
+    padding-bottom: 50px;
 }
 
 .canvas-header {
@@ -2715,12 +2710,9 @@ body.is-visualizer {
 /* Style for the horizontal columns */
 .global-macro-map {
     display: flex;
-    flex-direction: row !important; /* Force Stages to be side-by-side */
-    flex-wrap: nowrap !important;
     gap: 40px;
     padding: 20px;
     min-width: max-content;
-    min-height: 100%;
 }
 
 .asset-mini-card {
@@ -3190,15 +3182,17 @@ body.is-visualizer {
 }
 
 #inspector-panel.pane-inspector {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 320px !important;
-    height: 100vh;
-    background: #0b0f1a;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    z-index: 1000;
-    overflow-y: auto;
+    width:220px !important;
+    min-width: 220px !important;
+    flex-shrink: 0 !important; /* 🚀 Prevents canvas from squishing it */
+    background: #0b0f1a !important;
+    border-left: 1px solid rgba(255,255,255,0.1) !important;
+    height: 100% !important;
+    padding: 0 !important; /* Content padding is handled by .inspector-content */
+    overflow-y: auto !important;
+    display: block !important;
+    visibility: visible !important;
+    z-index: 50;
 }
 
 .inspector-content {
