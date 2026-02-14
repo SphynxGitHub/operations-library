@@ -6064,7 +6064,7 @@ OL.executeAssignmentOutcome = function(parentId, itemId, actionCode, destination
     const results = document.getElementById('outcome-results');
     if (results) results.innerHTML = "";
 
-    // 🌲 Update the Tree icons on the Global Map
+    // 🔀 Update the Tree icons on the Global Map
     renderGlobalVisualizer(location.hash.includes('vault'));
     
     console.log(`✅ Logic path added to ${itemId}: leads to ${destinationLabel}`);
@@ -10882,19 +10882,21 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                 ${workflowSteps.map((step, rIdx) => {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
+                    
+                    const isParentActive = state.activeInspectorParentId === asset.id;
+                    const isInspectingThis = state.activeInspectorResId === asset.id;
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
                     const hasLogic = (wf.outcomes || []).length > 0;
-                    const isParentActive = state.activeInspectorParentId === asset.id;
-                    
+                
                     return `
                     <div class="wf-resource-wrapper" 
                         draggable="true" 
                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
                         ondragend="this.classList.remove('dragging-now')">
                         
-                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInScope ? 'is-in-scope' : ''}" 
+                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspectingThis ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
                             onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
                             ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
@@ -10923,15 +10925,19 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             </div>
 
                             <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
-                                ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🌲</span>` : ''}
-                                ${(asset.steps || []).map(atomic => `
-                                    <div class="tiny" style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;">
+                                ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🔀</span>` : ''}
+                                ${(asset.steps || []).map(atomic => {
+                                    const isStepActive = state.activeInspectorResId === atomic.id;
+                                    const stepHasLogic = (atomic.outcomes || []).length > 0;
+                                    
+                                    return `<div class="tiny ${isStepActive ? 'step-active' : ''}" style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;">
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
                                         </span> 
                                         ${esc(atomic.name || "Unnamed Step")}
-                                    </div>
-                                `).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
+                                        ${stepHasLogic ? `<span style="color:var(--vault-gold); font-size:8px; margin-left:auto;">🔀</span>` : ''}
+                                    </div>`;
+                                }).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
                             </div>
                         </div>
 
@@ -11355,7 +11361,7 @@ window.renderLevel2Canvas = function(workflowId) {
 
                         ${(step.outcomes || []).length > 0 ? `
                             <div class="tiny" style="color:var(--vault-gold); font-weight: bold; margin-top: 5px; pointer-events: none;">
-                                🌲 ${step.outcomes.length} Logic Branches
+                                🔀 ${step.outcomes.length} Logic Branches
                             </div>
                         ` : ''}
 

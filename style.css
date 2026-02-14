@@ -3172,10 +3172,20 @@ body.is-visualizer #mainContent {
     background: rgba(16, 185, 129, 0.05) !important;
 }
 
-/* Highlight parent when child is inspected */
+/* The "Parent" card glows blue when you are inside its steps */
 .asset-mini-card.parent-active {
     border: 1px solid var(--accent) !important;
-    box-shadow: 0 0 10px var(--accent-glow);
+    background: rgba(56, 189, 248, 0.1) !important;
+    box-shadow: 0 0 15px var(--accent-glow);
+    transition: all 0.3s ease;
+}
+
+/* The specific line item in the mini-card list highlights */
+.tiny.step-active {
+    background: rgba(56, 189, 248, 0.2);
+    font-weight: bold;
+    padding: 1px 4px;
+    border-radius: 2px;
 }
 
 /*==================================================================
