@@ -11311,6 +11311,7 @@ window.renderLevel2Canvas = function(workflowId) {
                         draggable="true"
                         ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})"
                         onclick="OL.loadInspector('${techAsset.id}', '${workflowId}')"
+                        ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${techAsset.id}')"
                         style="cursor: pointer; ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
                         
                         <div style="display:flex; justify-content:space-between; align-items:center; pointer-events: none;">
