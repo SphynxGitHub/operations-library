@@ -11827,6 +11827,19 @@ OL.loadInspector = function(targetId, parentId = null) {
                 </div>
             </div>
 
+            <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
+                <label class="modal-section-label">🎯 Logic Branches (Outcomes)</label>
+                <div id="step-outcomes-list" style="margin-top:8px;">
+                    ${renderStepOutcomes(data.id, data)} 
+                </div>
+                <div class="search-map-container" style="margin-top:10px;">
+                    <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add branch..." 
+                        onfocus="OL.filterOutcomeSearch('${data.id}', '${data.id}', '')"
+                        oninput="OL.filterOutcomeSearch('${data.id}', '${data.id}', this.value)">
+                    <div id="outcome-results" class="search-results-overlay"></div>
+                </div>
+            </div>
+
             <div class="card-section" style="margin-top:25px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.1);">
                 <label class="modal-section-label">💰 Scoping</label>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
