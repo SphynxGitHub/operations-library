@@ -10863,6 +10863,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
         return { ...step, asset: linkedAsset };
     });
+    const isParentActive = state.activeInspectorParentId === asset.id;
 
     return `
         <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
@@ -10893,7 +10894,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
                         ondragend="this.classList.remove('dragging-now')">
                         
-                        <div class="asset-mini-card is-navigable ${isInScope ? 'is-in-scope' : ''}" 
+                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInScope ? 'is-in-scope' : ''}" 
                             onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
                             ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
@@ -11801,7 +11802,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     const isStage = targetId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
-    const isModule = data.type === 'module_block';
     const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;
     
     const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
@@ -11812,19 +11812,28 @@ OL.loadInspector = function(targetId, parentId = null) {
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
     // ------------------------------------------------------------
-    // 1. DYNAMIC HEADER SECTION
+    // 1. DYNAMIC HEADER & BACK BUTTON
     // ------------------------------------------------------------
-    const isInScope = OL.isResourceInScope(data.id);
-
     html += `
         <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <span class="pill tiny accent">${isTechnicalResource ? '📦 ' : ''}${levelLabel.toUpperCase()}</span>
+                
+                ${isAtomicStep ? `
+                    <button class="btn tiny soft" onclick="OL.loadInspector('${parentId}')" 
+                            style="background: rgba(255,255,255,0.1); font-size: 9px; padding: 2px 8px;">
+                        ⬅ Back to Resource
+                    </button>
+                ` : ''}
+
                 ${isTechnicalResource ? `<button class="btn tiny soft" onclick="OL.openResourceModal('${data.id}')">↗ Full Modal</button>` : ''}
             </div>
+            
             <input type="text" class="header-editable-input" value="${esc(data.name || data.title)}" 
                    style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                   onblur="OL.updateResourceMetadata('${targetId}', 'name', this.value)">
+                   onblur="${isAtomicStep ? 
+                        `OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)` : 
+                        `OL.updateResourceMetadata('${targetId}', 'name', this.value)`}">
         </div>`;
 
     // ------------------------------------------------------------
@@ -11834,7 +11843,9 @@ OL.loadInspector = function(targetId, parentId = null) {
         <div class="card-section">
             <label class="modal-section-label">📝 Description & Technical Notes</label>
             <textarea class="modal-textarea" rows="3" style="width:100%; font-size:11px;"
-                      onblur="OL.updateResourceMetadata('${targetId}', 'description', this.value)">${esc(data.description || data.notes || '')}</textarea>
+                      onblur="${isAtomicStep ? 
+                        `OL.updateAtomicStep('${parentId}', '${data.id}', 'description', this.value)` : 
+                        `OL.updateResourceMetadata('${targetId}', 'description', this.value)`}">${esc(data.description || data.notes || '')}</textarea>
         </div>`;
 
     // ------------------------------------------------------------

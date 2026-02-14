@@ -3172,6 +3172,12 @@ body.is-visualizer #mainContent {
     background: rgba(16, 185, 129, 0.05) !important;
 }
 
+/* Highlight parent when child is inspected */
+.asset-mini-card.parent-active {
+    border: 1px solid var(--accent) !important;
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
 /*==================================================================
   6. BOTTOM INVENTORY & RIGHT INSPECTOR (STABILIZED)
 ==================================================================*/
