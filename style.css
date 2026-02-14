@@ -3129,6 +3129,12 @@ body.is-visualizer #mainContent {
     pointer-events: auto; /* 🚀 ENABLE clicks for specifically marked groups */
 }
 
+.resource-description {
+    width: inherit;
+    max-width: 250px;
+    text-wrap: wrap;
+}
+
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/
