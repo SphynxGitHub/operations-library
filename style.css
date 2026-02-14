@@ -2459,6 +2459,8 @@ body.fs-mode-active {
 
 body.is-visualizer #mainContent {
     padding: 10px 10px 40px 10px !important;
+    overflow: hidden;
+    height: 100vh;
 }
 
 .three-pane-layout {
@@ -2471,30 +2473,26 @@ body.is-visualizer #mainContent {
 }
 
 .pane-canvas-wrap {
-    flex: 1;
+    margin-left: 285px; /* (Drawer width 220 + Sidebar 65) */
+    margin-right: 320px; /* (Inspector width) */
+    height: 100vh;
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    min-width: 0;
-    width: 100%;
-    overflow: hidden;
-    padding-left: 15px;
-    padding-bottom: 10px;
-    width: 50vh;
+    overflow: hidden; /* Header doesn't move */
 }
 
 /*==================================================================
   2. LEFT SIDEBAR (The Workflow Library Toolbox)
 ==================================================================*/
 .pane-drawer {
-    width: 180px;
-    max-width: 25%;
+    position: fixed;
+    top: 0;
+    left: 65px; /* Offset for your main app sidebar */
+    width: 220px;
     height: 100vh;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
     background: #0b0f1a;
     border-right: 1px solid rgba(255,255,255,0.1);
+    z-index: 1000;
 }
 
 .drawer-header {
@@ -2691,14 +2689,12 @@ body.is-visualizer #mainContent {
     overflow-x: auto;
 }
 
-.global-scroll-canvas {
-    flex-grow: 1;
-    overflow-x: auto; /* Horizontal scroll happens here */
-    overflow-y: auto; /* Vertical scroll happens here */
-    height: 100%;
-    padding-bottom: 50px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent) transparent;
+.global-scroll-canvas, 
+.vertical-stage-canvas {
+    flex: 1;
+    overflow: auto !important; /* 🚀 The scrollbar lives HERE now */
+    padding: 20px;
+    padding-bottom: 150px; /* Space to reach the bottom nodes */
 }
 
 .canvas-header {
@@ -3185,17 +3181,15 @@ body.is-visualizer #mainContent {
 }
 
 #inspector-panel.pane-inspector {
-    width:220px !important;
-    min-width: 220px !important;
-    flex-shrink: 0 !important; /* 🚀 Prevents canvas from squishing it */
-    background: #0b0f1a !important;
-    border-left: 1px solid rgba(255,255,255,0.1) !important;
-    height: 100% !important;
-    padding: 0 !important; /* Content padding is handled by .inspector-content */
-    overflow-y: auto !important;
-    display: block !important;
-    visibility: visible !important;
-    z-index: 50;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px !important;
+    height: 100vh;
+    background: #0b0f1a;
+    border-left: 1px solid rgba(255,255,255,0.1);
+    z-index: 1000;
+    overflow-y: auto;
 }
 
 .inspector-content {
