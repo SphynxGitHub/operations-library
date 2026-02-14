@@ -10896,9 +10896,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             </div>
 
                             <div class = "resource-description">
-                                        ${asset.descripiton}
+                                        ${asset.note}
                             </div>
-                            
+
                             <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
                                 ${(asset.steps || []).map(atomic => `
                                     <div class="tiny" style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;">
