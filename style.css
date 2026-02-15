@@ -2527,16 +2527,55 @@ body.is-visualizer #mainContent {
     border-right: 1px solid rgba(255,255,255,0.1);
 }
 
-/* Specific position for Left Sidebar Handle */
-.pane-drawer .sidebar-resizer { right: -3px; }
+.sidebar-resizer {
+    position: absolute;
+    top: 0;
+    width: 10px; /* Wider hit area */
+    height: 100%;
+    cursor: col-resize;
+    z-index: 99999 !important; /* Above everything else */
+    background: transparent;
+    transition: background 0.2s, box-shadow 0.2s;
+}
 
-/* Specific position for Right Inspector Handle */
-.pane-inspector .sidebar-resizer { left: -3px; }
+/* 2. SPECIFIC PLACEMENT */
+/* Handle for the LEFT toolbox (on its right edge) */
+#pane-drawer .sidebar-resizer {
+    right: -5px;
+}
 
-.sidebar-resizer:hover, 
-.sidebar-resizer.is-dragging {
-    background: var(--accent);
+/* 2. SPECIFIC PLACEMENT */
+/* Handle for the LEFT toolbox (on its right edge) */
+#pane-drawer .sidebar-resizer {
+    right: -5px;
+}
+
+/* Handle for the RIGHT inspector (on its left edge) */
+#inspector-panel .sidebar-resizer {
+    left: -5px;
+}
+
+/* 3. VISUAL GRABBER (The "Line") */
+.sidebar-resizer::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.1); /* Subtle default line */
+    transform: translateX(-50%);
+}
+
+/* 4. HOVER & DRAG STATES */
+.sidebar-resizer:hover::after, 
+.sidebar-resizer.is-dragging::after {
+    background: var(--accent); /* Lights up blue when hovering */
     box-shadow: 0 0 10px var(--accent);
+}
+
+.sidebar-resizer:hover {
+    background: rgba(56, 189, 248, 0.05); /* Very subtle glow area */
 }
 
 .drawer-header {

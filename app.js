@@ -10895,7 +10895,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     container.innerHTML = `
        <div class="three-pane-layout ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
-            <aside class="pane-drawer">${toolboxHtml}</aside>
+            <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
