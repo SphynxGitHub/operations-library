@@ -10778,80 +10778,53 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
 OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
+    console.log("🔍 TRACING:", nodeId);
+
+    const client = getActiveClient();
+    const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
     
-    // 1. Identify the DOM Source (Try both prefixed and raw ID)
+    // 1. Resolve Step Data
+    const parentRes = all.find(r => String(r.id) === String(nodeId) || (r.steps || []).find(s => String(s.id) === String(nodeId)));
+    const stepObj = (parentRes?.id === nodeId) ? parentRes : parentRes?.steps?.find(s => String(s.id) === String(nodeId));
+
+    if (!stepObj) return console.error("❌ Data missing for ID:", nodeId);
+
+    // 2. Resolve Starting DOM Element
     const rowEl = document.getElementById(`step-row-${nodeId}`) || document.getElementById(nodeId);
-    if (!rowEl) {
-        console.error("❌ Trace Error: DOM Source not found for ID:", nodeId);
-        return;
-    }
+    if (!rowEl) return console.error("❌ DOM Source missing for ID:", nodeId);
 
     const sourceIcon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
     const anchorEl = sourceIcon || rowEl;
     anchorEl.classList.add('trace-active-icon');
 
-    // 2. DATA RESOLUTION (The Working Flattened Method)
-    const client = getActiveClient();
-    const allResources = [
-        ...(state.master.resources || []),
-        ...(client?.projectData?.localResources || [])
-    ];
-
-    let stepObj = null;
-    allResources.some(r => {
-        // Check if the ID matches the Resource itself
-        if (String(r.id) === String(nodeId)) { stepObj = r; return true; }
-        // Check if the ID matches an Atomic Step inside the Resource
-        const s = (r.steps || []).find(st => String(st.id) === String(nodeId));
-        if (s) { stepObj = s; return true; }
-        return false;
-    });
-
-    if (!stepObj) {
-        console.error("❌ Trace Error: Data Object not found for ID:", nodeId);
-        return;
-    }
-
-    // 🚀 THE SCOPE FIX: Initialize this array here so both branches can fill it
     const connections = [];
 
-    // 3. LOGIC SEARCH
     if (direction === 'outgoing') {
-        const outcomes = stepObj.outcomes || [];
-        outcomes.forEach(o => {
-            // Skip basic 'next' actions with no conditions to keep map clean
-            if (o.action === 'next' && !o.condition) return;
-
-            // Extract the target ID (handles raw targetId or 'jump_step_ID' strings)
+        (stepObj.outcomes || []).forEach(o => {
+            // Extract the target ID from 'targetId' OR 'action' string
             let tid = o.targetId || (o.action?.includes('jump_step_') ? o.action.split('jump_step_')[1] : null);
             
-            // Handle 'next' action by looking at the physical DOM sibling
-            if (!tid && o.action === 'next') {
-                const nextRow = rowEl.nextElementSibling;
-                if (nextRow && nextRow.id.startsWith('step-row-')) {
-                    tid = nextRow.id.replace('step-row-', '');
-                }
-            }
+            console.log("🎯 Searching for Target ID:", tid);
 
             if (tid) {
-                // Aggressive DOM lookup (checks step-row, raw ID, and Tier 3 node ID)
+                // Look for the target on the canvas
                 const targetEl = document.getElementById(`step-row-${tid}`) || 
                                  document.getElementById(tid) || 
                                  document.getElementById(`l3-node-${tid}`);
                 
                 if (targetEl) {
+                    console.log("✅ Target Found in DOM!");
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                     connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
                 } else {
-                    console.warn(`📍 Target element ${tid} not found on canvas.`);
+                    console.warn(`❌ DOM Error: Target ${tid} exists in data but is NOT on the canvas.`);
                 }
             }
         });
     } else {
-        // INCOMING: Scan every resource/step in the library for outcomes pointing to this nodeId
-        allResources.forEach(r => {
-            const allSteps = (r.steps || []);
-            allSteps.forEach(s => {
+        // Incoming Logic (Existing working logic)
+        all.forEach(r => {
+            (r.steps || []).forEach(s => {
                 (s.outcomes || []).forEach(o => {
                     let tid = o.targetId || (o.action?.includes('jump_step_') ? o.action.split('jump_step_')[1] : null);
                     if (String(tid) === String(nodeId)) {
@@ -10866,12 +10839,8 @@ OL.traceLogic = function(nodeId, direction) {
         });
     }
 
-    console.log(`🔗 Found ${connections.length} connections. Rendering...`);
-
-    // 4. DRAWING LOOP
-    connections.forEach(conn => {
-        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
-    });
+    console.log(`🔗 Found ${connections.length} connections.`);
+    connections.forEach(conn => OL.drawTraceArrow(conn.from, conn.to, direction, conn.label));
 };
 
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
