@@ -10639,10 +10639,10 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         return { ...step, asset: linkedAsset };
     });
 
-    /*const hasIncoming = allResources.some(otherRes => 
+    const hasIncoming = allResources.some(otherRes => 
         (otherRes.outcomes || []).some(o => o.targetId === wf.id)
     );
-    const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);*/
+    const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
 
     return `
         <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
