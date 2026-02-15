@@ -10758,7 +10758,17 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
 OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
+    const isVaultMode = window.location.hash.includes('vault');
     const client = getActiveClient();
+    
+    // 1. Find DOM Element
+    const rowEl = document.getElementById(`step-row-${nodeId}`);
+    if (!rowEl) return;
+    const sourceIcon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
+    const anchorEl = sourceIcon || rowEl;
+    anchorEl.classList.add('trace-active-icon');
+
+    // 2. Resolve Data
     const allResources = [
         ...(state.master.resources || []),
         ...(client?.projectData?.localResources || [])
@@ -10766,24 +10776,49 @@ OL.traceLogic = function(nodeId, direction) {
 
     let stepObj = null;
     allResources.some(r => {
-        if (r.id === nodeId) { stepObj = r; return true; }
-        const s = (r.steps || []).find(st => st.id === nodeId);
+        if (String(r.id) === String(nodeId)) { stepObj = r; return true; }
+        const s = (r.steps || []).find(st => String(st.id) === String(nodeId));
         if (s) { stepObj = s; return true; }
+        return false;
     });
 
-    if (!stepObj) {
-        console.error("❌ Trace Error: No data found for ID:", nodeId);
-        return;
+    if (!stepObj) return;
+
+    // 🚀 THE FIX: Initialize connections at the top level of the function
+    const connections = [];
+
+    if (direction === 'outgoing') {
+        (stepObj.outcomes || []).forEach(o => {
+            const targetEl = document.getElementById(`step-row-${o.targetId}`) || 
+                             document.getElementById(`l3-node-${o.targetId}`) || 
+                             document.getElementById(`l2-node-${o.targetId}`);
+            
+            if (targetEl) {
+                const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
+                connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
+            }
+        });
+    } else {
+        // Incoming Logic
+        allResources.forEach(r => {
+            const scanItems = [r, ...(r.steps || [])];
+            scanItems.forEach(item => {
+                (item.outcomes || []).forEach(o => {
+                    if (String(o.targetId) === String(nodeId)) {
+                        const fromRow = document.getElementById(`step-row-${item.id}`) || document.getElementById(`l3-node-${item.id}`);
+                        if (fromRow) {
+                            const fromIcon = fromRow.querySelector('.logic-trace-icon.out') || fromRow;
+                            connections.push({ from: fromIcon, to: anchorEl, label: o.condition });
+                        }
+                    }
+                });
+            });
+        });
     }
 
-    // 🚀 THE SMOKING GUN: Print the actual data found
-    console.log("%c STEP DATA FOUND ", "background: #38bdf8; color: #000; font-weight: bold;", stepObj);
-    console.log("Outcomes Array:", stepObj.outcomes);
+    console.log(`🔗 Drawing ${connections.length} connections.`);
 
-    const outcomes = stepObj.outcomes || [];
-    console.log(`🔗 Found ${outcomes.length} connections.`);
-
-    // 4. Draw them
+    // 3. Draw them
     connections.forEach(conn => {
         OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
     });
