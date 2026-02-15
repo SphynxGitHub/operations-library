@@ -11564,10 +11564,10 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     // 🟠 3. RESOURCE SELECTOR (Shown only for Steps)
     if (isStep) {
         html += `
-            <div class="form-group">
-                <label class="tiny muted uppercase bold" style="font-size:8px;">Parent Resource</label>
-                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
-                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `<option value="${res.id}" ${String(res.id) === String(state.activeInspectorParentId) ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
+            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Resource</label>
+                <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
+                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `<option value="${res.id}" ${String(res.id) === String(parentResource?.id) ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
                 </select>
             </div>`;
     }
