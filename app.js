@@ -280,8 +280,9 @@ OL.toggleSidebar = function() {
 
 // Run this on page load to restore state
 window.addEventListener('load', () => {
-    if (localStorage.getItem('sidebarCollapsed') === 'true') {
-        document.querySelector('.sidebar').classList.add('collapsed');
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && localStorage.getItem('sidebarCollapsed') === 'true') {
+        sidebar.classList.add('collapsed');
     }
 });
 
@@ -10800,22 +10801,27 @@ OL.traceLogic = function(nodeId, direction) {
     if (direction === 'outgoing') {
         (stepObj.outcomes || []).forEach(o => {
             // 🚀 FUZZY LOOKUP: Try multiple ID patterns
-            const targetId = o.targetId || o.toId || o.resourceId; 
+           let targetId = o.targetId;
     
+            if (!targetId && o.action && o.action.includes('jump_step_')) {
+                targetId = o.action.replace('jump_step_', '');
+            }
+
             if (!targetId) {
-                console.error("❌ Outcome Data Error: Outcome exists but has no targetId defined.", o);
+                console.error("❌ Outcome Data Error: No valid targetId found in outcome", o);
                 return;
             }
 
+            // Now find the element using the cleaned targetId
             const targetEl = document.getElementById(`step-row-${targetId}`) || 
-                     document.getElementById(`l3-node-${targetId}`) || 
-                     document.getElementById(`l2-node-${targetId}`);
-    
+                            document.getElementById(targetId) ||
+                            document.getElementById(`l3-node-${targetId}`);
+            
             if (targetEl) {
                 const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                 connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
             } else {
-                console.warn(`📍 Target element NOT found on canvas for targetId: ${targetId}`);
+                console.warn(`📍 Target element NOT found for ID: ${targetId}`);
             }
         });
     } else {
