@@ -11656,6 +11656,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
      
     OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
+    OL.applyCanvasHighlight();
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
@@ -11807,6 +11808,35 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+};
+
+OL.applyCanvasHighlight = function() {
+    // 1. Remove highlight from whatever was selected before
+    document.querySelectorAll('.is-inspecting, .parent-active').forEach(el => {
+        el.classList.remove('is-inspecting', 'parent-active');
+    });
+
+    // 2. Highlight the new selection
+    // Note: We use the ID patterns from your Tier 1, 2, and 3 nodes
+    const targetId = state.activeInspectorResId;
+    const parentId = state.activeInspectorParentId;
+
+    const targetEl = document.getElementById(`l1-node-${targetId}`) || 
+                     document.getElementById(`l2-node-${targetId}`) || 
+                     document.getElementById(`step-node-${targetId}`);
+    
+    if (targetEl) {
+        targetEl.classList.add('is-inspecting');
+        console.log("🔦 Surgically highlighted node:", targetId);
+    }
+
+    // 3. Highlight the parent (the blue border)
+    const parentEl = document.getElementById(`l1-node-${parentId}`) || 
+                     document.getElementById(`l2-node-${parentId}`);
+    
+    if (parentEl) {
+        parentEl.classList.add('parent-active');
+    }
 };
 
 OL.syncCanvasHighlights = function() {
