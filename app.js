@@ -5652,6 +5652,7 @@ OL.toggleStepOutcomes = function(event, resId, stepId) {
     }
 };
 
+/*
 OL.filterOutcomeSearch = function(resId, stepId, query) {
     const listEl = document.getElementById("outcome-results");
     if (!listEl) return;
@@ -5704,6 +5705,104 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
     }
 
     listEl.innerHTML = html || `<div class="search-result-item muted">No outcomes found</div>`;
+};
+*/
+
+OL.filterOutcomeSearch = function(resId, stepId, query) {
+    const listEl = document.getElementById("outcome-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    const isVault = location.hash.includes('vault');
+    const sourceData = isVault ? state.master : client.projectData;
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    let html = '';
+
+    // 1. STANDARD ACTIONS (Always visible)
+    if (!q) {
+        html += `<div class="search-group-header">Standard Logic</div>
+                 <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}','${stepId}','next','➡️ Next Step')">➡️ Next Step</div>
+                 <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}','${stepId}','close','🏁 End Workflow')">🏁 End Workflow</div>`;
+    }
+
+    // 2. THE NAVIGATOR (If no specific query, show Stages/Workflows to drill down)
+    if (!q) {
+        html += `<div class="search-group-header">Navigator: Select Target Step</div>`;
+        
+        // Show Stages
+        (sourceData.stages || []).forEach(stage => {
+            html += `
+                <div class="search-result-item stage-drill" style="border-left: 2px solid var(--accent);" 
+                     onclick="event.stopPropagation(); OL.filterOutcomeSearch('${resId}', '${stepId}', 'stage:${stage.id}')">
+                    📁 Stage: ${esc(stage.name)} <span class="tiny muted">➔</span>
+                </div>`;
+        });
+    } 
+    
+    // 3. DRILL DOWN: Workflows in Stage
+    else if (q.startsWith('stage:')) {
+        const targetStageId = q.split(':')[1];
+        html += `<div class="search-result-item back-btn" onclick="OL.filterOutcomeSearch('${resId}', '${stepId}', '')">⬅ Back to Stages</div>`;
+        allResources.filter(r => r.type === 'Workflow' && String(r.stageId) === targetStageId).forEach(wf => {
+            html += `
+                <div class="search-result-item wf-drill" style="border-left: 2px solid #38bdf8;"
+                     onclick="event.stopPropagation(); OL.filterOutcomeSearch('${resId}', '${stepId}', 'wf:${wf.id}')">
+                    🔄 Workflow: ${esc(wf.name)} <span class="tiny muted">➔</span>
+                </div>`;
+        });
+    }
+
+    // 4. DRILL DOWN: Resources in Workflow
+    else if (q.startsWith('wf:')) {
+        const targetWfId = q.split(':')[1];
+        const wf = OL.getResourceById(targetWfId);
+        html += `<div class="search-result-item back-btn" onclick="OL.filterOutcomeSearch('${resId}', '${stepId}', 'stage:${wf.stageId}')">⬅ Back to Stage</div>`;
+        (wf.steps || []).forEach(stepLink => {
+            const asset = allResources.find(r => r.id === stepLink.resourceLinkId);
+            if (asset) {
+                html += `
+                    <div class="search-result-item res-drill" style="border-left: 2px solid #10b981;"
+                         onclick="event.stopPropagation(); OL.filterOutcomeSearch('${resId}', '${stepId}', 'res:${asset.id}')">
+                        📦 ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)} <span class="tiny muted">➔</span>
+                    </div>`;
+            }
+        });
+    }
+
+    // 5. FINAL STOP: Steps in Resource (The actual linkable items)
+    else if (q.startsWith('res:')) {
+        const targetResId = q.split(':')[1];
+        const res = OL.getResourceById(targetResId);
+        html += `<div class="search-result-item back-btn" onclick="OL.filterOutcomeSearch('${resId}', '${stepId}', '')">⬅ Start Over</div>`;
+        (res.steps || []).forEach(s => {
+            if (s.id === stepId) return; // Can't link to self
+            html += `
+                <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(s.name)}')">
+                    📍 Link Step: ${esc(s.name)}
+                </div>`;
+        });
+    }
+
+    // 6. TEXT SEARCH OVERRIDE (If they type normally)
+    else {
+        html += `<div class="search-group-header">Search Results</div>`;
+        allResources.forEach(resource => {
+            (resource.steps || []).forEach(s => {
+                if (s.name.toLowerCase().includes(q) && s.id !== stepId) {
+                    html += `
+                        <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(s.name)}')">
+                            <div style="display:flex; flex-direction:column;">
+                                <span>↪ ${esc(s.name)}</span>
+                                <span class="tiny muted" style="font-size:8px;">In: ${esc(resource.name)}</span>
+                            </div>
+                        </div>`;
+                }
+            });
+        });
+    }
+
+    listEl.innerHTML = html || `<div class="search-result-item muted">No steps found</div>`;
 };
 
 OL.getOutcomeLabel = function(action, res) {
@@ -10825,24 +10924,28 @@ OL.traceLogic = function(nodeId, direction) {
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                     connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
                 } else {
-                    // 🚀 THE TELEPORT FEATURE:
-                    console.warn(`📍 Target ${tid} is off-screen. Creating Teleport Link.`);
-                    
+                    // 🚀 IMPROVED ROCKET (Body-anchored to ensure clickability)
+                    const rect = anchorEl.getBoundingClientRect();
                     const teleportBtn = document.createElement('div');
                     teleportBtn.className = 'teleport-rocket fade-in';
+                    teleportBtn.style.cssText = `
+                        position: fixed;
+                        left: ${rect.right + 10}px;
+                        top: ${rect.top}px;
+                        z-index: 10000;
+                        pointer-events: auto !important;
+                    `;
                     teleportBtn.innerHTML = `🚀 Jump to ${o.label || 'Target'}`;
-                    teleportBtn.onclick = () => {
-                        // Logic to find and focus the target
-                        if (tid.startsWith('local-prj') || tid.startsWith('res-vlt')) {
-                            OL.loadInspector(tid); // This will scroll to it and highlight it
-                        }
+                    
+                    teleportBtn.onmousedown = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log("🚀 Warp Speed to:", tid);
+                        OL.loadInspector(tid);
                         teleportBtn.remove();
                     };
                     
-                    // Position it right next to the icon you just clicked
-                    anchorEl.parentElement.appendChild(teleportBtn);
-                    
-                    // Auto-remove after 5 seconds if not clicked
+                    document.body.appendChild(teleportBtn);
                     setTimeout(() => teleportBtn.remove(), 5000);
                 }
             }
