@@ -10879,23 +10879,16 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const isZen = state.ui.zenMode;
     const zenClass = isZen ? 'zen-mode-active' : '';
 
+    // 🚀 PRIORITY 1: GLOBAL CANVAS (No Left Sidebar)
     if (isGlobalMode) {
-        toolboxHtml = renderLevel1SidebarContent(allResources);
+        toolboxHtml = ""; // Explicitly empty
         canvasHtml = renderGlobalCanvas(isVaultMode);
         breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
     } 
-
-    // 🚀 THE FIX: Only render toolbox if NOT in global mode
-    const sidebarHtml = isGlobalMode ? '' : `<aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>`;
-    
-    // We adjust the layout class to handle the missing pane
-    const layoutClass = isGlobalMode ? 'global-macro-layout no-sidebar' : 'vertical-lifecycle-mode';
-
-    // --- TIER 3: RESOURCE > STEPS (Only if NOT global) ---
+    // --- FOCUS MODE LOGIC (Only if NOT global) ---
+    // TIER 3: RESOURCE > STEPS
     else if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
-        
-        // Parent lookup for breadcrumbs
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
 
@@ -10905,33 +10898,40 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
             <span class="muted"> > </span>  
             <span class="breadcrumb-current">${esc(res?.name)}</span>`;
+        
         toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
         canvasHtml = renderLevel3Canvas(state.focusedResourceId);
     } 
-    // --- TIER 2: WORKFLOW > RESOURCES ---
+    // TIER 2: WORKFLOW > RESOURCES
     else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
+        
         breadcrumbHtml += ` <span class="muted"> > </span> 
             <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
             <span class="muted"> > </span> 
             <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
+        
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
-    // --- TIER 1: STAGE > WORKFLOWS ---
+    // TIER 1: FOCUS LIFESTYLE
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
+        canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
+    // 🚀 THE SIDEBAR TOGGLE: Completely omit the HTML if in Global Mode
+    const sidebarHtml = isGlobalMode ? '' : `<aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>`;
+    const layoutClass = isGlobalMode ? 'global-macro-layout no-sidebar' : 'vertical-lifecycle-mode';
+
     if (state.isFiltering) {
-        state.isFiltering = false; // Reset flag
+        state.isFiltering = false;
         return; 
     }
 
     container.innerHTML = `
-       <div class="three-pane-layout ${layoutClass} ${zenClass} ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
+        <div class="three-pane-layout ${layoutClass} ${zenClass}">
             ${sidebarHtml}
 
             <main class="pane-canvas-wrap">
@@ -10939,10 +10939,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
                     
                     <div style="display:flex; gap:10px;">
-                        <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" 
-                                onclick="OL.toggleZenMode()">
-                            ${isZen ? 'Show Tools ⤢' : 'Hide Tools ⤓'}
-                        </button>
+                        ${!isGlobalMode ? `
+                            <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" onclick="OL.toggleZenMode()">
+                                ${isZen ? 'Show Tools ⤢' : 'Hide Tools ⤓'}
+                            </button>
+                        ` : ''}
 
                         <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
                                 onclick="OL.toggleGlobalView(${isVaultMode})">
@@ -10956,25 +10957,22 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 </div>
             </main>
             <aside id="inspector-panel" class="pane-inspector">
-                 <div class="empty-inspector tiny muted">Select a node to inspect</div>
-            </aside>
+                 </aside>
         </div>
     `;
-    // Restore search query if user was typing
-    if (state.lastSearchQuery) {
-        // Look for whichever search bar is currently in the DOM
+
+    // Persistence Logic for Search
+    if (state.lastSearchQuery && !isGlobalMode) {
         const searchInput = document.getElementById('workflow-toolbox-search') || 
                            document.getElementById('resource-toolbox-search');
         if (searchInput) {
             searchInput.value = state.lastSearchQuery;
-            // Place cursor at the end of the text
             searchInput.focus();
-            searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
-            
-            // Run the filter immediately to hide items
             OL.filterToolbox(state.lastSearchQuery);
         }
     }
+    
+    // Only init resizers if sidebars exist
     setTimeout(OL.initSideResizers, 10);
 };
 
