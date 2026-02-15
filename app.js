@@ -10486,41 +10486,55 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     return `
-        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" style="display: flex; padding: 40px; align-items: flex-start;">
+        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
+             style="display: flex; padding: 60px; align-items: flex-start; min-height: 100vh;">
+            
             ${stages.map((stage, sIdx) => {
                 const isInspectingStage = String(state.activeInspectorResId) === String(stage.id);
-                
                 const workflowsInStage = allResources.filter(r => 
                     r.type === 'Workflow' && String(r.stageId) === String(stage.id)
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                 
                 return `
-                <div class="macro-stage-col" style="display: flex; align-items: flex-start;">
+                <div class="macro-stage-col" style="display: flex; align-items: flex-start; position: relative;">
                     <div style="min-width: 320px;">
-                        <div class="stage-header ${isInspectingStage ? 'is-inspecting' : ''} hover-reveal-container" 
-                            style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;"
-                            onclick="OL.loadInspector('${stage.id}')">
+                        <div class="stage-header ${isInspectingStage ? 'is-inspecting' : ''}" 
+                             style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center; cursor: pointer;"
+                             onclick="OL.loadInspector('${stage.id}')">
                             <div>
                                 <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
                                 <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
                             </div>
-                            <button class="card-delete-btn" onclick="OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
+                            <button class="card-delete-btn" onclick="event.stopPropagation(); OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
                         </div>
                         
                         <div class="workflow-stack">
                             ${workflowsInStage.map((wf, wIdx) => {
                                 const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
                                 return `
-                                <div class="wf-node-container ${isInspectingWorkflow ? 'is-inspecting' : ''}" style="margin-bottom:15px; border-radius: 10px;">
+                                <div class="wf-node-container ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
+                                     style="margin-bottom:25px; border-radius: 10px; position: relative;">
+                                    
                                     ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
-                                    <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                                    
+                                    <div class="insert-divider vertical" 
+                                         onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})">
+                                        <span>+</span>
+                                    </div>
                                 </div>
                             `}).join('')}
-                            ${workflowsInStage.length === 0 ? `<div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})"><span>+ Add Workflow</span></div>` : ''}
+
+                            ${workflowsInStage.length === 0 ? `
+                                <div class="insert-divider initial" style="position: relative; opacity: 1;" 
+                                     onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})">
+                                    <span>+ Add Workflow</span>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
 
-                    <div class="insert-divider horizontal" onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
+                    <div class="insert-divider horizontal" 
+                         onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
                         <span>+</span>
                     </div>
                 </div>
