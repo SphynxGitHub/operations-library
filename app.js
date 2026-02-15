@@ -10714,7 +10714,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                         ${esc(asset.description)}
                             </div>
 
-                            <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
+                            <div class="atomic-step-container" opacity: 0.7;">
                                 ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🔀</span>` : ''}
                                 ${(asset.steps || []).map(atomic => {
                                     const isStepInspected = String(state.activeInspectorResId) === String(atomic.id);

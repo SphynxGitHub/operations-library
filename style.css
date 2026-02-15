@@ -3323,6 +3323,19 @@ ARROWS
     overflow: visible !important;
 }
 
+/* Make sure the logic icon stands out on hover */
+.logic-peek:hover {
+    transform: scale(1.3);
+    filter: brightness(1.2);
+    text-shadow: 0 0 8px var(--vault-gold);
+}
+
+/* Give the user a hint that the individual steps are clickable now */
+.atomic-step-container .tiny:hover {
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+}
+
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/
