@@ -10902,7 +10902,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
                         ondragend="this.classList.remove('dragging-now')">
                         
-                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspectingThis ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
+                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspecting ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
                             onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
                             ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
@@ -11810,18 +11810,40 @@ OL.loadInspector = function(targetId, parentId = null) {
         return;
     }
     
-    let breadcrumbParts = [];
+    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
+    const isVaultMode = location.hash.includes('vault');
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
-    // 🚀 TYPE & LEVEL DETECTION
+    // 🚀 BREADCRUMB GENERATION LOGIC
+    let breadcrumbParts = [];
+    const client = getActiveClient();
+    const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
+    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+
     const isStage = targetId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
     const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;
-    
-    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
-    const isVaultMode = location.hash.includes('vault');
-    const client = getActiveClient();
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+
+    // Build the trail backwards
+    if (isAtomicStep) {
+        const parentRes = OL.getResourceById(parentId);
+        const parentWf = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === parentId));
+        const pStage = sourceData.stages?.find(s => s.id === (parentWf?.stageId || parentRes?.stageId));
+        
+        if (pStage) breadcrumbParts.push(pStage.name);
+        if (parentWf) breadcrumbParts.push(parentWf.name);
+        breadcrumbParts.push(parentRes?.name || "Resource");
+    } else if (isTechnicalResource) {
+        const parentWf = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === targetId));
+        const pStage = sourceData.stages?.find(s => s.id === (parentWf?.stageId || data.stageId));
+        
+        if (pStage) breadcrumbParts.push(pStage.name);
+        if (parentWf) breadcrumbParts.push(parentWf.name);
+    } else if (isWorkflow) {
+        const pStage = sourceData.stages?.find(s => s.id === data.stageId);
+        if (pStage) breadcrumbParts.push(pStage.name);
+    }
 
     const breadcrumbHtml = breadcrumbParts.length > 0 
         ? `<div class="tiny muted" style="margin-bottom: 8px; font-size: 9px; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.5px;">
