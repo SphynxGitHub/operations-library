@@ -11654,6 +11654,8 @@ OL.loadInspector = function(targetId, parentId = null) {
     const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
     const isVaultMode = location.hash.includes('vault');
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+     
+    OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
 
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
@@ -11805,7 +11807,6 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
-    OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
 };
 
 OL.syncCanvasHighlights = function() {
