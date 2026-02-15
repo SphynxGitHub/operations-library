@@ -11809,10 +11809,6 @@ OL.loadInspector = function(targetId, parentId = null) {
         panel.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
         return;
     }
-    
-    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
-    const isVaultMode = location.hash.includes('vault');
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
     // 🚀 BREADCRUMB GENERATION LOGIC
     let breadcrumbParts = [];
@@ -11824,6 +11820,10 @@ OL.loadInspector = function(targetId, parentId = null) {
     const isWorkflow = data.type === 'Workflow';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
     const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;
+    
+    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
+    const isVaultMode = location.hash.includes('vault');
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
     // Build the trail backwards
     if (isAtomicStep) {
@@ -11845,9 +11845,15 @@ OL.loadInspector = function(targetId, parentId = null) {
         if (pStage) breadcrumbParts.push(pStage.name);
     }
 
-    const breadcrumbHtml = breadcrumbParts.length > 0 
-        ? `<div class="tiny muted" style="margin-bottom: 8px; font-size: 9px; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.5px;">
-            ${breadcrumbParts.join(' <span style="opacity:0.3;">/</span> ')}
+    const breadcrumbHtml = trail.length > 0 
+        ? `<div class="inspector-breadcrumbs" style="margin-bottom: 12px; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;">
+            ${trail.map((step, i) => `
+                <span class="breadcrumb-link is-clickable" 
+                      style="color: var(--accent); opacity: 0.7; cursor: pointer;"
+                      onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7"
+                      onclick="OL.loadInspector('${step.id}')">${esc(step.name)}</span>
+                ${i < trail.length - 1 ? '<span style="margin: 0 4px; opacity: 0.3;">/</span>' : ''}
+            `).join('')}
            </div>` 
         : '';
 
