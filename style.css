@@ -2530,6 +2530,7 @@ body.is-visualizer #mainContent {
 .sidebar-resizer {
     position: absolute;
     top: 0;
+    bottom: 0;
     width: 10px; /* Wider hit area */
     height: 100%;
     cursor: col-resize;
@@ -3320,6 +3321,7 @@ body.is-visualizer #mainContent {
 }
 
 #inspector-panel.pane-inspector {
+    position: relative;
     display: flex;
     flex-direction: column;
     overflow: visible !important; /* Allow resizer to hang off the edge */
