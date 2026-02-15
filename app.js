@@ -10672,12 +10672,12 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
-                    /*const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
+                    const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
                     const isParentActive = String(state.activeInspectorParentId) === String(asset.id);
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
-                    const hasLogic = (wf.outcomes || []).length > 0;*/
+                    const hasLogic = (wf.outcomes || []).length > 0;
                 
                     return `
                     <div class="wf-resource-wrapper" 
