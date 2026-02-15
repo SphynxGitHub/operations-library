@@ -11535,7 +11535,7 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:8px; margin-bottom:15px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid rgba(255,255,255,0.05);">`;
 
     // 🟢 1. STAGE SELECTOR (Shown for Workflows, Resources, and Steps)
-    if (isWorkflow || isResource || isStep) {
+    if (isWorkflow) {
         const currentStageId = targetObj.stageId || OL.getResourceById(state.activeInspectorParentId)?.stageId;
         html += `
             <div class="form-group">
@@ -11548,7 +11548,7 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     }
 
     // 🔵 2. WORKFLOW SELECTOR (Shown for Resources and Steps)
-    if (isResource || isStep) {
+    if (isResource) {
         // Find which workflow this resource/step currently belongs to
         const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => s.resourceLinkId === (isStep ? state.activeInspectorParentId : targetObj.id)));
         html += `
