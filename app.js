@@ -10850,7 +10850,26 @@ OL.traceLogic = function(nodeId, direction) {
     }
 
     console.log(`🔗 Found ${connections.length} connections.`);
-    connections.forEach(conn => OL.drawTraceArrow(conn.from, conn.to, direction, conn.label));
+    connections.forEach(conn => {
+        // Draw the arrow
+        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
+
+        // 🌟 THE GLOW: Find the card or row and light it up
+        // We look for the closest parent with a card class, or the icon itself
+        const targetCard = conn.to.closest('.workflow-block-card') || 
+                           conn.to.closest('.atomic-step-row') || 
+                           conn.to;
+
+        targetCard.classList.add('trace-highlight-glow');
+
+        // Remove the glow after 3 seconds so the UI stays clean
+        setTimeout(() => {
+            targetCard.classList.remove('trace-highlight-glow');
+        }, 3000);
+
+        // Optional: Smoothly center the target in the viewport
+        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
 };
 
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
