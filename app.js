@@ -4224,6 +4224,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     if (!targetId) return;
 
     OL.trackNav(targetId, 'resource');
+    let res = null;
 
     // 🚩 THE TRACKER: Save the current ID before switching to the new target
     const currentId = document.getElementById('active-modal-box')?.dataset?.activeResId;
@@ -4237,12 +4238,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
 
-    const hierarchyHtml = `
-        <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
-            ${OL.renderHierarchySelectors(res, isVaultMode)}
-        </div>`;
+    const isVaultMode = window.location.hash.includes('vault');
     
-    let res = null;
     let lineItem = null;
 
     // 1. DATA RESOLUTION
@@ -4267,6 +4264,11 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     // 3. Show button if Admin AND not already Master
     const canPromote = userIsAdmin && !isAlreadyMaster;
 
+     const hierarchyHtml = `
+        <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
+            ${OL.renderHierarchySelectors(res, isVaultMode)}
+        </div>`;
+        
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
     const originPill = `
