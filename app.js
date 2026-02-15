@@ -36,6 +36,7 @@ const db = firebase.firestore();
 // 4. Initialize the state placeholder
 let state = {
     activeClientId: null,
+    viewMode: localStorage.getItem('ol_preferred_view_mode') || 'global',
     ui: {showCompleted: false},
     master: {
         apps: [], functions: [], resources: [], taskBlueprints: [], howToLibrary: [],
@@ -10824,10 +10825,13 @@ OL.jumpToScopingItem = function(resId) {
 };
 
 OL.toggleGlobalView = function(isVaultMode) {
-    // Switch between 'focus' and 'global'
+    // 1. Switch the mode
     state.viewMode = (state.viewMode === 'global') ? 'focus' : 'global';
     
-    // If going to global, we clear specific focuses so the map shows everything
+    // 💾 2. THE FIX: Persist the choice
+    localStorage.setItem('ol_preferred_view_mode', state.viewMode);
+    
+    // 3. Reset focuses if going global
     if (state.viewMode === 'global') {
         state.focusedWorkflowId = null;
         state.focusedResourceId = null;
