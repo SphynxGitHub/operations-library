@@ -10884,6 +10884,12 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
                     const currentParentId = String(state.activeInspectorParentId || "");
+                    if (currentParentId) {
+                        state.activeInspectorParentId = currentParentId;
+                    } else {
+                        currentParentId = state.activeInspectorParentId;
+                    }
+
                     console.log(currentParentId,": Parent ID")
                     const currentAssetId = String(asset.id || "");
                     console.log(currentAssetId,": Asset ID")
@@ -11851,6 +11857,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                    onblur="${isAtomicStep ? 
                         `OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)` : 
                         `OL.updateResourceMetadata('${targetId}', 'name', this.value)`}">
+            
         </div>`;
 
     // ------------------------------------------------------------
