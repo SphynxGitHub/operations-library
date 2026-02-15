@@ -10483,7 +10483,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     return `
-        <div class="global-macro-map" style="display: flex; padding: 40px; align-items: flex-start;">
+        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" style="display: flex; padding: 40px; align-items: flex-start;">
             ${stages.map((stage, sIdx) => {
                 const isInspectingStage = String(state.activeInspectorResId) === String(stage.id);
                 
@@ -10525,6 +10525,23 @@ window.renderGlobalCanvas = function(isVaultMode) {
         </div>
     `;
 };
+
+OL.handleCanvasBackgroundClick = function(event) {
+    // Only trigger if clicking the actual background grid, not a card or button
+    if (event.target.classList.contains('global-macro-map') || event.target.id === 'fs-canvas') {
+        const isZenPreferred = localStorage.getItem('ol_zen_mode') === 'true';
+        if (isZenPreferred) {
+            const layout = document.querySelector('.three-pane-layout');
+            if (layout) layout.classList.add('zen-mode-active');
+            
+            const zenBtn = document.getElementById('zen-mode-toggle');
+            if (zenBtn) zenBtn.innerHTML = 'Collapse ⤓';
+            
+            // Clear inspector highlights since we are "leaving" focus
+            OL.clearInspector();
+        }
+    }
+}
 
 // 🗑️ Handle Stage Deletion & Unmapping
 OL.handleStageDelete = async function(stageId, isVault) {
@@ -11683,18 +11700,25 @@ OL.loadInspector = function(targetId, parentId = null) {
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    if (!panel.querySelector('.inspector-scroll-content')) {
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout && layout.classList.contains('zen-mode-active')) {
+        layout.classList.remove('zen-mode-active');
+        const zenBtn = document.getElementById('zen-mode-toggle');
+        if (zenBtn) zenBtn.innerHTML = 'Full Screen ⤢';
+        // Note: we don't change localStorage here, so it remains a "temporary" peek
+    }
+
+    let contentWrapper = panel.querySelector('.inspector-scroll-content');
+    if (!contentWrapper) {
         panel.innerHTML = `
             <div class="sidebar-resizer right-side-handle"></div>
             <div class="inspector-scroll-content"></div>
         `;
-        // Immediately bind the dragging logic to the newly created handle
+        contentWrapper = panel.querySelector('.inspector-scroll-content');
         OL.initSideResizers(); 
     }
 
-    const contentWrapper = OL.ensureInspectorSkeleton();
     const data = OL.getResourceById(targetId);
-
     if (!data) {
         contentWrapper.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
         return;
@@ -11703,12 +11727,10 @@ OL.loadInspector = function(targetId, parentId = null) {
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
 
     const client = getActiveClient();
-
     const isStage = targetId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
-    const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;
-    
+    const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;  
     const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
     const isVaultMode = location.hash.includes('vault');
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
@@ -11716,12 +11738,11 @@ OL.loadInspector = function(targetId, parentId = null) {
     OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
     OL.applyCanvasHighlight();
 
-    let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
-
     // ------------------------------------------------------------
     // 1. DYNAMIC HEADER & BACK BUTTON
     // ------------------------------------------------------------
-    html += OL.renderHierarchySelectors(data, location.hash.includes('vault'));
+    let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
+    html += OL.renderHierarchySelectors(data, isVaultMode);
 
     html += `
         <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
