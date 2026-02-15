@@ -2835,10 +2835,12 @@ body.is-visualizer #mainContent {
 
 /* Style for the horizontal columns */
 .global-macro-map {
+    position: relative;
     display: flex;
     gap: 40px;
     padding: 60px;
     min-width: max-content;
+    min-height: 100vh;
 }
 
 .asset-mini-card {
@@ -3317,6 +3319,7 @@ ARROWS
 }
 
 .logic-trace-svg {
+    display: block !important;
     overflow: visible !important;
 }
 

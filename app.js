@@ -10789,25 +10789,39 @@ OL.traceLogic = function(nodeId, direction) {
         otherEnd.classList.add('trace-highlight-end');
     });
 };
-OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
-    const canvas = document.getElementById('fs-canvas');
-    const mapContainer = document.querySelector('.global-macro-map');
-    if (!canvas || !mapContainer) return;
 
-    // 1. Ensure a clean SVG layer exists inside the MAP container
+OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
+    // 1. Debug check for the elements themselves
+    if (!fromEl || !toEl) {
+        console.error("❌ Trace Error: Target elements are missing from DOM", {fromEl, toEl});
+        return;
+    }
+
+    // 2. Locate the anchor container
+    const mapContainer = document.querySelector('.global-macro-map');
+    if (!mapContainer) {
+        console.error("❌ Trace Error: Could not find .global-macro-map container.");
+        return;
+    }
+
+    // 3. Persistent Layer Creation
     let svg = document.getElementById('logic-trace-layer');
     if (!svg) {
+        console.log("🛠️ Creating Logic Trace Layer...");
         svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.id = 'logic-trace-layer';
-        svg.setAttribute('class', 'logic-trace-svg');
-        // Absolute to the MAP, so it scrolls WITH the content
-        svg.style.position = 'absolute';
-        svg.style.top = '0';
-        svg.style.left = '0';
-        svg.style.width = '100%';
-        svg.style.height = '100%';
-        svg.style.pointerEvents = 'none';
-        svg.style.zIndex = '1'; // Behind nodes but above background
+        
+        // CSS properties to ensure it spans the entire scrollable area
+        Object.assign(svg.style, {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: mapContainer.scrollWidth + 'px',
+            height: mapContainer.scrollHeight + 'px',
+            pointerEvents: 'none',
+            overflow: 'visible',
+            zIndex: '5' // Sits above grid but behind cards
+        });
         
         svg.innerHTML = `
             <defs>
@@ -10819,50 +10833,36 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
         mapContainer.appendChild(svg);
     }
 
-    // 2. Calculate coordinates relative to the MAP container
-    // This is much more stable than ClientRect for scrolling maps
-    const getCoords = (el) => {
-        let x = 0, y = 0;
-        const rect = el.getBoundingClientRect();
-        const mapRect = mapContainer.getBoundingClientRect();
-        return {
-            x: rect.left - mapRect.left,
-            y: rect.top - mapRect.top,
-            w: rect.width,
-            h: rect.height
-        };
-    };
+    // 4. Coordinate Math (Relative to Map)
+    const mapRect = mapContainer.getBoundingClientRect();
+    const fRect = fromEl.getBoundingClientRect();
+    const tRect = toEl.getBoundingClientRect();
 
-    const from = getCoords(fromEl);
-    const to = getCoords(toEl);
+    const x1 = (fRect.left + fRect.width / 2) - mapRect.left;
+    const y1 = (direction === 'outgoing' ? fRect.bottom : fRect.top) - mapRect.top;
+    
+    const x2 = (tRect.left + tRect.width / 2) - mapRect.left;
+    const y2 = (direction === 'outgoing' ? tRect.top : tRect.bottom) - mapRect.top;
 
-    // Origin: Bottom center of source | Target: Top center of dest
-    const x1 = from.x + (from.w / 2);
-    const y1 = from.y + from.h;
-    const x2 = to.x + (to.w / 2);
-    const y2 = to.y;
-
-    // 3. Draw Path
+    // 5. Draw the Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const curvePadding = Math.abs(y2 - y1) * 0.5;
-    const d = `M ${x1} ${y1} C ${x1} ${y1 + curvePadding}, ${x2} ${y2 - curvePadding}, ${x2} ${y2}`;
+    const cpY = y1 + (y2 - y1) / 2;
+    const d = `M ${x1} ${y1} C ${x1} ${cpY}, ${x2} ${cpY}, ${x2} ${y2}`;
     
     path.setAttribute("d", d);
-    path.setAttribute("stroke", "#38bdf8"); // Use your accent color
+    path.setAttribute("stroke", "#38bdf8");
     path.setAttribute("stroke-width", "3");
     path.setAttribute("fill", "none");
-    path.setAttribute("class", "trace-path");
+    path.setAttribute("class", "trace-path"); // Ensure this is in your CSS for animation
     path.setAttribute("marker-end", "url(#arrowhead)");
     svg.appendChild(path);
 
-    // 4. Label
+    // 6. Label Placement
     if (label) {
         const lbl = document.createElement('div');
         lbl.className = 'trace-label fade-in';
         lbl.innerText = label;
-        lbl.style.position = 'absolute';
-        lbl.style.left = `${(x1 + x2) / 2}px`;
-        lbl.style.top = `${(y1 + y2) / 2}px`;
+        lbl.style.cssText = `position:absolute; left:${(x1+x2)/2}px; top:${(y1+y2)/2}px; transform:translate(-50%,-50%);`;
         mapContainer.appendChild(lbl);
     }
 };
