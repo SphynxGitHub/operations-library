@@ -10789,13 +10789,17 @@ OL.traceLogic = function(nodeId, direction) {
 
     if (direction === 'outgoing') {
         (stepObj.outcomes || []).forEach(o => {
+            // 🚀 FUZZY LOOKUP: Try multiple ID patterns
             const targetEl = document.getElementById(`step-row-${o.targetId}`) || 
-                             document.getElementById(`l3-node-${o.targetId}`) || 
-                             document.getElementById(`l2-node-${o.targetId}`);
+                            document.getElementById(`l3-node-${o.targetId}`) || 
+                            document.getElementById(`l2-node-${o.targetId}`) ||
+                            document.querySelector(`[data-id="${o.targetId}"]`);
             
             if (targetEl) {
                 const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                 connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
+            } else {
+                console.warn(`📍 Target element NOT found on canvas for targetId: ${o.targetId}`);
             }
         });
     } else {
