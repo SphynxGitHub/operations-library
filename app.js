@@ -11643,19 +11643,20 @@ OL.loadInspector = function(targetId, parentId = null) {
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
-    // Ensure the wrapper exists WITHOUT blowing away the resizer handle
-    let contentWrapper = panel.querySelector('.inspector-scroll-content');
-    if (!contentWrapper) {
-        // We clear the panel ONCE, but we immediately re-init the resizers after
-        panel.innerHTML = `<div class="inspector-scroll-content"></div>`;
-        contentWrapper = panel.querySelector('.inspector-scroll-content');
+    if (!panel.querySelector('.inspector-scroll-content')) {
+        panel.innerHTML = `
+            <div class="sidebar-resizer right-side-handle"></div>
+            <div class="inspector-scroll-content"></div>
+        `;
+        // Immediately bind the dragging logic to the newly created handle
         OL.initSideResizers(); 
     }
 
-    // 🔍 RESOLVE DATA (Stages, Workflows, Resources, or Steps)
+    const contentWrapper = panel.querySelector('.inspector-scroll-content');
     const data = OL.getResourceById(targetId);
+
     if (!data) {
-        panel.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
+        contentWrapper.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
         return;
     }
     
