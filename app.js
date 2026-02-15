@@ -10845,8 +10845,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                          onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
 
                                         ${hasIn ? `<span class="logic-trace-icon in" 
-                                            data-preview="${esc(previewText)}"
-                                            onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
+                                                    style="margin-right: 5px;" 
+                                                    onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : 
+                                            `<span style="width: 14px; display: inline-block;"></span>` /* Placeholder to keep alignment */}
 
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
@@ -10854,7 +10855,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
                                         ${esc(atomic.name || "Unnamed Step")}
 
-                                        ${hasOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
+                                        ${hasOut ? `<span class="logic-trace-icon out" 
+                                                    data-preview="${esc(previewText)}"
+                                                    onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
                                     </div>`;
                                 }).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
                             </div>
@@ -10992,27 +10995,15 @@ OL.traceLogic = function(nodeId, direction) {
 };
 
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
-    // 1. Debug check for the elements themselves
-    if (!fromEl || !toEl) {
-        console.error("❌ Trace Error: Target elements are missing from DOM", {fromEl, toEl});
-        return;
-    }
+    if (!fromEl || !toEl) return;
 
-    // 2. Locate the anchor container
     const mapContainer = document.querySelector('.global-macro-map');
-    if (!mapContainer) {
-        console.error("❌ Trace Error: Could not find .global-macro-map container.");
-        return;
-    }
+    if (!mapContainer) return;
 
-    // 3. Persistent Layer Creation
     let svg = document.getElementById('logic-trace-layer');
     if (!svg) {
-        console.log("🛠️ Creating Logic Trace Layer...");
         svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.id = 'logic-trace-layer';
-        
-        // CSS properties to ensure it spans the entire scrollable area
         Object.assign(svg.style, {
             position: 'absolute',
             top: '0',
@@ -11021,49 +11012,60 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
             height: mapContainer.scrollHeight + 'px',
             pointerEvents: 'none',
             overflow: 'visible',
-            zIndex: '5' // Sits above grid but behind cards
+            zIndex: '5'
         });
         
         svg.innerHTML = `
             <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-                refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8" />
+                <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" 
+                        markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
                 </marker>
             </defs>`;
         mapContainer.appendChild(svg);
     }
 
-    // 4. Coordinate Math (Relative to Map)
     const mapRect = mapContainer.getBoundingClientRect();
     const fRect = fromEl.getBoundingClientRect();
     const tRect = toEl.getBoundingClientRect();
 
-    const x1 = (fRect.left + fRect.width / 2) - mapRect.left;
-    const y1 = (direction === 'outgoing' ? fRect.bottom : fRect.top) - mapRect.top;
-    
-    const x2 = (tRect.left + tRect.width / 2) - mapRect.left;
-    const y2 = (direction === 'outgoing' ? tRect.top : tRect.bottom) - mapRect.top;
+    // 🔘 START POINT: Right side of the source icon
+    const x1 = (fRect.right) - mapRect.left;
+    const y1 = (fRect.top + fRect.height / 2) - mapRect.top;
 
-    // 5. Draw the Path
+    // 🎯 END POINT: Absolute left edge of the target icon
+    // We subtract 2 pixels to give the arrowhead a tiny bit of breathing room
+    const x2 = (tRect.left) - mapRect.left - 2; 
+    const y2 = (tRect.top + tRect.height / 2) - mapRect.top;
+
+    // ➰ CURVE MATH: Create an "S" curve
+    // We use a horizontal offset for the control points to make the line feel "circuit-like"
+    const deltaX = Math.abs(x2 - x1);
+    const controlPointOffset = Math.min(deltaX / 2, 100); 
+
+    const d = `M ${x1} ${y1} 
+               C ${x1 + controlPointOffset} ${y1}, 
+                 ${x2 - controlPointOffset} ${y2}, 
+                 ${x2} ${y2}`;
+
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const cpY = y1 + (y2 - y1) / 2;
-    const d = `M ${x1} ${y1} C ${x1} ${cpY}, ${x2} ${cpY}, ${x2} ${y2}`;
-    
     path.setAttribute("d", d);
     path.setAttribute("stroke", "#38bdf8");
-    path.setAttribute("stroke-width", "3");
+    path.setAttribute("stroke-width", "2.5");
     path.setAttribute("fill", "none");
-    path.setAttribute("class", "trace-path"); // Ensure this is in your CSS for animation
+    path.setAttribute("class", "trace-path"); 
     path.setAttribute("marker-end", "url(#arrowhead)");
+    
     svg.appendChild(path);
 
-    // 6. Label Placement
     if (label) {
         const lbl = document.createElement('div');
         lbl.className = 'trace-label fade-in';
         lbl.innerText = label;
-        lbl.style.cssText = `position:absolute; left:${(x1+x2)/2}px; top:${(y1+y2)/2}px; transform:translate(-50%,-50%);`;
+        // Place label at the center of the curve
+        const midX = x1 + (x2 - x1) / 2;
+        const midY = y1 + (y2 - y1) / 2;
+        lbl.style.cssText = `position:absolute; left:${midX}px; top:${midY}px; transform:translate(-50%,-120%); background:#0f172a; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:9px; border:1px solid #38bdf8; font-weight:bold; white-space:nowrap; z-index:10;`;
         mapContainer.appendChild(lbl);
     }
 };
