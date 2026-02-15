@@ -3293,12 +3293,12 @@ body.is-visualizer #mainContent {
 
 /* 2. Resource Card (The Middle Tier) */
 .asset-mini-card.is-inspecting {
-    outline: 3px solid #fff !important; /* Use white or a brighter blue to contrast the workflow */
+    outline: 2px solid #fff !important; /* Use white or a brighter blue to contrast the workflow */
     outline-offset: 2px;
     background: rgba(56, 189, 248, 0.3) !important;
-    box-shadow: 0 0 25px var(--accent) !important;
     z-index: 100 !important;
     transform: scale(1.02);
+    margin-bottom: 2%;
 }
 
 /* 3. Atomic Step (The Text Level) */
