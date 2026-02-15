@@ -10801,24 +10801,34 @@ OL.traceLogic = function(nodeId, direction) {
 
     if (direction === 'outgoing') {
         (stepObj.outcomes || []).forEach(o => {
-            // Extract the target ID from 'targetId' OR 'action' string
-            let tid = o.targetId || (o.action?.includes('jump_step_') ? o.action.split('jump_step_')[1] : null);
+            // 🚀 THE FIX: Try every possible way to find the target ID
+            let tid = o.targetId || o.toId;
             
-            console.log("🎯 Searching for Target ID:", tid);
+            // If ID is buried in the action string (e.g., "jump_step_id_123")
+            if (!tid && o.action && typeof o.action === 'string') {
+                if (o.action.includes('jump_step_')) {
+                    tid = o.action.replace('jump_step_', '');
+                } else if (o.action.includes('jump_res_')) {
+                    tid = o.action.replace('jump_res_', '');
+                }
+            }
+            
+            console.log("🎯 Resolved Target ID:", tid);
 
             if (tid) {
-                // Look for the target on the canvas
+                // Look for the target in the DOM
                 const targetEl = document.getElementById(`step-row-${tid}`) || 
                                  document.getElementById(tid) || 
                                  document.getElementById(`l3-node-${tid}`);
                 
                 if (targetEl) {
-                    console.log("✅ Target Found in DOM!");
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                     connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
                 } else {
-                    console.warn(`❌ DOM Error: Target ${tid} exists in data but is NOT on the canvas.`);
+                    console.warn(`❌ DOM Error: Target element for ${tid} is not rendered on screen.`);
                 }
+            } else {
+                console.warn("⚠️ Data Error: Outcome found, but could not parse a Target ID from:", o);
             }
         });
     } else {
