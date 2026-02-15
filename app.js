@@ -10759,6 +10759,8 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
     
+    const isVaultMode = window.location.hash.includes('vault');
+    
     // 1. Find the specific icon clicked
     const rowEl = document.getElementById(`step-row-${nodeId}`);
     if (!rowEl) {
