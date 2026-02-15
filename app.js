@@ -10852,6 +10852,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
+    const savedWidth = localStorage.getItem('ol_inspector_width') || '250px';
+
 // --- TIER 3: RESOURCE > STEPS ---
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
@@ -10908,7 +10910,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     ${canvasHtml}
                 </div>
             </main>
-            <aside id="inspector-panel" class="pane-inspector">
+            <aside id="inspector-panel" class="pane-inspector" style="width: ${savedWidth}">
                  <div class="empty-inspector tiny muted">Select a node to inspect</div>
             </aside>
         </div>
@@ -10928,6 +10930,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             OL.filterToolbox(state.lastSearchQuery);
         }
     }
+    setTimeout(OL.initInspectorResizer, 10);
 };
 
 OL.addLifecycleStage = function(isVaultMode) {
@@ -11544,12 +11547,12 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
 
     let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid rgba(255,255,255,0.1);">`;
 
-    // 🟢 1. WORKFLOW -> STAGE
+   // 🟢 1. WORKFLOW -> STAGE
     if (isWorkflow) {
         html += `
-            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
-                <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Stage</label>
-                <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'stageId', this.value, ${isVaultMode})">
+            <div class="form-group">
+                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Stage</label>
+                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'stageId', this.value, ${isVaultMode})">
                     <option value="">-- Unmapped --</option>
                     ${(sourceData.stages || []).map(s => `<option value="${s.id}" ${String(s.id) === String(targetObj.stageId) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
                 </select>
@@ -11560,30 +11563,27 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     if (isResource) {
         const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.resourceLinkId) === String(targetObj.id)));
         html += `
-            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
-                <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Workflow</label>
-                <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
+            <div class="form-group">
+                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Workflow</label>
+                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
                     <option value="">-- No Workflow --</option>
                     ${allResources.filter(r => r.type === 'Workflow').map(w => `<option value="${w.id}" ${currentWf?.id === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
                 </select>
             </div>`;
     }
 
-    // 🟠 3. STEP -> RESOURCE (The Fix Area)
+    // 🟠 3. STEP -> RESOURCE
     if (isStep) {
-        // 🚀 THE LOGIC FIX: Find the parent Resource by scanning all resources for this step's ID
         const parentRes = allResources.find(r => (r.steps || []).some(s => String(s.id) === String(targetObj.id)));
         const parentResId = parentRes?.id || state.activeInspectorParentId;
 
         html += `
-            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
-                <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Resource</label>
-                <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
-                    <option value="">-- Select Resource --</option>
+            <div class="form-group">
+                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Resource Container</label>
+                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
+                    <option value="">-- Select --</option>
                     ${allResources.filter(r => r.type !== 'Workflow').map(res => `
-                        <option value="${res.id}" ${String(res.id) === String(parentResId) ? 'selected' : ''}>
-                            ${esc(res.name)}
-                        </option>
+                        <option value="${res.id}" ${String(res.id) === String(parentResId) ? 'selected' : ''}>${esc(res.name)}</option>
                     `).join('')}
                 </select>
             </div>`;
@@ -11630,6 +11630,54 @@ OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
     if (modal) OL.openResourceModal(targetId);
     else OL.loadInspector(targetId);
 };
+
+OL.initInspectorResizer = function() {
+    const pane = document.getElementById('inspector-panel');
+    if (!pane) return;
+
+    // Create the handle element
+    const resizer = document.createElement('div');
+    resizer.className = 'inspector-resizer';
+    pane.appendChild(resizer);
+
+    let startX, startWidth;
+
+    resizer.addEventListener('mousedown', (e) => {
+        startX = e.clientX;
+        startWidth = parseInt(document.defaultView.getComputedStyle(pane).width, 10);
+        
+        resizer.classList.add('is-dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none'; // Prevent text selection while dragging
+
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('mouseup', stopDrag);
+    });
+
+    function doDrag(e) {
+        // Calculate new width (Mouse position - initial offset)
+        // Since the panel is on the right, moving left increases width
+        const newWidth = startWidth + (startX - e.clientX);
+        
+        if (newWidth > 300 && newWidth < (window.innerWidth * 0.8)) {
+            pane.style.width = `${newWidth}px`;
+        }
+    }
+
+    function stopDrag() {
+        resizer.classList.remove('is-dragging');
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+        document.removeEventListener('mousemove', doDrag);
+        document.removeEventListener('mouseup', stopDrag);
+        
+        // 💾 Optional: Save preference to localStorage
+        localStorage.setItem('ol_inspector_width', pane.style.width);
+    }
+};
+
+// Call this once on app load
+window.addEventListener('DOMContentLoaded', OL.initInspectorResizer);
 
 OL.loadInspector = function(targetId, parentId = null) {
     // ⚓ THE ANCHOR: Lock the parent context for re-renders

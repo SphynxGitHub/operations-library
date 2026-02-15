@@ -3240,9 +3240,11 @@ body.is-visualizer #mainContent {
 }
 
 #inspector-panel.pane-inspector {
-    width:220px !important;
+    position: relative;
+    width: 220px !important;
     min-width: 220px !important;
-    flex-shrink: 0 !important; /* 🚀 Prevents canvas from squishing it */
+    max-width: 80vw;
+    flex: 0 0 auto !important;
     background: #0b0f1a !important;
     border-left: 1px solid rgba(255,255,255,0.1) !important;
     height: 100% !important;
@@ -3253,16 +3255,59 @@ body.is-visualizer #mainContent {
     z-index: 50;
 }
 
+/* 2. The Invisible Resize Handle */
+.inspector-resizer {
+    position: absolute;
+    top: 0;
+    left: -4px; /* Sits exactly on the border */
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 100;
+    transition: background 0.2s;
+}
+
+/* Visual cue when hovering */
+.inspector-resizer:hover, 
+.inspector-resizer.is-dragging {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+}
+
 .inspector-content {
     padding: 20px;
     color: white !important;
-    display: block !important;
+    display:flex;
+    flex-direction: column;
+    width: 100%;
 }
 
 .empty-inspector {
     padding: 40px 20px;
     text-align: center;
     color: var(--text-muted);
+}
+
+.hierarchy-selectors {
+    display: flex !important;
+    flex-direction: row !important; /* Switch to row */
+    flex-wrap: wrap !important;     /* Allow items to wrap */
+    gap: 15px !important;
+    padding: 15px !important;
+}
+
+.hierarchy-selectors .form-group {
+    flex: 1 1 180px; /* Each dropdown takes half space if width allows */
+    min-width: 150px;
+    display: flex;
+    flex-direction: column; /* Stack label over select within the wrapper */
+}
+
+/* 3. Wrap long text items (titles/descriptions) */
+.header-editable-input {
+    word-wrap: break-word;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 /*==================================================================
