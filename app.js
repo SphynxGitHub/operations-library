@@ -10831,16 +10831,34 @@ OL.traceLogic = function(nodeId, direction) {
             console.log("🎯 Resolved Target ID:", tid);
 
             if (tid) {
-                // Look for the target in the DOM
                 const targetEl = document.getElementById(`step-row-${tid}`) || 
-                                 document.getElementById(tid) || 
-                                 document.getElementById(`l3-node-${tid}`);
+                                 document.getElementById(`l3-node-${tid}`) || 
+                                 document.getElementById(`l2-node-${tid}`) ||
+                                 document.getElementById(tid);
                 
                 if (targetEl) {
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                     connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
                 } else {
-                    console.warn(`❌ DOM Error: Target element for ${tid} is not rendered on screen.`);
+                    // 🚀 THE TELEPORT FEATURE:
+                    console.warn(`📍 Target ${tid} is off-screen. Creating Teleport Link.`);
+                    
+                    const teleportBtn = document.createElement('div');
+                    teleportBtn.className = 'teleport-rocket fade-in';
+                    teleportBtn.innerHTML = `🚀 Jump to ${o.label || 'Target'}`;
+                    teleportBtn.onclick = () => {
+                        // Logic to find and focus the target
+                        if (tid.startsWith('local-prj') || tid.startsWith('res-vlt')) {
+                            OL.loadInspector(tid); // This will scroll to it and highlight it
+                        }
+                        teleportBtn.remove();
+                    };
+                    
+                    // Position it right next to the icon you just clicked
+                    anchorEl.parentElement.appendChild(teleportBtn);
+                    
+                    // Auto-remove after 5 seconds if not clicked
+                    setTimeout(() => teleportBtn.remove(), 5000);
                 }
             } else {
                 console.warn("⚠️ Data Error: Outcome found, but could not parse a Target ID from:", o);
