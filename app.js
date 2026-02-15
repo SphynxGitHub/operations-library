@@ -10863,12 +10863,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     } 
     // --- TIER 3: RESOURCE > STEPS (Only if NOT global) ---
     else if (state.focusedResourceId) {
-        // ... (existing Level 3 logic) ...
-        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
-        canvasHtml = renderLevel3Can
-
-// --- TIER 3: RESOURCE > STEPS ---
-    if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         
         // Parent lookup for breadcrumbs
