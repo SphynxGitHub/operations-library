@@ -10883,7 +10883,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
-                    const currentParentId = String(state.activeInspectorParentId || "");
+                    let currentParentId = "";
                     if (currentParentId) {
                         state.activeInspectorParentId = currentParentId;
                     } else {
