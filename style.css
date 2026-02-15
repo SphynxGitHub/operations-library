@@ -2072,6 +2072,36 @@ body.fs-mode-active {
   z-index: 10000 !important;
 } 
 
+/* Ensure the link layer is physically above the cards */
+#vis-links-layer, 
+#vis-links-layer-l2 {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* 🚀 CRITICAL: Let clicks pass through to cards */
+    z-index: 9999 !important; /* Sit above every card and container */
+    overflow: visible;
+}
+
+/* Ensure the arrows themselves are visible */
+#vis-links-layer path, 
+#vis-links-layer-l2 path {
+    pointer-events: none;
+}
+
+/* Allow rocket links to remain clickable even though the layer is 'none' */
+.external-exit-link, .is-clickable {
+    pointer-events: auto !important;
+}
+
+/* Ensure card wrappers don't create new stacking contexts that hide the SVG */
+.wf-node-container, .wf-resource-wrapper {
+    position: relative;
+    z-index: 1; /* Lower than SVG */
+}
+
 .path-handle {
     fill: #00aaff;
     stroke: #ffffff;

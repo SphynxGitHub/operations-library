@@ -11816,11 +11816,22 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+    
+    // At the very bottom of OL.loadInspector
     if (state.viewMode === 'global') {
         const isVault = location.hash.includes('vault');
         const canvas = document.getElementById('fs-canvas');
         if (canvas) {
             canvas.innerHTML = renderGlobalCanvas(isVault);
+            
+            // 🚀 THE REDRAW TRIGGER: 
+            // If we are looking at a Workflow or Resource, redraw tiers
+            if (state.focusedWorkflowId) {
+                setTimeout(() => OL.drawLevel2LogicLines(state.focusedWorkflowId), 50);
+            }
+            if (state.focusedResourceId) {
+                setTimeout(() => OL.drawVerticalLogicLines(state.focusedResourceId), 50);
+            }
         }
     }
 };
