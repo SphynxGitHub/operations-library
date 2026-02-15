@@ -3268,6 +3268,32 @@ body.is-visualizer #mainContent {
 ARROWS
 ===================================================================*/
 /* Position the icons on the top/bottom border */
+.logic-trace-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    font-size: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.logic-trace-icon:hover {
+    background: var(--accent);
+    color: black;
+    transform: scale(1.3);
+}
+
+/* Ensure the arrow starts/ends exactly at the icon */
+.trace-active-icon {
+    box-shadow: 0 0 8px var(--accent);
+    background: var(--accent) !important;
+    color: black !important;
+}
+
 .logic-trace-trigger {
     position: absolute;
     left: 50%;

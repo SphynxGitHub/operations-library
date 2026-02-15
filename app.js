@@ -10632,7 +10632,7 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
     renderGlobalVisualizer(isVault);
 };
 
-function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
+/*function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     const workflowSteps = (wf.steps || []).map(step => {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
@@ -10746,34 +10746,98 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             ` : ''}
         </div>
     `;
+}*/
+
+function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
+    const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
+    const workflowSteps = (wf.steps || []).map(step => {
+        const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
+        return { ...step, asset: linkedAsset };
+    });
+
+    return `
+        <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
+             id="l2-node-${wf.id}"
+             onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
+             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer; position: relative;">
+
+             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
+                </div>
+                <button class="card-delete-btn" style="opacity:0; position:static;" 
+                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
+            </div>
+
+            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 15px;">
+                ${workflowSteps.map((step, rIdx) => {
+                    const asset = step.asset;
+                    if (!asset) return `<div class="tiny muted">⚠️ Missing Asset</div>`;
+                    
+                    return `
+                    <div class="wf-resource-wrapper" id="l3-node-${asset.id}" style="position: relative;">
+                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="atomic-step-container">
+                                ${(asset.steps || []).map(atomic => {
+                                    // 🚀 CHECK LOGIC FOR THIS SPECIFIC STEP
+                                    const hasIn = allResources.some(r => (r.outcomes || []).some(o => o.targetId === atomic.id));
+                                    const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
+
+                                    return `
+                                    <div class="tiny atomic-step-row" 
+                                         id="step-row-${atomic.id}"
+                                         style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom: 4px;"
+                                         onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
+                                        
+                                        ${hasIn ? `<span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : ''}
+
+                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'};">
+                                            ${atomic.type === 'Trigger' ? '⚡' : '•'}
+                                        </span> 
+                                        
+                                        <span class="step-name">${esc(atomic.name || "Unnamed Step")}</span>
+
+                                        ${hasOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
+                                    </div>`;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+    `;
 }
 
 OL.traceLogic = function(nodeId, direction) {
-    console.log(`🔎 Tracing ${direction} for: ${nodeId}`);
-    
-    // 1. Immediately prevent any further selection logic
     OL.clearLogicTraces();
+    
+    // 1. Find the specific icon clicked
+    const rowEl = document.getElementById(`step-row-${nodeId}`);
+    const sourceEl = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
+    
+    if (!sourceEl) return;
+    sourceEl.classList.add('trace-active-icon');
 
-    // 2. Identify the source element
-    const sourceEl = document.getElementById(`l2-node-${nodeId}`) || document.getElementById(nodeId);
-    if (!sourceEl) {
-        console.error(`❌ Element not found: l2-node-${nodeId}`);
-        return;
-    }
+    // 2. Data Lookup (Find the step object)
+    let stepObj = null;
+    const all = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
+    all.some(r => {
+        stepObj = (r.steps || []).find(s => s.id === nodeId);
+        return !!stepObj;
+    });
 
-    // 3. Find the data
-    const res = OL.getResourceById(nodeId);
-    if (!res) {
-        console.error(`❌ Data not found for: ${nodeId}`);
-        return;
-    }
+    if (!stepObj) return;
 
     const connections = [];
     if (direction === 'outgoing') {
-        const outcomes = res.outcomes || [];
-        outcomes.forEach(o => {
-            const targetEl = document.getElementById(`l2-node-${o.targetId}`);
-            if (targetEl) connections.push({ from: sourceEl, to: targetEl, label: o.condition });
+        (stepObj.outcomes || []).forEach(o => {
+            // Target the row of the destination step
+            const targetEl = document.getElementById(`step-row-${o.targetId}`);
+            if (targetEl) {
+                const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
+                connections.push({ from: sourceEl, to: targetIcon, label: o.condition });
+            }
         });
     } else {
         // Incoming logic
