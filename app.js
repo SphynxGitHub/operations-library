@@ -10825,16 +10825,16 @@ OL.jumpToScopingItem = function(resId) {
 };
 
 OL.toggleGlobalView = function(isVaultMode) {
-    // 1. Switch the mode
     state.viewMode = (state.viewMode === 'global') ? 'focus' : 'global';
-    
-    // 💾 2. THE FIX: Persist the choice
     localStorage.setItem('ol_preferred_view_mode', state.viewMode);
     
-    // 3. Reset focuses if going global
+    // 🚀 THE GHOST REMOVAL:
+    // If we are moving TO global, clear the specific focuses from state AND session
     if (state.viewMode === 'global') {
         state.focusedWorkflowId = null;
         state.focusedResourceId = null;
+        sessionStorage.removeItem('active_workflow_id');
+        sessionStorage.removeItem('active_resource_id');
     }
     
     renderGlobalVisualizer(isVaultMode);
@@ -10856,7 +10856,16 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    const savedWidth = localStorage.getItem('ol_inspector_width') || '250px';
+    if (isGlobalMode) {
+        toolboxHtml = renderLevel1SidebarContent(allResources);
+        canvasHtml = renderGlobalCanvas(isVaultMode);
+        breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
+    } 
+    // --- TIER 3: RESOURCE > STEPS (Only if NOT global) ---
+    else if (state.focusedResourceId) {
+        // ... (existing Level 3 logic) ...
+        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
+        canvasHtml = renderLevel3Can
 
 // --- TIER 3: RESOURCE > STEPS ---
     if (state.focusedResourceId) {
