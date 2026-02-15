@@ -10831,35 +10831,19 @@ OL.traceLogic = function(nodeId, direction) {
             console.log("🎯 Resolved Target ID:", tid);
 
             if (tid) {
+                // Look for the target in the DOM
                 const targetEl = document.getElementById(`step-row-${tid}`) || 
-                                 document.getElementById(`l3-node-${tid}`) || 
-                                 document.getElementById(`l2-node-${tid}`) ||
-                                 document.getElementById(tid);
+                                 document.getElementById(tid) || 
+                                 document.getElementById(`l3-node-${tid}`);
                 
                 if (targetEl) {
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                     connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
                 } else {
-                    // 🚀 THE TELEPORT FEATURE:
-                    console.warn(`📍 Target ${tid} is off-screen. Creating Teleport Link.`);
-                    
-                    const teleportBtn = document.createElement('div');
-                    teleportBtn.className = 'teleport-rocket fade-in';
-                    teleportBtn.innerHTML = `🚀 Jump to ${o.label || 'Target'}`;
-                    teleportBtn.onclick = () => {
-                        // Logic to find and focus the target
-                        if (tid.startsWith('local-prj') || tid.startsWith('res-vlt')) {
-                            OL.loadInspector(tid); // This will scroll to it and highlight it
-                        }
-                        teleportBtn.remove();
-                    };
-                    
-                    // Position it right next to the icon you just clicked
-                    anchorEl.parentElement.appendChild(teleportBtn);
-                    
-                    // Auto-remove after 5 seconds if not clicked
-                    setTimeout(() => teleportBtn.remove(), 5000);
+                    console.warn(`❌ DOM Error: Target element for ${tid} is not rendered on screen.`);
                 }
+            } else {
+                console.warn("⚠️ Data Error: Outcome found, but could not parse a Target ID from:", o);
             }
         });
     } else {
@@ -10881,26 +10865,7 @@ OL.traceLogic = function(nodeId, direction) {
     }
 
     console.log(`🔗 Found ${connections.length} connections.`);
-    connections.forEach(conn => {
-        // Draw the arrow
-        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
-
-        // 🌟 THE GLOW: Find the card or row and light it up
-        // We look for the closest parent with a card class, or the icon itself
-        const targetCard = conn.to.closest('.workflow-block-card') || 
-                           conn.to.closest('.atomic-step-row') || 
-                           conn.to;
-
-        targetCard.classList.add('trace-highlight-glow');
-
-        // Remove the glow after 3 seconds so the UI stays clean
-        setTimeout(() => {
-            targetCard.classList.remove('trace-highlight-glow');
-        }, 3000);
-
-        // Optional: Smoothly center the target in the viewport
-        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+    connections.forEach(conn => OL.drawTraceArrow(conn.from, conn.to, direction, conn.label));
 };
 
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
