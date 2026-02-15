@@ -10760,7 +10760,7 @@ OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
     
     const isVaultMode = window.location.hash.includes('vault');
-    
+
     // 1. Find the specific icon clicked
     const rowEl = document.getElementById(`step-row-${nodeId}`);
     if (!rowEl) {
@@ -10780,22 +10780,41 @@ OL.traceLogic = function(nodeId, direction) {
 
     // 2. Data Lookup (Find the step object)
     let stepObj = null;
-    const all = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-    all.some(r => {
-        stepObj = (r.steps || []).find(s => s.id === nodeId);
-        return !!stepObj;
+    let parentRes = null;
+
+    allResources.forEach(r => {
+        // Is the ID a top-level Resource?
+        if (String(r.id) === String(nodeId)) {
+            stepObj = r;
+            parentRes = r;
+        }
+        // Or is it an Atomic Step inside a resource?
+        const foundStep = (r.steps || []).find(s => String(s.id) === String(nodeId));
+        if (foundStep) {
+            stepObj = foundStep;
+            parentRes = r;
+        }
     });
 
-    if (!stepObj) return;
+    if (!stepObj) {
+        console.warn(`⚠️ Data lookup failed. No step found with ID: ${nodeId}`);
+        return;
+    }
 
     const connections = [];
+    const outcomes = stepObj.outcomes || []; // Check the outcomes of the STEP
+
     if (direction === 'outgoing') {
-        (stepObj.outcomes || []).forEach(o => {
-            // Target the row of the destination step
-            const targetEl = document.getElementById(`step-row-${o.targetId}`);
+        outcomes.forEach(o => {
+            // Target can be another Step OR a whole Workflow/Resource
+            const targetEl = document.getElementById(`step-row-${o.targetId}`) || 
+                             document.getElementById(`l3-node-${o.targetId}`) || 
+                             document.getElementById(`l2-node-${o.targetId}`);
+            
             if (targetEl) {
+                // Try to find an icon to snap to, otherwise snap to the whole row/card
                 const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                connections.push({ from: sourceEl, to: targetIcon, label: o.condition });
+                connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
             }
         });
     } else {
