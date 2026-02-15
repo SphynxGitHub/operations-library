@@ -10751,12 +10751,11 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const isInspectingStage = String(state.activeInspectorResId) === String(stage.id);
-    const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
 
     return `
         <div class="global-macro-map" style="display: flex; padding: 40px; align-items: flex-start;">
             ${stages.map((stage, sIdx) => {
+                const isInspectingStage = String(state.activeInspectorResId) === String(stage.id);
                 const workflowsInStage = allResources.filter(r => 
                     r.type === 'Workflow' && String(r.stageId) === String(stage.id)
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
@@ -10775,10 +10774,13 @@ window.renderGlobalCanvas = function(isVaultMode) {
                         </div>
                         
                         <div class="workflow-stack">
-                            ${workflowsInStage.map((wf, wIdx) => `
+                            ${workflowsInStage.map((wf, wIdx) => {
+                                const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
+                                return `
+                                <div class="wf-node-container ${isInspectingWorkflow ? 'is-inspecting' : ''}" style="margin-bottom:15px; border-radius: 10px;">
                                 ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
-                                <div class="insert-divider vertical ${isInspectingWorkflow ? 'is-inspecting' : ''}" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
-                            `).join('')}
+                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                            `}).join('')}
                             ${workflowsInStage.length === 0 ? `<div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})"><span>+ Add Workflow</span></div>` : ''}
                         </div>
                     </div>
@@ -11807,6 +11809,8 @@ OL.loadInspector = function(targetId, parentId = null) {
         panel.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
         return;
     }
+    
+    let breadcrumbParts = [];
 
     // 🚀 TYPE & LEVEL DETECTION
     const isStage = targetId.startsWith('stage-');
@@ -11819,11 +11823,19 @@ OL.loadInspector = function(targetId, parentId = null) {
     const client = getActiveClient();
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
+    const breadcrumbHtml = breadcrumbParts.length > 0 
+        ? `<div class="tiny muted" style="margin-bottom: 8px; font-size: 9px; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.5px;">
+            ${breadcrumbParts.join(' <span style="opacity:0.3;">/</span> ')}
+           </div>` 
+        : '';
+
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
     // ------------------------------------------------------------
     // 1. DYNAMIC HEADER & BACK BUTTON
     // ------------------------------------------------------------
+    html += breadcrumbHtml;
+
     html += `
         <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -11969,15 +11981,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     panel.innerHTML = html;
 
     if (!document.getElementById('modal-layer')) {
-        // If we are in the Global Macro Map (L1)
-        if (state.viewMode === 'global') {
-            renderGlobalVisualizer(isVaultMode);
-        } 
-        // If we are in the Workflow Stream (L2)
-        else if (state.viewMode === 'workflow' && state.activeWorkflowId) {
-            const canvas = document.getElementById('fs-canvas');
-            if (canvas) canvas.innerHTML = window.renderLevel2Canvas(state.activeWorkflowId);
-        }
+        renderGlobalVisualizer(location.hash.includes('vault'));
     }
 };
 
