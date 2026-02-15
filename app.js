@@ -10758,92 +10758,30 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
 OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
-    
-    const isVaultMode = window.location.hash.includes('vault');
-
-    // 1. Find the specific DOM row clicked
-    const rowEl = document.getElementById(`step-row-${nodeId}`);
-    if (!rowEl) {
-        console.error(`❌ Trace Error: Could not find DOM element 'step-row-${nodeId}'`);
-        return;
-    }
-
-    // 2. Determine anchor icon
-    const sourceIcon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
-    const anchorEl = sourceIcon || rowEl; 
-    anchorEl.classList.add('trace-active-icon');
-
-    // 3. DATA RESOLUTION - Define client BEFORE using it
     const client = getActiveClient();
-    
-    // Create ONE master list to scan (combining master, local, and line items)
     const allResources = [
         ...(state.master.resources || []),
-        ...(client?.projectData?.localResources || []),
-        ...(client?.projectData?.scopingSheets?.[0]?.lineItems || [])
+        ...(client?.projectData?.localResources || [])
     ];
 
     let stepObj = null;
-
-    // Scan for the data object (Resource or Step)
     allResources.some(r => {
-        if (String(r.id) === String(nodeId)) {
-            stepObj = r;
-            return true;
-        }
-        const foundStep = (r.steps || []).find(s => String(s.id) === String(nodeId));
-        if (foundStep) {
-            stepObj = foundStep;
-            return true;
-        }
-        return false;
+        if (r.id === nodeId) { stepObj = r; return true; }
+        const s = (r.steps || []).find(st => st.id === nodeId);
+        if (s) { stepObj = s; return true; }
     });
 
     if (!stepObj) {
-        console.warn(`⚠️ Data lookup failed for ID: ${nodeId}`);
+        console.error("❌ Trace Error: No data found for ID:", nodeId);
         return;
     }
 
-    const connections = [];
+    // 🚀 THE SMOKING GUN: Print the actual data found
+    console.log("%c STEP DATA FOUND ", "background: #38bdf8; color: #000; font-weight: bold;", stepObj);
+    console.log("Outcomes Array:", stepObj.outcomes);
 
-    if (direction === 'outgoing') {
-        const outcomes = stepObj.outcomes || [];
-        outcomes.forEach(o => {
-            const targetEl = document.getElementById(`step-row-${o.targetId}`) || 
-                             document.getElementById(`l3-node-${o.targetId}`) || 
-                             document.getElementById(`l2-node-${o.targetId}`);
-            
-            if (targetEl) {
-                const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
-            }
-        });
-    } else {
-        // 🚀 DEEP SCAN INCOMING
-        allResources.forEach(r => {
-            // Check top-level outcomes
-            (r.outcomes || []).forEach(o => {
-                if (String(o.targetId) === String(nodeId)) {
-                    const fromEl = document.getElementById(`l2-node-${r.id}`) || document.getElementById(`l3-node-${r.id}`);
-                    if (fromEl) connections.push({ from: fromEl, to: anchorEl, label: o.condition });
-                }
-            });
-            // Check inner step outcomes
-            (r.steps || []).forEach(s => {
-                (s.outcomes || []).forEach(o => {
-                    if (String(o.targetId) === String(nodeId)) {
-                        const fromRow = document.getElementById(`step-row-${s.id}`);
-                        if (fromRow) {
-                            const fromIcon = fromRow.querySelector('.logic-trace-icon.out') || fromRow;
-                            connections.push({ from: fromIcon, to: anchorEl, label: o.condition });
-                        }
-                    }
-                });
-            });
-        });
-    }
-
-    console.log(`🔗 Found ${connections.length} connections for ${direction} trace.`);
+    const outcomes = stepObj.outcomes || [];
+    console.log(`🔗 Found ${outcomes.length} connections.`);
 
     // 4. Draw them
     connections.forEach(conn => {
