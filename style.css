@@ -2488,14 +2488,25 @@ body.is-visualizer #mainContent {
   2. LEFT SIDEBAR (The Workflow Library Toolbox)
 ==================================================================*/
 .pane-drawer {
-    width: 180px;
-    max-width: 25%;
+    position: relative;
+    flex: 0 0 auto !important;
+    width: 280px;
+    max-width: 40%;
     height: 100vh;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
     background: #0b0f1a;
     border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Specific position for Left Sidebar Handle */
+.pane-drawer .sidebar-resizer { right: -3px; }
+
+/* Specific position for Right Inspector Handle */
+.pane-inspector .sidebar-resizer { left: -3px; }
+
+.sidebar-resizer:hover, 
+.sidebar-resizer.is-dragging {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
 }
 
 .drawer-header {

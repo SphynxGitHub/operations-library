@@ -10930,7 +10930,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             OL.filterToolbox(state.lastSearchQuery);
         }
     }
-    setTimeout(OL.initInspectorResizer, 10);
+    setTimeout(OL.initSideResizers, 10);
 };
 
 OL.addLifecycleStage = function(isVaultMode) {
@@ -11631,54 +11631,6 @@ OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
     else OL.loadInspector(targetId);
 };
 
-OL.initInspectorResizer = function() {
-    const pane = document.getElementById('inspector-panel');
-    if (!pane) return;
-
-    // Create the handle element
-    const resizer = document.createElement('div');
-    resizer.className = 'inspector-resizer';
-    pane.appendChild(resizer);
-
-    let startX, startWidth;
-
-    resizer.addEventListener('mousedown', (e) => {
-        startX = e.clientX;
-        startWidth = parseInt(document.defaultView.getComputedStyle(pane).width, 10);
-        
-        resizer.classList.add('is-dragging');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none'; // Prevent text selection while dragging
-
-        document.addEventListener('mousemove', doDrag);
-        document.addEventListener('mouseup', stopDrag);
-    });
-
-    function doDrag(e) {
-        // Calculate new width (Mouse position - initial offset)
-        // Since the panel is on the right, moving left increases width
-        const newWidth = startWidth + (startX - e.clientX);
-        
-        if (newWidth > 300 && newWidth < (window.innerWidth * 0.8)) {
-            pane.style.width = `${newWidth}px`;
-        }
-    }
-
-    function stopDrag() {
-        resizer.classList.remove('is-dragging');
-        document.body.style.cursor = 'default';
-        document.body.style.userSelect = 'auto';
-        document.removeEventListener('mousemove', doDrag);
-        document.removeEventListener('mouseup', stopDrag);
-        
-        // 💾 Optional: Save preference to localStorage
-        localStorage.setItem('ol_inspector_width', pane.style.width);
-    }
-};
-
-// Call this once on app load
-window.addEventListener('DOMContentLoaded', OL.initInspectorResizer);
-
 OL.loadInspector = function(targetId, parentId = null) {
     // ⚓ THE ANCHOR: Lock the parent context for re-renders
     if (parentId) {
@@ -11872,6 +11824,66 @@ OL.loadInspector = function(targetId, parentId = null) {
         }
     }
 };
+
+OL.initSideResizers = function() {
+    const resizablePanes = [
+        { id: 'pane-drawer', side: 'left', storageKey: 'ol_toolbox_width' },
+        { id: 'inspector-panel', side: 'right', storageKey: 'ol_inspector_width' }
+    ];
+
+    resizablePanes.forEach(config => {
+        const pane = document.getElementById(config.id) || document.querySelector(`.${config.id}`);
+        if (!pane) return;
+
+        // Clean up existing resizers to prevent double-binding
+        pane.querySelectorAll('.sidebar-resizer').forEach(r => r.remove());
+
+        const resizer = document.createElement('div');
+        resizer.className = 'sidebar-resizer';
+        pane.appendChild(resizer);
+
+        let startX, startWidth;
+
+        resizer.addEventListener('mousedown', (e) => {
+            startX = e.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(pane).width, 10);
+            
+            resizer.classList.add('is-dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+
+            const doDrag = (e) => {
+                let newWidth;
+                if (config.side === 'left') {
+                    // Moving right increases width
+                    newWidth = startWidth + (e.clientX - startX);
+                } else {
+                    // Moving left increases width
+                    newWidth = startWidth + (startX - e.clientX);
+                }
+                
+                // Boundaries
+                if (newWidth > 200 && newWidth < (window.innerWidth * 0.5)) {
+                    pane.style.width = `${newWidth}px`;
+                }
+            };
+
+            const stopDrag = () => {
+                resizer.classList.remove('is-dragging');
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
+                document.removeEventListener('mousemove', doDrag);
+                document.removeEventListener('mouseup', stopDrag);
+                localStorage.setItem(config.storageKey, pane.style.width);
+            };
+
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('mouseup', stopDrag);
+        });
+    });
+};
+// Call this once on app load
+window.addEventListener('DOMContentLoaded', OL.initSidebarResizers);
 
 OL.applyCanvasHighlight = function() {
     // 1. Remove highlight from whatever was selected before
