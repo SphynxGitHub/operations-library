@@ -10640,7 +10640,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         ondragend="this.classList.remove('dragging-now')">
                         
                         <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspectingRes ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
-                            onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
+                            onclick="event.stopPropagation(); OL.loadInspector('${asset.id}', '${wf.id}')"
                             ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
                                     border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
