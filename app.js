@@ -10816,19 +10816,27 @@ OL.traceLogic = function(nodeId, direction) {
             console.log("🎯 Resolved Target ID:", tid);
 
             if (tid) {
-                // Look for the target in the DOM
+                // 🚀 THE EXPANDED LOOKUP: Try Steps, then Try Cards (Tier 3/Tier 2)
                 const targetEl = document.getElementById(`step-row-${tid}`) || 
-                                 document.getElementById(tid) || 
-                                 document.getElementById(`l3-node-${tid}`);
+                                 document.getElementById(`l3-node-${tid}`) || 
+                                 document.getElementById(`l2-node-${tid}`) ||
+                                 document.getElementById(tid);
                 
                 if (targetEl) {
+                    console.log("✅ Target Found in DOM:", targetEl.id);
+                    // Determine the exact point to land the arrow
+                    // If it's a step-row, try to find the 'in' icon. If it's a card, just use the card.
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                    connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
+                    
+                    connections.push({ 
+                        from: anchorEl, 
+                        to: targetIcon, 
+                        label: o.condition || o.label 
+                    });
                 } else {
-                    console.warn(`❌ DOM Error: Target element for ${tid} is not rendered on screen.`);
+                    // 🔍 DIAGNOSTIC: If it fails, let's see what IS on the screen
+                    console.warn(`❌ DOM Error: Target ${tid} is not rendered. Check if the card is collapsed or on a different stage.`);
                 }
-            } else {
-                console.warn("⚠️ Data Error: Outcome found, but could not parse a Target ID from:", o);
             }
         });
     } else {
