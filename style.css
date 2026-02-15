@@ -3262,6 +3262,60 @@ body.is-visualizer #mainContent {
     font-size: 11px;
 }
 
+/*=================================================================
+ARROWS
+===================================================================*/
+/* Position the icons on the top/bottom border */
+.logic-trace-trigger {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+    z-index: 20;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.logic-trace-trigger.incoming { top: -12px; }
+.logic-trace-trigger.outgoing { bottom: -12px; }
+
+.logic-trace-trigger:hover {
+    background: var(--accent);
+    color: black;
+    transform: translateX(-50%) scale(1.2);
+}
+
+/* Pulsing effect for the traced targets */
+.trace-highlight-end {
+    animation: logic-pulse 1.5s infinite;
+}
+
+@keyframes logic-pulse {
+    0% { box-shadow: 0 0 0px var(--accent); }
+    50% { box-shadow: 0 0 20px var(--accent); }
+    100% { box-shadow: 0 0 0px var(--accent); }
+}
+
+/* Trace Arrow Animation */
+.trace-path {
+    stroke-dasharray: 8;
+    animation: dash-flow 20s linear infinite;
+}
+
+@keyframes dash-flow {
+    from { stroke-dashoffset: 1000; }
+    to { stroke-dashoffset: 0; }
+}
+
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/

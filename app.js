@@ -10639,11 +10639,21 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         return { ...step, asset: linkedAsset };
     });
 
+    const hasIncoming = allResources.some(otherRes => 
+        (otherRes.outcomes || []).some(o => o.targetId === wf.id)
+    );
+    const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
+
     return `
         <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
              id="l2-node-${wf.id}"
              onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
              style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
+
+             ${hasIncoming ? `
+                <div class="logic-trace-trigger incoming" title="View Incoming Logic"
+                     onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>
+            ` : ''}
             
              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
@@ -10730,9 +10740,134 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     </div>`;
                 }).join('')}
             </div>
+            ${hasOutgoing ? `
+                <div class="logic-trace-trigger outgoing" title="View Outgoing Logic"
+                     onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>
+            ` : ''}
         </div>
     `;
 }
+
+OL.traceLogic = function(nodeId, direction) {
+    // 1. Clear existing traces to avoid a mess
+    OL.clearLogicTraces();
+
+    const canvas = document.getElementById('fs-canvas');
+    const sourceNode = document.getElementById(`l1-node-${nodeId}`) || 
+                       document.getElementById(`l2-node-${nodeId}`);
+    
+    if (!sourceNode) return;
+    sourceNode.classList.add('trace-active');
+
+    const connections = [];
+    
+    if (direction === 'outgoing') {
+        const res = OL.getResourceById(nodeId);
+        (res.outcomes || []).forEach(outcome => {
+            const targetEl = document.getElementById(`l1-node-${outcome.targetId}`) || 
+                             document.getElementById(`l2-node-${outcome.targetId}`);
+            if (targetEl) connections.push({ from: sourceNode, to: targetEl });
+        });
+    } else {
+        // Incoming: Search all resources for outcomes pointing HERE
+        const client = getActiveClient();
+        const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+        
+        all.forEach(r => {
+            if ((r.outcomes || []).some(o => o.targetId === nodeId)) {
+                const startEl = document.getElementById(`l1-node-${r.id}`) || 
+                                document.getElementById(`l2-node-${r.id}`);
+                if (startEl) connections.push({ from: startEl, to: sourceNode });
+            }
+        });
+    }
+
+    // 2. Draw the lines and highlight the "other end"
+    connections.forEach(conn => {
+        OL.drawTemporaryTraceLine(conn.from, conn.to, direction);
+        const otherEnd = (direction === 'outgoing') ? conn.to : conn.from;
+        otherEnd.classList.add('trace-highlight-end');
+    });
+};
+
+OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
+    const canvas = document.getElementById('fs-canvas');
+    if (!canvas) return;
+
+    // 1. Create or get SVG Layer
+    let svg = document.getElementById('logic-trace-layer');
+    if (!svg) {
+        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.id = 'logic-trace-layer';
+        svg.setAttribute('class', 'logic-trace-svg');
+        svg.style.position = 'absolute';
+        svg.style.top = '0';
+        svg.style.left = '0';
+        svg.style.width = canvas.scrollWidth + 'px';
+        svg.style.height = canvas.scrollHeight + 'px';
+        svg.style.pointerEvents = 'none';
+        svg.style.zIndex = '999';
+        
+        // Define Arrowhead
+        svg.innerHTML = `
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="var(--accent)" />
+                </marker>
+            </defs>`;
+        canvas.appendChild(svg);
+    }
+
+    // 2. Calculate Coordinates
+    const rectFrom = fromEl.getBoundingClientRect();
+    const rectTo = toEl.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+
+    // Start from bottom center of 'From' and end at top center of 'To'
+    const x1 = (rectFrom.left + rectFrom.width / 2) - canvasRect.left + canvas.scrollLeft;
+    const y1 = (rectFrom.bottom) - canvasRect.top + canvas.scrollTop;
+    
+    const x2 = (rectTo.left + rectTo.width / 2) - canvasRect.left + canvas.scrollLeft;
+    const y2 = (rectTo.top) - canvasRect.top + canvas.scrollTop;
+
+    // 3. Draw Path (Cubic Bezier for nice curves)
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const cp1y = y1 + (y2 - y1) / 2;
+    const cp2y = y1 + (y2 - y1) / 2;
+    
+    const d = `M ${x1} ${y1} C ${x1} ${cp1y}, ${x2} ${cp2y}, ${x2} ${y2}`;
+    
+    path.setAttribute("d", d);
+    path.setAttribute("class", "trace-path");
+    path.setAttribute("stroke", "var(--accent)");
+    path.setAttribute("stroke-width", "3");
+    path.setAttribute("fill", "none");
+    path.setAttribute("marker-end", "url(#arrowhead)");
+    svg.appendChild(path);
+
+    // 4. Add Floating Label
+    if (label) {
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'trace-label fade-in';
+        labelDiv.innerText = label;
+        labelDiv.style.position = 'absolute';
+        labelDiv.style.left = `${(x1 + x2) / 2}px`;
+        labelDiv.style.top = `${(y1 + y2) / 2}px`;
+        labelDiv.style.transform = 'translate(-50%, -50%)';
+        canvas.appendChild(labelDiv);
+    }
+};
+
+OL.clearLogicTraces = function() {
+    // Remove highlight classes
+    document.querySelectorAll('.trace-active, .trace-highlight-end').forEach(el => {
+        el.classList.remove('trace-active', 'trace-highlight-end');
+    });
+    
+    // Remove the SVG lines
+    document.querySelectorAll('.logic-trace-svg').forEach(el => el.remove());
+};
 
 OL.handleResourceUnmap = async function(workflowId, resourceId, isVault) {
     if (!confirm("Remove this resource from this workflow? It will remain in the library.")) return;
