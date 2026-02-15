@@ -10887,7 +10887,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     console.log(currentParentId,": Parent ID")
                     const currentAssetId = String(asset.id || "");
                     console.log(currentAssetId,": Asset ID")
-                    const currentResId = String(state.activeInspectorResId || "");\
+                    const currentResId = String(state.activeInspectorResId || "");
                     console.log(currentResId,": Res ID")
 
                     // 🚀 TYPE-SAFE CHECKS
