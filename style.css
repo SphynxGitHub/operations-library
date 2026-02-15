@@ -3188,6 +3188,28 @@ body.is-visualizer #mainContent {
     border-radius: 2px;
 }
 
+/* Selected Object Glow */
+.is-inspecting {
+    outline: 2px solid var(--accent) !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 20px var(--accent-glow) !important;
+    background: rgba(56, 189, 248, 0.1) !important;
+    z-index: 100 !important;
+    position: relative;
+}
+
+/* Parent Highlighting (when inspecting a step inside a resource) */
+.parent-active {
+    border: 2px solid var(--accent) !important;
+}
+
+/* Fix for individual step names in the stack */
+.step-active.is-inspecting {
+    color: var(--accent) !important;
+    font-weight: bold;
+    text-shadow: 0 0 5px var(--accent);
+}
+
 /*==================================================================
   6. BOTTOM INVENTORY & RIGHT INSPECTOR (STABILIZED)
 ==================================================================*/

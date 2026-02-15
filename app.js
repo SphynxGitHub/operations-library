@@ -10596,14 +10596,19 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
 };
 
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
+    const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     const workflowSteps = (wf.steps || []).map(step => {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
         return { ...step, asset: linkedAsset };
     });
 
     return `
-        <div class="wf-global-node" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
+             id="l2-node-${wf.id}"
+             onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
+             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
+            
+             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
                 </div>
@@ -10629,6 +10634,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                 
                     return `
                     <div class="wf-resource-wrapper" 
+                        id="l3-node-${asset.id}"
                         draggable="true" 
                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
                         ondragend="this.classList.remove('dragging-now')">
