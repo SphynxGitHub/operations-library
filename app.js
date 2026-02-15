@@ -8588,7 +8588,6 @@ OL.calculateBaseFeeWithMultiplier = function(item, resource) {
     return Math.round(baseAmount * multiplier);
 };
 
-
 // 11. GRAND TOTALS SUMMARY
 window.renderGrandTotals = function(lineItems, baseRate) {
     const area = document.getElementById("grand-totals-area");
@@ -10480,6 +10479,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
         <div class="global-macro-map" style="display: flex; padding: 40px; align-items: flex-start;">
             ${stages.map((stage, sIdx) => {
                 const isInspectingStage = String(state.activeInspectorResId) === String(stage.id);
+                
                 const workflowsInStage = allResources.filter(r => 
                     r.type === 'Workflow' && String(r.stageId) === String(stage.id)
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
@@ -10502,8 +10502,9 @@ window.renderGlobalCanvas = function(isVaultMode) {
                                 const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
                                 return `
                                 <div class="wf-node-container ${isInspectingWorkflow ? 'is-inspecting' : ''}" style="margin-bottom:15px; border-radius: 10px;">
-                                ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
-                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                                    ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
+                                    <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                                </div>
                             `}).join('')}
                             ${workflowsInStage.length === 0 ? `<div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})"><span>+ Add Workflow</span></div>` : ''}
                         </div>
