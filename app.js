@@ -10910,7 +10910,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     ${canvasHtml}
                 </div>
             </main>
-            <aside id="inspector-panel" class="pane-inspector" style="width: ${savedWidth}">
+            <aside id="inspector-panel" class="pane-inspector">
                  <div class="empty-inspector tiny muted">Select a node to inspect</div>
             </aside>
         </div>
