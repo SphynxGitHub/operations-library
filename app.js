@@ -11805,9 +11805,27 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+    OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
+};
 
-    if (!document.getElementById('modal-layer')) {
-        renderGlobalVisualizer(location.hash.includes('vault'));
+OL.syncCanvasHighlights = function() {
+    // 1. Clear all existing highlights on the map
+    document.querySelectorAll('.is-inspecting, .parent-active').forEach(el => {
+        el.classList.remove('is-inspecting', 'parent-active');
+    });
+
+    // 2. Apply to the new Active Resource/Step
+    const targetNode = document.getElementById(`l1-node-${state.activeInspectorResId}`) || 
+                       document.getElementById(`l2-node-${state.activeInspectorResId}`) ||
+                       document.getElementById(`step-node-${state.activeInspectorResId}`);
+    
+    if (targetNode) targetNode.classList.add('is-inspecting');
+
+    // 3. Apply to the Parent if we are looking at a step
+    if (state.activeInspectorParentId) {
+        const parentNode = document.getElementById(`l1-node-${state.activeInspectorParentId}`) || 
+                           document.getElementById(`l2-node-${state.activeInspectorParentId}`);
+        if (parentNode) parentNode.classList.add('parent-active');
     }
 };
 
