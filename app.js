@@ -10761,36 +10761,42 @@ OL.traceLogic = function(nodeId, direction) {
     
     const isVaultMode = window.location.hash.includes('vault');
 
-    // 1. Find the specific row clicked
+    // 1. Find the specific DOM row clicked
     const rowEl = document.getElementById(`step-row-${nodeId}`);
     if (!rowEl) {
-        console.error(`❌ Trace Error: Could not find step-row-${nodeId}`);
+        console.error(`❌ Trace Error: Could not find DOM element 'step-row-${nodeId}'`);
         return;
     }
 
-    // 2. Determine anchor icon (In/Out)
+    // 2. Determine anchor icon
     const sourceIcon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
     const anchorEl = sourceIcon || rowEl; 
     anchorEl.classList.add('trace-active-icon');
 
-    // 3. DATA RESOLUTION (The Fix)
+    // 3. DATA RESOLUTION - Define client BEFORE using it
     const client = getActiveClient();
-    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    // Create ONE master list to scan (combining master, local, and line items)
+    const allResources = [
+        ...(state.master.resources || []),
+        ...(client?.projectData?.localResources || []),
+        ...(client?.projectData?.scopingSheets?.[0]?.lineItems || [])
+    ];
 
     let stepObj = null;
-    let parentRes = null;
 
-    // Deep Search for the data object
-    allResources.forEach(r => {
+    // Scan for the data object (Resource or Step)
+    allResources.some(r => {
         if (String(r.id) === String(nodeId)) {
             stepObj = r;
-            parentRes = r;
+            return true;
         }
         const foundStep = (r.steps || []).find(s => String(s.id) === String(nodeId));
         if (foundStep) {
             stepObj = foundStep;
-            parentRes = r;
+            return true;
         }
+        return false;
     });
 
     if (!stepObj) {
@@ -10813,9 +10819,9 @@ OL.traceLogic = function(nodeId, direction) {
             }
         });
     } else {
-        // 🚀 DEEP SCAN INCOMING: Check every outcome of every step in every resource
+        // 🚀 DEEP SCAN INCOMING
         allResources.forEach(r => {
-            // Check top-level resource outcomes
+            // Check top-level outcomes
             (r.outcomes || []).forEach(o => {
                 if (String(o.targetId) === String(nodeId)) {
                     const fromEl = document.getElementById(`l2-node-${r.id}`) || document.getElementById(`l3-node-${r.id}`);
