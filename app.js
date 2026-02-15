@@ -10732,13 +10732,22 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                     const stepHasLogic = (atomic.outcomes || []).length > 0;
                                     const hasIn = allResources.some(r => (r.outcomes || []).some(o => o.targetId === atomic.id));
                                     const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
+                                    let previewText = "No Target";
+                                    if (hasOut) {
+                                        const firstOutcome = atomic.outcomes[0];
+                                        const tid = firstOutcome.targetId || (firstOutcome.action?.includes('jump_step_') ? firstOutcome.action.split('jump_step_')[1] : null);
+                                        const targetData = OL.getResourceById(tid);
+                                        previewText = targetData ? `Jump to: ${targetData.name}` : "Proceed Next";
+                                    }
                                     
                                     return `<div class="tiny atomic-step-row ${isStepInspected ? 'is-inspecting step-active' : ''}" 
                                          id="step-row-${atomic.id}"
                                          style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px;
                                          onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
 
-                                        ${hasIn ? `<span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : ''}
+                                        ${hasIn ? `<span class="logic-trace-icon in" 
+                                            data-preview="${esc(previewText)}"
+                                            onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
 
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
@@ -10844,7 +10853,14 @@ OL.traceLogic = function(nodeId, direction) {
     }
 
     console.log(`🔗 Drawing ${connections.length} connections.`);
-    connections.forEach(conn => OL.drawTraceArrow(conn.from, conn.to, direction, conn.label));
+    connections.forEach(conn => {
+        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
+        conn.to.classList.add('trace-highlight-end');
+        setTimeout(() => conn.to.classList.remove('trace-highlight-end'), 2000);
+        
+        // Optional: Scroll to the target if it's far away
+        conn.to.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
 };
 
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
