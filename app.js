@@ -11643,6 +11643,13 @@ OL.loadInspector = function(targetId, parentId = null) {
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
+    let contentWrapper = panel.querySelector('.inspector-scroll-content');
+    if (!contentWrapper) {
+        // First time load: create the wrapper
+        panel.innerHTML = `<div class="inspector-scroll-content"></div>`;
+        contentWrapper = panel.querySelector('.inspector-scroll-content');
+    }
+
     // 🔍 RESOLVE DATA (Stages, Workflows, Resources, or Steps)
     const data = OL.getResourceById(targetId);
     if (!data) {
@@ -11817,6 +11824,8 @@ OL.loadInspector = function(targetId, parentId = null) {
     html += `</div>`;
     panel.innerHTML = html;
     
+    contentWrapper.innerHTML = html;
+    
     // At the very bottom of OL.loadInspector
     if (state.viewMode === 'global') {
         const isVault = location.hash.includes('vault');
@@ -11843,46 +11852,44 @@ OL.initSideResizers = function() {
     ];
 
     resizablePanes.forEach(config => {
-        const pane = document.getElementById(config.id) || document.querySelector(`.${config.id}`);
+        const pane = document.getElementById(config.id);
         if (!pane) return;
 
-        // Clean up existing resizers to prevent double-binding
-        pane.querySelectorAll('.sidebar-resizer').forEach(r => r.remove());
+        // 🚀 THE FIX: If resizer already exists, don't delete/re-add it
+        if (pane.querySelector('.sidebar-resizer')) return;
 
         const resizer = document.createElement('div');
         resizer.className = 'sidebar-resizer';
-        pane.appendChild(resizer);
+        // We use prepend so it stays at the top of the DOM inside the sidebar
+        pane.prepend(resizer); 
 
         let startX, startWidth;
 
         resizer.addEventListener('mousedown', (e) => {
             startX = e.clientX;
-            startWidth = parseInt(document.defaultView.getComputedStyle(pane).width, 10);
+            // Get current computed width
+            startWidth = pane.offsetWidth;
             
             resizer.classList.add('is-dragging');
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
+            document.body.classList.add('resizing-active'); // For cursor locking
 
             const doDrag = (e) => {
-                let newWidth;
-                if (config.side === 'left') {
-                    // Moving right increases width
-                    newWidth = startWidth + (e.clientX - startX);
-                } else {
-                    // Moving left increases width
-                    newWidth = startWidth + (startX - e.clientX);
-                }
+                let newWidth = config.side === 'left' 
+                    ? startWidth + (e.clientX - startX)
+                    : startWidth + (startX - e.clientX);
                 
-                // Boundaries
-                if (newWidth > 200 && newWidth < (window.innerWidth * 0.5)) {
-                    pane.style.width = `${newWidth}px`;
+                if (newWidth > 250 && newWidth < (window.innerWidth * 0.7)) {
+                    // 🚀 THE FIX: Set BOTH width and flex-basis
+                    const widthStr = `${newWidth}px`;
+                    pane.style.width = widthStr;
+                    pane.style.minWidth = widthStr;
+                    pane.style.flex = `0 0 ${widthStr}`;
                 }
             };
 
             const stopDrag = () => {
                 resizer.classList.remove('is-dragging');
-                document.body.style.cursor = 'default';
-                document.body.style.userSelect = 'auto';
+                document.body.classList.remove('resizing-active');
                 document.removeEventListener('mousemove', doDrag);
                 document.removeEventListener('mouseup', stopDrag);
                 localStorage.setItem(config.storageKey, pane.style.width);
@@ -11894,7 +11901,7 @@ OL.initSideResizers = function() {
     });
 };
 // Call this once on app load
-window.addEventListener('DOMContentLoaded', OL.initSidebarResizers);
+window.addEventListener('DOMContentLoaded', OL.initSideResizers);
 
 OL.applyCanvasHighlight = function() {
     // 1. Remove highlight from whatever was selected before

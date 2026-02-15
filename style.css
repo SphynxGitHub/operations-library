@@ -3329,6 +3329,7 @@ body.is-visualizer #mainContent {
     border-left: 1px solid rgba(255,255,255,0.1) !important;
     height: 100% !important;
     padding: 0 !important; /* Content padding is handled by .inspector-content */
+    overflow-x: hidden;
     overflow-y: auto !important;
     display: block !important;
     visibility: visible !important;
