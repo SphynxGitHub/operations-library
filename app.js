@@ -10816,26 +10816,34 @@ OL.traceLogic = function(nodeId, direction) {
             console.log("🎯 Resolved Target ID:", tid);
 
             if (tid) {
-                // 🚀 THE EXPANDED LOOKUP: Try Steps, then Try Cards (Tier 3/Tier 2)
                 const targetEl = document.getElementById(`step-row-${tid}`) || 
                                  document.getElementById(`l3-node-${tid}`) || 
                                  document.getElementById(`l2-node-${tid}`) ||
                                  document.getElementById(tid);
                 
                 if (targetEl) {
-                    console.log("✅ Target Found in DOM:", targetEl.id);
-                    // Determine the exact point to land the arrow
-                    // If it's a step-row, try to find the 'in' icon. If it's a card, just use the card.
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                    
-                    connections.push({ 
-                        from: anchorEl, 
-                        to: targetIcon, 
-                        label: o.condition || o.label 
-                    });
+                    connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
                 } else {
-                    // 🔍 DIAGNOSTIC: If it fails, let's see what IS on the screen
-                    console.warn(`❌ DOM Error: Target ${tid} is not rendered. Check if the card is collapsed or on a different stage.`);
+                    // 🚀 THE TELEPORT FEATURE:
+                    console.warn(`📍 Target ${tid} is off-screen. Creating Teleport Link.`);
+                    
+                    const teleportBtn = document.createElement('div');
+                    teleportBtn.className = 'teleport-rocket fade-in';
+                    teleportBtn.innerHTML = `🚀 Jump to ${o.label || 'Target'}`;
+                    teleportBtn.onclick = () => {
+                        // Logic to find and focus the target
+                        if (tid.startsWith('local-prj') || tid.startsWith('res-vlt')) {
+                            OL.loadInspector(tid); // This will scroll to it and highlight it
+                        }
+                        teleportBtn.remove();
+                    };
+                    
+                    // Position it right next to the icon you just clicked
+                    anchorEl.parentElement.appendChild(teleportBtn);
+                    
+                    // Auto-remove after 5 seconds if not clicked
+                    setTimeout(() => teleportBtn.remove(), 5000);
                 }
             }
         });
