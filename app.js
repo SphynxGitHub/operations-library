@@ -10723,6 +10723,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                     const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
                                     
                                     return `<div class="tiny atomic-step-row ${isStepInspected ? 'is-inspecting step-active' : ''}" 
+                                         id="step-row-${atomic.id}"
                                          style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px;
                                          onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
 
@@ -10760,6 +10761,16 @@ OL.traceLogic = function(nodeId, direction) {
     
     // 1. Find the specific icon clicked
     const rowEl = document.getElementById(`step-row-${nodeId}`);
+    if (!rowEl) {
+        console.error(`❌ Trace Error: Could not find DOM element 'step-row-${nodeId}'. Check if your HTML template is rendering this ID correctly.`);
+        return;
+    }
+
+    const sourceIcon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
+    const anchorEl = sourceIcon || rowEl; // Fallback to the whole row if icon isn't found
+    
+    anchorEl.classList.add('trace-active-icon');
+
     const sourceEl = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
     
     if (!sourceEl) return;
