@@ -2797,6 +2797,11 @@ body.is-visualizer #mainContent {
     scrollbar-color: var(--accent) transparent;
 }
 
+/* Allow the plus buttons to "hang" off the edge of the columns */
+.macro-stage-col {
+    overflow: visible !important;
+}
+
 .wf-global-node {
     transition: transform 0.2s, border-color 0.2s;
 }
@@ -3462,16 +3467,13 @@ body.is-visualizer #mainContent {
 
 /* 2. Position the Stage + exactly in the gutter between titles */
 .insert-divider.horizontal {
-    position: absolute;
     right: -35px; /* Adjust based on your gap */
-    top: 50%;
-    transform: translateY(-50%);
     width: 30px;
     height: 30px;
     z-index: 100;
-    opacity: 0;
     transition: opacity 0.2s;
-    padding-left: 6%
+    padding-left: 6%;
+    margin-top: 2.1%;
 }
 
 /* 3. Position the Workflow + between cards */
@@ -3482,13 +3484,10 @@ body.is-visualizer #mainContent {
 
 .insert-divider.vertical {
     position: absolute;
-    bottom: -10px;
     left: 50%;
-    transform: translateX(-50%);
     width: 24px;
     height: 24px;
     z-index: 100;
-    opacity: 0;
     padding-top: 3%;
     padding-bottom: 3%;
 }
