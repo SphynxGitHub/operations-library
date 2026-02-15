@@ -10632,30 +10632,30 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
     renderGlobalVisualizer(isVault);
 };
 
-/*function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
+function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     const workflowSteps = (wf.steps || []).map(step => {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
         return { ...step, asset: linkedAsset };
     });
 
-    const hasIncoming = allResources.some(otherRes => 
+    /*const hasIncoming = allResources.some(otherRes => 
         (otherRes.outcomes || []).some(o => o.targetId === wf.id)
     );
-    const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
+    const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);*/
 
     return `
         <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
              id="l2-node-${wf.id}"
              onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
-             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
+             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">`
 
-             ${hasIncoming ? `
+             /*${hasIncoming ? `
                 <div class="logic-trace-trigger incoming" title="View Incoming Logic"
                      onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>
-            ` : ''}
+            ` : ''}*/
             
-             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+             `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
                 </div>
@@ -10672,12 +10672,12 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
-                    const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
+                    /*const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
                     const isParentActive = String(state.activeInspectorParentId) === String(asset.id);
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
-                    const hasLogic = (wf.outcomes || []).length > 0;
+                    const hasLogic = (wf.outcomes || []).length > 0;*/
                 
                     return `
                     <div class="wf-resource-wrapper" 
@@ -10719,15 +10719,22 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
                                 ${(asset.steps || []).map(atomic => {
                                     const isStepInspected = String(state.activeInspectorResId) === String(atomic.id);
                                     const stepHasLogic = (atomic.outcomes || []).length > 0;
+                                    const hasIn = allResources.some(r => (r.outcomes || []).some(o => o.targetId === atomic.id));
+                                    const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
                                     
-                                    return `<div class="tiny ${isStepInspected ? 'is-inspecting step-active' : ''}" 
+                                    return `<div class="tiny atomic-step-row ${isStepInspected ? 'is-inspecting step-active' : ''}" 
                                          style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px;
                                          onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
+
+                                        ${hasIn ? `<span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : ''}
+
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
                                         </span> 
+
                                         ${esc(atomic.name || "Unnamed Step")}
-                                        ${stepHasLogic ? `<span style="color:var(--vault-gold); font-size:8px; margin-left:auto;">🔀</span>` : ''}
+
+                                        ${hasOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
                                     </div>`;
                                 }).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
                             </div>
@@ -10744,67 +10751,6 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
                 <div class="logic-trace-trigger outgoing" title="View Outgoing Logic"
                      onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>
             ` : ''}
-        </div>
-    `;
-}*/
-
-function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
-    const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
-    const workflowSteps = (wf.steps || []).map(step => {
-        const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
-        return { ...step, asset: linkedAsset };
-    });
-
-    return `
-        <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
-             id="l2-node-${wf.id}"
-             onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
-             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer; position: relative;">
-
-             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
-                </div>
-                <button class="card-delete-btn" style="opacity:0; position:static;" 
-                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
-            </div>
-
-            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 15px;">
-                ${workflowSteps.map((step, rIdx) => {
-                    const asset = step.asset;
-                    if (!asset) return `<div class="tiny muted">⚠️ Missing Asset</div>`;
-                    
-                    return `
-                    <div class="wf-resource-wrapper" id="l3-node-${asset.id}" style="position: relative;">
-                        <div class="asset-mini-card" style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; border: 1px solid rgba(255,255,255,0.05);">
-                            <div class="atomic-step-container">
-                                ${(asset.steps || []).map(atomic => {
-                                    // 🚀 CHECK LOGIC FOR THIS SPECIFIC STEP
-                                    const hasIn = allResources.some(r => (r.outcomes || []).some(o => o.targetId === atomic.id));
-                                    const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
-
-                                    return `
-                                    <div class="tiny atomic-step-row" 
-                                         id="step-row-${atomic.id}"
-                                         style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom: 4px;"
-                                         onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
-                                        
-                                        ${hasIn ? `<span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : ''}
-
-                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'};">
-                                            ${atomic.type === 'Trigger' ? '⚡' : '•'}
-                                        </span> 
-                                        
-                                        <span class="step-name">${esc(atomic.name || "Unnamed Step")}</span>
-
-                                        ${hasOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
-                                    </div>`;
-                                }).join('')}
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>
         </div>
     `;
 }
