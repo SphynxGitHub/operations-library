@@ -3203,11 +3203,30 @@ body.is-visualizer #mainContent {
     border: 2px solid var(--accent) !important;
 }
 
-/* Fix for individual step names in the stack */
+/* 1. Workflow Node (The Large Container) */
+.wf-global-node.is-inspecting {
+    outline: 2px solid var(--accent) !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    box-shadow: 0 0 15px var(--accent-glow) !important;
+}
+
+/* 2. Resource Card (The Middle Tier) */
+.asset-mini-card.is-inspecting {
+    outline: 3px solid #fff !important; /* Use white or a brighter blue to contrast the workflow */
+    outline-offset: 2px;
+    background: rgba(56, 189, 248, 0.3) !important;
+    box-shadow: 0 0 25px var(--accent) !important;
+    z-index: 100 !important;
+    transform: scale(1.02);
+}
+
+/* 3. Atomic Step (The Text Level) */
 .step-active.is-inspecting {
-    color: var(--accent) !important;
+    background: var(--accent) !important;
+    color: #000 !important;
+    border-radius: 4px;
+    padding: 0 4px;
     font-weight: bold;
-    text-shadow: 0 0 5px var(--accent);
 }
 
 /*==================================================================

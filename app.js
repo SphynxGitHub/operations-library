@@ -10625,7 +10625,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
-                    const isInspecting = String(state.activeInspectorResId) === String(asset.id);
+                    const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
                     const isParentActive = String(state.activeInspectorParentId) === String(asset.id);
 
                     const scopingItem = OL.isResourceInScope(asset.id);
@@ -10639,7 +10639,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
                         ondragend="this.classList.remove('dragging-now')">
                         
-                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspecting ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
+                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspectingRes ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
                             onclick="OL.loadInspector('${asset.id}', '${wf.id}')"
                             ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
                             style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
@@ -10670,10 +10670,12 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             <div class="atomic-step-container" style="pointer-events: none; opacity: 0.7;">
                                 ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🔀</span>` : ''}
                                 ${(asset.steps || []).map(atomic => {
-                                    const isStepActive = state.activeInspectorResId === atomic.id;
+                                    const isStepInspected = String(state.activeInspectorResId) === String(atomic.id);
                                     const stepHasLogic = (atomic.outcomes || []).length > 0;
                                     
-                                    return `<div class="tiny ${isStepActive ? 'step-active' : ''}" style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;">
+                                    return `<div class="tiny ${isStepInspected ? 'is-inspecting step-active' : ''}" 
+                                         style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;
+                                         onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
                                         </span> 
@@ -11814,6 +11816,13 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     html += `</div>`;
     panel.innerHTML = html;
+    if (state.viewMode === 'global') {
+        const isVault = location.hash.includes('vault');
+        const canvas = document.getElementById('fs-canvas');
+        if (canvas) {
+            canvas.innerHTML = renderGlobalCanvas(isVault);
+        }
+    }
 };
 
 OL.applyCanvasHighlight = function() {
