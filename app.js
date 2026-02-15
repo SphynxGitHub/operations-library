@@ -11525,49 +11525,48 @@ OL.cloneResourceWorkflow = function(resId) {
 
 OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     const client = getActiveClient();
-    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     
     const isWorkflow = targetObj.type === 'Workflow';
     const isResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(targetObj.type);
-    const isStep = !targetObj.type && state.activeInspectorParentId;
+    const isStep = !targetObj.type && (state.activeInspectorParentId || targetObj.resourceId);
 
-    let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:8px; margin-bottom:15px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid rgba(255,255,255,0.05);">`;
+    let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid rgba(255,255,255,0.1);">`;
 
-    // 🟢 1. STAGE SELECTOR (Shown for Workflows, Resources, and Steps)
+    // 🟢 1. WORKFLOW -> STAGE (Workflow's immediate parent)
     if (isWorkflow) {
-        const currentStageId = targetObj.stageId || OL.getResourceById(state.activeInspectorParentId)?.stageId;
         html += `
-            <div class="form-group">
-                <label class="tiny muted uppercase bold" style="font-size:8px;">Lifecycle Stage</label>
-                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'stageId', this.value, ${isVaultMode})">
-                    <option value="">-- No Stage Assigned --</option>
-                    ${(sourceData.stages || []).map(s => `<option value="${s.id}" ${String(s.id) === String(currentStageId) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Stage</label>
+                <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'stageId', this.value, ${isVaultMode})">
+                    <option value="">-- Unmapped --</option>
+                    ${(sourceData.stages || []).map(s => `<option value="${s.id}" ${String(s.id) === String(targetObj.stageId) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
                 </select>
             </div>`;
     }
 
-    // 🔵 2. WORKFLOW SELECTOR (Shown for Resources and Steps)
+    // 🔵 2. RESOURCE -> WORKFLOW (Resource's immediate parent)
     if (isResource) {
-        // Find which workflow this resource/step currently belongs to
-        const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => s.resourceLinkId === (isStep ? state.activeInspectorParentId : targetObj.id)));
+        const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.resourceLinkId) === String(targetObj.id)));
         html += `
-            <div class="form-group">
-                <label class="tiny muted uppercase bold" style="font-size:8px;">Parent Workflow</label>
-                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
-                    <option value="">-- No Workflow Assigned --</option>
+            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Workflow</label>
+                <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
+                    <option value="">-- No Workflow --</option>
                     ${allResources.filter(r => r.type === 'Workflow').map(w => `<option value="${w.id}" ${currentWf?.id === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
                 </select>
             </div>`;
     }
 
-    // 🟠 3. RESOURCE SELECTOR (Shown only for Steps)
+    // 🟠 3. STEP -> RESOURCE (Step's immediate parent)
     if (isStep) {
+        const parentResId = state.activeInspectorParentId || targetObj.resourceId;
         html += `
             <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                 <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Resource</label>
                 <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
-                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `<option value="${res.id}" ${String(res.id) === String(parentResource?.id) ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
+                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `<option value="${res.id}" ${String(res.id) === String(parentResId) ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
                 </select>
             </div>`;
     }
