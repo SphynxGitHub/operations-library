@@ -478,6 +478,12 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const main = document.getElementById("mainContent");
+    // 🚀 THE FIX: If main is null, we can't render anything yet
+    if (!main) {
+        console.warn("⏳ Main content container not ready. Retrying in 50ms...");
+        setTimeout(window.handleRoute, 50);
+        return;
+    }
 
     // 🚀 NEW: REFINED BREAKOUT LOGIC
     // We only clear the focus if we are going back to the HOME Dashboard.
@@ -10794,16 +10800,22 @@ OL.traceLogic = function(nodeId, direction) {
     if (direction === 'outgoing') {
         (stepObj.outcomes || []).forEach(o => {
             // 🚀 FUZZY LOOKUP: Try multiple ID patterns
-            const targetEl = document.getElementById(`step-row-${o.targetId}`) || 
-                            document.getElementById(`l3-node-${o.targetId}`) || 
-                            document.getElementById(`l2-node-${o.targetId}`) ||
-                            document.querySelector(`[data-id="${o.targetId}"]`);
-            
+            const targetId = o.targetId || o.toId || o.resourceId; 
+    
+            if (!targetId) {
+                console.error("❌ Outcome Data Error: Outcome exists but has no targetId defined.", o);
+                return;
+            }
+
+            const targetEl = document.getElementById(`step-row-${targetId}`) || 
+                     document.getElementById(`l3-node-${targetId}`) || 
+                     document.getElementById(`l2-node-${targetId}`);
+    
             if (targetEl) {
                 const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
                 connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
             } else {
-                console.warn(`📍 Target element NOT found on canvas for targetId: ${o.targetId}`);
+                console.warn(`📍 Target element NOT found on canvas for targetId: ${targetId}`);
             }
         });
     } else {
