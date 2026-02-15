@@ -3316,6 +3316,10 @@ ARROWS
     to { stroke-dashoffset: 0; }
 }
 
+.logic-trace-svg {
+    overflow: visible !important;
+}
+
 /*==================================================================
   5. STATUS & INDICATORS
 ==================================================================*/
