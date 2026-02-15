@@ -4986,274 +4986,6 @@ OL.executeResourceImport = function(masterId) {
 
 //======================= SOP STEP LOGIC =======================//
 
-/*window.renderSopStepList = function (res) {
-    if (!res) return "";
-
-    // --- 🛡️ INITIALIZATION SAFETY ---
-    if (!(state.expandedSteps instanceof Set)) {
-        state.expandedSteps = new Set(Array.isArray(state.expandedSteps) ? state.expandedSteps : []);
-    }
-    if (!(state.expandedTriggers instanceof Set)) {
-        state.expandedTriggers = new Set(Array.isArray(state.expandedTriggers) ? state.expandedTriggers : []);
-    }
-    
-    const triggers = res.triggers || [];
-    const steps = res.steps || [];
-    let html = "";
-
-    // --- ⚡ SECTION 1: TRIGGERS ---
-    html += `
-        <div class="triggers-container" style="margin-bottom: 20px; border: 1px dashed rgba(255, 191, 0, 0.3); border-radius: 8px; padding: 12px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
-                <button class="btn tiny soft" onclick="OL.addResourceTrigger('${res.id}')">+ Add Trigger</button>
-            </div>
-            <div id="triggers-list" style="display:flex; flex-direction:column; gap:6px;">
-                ${triggers.map((t, idx) => {
-                    const trigId = `trig-${idx}`;
-                    const isExp = state.expandedTriggers.has(trigId);
-                    
-                    // Resolve the App linked to this trigger (if any)
-                    const client = getActiveClient();
-                    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-                    const linkedApp = allApps.find(a => String(a.id) === String(t.appId));
-
-                    return `
-                    <div class="step-group">
-                        <div class="dp-manager-row trigger-row is-clickable" 
-                            style="gap:10px; align-items: flex-start; border: 1px solid var(--line); border-radius:6px; padding: 10px 12px;"
-                            onclick="OL.openTriggerDetailModal('${res.id}', ${idx})">
-                            
-                            <div style="display:flex; align-items:center; width:35px; justify-content:space-between; padding-top: 4px;">
-                                <span style="font-size: 10px; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleTrigDetails(event, '${res.id}', '${trigId}')">
-                                    ${isExp ? '▼' : '▶'}
-                                </span>
-                            </div>
-
-                            <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span style="font-size:12px;">${t.type === 'auto' ? '⚡' : '👨'}</span>
-                                    <span class="bold" style="font-size:0.95em; color: var(--accent);">${esc(t.name || "New Trigger")}</span>
-                                </div>
-                                
-                                <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
-                                    <span>👤 ${esc(t.assigneeName || "Unassigned")}</span>
-                                    <span>📱 ${esc(linkedApp?.name || (t.type === 'auto' ? "System Auto" : "Manual Source"))}</span>
-                                    <span style="border-left: 1px solid rgba(255,191,0,0.3); padding-left: 10px; color: #ffbf00; font-weight: bold; font-size: 9px; text-transform: uppercase;">
-                                        START EVENT
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <button class="card-delete-btn" style="position:static; margin-top: 4px;" 
-                                    onclick="event.stopPropagation(); OL.removeTrigger('${res.id}', ${idx})">×</button>
-                        </div>
-                        
-                        ${isExp ? `
-                            <div class="sop-expansion-panel" style="margin-left: 45px; padding: 10px; border-left: 2px solid #ffbf00; background: rgba(255, 191, 0, 0.02);">
-                                <div class="tiny muted" style="margin-bottom:8px;">
-                                    ${esc(t.notes || 'No technical notes provided for this trigger.')}
-                                </div>
-                                ${(t.links || []).map(link => `
-                                    <div class="pill tiny soft" style="display:inline-block; margin-right:5px; font-size:9px;">
-                                        🔗 ${esc(link.name)}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-                    </div>`;
-                }).join("")}
-                ${triggers.length === 0 ? '<div class="tiny muted italic">No entry triggers defined.</div>' : ''}
-            </div>
-        </div>
-    `;
-
-    // --- 📝 SECTION 2: SEQUENTIAL STEPS ---
-    html += `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <label class="tiny muted bold uppercase">📝 Sequential Steps</label>
-            <button class="btn tiny soft" onclick="OL.openResourceLinker('${res.id}')">📦 Link Module</button>
-            <button class="btn tiny primary" onclick="OL.addSopStep('${res.id}')">+ Add Step</button>
-        </div>
-    `;
-
-    if (steps.length === 0) {
-        html += '<div class="empty-hint">No workflow steps defined.</div>';
-    } else {
-        html += steps.map((step, idx) => {
-            const isExpanded = state.expandedSteps.has(step.id);
-            const isModule = step.type === 'module_block';
-            
-            const client = getActiveClient();
-            const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-            const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
-            const timingLabel = step.timingType ? `📅 T+${step.timingValue || 0}d (${step.timingType === 'after_prev' ? 'Prev' : 'Start'})` : "";
-
-            if (isModule) {
-                const nestedRes = OL.getResourceById(step.linkedResourceId);
-                const nestedSteps = nestedRes?.steps || [];
-
-                return `
-                <div class="step-group module-block-container" 
-                    draggable="true" 
-                    ondragstart="OL.handleStepDragStart(event, ${idx})" 
-                    ondragover="OL.handleDragOver(event)" 
-                    ondrop="OL.handleStepDrop(event, ${idx}, '${res.id}')"
-                    style="margin-bottom: 12px; border: 1px solid var(--accent); border-radius: 8px; background: rgba(56, 189, 248, 0.03); overflow: hidden;">
-                    
-                    <div class="dp-manager-row is-clickable" 
-                        style="gap:10px; margin-bottom:0; align-items: flex-start; padding: 10px 12px; background: var(--accent); color: #000;" 
-                        onclick="event.stopPropagation(); OL.openResourceModal('${step.linkedResourceId}')"
-                        onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-                        
-                        <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
-                            <span class="drag-handle" style="opacity:0.5; font-size:12px; color: #000;" onclick="event.stopPropagation()">⠿</span>
-                            <span class="tiny bold" style="font-size:10px; color: #000;">${idx + 1}</span>
-                            <span style="font-size: 10px; color: #000; opacity: 0.5;">📦</span>
-                        </div>
-                        
-                        <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                            <div class="bold" style="font-size:0.95em; color: #000;">${esc(nestedRes?.name || 'Unknown Module')} 🚀</div>
-                            <div style="display:flex; gap:12px; align-items:center; opacity: 0.8; font-size: 10px; color: #000;">
-                                <span>Linked Module Resource</span>
-                                <span>${nestedSteps.length} Steps</span>
-                            </div>
-                        </div>
-                        
-                        <button class="card-delete-btn" 
-                                style="position:static; margin-top: 4px; color: #000;" 
-                                onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
-                    </div>
-                    
-                    <div style="padding: 10px 10px 15px 65px; display: flex; flex-direction: column; gap: 12px; background: rgba(0,0,0,0.1);">
-                        ${nestedSteps.map((nS, nIdx) => {
-                            const nestedOutcomesHtml = (nS.outcomes || []).map(oc => {
-                                let jumpAction = "";
-                                if (oc.action?.startsWith('jump_step_')) {
-                                    jumpAction = `OL.openStepDetailModal('${nestedRes.id}', '${oc.action.replace('jump_step_', '')}')`;
-                                } else if (oc.action?.startsWith('jump_res_')) {
-                                    jumpAction = `OL.openResourceModal('${oc.action.replace('jump_res_', '')}')`;
-                                }
-
-                                return `
-                                    <div class="outcome-nav-row" style="display: flex; align-items: center; gap: 6px; font-size: 10px; cursor: pointer; margin-top: 3px;"
-                                        onclick="event.stopPropagation(); ${jumpAction}">
-                                        <span class="accent bold" style="opacity:0.8;">↳ IF ${esc(oc.condition || '...')}</span>
-                                        <span class="muted" style="opacity:0.5;">:</span>
-                                        <span style="text-decoration: underline dotted; opacity:0.9;">${esc(oc.label)}</span>
-                                    </div>
-                                `;
-                            }).join('');
-
-                            return `
-                                <div class="nested-step-wrap" style="border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 8px;">
-                                    <div style="font-size: 11px; font-weight: 600; color: white; opacity: 0.9;">
-                                        <span style="opacity:0.4; font-weight: normal;">${idx+1}.${nIdx+1}</span> ${esc(nS.name)}
-                                    </div>
-                                    <div style="display:flex; gap:10px; align-items:center; opacity: 0.5; font-size: 9px; margin: 2px 0 4px 20px;">
-                                        <span>👤 ${esc(nS.assigneeName || "Unassigned")}</span>
-                                        ${(() => {
-                                            const stepApp = allApps.find(a => String(a.id) === String(nS.appId));
-                                            if (!stepApp) return '';
-                                            
-                                            // 🚀 INTERACTIVE APP LINK
-                                            return `
-                                                <span class="is-clickable" 
-                                                    style="cursor: pointer; text-decoration: underline dotted; transition: color 0.2s;"
-                                                    onmouseover="this.style.color='var(--accent)';" 
-                                                    onmouseout="this.style.color='inherit';"
-                                                    onclick="event.stopPropagation(); OL.openAppModal('${stepApp.id}')">
-                                                    📱 ${esc(stepApp.name)}
-                                                </span>
-                                            `;
-                                        })()}
-                                        ${nS.timingType ? `<span style="color: var(--accent);">📅 T+${nS.timingValue || 0}d</span>` : ''}
-                                    </div>
-                                    ${nestedOutcomesHtml}
-                                </div>
-                            `;
-                        }).join('') || '<div class="tiny muted">No steps in this module</div>'}
-                    </div>
-                </div>`;
-            }
-
-            return `
-            <div class="step-group">
-                <div class="dp-manager-row is-clickable" style="gap:10px; margin-bottom:2px; align-items: flex-start; padding: 10px 12px;" 
-                     onclick="OL.openStepDetailModal('${res.id}', '${step.id}')">
-                    
-                    <div style="display:flex; align-items:center; width:55px; justify-content:space-between; padding-top: 4px;">
-                        <span class="drag-handle" style="opacity:0.3; font-size:12px;" onclick="event.stopPropagation()">⠿</span>
-                        <span class="tiny muted" style="font-size:10px;">${idx + 1}</span>
-                        <span style="font-size: 10px; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleStepOutcomes(event, '${res.id}', '${step.id}')">
-                            ${isExpanded ? '▼' : '▶'}
-                        </span>
-                    </div>
-                    
-                    <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                        <div class="bold" style="font-size:0.95em;">${esc(step.name || "Untitled Step")}</div>
-                        <div style="display:flex; gap:12px; align-items:center; opacity: 0.6; font-size: 11px;">
-                            <span>👤 ${esc(step.assigneeName || "Unassigned")}</span>
-                            <span>📱 ${esc(linkedApp?.name || "No App")}</span>
-                            ${timingLabel ? `<span style="border-left: 1px solid rgba(255,255,255,0.2); padding-left: 10px; color: var(--accent); font-weight: bold;">${timingLabel}</span>` : ''}
-                        </div>
-                    </div>
-                    <button class="card-delete-btn" style="position:static; margin-top: 4px;" onclick="event.stopPropagation(); OL.removeSopStep('${res.id}', '${step.id}')">×</button>
-                </div>
-                ${isExpanded ? `
-                    <div class="sop-expansion-panel" style="margin-left: 55px; padding: 10px; border-left: 2px solid var(--accent); background: rgba(var(--accent-rgb), 0.02);">
-                        ${step.description ? `<div class="tiny muted" style="margin-bottom:8px;">${esc(step.description)}</div>` : ''}
-
-                        ${(step.outcomes || []).map(oc => {
-                            // 1. Logic Resolution: Determine WHERE the "THEN" part goes
-                            let jumpAction = "";
-
-                            if (oc.action?.startsWith('jump_step_')) {
-                                const targetId = oc.action.replace('jump_step_', '');
-                                jumpAction = `OL.openStepDetailModal('${res.id}', '${targetId}')`;
-                            } 
-                            else if (oc.action?.startsWith('jump_res_')) {
-                                const targetId = oc.action.replace('jump_res_', '');
-                                jumpAction = `OL.openResourceModal('${targetId}')`;
-                            } 
-                            else if (oc.action === 'next') {
-                                const currentIdx = steps.findIndex(s => s.id === step.id);
-                                const nextStep = steps[currentIdx + 1];
-                                jumpAction = nextStep ? `OL.openStepDetailModal('${res.id}', '${nextStep.id}')` : "";
-                            }
-
-                            return `
-                                <div class="outcome-nav-row" style="display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px;">
-                                    
-                                    <div class="is-clickable" 
-                                        style="cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s;"
-                                        onmouseover="this.style.background='rgba(56, 189, 248, 0.1)'" 
-                                        onmouseout="this.style.background='transparent'"
-                                        onclick="event.stopPropagation(); OL.openStepDetailModal('${res.id}', '${step.id}')">
-                                        IF ${esc(oc.condition || '...')}
-                                    </div>
-
-                                    <span class="muted" style="opacity: 0.5;">:</span>
-
-                                    <div class="is-clickable" 
-                                        style="flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; transition: all 0.2s;"
-                                        onmouseover="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='translateX(4px)';" 
-                                        onmouseout="this.style.background='transparent'; this.style.transform='translateX(0)';"
-                                        onclick="event.stopPropagation(); ${jumpAction}">
-                                        <span style="text-decoration: underline dotted; text-underline-offset: 3px;">${esc(oc.label)}</span>
-                                    </div>
-                                    
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                ` : ''}
-            </div>`;
-        }).join("");
-    }
-    return html;
-};*/
-
 window.renderSopStepList = function (res) {
     if (!res) return "";
 
@@ -6020,54 +5752,46 @@ OL.openOutcomePicker = function(event, resId, stepId, idx) {
 };
 
 OL.executeAssignmentOutcome = function(parentId, itemId, actionCode, destinationLabel) {
-    // 1. Resolve the specific target (Stage, Workflow, Resource, or Step)
     const targetObj = OL.getResourceById(itemId);
     const parentObj = OL.getResourceById(parentId);
     
-    if (!targetObj) {
-        console.error("❌ Target object not found for ID:", itemId);
-        return;
-    }
+    if (!targetObj) return console.error("❌ Target missing:", itemId);
 
-    // 2. Initialize the outcomes array if missing
     if (!targetObj.outcomes) targetObj.outcomes = [];
 
-    // 🚀 Check if we are remapping an existing row or adding a new one
+    // 🚀 Update State
     if (state.activeRemap && state.activeRemap.idx !== undefined) {
-        const idx = state.activeRemap.idx;
-        targetObj.outcomes[idx].action = actionCode;
-        targetObj.outcomes[idx].label = destinationLabel;
-        state.activeRemap = null; // Clear remap state
+        targetObj.outcomes[state.activeRemap.idx].action = actionCode;
+        targetObj.outcomes[state.activeRemap.idx].label = destinationLabel;
+        state.activeRemap = null; 
     } else {
-        targetObj.outcomes.push({ 
-            condition: "", 
-            action: actionCode, 
-            label: destinationLabel 
-        });
+        targetObj.outcomes.push({ condition: "", action: actionCode, label: destinationLabel });
     }
 
-    // 💾 Push to Cloud
     OL.persist();
     
     // 🔄 SURGICAL UI REFRESH
-    // Update the outcomes list in the inspector
     const detailList = document.getElementById('step-outcomes-list');
-    if (detailList) detailList.innerHTML = renderStepOutcomes(parentId, targetObj);
-
-    // If we are inside a Resource Modal/Fullscreen, refresh the sequence list
-    const mainList = document.getElementById('sop-step-list');
-    if (mainList && parentObj) {
-        mainList.innerHTML = renderSopStepList(parentObj);
+    if (detailList) {
+        // If parent and item are the same (Stage/Workflow), pass null as parent to the renderer
+        const contextId = (parentId === itemId) ? itemId : parentId;
+        detailList.innerHTML = renderStepOutcomes(contextId, targetObj);
     }
 
-    // Clear the search overlay results
+    // Refresh sequence list if in Resource Modal
+    const mainList = document.getElementById('sop-step-list');
+    if (mainList && parentObj) mainList.innerHTML = renderSopStepList(parentObj);
+
+    // Clear Search Overlay
     const results = document.getElementById('outcome-results');
     if (results) results.innerHTML = "";
 
-    // 🔀 Update the Tree icons on the Global Map
-    renderGlobalVisualizer(location.hash.includes('vault'));
+    // 🔀 Global Map Sync: Update "🌲" indicators
+    if (typeof renderGlobalVisualizer === 'function') {
+        renderGlobalVisualizer(location.hash.includes('vault'));
+    }
     
-    console.log(`✅ Logic path added to ${itemId}: leads to ${destinationLabel}`);
+    console.log(`✅ Logic updated for ${targetObj.name || itemId}`);
 };
 
 OL.updateOutcomeValue = function(resId, stepId, idx, field, value) {
