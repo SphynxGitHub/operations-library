@@ -13014,6 +13014,20 @@ OL.addResourceLinkToStep = function(parentResId, stepId, targetId, targetName) {
     }
 };
 
+OL.handleUniversalDragStart = function(event, id, type, parentId = null) {
+    // Add a visual class to the element being dragged
+    const target = event.currentTarget;
+    target.classList.add('dragging-now');
+    
+    // Store the data in the dataTransfer object
+    const dragData = { id, type, parentId };
+    event.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    event.dataTransfer.effectAllowed = 'move';
+    
+    // Optional: Create a custom ghost image or just let it use the default
+    console.log(`🚚 Started dragging ${type}: ${id}`);
+};
+
 OL.handleUniversalDrop = function(e, parentId, sectionId) {
     e.preventDefault();
     const moveId = e.dataTransfer.getData("moveNodeId");      
