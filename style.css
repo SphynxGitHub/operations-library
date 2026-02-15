@@ -3573,7 +3573,7 @@ ARROWS
     z-index: 100;
     transition: opacity 0.2s;
     padding-left: 6%;
-    margin-top: 2.1%;
+    margin: 1%;
 }
 
 /* 3. Position the Workflow + between cards */
