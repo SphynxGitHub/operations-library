@@ -10884,8 +10884,11 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
                     const currentParentId = String(state.activeInspectorParentId || "");
+                    console.log(currentParentId,": Parent ID")
                     const currentAssetId = String(asset.id || "");
-                    const currentResId = String(state.activeInspectorResId || "");
+                    console.log(currentAssetId,": Asset ID")
+                    const currentResId = String(state.activeInspectorResId || "");\
+                    console.log(currentResId,": Res ID")
 
                     // 🚀 TYPE-SAFE CHECKS
                     const isParentActive = currentParentId === currentAssetId;
