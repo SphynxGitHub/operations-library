@@ -10778,17 +10778,20 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
 OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
-    const client = getActiveClient();
-    const isVaultMode = window.location.hash.includes('vault');
     
-    // 1. Find the starting DOM element
-    const rowEl = document.getElementById(`step-row-${nodeId}`);
-    if (!rowEl) return;
+    // 1. Identify the DOM Source (Try both prefixed and raw ID)
+    const rowEl = document.getElementById(`step-row-${nodeId}`) || document.getElementById(nodeId);
+    if (!rowEl) {
+        console.error("❌ Trace Error: DOM Source not found for ID:", nodeId);
+        return;
+    }
+
     const sourceIcon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
     const anchorEl = sourceIcon || rowEl;
     anchorEl.classList.add('trace-active-icon');
 
-    // 2. Resolve Data Source
+    // 2. DATA RESOLUTION (The Working Flattened Method)
+    const client = getActiveClient();
     const allResources = [
         ...(state.master.resources || []),
         ...(client?.projectData?.localResources || [])
@@ -10796,52 +10799,63 @@ OL.traceLogic = function(nodeId, direction) {
 
     let stepObj = null;
     allResources.some(r => {
+        // Check if the ID matches the Resource itself
         if (String(r.id) === String(nodeId)) { stepObj = r; return true; }
+        // Check if the ID matches an Atomic Step inside the Resource
         const s = (r.steps || []).find(st => String(st.id) === String(nodeId));
         if (s) { stepObj = s; return true; }
         return false;
     });
 
-    if (!stepObj) return;
+    if (!stepObj) {
+        console.error("❌ Trace Error: Data Object not found for ID:", nodeId);
+        return;
+    }
 
-    // 🚀 INITIALIZE CONNECTIONS (Fixed Scope)
+    // 🚀 THE SCOPE FIX: Initialize this array here so both branches can fill it
     const connections = [];
 
+    // 3. LOGIC SEARCH
     if (direction === 'outgoing') {
-        (stepObj.outcomes || []).forEach(o => {
-            // Rule: Filter out "Next" actions without conditions to keep UI clean
+        const outcomes = stepObj.outcomes || [];
+        outcomes.forEach(o => {
+            // Skip basic 'next' actions with no conditions to keep map clean
             if (o.action === 'next' && !o.condition) return;
 
-            let targetId = o.targetId;
-            let targetEl = null;
-
-            // 🛠️ PARSE JUMP LOGIC: Extract ID from 'jump_step_...'
-            if (!targetId && o.action && o.action.includes('jump_step_')) {
-                targetId = o.action.split('jump_step_')[1];
+            // Extract the target ID (handles raw targetId or 'jump_step_ID' strings)
+            let tid = o.targetId || (o.action?.includes('jump_step_') ? o.action.split('jump_step_')[1] : null);
+            
+            // Handle 'next' action by looking at the physical DOM sibling
+            if (!tid && o.action === 'next') {
+                const nextRow = rowEl.nextElementSibling;
+                if (nextRow && nextRow.id.startsWith('step-row-')) {
+                    tid = nextRow.id.replace('step-row-', '');
+                }
             }
 
-            if (o.action === 'next') {
-                // 🛠️ RESOLVE NEXT: Look for the immediate sibling row in the same card
-                targetEl = rowEl.nextElementSibling;
-                if (targetEl && !targetEl.id.startsWith('step-row-')) targetEl = null;
-            } else if (targetId) {
-                // 🛠️ STRICT STEP-ONLY: Only look for step-row IDs
-                targetEl = document.getElementById(`step-row-${targetId}`);
-            }
-
-            if (targetEl) {
-                const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
+            if (tid) {
+                // Aggressive DOM lookup (checks step-row, raw ID, and Tier 3 node ID)
+                const targetEl = document.getElementById(`step-row-${tid}`) || 
+                                 document.getElementById(tid) || 
+                                 document.getElementById(`l3-node-${tid}`);
+                
+                if (targetEl) {
+                    const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
+                    connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
+                } else {
+                    console.warn(`📍 Target element ${tid} not found on canvas.`);
+                }
             }
         });
     } else {
-        // INCOMING: Scan all resources/steps for outcomes pointing HERE
+        // INCOMING: Scan every resource/step in the library for outcomes pointing to this nodeId
         allResources.forEach(r => {
-            (r.steps || []).forEach(s => {
+            const allSteps = (r.steps || []);
+            allSteps.forEach(s => {
                 (s.outcomes || []).forEach(o => {
-                    const tid = o.targetId || (o.action?.includes('jump_step_') ? o.action.split('jump_step_')[1] : null);
+                    let tid = o.targetId || (o.action?.includes('jump_step_') ? o.action.split('jump_step_')[1] : null);
                     if (String(tid) === String(nodeId)) {
-                        const fromRow = document.getElementById(`step-row-${s.id}`);
+                        const fromRow = document.getElementById(`step-row-${s.id}`) || document.getElementById(s.id);
                         if (fromRow) {
                             const fromIcon = fromRow.querySelector('.logic-trace-icon.out') || fromRow;
                             connections.push({ from: fromIcon, to: anchorEl, label: o.condition });
@@ -10852,14 +10866,11 @@ OL.traceLogic = function(nodeId, direction) {
         });
     }
 
-    console.log(`🔗 Drawing ${connections.length} connections.`);
+    console.log(`🔗 Found ${connections.length} connections. Rendering...`);
+
+    // 4. DRAWING LOOP
     connections.forEach(conn => {
         OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
-        conn.to.classList.add('trace-highlight-end');
-        setTimeout(() => conn.to.classList.remove('trace-highlight-end'), 2000);
-        
-        // Optional: Scroll to the target if it's far away
-        conn.to.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 };
 
