@@ -11809,6 +11809,8 @@ OL.loadInspector = function(targetId, parentId = null) {
         panel.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
         return;
     }
+    
+    setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
 
     // 🚀 BREADCRUMB GENERATION LOGIC
     let breadcrumbParts = [];
@@ -11845,14 +11847,14 @@ OL.loadInspector = function(targetId, parentId = null) {
         if (pStage) breadcrumbParts.push(pStage.name);
     }
 
-    const breadcrumbHtml = trail.length > 0 
+    const breadcrumbHtml = breadcrumbParts.length > 0 
         ? `<div class="inspector-breadcrumbs" style="margin-bottom: 12px; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;">
-            ${trail.map((step, i) => `
+            ${breadcrumbParts.map((step, i) => `
                 <span class="breadcrumb-link is-clickable" 
                       style="color: var(--accent); opacity: 0.7; cursor: pointer;"
                       onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7"
                       onclick="OL.loadInspector('${step.id}')">${esc(step.name)}</span>
-                ${i < trail.length - 1 ? '<span style="margin: 0 4px; opacity: 0.3;">/</span>' : ''}
+                ${i < breadcrumbParts.length - 1 ? '<span style="margin: 0 4px; opacity: 0.3;">/</span>' : ''}
             `).join('')}
            </div>` 
         : '';
@@ -12010,6 +12012,31 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     if (!document.getElementById('modal-layer')) {
         renderGlobalVisualizer(location.hash.includes('vault'));
+    }
+};
+
+OL.scrollToCanvasNode = function(id) {
+    // 1. Try to find the node on the L1 Macro Map or L2 Spine
+    const node = document.getElementById(`l1-node-${id}`) || 
+                 document.getElementById(`l2-node-${id}`) || 
+                 document.getElementById(`step-node-${id}`);
+    
+    const canvas = document.getElementById('fs-canvas');
+    
+    if (node && canvas) {
+        node.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'center'
+        });
+        
+        // 💫 Visual Polish: Brief "Look at me" flash
+        node.style.transition = 'none';
+        node.style.boxShadow = '0 0 30px var(--accent)';
+        setTimeout(() => {
+            node.style.transition = 'all 0.5s ease';
+            node.style.boxShadow = '';
+        }, 500);
     }
 };
 
