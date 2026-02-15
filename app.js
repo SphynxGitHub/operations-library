@@ -10648,14 +10648,14 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
              id="l2-node-${wf.id}"
              onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
-             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">`
+             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
 
-             /*${hasIncoming ? `
+             ${hasIncoming ? `
                 <div class="logic-trace-trigger incoming" title="View Incoming Logic"
                      onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>
-            ` : ''}*/
+            ` : ''}
             
-             `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
                 </div>
