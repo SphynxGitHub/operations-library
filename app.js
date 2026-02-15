@@ -11516,6 +11516,77 @@ OL.cloneResourceWorkflow = function(resId) {
 // THE UNIFIED INSPECTOR ENGINE
 // Handles: Stages, Workflows, Resources, and Steps
 // ==========================================
+
+OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    const isWorkflow = targetObj.type === 'Workflow';
+    const isResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(targetObj.type);
+    const isStep = !targetObj.type && state.activeInspectorParentId;
+
+    let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:8px; margin-bottom:15px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid rgba(255,255,255,0.05);">`;
+
+    // 🟢 1. STAGE SELECTOR (Shown for Workflows, Resources, and Steps)
+    if (isWorkflow || isResource || isStep) {
+        const currentStageId = targetObj.stageId || OL.getResourceById(state.activeInspectorParentId)?.stageId;
+        html += `
+            <div class="form-group">
+                <label class="tiny muted uppercase bold" style="font-size:8px;">Lifecycle Stage</label>
+                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'stageId', this.value, ${isVaultMode})">
+                    <option value="">-- No Stage Assigned --</option>
+                    ${(sourceData.stages || []).map(s => `<option value="${s.id}" ${String(s.id) === String(currentStageId) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+                </select>
+            </div>`;
+    }
+
+    // 🔵 2. WORKFLOW SELECTOR (Shown for Resources and Steps)
+    if (isResource || isStep) {
+        // Find which workflow this resource/step currently belongs to
+        const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => s.resourceLinkId === (isStep ? state.activeInspectorParentId : targetObj.id)));
+        html += `
+            <div class="form-group">
+                <label class="tiny muted uppercase bold" style="font-size:8px;">Parent Workflow</label>
+                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
+                    <option value="">-- No Workflow Assigned --</option>
+                    ${allResources.filter(r => r.type === 'Workflow').map(w => `<option value="${w.id}" ${currentWf?.id === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+                </select>
+            </div>`;
+    }
+
+    // 🟠 3. RESOURCE SELECTOR (Shown only for Steps)
+    if (isStep) {
+        html += `
+            <div class="form-group">
+                <label class="tiny muted uppercase bold" style="font-size:8px;">Parent Resource</label>
+                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
+                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `<option value="${res.id}" ${String(res.id) === String(state.activeInspectorParentId) ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
+                </select>
+            </div>`;
+    }
+
+    html += `</div>`;
+    return html;
+};
+
+OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
+    const res = OL.getResourceById(targetId);
+    if (!res) return;
+
+    await OL.updateAndSync(() => {
+        if (level === 'stageId') {
+            res.stageId = newParentId;
+            res.mapOrder = 999; // Move to end of new stage
+        } 
+        // Logic for moving Resources between Workflows or Steps between Resources
+        // would involve splicing from old parent.steps and pushing to newParent.steps
+    });
+
+    renderGlobalVisualizer(isVault);
+    OL.loadInspector(targetId);
+};
+
 OL.loadInspector = function(targetId, parentId = null) {
     // ⚓ THE ANCHOR: Lock the parent context for re-renders
     if (parentId) {
@@ -11536,12 +11607,8 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
     
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
-
-    // 🚀 BREADCRUMB GENERATION LOGIC
-    let breadcrumbParts = [];
+    
     const client = getActiveClient();
-    const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
-    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
 
     const isStage = targetId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
@@ -11552,44 +11619,12 @@ OL.loadInspector = function(targetId, parentId = null) {
     const isVaultMode = location.hash.includes('vault');
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
-    // Build the trail backwards
-    if (isAtomicStep) {
-        const parentRes = OL.getResourceById(parentId);
-        const parentWf = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === parentId));
-        const pStage = sourceData.stages?.find(s => s.id === (parentWf?.stageId || parentRes?.stageId));
-        
-        if (pStage) breadcrumbParts.push(pStage.name);
-        if (parentWf) breadcrumbParts.push(parentWf.name);
-        breadcrumbParts.push(parentRes?.name || "Resource");
-    } else if (isTechnicalResource) {
-        const parentWf = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === targetId));
-        const pStage = sourceData.stages?.find(s => s.id === (parentWf?.stageId || data.stageId));
-        
-        if (pStage) breadcrumbParts.push(pStage.name);
-        if (parentWf) breadcrumbParts.push(parentWf.name);
-    } else if (isWorkflow) {
-        const pStage = sourceData.stages?.find(s => s.id === data.stageId);
-        if (pStage) breadcrumbParts.push(pStage.name);
-    }
-
-    const breadcrumbHtml = breadcrumbParts.length > 0 
-        ? `<div class="inspector-breadcrumbs" style="margin-bottom: 12px; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;">
-            ${breadcrumbParts.map((step, i) => `
-                <span class="breadcrumb-link is-clickable" 
-                      style="color: var(--accent); opacity: 0.7; cursor: pointer;"
-                      onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7"
-                      onclick="OL.loadInspector('${step.id}')">${esc(step.name)}</span>
-                ${i < breadcrumbParts.length - 1 ? '<span style="margin: 0 4px; opacity: 0.3;">/</span>' : ''}
-            `).join('')}
-           </div>` 
-        : '';
-
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
 
     // ------------------------------------------------------------
     // 1. DYNAMIC HEADER & BACK BUTTON
     // ------------------------------------------------------------
-    html += breadcrumbHtml;
+    html += OL.renderHierarchySelectors(data, location.hash.includes('vault'));
 
     html += `
         <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
