@@ -11652,7 +11652,7 @@ OL.loadInspector = function(targetId, parentId = null) {
         OL.initSideResizers(); 
     }
 
-    const contentWrapper = panel.querySelector('.inspector-scroll-content');
+    const contentWrapper = OL.ensureInspectorSkeleton();
     const data = OL.getResourceById(targetId);
 
     if (!data) {
@@ -11848,6 +11848,26 @@ OL.loadInspector = function(targetId, parentId = null) {
             }
         }
     }
+};
+
+OL.ensureInspectorSkeleton = function() {
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) return null;
+
+    let contentWrapper = panel.querySelector('.inspector-scroll-content');
+    
+    if (!contentWrapper) {
+        // Nuke and rebuild the skeleton to ensure order is correct
+        panel.innerHTML = `
+            <div class="sidebar-resizer right-side-handle"></div>
+            <div class="inspector-scroll-content"></div>
+        `;
+        contentWrapper = panel.querySelector('.inspector-scroll-content');
+        
+        // 🚀 BIND IMMEDIATELY: Don't wait for a timeout
+        OL.initSideResizers(); 
+    }
+    return contentWrapper;
 };
 
 OL.initSideResizers = function() {
