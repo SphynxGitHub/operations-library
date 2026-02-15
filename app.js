@@ -37,7 +37,10 @@ const db = firebase.firestore();
 let state = {
     activeClientId: null,
     viewMode: localStorage.getItem('ol_preferred_view_mode') || 'global',
-    ui: {showCompleted: false},
+    ui: { 
+        showCompleted: false,
+        zenMode: localStorage.getItem('ol_preferred_view_mode') === 'global' 
+    },
     master: {
         apps: [], functions: [], resources: [], taskBlueprints: [], howToLibrary: [],
         rates: { baseHourlyRate: 300, teamMultiplier: 1.1, variables: {} },
@@ -10873,7 +10876,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    const isZen = localStorage.getItem('ol_zen_mode') === 'true';
+    const isZen = state.ui.zenMode;
     const zenClass = isZen ? 'zen-mode-active' : '';
 
     if (isGlobalMode) {
@@ -10881,6 +10884,13 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         canvasHtml = renderGlobalCanvas(isVaultMode);
         breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
     } 
+
+    // 🚀 THE FIX: Only render toolbox if NOT in global mode
+    const sidebarHtml = isGlobalMode ? '' : `<aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>`;
+    
+    // We adjust the layout class to handle the missing pane
+    const layoutClass = isGlobalMode ? 'global-macro-layout no-sidebar' : 'vertical-lifecycle-mode';
+
     // --- TIER 3: RESOURCE > STEPS (Only if NOT global) ---
     else if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
@@ -10921,8 +10931,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 
     container.innerHTML = `
-       <div class="three-pane-layout ${zenClass} ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
-            <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
+       <div class="three-pane-layout ${layoutClass} ${zenClass} ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
+            ${sidebarHtml}
+
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
@@ -10930,7 +10941,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     <div style="display:flex; gap:10px;">
                         <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" 
                                 onclick="OL.toggleZenMode()">
-                            ${isZen ? 'Collapse ⤓' : 'Full Screen ⤢'}
+                            ${isZen ? 'Show Tools ⤢' : 'Hide Tools ⤓'}
                         </button>
 
                         <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
@@ -11696,6 +11707,8 @@ OL.loadInspector = function(targetId, parentId = null) {
         parentId = state.activeInspectorParentId;
     }
 
+    const isGlobalMode = state.viewMode === 'global';
+
     state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
@@ -11703,9 +11716,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     const layout = document.querySelector('.three-pane-layout');
     if (layout && layout.classList.contains('zen-mode-active')) {
         layout.classList.remove('zen-mode-active');
-        const zenBtn = document.getElementById('zen-mode-toggle');
-        if (zenBtn) zenBtn.innerHTML = 'Full Screen ⤢';
-        // Note: we don't change localStorage here, so it remains a "temporary" peek
     }
 
     let contentWrapper = panel.querySelector('.inspector-scroll-content');

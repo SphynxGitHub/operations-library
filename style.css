@@ -2501,6 +2501,18 @@ body.is-visualizer #mainContent {
     background-color: #050816;
 }
 
+/* When no sidebar is present, let the canvas take the full starting width */
+.three-pane-layout.no-sidebar .pane-canvas-wrap {
+    padding-left: 0;
+    margin-left: 0;
+}
+
+
+/* Hide the Toolbox divider line if it exists in global mode */
+.no-sidebar .pane-drawer {
+    display: none !important;
+}
+
 .pane-canvas-wrap {
     flex: 1;
     display: flex;
@@ -2820,7 +2832,7 @@ body.is-visualizer #mainContent {
 .global-macro-map {
     display: flex;
     gap: 40px;
-    padding: 20px;
+    padding: 60px;
     min-width: max-content;
 }
 
