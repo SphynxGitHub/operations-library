@@ -10751,6 +10751,8 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const isInspectingStage = String(state.activeInspectorResId) === String(stage.id);
+    const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
 
     return `
         <div class="global-macro-map" style="display: flex; padding: 40px; align-items: flex-start;">
@@ -10762,7 +10764,9 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 return `
                 <div class="macro-stage-col" style="display: flex; align-items: flex-start;">
                     <div style="min-width: 320px;">
-                        <div class="stage-header hover-reveal-container" style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                        <div class="stage-header ${isInspectingStage ? 'is-inspecting' : ''} hover-reveal-container" 
+                            style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;"
+                            onclick="OL.loadInspector('${stage.id}')">
                             <div>
                                 <span class="tiny accent bold">STAGE 0${sIdx + 1}</span>
                                 <h3 style="margin: 0; font-size: 16px; color: #fff; text-transform: uppercase;">${esc(stage.name)}</h3>
@@ -10773,7 +10777,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                         <div class="workflow-stack">
                             ${workflowsInStage.map((wf, wIdx) => `
                                 ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
-                                <div class="insert-divider vertical" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                                <div class="insert-divider vertical ${isInspectingWorkflow ? 'is-inspecting' : ''}" onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})"><span>+</span></div>
                             `).join('')}
                             ${workflowsInStage.length === 0 ? `<div class="insert-divider initial" onclick="OL.promptInsertWorkflow('${stage.id}', 0, ${isVaultMode})"><span>+ Add Workflow</span></div>` : ''}
                         </div>
@@ -10883,25 +10887,8 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
-                    let currentParentId = "";
-                    if (currentParentId) {
-                        state.activeInspectorParentId = currentParentId;
-                    } else {
-                        currentParentId = state.activeInspectorParentId;
-                    }
-
-                    console.log(currentParentId,": Parent ID")
-                    const currentAssetId = String(asset.id || "");
-                    console.log(currentAssetId,": Asset ID")
-                    const currentResId = String(state.activeInspectorResId || "");
-                    console.log(currentResId,": Res ID")
-
-                    // 🚀 TYPE-SAFE CHECKS
-                    const isParentActive = currentParentId === currentAssetId;
-                    const isInspectingThis = currentResId === currentAssetId;
-
-                    // Add this right before the 'return' backtick
-                    if (isParentActive) console.log("🎯 FOUND ACTIVE PARENT:", asset.name);
+                    const isInspecting = String(state.activeInspectorResId) === String(asset.id);
+                    const isParentActive = String(state.activeInspectorParentId) === String(asset.id);
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
