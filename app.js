@@ -10800,28 +10800,35 @@ OL.traceLogic = function(nodeId, direction) {
 
     if (direction === 'outgoing') {
         (stepObj.outcomes || []).forEach(o => {
-            // 🚀 FUZZY LOOKUP: Try multiple ID patterns
-           let targetId = o.targetId;
-    
+            if (o.action === 'next' && !o.condition) return;
+            let targetId = o.targetId;
+            let targetEl = null;
+
+            // 1. Handle "Jump" logic
             if (!targetId && o.action && o.action.includes('jump_step_')) {
-                targetId = o.action.replace('jump_step_', '');
+                targetId = o.action.split('jump_step_')[1];
             }
 
-            if (!targetId) {
-                console.error("❌ Outcome Data Error: No valid targetId found in outcome", o);
-                return;
+            // 2. Handle "Next" logic 🚀
+            if (o.action === 'next') {
+                const currentRow = document.getElementById(`step-row-${nodeId}`);
+                // Find the next sibling in the list that is also a step row
+                const nextRow = currentRow?.nextElementSibling;
+                if (nextRow && nextRow.classList.contains('atomic-step-row')) {
+                    targetEl = nextRow;
+                }
+            } else if (targetId) {
+                // Find by ID for jumps
+                targetEl = document.getElementById(`step-row-${targetId}`) || 
+                        document.getElementById(targetId) ||
+                        document.getElementById(`l3-node-${targetId}`);
             }
 
-            // Now find the element using the cleaned targetId
-            const targetEl = document.getElementById(`step-row-${targetId}`) || 
-                            document.getElementById(targetId) ||
-                            document.getElementById(`l3-node-${targetId}`);
-            
             if (targetEl) {
                 const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                connections.push({ from: anchorEl, to: targetIcon, label: o.condition });
+                connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
             } else {
-                console.warn(`📍 Target element NOT found for ID: ${targetId}`);
+                console.warn(`📍 Could not resolve target for action: ${o.action}`);
             }
         });
     } else {
