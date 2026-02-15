@@ -11643,11 +11643,13 @@ OL.loadInspector = function(targetId, parentId = null) {
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
 
+    // Ensure the wrapper exists WITHOUT blowing away the resizer handle
     let contentWrapper = panel.querySelector('.inspector-scroll-content');
     if (!contentWrapper) {
-        // First time load: create the wrapper
+        // We clear the panel ONCE, but we immediately re-init the resizers after
         panel.innerHTML = `<div class="inspector-scroll-content"></div>`;
         contentWrapper = panel.querySelector('.inspector-scroll-content');
+        OL.initSideResizers(); 
     }
 
     // 🔍 RESOLVE DATA (Stages, Workflows, Resources, or Steps)
@@ -11822,11 +11824,13 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     html += `</div>`;
-    panel.innerHTML = html;
-    
+   
     contentWrapper.innerHTML = html;
-    
-    // At the very bottom of OL.loadInspector
+
+    if (!panel.querySelector('.sidebar-resizer')) {
+        OL.initSideResizers();
+    }
+
     if (state.viewMode === 'global') {
         const isVault = location.hash.includes('vault');
         const canvas = document.getElementById('fs-canvas');

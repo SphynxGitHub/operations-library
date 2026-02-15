@@ -3320,20 +3320,17 @@ body.is-visualizer #mainContent {
 }
 
 #inspector-panel.pane-inspector {
-    position: relative;
-    width: 220px !important;
-    min-width: 220px !important;
-    max-width: 80vw;
-    flex: 0 0 auto !important;
-    background: #0b0f1a !important;
-    border-left: 1px solid rgba(255,255,255,0.1) !important;
-    height: 100% !important;
-    padding: 0 !important; /* Content padding is handled by .inspector-content */
+    display: flex;
+    flex-direction: column;
+    overflow: visible !important; /* Allow resizer to hang off the edge */
+}
+
+.inspector-scroll-content {
+    flex: 1;
+    overflow-y: auto;
     overflow-x: hidden;
-    overflow-y: auto !important;
-    display: block !important;
-    visibility: visible !important;
-    z-index: 50;
+    width: 100%;
+    height: 100%;
 }
 
 /* 2. The Invisible Resize Handle */
