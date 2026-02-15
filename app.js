@@ -10883,8 +10883,16 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
-                    const isParentActive = state.activeInspectorParentId === asset.id;
-                    const isInspectingThis = state.activeInspectorResId === asset.id;
+                    const currentParentId = String(state.activeInspectorParentId || "");
+                    const currentAssetId = String(asset.id || "");
+                    const currentResId = String(state.activeInspectorResId || "");
+
+                    // 🚀 TYPE-SAFE CHECKS
+                    const isParentActive = currentParentId === currentAssetId;
+                    const isInspectingThis = currentResId === currentAssetId;
+
+                    // Add this right before the 'return' backtick
+                    if (isParentActive) console.log("🎯 FOUND ACTIVE PARENT:", asset.name);
 
                     const scopingItem = OL.isResourceInScope(asset.id);
                     const isInScope = !!scopingItem;
