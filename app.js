@@ -5658,16 +5658,19 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
     const q = (query || "").toLowerCase();
     const res = OL.getResourceById(resId);
     const client = getActiveClient();
-    
-    let html = '';
 
-    // 1. Standard Logic
     const logicActions = [
         { id: 'next', name: 'Proceed to Next Step', icon: '➡️' },
         { id: 'close', name: 'Close Workflow', icon: '🏁' },
         { id: 'restartStep', name: 'Restart Step', icon: '🔁' }
     ];
+    
+    const steps = (res.steps || []).filter(s => String(s.id) !== String(stepId));
+    const externalResources = (client?.projectData?.localResources || []).filter(r => r.id !== resId);
 
+    let html = '';
+
+    // 1. Workflow Logic
     html += `<div class="search-group-header">Standard Logic</div>`;
     logicActions.filter(a => a.name.toLowerCase().includes(q)).forEach(a => {
         html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', '${a.id}', '${esc(a.icon + " " + a.name)}')">
@@ -5675,50 +5678,32 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
         </div>`;
     });
 
-    // 2. Resolve All Project Resources for Global Step Search
-    const allResources = [
-        ...(state.master.resources || []),
-        ...(client?.projectData?.localResources || [])
-    ];
-
-    html += `<div class="search-group-header">Jump to Step (Project Wide)</div>`;
-    
-    let stepMatches = 0;
-
-    allResources.forEach(resource => {
-        const resourceSteps = resource.steps || [];
-        
-        resourceSteps.forEach(s => {
-            // 🛡️ Rule 1: Don't link to the current step itself
-            if (String(s.id) === String(stepId)) return;
-
-            const stepName = val(s.name, "Unnamed Step");
-            const resourceName = val(resource.name, "Unknown Resource");
-
-            // Filter by query against Step Name OR Parent Resource Name
-            if (stepName.toLowerCase().includes(q) || resourceName.toLowerCase().includes(q)) {
-                stepMatches++;
-                
-                // We use 'jump_step_' for everything now to maintain Step-to-Step parity
-                html += `
-                    <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(stepName)}')">
-                        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                            <div style="display:flex; flex-direction:column;">
-                                <span style="font-weight:bold;">↪ ${esc(stepName)}</span>
-                                <span class="tiny muted" style="font-size:9px;">Location: ${esc(resourceName)}</span>
-                            </div>
-                            <span class="pill tiny soft" style="font-size:7px; opacity:0.6;">STEP</span>
-                        </div>
-                    </div>`;
-            }
+    // 2. Internal Jumps (Jump to another step in THIS resource)
+    const filteredSteps = steps.filter(s => val(s.name, "Unnamed Step").toLowerCase().includes(q));
+    if (filteredSteps.length) {
+        html += `<div class="search-group-header">Jump To Step (Internal)</div>`;
+        filteredSteps.forEach(s => {
+            const stepTitle = val(s.name, "Unnamed Step");
+            // 🚀 We tag this as jump_step_
+            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(stepTitle)}')">
+                ↪ Step: ${esc(stepTitle)}
+            </div>`;
         });
-    });
-
-    if (stepMatches === 0 && q !== "") {
-        html += `<div class="search-result-item muted">No matching steps found in project.</div>`;
     }
 
-    listEl.innerHTML = html;
+    // 3. External Jumps (Open a different Resource/Email/Form)
+    const filteredExt = externalResources.filter(r => r.name.toLowerCase().includes(q));
+    if (filteredExt.length) {
+        html += `<div class="search-group-header">Jump to External Resource</div>`;
+        filteredExt.forEach(r => {
+            // 🚀 We tag this as jump_res_
+            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_res_${r.id}', '🚀 ${esc(r.name)}')">
+                🚀 ${esc(r.name)} <span class="pill tiny vault">${esc(r.type || 'Res')}</span>
+            </div>`;
+        });
+    }
+
+    listEl.innerHTML = html || `<div class="search-result-item muted">No outcomes found</div>`;
 };
 
 OL.getOutcomeLabel = function(action, res) {
@@ -10860,8 +10845,6 @@ OL.traceLogic = function(nodeId, direction) {
                     // Auto-remove after 5 seconds if not clicked
                     setTimeout(() => teleportBtn.remove(), 5000);
                 }
-            } else {
-                console.warn("⚠️ Data Error: Outcome found, but could not parse a Target ID from:", o);
             }
         });
     } else {
@@ -10883,7 +10866,26 @@ OL.traceLogic = function(nodeId, direction) {
     }
 
     console.log(`🔗 Found ${connections.length} connections.`);
-    connections.forEach(conn => OL.drawTraceArrow(conn.from, conn.to, direction, conn.label));
+    connections.forEach(conn => {
+        // Draw the arrow
+        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
+
+        // 🌟 THE GLOW: Find the card or row and light it up
+        // We look for the closest parent with a card class, or the icon itself
+        const targetCard = conn.to.closest('.workflow-block-card') || 
+                           conn.to.closest('.atomic-step-row') || 
+                           conn.to;
+
+        targetCard.classList.add('trace-highlight-glow');
+
+        // Remove the glow after 3 seconds so the UI stays clean
+        setTimeout(() => {
+            targetCard.classList.remove('trace-highlight-glow');
+        }, 3000);
+
+        // Optional: Smoothly center the target in the viewport
+        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
 };
 
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
