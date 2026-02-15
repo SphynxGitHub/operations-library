@@ -10856,6 +10856,9 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
+    const isZen = localStorage.getItem('ol_zen_mode') === 'true';
+    const zenClass = isZen ? 'zen-mode-active' : '';
+
     if (isGlobalMode) {
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderGlobalCanvas(isVaultMode);
@@ -10901,16 +10904,23 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 
     container.innerHTML = `
-       <div class="three-pane-layout ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
+       <div class="three-pane-layout ${zenClass} ${isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode'}">
             <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
                     
-                    <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
-                            onclick="OL.toggleGlobalView(${isVaultMode})">
-                        ${isGlobalMode ? '🔍 Focus Mode' : '🌐 Global View'}
-                    </button>
+                    <div style="display:flex; gap:10px;">
+                        <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" 
+                                onclick="OL.toggleZenMode()">
+                            ${isZen ? 'Collapse ⤓' : 'Full Screen ⤢'}
+                        </button>
+
+                        <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
+                                onclick="OL.toggleGlobalView(${isVaultMode})">
+                            ${isGlobalMode ? '🔍 Focus Mode' : '🌐 Global View'}
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">
@@ -10938,6 +10948,29 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         }
     }
     setTimeout(OL.initSideResizers, 10);
+};
+
+OL.toggleZenMode = function() {
+    const layout = document.querySelector('.three-pane-layout');
+    if (!layout) return;
+
+    const isActive = layout.classList.toggle('zen-mode-active');
+    
+    // 💾 Persist preference
+    localStorage.setItem('ol_zen_mode', isActive);
+
+    // Update the button icon/text
+    const btn = document.getElementById('zen-mode-toggle');
+    if (btn) {
+        btn.innerHTML = isActive ? 'Collapse ⤓' : 'Full Screen ⤢';
+        btn.classList.toggle('accent', isActive);
+    }
+    
+    // 🔄 Redraw lines because canvas size changed
+    setTimeout(() => {
+        if (state.focusedWorkflowId) OL.drawLevel2LogicLines(state.focusedWorkflowId);
+        if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
+    }, 350);
 };
 
 OL.addLifecycleStage = function(isVaultMode) {

@@ -2551,6 +2551,33 @@ body.is-visualizer #mainContent {
     right: -5px;
 }
 
+/* 1. Transition for smooth sliding */
+.pane-drawer, .pane-inspector {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease;
+}
+
+/* 2. Zen Mode State */
+.zen-mode-active .pane-drawer {
+    transform: translateX(-100%);
+    margin-right: -280px; /* Adjust based on your width variable */
+}
+
+.zen-mode-active .pane-inspector {
+    transform: translateX(100%);
+    margin-left: -450px; /* Adjust based on your width variable */
+}
+
+/* Ensure the canvas expands to fill the void */
+.zen-mode-active .pane-canvas-wrap {
+    flex: 1;
+    width: 100vw;
+}
+
+/* Hide the resizer handles while in Zen mode to prevent "ghost" dragging */
+.zen-mode-active .sidebar-resizer {
+    display: none !important;
+}
+
 /* Handle for the RIGHT inspector (on its left edge) */
 #inspector-panel .sidebar-resizer {
     left: -5px;
