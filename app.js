@@ -10789,73 +10789,81 @@ OL.traceLogic = function(nodeId, direction) {
         otherEnd.classList.add('trace-highlight-end');
     });
 };
-
 OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
     const canvas = document.getElementById('fs-canvas');
-    if (!canvas) return;
+    const mapContainer = document.querySelector('.global-macro-map');
+    if (!canvas || !mapContainer) return;
 
-    // 1. Create or get SVG Layer
+    // 1. Ensure a clean SVG layer exists inside the MAP container
     let svg = document.getElementById('logic-trace-layer');
     if (!svg) {
         svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.id = 'logic-trace-layer';
         svg.setAttribute('class', 'logic-trace-svg');
+        // Absolute to the MAP, so it scrolls WITH the content
         svg.style.position = 'absolute';
         svg.style.top = '0';
         svg.style.left = '0';
-        svg.style.width = canvas.scrollWidth + 'px';
-        svg.style.height = canvas.scrollHeight + 'px';
+        svg.style.width = '100%';
+        svg.style.height = '100%';
         svg.style.pointerEvents = 'none';
-        svg.style.zIndex = '999';
+        svg.style.zIndex = '1'; // Behind nodes but above background
         
-        // Define Arrowhead
         svg.innerHTML = `
             <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7" 
                 refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="var(--accent)" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8" />
                 </marker>
             </defs>`;
-        canvas.appendChild(svg);
+        mapContainer.appendChild(svg);
     }
 
-    // 2. Calculate Coordinates
-    const rectFrom = fromEl.getBoundingClientRect();
-    const rectTo = toEl.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
+    // 2. Calculate coordinates relative to the MAP container
+    // This is much more stable than ClientRect for scrolling maps
+    const getCoords = (el) => {
+        let x = 0, y = 0;
+        const rect = el.getBoundingClientRect();
+        const mapRect = mapContainer.getBoundingClientRect();
+        return {
+            x: rect.left - mapRect.left,
+            y: rect.top - mapRect.top,
+            w: rect.width,
+            h: rect.height
+        };
+    };
 
-    // Start from bottom center of 'From' and end at top center of 'To'
-    const x1 = (rectFrom.left + rectFrom.width / 2) - canvasRect.left + canvas.scrollLeft;
-    const y1 = (rectFrom.bottom) - canvasRect.top + canvas.scrollTop;
-    
-    const x2 = (rectTo.left + rectTo.width / 2) - canvasRect.left + canvas.scrollLeft;
-    const y2 = (rectTo.top) - canvasRect.top + canvas.scrollTop;
+    const from = getCoords(fromEl);
+    const to = getCoords(toEl);
 
-    // 3. Draw Path (Cubic Bezier for nice curves)
+    // Origin: Bottom center of source | Target: Top center of dest
+    const x1 = from.x + (from.w / 2);
+    const y1 = from.y + from.h;
+    const x2 = to.x + (to.w / 2);
+    const y2 = to.y;
+
+    // 3. Draw Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const cp1y = y1 + (y2 - y1) / 2;
-    const cp2y = y1 + (y2 - y1) / 2;
-    
-    const d = `M ${x1} ${y1} C ${x1} ${cp1y}, ${x2} ${cp2y}, ${x2} ${y2}`;
+    const curvePadding = Math.abs(y2 - y1) * 0.5;
+    const d = `M ${x1} ${y1} C ${x1} ${y1 + curvePadding}, ${x2} ${y2 - curvePadding}, ${x2} ${y2}`;
     
     path.setAttribute("d", d);
-    path.setAttribute("class", "trace-path");
-    path.setAttribute("stroke", "var(--accent)");
+    path.setAttribute("stroke", "#38bdf8"); // Use your accent color
     path.setAttribute("stroke-width", "3");
     path.setAttribute("fill", "none");
+    path.setAttribute("class", "trace-path");
     path.setAttribute("marker-end", "url(#arrowhead)");
     svg.appendChild(path);
 
-    // 4. Add Floating Label
+    // 4. Label
     if (label) {
-        const labelDiv = document.createElement('div');
-        labelDiv.className = 'trace-label fade-in';
-        labelDiv.innerText = label;
-        labelDiv.style.position = 'absolute';
-        labelDiv.style.left = `${(x1 + x2) / 2}px`;
-        labelDiv.style.top = `${(y1 + y2) / 2}px`;
-        labelDiv.style.transform = 'translate(-50%, -50%)';
-        canvas.appendChild(labelDiv);
+        const lbl = document.createElement('div');
+        lbl.className = 'trace-label fade-in';
+        lbl.innerText = label;
+        lbl.style.position = 'absolute';
+        lbl.style.left = `${(x1 + x2) / 2}px`;
+        lbl.style.top = `${(y1 + y2) / 2}px`;
+        mapContainer.appendChild(lbl);
     }
 };
 
