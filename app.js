@@ -10749,44 +10749,50 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 }
 
 OL.traceLogic = function(nodeId, direction) {
-    // 1. Clear existing traces to avoid a mess
+    console.log(`🔎 Tracing ${direction} for: ${nodeId}`);
+    
+    // 1. Immediately prevent any further selection logic
     OL.clearLogicTraces();
 
-    const canvas = document.getElementById('fs-canvas');
-    const sourceNode = document.getElementById(`l1-node-${nodeId}`) || 
-                       document.getElementById(`l2-node-${nodeId}`);
-    
-    if (!sourceNode) return;
-    sourceNode.classList.add('trace-active');
+    // 2. Identify the source element
+    const sourceEl = document.getElementById(`l2-node-${nodeId}`) || document.getElementById(nodeId);
+    if (!sourceEl) {
+        console.error(`❌ Element not found: l2-node-${nodeId}`);
+        return;
+    }
+
+    // 3. Find the data
+    const res = OL.getResourceById(nodeId);
+    if (!res) {
+        console.error(`❌ Data not found for: ${nodeId}`);
+        return;
+    }
 
     const connections = [];
-    
     if (direction === 'outgoing') {
-        const res = OL.getResourceById(nodeId);
-        (res.outcomes || []).forEach(outcome => {
-            const targetEl = document.getElementById(`l1-node-${outcome.targetId}`) || 
-                             document.getElementById(`l2-node-${outcome.targetId}`);
-            if (targetEl) connections.push({ from: sourceNode, to: targetEl });
+        const outcomes = res.outcomes || [];
+        outcomes.forEach(o => {
+            const targetEl = document.getElementById(`l2-node-${o.targetId}`);
+            if (targetEl) connections.push({ from: sourceEl, to: targetEl, label: o.condition });
         });
     } else {
-        // Incoming: Search all resources for outcomes pointing HERE
-        const client = getActiveClient();
-        const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
-        
-        all.forEach(r => {
-            if ((r.outcomes || []).some(o => o.targetId === nodeId)) {
-                const startEl = document.getElementById(`l1-node-${r.id}`) || 
-                                document.getElementById(`l2-node-${r.id}`);
-                if (startEl) connections.push({ from: startEl, to: sourceNode });
-            }
+        // Incoming logic
+        const all = state.viewMode === 'vault' ? state.master.resources : (getActiveClient()?.projectData?.localResources || []);
+        all.forEach(other => {
+            (other.outcomes || []).forEach(o => {
+                if (String(o.targetId) === String(nodeId)) {
+                    const fromEl = document.getElementById(`l2-node-${other.id}`);
+                    if (fromEl) connections.push({ from: fromEl, to: sourceEl, label: o.condition });
+                }
+            });
         });
     }
 
-    // 2. Draw the lines and highlight the "other end"
+    console.log(`🔗 Found ${connections.length} connections.`);
+
+    // 4. Draw them
     connections.forEach(conn => {
-        OL.drawTemporaryTraceLine(conn.from, conn.to, direction);
-        const otherEnd = (direction === 'outgoing') ? conn.to : conn.from;
-        otherEnd.classList.add('trace-highlight-end');
+        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
     });
 };
 
