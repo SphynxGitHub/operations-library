@@ -4232,6 +4232,11 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
     const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
+
+    const hierarchyHtml = `
+        <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
+            ${OL.renderHierarchySelectors(res, isVaultMode)}
+        </div>`;
     
     let res = null;
     let lineItem = null;
@@ -4428,6 +4433,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </button>
                 ` : ''}
                 </div>
+                ${hierarchyHtml}
 
             </div>
         </div>
@@ -11571,20 +11577,41 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
 };
 
 OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
-    const res = OL.getResourceById(targetId);
-    if (!res) return;
+    const item = OL.getResourceById(targetId);
+    if (!item) return;
+
+    const client = getActiveClient();
+    const sourceResources = isVault ? state.master.resources : client.projectData.localResources;
 
     await OL.updateAndSync(() => {
+        // 🟢 LEVEL 1: Move Workflow to different Stage
         if (level === 'stageId') {
-            res.stageId = newParentId;
-            res.mapOrder = 999; // Move to end of new stage
+            item.stageId = newParentId;
+            item.mapOrder = 999; // Default to end of list
         } 
-        // Logic for moving Resources between Workflows or Steps between Resources
-        // would involve splicing from old parent.steps and pushing to newParent.steps
+
+        // 🔵 LEVEL 2: Move Resource to different Workflow
+        if (level === 'workflowId') {
+            // 1. Find old parent workflow and remove item
+            sourceResources.forEach(wf => {
+                if (wf.steps) wf.steps = wf.steps.filter(s => s.resourceLinkId !== targetId);
+            });
+            // 2. Add to new parent workflow
+            const newWf = OL.getResourceById(newParentId);
+            if (newWf) {
+                if (!newWf.steps) newWf.steps = [];
+                newWf.steps.push({ id: uid(), name: item.name, resourceLinkId: targetId });
+            }
+        }
     });
 
+    // 🔄 UI Refresh Loop
     renderGlobalVisualizer(isVault);
-    OL.loadInspector(targetId);
+    
+    // Refresh whichever view we are currently in
+    const modal = document.getElementById('active-modal-box');
+    if (modal) OL.openResourceModal(targetId);
+    else OL.loadInspector(targetId);
 };
 
 OL.loadInspector = function(targetId, parentId = null) {
@@ -11607,7 +11634,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
     
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
-    
+
     const client = getActiveClient();
 
     const isStage = targetId.startsWith('stage-');
