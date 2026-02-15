@@ -10674,7 +10674,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                     const stepHasLogic = (atomic.outcomes || []).length > 0;
                                     
                                     return `<div class="tiny ${isStepInspected ? 'is-inspecting step-active' : ''}" 
-                                         style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; margin-bottom:2px;
+                                         style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px;
                                          onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
                                         <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}

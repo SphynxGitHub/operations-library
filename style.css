@@ -3307,6 +3307,7 @@ body.is-visualizer #mainContent {
     color: #000 !important;
     border-radius: 4px;
     padding: 0 4px;
+    margin: 2%;
     font-weight: bold;
 }
 
