@@ -3312,6 +3312,25 @@ ARROWS
     transform: translateX(-50%) translateY(-5px);
 }
 
+/* Styling for the receiver icon on the left */
+.logic-trace-icon.in {
+    opacity: 0.5;
+    filter: grayscale(1);
+    transition: all 0.2s ease;
+}
+
+.logic-trace-icon.in:hover {
+    opacity: 1;
+    filter: grayscale(0);
+    color: var(--accent);
+}
+
+/* Ensure the glow target is centered correctly */
+.atomic-step-row.is-inspecting {
+    background: rgba(56, 189, 248, 0.1);
+    border-radius: 4px;
+}
+
 /* Ensure the arrow starts/ends exactly at the icon */
 .trace-active-icon {
     box-shadow: 0 0 8px var(--accent);

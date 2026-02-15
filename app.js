@@ -10840,24 +10840,30 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                     }
                                     
                                     return `<div class="tiny atomic-step-row ${isStepInspected ? 'is-inspecting step-active' : ''}" 
-                                         id="step-row-${atomic.id}"
-                                         style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px;
-                                         onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
+                                        id="step-row-${atomic.id}"
+                                        style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; padding: 2px 4px;
+                                        onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
 
-                                        ${hasIn ? `<span class="logic-trace-icon in" 
-                                                    style="margin-right: 5px;" 
-                                                    onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : 
-                                            `<span style="width: 14px; display: inline-block;"></span>` /* Placeholder to keep alignment */}
+                                        <div style="width: 14px; display: flex; justify-content: center; flex-shrink: 0;">
+                                            ${hasIn ? `<span class="logic-trace-icon in" 
+                                                            style="cursor: pointer;" 
+                                                            onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>` : ''}
+                                        </div>
 
-                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">
+                                        <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px; flex-shrink: 0;">
                                             ${atomic.type === 'Trigger' ? '⚡' : '•'}
                                         </span> 
 
-                                        ${esc(atomic.name || "Unnamed Step")}
+                                        <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 5px;">
+                                            ${esc(atomic.name || "Unnamed Step")}
+                                        </span>
 
-                                        ${hasOut ? `<span class="logic-trace-icon out" 
-                                                    data-preview="${esc(previewText)}"
-                                                    onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
+                                        <div style="width: 14px; display: flex; justify-content: center; flex-shrink: 0;">
+                                            ${hasOut ? `<span class="logic-trace-icon out" 
+                                                            data-preview="${esc(previewText)}"
+                                                            style="cursor: pointer;"
+                                                            onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>` : ''}
+                                        </div>
                                     </div>`;
                                 }).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
                             </div>
