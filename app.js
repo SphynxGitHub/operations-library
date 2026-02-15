@@ -11530,11 +11530,13 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     
     const isWorkflow = targetObj.type === 'Workflow';
     const isResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(targetObj.type);
-    const isStep = !targetObj.type && (state.activeInspectorParentId || targetObj.resourceId);
+    
+    // 🔍 STEP DETECTION: If it's not a Workflow/Resource, it's a Step
+    const isStep = !isWorkflow && !isResource;
 
     let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid rgba(255,255,255,0.1);">`;
 
-    // 🟢 1. WORKFLOW -> STAGE (Workflow's immediate parent)
+    // 🟢 1. WORKFLOW -> STAGE
     if (isWorkflow) {
         html += `
             <div class="form-group" style="display:flex; align-items:center; gap:10px;">
@@ -11546,7 +11548,7 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
             </div>`;
     }
 
-    // 🔵 2. RESOURCE -> WORKFLOW (Resource's immediate parent)
+    // 🔵 2. RESOURCE -> WORKFLOW
     if (isResource) {
         const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.resourceLinkId) === String(targetObj.id)));
         html += `
@@ -11559,14 +11561,22 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
             </div>`;
     }
 
-    // 🟠 3. STEP -> RESOURCE (Step's immediate parent)
+    // 🟠 3. STEP -> RESOURCE (The Fix Area)
     if (isStep) {
-        const parentResId = state.activeInspectorParentId || targetObj.resourceId;
+        // 🚀 THE LOGIC FIX: Find the parent Resource by scanning all resources for this step's ID
+        const parentRes = allResources.find(r => (r.steps || []).some(s => String(s.id) === String(targetObj.id)));
+        const parentResId = parentRes?.id || state.activeInspectorParentId;
+
         html += `
             <div class="form-group" style="display:flex; align-items:center; gap:10px;">
                 <label class="tiny muted bold uppercase" style="width:70px; font-size:8px; color:var(--accent);">Resource</label>
                 <select class="modal-input tiny" style="flex:1;" onchange="OL.reassignHierarchy('${targetObj.id}', 'parentId', this.value, ${isVaultMode})">
-                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `<option value="${res.id}" ${String(res.id) === String(parentResId) ? 'selected' : ''}>${esc(res.name)}</option>`).join('')}
+                    <option value="">-- Select Resource --</option>
+                    ${allResources.filter(r => r.type !== 'Workflow').map(res => `
+                        <option value="${res.id}" ${String(res.id) === String(parentResId) ? 'selected' : ''}>
+                            ${esc(res.name)}
+                        </option>
+                    `).join('')}
                 </select>
             </div>`;
     }
