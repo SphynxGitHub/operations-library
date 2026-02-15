@@ -550,10 +550,14 @@ window.handleRoute = function () {
         else if (hash.includes("#/how-to")) renderHowToLibrary();
         else if (hash.includes("#/visualizer")) renderGlobalVisualizer(false);
     } else {
-        main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
-            <h3>Loading Project...</h3>
-            <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
-        </div>`;
+        if (main) {
+            main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
+                <h3>Loading Project...</h3>
+                <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
+            </div>`;
+        } else {
+            console.warn("📍 handleRoute: 'mainContent' element not found in DOM.");
+        }
     }
 };
 
