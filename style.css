@@ -3498,16 +3498,8 @@ ARROWS
     transition: all 0.3s ease;
 }
 
-/* The specific line item in the mini-card list highlights */
-.tiny.step-active {
-    background: rgba(56, 189, 248, 0.2);
-    font-weight: bold;
-    padding: 1px 4px;
-    border-radius: 2px;
-}
-
 /* Selected Object Glow */
-.is-inspecting {
+.is-inspecting, .tiny.step-active {
     outline: 2px solid var(--accent) !important;
     outline-offset: 2px;
     box-shadow: 0 0 20px var(--accent-glow) !important;
