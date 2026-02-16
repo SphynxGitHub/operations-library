@@ -8421,54 +8421,58 @@ OL.handleInlineResourceSearch = function(query) {
 };
 
 OL.linkResourceToWorkflow = async function(wfId, resId, index) {
-    const context = OL.getCurrentContext();
-    if (!context.data) return;
-
-    const targetResources = context.isMaster ? context.data.resources : context.data.localResources;
+    console.log(`🔗 Linking Resource ${resId} into Workflow ${wfId} at index ${index}`);
 
     await OL.updateAndSync(() => {
-        const wf = targetResources.find(r => r.id === wfId);
+        // 🚀 ALWAYS get the fresh list inside the sync block
+        const isVault = window.location.hash.includes('vault');
+        const client = getActiveClient();
+        const resources = isVault ? state.master.resources : client.projectData.localResources;
+
+        const wf = resources.find(r => String(r.id) === String(wfId));
         if (wf) {
             if (!wf.steps) wf.steps = [];
+            
+            // Insert the link object
             wf.steps.splice(index, 0, {
                 id: 'link_' + Math.random().toString(36).substr(2, 9),
-                resourceLinkId: resId
+                resourceLinkId: resId,
+                mapOrder: index // Ensure order is stored
             });
+
+            // Re-index to prevent collisions
+            wf.steps.forEach((s, idx) => s.mapOrder = idx);
+        } else {
+            console.error("❌ Parent workflow not found in current context.");
         }
     });
 
+    // Cleanup UI
     state.openInsertIndex = null;
+    state.tempInsertMode = null;
     OL.refreshMap();
 };
 
 OL.createNewResourceAndLink = async function(wfId, name, index) {
-    // 🚀 STEP 1: Use the global creator we just fixed
-    const newResId = await OL.universalCreate(detectedType, { name, linkToWfId: wfId, insertIdx: index });
+    // 🚀 THE FIX: Resolve detectedType based on keywords in the name
+    const n = name.toLowerCase();
+    let detectedType = "SOP"; // Default
+    if (n.includes("email")) detectedType = "Email";
+    else if (n.includes("form")) detectedType = "Form";
+    else if (n.includes("zap") || n.includes("automation")) detectedType = "Zap";
+    else if (n.includes("sign") || n.includes("contract")) detectedType = "Signature";
+
+    console.log(`✨ Auto-categorized as: ${detectedType}`);
+
+    // STEP 1: Create the actual asset in the library
+    const newResId = await OL.universalCreate(detectedType, { name });
     if (!newResId) return;
 
-    // 🚀 STEP 2: Link it to the workflow
-    // We use getResourceById to avoid 'prj is undefined' errors
-    const wf = OL.getResourceById(wfId);
-    
-    if (wf) {
-        if (!wf.steps) wf.steps = [];
-        wf.steps.splice(index, 0, {
-            id: uid(), // Standard UID helper
-            resourceLinkId: newResId
-        });
-        
-        await OL.persist();
-        console.log(`🔗 Linked ${newResId} to Workflow ${wfId} at index ${index}`);
-    }
+    // STEP 2: Link it to the workflow using our hardened function above
+    await OL.linkResourceToWorkflow(wfId, newResId, index);
 
-    // 🚀 STEP 3: Cleanup UI
-    state.openInsertIndex = null;
-    state.tempInsertMode = null;
-    
-    OL.refreshMap();
-    
-    // Small delay to let the DOM catch up before opening inspector
-    setTimeout(() => OL.loadInspector(newResId, wfId), 100);
+    // STEP 3: Focus the new item in the right sidebar
+    setTimeout(() => OL.loadInspector(newResId, wfId), 150);
 };
 
 // Toggle custom input visibility
