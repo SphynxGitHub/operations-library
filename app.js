@@ -10253,7 +10253,26 @@ OL.loadInspector = function(targetId, parentId = null) {
                            oninput="OL.filterAssignmentSearch('${parentId}', '${data.id}', false, this.value)">
                     <div id="assignment-search-results" class="search-results-overlay"></div>
                 </div>
-            </div>
+            </div>`;
+    }
+
+    // ------------------------------------------------------------
+    // 🚀 UNIVERSAL RELATIONSHIP SCANNER (Moved OUTSIDE if(isAtomicStep))
+    // ------------------------------------------------------------
+    // If we're on a Step, we check where the Parent Resource is used. 
+    // Otherwise, we check where this specific Resource/Workflow is used.
+    const scannerTargetId = isAtomicStep ? parentId : targetId;
+    const allResources = isVaultMode ? state.master.resources : client.projectData.localResources;
+    const allConnections = getAllIncomingLinks(scannerTargetId, allResources);
+
+    if (allConnections.length > 0) {
+        const activeFilter = state.ui.relationshipFilter || 'All';
+        const types = ['All', ...new Set(allConnections.map(c => c.type))];
+        const filteredConnections = allConnections.filter(c => 
+            activeFilter === 'All' || c.type === activeFilter
+        );
+
+        html += `
             <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
                 <label class="modal-section-label">🔗 Connected Relationships</label>
                 
@@ -10267,9 +10286,9 @@ OL.loadInspector = function(targetId, parentId = null) {
                         </span>
                     `).join('')}
                 </div>
-    
+
                 <div style="display: flex; flex-direction: column; gap: 6px;">
-                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
+                    ${filteredConnections.map(conn => `
                         <div class="pill accent is-clickable" 
                              onclick="OL.loadInspector('${conn.id}')"
                              style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
@@ -10282,7 +10301,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                             </div>
                             <span style="font-size: 9px; opacity: 0.5;">Navigate →</span>
                         </div>
-                    `).join('') : `<div class="tiny muted" style="padding: 10px; text-align: center;">No ${activeFilter} links found.</div>`}
+                    `).join('')}
                 </div>
             </div>
         `;
