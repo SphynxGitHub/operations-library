@@ -11679,6 +11679,22 @@ OL.handleResourceUnmap = async function(wfId, resId, isVault) {
     OL.refreshMap();
 };
 
+OL.handleWorkflowUnmap = async function(wfId, isVault) {
+    if (!confirm("Remove this workflow from the stage?")) return;
+
+    await OL.updateAndSync(() => {
+        // Use the ID as a string to find the item
+        const resources = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        const wf = resources.find(r => String(r.id) === String(wfId));
+        if (wf) {
+            wf.stageId = null;
+            wf.mapOrder = null;
+        }
+    });
+
+    renderGlobalVisualizer(isVault);
+};
+
 OL.promptInsertResourceInWorkflow = async function(workflowId, order, isVault) {
     const name = prompt("Enter Resource/Asset Name (e.g. 'Customer Onboarding Form'):");
     if (!name) return;
