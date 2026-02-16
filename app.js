@@ -11044,7 +11044,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
                 <input type="text" class="mini-search" placeholder="Search or type new..." 
                        oninput="OL.handleInlineResourceSearch(this.value)" 
                        style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:8px; border-radius:4px; font-size:11px; outline:none;">
-                <div id="inline-search-results" style="background:#0f172a; border:1px solid #334155; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
+                <div id="inline-search-results" style="background:#0f172a; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
             </div>`;
         }
     }
