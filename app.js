@@ -8021,6 +8021,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
 };
 
 OL.handleCanvasBackgroundClick = function(event) {
+
     // 🛑 STOP if we clicked a card, button, or input inside the canvas
     if (event.target.closest('.wf-global-node') || 
         event.target.closest('.asset-mini-card') || 
@@ -8040,7 +8041,10 @@ OL.handleCanvasBackgroundClick = function(event) {
         
         // 🔄 Force layout back to full width if zen mode logic is linked
         const layout = document.querySelector('.three-pane-layout');
-        if (layout) layout.classList.add('zen-mode-active');
+        if (layout) {
+            layout.classList.add('zen-mode-active');
+            layout.classList.remove('toolbox-focused');
+        }
         
         // Clear highlights on the canvas
         state.activeInspectorResId = null;
@@ -8051,35 +8055,65 @@ OL.handleCanvasBackgroundClick = function(event) {
 };
 
 OL.focusToolbox = function(mode = 'workflow') {
-    console.log("🚀 Sliding Sidebar into Global View. Mode:", mode);
+    console.log(`🚀 Universal Sidebar Focus: [${mode.toUpperCase()}]`);
 
-    // 1. Keep us in Global View, but ensure Zen Mode is OFF
-    // (In your CSS, Zen Mode is likely what hides the sidebar)
+    // 1. Resolve Environment Context
+    const isVault = window.location.hash.includes('vault');
+    const layout = document.querySelector('.three-pane-layout');
+    
+    // 2. Global State Normalization
+    // We disable Zen Mode to ensure sidebars are permitted to render
     state.ui.zenMode = false;
+    
+    // Determine if we need to clear deep-dives (Tiers) based on the mode
+    // If moving to 'workflow', we want the Macro view. If 'resource', we stay in current focus.
+    if (mode === 'workflow') {
+        state.focusedWorkflowId = null;
+        state.focusedResourceId = null;
+    }
 
-    // 2. Clear the Right Sidebar (Inspector)
+    // 3. Close the Inspector (Right Sidebar) 
+    // This provides the necessary screen real-estate for the toolbox
     OL.clearInspector(); 
 
-    // 3. Force a Full UI Repaint so the Sidebar HTML is actually generated
-    const isVault = window.location.hash.includes('vault');
+    // 4. Force UI Repaint
+    // This ensures the Level 1 vs Level 2 Sidebar content is actually in the DOM
     window.renderGlobalVisualizer(isVault); 
 
-    // 4. Force the layout to show the sidebar even in Global Mode
-    // We add a temporary class to the body to force the sidebar visible
-    const layout = document.querySelector('.three-pane-layout');
+    // 5. Layout & CSS Synchronization
     if (layout) {
         layout.classList.remove('no-sidebar'); 
         layout.classList.remove('zen-mode-active');
+        layout.classList.add('toolbox-focused')
+        // Update the toggle button UI if it exists
+        const zenBtn = document.getElementById('zen-mode-toggle');
+        if (zenBtn) {
+            zenBtn.innerHTML = 'Hide Tools ⤓';
+            zenBtn.classList.remove('accent');
+        }
     }
 
-    // 5. Focus the Search
+    // 6. Universal Focus Logic
+    // Maps the 'mode' to the specific ID of the search input
     setTimeout(() => {
-        const inputId = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
-        const searchInput = document.getElementById(inputId);
+        const focusMap = {
+            'workflow': 'workflow-toolbox-search',
+            'resource': 'resource-toolbox-search',
+            'app': 'app-sidebar-search', // For future expansion
+            'function': 'function-sidebar-search'
+        };
+
+        const targetId = focusMap[mode] || `${mode}-search`;
+        const searchInput = document.getElementById(targetId);
+
         if (searchInput) {
             searchInput.focus();
-            searchInput.style.boxShadow = '0 0 15px var(--accent)';
-            setTimeout(() => searchInput.style.boxShadow = '', 800);
+            // Visual feedback pulse on the drawer
+            const drawer = searchInput.closest('.pane-drawer');
+            if (drawer) {
+                drawer.style.boxShadow = 'inset -10px 0 20px rgba(56, 189, 248, 0.15)';
+                setTimeout(() => drawer.style.boxShadow = '', 1000);
+            }
         }
     }, 150);
 };
@@ -11356,6 +11390,9 @@ OL.handleUniversalDragStart = function(event, id, type, parentId = null) {
 
 OL.handleUniversalDrop = async function(e, parentId, sectionId) {
     e.preventDefault();
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout) layout.classList.remove('toolbox-focused');
+
     const moveId = e.dataTransfer.getData("moveNodeId"); // Rearranging existing
     const sidebarResId = e.dataTransfer.getData("resId"); // Dragging from library
     const stepType = e.dataTransfer.getData("stepType"); // L3 Factory Type
