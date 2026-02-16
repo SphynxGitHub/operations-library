@@ -10913,7 +10913,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             ${isInScope ? `<button 
                                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')" 
                                 title="View in Scoping" 
-                                style="padding: 4px 6px; font-size: 9px; background: #10b981; color: white; border: 1px solid white; border-radius: 4px;">
+                                style="padding: 4px 6px; font-size: 9px; background: #10b981; color: white; border: 1px solid white; border-radius: 94px;">
                             $</button>` : ''}
                         </div>
 
