@@ -8125,23 +8125,23 @@ OL.addLifecycleStageAt = function(index, isVault) {
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     
-    // 1. FLATTEN: Combine Workflow-level structure with actual Resource data
+    // 1. Get steps and SORT them by mapOrder immediately
+    // This ensures that when we flatten/group, we are working in the correct sequence
+    const sortedWfSteps = (wf.steps || []).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
     let flattenedSequence = [];
-    (wf.steps || []).forEach((wfStep, wfIdx) => {
+    sortedWfSteps.forEach((wfStep, wfIdx) => {
         if (!wfStep.resourceLinkId) {
-            // It's a loose step: Add it directly
             flattenedSequence.push({ 
                 ...wfStep, 
                 isLoose: true, 
                 originalWfIndex: wfIdx 
             });
         } else {
-            // It's a Resource: Find the technical asset
             const asset = allResources.find(r => String(r.id) === String(wfStep.resourceLinkId));
             if (asset) {
                 const internalSteps = (asset.steps || []);
                 if (internalSteps.length === 0) {
-                    // Placeholder if resource has no internal steps yet so the card still renders
                     flattenedSequence.push({ 
                         id: `empty-${asset.id}`, 
                         name: "No internal steps defined", 
@@ -8151,7 +8151,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         originalWfIndex: wfIdx 
                     });
                 } else {
-                    // Pull in all internal steps from the technical resource
                     internalSteps.forEach(internalStep => {
                         flattenedSequence.push({ 
                             ...internalStep, 
@@ -8164,7 +8163,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             }
         }
     });
-
+    
     // 2. GROUP: Group consecutive items that belong to the same technical asset
     const groupedItems = [];
     flattenedSequence.forEach((item) => {
