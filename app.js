@@ -4348,6 +4348,21 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         </div>`;
 
+  // --- SECTION: INCOMING LINKS ---
+
+  const targetId = isAtomicStep ? parentId : data.id;
+  const allConnections = getAllIncomingLinks(targetId, allResources);
+  
+  // State for filtering (you can persist this in state.ui if desired)
+  const activeFilter = state.ui.relationshipFilter || 'All';
+  const filteredConnections = allConnections.filter(c => 
+      activeFilter === 'All' || c.type === activeFilter
+  );
+  
+  if (allConnections.length > 0) {
+      // Unique types for the filter buttons
+      const types = ['All', ...new Set(allConnections.map(c => c.type))];
+
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
         <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
@@ -4424,6 +4439,38 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                         placeholder="Enter login details, account purpose, or specific access instructions..." 
                         style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
                         onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+            </div>
+
+            <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
+                <label class="modal-section-label">🔗 Connected Relationships</label>
+                
+                <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
+                    ${types.map(t => `
+                        <span onclick="state.ui.relationshipFilter = '${t}'; OL.refreshInspector();" 
+                              style="font-size: 9px; padding: 2px 8px; border-radius: 10px; cursor: pointer; 
+                              background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
+                              color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
+                            ${t.toUpperCase()}
+                        </span>
+                    `).join('')}
+                </div>
+    
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
+                        <div class="pill accent is-clickable" 
+                             onclick="OL.loadInspector('${conn.id}')"
+                             style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
+                                <div style="display:flex; flex-direction:column;">
+                                    <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
+                                    <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
+                                </div>
+                            </div>
+                            <span style="font-size: 9px; opacity: 0.5;">Navigate →</span>
+                        </div>
+                    `).join('') : `<div class="tiny muted" style="padding: 10px; text-align: center;">No ${activeFilter} links found.</div>`}
+                </div>
             </div>
 
             ${typeSpecificHtml}
@@ -9978,6 +10025,21 @@ OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
     const modal = document.getElementById('active-modal-box');
     if (modal) OL.openResourceModal(targetId);
     else OL.loadInspector(targetId);
+};
+
+const getAllIncomingLinks = (targetId, allResources) => {
+    const connections = [];
+    allResources.forEach(parent => {
+        // Search in steps (Workflows/SOPs)
+        if (parent.steps && parent.steps.some(s => String(s.resourceLinkId) === String(targetId))) {
+            connections.push(parent);
+        }
+        // Search in app references or other custom link fields if they exist
+        if (parent.appId === targetId || parent.linkedResourceId === targetId) {
+            connections.push(parent);
+        }
+    });
+    return connections;
 };
 
 OL.loadInspector = function(targetId, parentId = null) {
