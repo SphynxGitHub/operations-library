@@ -10968,7 +10968,10 @@ OL.traceLogic = function(nodeId, direction) {
                 
                 if (targetEl) {
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                    connections.push({ from: anchorEl, to: targetIcon, label: o.condition || o.label });
+                    const displayLabel = (o.condition && o.condition.trim() !== "") 
+                         ? o.condition 
+                         : `(${o.label || 'Always'})`;
+                    connections.push({ from: anchorEl, to: targetIcon, label: displayLabel });
                 } else {
                     // 🚀 IMPROVED ROCKET (Body-anchored to ensure clickability)
                     const rect = anchorEl.getBoundingClientRect();
