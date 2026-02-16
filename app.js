@@ -10904,6 +10904,24 @@ OL.checkIncomingLogic = function(stepId) {
 };
 
 OL.traceLogic = function(nodeId, direction) {
+    // 🔍 TOGGLE CHECK:
+    // Check if we are already showing a trace for THIS node and THIS direction
+    const existingTraceId = `trace-${nodeId}-${direction}`;
+    const alreadyExists = document.querySelector(`[data-trace-group="${existingTraceId}"]`);
+
+    if (alreadyExists) {
+        console.log("🧼 Toggling Trace OFF for:", nodeId);
+        document.querySelectorAll(`[data-trace-group="${existingTraceId}"]`).forEach(el => el.remove());
+        
+        // Remove active state from the icon
+        const rowEl = document.getElementById(`step-row-${nodeId}`) || document.getElementById(nodeId);
+        if (rowEl) {
+            const icon = rowEl.querySelector(`.logic-trace-icon.${direction === 'incoming' ? 'in' : 'out'}`);
+            if (icon) icon.classList.remove('trace-active-icon');
+        }
+        return; // Exit function
+    }
+
     OL.clearLogicTraces();
     console.log("🔍 TRACING:", nodeId);
 
@@ -11080,6 +11098,7 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
     path.setAttribute("fill", "none");
     path.setAttribute("class", "trace-path"); 
     path.setAttribute("marker-end", "url(#arrowhead)");
+    path.setAttribute("data-trace-group", `trace-${nodeId}-${direction}`);
     
     svg.appendChild(path);
 
@@ -11095,14 +11114,33 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
     }
 };
 
+// Global keyboard listener
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        console.log("⌨️ Escape pressed: Clearing all logic traces");
+        OL.clearLogicTraces();
+        
+        // Also remove the "active" styling from all icons
+        document.querySelectorAll('.trace-active-icon').forEach(el => {
+            el.classList.remove('trace-active-icon');
+        });
+
+        // Remove any floating rockets
+        document.querySelectorAll('.teleport-rocket').forEach(el => el.remove());
+    }
+});
+
 OL.clearLogicTraces = function() {
-    // Remove highlight classes
-    document.querySelectorAll('.trace-active, .trace-highlight-end').forEach(el => {
-        el.classList.remove('trace-active', 'trace-highlight-end');
-    });
-    
-    // Remove the SVG lines
-    document.querySelectorAll('.logic-trace-svg').forEach(el => el.remove());
+    // 1. Wipe the SVG paths
+    const svg = document.getElementById('logic-trace-layer');
+    if (svg) {
+        // Keep the <defs> for the arrowhead, just remove the paths
+        const paths = svg.querySelectorAll('path:not([id])'); 
+        paths.forEach(p => p.remove());
+    }
+
+    // 2. Wipe the floating text labels
+    document.querySelectorAll('.trace-label').forEach(lbl => lbl.remove());
 };
 
 OL.handleResourceUnmap = async function(workflowId, resourceId, isVault) {
