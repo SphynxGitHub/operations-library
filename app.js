@@ -8021,7 +8021,6 @@ window.renderGlobalCanvas = function(isVaultMode) {
 };
 
 OL.handleCanvasBackgroundClick = function(event) {
-
     // 🛑 STOP if we clicked a card, button, or input inside the canvas
     if (event.target.closest('.wf-global-node') || 
         event.target.closest('.asset-mini-card') || 
@@ -8031,91 +8030,64 @@ OL.handleCanvasBackgroundClick = function(event) {
         return; 
     }
 
-    // ✅ If we clicked the grid background, clear the inspector
+    // ✅ If we clicked the grid background, clear the UI
     if (event.target.classList.contains('global-macro-map') || 
         event.target.id === 'fs-canvas' || 
         event.target.classList.contains('global-scroll-canvas')) {
         
-        console.log("🧼 Canvas background clicked: Closing Inspector");
-        OL.clearInspector();
+        console.log("🧼 Canvas background clicked: Cleaning UI state");
+
+        // 1. Reset specific UI flags
+        state.ui.sidebarOpen = false; // 🚀 THE FIX: Allows sidebar to hide again
+        state.ui.zenMode = true;      // Returns to wide-view default
         
-        // 🔄 Force layout back to full width if zen mode logic is linked
+        // 2. Clear data focus
+        OL.clearInspector();
+        state.activeInspectorResId = null;
+        state.activeInspectorParentId = null;
+        
+        // 3. Sync DOM classes
         const layout = document.querySelector('.three-pane-layout');
         if (layout) {
             layout.classList.add('zen-mode-active');
             layout.classList.remove('toolbox-focused');
         }
         
-        // Clear highlights on the canvas
-        state.activeInspectorResId = null;
-        state.activeInspectorParentId = null;
-        
+        // 4. Repaint
         OL.refreshMap(); 
     }
 };
 
-OL.focusToolbox = function(mode = 'workflow') {
-    console.log(`🚀 Universal Sidebar Focus: [${mode.toUpperCase()}]`);
+OL.focusToolbox = function() {
+    console.log("🚀 Universal Sidebar Focus Triggered");
 
-    // 1. Resolve Environment Context
-    const isVault = window.location.hash.includes('vault');
-    const layout = document.querySelector('.three-pane-layout');
-    
-    // 2. Global State Normalization
-    // We disable Zen Mode to ensure sidebars are permitted to render
+    // 1. Identify Mode
+    const mode = state.focusedWorkflowId ? 'resource' : 'workflow';
+
+    // 2. Set State Flags
     state.ui.zenMode = false;
+    state.ui.sidebarOpen = true; // 🚀 NEW FLAG: Forces the drawer to stay open
     
-    // Determine if we need to clear deep-dives (Tiers) based on the mode
-    // If moving to 'workflow', we want the Macro view. If 'resource', we stay in current focus.
-    if (mode === 'workflow') {
-        state.focusedWorkflowId = null;
-        state.focusedResourceId = null;
-    }
+    // 3. Clear Inspector (Right Side)
+    OL.clearInspector();
 
-    // 3. Close the Inspector (Right Sidebar) 
-    // This provides the necessary screen real-estate for the toolbox
-    OL.clearInspector(); 
+    // 4. Force Repaint
+    const isVault = window.location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVault);
 
-    // 4. Force UI Repaint
-    // This ensures the Level 1 vs Level 2 Sidebar content is actually in the DOM
-    window.renderGlobalVisualizer(isVault); 
-
-    // 5. Layout & CSS Synchronization
+    // 5. Apply CSS Classes directly to be safe
+    const layout = document.querySelector('.three-pane-layout');
     if (layout) {
-        layout.classList.remove('no-sidebar'); 
-        layout.classList.remove('zen-mode-active');
-        layout.classList.add('toolbox-focused')
-        // Update the toggle button UI if it exists
-        const zenBtn = document.getElementById('zen-mode-toggle');
-        if (zenBtn) {
-            zenBtn.innerHTML = 'Hide Tools ⤓';
-            zenBtn.classList.remove('accent');
-        }
+        layout.classList.remove('zen-mode-active', 'no-sidebar');
+        layout.classList.add('toolbox-focused');
     }
 
-    // 6. Universal Focus Logic
-    // Maps the 'mode' to the specific ID of the search input
+    // 6. Focus Search
     setTimeout(() => {
-        const focusMap = {
-            'workflow': 'workflow-toolbox-search',
-            'resource': 'resource-toolbox-search',
-            'app': 'app-sidebar-search', // For future expansion
-            'function': 'function-sidebar-search'
-        };
-
-        const targetId = focusMap[mode] || `${mode}-search`;
-        const searchInput = document.getElementById(targetId);
-
-        if (searchInput) {
-            searchInput.focus();
-            // Visual feedback pulse on the drawer
-            const drawer = searchInput.closest('.pane-drawer');
-            if (drawer) {
-                drawer.style.boxShadow = 'inset -10px 0 20px rgba(56, 189, 248, 0.15)';
-                setTimeout(() => drawer.style.boxShadow = '', 1000);
-            }
-        }
-    }, 150);
+        const id = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
+        const el = document.getElementById(id);
+        if (el) el.focus();
+    }, 100);
 };
 
 // 🗑️ Handle Stage Deletion & Unmapping
@@ -9247,7 +9219,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
     const isZen = state.ui.zenMode;
-    const zenClass = isZen ? 'zen-mode-active' : '';
+    const zenClass = (isZen && !state.ui.sidebarOpen) ? 'zen-mode-active' : '';
 
     // 🚀 PRIORITY 1: GLOBAL CANVAS (No Left Sidebar)
     if (isGlobalMode) {
