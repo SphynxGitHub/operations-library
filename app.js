@@ -8421,33 +8421,38 @@ OL.handleInlineResourceSearch = function(query) {
 };
 
 OL.linkResourceToWorkflow = async function(wfId, resId, index) {
-    console.log(`🔗 Linking Resource ${resId} into Workflow ${wfId} at index ${index}`);
+    // 🚀 THE FIX: Clean the ID. If it contains a hyphen followed by a single digit at the end, strip it.
+    // This handles cases where 'local-prj-123-1' is passed instead of 'local-prj-123'
+    const cleanWfId = wfId.includes(':') ? wfId.split(':')[0] : wfId.replace(/-\d$/, '');
+    
+    console.log(`🔗 Linking Resource ${resId} into Workflow ${cleanWfId} at index ${index}`);
 
     await OL.updateAndSync(() => {
-        // 🚀 ALWAYS get the fresh list inside the sync block
         const isVault = window.location.hash.includes('vault');
         const client = getActiveClient();
         const resources = isVault ? state.master.resources : client.projectData.localResources;
 
-        const wf = resources.find(r => String(r.id) === String(wfId));
+        // Use the cleaned ID for the search
+        const wf = resources.find(r => String(r.id) === String(cleanWfId));
+        
         if (wf) {
             if (!wf.steps) wf.steps = [];
             
-            // Insert the link object
             wf.steps.splice(index, 0, {
                 id: 'link_' + Math.random().toString(36).substr(2, 9),
                 resourceLinkId: resId,
-                mapOrder: index // Ensure order is stored
+                mapOrder: index 
             });
 
-            // Re-index to prevent collisions
             wf.steps.forEach((s, idx) => s.mapOrder = idx);
+            console.log("✅ Link successful to:", wf.name);
         } else {
-            console.error("❌ Parent workflow not found in current context.");
+            console.error("❌ Still could not find Workflow:", cleanWfId);
+            // Log the library to see what IDs actually exist
+            console.log("Current Library IDs:", resources.map(r => r.id));
         }
     });
 
-    // Cleanup UI
     state.openInsertIndex = null;
     state.tempInsertMode = null;
     OL.refreshMap();
