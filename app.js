@@ -11015,7 +11015,12 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
                 </div>
             ` : state.tempInsertMode === 'loose' ? renderInlineLooseForm(wf.id, index) : `
                 <div class="inline-form-box">
-                    <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.handleInlineResourceSearch(this.value)" style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
+                    <input type="text" class="mini-search" placeholder="Search resources..." 
+                        oninput="OL.handleInlineResourceSearch(this.value)" 
+                        style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
+                    <div id="inline-search-results" 
+                        style="background:#0f172a; border:1px solid #334155; border-top:none; max-height:150px; overflow-y:auto; border-radius:0 0 4px 4px;">
+                    </div>
                 </div>
             `}
         </div>`;
@@ -11023,6 +11028,34 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 
     return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
 }
+
+OL.handleInlineResourceSearch = function(query) {
+    const isVault = location.hash.includes('vault');
+    const client = getActiveClient();
+    const allResources = isVault ? state.master.resources : client.projectData.localResources;
+    
+    // Filter for technical assets (not workflows)
+    const filtered = allResources.filter(r => 
+        r.type !== 'Workflow' && 
+        r.name.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 5); // Limit to top 5 for the mini-popup
+
+    const resultsContainer = document.getElementById('inline-search-results');
+    if (!resultsContainer) return;
+
+    if (!query) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+
+    resultsContainer.innerHTML = filtered.map(res => `
+        <div class="search-item tiny" 
+             style="padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); font-size:10px;"
+             onclick="OL.linkResourceToWorkflow('${state.openInsertIndex.split('-')[0]}', '${res.id}', ${state.openInsertIndex.split('-')[1]})">
+            ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
+        </div>
+    `).join('') || `<div class="p-10 muted tiny">No resources found</div>`;
+};
 
 // Toggle custom input visibility
 OL.handleInlineCustomToggle = function(selectEl, wrapId) {
