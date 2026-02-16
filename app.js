@@ -11034,32 +11034,39 @@ OL.handleInlineResourceSearch = function(query) {
     const context = OL.getCurrentContext();
     if (!context.data) return;
 
-    const resources = context.isMaster ? context.data.resources : context.data.localResources;
-    const insertIdParts = state.openInsertIndex.split('-'); // [wfId, index]
-    
     const resultsContainer = document.getElementById('inline-search-results');
-    if (!resultsContainer || !query) {
-        if (resultsContainer) resultsContainer.innerHTML = '';
+    if (!resultsContainer) return;
+
+    // 1. If input is empty, clear results and stop
+    if (!query || query.trim() === "") {
+        resultsContainer.innerHTML = '';
         return;
     }
 
+    const q = query.toLowerCase().trim();
+    const resources = context.isMaster ? (context.data.resources || []) : (context.data.localResources || []);
+    const insertIdParts = state.openInsertIndex.split('-'); // [wfId, index]
+
+    // 2. Filter existing resources
     const filtered = resources.filter(r => 
         r.type !== 'Workflow' && 
-        r.name.toLowerCase().includes(query.toLowerCase())
+        (r.name || "").toLowerCase().includes(q)
     ).slice(0, 5);
 
+    // 3. Build HTML starting with existing matches
     let html = filtered.map(res => `
         <div class="search-item tiny" 
-             style="padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); font-size:10px; color: #eee;"
+             style="padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); color: #eee;"
              onclick="OL.linkResourceToWorkflow('${insertIdParts[0]}', '${res.id}', ${insertIdParts[1]})">
             ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
         </div>
     `).join('');
 
-    // ✨ "Create New" option - ensure it passes context flags
+    // 🚀 4. THE RESTORATION: Always append "Create New" if there is text
+    // This ensures even if filtered.length is 0, this button shows up.
     html += `
-        <div class="search-item tiny" 
-             style="padding:8px; cursor:pointer; background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-weight: bold; font-size:10px;"
+        <div class="search-item tiny create-new-trigger" 
+             style="padding:10px; cursor:pointer; background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-weight: bold; border-top: 1px solid rgba(56, 189, 248, 0.2);"
              onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
             ➕ Create new "${esc(query)}"
         </div>
