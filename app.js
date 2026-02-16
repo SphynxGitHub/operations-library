@@ -11069,21 +11069,26 @@ OL.handleInlineResourceSearch = function(query) {
 OL.createNewResourceAndLink = async function(wfId, name, index) {
     const newId = 'res_' + Math.random().toString(36).substr(2, 9);
     const isVault = location.hash.includes('vault');
+    const client = getActiveClient();
     
+    // 🛡️ Data Source Guard
+    const sourceData = isVault ? state.master : client.projectData;
+    if (!sourceData.resources && !sourceData.localResources) return;
+
     await OL.updateAndSync(() => {
-        const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        const resources = isVault ? sourceData.resources : sourceData.localResources;
         
         // 1. Create the Library Asset
-        source.push({
+        resources.push({
             id: newId,
             name: name,
-            type: 'Zap', // Default type, user can change in inspector
+            type: 'Zap', // Default
             steps: [],
-            description: 'New resource created from workflow'
+            description: 'Created via inline workflow builder'
         });
 
-        // 2. Link it to the Workflow
-        const wf = source.find(r => r.id === wfId);
+        // 2. Link to Workflow
+        const wf = resources.find(r => r.id === wfId);
         if (wf) {
             if (!wf.steps) wf.steps = [];
             wf.steps.splice(index, 0, {
@@ -11095,7 +11100,7 @@ OL.createNewResourceAndLink = async function(wfId, name, index) {
 
     state.openInsertIndex = null;
     OL.refreshMap();
-    OL.loadInspector(newId, wfId); // Focus on the new tool immediately
+    OL.loadInspector(newId, wfId); 
 };
 
 // Toggle custom input visibility
