@@ -2841,11 +2841,15 @@ body.is-visualizer #mainContent {
     padding: 60px;
     min-width: max-content;
     min-height: 100vh;
+    right: 390px;
 }
 
 .asset-mini-card {
     transition: background 0.2s;
     cursor: zoom-in;
+    overflow: visible !important;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .asset-mini-card:hover {
