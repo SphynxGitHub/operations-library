@@ -10910,10 +10910,10 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
                                 ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                             </div>
-                            ${isInScope ? `<button class="btn tiny" 
+                            ${isInScope ? `<button 
                                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')" 
                                 title="View in Scoping" 
-                                style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;">
+                                style="padding: 4px 6px; font-size: 9px; background: #10b981; color: white; border: 1px solid white; border-radius: 4px;">
                             $</button>` : ''}
                         </div>
 
