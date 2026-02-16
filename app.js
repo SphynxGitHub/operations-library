@@ -10882,9 +10882,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
                 </div>
-                <button class="card-delete-btn" 
-                    onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">
-                ×</button>
+                <button class="card-delete-btn" style="opacity:0; position:static;" onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
             </div>
 
             <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">`;
@@ -10949,10 +10947,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 style="position:static; opacity: 0.4; font-size: 14px;"
                                 onmouseover="this.style.opacity='1'" 
                                 onmouseout="this.style.opacity='0.4'"
-                                onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})>
+                                onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">
                                 ×
                             </button>
-                            <button class="card-delete-btn" 
                         </div>
 
                         <div class="resource-description" style="font-size: 9px; color: #94a3b8; margin-bottom: 8px; line-height: 1.3;">
@@ -10999,22 +10996,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     
     return html;
 }
-
-OL.handleWorkflowUnmap = async function(wfId, isVault) {
-    if (!confirm("Remove this workflow from the stage?")) return;
-
-    await OL.updateAndSync(() => {
-        // Use the ID as a string to find the item
-        const resources = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-        const wf = resources.find(r => String(r.id) === String(wfId));
-        if (wf) {
-            wf.stageId = null;
-            wf.mapOrder = null;
-        }
-    });
-
-    renderGlobalVisualizer(isVault);
-};
 
 function renderInlineInsertUI(wf, index, key, isVaultMode) {
     const isInsertingHere = (state.openInsertIndex === key);
@@ -11063,17 +11044,13 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
                 <input type="text" class="mini-search" placeholder="Search or type new..." 
                        oninput="OL.handleInlineResourceSearch(this.value)" 
                        style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:8px; border-radius:4px; font-size:11px; outline:none;">
-                <div id="inline-search-results" style="background:#0f172a; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
+                <div id="inline-search-results" style="background:#0f172a; border:1px solid #334155; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
             </div>`;
         }
     }
 
     // Standard "+" Divider
-    return `<div class="insert-divider resource-gap" 
-    onclick="event.stopPropagation(); state.openInsertIndex = '${key}';
-    state.tempInsertMode = null; OL.refreshMap();">
-        <span>+</span>
-    </div>`;
+    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; state.tempInsertMode = null; OL.refreshMap();"><span>+</span></div>`;
 }
 
 OL.handleInlineResourceSearch = function(query) {
