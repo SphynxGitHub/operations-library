@@ -8047,38 +8047,35 @@ OL.handleCanvasBackgroundClick = function(event) {
 };
 
 OL.focusToolbox = function(mode = 'workflow') {
-    console.log("🚀 Toolbox Focus Triggered. Mode:", mode);
+    console.log("🚀 Sliding Sidebar into Global View. Mode:", mode);
 
-    // 1. Force State: These are the switches that 'unlock' the left sidebar
-    state.viewMode = 'focus'; 
+    // 1. Keep us in Global View, but ensure Zen Mode is OFF
+    // (In your CSS, Zen Mode is likely what hides the sidebar)
     state.ui.zenMode = false;
 
-    // 2. Clear any deep-dive focus to ensure sidebar shows the top-level list
-    state.focusedWorkflowId = null;
-    state.focusedResourceId = null;
-    
-    // 3. Clear the Right Sidebar (Inspector) to ensure layout shifts left
+    // 2. Clear the Right Sidebar (Inspector)
     OL.clearInspector(); 
 
-    // 4. Force a Full UI Repaint
+    // 3. Force a Full UI Repaint so the Sidebar HTML is actually generated
     const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault); 
 
-    // 5. DOM Focus & Visual Feedback
+    // 4. Force the layout to show the sidebar even in Global Mode
+    // We add a temporary class to the body to force the sidebar visible
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout) {
+        layout.classList.remove('no-sidebar'); 
+        layout.classList.remove('zen-mode-active');
+    }
+
+    // 5. Focus the Search
     setTimeout(() => {
         const inputId = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
         const searchInput = document.getElementById(inputId);
-        
         if (searchInput) {
             searchInput.focus();
-            // Pulse effect to show it's open
-            const drawer = searchInput.closest('.pane-drawer');
-            if (drawer) {
-                drawer.style.boxShadow = '0 0 30px var(--accent)';
-                setTimeout(() => drawer.style.boxShadow = '', 1000);
-            }
-        } else {
-            console.error("❌ Sidebar Search Input not found in DOM after render.");
+            searchInput.style.boxShadow = '0 0 15px var(--accent)';
+            setTimeout(() => searchInput.style.boxShadow = '', 800);
         }
     }, 150);
 };
