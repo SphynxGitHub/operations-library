@@ -11031,9 +11031,10 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 }
 
 OL.handleInlineResourceSearch = function(query) {
-    const isVault = location.hash.includes('vault');
-    const client = getActiveClient();
-    const allResources = isVault ? state.master.resources : client.projectData.localResources;
+    const context = OL.getCurrentContext();
+    if (!context.data) return;
+
+    const resources = context.isMaster ? context.data.resources : context.data.localResources;
     const insertIdParts = state.openInsertIndex.split('-'); // [wfId, index]
     
     const resultsContainer = document.getElementById('inline-search-results');
@@ -11042,7 +11043,7 @@ OL.handleInlineResourceSearch = function(query) {
         return;
     }
 
-    const filtered = allResources.filter(r => 
+    const filtered = resources.filter(r => 
         r.type !== 'Workflow' && 
         r.name.toLowerCase().includes(query.toLowerCase())
     ).slice(0, 5);
@@ -11055,7 +11056,7 @@ OL.handleInlineResourceSearch = function(query) {
         </div>
     `).join('');
 
-    // ✨ Add "Create New" option if results are low or empty
+    // ✨ "Create New" option - ensure it passes context flags
     html += `
         <div class="search-item tiny" 
              style="padding:8px; cursor:pointer; background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-weight: bold; font-size:10px;"
@@ -11071,8 +11072,7 @@ OL.linkResourceToWorkflow = async function(wfId, resId, index) {
     const context = OL.getCurrentContext();
     if (!context.data) return;
 
-    const isVault = context.isMaster;
-    const targetResources = isVault ? context.data.resources : context.data.localResources;
+    const targetResources = context.isMaster ? context.data.resources : context.data.localResources;
 
     await OL.updateAndSync(() => {
         const wf = targetResources.find(r => r.id === wfId);
@@ -11094,21 +11094,21 @@ OL.createNewResourceAndLink = async function(wfId, name, index) {
     if (!context.data) return console.error("❌ Context Data not found");
 
     const newId = 'res_' + Math.random().toString(36).substr(2, 9);
-    const isVault = context.isMaster;
     
-    const targetResources = isVault ? context.data.resources : context.data.localResources;
+    // 🛡️ THE FIX: Use context.data instead of 'prj'
+    const targetResources = context.isMaster ? context.data.resources : context.data.localResources;
 
     await OL.updateAndSync(() => {
         // 1. Create the Library Asset
         targetResources.push({
             id: newId,
             name: name,
-            type: 'Zap', 
+            type: 'Zap', // Default
             steps: [],
             description: 'Created via inline workflow builder'
         });
-       
-        // 2. Link to Workflow
+
+        // 2. Link it to the Workflow
         const wf = targetResources.find(r => r.id === wfId);
         if (wf) {
             if (!wf.steps) wf.steps = [];
