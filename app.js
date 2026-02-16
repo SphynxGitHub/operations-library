@@ -10948,7 +10948,7 @@ OL.traceLogic = function(nodeId, direction) {
         (stepObj.outcomes || []).forEach((o, index) => {
             console.log(`🔍 DEBUG Outcome ${index}:`, o); // This will reveal the true key name
         });
-        
+
         (stepObj.outcomes || []).forEach(o => {
             // 🚀 THE FIX: Try every possible way to find the target ID
             let tid = o.targetId || o.toId;
@@ -10972,10 +10972,11 @@ OL.traceLogic = function(nodeId, direction) {
                 
                 if (targetEl) {
                     const targetIcon = targetEl.querySelector('.logic-trace-icon.in') || targetEl;
-                    const displayLabel = (o.condition && o.condition.trim() !== "") 
-                         ? o.condition 
-                         : `(${o.label || 'Always'})`;
-                    connections.push({ from: anchorEl, to: targetIcon, label: displayLabel });
+                    const conditionText = (o.condition && String(o.condition).trim() !== "") 
+                              ? o.condition 
+                              : `(${o.label || 'Always'})`;
+
+                    connections.push({ from: anchorEl, to: targetIcon, label: conditionText });
                 } else {
                     // 🚀 IMPROVED ROCKET (Body-anchored to ensure clickability)
                     const rect = anchorEl.getBoundingClientRect();
@@ -11013,7 +11014,11 @@ OL.traceLogic = function(nodeId, direction) {
                         const fromRow = document.getElementById(`step-row-${s.id}`) || document.getElementById(s.id);
                         if (fromRow) {
                             const fromIcon = fromRow.querySelector('.logic-trace-icon.out') || fromRow;
-                            connections.push({ from: fromIcon, to: anchorEl, label: o.condition });
+                            const incomingLabel = (o.condition && String(o.condition).trim() !== "") 
+                              ? o.condition 
+                              : `(${o.label || 'Jump'})`;
+
+                            connections.push({ from: fromIcon, to: anchorEl, label: incomingLabel });
                         }
                     }
                 });
