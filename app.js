@@ -3989,8 +3989,9 @@ OL.promptCreateResource = function() {
     const name = prompt("Enter Resource Name:");
     if (!name) return;
     
-    // ... your logic to determine type/archetype ...
-    const isVaultMode = location.hash.includes('vault');
+    const context = OL.getCurrentContext();
+    if (!context.data) return;
+
     const timestamp = Date.now();
     const newId = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
@@ -4002,16 +4003,16 @@ OL.promptCreateResource = function() {
         createdDate: new Date().toISOString()
     };
 
-    // 1. Save to state
-    if (isVaultMode) {
-        state.master.resources.push(newRes);
+    if (context.isMaster) {
+        if (!context.data.resources) context.data.resources = [];
+        context.data.resources.push(newRes);
     } else {
-        const client = getActiveClient();
-        if (client) client.projectData.localResources.push(newRes);
+        if (!context.data.localResources) context.data.localResources = [];
+        context.data.localResources.push(newRes);
     }
 
-    // 2. Persist to Firebase
     OL.persist();
+    renderGlobalVisualizer(context.isMaster);
 
     // 🚀 THE FIX: Instead of letting the app redirect, 
     // explicitly tell it to stay in the Visualizer
@@ -11612,15 +11613,21 @@ OL.clearLogicTraces = function() {
     document.querySelectorAll('.trace-label').forEach(lbl => lbl.remove());
 };
 
-OL.handleResourceUnmap = async function(workflowId, resourceId, isVault) {
-    if (!confirm("Remove this resource from this workflow? It will remain in the library.")) return;
+OL.handleResourceUnmap = async function(wfId, resId, isVault) {
+    if (!confirm("Unmap this resource?")) return;
 
-    const workflow = OL.getResourceById(workflowId);
-    if (workflow && workflow.steps) {
-        workflow.steps = workflow.steps.filter(s => String(s.resourceLinkId) !== String(resourceId));
-        await OL.persist();
-        renderGlobalVisualizer(isVault);
-    }
+    // Use your specific variables instead of 'prj'
+    const targetData = isVault ? state.master : (window['local-prj'] || window['draft-prj']);
+    const resources = isVault ? targetData.resources : targetData.localResources;
+
+    await OL.updateAndSync(() => {
+        const wf = resources.find(r => r.id === wfId);
+        if (wf && wf.steps) {
+            wf.steps = wf.steps.filter(s => s.resourceLinkId !== resId);
+        }
+    });
+
+    OL.refreshMap();
 };
 
 OL.promptInsertResourceInWorkflow = async function(workflowId, order, isVault) {
@@ -12428,8 +12435,7 @@ OL.quickCreateWorkflow = function() {
     const name = prompt("Enter Workflow Name:");
     if (!name) return;
 
-    const isVaultMode = location.hash.includes('vault');
-    const client = getActiveClient();
+    const context = OL.getCurrentContext();
     const timestamp = Date.now();
     const newId = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
@@ -12443,16 +12449,12 @@ OL.quickCreateWorkflow = function() {
         createdDate: new Date().toISOString()
     };
 
-    if (isVaultMode) {
-        if (!state.master.resources) state.master.resources = [];
-        state.master.resources.push(newWorkflow);
-    } else if (client) {
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        client.projectData.localResources.push(newWorkflow);
-    }
+    const targetList = context.isMaster ? context.data.resources : context.data.localResources;
+    targetList.push(newWorkflow);
 
     OL.persist();
-    renderGlobalVisualizer(isVaultMode);
+    renderGlobalVisualizer(context.isMaster);
+
     console.log(`✨ Created New Workflow: ${name}`);
 };
 
@@ -12460,28 +12462,20 @@ OL.cloneResourceWorkflow = function(resId) {
     const original = OL.getResourceById(resId);
     if (!original) return;
 
-    const isVaultMode = location.hash.includes('vault');
-    const client = getActiveClient();
-    
-    // 1. Deep Copy the data
+    const context = OL.getCurrentContext();
     const clone = JSON.parse(JSON.stringify(original));
     
     // 2. Generate New Identity
     const timestamp = Date.now();
-    clone.id = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    clone.id = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
     clone.name = `${original.name} (Copy)`;
     clone.stageId = null; // 🚀 Always force back into the toolbox/library
     clone.mapOrder = null;
     clone.createdDate = new Date().toISOString();
 
     // 3. Save to correct location
-    if (isVaultMode) {
-        if (!state.master.resources) state.master.resources = [];
-        state.master.resources.push(clone);
-    } else if (client) {
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        client.projectData.localResources.push(clone);
-    }
+    const targetList = context.isMaster ? context.data.resources : context.data.localResources;
+    targetList.push(clone);
 
     OL.persist();
     renderGlobalVisualizer(isVaultMode);
