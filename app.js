@@ -11067,29 +11067,49 @@ OL.handleInlineResourceSearch = function(query) {
     resultsContainer.innerHTML = html;
 };
 
-OL.createNewResourceAndLink = async function(wfId, name, index) {
-    const newId = 'res_' + Math.random().toString(36).substr(2, 9);
-    const isVault = location.hash.includes('vault');
-    const client = getActiveClient();
-    
-    // 🛡️ Data Source Guard
-    const sourceData = isVault ? state.master : client.projectData;
-    if (!sourceData.resources && !sourceData.localResources) return;
+OL.linkResourceToWorkflow = async function(wfId, resId, index) {
+    const context = OL.getCurrentContext();
+    if (!context.data) return;
+
+    const isVault = context.isMaster;
+    const targetResources = isVault ? context.data.resources : context.data.localResources;
 
     await OL.updateAndSync(() => {
-        const resources = isVault ? sourceData.resources : sourceData.localResources;
-        
+        const wf = targetResources.find(r => r.id === wfId);
+        if (wf) {
+            if (!wf.steps) wf.steps = [];
+            wf.steps.splice(index, 0, {
+                id: 'link_' + Math.random().toString(36).substr(2, 9),
+                resourceLinkId: resId
+            });
+        }
+    });
+
+    state.openInsertIndex = null;
+    OL.refreshMap();
+};
+
+OL.createNewResourceAndLink = async function(wfId, name, index) {
+    const context = OL.getCurrentContext();
+    if (!context.data) return console.error("❌ Context Data not found");
+
+    const newId = 'res_' + Math.random().toString(36).substr(2, 9);
+    const isVault = context.isMaster;
+    
+    const targetResources = isVault ? context.data.resources : context.data.localResources;
+
+    await OL.updateAndSync(() => {
         // 1. Create the Library Asset
-        resources.push({
+        targetResources.push({
             id: newId,
             name: name,
-            type: 'Zap', // Default
+            type: 'Zap', 
             steps: [],
             description: 'Created via inline workflow builder'
         });
-
+       
         // 2. Link to Workflow
-        const wf = resources.find(r => r.id === wfId);
+        const wf = targetResources.find(r => r.id === wfId);
         if (wf) {
             if (!wf.steps) wf.steps = [];
             wf.steps.splice(index, 0, {
