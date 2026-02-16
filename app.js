@@ -9255,7 +9255,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     // 🚀 THE SIDEBAR TOGGLE: Completely omit the HTML if in Global Mode
     const sidebarHtml = /*isGlobalMode ? '' : */`<aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>`;
-    const layoutClass = isGlobalMode ? 'global-macro-layout no-sidebar' : 'vertical-lifecycle-mode';
+    const layoutClass = /*isGlobalMode ? 'global-macro-layout no-sidebar' : */'vertical-lifecycle-mode';
 
     if (state.isFiltering) {
         state.isFiltering = false;
