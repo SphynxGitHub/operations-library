@@ -10790,12 +10790,34 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     
-    const workflowSteps = (wf.steps || []).map(step => {
-        if (!step.resourceLinkId) {
-            return { ...step, isLoose: true }; 
-        }
+    // 1. Map raw steps to enriched data
+    const enrichedSteps = (wf.steps || []).map((step, originalIndex) => {
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
-        return { ...step, asset: linkedAsset, isLoose: false };
+        return { 
+            ...step, 
+            asset: linkedAsset, 
+            isLoose: !step.resourceLinkId,
+            originalIndex 
+        };
+    });
+
+    // 2. Group consecutive steps by Resource ID
+    const groupedItems = [];
+    enrichedSteps.forEach((step) => {
+        const lastGroup = groupedItems[groupedItems.length - 1];
+        
+        // If it's the same resource as the previous step (and not a loose step), group them
+        if (lastGroup && !step.isLoose && lastGroup.resourceLinkId === step.resourceLinkId) {
+            lastGroup.steps.push(step);
+        } else {
+            groupedItems.push({
+                resourceLinkId: step.resourceLinkId,
+                isLoose: step.isLoose,
+                steps: [step],
+                // The index where the NEXT "+" divider should insert after this group
+                insertAfterIndex: step.originalIndex + 1 
+            });
+        }
     });
 
     const hasIncoming = OL.checkIncomingLogic(wf.id);
@@ -10807,32 +10829,27 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
              onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
              style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
 
-             ${hasIncoming ? `
-                <div class="logic-trace-trigger incoming" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>
-            ` : ''}
+             ${hasIncoming ? `<div class="logic-trace-trigger incoming" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>` : ''}
             
              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
                 </div>
-                <button class="card-delete-btn" style="opacity:0; position:static;" 
-                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
+                <button class="card-delete-btn" style="opacity:0; position:static;" onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
             </div>
 
-            <div class="tier-3-resource-stack" 
-                 style="display: flex; flex-direction: column; gap: 15px;"
-                 ondragover="OL.handleCanvasDragOver(event)" 
-                 ondrop="OL.handleUniversalDrop(event, '${wf.id}', 'resource-stack')">`;
+            <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">`;
 
-    // 🚀 1. FIRST INSERT POINT (Index 0)
+    // 🚀 1. STARTING INSERT POINT
     html += renderInlineInsertUI(wf, 0, `${wf.id}-0`, isVaultMode);
 
-    // 🚀 2. THE MAIN LOOP
-    html += workflowSteps.map((step, rIdx) => {
-        let itemHtml = '';
+    // 🚀 2. RENDER GROUPS
+    html += groupedItems.map((group) => {
+        let groupHtml = '';
         
-        if (step.isLoose) {
-            itemHtml = `
+        if (group.isLoose) {
+            const step = group.steps[0];
+            groupHtml = `
                 <div class="wf-resource-wrapper loose-step-wrapper" id="step-row-${step.id}">
                     <div class="atomic-step-row loose-step-card" 
                          onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${wf.id}')"
@@ -10840,18 +10857,16 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         <span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'incoming')">🔀</span>
                         <span style="font-size: 11px; color: #38bdf8; font-weight: bold; flex: 1;">📝 ${esc(step.name || "Draft Step")}</span>
                         <span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</span>
-                        <button class="card-delete-btn" style="position:static; font-size: 12px; margin-left: 5px;" 
-                                onclick="event.stopPropagation(); OL.removeLooseStep('${wf.id}', '${step.id}')">×</button>
                     </div>
                 </div>`;
         } else {
-            const asset = step.asset;
-            if (!asset) return `<div class="tiny muted">⚠️ Missing: ${esc(step.name)}</div>`;
+            const asset = group.steps[0].asset;
+            if (!asset) return `<div class="tiny muted">⚠️ Missing Resource</div>`;
             
             const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
             const isInScope = !!OL.isResourceInScope(asset.id);
 
-            itemHtml = `
+            groupHtml = `
                 <div class="wf-resource-wrapper" id="l3-node-${asset.id}">
                     <div class="asset-mini-card is-navigable ${isInspectingRes ? 'is-inspecting' : ''}" 
                          onclick="event.stopPropagation(); OL.loadInspector('${asset.id}', '${wf.id}')"
@@ -10860,20 +10875,23 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                          </div>
                          <div class="atomic-step-container">
-                             ${(asset.steps || []).map(atomic => `
-                                <div class="tiny atomic-step-row" onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
-                                    <span style="flex: 1;">${esc(atomic.name)}</span>
+                             ${group.steps.map(s => `
+                                <div class="tiny atomic-step-row" 
+                                     style="display:flex; align-items:center; gap:8px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);"
+                                     onclick="event.stopPropagation(); OL.loadInspector('${s.id}', '${wf.id}')">
+                                    <span class="logic-trace-icon in" style="font-size:8px;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'incoming')">🔀</span>
+                                    <span style="flex: 1; font-size:10px;">${esc(s.name)}</span>
+                                    <span class="logic-trace-icon out" style="font-size:8px;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'outgoing')">🔀</span>
                                 </div>`).join('')}
                          </div>
                     </div>
                 </div>`;
         }
 
-        // 🚀 3. SUBSEQUENT INSERT POINTS (Index 1+)
-        const nextIdx = rIdx + 1;
-        itemHtml += renderInlineInsertUI(wf, nextIdx, `${wf.id}-${nextIdx}`, isVaultMode);
+        // 🚀 3. SUBSEQUENT INSERT POINT
+        groupHtml += renderInlineInsertUI(wf, group.insertAfterIndex, `${wf.id}-${group.insertAfterIndex}`, isVaultMode);
 
-        return itemHtml;
+        return groupHtml;
     }).join('');
 
     html += `</div>
