@@ -10931,15 +10931,23 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 }
 
 OL.refreshMap = function() {
-    if (typeof OL.render === 'function') {
-        OL.render();
-    } else if (typeof renderGlobalCanvas === 'function') {
+    // 1. Check if we're in Global Mode (Canvas)
+    const canvas = document.getElementById('fs-canvas');
+    if (canvas && typeof renderGlobalCanvas === 'function') {
         const isVault = location.hash.includes('vault');
-        const canvas = document.getElementById('fs-canvas');
-        if (canvas) canvas.innerHTML = renderGlobalCanvas(isVault);
-    } else {
-        console.warn("⚠️ No refresh function found. Please check your render engine name.");
+        canvas.innerHTML = renderGlobalCanvas(state.master.workflows, state.master.resources, isVault);
+        
+        // Redraw lines if your app uses them
+        if (typeof OL.drawLevel2LogicLines === 'function' && state.focusedWorkflowId) {
+            setTimeout(() => OL.drawLevel2LogicLines(state.focusedWorkflowId), 50);
+        }
+        return;
     }
+
+    // 2. Fallback to a full page reload if we can't find the render function
+    // (Last resort to prevent the error from breaking the UX)
+    console.warn("OL.refreshMap: Could not find renderGlobalCanvas, falling back to soft reload.");
+    if (typeof OL.loadProject === 'function') OL.loadProject();
 };
 
 /*function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
