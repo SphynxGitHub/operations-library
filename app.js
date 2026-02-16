@@ -5825,8 +5825,12 @@ OL.getOutcomeLabel = function(action, res) {
 };
 
 function renderStepOutcomes(resId, step) {
+    // 🛡️ SELF-HEAL: If resId is invalid, try to find the correct ID
+    const activeResId = (resId && resId !== 'undefined' && resId !== 'null') 
+                        ? resId 
+                        : (state.activeInspectorParentId || state.activeInspectorResId);
+
     const outcomes = step.outcomes || [];
-    const res = OL.getResourceById(resId);
     
     if (outcomes.length === 0) {
         return '<div class="tiny muted" style="padding: 10px; border: 1px dashed var(--line); border-radius: 4px; text-align: center;">No branching logic defined.</div>';
@@ -5840,23 +5844,23 @@ function renderStepOutcomes(resId, step) {
                 <span class="tiny bold accent" style="font-size: 9px; opacity: 0.7; min-width: 15px; text-align: left;">IF</span>
                 <input type="text" class="tiny-input" 
                       value="${esc(oc.condition || '')}" 
-                      placeholder="Enter condition (e.g. Approved)..."
+                      placeholder="Enter condition..."
                       style="background: transparent; border: none; font-size: 11px; width: 100%; outline: none; color: white; text-align: left; padding: 0;"
-                      onblur="OL.updateOutcomeDetail('${resId}', '${step.id}', ${idx}, 'condition', this.value)">
+                      onblur="OL.updateOutcomeDetail('${activeResId}', '${step.id}', ${idx}, 'condition', this.value)">
             </div>
 
             <div style="flex: 1; display: flex; align-items: center; justify-content: flex-start; gap: 8px; border-left: 1px solid var(--line); padding-left: 10px;">
                 <span class="tiny muted" style="font-size: 9px; min-width: 30px; text-align: left;">THEN</span>
                 <div class="is-clickable outcome-mapping-target" 
                     style="font-size: 11px; color: var(--text-main); flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-                    onclick="OL.openOutcomePicker(event, '${resId}', '${step.id}', ${idx})"
+                    onclick="OL.openOutcomePicker(event, '${activeResId}', '${step.id}', ${idx})"
                     title="Click to remap destination">
                     ${esc(oc.label || 'Select Destination...')}
                 </div>
             </div>
 
             <button class="card-delete-btn" style="position: static; font-size: 14px;" 
-                    onclick="OL.removeOutcome('${resId}', '${step.id}', ${idx})">×</button>
+                    onclick="OL.removeOutcome('${activeResId}', '${step.id}', ${idx})">×</button>
         </div>
     `).join('');
 }
@@ -5926,23 +5930,42 @@ OL.updateOutcomeValue = function(resId, stepId, idx, field, value) {
 };
 
 OL.updateOutcomeDetail = function(resId, stepId, idx, field, value) {
-    const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
+    // 1. Attempt to find the resource through various state anchors
+    let res = OL.getResourceById(resId) || 
+              OL.getResourceById(state.activeInspectorParentId) ||
+              OL.getResourceById(state.activeInspectorResId);
+
+    // 2. If still not found, do a deep search across all resources
+    if (!res) {
+        const client = getActiveClient();
+        const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+        res = all.find(r => r.steps && r.steps.some(s => String(s.id) === String(stepId)));
+    }
+
+    // 3. Safety Check: If res is still undefined, stop here
+    if (!res || !res.steps) {
+        console.error("❌ Save Error: Resource or Steps array undefined", { resId, stepId });
+        return;
+    }
+
+    // 4. Find the specific step
+    const step = res.steps.find(s => String(s.id) === String(stepId));
     
     if (step && step.outcomes && step.outcomes[idx]) {
-        // 🚀 FORCE UPDATE: Update the actual data object
+        // 5. Apply the update
         step.outcomes[idx][field] = value;
-        
-        console.log(`✅ Data Updated: Step ${stepId} [${idx}].${field} = "${value}"`);
+        console.log(`💾 Logic Saved: Step ${stepId} Outcome[${idx}].${field} = "${value}"`);
         
         OL.persist();
         
-        // If we are in the inspector, we don't necessarily need to re-render the 
-        // whole map, but we DO need to make sure the tracer sees this new data.
-        const mainList = document.getElementById('sop-step-list');
-        if (mainList) mainList.innerHTML = renderSopStepList(res);
+        // 6. Surgical UI Update (Optional)
+        // Only refresh the outcomes list if the element exists
+        const outcomeList = document.getElementById('step-outcomes-list');
+        if (outcomeList && typeof renderStepOutcomes === 'function') {
+            // outcomeList.innerHTML = renderStepOutcomes(res.id, step);
+        }
     } else {
-        console.error("❌ Save Failed: Could not find step or outcome index", {stepId, idx});
+        console.warn("⚠️ Save Warning: Step or Outcome index not found", { stepId, idx });
     }
 };
 
