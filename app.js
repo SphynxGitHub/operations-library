@@ -10996,38 +10996,6 @@ OL.setInsertMode = function(mode) {
     OL.refreshMap();
 };
 
-function renderInlineInsertUI(wf, index, key, isVaultMode) {
-    const isInsertingHere = (state.openInsertIndex === key);
-
-    if (isInsertingHere) {
-        return `
-        <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" 
-             style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0;">
-            <div class="insert-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <span class="tiny accent bold">INSERT LOGIC</span>
-                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer; font-size: 16px;">×</button>
-            </div>
-            
-            ${!state.tempInsertMode ? `
-                <div class="insert-options" style="display:flex; gap:8px;">
-                    <div class="opt-btn" onclick="OL.setInsertMode('loose')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
-                        <span style="display:block; font-size:16px;">📝</span><b style="font-size:10px;">Loose Step</b>
-                    </div>
-                    <div class="opt-btn" onclick="OL.setInsertMode('resource')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
-                        <span style="display:block; font-size:16px;">🔗</span><b style="font-size:10px;">Resource</b>
-                    </div>
-                </div>
-            ` : state.tempInsertMode === 'loose' ? renderInlineLooseForm(wf.id, index) : `
-                <div class="inline-form-box">
-                    <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.handleInlineResourceSearch(this.value)" style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
-                </div>
-            `}
-        </div>`;
-    }
-
-    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
-}
-
 function renderInlineResourceForm(wfId, index) {
     return `
         <div class="inline-form-box">
