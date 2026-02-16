@@ -11070,7 +11070,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 
     // Standard "+" Divider
     return `<div class="insert-divider resource-gap" 
-    onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; state.tempInsertMode = null; OL.refreshMap();">
+    onclick="event.stopPropagation(); state.openInsertIndex = '${key}';
     state.tempInsertMode = null; OL.refreshMap();">
         <span>+</span>
     </div>`;
