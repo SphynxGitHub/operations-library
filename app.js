@@ -10945,6 +10945,10 @@ OL.traceLogic = function(nodeId, direction) {
     const connections = [];
 
     if (direction === 'outgoing') {
+        (stepObj.outcomes || []).forEach((o, index) => {
+            console.log(`🔍 DEBUG Outcome ${index}:`, o); // This will reveal the true key name
+        });
+        
         (stepObj.outcomes || []).forEach(o => {
             // 🚀 THE FIX: Try every possible way to find the target ID
             let tid = o.targetId || o.toId;
