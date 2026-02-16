@@ -11103,7 +11103,30 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
 
     // 🚀 FIX: Get the SVG layer reference
     let svg = document.getElementById('logic-trace-layer');
-    if (!svg) return; // Or create it here if your architecture requires it
+    if (!svg) {
+        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.id = 'logic-trace-layer';
+        Object.assign(svg.style, {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: mapContainer.scrollWidth + 'px',
+            height: mapContainer.scrollHeight + 'px',
+            pointerEvents: 'none',
+            overflow: 'visible',
+            zIndex: '5'
+        });
+        
+        // Add the arrowhead definition
+        svg.innerHTML = `
+            <defs>
+                <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" 
+                        markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
+                </marker>
+            </defs>`;
+        mapContainer.appendChild(svg);
+    }
 
     const mapRect = mapContainer.getBoundingClientRect();
     const fRect = fromEl.getBoundingClientRect();
