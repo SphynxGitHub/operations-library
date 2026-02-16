@@ -7995,7 +7995,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                                     ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
                                     
                                     <div class="insert-divider vertical" 
-                                         onclick="event.stopPropagation(); OL.focusToolbox('workflow')">
+                                         onclick="event.stopPropagation(); OL.focusToolbox()">
                                         <span>+</span>
                                     </div>
                                 </div>
@@ -8003,7 +8003,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
 
                             ${workflowsInStage.length === 0 ? `
                                 <div class="insert-divider initial" style="position: relative; opacity: 1;" 
-                                     onclick="event.stopPropagation(); OL.focusToolbox('workflow')">
+                                     onclick="event.stopPropagation(); OL.focusToolbox()">
                                     <span>+ Add Workflow</span>
                                 </div>
                             ` : ''}
@@ -8119,44 +8119,6 @@ OL.addLifecycleStageAt = function(index, isVault) {
     source.stages.push(newStage);
     
     OL.persist();
-    renderGlobalVisualizer(isVault);
-};
-
-// ➕ Prompt for Workflow/Resource Insertion
-OL.promptInsertWorkflow = async function(stageId, order, isVault) {
-    const name = prompt("Enter Workflow Name:", "New Workflow");
-    if (!name) return;
-
-    const client = getActiveClient();
-    const timestamp = Date.now();
-    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
-
-    const newWorkflow = {
-        id: newId,
-        name: name,
-        type: "Workflow",
-        archetype: "Multi-Level",
-        steps: [],
-        stageId: stageId, // 🚀 Assign to stage immediately
-        mapOrder: order,  // 🚀 Insert at specific position
-        createdDate: new Date().toISOString()
-    };
-
-    // 1. Save to state
-    if (isVault) {
-        if (!state.master.resources) state.master.resources = [];
-        state.master.resources.push(newWorkflow);
-    } else if (client) {
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        client.projectData.localResources.push(newWorkflow);
-    }
-
-    // 2. Shift others down (re-indexing)
-    const source = isVault ? state.master.resources : client.projectData.localResources;
-    source.filter(r => String(r.stageId) === String(stageId) && r.id !== newId)
-          .forEach(r => { if (r.mapOrder >= order) r.mapOrder++; });
-
-    await OL.persist();
     renderGlobalVisualizer(isVault);
 };
 
@@ -8428,6 +8390,8 @@ OL.handleInlineResourceSearch = function(query) {
 
     const insertIdParts = (state.openInsertIndex || "").split('-'); 
     if (insertIdParts.length < 2) return;
+    
+    console.log (insertIdParts, "Insert ID Parts");
 
     // Filter library
     const filtered = resources.filter(r => 
@@ -8554,53 +8518,11 @@ OL.refreshMap = OL.render = function() {
     }
 };
 
-OL.openSmartInsertMenu = function(e, wfId, index, isVaultMode) {
-    const rect = e.target.getBoundingClientRect();
-    
-    const menuHtml = `
-        <div class="smart-insert-overlay fade-in" style="top: ${rect.top}px; left: ${rect.right + 10}px;">
-            <div class="menu-item" onclick="OL.startLooseStepFlow('${wfId}', ${index})">
-                <span class="icon">📝</span>
-                <div class="text"><strong>Loose Step</strong><br><small>Draft logic now, assign later</small></div>
-            </div>
-            <div class="menu-item" onclick="OL.startResourceLinkFlow('${wfId}', ${index}, ${isVaultMode})">
-                <span class="icon">🔗</span>
-                <div class="text"><strong>Resource</strong><br><small>Link to a tool or asset</small></div>
-            </div>
-        </div>
-    `;
-    
-    OL.showOverlay(menuHtml);
-};
-
-OL.toggleInlineInsert = function(wfId, index) {
-    const key = `${wfId}-${index}`;
-    if (state.openInsertIndex === key) {
-        state.openInsertIndex = null;
-    } else {
-        state.openInsertIndex = key;
-        state.tempInsertMode = null; // 🚀 FORCE THE CHOICE MENU TO SHOW FIRST
-    }
-    OL.refreshMap(); 
-};
-
 OL.setInsertMode = function(mode) {
     state.tempInsertMode = mode;
     state.tempType = 'Action'; // Default
     OL.refreshMap();
 };
-
-function renderInlineResourceForm(wfId, index) {
-    return `
-        <div class="inline-form-box">
-            <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.filterInlineResource(this.value)">
-            <div class="type-selection">
-                <span onclick="OL.createAndLink('${wfId}', ${index}, 'Software')">💻 New App</span>
-                <span onclick="OL.createAndLink('${wfId}', ${index}, 'Human')">👤 New Human</span>
-            </div>
-        </div>
-    `;
-}
 
 function renderInlineLooseForm(wfId, index) {
     // 📚 Reference your existing library
@@ -8641,79 +8563,6 @@ function renderInlineLooseForm(wfId, index) {
         </div>
     `;
 }
-
-OL.startLooseStepFlow = function(wfId, index) {
-    const flowHtml = `
-        <div class="logic-builder-modal">
-            <h3>New Loose Step</h3>
-            <div class="toggle-group">
-                <button onclick="state.tempStepType='Trigger'">⚡ Trigger</button>
-                <button onclick="state.tempStepType='Action'">🎬 Action</button>
-            </div>
-            <input type="text" id="verb-input" placeholder="Verb (e.g. Send)">
-            <input type="text" id="object-input" placeholder="Object (e.g. Email)">
-            <button class="btn-primary" onclick="OL.finalizeLooseStep('${wfId}', ${index})">Add to Flow</button>
-        </div>
-    `;
-    OL.showOverlay(flowHtml);
-};
-
-function renderLooseStepRow(step, wfId) {
-    return `
-        <div class="drop-zone" ondrop="OL.handleMoveStep(event, '${wfId}', ${step.position})" ondragover="OL.showDropZone(this)"></div>
-        <div class="atomic-step-row loose-step" 
-             draggable="true" 
-             ondragstart="OL.handleStepDragStart(event, '${step.id}')"
-             onclick="OL.loadInspector('${step.id}')">
-            <div class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'incoming')">🔀</div>
-            <span class="step-name">${esc(step.name)}</span>
-            <div class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</div>
-        </div>
-    `;
-}
-
-OL.handleMoveStep = function(e, wfId, targetIndex) {
-    const stepId = e.dataTransfer.getData("stepId");
-    const wf = OL.getWorkflowById(wfId);
-    
-    // Find the step and update its position and resourceId
-    const stepIdx = wf.steps.findIndex(s => String(s.id) === String(stepId));
-    const [step] = wf.steps.splice(stepIdx, 1);
-    
-    // If dropped into a loose zone, remove the resource assignment
-    step.resourceId = null; 
-    
-    // Re-insert at the new sequence position
-    wf.steps.splice(targetIndex, 0, step);
-    
-    OL.persist();
-    OL.refreshMap();
-};
-
-OL.startResourceLinkFlow = function(wfId, index, isVaultMode) {
-    const flowHtml = `
-        <div class="logic-builder-modal">
-            <button onclick="OL.openResourcePicker('${wfId}', ${index})">Existing Resource</button>
-            <hr>
-            <label>Create New:</label>
-            <div class="type-grid">
-                <div onclick="OL.createNewResourceAndLink('${wfId}', ${index}, 'Software')">💻 Software</div>
-                <div onclick="OL.createNewResourceAndLink('${wfId}', ${index}, 'Human')">👤 Human</div>
-                <div onclick="OL.createNewResourceAndLink('${wfId}', ${index}, 'Document')">📄 Document</div>
-            </div>
-        </div>
-    `;
-    OL.showOverlay(flowHtml);
-};
-
-OL.assignResourceToStep = function(stepId, resourceId) {
-    const step = OL.getStepById(stepId);
-    if (step) {
-        step.resourceLinkId = resourceId;
-        OL.persist();
-        OL.refreshMap();
-    }
-};
 
 OL.checkIncomingLogic = function(stepId) {
     const client = getActiveClient();
