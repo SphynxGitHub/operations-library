@@ -9866,13 +9866,15 @@ OL.promptAddAtomic = function(category) {
     }
 };
 
-OL.quickCreateWorkflow = function() {
+OL.quickCreateWorkflow = async function() {
     const name = prompt("Enter Workflow Name:");
     if (!name) return;
 
+    // 🚀 THE FIX: Determine isVaultMode inside the function
+    const isVault = window.location.hash.includes('vault');
     const context = OL.getCurrentContext();
     const timestamp = Date.now();
-    const newId = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
     const newWorkflow = {
         id: newId,
@@ -9880,16 +9882,18 @@ OL.quickCreateWorkflow = function() {
         type: "Workflow",
         archetype: "Multi-Level",
         steps: [],
-        stageId: null, // Starts in the library/sidebar
+        stageId: null, 
         createdDate: new Date().toISOString()
     };
 
-    const targetList = context.isMaster ? context.data.resources : context.data.localResources;
+    const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     targetList.push(newWorkflow);
 
-    OL.persist();
-    renderGlobalVisualizer(context.isMaster);
-
+    await OL.persist();
+    
+    // 🔄 Switch to Focus Mode and open the Inspector for the new item
+    // This will open the right sidebar for naming/setup
+    OL.loadInspector(newId); 
     console.log(`✨ Created New Workflow: ${name}`);
 };
 
