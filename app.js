@@ -11099,34 +11099,34 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
     if (!fromEl || !toEl) return;
 
     const mapContainer = document.querySelector('.global-macro-map');
+    if (!mapContainer) return;
+
+    // 🚀 FIX: Get the SVG layer reference
+    let svg = document.getElementById('logic-trace-layer');
+    if (!svg) return; // Or create it here if your architecture requires it
+
     const mapRect = mapContainer.getBoundingClientRect();
     const fRect = fromEl.getBoundingClientRect();
     const tRect = toEl.getBoundingClientRect();
 
-    // 1. Calculate base coordinates
     let x1 = (fRect.right) - mapRect.left;
     let y1 = (fRect.top + fRect.height / 2) - mapRect.top;
     let x2 = (tRect.left) - mapRect.left; 
     let y2 = (tRect.top + tRect.height / 2) - mapRect.top;
 
-    // 🚀 THE LOGIC: Is it the same column?
-    // We allow a 50px buffer to account for slight layout variances
     const isSameColumn = Math.abs(fRect.left - tRect.left) < 50;
+    const curveWidth = 60; 
 
     let d;
     if (isSameColumn) {
-        // Force both points to the RIGHT side
-        x2 = (tRect.right) - mapRect.left + 2; // End on right side (+ buffer for arrowhead)
+        // Pointing to right side of target
+        x2 = (tRect.right) - mapRect.left + 2; 
         
-        // Create a "C" shaped bracket curve
-        const curveWidth = 60; // How far out the bracket swings
+        // Use a "C" bracket curve
         d = `M ${x1} ${y1} 
              C ${x1 + curveWidth} ${y1}, 
                ${x2 + curveWidth} ${y2}, 
                ${x2} ${y2}`;
-               
-        // Update arrowhead marker to face left if ending on the right
-        // Note: 'auto-start-reverse' in SVG markers handles this best
     } else {
         // Standard "S" Curve (Left to Right)
         x2 = x2 - 2; 
@@ -11139,7 +11139,6 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
                ${x2} ${y2}`;
     }
 
-    // 2. Create the Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
     path.setAttribute("stroke", "#38bdf8");
@@ -11154,13 +11153,30 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
     if (label) {
         const lbl = document.createElement('div');
         lbl.className = 'trace-label fade-in';
-        // 🏷️ Tag the label too so it disappears on toggle!
         lbl.setAttribute("data-trace-group", `trace-${nodeId}-${direction}`);
         lbl.innerText = label;
         
-        const midX = isSameColumn ? (x1 + 60) : (x1 + (x2 - x1) / 2); // Shift label to the apex of the bracket
+        // 🚀 Improved Label Placement: Apex of the curve for loops
+        const midX = isSameColumn ? (x1 + curveWidth) : (x1 + (x2 - x1) / 2);
         const midY = y1 + (y2 - y1) / 2;
-        lbl.style.cssText = `position:absolute; left:${midX}px; top:${midY}px; transform:translate(-50%,-50%); background:#0f172a; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:9px; border:1px solid #38bdf8; font-weight:bold; white-space:nowrap; z-index:10; pointer-events:none;`;
+        
+        lbl.style.cssText = `
+            position:absolute; 
+            left:${midX}px; 
+            top:${midY}px; 
+            transform:translate(-50%,-50%); 
+            background:#0f172a; 
+            color:#38bdf8; 
+            padding:2px 6px; 
+            border-radius:4px; 
+            font-size:9px; 
+            border:1px solid #38bdf8; 
+            font-weight:bold; 
+            white-space:nowrap; 
+            z-index:10; 
+            pointer-events:none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        `;
         mapContainer.appendChild(lbl);
     }
 };
