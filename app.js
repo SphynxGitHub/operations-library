@@ -11099,54 +11099,47 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
     if (!fromEl || !toEl) return;
 
     const mapContainer = document.querySelector('.global-macro-map');
-    if (!mapContainer) return;
-
-    let svg = document.getElementById('logic-trace-layer');
-    if (!svg) {
-        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.id = 'logic-trace-layer';
-        Object.assign(svg.style, {
-            position: 'absolute',
-            top: '0',
-            left: '0',
-            width: mapContainer.scrollWidth + 'px',
-            height: mapContainer.scrollHeight + 'px',
-            pointerEvents: 'none',
-            overflow: 'visible',
-            zIndex: '5'
-        });
-        
-        svg.innerHTML = `
-            <defs>
-                <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" 
-                        markerWidth="6" markerHeight="6" orient="auto">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
-                </marker>
-            </defs>`;
-        mapContainer.appendChild(svg);
-    }
-
     const mapRect = mapContainer.getBoundingClientRect();
     const fRect = fromEl.getBoundingClientRect();
     const tRect = toEl.getBoundingClientRect();
 
-    // 🔘 START POINT: Right side of the source icon
-    const x1 = (fRect.right) - mapRect.left;
-    const y1 = (fRect.top + fRect.height / 2) - mapRect.top;
+    // 1. Calculate base coordinates
+    let x1 = (fRect.right) - mapRect.left;
+    let y1 = (fRect.top + fRect.height / 2) - mapRect.top;
+    let x2 = (tRect.left) - mapRect.left; 
+    let y2 = (tRect.top + tRect.height / 2) - mapRect.top;
 
-    // 🎯 END POINT: Absolute left edge of the target icon
-    const x2 = (tRect.left) - mapRect.left - 2; 
-    const y2 = (tRect.top + tRect.height / 2) - mapRect.top;
+    // 🚀 THE LOGIC: Is it the same column?
+    // We allow a 50px buffer to account for slight layout variances
+    const isSameColumn = Math.abs(fRect.left - tRect.left) < 50;
 
-    // ➰ CURVE MATH
-    const deltaX = Math.abs(x2 - x1);
-    const controlPointOffset = Math.min(deltaX / 2, 100); 
+    let d;
+    if (isSameColumn) {
+        // Force both points to the RIGHT side
+        x2 = (tRect.right) - mapRect.left + 2; // End on right side (+ buffer for arrowhead)
+        
+        // Create a "C" shaped bracket curve
+        const curveWidth = 60; // How far out the bracket swings
+        d = `M ${x1} ${y1} 
+             C ${x1 + curveWidth} ${y1}, 
+               ${x2 + curveWidth} ${y2}, 
+               ${x2} ${y2}`;
+               
+        // Update arrowhead marker to face left if ending on the right
+        // Note: 'auto-start-reverse' in SVG markers handles this best
+    } else {
+        // Standard "S" Curve (Left to Right)
+        x2 = x2 - 2; 
+        const deltaX = Math.abs(x2 - x1);
+        const controlPointOffset = Math.min(deltaX / 2, 100); 
 
-    const d = `M ${x1} ${y1} 
-               C ${x1 + controlPointOffset} ${y1}, 
-                 ${x2 - controlPointOffset} ${y2}, 
-                 ${x2} ${y2}`;
+        d = `M ${x1} ${y1} 
+             C ${x1 + controlPointOffset} ${y1}, 
+               ${x2 - controlPointOffset} ${y2}, 
+               ${x2} ${y2}`;
+    }
 
+    // 2. Create the Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
     path.setAttribute("stroke", "#38bdf8");
@@ -11154,10 +11147,8 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
     path.setAttribute("fill", "none");
     path.setAttribute("class", "trace-path"); 
     path.setAttribute("marker-end", "url(#arrowhead)");
-    
-    // 🏷️ Tag this path for the TOGGLE feature
     path.setAttribute("data-trace-group", `trace-${nodeId}-${direction}`);
-    
+
     svg.appendChild(path);
 
     if (label) {
@@ -11167,9 +11158,9 @@ OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", n
         lbl.setAttribute("data-trace-group", `trace-${nodeId}-${direction}`);
         lbl.innerText = label;
         
-        const midX = x1 + (x2 - x1) / 2;
+        const midX = isSameColumn ? (x1 + 60) : (x1 + (x2 - x1) / 2); // Shift label to the apex of the bracket
         const midY = y1 + (y2 - y1) / 2;
-        lbl.style.cssText = `position:absolute; left:${midX}px; top:${midY}px; transform:translate(-50%,-120%); background:#0f172a; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:9px; border:1px solid #38bdf8; font-weight:bold; white-space:nowrap; z-index:10; pointer-events:none;`;
+        lbl.style.cssText = `position:absolute; left:${midX}px; top:${midY}px; transform:translate(-50%,-50%); background:#0f172a; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:9px; border:1px solid #38bdf8; font-weight:bold; white-space:nowrap; z-index:10; pointer-events:none;`;
         mapContainer.appendChild(lbl);
     }
 };
