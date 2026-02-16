@@ -11120,37 +11120,51 @@ OL.linkResourceToWorkflow = async function(wfId, resId, index) {
 
 OL.createNewResourceAndLink = async function(wfId, name, index) {
     const context = OL.getCurrentContext();
+    // 🛡️ Guard 1: Ensure context and the specific resource array exist
     if (!context.data) return console.error("❌ Context Data not found");
-
-    const newId = 'res_' + Math.random().toString(36).substr(2, 9);
     
-    // 🛡️ THE FIX: Use context.data instead of 'prj'
-    const targetResources = context.isMaster ? context.data.resources : context.data.localResources;
+    const targetResources = context.isMaster ? (context.data.resources || []) : (context.data.localResources || []);
+    const newId = 'res_' + Math.random().toString(36).substr(2, 9);
+
+    // 🧠 SMART SCAN: Auto-set type if name contains keywords
+    let autoType = 'Zap'; 
+    const types = ['Email', 'Form', 'SOP', 'Signature', 'Event'];
+    types.forEach(t => { if(name.toLowerCase().includes(t.toLowerCase())) autoType = t; });
 
     await OL.updateAndSync(() => {
         // 1. Create the Library Asset
         targetResources.push({
             id: newId,
             name: name,
-            type: 'Zap', // Default
+            type: autoType,
             steps: [],
-            description: 'Created via inline workflow builder'
+            description: 'Created via inline workflow builder',
+            createdDate: new Date().toISOString()
         });
 
         // 2. Link it to the Workflow
-        const wf = targetResources.find(r => r.id === wfId);
+        // 🛡️ Guard 2: Search the correct context for the parent workflow
+        const wf = targetResources.find(r => String(r.id) === String(wfId));
         if (wf) {
             if (!wf.steps) wf.steps = [];
             wf.steps.splice(index, 0, {
                 id: 'link_' + Math.random().toString(36).substr(2, 9),
                 resourceLinkId: newId
             });
+            console.log(`✅ Linked new ${autoType} to Workflow: ${wf.name}`);
         }
     });
 
+    // 3. UI Cleanup & Navigation
     state.openInsertIndex = null;
+    state.tempInsertMode = null; // Clear the menu state
+    
     OL.refreshMap();
-    OL.loadInspector(newId, wfId); 
+    
+    // ⚓ LOCK: Small timeout ensures the DOM is painted before inspector tries to anchor
+    setTimeout(() => {
+        OL.loadInspector(newId, wfId);
+    }, 100);
 };
 
 // Toggle custom input visibility
