@@ -10892,7 +10892,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
              style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0;">
             <div class="insert-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
                 <span class="tiny accent bold">INSERT LOGIC</span>
-                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer;">×</button>
+                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer; font-size: 16px;">×</button>
             </div>
             
             ${!state.tempInsertMode ? `
@@ -10904,19 +10904,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
                         <span style="display:block; font-size:16px;">🔗</span><b style="font-size:10px;">Resource</b>
                     </div>
                 </div>
-            ` : state.tempInsertMode === 'loose' ? `
-                <div class="inline-form-box">
-                    <div class="mini-toggle" style="display:flex; background:#1e293b; border-radius:4px; margin-bottom:10px; padding:2px;">
-                        <button class="${state.tempType === 'Trigger' ? 'active' : ''}" onclick="state.tempType='Trigger'; OL.refreshMap()" style="flex:1; background:transparent; border:none; color:#fff; font-size:9px; cursor:pointer; padding:4px;">Trigger</button>
-                        <button class="${state.tempType === 'Action' ? 'active' : ''}" onclick="state.tempType='Action'; OL.refreshMap()" style="flex:1; background:transparent; border:none; color:#fff; font-size:9px; cursor:pointer; padding:4px;">Action</button>
-                    </div>
-                    <div class="dual-input" style="display:flex; gap:5px; margin-bottom:10px;">
-                        <input type="text" id="verb-input" placeholder="Verb..." style="width:50%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;" autofocus>
-                        <input type="text" id="obj-input" placeholder="Object..." style="width:50%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
-                    </div>
-                    <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wf.id}', ${index})" style="width:100%; background:var(--accent); color:white; border:none; padding:6px; border-radius:4px; font-weight:bold; cursor:pointer;">Add to Sequence</button>
-                </div>
-            ` : `
+            ` : state.tempInsertMode === 'loose' ? renderInlineLooseForm(wf.id, index) : `
                 <div class="inline-form-box">
                     <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.handleInlineResourceSearch(this.value)" style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
                 </div>
@@ -10975,173 +10963,6 @@ OL.refreshMap = OL.render = function() {
     }
 };
 
-/*function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
-    const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
-   
-    const workflowSteps = (wf.steps || []).map(step => {
-        if (!step.resourceLinkId) {
-            return { ...step, isLoose: true }; // Flag it as loose
-        }
-        const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
-        return { ...step, asset: linkedAsset, isLoose: false };
-    });
-
-    const hasIncoming = OL.checkIncomingLogic(wf.id);
-    const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
-
-    return `
-        <div class="wf-global-node ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
-             id="l2-node-${wf.id}"
-             onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
-             style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
-
-             ${hasIncoming ? `
-                <div class="logic-trace-trigger incoming" title="View Incoming Logic"
-                     onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>
-            ` : ''}
-            
-             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
-                </div>
-                <button class="card-delete-btn" style="opacity:0; position:static;" 
-                        onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
-            </div>
-
-            <div class="tier-3-resource-stack" 
-                 style="display: flex; flex-direction: column; gap: 15px;"
-                 ondragover="OL.handleCanvasDragOver(event)" 
-                 ondrop="OL.handleUniversalDrop(event, '${wf.id}', 'resource-stack')">
-                
-                ${workflowSteps.map((step, rIdx) => {
-                    if (step.isLoose) {
-                        return `
-                        <div class="wf-resource-wrapper loose-step-wrapper" id="step-row-${step.id}">
-                            <div class="atomic-step-row loose-step-card" 
-                                 onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${wf.id}')"
-                                 style="background: rgba(56, 189, 248, 0.05); border: 1px dashed rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                                
-                                <span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'incoming')">🔀</span>
-                                <span style="font-size: 11px; color: #38bdf8; font-weight: bold; flex: 1;">📝 ${esc(step.name || "Draft Step")}</span>
-                                <span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</span>
-                                
-                                <button class="card-delete-btn" style="position:static; font-size: 12px; margin-left: 5px;" 
-                                        onclick="event.stopPropagation(); OL.removeLooseStep('${wf.id}', '${step.id}')">×</button>
-                            </div>
-                            <div class="insert-divider resource-gap" 
-                                onclick="event.stopPropagation(); OL.openSmartInsertMenu(event, '${wf.id}', ${rIdx + 1}, ${isVaultMode})">
-                                <span>+</span>
-                            </div>
-                        </div>`;
-                    }
-                    const asset = step.asset;
-                    if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
-                    
-                    const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
-                    const isParentActive = String(state.activeInspectorParentId) === String(asset.id);
-
-                    const scopingItem = OL.isResourceInScope(asset.id);
-                    const isInScope = !!scopingItem;
-                    const hasLogic = (wf.outcomes || []).length > 0;
-                
-                    return `
-                    <div class="wf-resource-wrapper" 
-                        id="l3-node-${asset.id}"
-                        draggable="true" 
-                        ondragstart="OL.handleUniversalDragStart(event, '${asset.id}', 'resource', '${wf.id}')"
-                        ondragend="this.classList.remove('dragging-now')">
-                        
-                        <div class="asset-mini-card is-navigable ${isParentActive ? 'parent-active' : ''} ${isInspectingRes ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
-                            onclick="event.stopPropagation(); OL.loadInspector('${asset.id}', '${wf.id}')"
-                            ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${asset.id}')"
-                            style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
-                                    border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; 
-                                    border: 1px solid rgba(255,255,255,0.05);">
-                            
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom:8px;">
-                                <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
-                                    ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
-                                </div>
-
-                                <div style="display:flex; gap:5px; align-items:center;">
-                                    ${isInScope ? `
-                                        <button class="btn tiny" title="View in Scoping"
-                                                style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;"
-                                                onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')">$</button>
-                                    ` : ''}
-
-                                    <button class="card-delete-btn" style="opacity:0; position:static; font-size:14px;" 
-                                            onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">×</button>
-                                </div>
-                            </div>
-
-                            <div class = "resource-description">
-                                        ${esc(asset.description)}
-                            </div>
-
-                            <div class="atomic-step-container" opacity: 0.7;">
-                                ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🔀</span>` : ''}
-                                ${(asset.steps || []).map(atomic => {
-                                    const isStepInspected = String(state.activeInspectorResId) === String(atomic.id);
-                                    const hasIn = OL.checkIncomingLogic(atomic.id);
-                                    const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
-                                    let previewText = "No Target";
-                                    if (hasOut) {
-                                        const firstOutcome = atomic.outcomes[0];
-                                        const tid = firstOutcome.targetId || (firstOutcome.action?.includes('jump_step_') ? firstOutcome.action.split('jump_step_')[1] : null);
-                                        const targetData = OL.getResourceById(tid);
-                                        previewText = targetData ? `Jump to: ${targetData.name}` : "Proceed Next";
-                                    }
-                                    
-                                    return `<div class="tiny atomic-step-row ${isStepInspected ? 'is-inspecting step-active' : ''}" 
-                                            id="step-row-${atomic.id}"
-                                            style="font-size: 9px; color: var(--text-dim); display:flex; align-items:center; gap:5px; padding: 2px 4px;"
-                                            onclick="event.stopPropagation(); OL.loadInspector('${atomic.id}', '${asset.id}')">
-
-                                    <div style="width: 14px; display: flex; justify-content: center; flex-shrink: 0;">
-                                        ${hasIn ? `
-                                            <span class="logic-trace-icon in" 
-                                                style="cursor: pointer;" 
-                                                onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'incoming')">🔀</span>
-                                        ` : ''}
-                                    </div>
-
-                                    <span style="color: ${atomic.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px; flex-shrink: 0;">
-                                        ${atomic.type === 'Trigger' ? '⚡' : '•'}
-                                    </span> 
-
-                                    <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 5px;">
-                                        ${esc(atomic.name || "Unnamed Step")}
-                                    </span>
-
-                                    <div style="width: 14px; display: flex; justify-content: center; flex-shrink: 0;">
-                                        ${hasOut ? `
-                                            <span class="logic-trace-icon out" 
-                                                data-preview="${esc(previewText)}"
-                                                style="cursor: pointer;"
-                                                onclick="event.stopPropagation(); OL.traceLogic('${atomic.id}', 'outgoing')">🔀</span>
-                                        ` : ''}
-                                    </div>
-                                </div>`;
-                                }).join('') || `<div class="tiny muted italic" style="font-size:8px;">No steps defined</div>`}
-                            </div>
-                        </div>
-
-                        <div class="insert-divider resource-gap" 
-                            onclick="event.stopPropagation(); OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})">
-                            <span>+</span>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>
-            ${hasOutgoing ? `
-                <div class="logic-trace-trigger outgoing" title="View Outgoing Logic"
-                     onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>
-            ` : ''}
-        </div>
-    `;
-}*/
-
 OL.openSmartInsertMenu = function(e, wfId, index, isVaultMode) {
     const rect = e.target.getBoundingClientRect();
     
@@ -11175,44 +10996,36 @@ OL.setInsertMode = function(mode) {
     OL.refreshMap();
 };
 
-function renderInlineLooseForm(wfId, index) {
-    // Access your existing library
-    const verbs = [...ATOMIC_STEP_LIB.ActionVerbs].sort();
-    const objects = [...ATOMIC_STEP_LIB.Objects].sort();
+function renderInlineInsertUI(wf, index, key, isVaultMode) {
+    const isInsertingHere = (state.openInsertIndex === key);
 
-    return `
-        <div class="inline-form-box fade-in">
-            <div class="dual-input" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
-                
-                <div class="select-wrapper">
-                    <label class="tiny muted">VERB</label>
-                    <select id="verb-select" class="modal-input tiny" onchange="OL.handleInlineCustomToggle(this, 'verb-custom-wrap')">
-                        ${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
-                        <option value="CUSTOM">-- Custom Verb --</option>
-                    </select>
-                    <div id="verb-custom-wrap" style="display:none; margin-top:5px;">
-                        <input type="text" id="verb-custom-input" class="modal-input tiny" placeholder="Enter custom verb...">
-                    </div>
-                </div>
-
-                <div class="select-wrapper">
-                    <label class="tiny muted">OBJECT</label>
-                    <select id="obj-select" class="modal-input tiny" onchange="OL.handleInlineCustomToggle(this, 'obj-custom-wrap')">
-                        ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
-                        <option value="CUSTOM">-- Custom Object --</option>
-                    </select>
-                    <div id="obj-custom-wrap" style="display:none; margin-top:5px;">
-                        <input type="text" id="obj-custom-input" class="modal-input tiny" placeholder="Enter custom object...">
-                    </div>
-                </div>
-
+    if (isInsertingHere) {
+        return `
+        <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" 
+             style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0;">
+            <div class="insert-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <span class="tiny accent bold">INSERT LOGIC</span>
+                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer; font-size: 16px;">×</button>
             </div>
-            <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wfId}', ${index})" 
-                    style="width:100%; background:var(--accent); color:white; border:none; padding:8px; border-radius:4px; font-weight:bold; cursor:pointer;">
-                Confirm Step
-            </button>
-        </div>
-    `;
+            
+            ${!state.tempInsertMode ? `
+                <div class="insert-options" style="display:flex; gap:8px;">
+                    <div class="opt-btn" onclick="OL.setInsertMode('loose')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+                        <span style="display:block; font-size:16px;">📝</span><b style="font-size:10px;">Loose Step</b>
+                    </div>
+                    <div class="opt-btn" onclick="OL.setInsertMode('resource')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+                        <span style="display:block; font-size:16px;">🔗</span><b style="font-size:10px;">Resource</b>
+                    </div>
+                </div>
+            ` : state.tempInsertMode === 'loose' ? renderInlineLooseForm(wf.id, index) : `
+                <div class="inline-form-box">
+                    <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.handleInlineResourceSearch(this.value)" style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
+                </div>
+            `}
+        </div>`;
+    }
+
+    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
 }
 
 function renderInlineResourceForm(wfId, index) {
