@@ -7991,7 +7991,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                                     ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
                                     
                                     <div class="insert-divider vertical" 
-                                         onclick="OL.promptInsertWorkflow('${stage.id}', ${wIdx + 1}, ${isVaultMode})">
+                                         onclick="event.stopPropagation(); OL.focusToolbox('workflow')">
                                         <span>+</span>
                                     </div>
                                 </div>
