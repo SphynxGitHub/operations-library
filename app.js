@@ -749,56 +749,6 @@ OL.closeModal = function () {
     if (typeof activeOnClose === "function") activeOnClose();
 };
 
-OL.deleteCard = function(id, type, event) {
-    if (event) event.stopPropagation();
-    
-    const client = getActiveClient();
-    const hash = window.location.hash;
-    const isVaultRoute = hash.startsWith('#/vault');
-    const isMasterItem = String(id).startsWith('master-') || String(id).startsWith('fn-') || String(id).startsWith('res-vlt-');
-    
-    // 🛡️ SCENARIO 1: Unlinking a Master reference from a Project
-    if (isMasterItem && !isVaultRoute && client) {
-        if (confirm(`Remove this Master reference from ${client.meta.name}? \n\n(This will NOT delete the global template from the Vault)`)) {
-            if (type === 'apps') {
-                client.sharedMasterIds = (client.sharedMasterIds || []).filter(mid => mid !== id);
-            }
-            // Add similar unlinking logic for functions/resources if they use sharedMasterIds
-            
-            OL.persist();
-            renderAppsGrid(); // or relevant grid refresh
-            return;
-        }
-        return;
-    }
-
-    // 🛡️ SCENARIO 2: Permanent Deletion (Only for Local items or when in the Vault)
-    const itemTypeLabel = type === 'apps' ? 'Application' : 'Function';
-    if (!confirm(`⚠️ PERMANENT DELETE: Are you sure you want to delete this ${itemTypeLabel}? \n\nThis cannot be undone.`)) return;
-
-    if (type === 'apps') {
-        // If we are in the Vault, remove from global list
-        if (isVaultRoute) {
-            state.master.apps = (state.master.apps || []).filter(a => a.id !== id);
-        } else if (client) {
-            // If in project, remove from local specific apps
-            client.projectData.localApps = (client.projectData.localApps || []).filter(a => a.id !== id);
-        }
-    } else if (type === 'functions') {
-        if (isVaultRoute) {
-            state.master.functions = (state.master.functions || []).filter(f => f.id !== id);
-        } else if (client) {
-            client.projectData.localFunctions = (client.projectData.localFunctions || []).filter(f => f.id !== id);
-        }
-    }
-
-    OL.persist();
-    
-    // Refresh the current view based on type
-    if (type === 'apps') renderAppsGrid();
-    else if (type === 'functions') renderFunctionsGrid();
-};
-
 OL.handlePillInteraction = function(event, appId, fnId) {
     if (event) {
         event.preventDefault(); // Prevents standard context menu
@@ -1268,7 +1218,7 @@ window.renderAppsGrid = function() {
                               <span class="vault-tag" style="background: ${tagColor}; border: 1px solid ${isMasterRef ? 'transparent' : 'var(--line)'};">
                                 ${tagLabel}
                               </span>   
-                              <button class="card-delete-btn" onclick="OL.deleteCard('${app.id}', 'apps', event)">×</button>
+                              <button class="card-delete-btn" onclick="OL.universalDelete('${app.id}', 'apps', event)">×</button>
                           </div>
                       </div>
                       <div class="card-body">
@@ -2490,7 +2440,7 @@ window.renderFunctionsGrid = function() {
                                 <span class="vault-tag" style="background: ${tagColor}">
                                     ${tagLabel}
                                 </span>
-                                <button class="card-delete-btn" onclick="event.stopPropagation(); OL.deleteCard('${fn.id}', 'functions', event)">×</button>
+                                <button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${fn.id}', 'functions', event)">×</button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -3975,7 +3925,7 @@ window.renderResourceCard = function (res) {
                                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${res.id}')">$</button>
                     ` : ''}
                     <span class="vault-tag" style="${tagStyle}">${tagLabel}</span>
-                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.deleteResource('${res.id}')">×</button>
+                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>
                 </div>
             </div>
             <div class="card-body">
@@ -4747,20 +4697,6 @@ OL.removeTrigger = function(resId, index) {
     if (state.focusedResourceId === resId) {
         renderGlobalVisualizer(location.hash.includes('vault'));
     }
-};
-
-// UPDATE OR DELETE RESOURCE
-
-OL.deleteResource = function (id) {
-  if (!confirm("Delete resource?")) return;
-  const isVault = window.location.hash.includes("vault");
-  if (isVault)
-    state.master.resources = state.master.resources.filter((r) => r.id !== id);
-  else
-    getActiveClient().projectData.localResources =
-      getActiveClient().projectData.localResources.filter((r) => r.id !== id);
-  OL.persist();
-  renderResourceManager();
 };
 
 // 4. RESOURCE CARD & FOLDER RENDERERS
@@ -7348,7 +7284,7 @@ OL.openGlobalContentManager = function() {
                                         }
                                     </div>
                                 </div>
-                                <button class="card-delete-btn" onclick="OL.globalDeleteContent('category', '${esc(catName)}', ${isFunction})">×</button>
+                                <button class="card-delete-btn" onclick="OL.universalDelete(null, 'category', '${esc(catName)}', ${isFunction})">×</button>
                             </div>
 
                             <div class="content-manager-features" style="padding-left: 15px;">
@@ -7369,7 +7305,7 @@ OL.openGlobalContentManager = function() {
                                     <div style="display:flex; gap: 8px; align-items: center; margin-left: 15px;">
                                         ${showStar ? `<button class="btn tiny accent" onclick="OL.pushFeatureToVault('${esc(featName)}')" title="Push to Master Vault">⭐</button>` : ''}
                                         <button class="btn tiny soft" onclick="OL.openGlobalFeatureEditor('${esc(featName)}')">⚙️</button>
-                                        <button class="card-delete-btn" style="position: static;" onclick="OL.globalDeleteContent('feature', '${esc(featName)}')">×</button>
+                                        <button class="card-delete-btn" style="position: static;" onclick="OL.universalDelete(null, 'feature', '${esc(featName)}')">×</button>
                                     </div>
                                 </div>`;
                                 }).join('')}
@@ -7789,6 +7725,68 @@ OL.globalRenameContent = function(type, oldName, newName, forceNewCat = null) {
     OL.persist();
 };
 
+/*OL.deleteResource = function (id) {
+  if (!confirm("Delete resource?")) return;
+  const isVault = window.location.hash.includes("vault");
+  if (isVault)
+    state.master.resources = state.master.resources.filter((r) => r.id !== id);
+  else
+    getActiveClient().projectData.localResources =
+      getActiveClient().projectData.localResources.filter((r) => r.id !== id);
+  OL.persist();
+  renderResourceManager();
+};*/
+
+/* OL.deleteCard = function(id, type, event) {
+    if (event) event.stopPropagation();
+    
+    const client = getActiveClient();
+    const hash = window.location.hash;
+    const isVaultRoute = hash.startsWith('#/vault');
+    const isMasterItem = String(id).startsWith('master-') || String(id).startsWith('fn-') || String(id).startsWith('res-vlt-');
+    
+    // 🛡️ SCENARIO 1: Unlinking a Master reference from a Project
+    if (isMasterItem && !isVaultRoute && client) {
+        if (confirm(`Remove this Master reference from ${client.meta.name}? \n\n(This will NOT delete the global template from the Vault)`)) {
+            if (type === 'apps') {
+                client.sharedMasterIds = (client.sharedMasterIds || []).filter(mid => mid !== id);
+            }
+            // Add similar unlinking logic for functions/resources if they use sharedMasterIds
+            
+            OL.persist();
+            renderAppsGrid(); // or relevant grid refresh
+            return;
+        }
+        return;
+    }
+
+    // 🛡️ SCENARIO 2: Permanent Deletion (Only for Local items or when in the Vault)
+    const itemTypeLabel = type === 'apps' ? 'Application' : 'Function';
+    if (!confirm(`⚠️ PERMANENT DELETE: Are you sure you want to delete this ${itemTypeLabel}? \n\nThis cannot be undone.`)) return;
+
+    if (type === 'apps') {
+        // If we are in the Vault, remove from global list
+        if (isVaultRoute) {
+            state.master.apps = (state.master.apps || []).filter(a => a.id !== id);
+        } else if (client) {
+            // If in project, remove from local specific apps
+            client.projectData.localApps = (client.projectData.localApps || []).filter(a => a.id !== id);
+        }
+    } else if (type === 'functions') {
+        if (isVaultRoute) {
+            state.master.functions = (state.master.functions || []).filter(f => f.id !== id);
+        } else if (client) {
+            client.projectData.localFunctions = (client.projectData.localFunctions || []).filter(f => f.id !== id);
+        }
+    }
+
+    OL.persist();
+    
+    // Refresh the current view based on type
+    if (type === 'apps') renderAppsGrid();
+    else if (type === 'functions') renderFunctionsGrid();
+};
+
 OL.globalDeleteContent = function(type, name, isFunction = false) {
     const isVaultMode = window.location.hash.includes('vault');
     
@@ -7828,6 +7826,101 @@ OL.globalDeleteContent = function(type, name, isFunction = false) {
     OL.persist();
     OL.openGlobalContentManager(); 
     renderAnalysisModule(isVaultMode); 
+};*/
+
+OL.universalDelete = async function(id, type, options = {}) {
+    const { event, isFunction, name } = options;
+    if (event) event.stopPropagation();
+
+    const context = OL.getCurrentContext(); // Uses your existing context helper
+    const client = getActiveClient();
+    const isVaultRoute = context.isMaster;
+    
+    // 1. Determine if this is a Master Reference inside a Project
+    const isMasterItem = String(id).startsWith('master-') || 
+                         String(id).startsWith('fn-') || 
+                         String(id).startsWith('res-vlt-') || 
+                         String(id).startsWith('ht-vlt-');
+
+    // 🛡️ SCENARIO A: Unlinking a Master Template from a Local Project
+    if (isMasterItem && !isVaultRoute && client) {
+        const msg = `Remove this Master ${type} from ${client.meta.name}?\n\n(This will NOT delete the global template from the Vault)`;
+        if (!confirm(msg)) return;
+
+        await OL.updateAndSync(() => {
+            if (type === 'apps' || type === 'functions' || type === 'how-to') {
+                client.sharedMasterIds = (client.sharedMasterIds || []).filter(mid => mid !== id);
+            }
+        });
+        return OL.refreshActiveView();
+    }
+
+    // 🛡️ SCENARIO B: Permanent Deletion (Local items or Master items deleted from the Vault)
+    const label = name || type.slice(0, -1); // "apps" becomes "app"
+    let confirmMsg = isVaultRoute 
+        ? `⚠️ PERMANENT VAULT DELETE: "${label}"\n\nThis removes the source for ALL projects. This cannot be undone.`
+        : `Delete "${label}" from this project?`;
+
+    if (isFunction && isVaultRoute) confirmMsg = `⚠️ WARNING: This will permanently remove the "${label}" Master Function from the Vault registry. Proceed?`;
+    if (!confirm(confirmMsg)) return;
+
+    await OL.updateAndSync(() => {
+        const data = context.data;
+
+        switch (type) {
+            case 'resources':
+                const resArray = isVaultRoute ? data.resources : data.localResources;
+                if (resArray) {
+                    const idx = resArray.findIndex(r => r.id === id);
+                    if (idx > -1) resArray.splice(idx, 1);
+                }
+                break;
+
+            case 'apps':
+                const appArray = isVaultRoute ? data.apps : data.localApps;
+                if (appArray) {
+                    const idx = appArray.findIndex(a => a.id === id);
+                    if (idx > -1) appArray.splice(idx, 1);
+                }
+                break;
+
+            case 'functions':
+                if (isVaultRoute) {
+                    data.functions = (data.functions || []).filter(f => f.id !== id);
+                } else {
+                    data.localFunctions = (data.localFunctions || []).filter(f => f.id !== id);
+                }
+                break;
+
+            case 'how-to':
+                if (isVaultRoute) {
+                    data.howToLibrary = (data.howToLibrary || []).filter(h => h.id !== id);
+                } else {
+                    data.localHowTo = (data.localHowTo || []).filter(h => h.id !== id);
+                }
+                break;
+
+            case 'category':
+            case 'feature':
+                // Handles the globalContentManager logic
+                (data.analyses || []).forEach(anly => {
+                    if (type === 'category') {
+                        anly.categories = anly.categories?.filter(c => c !== name);
+                        anly.features?.forEach(f => { if (f.category === name) f.category = "General"; });
+                        if (isFunction && isVaultRoute) {
+                            data.functions = (data.functions || []).filter(f => f.name !== name);
+                        }
+                    } else {
+                        anly.features = anly.features?.filter(f => f.name !== name);
+                    }
+                });
+                break;
+        }
+    });
+
+    // 🔄 Post-Delete UI Cleanup
+    if (type === 'category' || type === 'feature') OL.openGlobalContentManager();
+    OL.refreshActiveView();
 };
 
 // 4b. MANAGE ADDING / EDITING CATEGORIES
@@ -10882,7 +10975,8 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 14px;">🔄</span> ${esc(wf.name).toUpperCase()}
                 </div>
-                <button class="card-delete-btn" style="opacity:0; position:static;" onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
+                <button class="card-delete-btn" style="opacity:0; position:static;" 
+                onclick="event.stopPropagation(); OL.handleWorkflowUnmap('${wf.id}', ${isVaultMode})">×</button>
             </div>
 
             <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">`;
