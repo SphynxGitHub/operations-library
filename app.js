@@ -10840,7 +10840,10 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 <button class="card-delete-btn" style="position:static; font-size: 12px; margin-left: 5px;" 
                                         onclick="event.stopPropagation(); OL.removeLooseStep('${wf.id}', '${step.id}')">×</button>
                             </div>
-                            <div class="insert-divider" onclick="OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                            <div class="insert-divider resource-gap" 
+                                onclick="event.stopPropagation(); OL.openSmartInsertMenu(event, '${wf.id}', ${rIdx + 1}, ${isVaultMode})">
+                                <span>+</span>
+                            </div>
                         </div>`;
                     }
                     const asset = step.asset;
@@ -10951,6 +10954,41 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     `;
 }
 
+OL.openSmartInsertMenu = function(e, wfId, index, isVaultMode) {
+    const rect = e.target.getBoundingClientRect();
+    
+    const menuHtml = `
+        <div class="smart-insert-overlay fade-in" style="top: ${rect.top}px; left: ${rect.right + 10}px;">
+            <div class="menu-item" onclick="OL.startLooseStepFlow('${wfId}', ${index})">
+                <span class="icon">📝</span>
+                <div class="text"><strong>Loose Step</strong><br><small>Draft logic now, assign later</small></div>
+            </div>
+            <div class="menu-item" onclick="OL.startResourceLinkFlow('${wfId}', ${index}, ${isVaultMode})">
+                <span class="icon">🔗</span>
+                <div class="text"><strong>Resource</strong><br><small>Link to a tool or asset</small></div>
+            </div>
+        </div>
+    `;
+    
+    OL.showOverlay(menuHtml);
+};
+
+OL.startLooseStepFlow = function(wfId, index) {
+    const flowHtml = `
+        <div class="logic-builder-modal">
+            <h3>New Loose Step</h3>
+            <div class="toggle-group">
+                <button onclick="state.tempStepType='Trigger'">⚡ Trigger</button>
+                <button onclick="state.tempStepType='Action'">🎬 Action</button>
+            </div>
+            <input type="text" id="verb-input" placeholder="Verb (e.g. Send)">
+            <input type="text" id="object-input" placeholder="Object (e.g. Email)">
+            <button class="btn-primary" onclick="OL.finalizeLooseStep('${wfId}', ${index})">Add to Flow</button>
+        </div>
+    `;
+    OL.showOverlay(flowHtml);
+};
+
 function renderLooseStepRow(step, wfId) {
     return `
         <div class="drop-zone" ondrop="OL.handleMoveStep(event, '${wfId}', ${step.position})" ondragover="OL.showDropZone(this)"></div>
@@ -10981,6 +11019,22 @@ OL.handleMoveStep = function(e, wfId, targetIndex) {
     
     OL.persist();
     OL.refreshMap();
+};
+
+OL.startResourceLinkFlow = function(wfId, index, isVaultMode) {
+    const flowHtml = `
+        <div class="logic-builder-modal">
+            <button onclick="OL.openResourcePicker('${wfId}', ${index})">Existing Resource</button>
+            <hr>
+            <label>Create New:</label>
+            <div class="type-grid">
+                <div onclick="OL.createNewResourceAndLink('${wfId}', ${index}, 'Software')">💻 Software</div>
+                <div onclick="OL.createNewResourceAndLink('${wfId}', ${index}, 'Human')">👤 Human</div>
+                <div onclick="OL.createNewResourceAndLink('${wfId}', ${index}, 'Document')">📄 Document</div>
+            </div>
+        </div>
+    `;
+    OL.showOverlay(flowHtml);
 };
 
 OL.assignResourceToStep = function(stepId, resourceId) {
@@ -12308,6 +12362,8 @@ OL.loadInspector = function(targetId, parentId = null) {
         return;
     }
     
+    const isAssigned = !!data.resourceLinkId;
+
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
 
     const client = getActiveClient();
@@ -12330,6 +12386,27 @@ OL.loadInspector = function(targetId, parentId = null) {
     // ------------------------------------------------------------
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
     html += OL.renderHierarchySelectors(data, isVaultMode);
+
+    // 🚀 THE UNASSIGN TRIGGER
+    if (isAtomicStep && isAssigned) {
+        html += `
+            <div style="margin-bottom: 15px;">
+                <button class="btn tiny soft" onclick="OL.unassignStep('${targetId}', '${parentId}')" 
+                        style="background: rgba(244, 63, 94, 0.1); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.2); width: 100%; justify-content: center;">
+                    🔓 Unassign from Resource (Make Loose)
+                </button>
+            </div>
+        `;
+    } else if (isAtomicStep && !isAssigned) {
+        html += `
+            <div style="margin-bottom: 15px; padding: 10px; background: rgba(56, 189, 248, 0.05); border: 1px dashed #38bdf8; border-radius: 6px; text-align: center;">
+                <span class="tiny accent" style="display: block; margin-bottom: 4px;">📝 LOOSE DRAFT STEP</span>
+                <button class="btn tiny primary" onclick="OL.openResourcePickerForStep('${targetId}')" style="font-size: 9px;">
+                    🔗 Assign to Resource
+                </button>
+            </div>
+        `;
+    }
 
     html += `
         <div style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;">
@@ -12518,6 +12595,26 @@ OL.loadInspector = function(targetId, parentId = null) {
             }
         }
     }
+};
+
+// 🔓 Strip the resource link
+OL.unassignStep = function(stepId, resourceId) {
+    const step = OL.getResourceById(stepId);
+    if (step) {
+        delete step.resourceLinkId; // Remove the link
+        console.log(`🔓 Step ${stepId} is now loose.`);
+        OL.persist();
+        
+        // Refresh both the inspector and the map
+        OL.loadInspector(stepId, state.activeInspectorParentId); 
+        OL.refreshMap(); 
+    }
+};
+
+// 🔗 Prompt to pick a resource for a loose step
+OL.openResourcePickerForStep = function(stepId) {
+    // This would trigger your existing resource selection modal
+    OL.promptInsertResourceInWorkflow(state.activeInspectorParentId, 0, false, stepId);
 };
 
 OL.ensureInspectorSkeleton = function() {
