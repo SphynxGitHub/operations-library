@@ -11050,47 +11050,54 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 }
 
 OL.handleInlineResourceSearch = function(query) {
-    const context = OL.getCurrentContext();
-    if (!context.data) return;
-
     const resultsContainer = document.getElementById('inline-search-results');
-    if (!resultsContainer) return;
+    
+    // 🔍 DEBUG 1: Did we find the box?
+    if (!resultsContainer) {
+        console.error("❌ Search UI error: #inline-search-results not found in DOM");
+        return;
+    }
 
-    // 1. If input is empty, clear results and stop
     if (!query || query.trim() === "") {
         resultsContainer.innerHTML = '';
         return;
     }
 
+    const context = OL.getCurrentContext();
     const q = query.toLowerCase().trim();
-    const resources = context.isMaster ? (context.data.resources || []) : (context.data.localResources || []);
-    const insertIdParts = state.openInsertIndex.split('-'); // [wfId, index]
+    
+    // 🔍 DEBUG 2: What are we searching?
+    console.log(`🔎 Searching for: "${q}" in ${context.isMaster ? 'Vault' : 'Project'}`);
 
-    // 2. Filter existing resources
+    const resources = context.isMaster ? (context.data.resources || []) : (context.data.localResources || []);
+    const insertIdParts = state.openInsertIndex.split('-'); 
+
+    // Filter library
     const filtered = resources.filter(r => 
         r.type !== 'Workflow' && 
         (r.name || "").toLowerCase().includes(q)
     ).slice(0, 5);
 
-    // 3. Build HTML starting with existing matches
     let html = filtered.map(res => `
         <div class="search-item tiny" 
-             style="padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); color: #eee;"
+             style="padding:10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); color: #eee; background: rgba(255,255,255,0.02);"
              onclick="OL.linkResourceToWorkflow('${insertIdParts[0]}', '${res.id}', ${insertIdParts[1]})">
             ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
         </div>
     `).join('');
 
-    // 🚀 4. THE RESTORATION: Always append "Create New" if there is text
-    // This ensures even if filtered.length is 0, this button shows up.
+    // 🚀 THE "ADD NEW" BUTTON (Always Appended)
     html += `
-        <div class="search-item tiny create-new-trigger" 
-             style="padding:10px; cursor:pointer; background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-weight: bold; border-top: 1px solid rgba(56, 189, 248, 0.2);"
+        <div class="search-item tiny" 
+             style="padding:12px; cursor:pointer; background: #38bdf8 !important; color: #000 !important; font-weight: 900 !important; text-align: center; margin-top: 5px; border-radius: 4px;"
              onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
-            ➕ Create new "${esc(query)}"
+            ➕ CREATE NEW: "${esc(query)}"
         </div>
     `;
 
+    // 🔍 DEBUG 3: Final HTML length
+    console.log("✅ Rendering search results. Length:", html.length);
+    
     resultsContainer.innerHTML = html;
 };
 
