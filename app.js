@@ -668,32 +668,34 @@ OL.currentRenderer = null;
 
 OL.getCurrentContext = function() {
     const hash = window.location.hash || "#/";
-    
-    // 1. PHYSICAL CHECK: Are we actually inside the Vault routes?
     const isVaultView = hash.startsWith('#/vault') || hash.includes('resource-manager');
-    const activeClient = getActiveClient();
+    const client = getActiveClient();
 
     if (isVaultView) {
         return {
+            data: state.master || {}, // Fallback to empty object
             isMaster: true,
             namespace: 'res-vlt-',
-            label: '🛡️ GLOBAL VAULT',
-            type: 'vault'
+            label: '🛡️ GLOBAL VAULT'
         };
     }
     
-    // 2. PROJECT CHECK: If we aren't in the Vault, check for a project
-    if (activeClient) {
+    // 🚀 THE FIX: Ensure projectData actually exists before returning
+    if (client && client.projectData) {
         return {
+            data: client.projectData,
             isMaster: false,
             namespace: 'local-prj-',
-            label: `📁 PROJECT: ${activeClient.meta.name}`,
-            type: 'project'
+            label: `📁 PROJECT: ${client.meta.name}`
         };
     }
 
-    // 3. FALLBACK: Default to project if no specific vault route detected
-    return { isMaster: false, namespace: 'local-prj-', label: '⚠️ NO CONTEXT', type: 'project' };
+    // Ultimate fallback to prevent "undefined" errors
+    return { 
+        data: { localResources: [], resources: [] }, 
+        isMaster: false, 
+        label: '⚠️ NO CONTEXT' 
+    };
 };
 
 // 🚀 Register current view so modals know what to refresh
@@ -11051,12 +11053,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 
 OL.handleInlineResourceSearch = function(query) {
     const resultsContainer = document.getElementById('inline-search-results');
-    
-    // 🔍 DEBUG 1: Did we find the box?
-    if (!resultsContainer) {
-        console.error("❌ Search UI error: #inline-search-results not found in DOM");
-        return;
-    }
+    if (!resultsContainer) return;
 
     if (!query || query.trim() === "") {
         resultsContainer.innerHTML = '';
@@ -11066,11 +11063,13 @@ OL.handleInlineResourceSearch = function(query) {
     const context = OL.getCurrentContext();
     const q = query.toLowerCase().trim();
     
-    // 🔍 DEBUG 2: What are we searching?
-    console.log(`🔎 Searching for: "${q}" in ${context.isMaster ? 'Vault' : 'Project'}`);
+    // 🛡️ THE SAFETY GUARD: Default to an empty array if data or resources are missing
+    const resources = context.isMaster 
+        ? (context.data?.resources || []) 
+        : (context.data?.localResources || []);
 
-    const resources = context.isMaster ? (context.data.resources || []) : (context.data.localResources || []);
-    const insertIdParts = state.openInsertIndex.split('-'); 
+    const insertIdParts = (state.openInsertIndex || "").split('-'); 
+    if (insertIdParts.length < 2) return;
 
     // Filter library
     const filtered = resources.filter(r => 
@@ -11080,24 +11079,21 @@ OL.handleInlineResourceSearch = function(query) {
 
     let html = filtered.map(res => `
         <div class="search-item tiny" 
-             style="padding:10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); color: #eee; background: rgba(255,255,255,0.02);"
+             style="padding:10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); color: #eee;"
              onclick="OL.linkResourceToWorkflow('${insertIdParts[0]}', '${res.id}', ${insertIdParts[1]})">
             ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
         </div>
     `).join('');
 
-    // 🚀 THE "ADD NEW" BUTTON (Always Appended)
+    // Always append "Create New"
     html += `
         <div class="search-item tiny" 
-             style="padding:12px; cursor:pointer; background: #38bdf8 !important; color: #000 !important; font-weight: 900 !important; text-align: center; margin-top: 5px; border-radius: 4px;"
+             style="padding:12px; cursor:pointer; background: #38bdf8 !important; color: #000 !important; font-weight: 900; text-align: center; margin-top: 5px; border-radius: 4px;"
              onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
             ➕ CREATE NEW: "${esc(query)}"
         </div>
     `;
 
-    // 🔍 DEBUG 3: Final HTML length
-    console.log("✅ Rendering search results. Length:", html.length);
-    
     resultsContainer.innerHTML = html;
 };
 
