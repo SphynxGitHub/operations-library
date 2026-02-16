@@ -10910,7 +10910,11 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
                                 ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                             </div>
-                            ${isInScope ? `<button class="btn tiny" onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')">$</button>` : ''}
+                            ${isInScope ? `<button class="btn tiny" 
+                                onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')" 
+                                title="View in Scoping" 
+                                style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;">
+                            $</button>` : ''}
                         </div>
 
                         <div class="resource-description" style="font-size: 9px; color: #94a3b8; margin-bottom: 8px; line-height: 1.3;">
@@ -10948,7 +10952,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                 </div>` + renderInlineInsertUI(wf, group.insertIndex, `${wf.id}-${group.insertIndex}`, isVaultMode);
         }
     }).join('');
-    
+
     html += `</div>
             ${hasOutgoing ? `<div class="logic-trace-trigger outgoing" title="View Outgoing Logic" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>` : ''}
         </div>`;
