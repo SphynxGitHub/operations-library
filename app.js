@@ -12313,8 +12313,6 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     
     const isWorkflow = targetObj.type === 'Workflow';
     const isResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(targetObj.type);
-    
-    // 🔍 STEP DETECTION: If it's not a Workflow/Resource, it's a Step
     const isStep = !isWorkflow && !isResource;
 
     let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid rgba(255,255,255,0.1);">`;
@@ -12346,24 +12344,23 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
 
     // 🟠 3. STEP -> RESOURCE
     if (isStep) {
-        // 1. Find the parent Workflow (The ultimate container)
         const parentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.id) === String(targetObj.id)));
         
         html += `
-            <div class="form-group">
-                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Workflow Container</label>
-                <select class="modal-input tiny" onchange="OL.moveStepToWorkflow('${targetObj.id}', this.value, ${isVaultMode})">
+            <div class="stack-field">
+                <label style="font-size:8px; color:var(--accent); font-weight:900; margin-bottom:4px; display:block;">WORKFLOW CONTAINER</label>
+                <select class="modal-input tiny full-width" onchange="OL.moveStepToWorkflow('${targetObj.id}', this.value, ${isVaultMode})">
                     ${allResources.filter(r => r.type === 'Workflow').map(w => `
                         <option value="${w.id}" ${parentWf?.id === w.id ? 'selected' : ''}>🔄 ${esc(w.name)}</option>
                     `).join('')}
                 </select>
             </div>
 
-            <div class="form-group" style="margin-top: 10px;">
-                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Assigned Resource</label>
-                <select class="modal-input tiny" onchange="OL.handleStepAssignmentChange('${targetObj.id}', this.value, ${isVaultMode})">
-                    <option value="LOOSE" ${!targetObj.resourceLinkId ? 'selected' : ''}>📝 No Resource (Loose Step)</option>
-                    <optgroup label="Technical Assets">
+            <div class="stack-field">
+                <label style="font-size:8px; color:var(--accent); font-weight:900; margin-bottom:4px; display:block;">RESOURCE ASSIGNMENT</label>
+                <select class="modal-input tiny full-width" onchange="OL.handleStepAssignmentChange('${targetObj.id}', this.value, ${isVaultMode})">
+                    <option value="LOOSE" ${!targetObj.resourceLinkId ? 'selected' : ''}>📝 Loose Step (Unassigned)</option>
+                    <optgroup label="Technical Resources">
                         ${allResources.filter(r => r.type !== 'Workflow').map(res => `
                             <option value="${res.id}" ${String(res.id) === String(targetObj.resourceLinkId) ? 'selected' : ''}>
                                 ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
@@ -12371,7 +12368,8 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
                         `).join('')}
                     </optgroup>
                 </select>
-            </div>`;
+            </div>
+        `;
     }
 
     html += `</div>`;
@@ -12408,18 +12406,44 @@ OL.moveStepToWorkflow = async function(stepId, targetWfId, isVault) {
 };
 
 OL.handleStepAssignmentChange = async function(stepId, newValue, isVault) {
-    const step = OL.getResourceById(stepId);
-    if (!step) return;
+    // 1. Get current data
+    const client = getActiveClient();
+    const sourceResources = isVault ? state.master.resources : client.projectData.localResources;
+    
+    // Find the step and its current workflow parent
+    let stepObj = null;
+    let parentWf = sourceResources.find(wf => {
+        const found = (wf.steps || []).find(s => String(s.id) === String(stepId));
+        if (found) { stepObj = found; return true; }
+        return false;
+    });
 
-    if (newValue === "LOOSE") {
-        delete step.resourceLinkId;
-    } else {
-        step.resourceLinkId = newValue;
-    }
+    if (!stepObj) return;
 
-    OL.persist();
+    await OL.updateAndSync(() => {
+        if (newValue === "LOOSE") {
+            // 🔓 Make it a standalone row in the workflow
+            delete stepObj.resourceLinkId;
+        } else {
+            // 🔗 Bind it to the resource
+            // We set the resourceLinkId so the Map knows which card to group it into
+            stepObj.resourceLinkId = newValue;
+            
+            // 🚀 OPTIONAL: If you want the step to also exist inside the Resource's own procedure:
+            const targetRes = sourceResources.find(r => r.id === newValue);
+            if (targetRes) {
+                if (!targetRes.steps) targetRes.steps = [];
+                // Check if it's already in there to prevent duplication
+                const alreadyInRes = targetRes.steps.some(s => String(s.id) === String(stepId));
+                if (!alreadyInRes) {
+                    targetRes.steps.push({...stepObj}); // Add to resource's internal procedure
+                }
+            }
+        }
+    });
+
     OL.refreshMap();
-    OL.loadInspector(stepId, state.activeInspectorParentId);
+    OL.loadInspector(stepId, parentWf?.id);
 };
 
 OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
