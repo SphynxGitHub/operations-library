@@ -3987,44 +3987,28 @@ window.renderResourceCard = function (res) {
 };
 
 // 3. CREATE DRAFT RESOURCE MODAL
-OL.promptCreateResource = function() {
+OL.promptCreateResource = async function() {
     const name = prompt("Enter Resource Name:");
-    if (!name) return;
+    if (!name) return null; // Return null if cancelled
     
     const context = OL.getCurrentContext();
-    if (!context.data) return;
-
     const timestamp = Date.now();
-    const newId = isVaultMode ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    const newId = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
     const newRes = {
         id: newId,
         name: name,
-        type: "SOP", // Default
+        type: "SOP", 
         steps: [],
         createdDate: new Date().toISOString()
     };
 
-    if (context.isMaster) {
-        if (!context.data.resources) context.data.resources = [];
-        context.data.resources.push(newRes);
-    } else {
-        if (!context.data.localResources) context.data.localResources = [];
-        context.data.localResources.push(newRes);
-    }
+    // Push to the correct data pool
+    const targetList = context.isMaster ? context.data.resources : context.data.localResources;
+    targetList.push(newRes);
 
-    OL.persist();
-    renderGlobalVisualizer(context.isMaster);
-
-    // 🚀 THE FIX: Instead of letting the app redirect, 
-    // explicitly tell it to stay in the Visualizer
-    if (state.focusedWorkflowId || state.focusedResourceId) {
-        console.log("🛠️ Resource created while in Flow Map. Maintaining context.");
-        renderGlobalVisualizer(isVaultMode);
-    } else {
-        // Only go to library if we aren't in the Flow Map
-        location.hash = isVaultMode ? "#/vault/resources" : "#/resources";
-    }
+    await OL.persist();
+    return newId; // 👈 This is the key! We return the ID so other functions can use it.
 };
 
 // 3a. HANDLE THE FIRST UPDATE / SAVE DRAFT
@@ -11119,52 +11103,30 @@ OL.linkResourceToWorkflow = async function(wfId, resId, index) {
 };
 
 OL.createNewResourceAndLink = async function(wfId, name, index) {
+    // 🚀 REUSE: Just call the existing logic
+    // We pass the name if we have it, or let the prompt handle it
+    const newResId = await OL.promptCreateResource(); 
+    
+    if (!newResId) return; // User cancelled the prompt
+
+    // Now just do the mapping logic which is unique to this menu
     const context = OL.getCurrentContext();
-    // 🛡️ Guard 1: Ensure context and the specific resource array exist
-    if (!context.data) return console.error("❌ Context Data not found");
-    
-    const targetResources = context.isMaster ? (context.data.resources || []) : (context.data.localResources || []);
-    const newId = 'res_' + Math.random().toString(36).substr(2, 9);
+    const targetResources = context.isMaster ? context.data.resources : context.data.localResources;
+    const wf = targetResources.find(r => String(r.id) === String(wfId));
 
-    // 🧠 SMART SCAN: Auto-set type if name contains keywords
-    let autoType = 'Zap'; 
-    const types = ['Email', 'Form', 'SOP', 'Signature', 'Event'];
-    types.forEach(t => { if(name.toLowerCase().includes(t.toLowerCase())) autoType = t; });
-
-    await OL.updateAndSync(() => {
-        // 1. Create the Library Asset
-        targetResources.push({
-            id: newId,
-            name: name,
-            type: autoType,
-            steps: [],
-            description: 'Created via inline workflow builder',
-            createdDate: new Date().toISOString()
+    if (wf) {
+        if (!wf.steps) wf.steps = [];
+        wf.steps.splice(index, 0, {
+            id: uid(),
+            resourceLinkId: newResId
         });
+        await OL.persist();
+    }
 
-        // 2. Link it to the Workflow
-        // 🛡️ Guard 2: Search the correct context for the parent workflow
-        const wf = targetResources.find(r => String(r.id) === String(wfId));
-        if (wf) {
-            if (!wf.steps) wf.steps = [];
-            wf.steps.splice(index, 0, {
-                id: 'link_' + Math.random().toString(36).substr(2, 9),
-                resourceLinkId: newId
-            });
-            console.log(`✅ Linked new ${autoType} to Workflow: ${wf.name}`);
-        }
-    });
-
-    // 3. UI Cleanup & Navigation
     state.openInsertIndex = null;
-    state.tempInsertMode = null; // Clear the menu state
-    
+    state.tempInsertMode = null;
     OL.refreshMap();
-    
-    // ⚓ LOCK: Small timeout ensures the DOM is painted before inspector tries to anchor
-    setTimeout(() => {
-        OL.loadInspector(newId, wfId);
-    }, 100);
+    OL.loadInspector(newResId, wfId);
 };
 
 // Toggle custom input visibility
