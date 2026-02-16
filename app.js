@@ -11821,19 +11821,39 @@ OL.clearLogicTraces = function() {
 };
 
 OL.handleResourceUnmap = async function(wfId, resId, isVault) {
-    if (!confirm("Unmap this resource?")) return;
+    if (!confirm("Unmap this resource from this workflow?")) return;
 
-    // Use your specific variables instead of 'prj'
-    const targetData = isVault ? state.master : (window['local-prj'] || window['draft-prj']);
-    const resources = isVault ? targetData.resources : targetData.localResources;
+    // 🚀 THE FIX: Use the standardized context helper instead of window globals
+    const context = OL.getCurrentContext();
+    const data = context.data;
+
+    if (!data) {
+        console.error("❌ Unmap Failed: No project or vault data context found.");
+        return;
+    }
+
+    // Determine which list to look in based on the context
+    const resources = context.isMaster ? data.resources : data.localResources;
+
+    if (!resources) {
+        console.error("❌ Unmap Failed: Resource library is missing from context.");
+        return;
+    }
 
     await OL.updateAndSync(() => {
-        const wf = resources.find(r => r.id === wfId);
+        // Find the parent Workflow
+        const wf = resources.find(r => String(r.id) === String(wfId));
+        
         if (wf && wf.steps) {
-            wf.steps = wf.steps.filter(s => s.resourceLinkId !== resId);
+            // Remove the link to the resource from the workflow's sequence
+            wf.steps = wf.steps.filter(s => String(s.resourceLinkId) !== String(resId));
+            console.log(`✅ Unmapped Resource ${resId} from Workflow ${wf.name}`);
+        } else {
+            console.warn("⚠️ Parent Workflow not found or has no steps.");
         }
     });
 
+    // Refresh the map to show the item has been removed from the lane
     OL.refreshMap();
 };
 
