@@ -5860,7 +5860,7 @@ function renderStepOutcomes(resId, step) {
             </div>
 
             <button class="card-delete-btn" style="position: static; font-size: 14px;" 
-                    onclick="OL.removeOutcome('${activeResId}', '${step.id}', ${idx})">×</button>
+                    onclick="event.stopPropagation(); OL.removeOutcome('${activeResId}', '${step.id}', ${idx})">×</button>
         </div>
     `).join('');
 }
@@ -5969,19 +5969,35 @@ OL.updateOutcomeDetail = function(resId, stepId, idx, field, value) {
 };
 
 OL.removeOutcome = function(resId, stepId, idx) {
-    const res = OL.getResourceById(resId);
-    const step = res?.steps.find(s => String(s.id) === String(stepId));
+    // 1. Find the resource that actually owns this step
+    const client = getActiveClient();
+    const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+    
+    let res = all.find(r => (r.steps || []).some(s => String(s.id) === String(stepId)));
 
-    if (step && step.outcomes) {
-        step.outcomes.splice(idx, 1);
+    // 2. Fallback to direct lookup
+    if (!res) res = OL.getResourceById(resId);
+
+    if (!res) return console.error("❌ Delete Failed: Resource not found.");
+
+    const step = res.steps?.find(s => String(s.id) === String(stepId));
+
+    if (step && step.outcomes && step.outcomes[idx]) {
+        // 🗑️ Remove the item from the array
+        const removed = step.outcomes.splice(idx, 1);
+        console.log(`🗑️ Removed logic path:`, removed[0]);
+
         OL.persist();
 
-        // Surgical Update
-        const detailList = document.getElementById('step-outcomes-list');
-        if (detailList) detailList.innerHTML = renderStepOutcomes(resId, step);
-
-        const mainList = document.getElementById('sop-step-list');
-        if (mainList) mainList.innerHTML = renderSopStepList(res);
+        // 🔄 Refresh the Inspector UI immediately
+        if (typeof OL.loadInspector === 'function') {
+            OL.loadInspector(stepId, res.id); 
+        }
+        
+        // Clear any active traces on the map since the logic is gone
+        OL.clearLogicTraces();
+    } else {
+        console.error("❌ Delete Failed: Could not locate outcome at index", idx);
     }
 };
 
