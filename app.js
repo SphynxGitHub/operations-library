@@ -10888,66 +10888,54 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
 
     if (isInsertingHere) {
         return `
-        <div class="inline-insert-card fade-in" onclick="event.stopPropagation()">
-            <div class="insert-header">
-                <span>INSERT LOGIC @ POSITION ${index}</span>
-                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();">×</button>
+        <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" 
+             style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0;">
+            <div class="insert-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <span class="tiny accent bold">INSERT LOGIC</span>
+                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer;">×</button>
             </div>
             
             ${!state.tempInsertMode ? `
-                <div class="insert-options">
-                    <div class="opt-btn" onclick="OL.setInsertMode('loose')">
-                        <span class="icon">📝</span><b>Loose Step</b>
+                <div class="insert-options" style="display:flex; gap:8px;">
+                    <div class="opt-btn" onclick="OL.setInsertMode('loose')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+                        <span style="display:block; font-size:16px;">📝</span><b style="font-size:10px;">Loose Step</b>
                     </div>
-                    <div class="opt-btn" onclick="OL.setInsertMode('resource')">
-                        <span class="icon">🔗</span><b>Resource</b>
+                    <div class="opt-btn" onclick="OL.setInsertMode('resource')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+                        <span style="display:block; font-size:16px;">🔗</span><b style="font-size:10px;">Resource</b>
                     </div>
                 </div>
             ` : state.tempInsertMode === 'loose' ? `
                 <div class="inline-form-box">
-                    <div class="mini-toggle">
-                        <button class="${state.tempType === 'Trigger' ? 'active' : ''}" onclick="state.tempType='Trigger'; OL.refreshMap()">Trigger</button>
-                        <button class="${state.tempType === 'Action' ? 'active' : ''}" onclick="state.tempType='Action'; OL.refreshMap()">Action</button>
+                    <div class="mini-toggle" style="display:flex; background:#1e293b; border-radius:4px; margin-bottom:10px; padding:2px;">
+                        <button class="${state.tempType === 'Trigger' ? 'active' : ''}" onclick="state.tempType='Trigger'; OL.refreshMap()" style="flex:1; background:transparent; border:none; color:#fff; font-size:9px; cursor:pointer; padding:4px;">Trigger</button>
+                        <button class="${state.tempType === 'Action' ? 'active' : ''}" onclick="state.tempType='Action'; OL.refreshMap()" style="flex:1; background:transparent; border:none; color:#fff; font-size:9px; cursor:pointer; padding:4px;">Action</button>
                     </div>
-                    <div class="dual-input">
-                        <input type="text" id="verb-input" placeholder="Verb..." autofocus>
-                        <input type="text" id="obj-input" placeholder="Object...">
+                    <div class="dual-input" style="display:flex; gap:5px; margin-bottom:10px;">
+                        <input type="text" id="verb-input" placeholder="Verb..." style="width:50%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;" autofocus>
+                        <input type="text" id="obj-input" placeholder="Object..." style="width:50%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
                     </div>
-                    <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wf.id}', ${index})">Add to Sequence</button>
+                    <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wf.id}', ${index})" style="width:100%; background:var(--accent); color:white; border:none; padding:6px; border-radius:4px; font-weight:bold; cursor:pointer;">Add to Sequence</button>
                 </div>
             ` : `
                 <div class="inline-form-box">
-                    <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.handleInlineResourceSearch(this.value)">
+                    <input type="text" class="mini-search" placeholder="Search resources..." oninput="OL.handleInlineResourceSearch(this.value)" style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
                 </div>
             `}
         </div>`;
     }
 
-    // Replace OL.refreshMap() with your actual render call
-    return `<div class="insert-divider resource-gap" 
-                onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.render();">
-                <span>+</span>
-            </div>`;
+    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
 }
 
-OL.refreshMap = function() {
-    // 1. Check if we're in Global Mode (Canvas)
-    const canvas = document.getElementById('fs-canvas');
-    if (canvas && typeof renderGlobalCanvas === 'function') {
-        const isVault = location.hash.includes('vault');
-        canvas.innerHTML = renderGlobalCanvas(state.master.workflows, state.master.resources, isVault);
-        
-        // Redraw lines if your app uses them
-        if (typeof OL.drawLevel2LogicLines === 'function' && state.focusedWorkflowId) {
-            setTimeout(() => OL.drawLevel2LogicLines(state.focusedWorkflowId), 50);
-        }
-        return;
+// 🔄 The Master Refresh Bridge
+OL.refreshMap = OL.render = function() {
+    const isVault = location.hash.includes('vault');
+    // Your app uses renderGlobalVisualizer as the primary entry point
+    if (typeof renderGlobalVisualizer === 'function') {
+        renderGlobalVisualizer(isVault);
+    } else {
+        console.error("Critical: renderGlobalVisualizer not found.");
     }
-
-    // 2. Fallback to a full page reload if we can't find the render function
-    // (Last resort to prevent the error from breaking the UX)
-    console.warn("OL.refreshMap: Could not find renderGlobalCanvas, falling back to soft reload.");
-    if (typeof OL.loadProject === 'function') OL.loadProject();
 };
 
 /*function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
