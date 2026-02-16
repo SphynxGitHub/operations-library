@@ -8371,7 +8371,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
     return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; state.tempInsertMode = null; OL.refreshMap();"><span>+</span></div>`;
 }
 
-OL.handleInlineResourceSearch = function(query) {
+/* OL.handleInlineResourceSearch = function(query) {
     const resultsContainer = document.getElementById('inline-search-results');
     if (!resultsContainer) return;
 
@@ -8412,6 +8412,55 @@ OL.handleInlineResourceSearch = function(query) {
         <div class="search-item tiny" 
              style="padding:12px; cursor:pointer; text-align: center; margin-top: 5px; border-radius: 4px;"
              onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
+            ➕ CREATE NEW: "${esc(query)}"
+        </div>
+    `;
+
+    resultsContainer.innerHTML = html;
+}; */
+
+OL.handleInlineResourceSearch = function(query) {
+    const resultsContainer = document.getElementById('inline-search-results');
+    if (!resultsContainer) return;
+
+    const q = (query || "").toLowerCase().trim();
+    if (!q) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+
+    // 🚀 THE FIX: Use the new colon separator to get the clean Parent ID
+    if (!state.openInsertIndex) return;
+    const [parentId, sequenceIdxStr] = state.openInsertIndex.split(':');
+    const sequenceIdx = parseInt(sequenceIdxStr || 0);
+
+    // Get the correct data context
+    const context = OL.getCurrentContext();
+    const resources = context.isMaster 
+        ? (context.data?.resources || []) 
+        : (context.data?.localResources || []);
+
+    // 1. Filter the library for assets (excluding workflows)
+    const filtered = resources.filter(res => 
+        (res.type || "").toLowerCase() !== 'workflow' && 
+        (res.name || "").toLowerCase().includes(q)
+    ).slice(0, 5);
+
+    // 2. Build the Results HTML
+    let html = filtered.map(res => `
+        <div class="search-item tiny" 
+             style="padding:10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05);"
+             onclick="OL.linkResourceToWorkflow('${parentId}', '${res.id}', ${sequenceIdx})">
+            <span style="margin-right:8px;">${OL.getRegistryIcon(res.type)}</span>
+            <span>${esc(res.name)}</span>
+        </div>
+    `).join('');
+
+    // 3. Always offer the "Create New" option
+    html += `
+        <div class="search-item tiny" 
+             style="padding:12px; cursor:pointer; color: var(--accent); font-weight: bold; text-align: center; background: rgba(56, 189, 248, 0.05);"
+             onclick="OL.createNewResourceAndLink('${parentId}', '${esc(query)}', ${sequenceIdx})">
             ➕ CREATE NEW: "${esc(query)}"
         </div>
     `;
