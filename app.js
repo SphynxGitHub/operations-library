@@ -11017,7 +11017,7 @@ OL.traceLogic = function(nodeId, direction) {
     console.log(`🔗 Found ${connections.length} connections.`);
     connections.forEach(conn => {
         // Draw the arrow
-        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label);
+        OL.drawTraceArrow(conn.from, conn.to, direction, conn.label, nodeId);
 
         // 🌟 THE GLOW: Find the card or row and light it up
         // We look for the closest parent with a card class, or the icon itself
@@ -11037,7 +11037,8 @@ OL.traceLogic = function(nodeId, direction) {
     });
 };
 
-OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
+// 🚀 Updated signature to include direction and nodeId
+OL.drawTraceArrow = function(fromEl, toEl, direction = "outgoing", label = "", nodeId = "unknown") {
     if (!fromEl || !toEl) return;
 
     const mapContainer = document.querySelector('.global-macro-map');
@@ -11077,12 +11078,10 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
     const y1 = (fRect.top + fRect.height / 2) - mapRect.top;
 
     // 🎯 END POINT: Absolute left edge of the target icon
-    // We subtract 2 pixels to give the arrowhead a tiny bit of breathing room
     const x2 = (tRect.left) - mapRect.left - 2; 
     const y2 = (tRect.top + tRect.height / 2) - mapRect.top;
 
-    // ➰ CURVE MATH: Create an "S" curve
-    // We use a horizontal offset for the control points to make the line feel "circuit-like"
+    // ➰ CURVE MATH
     const deltaX = Math.abs(x2 - x1);
     const controlPointOffset = Math.min(deltaX / 2, 100); 
 
@@ -11098,6 +11097,8 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
     path.setAttribute("fill", "none");
     path.setAttribute("class", "trace-path"); 
     path.setAttribute("marker-end", "url(#arrowhead)");
+    
+    // 🏷️ Tag this path for the TOGGLE feature
     path.setAttribute("data-trace-group", `trace-${nodeId}-${direction}`);
     
     svg.appendChild(path);
@@ -11105,11 +11106,13 @@ OL.drawTraceArrow = function(fromEl, toEl, direction, label = "") {
     if (label) {
         const lbl = document.createElement('div');
         lbl.className = 'trace-label fade-in';
+        // 🏷️ Tag the label too so it disappears on toggle!
+        lbl.setAttribute("data-trace-group", `trace-${nodeId}-${direction}`);
         lbl.innerText = label;
-        // Place label at the center of the curve
+        
         const midX = x1 + (x2 - x1) / 2;
         const midY = y1 + (y2 - y1) / 2;
-        lbl.style.cssText = `position:absolute; left:${midX}px; top:${midY}px; transform:translate(-50%,-120%); background:#0f172a; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:9px; border:1px solid #38bdf8; font-weight:bold; white-space:nowrap; z-index:10;`;
+        lbl.style.cssText = `position:absolute; left:${midX}px; top:${midY}px; transform:translate(-50%,-120%); background:#0f172a; color:#38bdf8; padding:2px 6px; border-radius:4px; font-size:9px; border:1px solid #38bdf8; font-weight:bold; white-space:nowrap; z-index:10; pointer-events:none;`;
         mapContainer.appendChild(lbl);
     }
 };
