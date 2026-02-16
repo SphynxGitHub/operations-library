@@ -10923,8 +10923,24 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
         </div>`;
     }
 
-    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
+    // Replace OL.refreshMap() with your actual render call
+    return `<div class="insert-divider resource-gap" 
+                onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.render();">
+                <span>+</span>
+            </div>`;
 }
+
+OL.refreshMap = function() {
+    if (typeof OL.render === 'function') {
+        OL.render();
+    } else if (typeof renderGlobalCanvas === 'function') {
+        const isVault = location.hash.includes('vault');
+        const canvas = document.getElementById('fs-canvas');
+        if (canvas) canvas.innerHTML = renderGlobalCanvas(isVault);
+    } else {
+        console.warn("⚠️ No refresh function found. Please check your render engine name.");
+    }
+};
 
 /*function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
