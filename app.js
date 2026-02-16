@@ -11008,6 +11008,46 @@ function renderInlineResourceForm(wfId, index) {
     `;
 }
 
+function renderInlineLooseForm(wfId, index) {
+    // 📚 Reference your existing library
+    const verbs = [...ATOMIC_STEP_LIB.ActionVerbs].sort();
+    const objects = [...ATOMIC_STEP_LIB.Objects].sort();
+
+    return `
+        <div class="inline-form-box fade-in">
+            <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:12px;">
+                
+                <div class="select-field">
+                    <label style="display:block; font-size:8px; color:var(--accent); font-weight:bold; margin-bottom:4px;">ACTION VERB</label>
+                    <select id="verb-select" class="modal-input tiny" style="width:100%;" onchange="OL.handleInlineCustomToggle(this, 'verb-custom-wrap')">
+                        ${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                        <option value="CUSTOM">-- Custom Verb --</option>
+                    </select>
+                    <div id="verb-custom-wrap" style="display:none; margin-top:5px;">
+                        <input type="text" id="verb-custom-input" class="modal-input tiny" placeholder="Type verb..." style="width:100%;">
+                    </div>
+                </div>
+
+                <div class="select-field">
+                    <label style="display:block; font-size:8px; color:var(--accent); font-weight:bold; margin-bottom:4px;">DATA OBJECT</label>
+                    <select id="obj-select" class="modal-input tiny" style="width:100%;" onchange="OL.handleInlineCustomToggle(this, 'obj-custom-wrap')">
+                        ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                        <option value="CUSTOM">-- Custom Object --</option>
+                    </select>
+                    <div id="obj-custom-wrap" style="display:none; margin-top:5px;">
+                        <input type="text" id="obj-custom-input" class="modal-input tiny" placeholder="Type object..." style="width:100%;">
+                    </div>
+                </div>
+
+            </div>
+            <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wfId}', ${index})" 
+                    style="width:100%; background:var(--accent); color:white; border:none; padding:8px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:10px;">
+                Confirm Logic Step
+            </button>
+        </div>
+    `;
+}
+
 OL.startLooseStepFlow = function(wfId, index) {
     const flowHtml = `
         <div class="logic-builder-modal">
