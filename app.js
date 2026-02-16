@@ -7970,7 +7970,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 
                 return `
                 <div class="macro-stage-col" style="display: flex; align-items: flex-start; position: relative;">
-                    <div style="min-width: 320px;">
+                    <div style="min-width: 300px;">
                         <div class="stage-header ${isInspectingStage ? 'is-inspecting' : ''}" 
                              style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center; cursor: pointer;"
                              onclick="OL.loadInspector('${stage.id}')">
@@ -7981,7 +7981,11 @@ window.renderGlobalCanvas = function(isVaultMode) {
                             <button class="card-delete-btn" onclick="event.stopPropagation(); OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
                         </div>
                         
-                        <div class="workflow-stack">
+                        <div class="workflow-stack" stage-workflow-stream" 
+                            data-stage-id="${stage.id}"
+                            ondragover="OL.handleCanvasDragOver(event)" 
+                            ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
+                            
                             ${workflowsInStage.map((wf, wIdx) => {
                                 const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
                                 return `
@@ -11346,75 +11350,87 @@ OL.handleUniversalDragStart = function(event, id, type, parentId = null) {
     console.log(`🚚 Started dragging ${type}: ${id}`);
 };
 
-OL.handleUniversalDrop = function(e, parentId, sectionId) {
+OL.handleUniversalDrop = async function(e, parentId, sectionId) {
     e.preventDefault();
-    const moveId = e.dataTransfer.getData("moveNodeId");      
-    const resId = e.dataTransfer.getData("resId");           
-    const atomicPayload = e.dataTransfer.getData("atomicPayload"); 
-    const stepName = e.dataTransfer.getData("stepName"); 
-    const objContext = e.dataTransfer.getData("objectContext"); 
-    const stepType = e.dataTransfer.getData("stepType"); 
+    const moveId = e.dataTransfer.getData("moveNodeId"); // Rearranging existing
+    const sidebarResId = e.dataTransfer.getData("resId"); // Dragging from library
+    const stepType = e.dataTransfer.getData("stepType"); // L3 Factory Type
+    const stepName = e.dataTransfer.getData("stepName"); // L3 Factory Name
     const isVaultMode = location.hash.includes('vault');
 
-    // 🎯 Use the Ghost Index from the hover handler, or default to the end
+    // 🎯 Use the Ghost Index from the hover handler
     const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
 
-    // 🚀 SCENARIO 1: REARRANGE EXISTING (Within Canvas)
-    if (moveId) {
-        OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
-    } 
+    await OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const resources = isVaultMode ? state.master.resources : client.projectData.localResources;
 
-    // 🚀 SCENARIO 2: MAP FROM SIDEBAR (Tier 1 & Tier 2)
-    else if (resId) {
-        // TIER 1: Sidebar Workflow -> Stage Lane
-        if (!state.focusedWorkflowId && !state.focusedResourceId) {
-            const res = OL.getResourceById(resId);
-            if (res) {
-                const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-                
-                // 1. Shift existing items in that lane to make room
-                source.filter(r => String(r.stageId) === String(sectionId))
-                      .forEach(r => { if (r.mapOrder >= targetIdx) r.mapOrder++; });
-                
-                // 2. Map the new item
-                res.stageId = sectionId;
-                res.mapOrder = targetIdx;
-            }
+        // 🚀 SCENARIO 1: REARRANGE EXISTING (Within Canvas)
+        if (moveId) {
+            OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
         } 
-        // TIER 2: Sidebar Resource -> Workflow Sequence
-        else if (state.focusedWorkflowId) {
-            const workflow = OL.getResourceById(state.focusedWorkflowId);
-            const sourceRes = OL.getResourceById(resId);
-            if (workflow && sourceRes) {
-                if (!workflow.steps) workflow.steps = [];
-                
-                const newStep = { 
-                    id: uid(), 
-                    name: sourceRes.name, 
-                    resourceLinkId: resId, 
-                    gridLane: sectionId 
-                };
 
-                // Inline Splice at the target index
-                workflow.steps.splice(targetIdx, 0, newStep);
-                
-                // Re-index mapOrder for the whole sequence to keep it clean
-                workflow.steps.forEach((s, idx) => s.mapOrder = idx);
+        // 🚀 SCENARIO 2: MAP FROM SIDEBAR (Tier 1 & Tier 2)
+        else if (sidebarResId) {
+            // TIER 1: Sidebar Workflow -> Stage Lane
+            if (!state.focusedWorkflowId && !state.focusedResourceId) {
+                const wf = resources.find(r => String(r.id) === String(sidebarResId));
+                if (wf) {
+                    wf.stageId = sectionId;
+                    // Re-index mapOrder for the lane
+                    const siblings = resources.filter(r => String(r.stageId) === String(sectionId) && r.id !== wf.id)
+                                              .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+                    siblings.splice(targetIdx, 0, wf);
+                    siblings.forEach((r, i) => r.mapOrder = i);
+                }
+            } 
+            // TIER 2: Sidebar Resource -> Workflow Sequence
+            else if (state.focusedWorkflowId) {
+                const workflow = OL.getResourceById(state.focusedWorkflowId);
+                if (workflow) {
+                    if (!workflow.steps) workflow.steps = [];
+                    workflow.steps.splice(targetIdx, 0, { 
+                        id: uid(), 
+                        name: sidebarResId.split('-').pop(), // Fallback name logic
+                        resourceLinkId: sidebarResId, 
+                        gridLane: sectionId 
+                    });
+                    workflow.steps.forEach((s, idx) => s.mapOrder = idx);
+                }
             }
         }
-    }
 
-    // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
-    else if ((atomicPayload || stepName) && state.focusedResourceId) {
-        // ... (Keep your existing Logic for Atomic Steps here) ...
-        // Ensure you use the 'targetIdx' to splice the step into the array
-        // rather than just pushing to the end.
-    }
+        // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
+        else if (stepName && state.focusedResourceId) {
+            const res = OL.getResourceById(state.focusedResourceId);
+            if (res) {
+                if (!res.steps) res.steps = [];
+                
+                const newAtomicStep = {
+                    id: uid(),
+                    name: stepName,
+                    type: stepType || "Action",
+                    outcomes: [],
+                    createdDate: new Date().toISOString()
+                };
 
-    // 🧹 Finalize
+                // Insert exactly where the placeholder was
+                res.steps.splice(targetIdx, 0, newAtomicStep);
+                
+                // Re-sync Dual-Homed Triggers if necessary
+                if (stepType === 'Trigger') {
+                    if (!res.triggers) res.triggers = [];
+                    res.triggers.push({ name: stepName, type: 'auto' });
+                }
+
+                console.log(`✨ Atomic ${stepType} created: ${stepName} at index ${targetIdx}`);
+            }
+        }
+    });
+
+    // 🧹 Finalize UI
     state.currentDropIndex = null;
     cleanupUI();
-    OL.persist();
     renderGlobalVisualizer(isVaultMode);
 };
 
