@@ -8362,7 +8362,7 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
                 <input type="text" class="mini-search" placeholder="Search or type new..." 
                        oninput="OL.handleInlineResourceSearch(this.value)" 
                        style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:8px; border-radius:4px; font-size:11px; outline:none;">
-                <div id="inline-search-results" style="background:#0f172a; border:1px solid #334155; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
+                <div id="inline-search-results" style="background:#0f172a; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
             </div>`;
         }
     }
@@ -8370,54 +8370,6 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
     // Standard "+" Divider
     return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; state.tempInsertMode = null; OL.refreshMap();"><span>+</span></div>`;
 }
-
-/* OL.handleInlineResourceSearch = function(query) {
-    const resultsContainer = document.getElementById('inline-search-results');
-    if (!resultsContainer) return;
-
-    if (!query || query.trim() === "") {
-        resultsContainer.innerHTML = '';
-        return;
-    }
-
-    const context = OL.getCurrentContext();
-    const q = query.toLowerCase().trim();
-    
-    // 🛡️ THE SAFETY GUARD: Default to an empty array if data or resources are missing
-    const resources = context.isMaster 
-        ? (context.data?.resources || []) 
-        : (context.data?.localResources || []);
-
-    const insertIdParts = (state.openInsertIndex || "").split(':'); 
-    if (insertIdParts.length < 2) return;
-    
-    console.log (insertIdParts, "Insert ID Parts");
-
-    // Filter library
-    const filtered = resources.filter(r => 
-        r.type !== 'Workflow' && 
-        (r.name || "").toLowerCase().includes(q)
-    ).slice(0, 5);
-
-    let html = filtered.map(res => `
-        <div class="search-item tiny" 
-             style="padding:10px; cursor:pointer; color: #eee;"
-             onclick="OL.linkResourceToWorkflow('${insertIdParts[0]}', '${res.id}', ${insertIdParts[1]})">
-            ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
-        </div>
-    `).join('');
-
-    // Always append "Create New"
-    html += `
-        <div class="search-item tiny" 
-             style="padding:12px; cursor:pointer; text-align: center; margin-top: 5px; border-radius: 4px;"
-             onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
-            ➕ CREATE NEW: "${esc(query)}"
-        </div>
-    `;
-
-    resultsContainer.innerHTML = html;
-}; */
 
 OL.handleInlineResourceSearch = function(query) {
     const resultsContainer = document.getElementById('inline-search-results');
