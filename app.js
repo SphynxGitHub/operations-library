@@ -10749,9 +10749,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         return { ...step, asset: linkedAsset };
     });
 
-    const hasIncoming = allResources.some(otherRes => 
-        (otherRes.outcomes || []).some(o => o.targetId === wf.id)
-    );
+    const hasIncoming = OL.checkIncomingLogic(atomic.id);
     const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
 
     return `
@@ -10887,6 +10885,24 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         </div>
     `;
 }
+
+OL.checkIncomingLogic = function(stepId) {
+    const client = getActiveClient();
+    const allResources = [
+        ...(state.master.resources || []),
+        ...(client?.projectData?.localResources || [])
+    ];
+
+    // Scan all resources and their steps for an outcome pointing to our stepId
+    return allResources.some(res => 
+        (res.steps || []).some(step => 
+            (step.outcomes || []).some(out => {
+                const tid = out.targetId || (out.action?.includes('jump_step_') ? out.action.split('jump_step_')[1] : null);
+                return String(tid) === String(stepId);
+            })
+        )
+    );
+};
 
 OL.traceLogic = function(nodeId, direction) {
     OL.clearLogicTraces();
@@ -12114,6 +12130,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
     const isVaultMode = location.hash.includes('vault');
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const isTargetOfLogic = OL.checkIncomingLogic(selectedStepId);
      
     OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
     OL.applyCanvasHighlight();
@@ -12150,6 +12167,15 @@ OL.loadInspector = function(targetId, parentId = null) {
     // ------------------------------------------------------------
     // 2. DESCRIPTION & NOTES
     // ------------------------------------------------------------
+    if (isTargetOfLogic) {
+        html += `
+            <div class="logic-badge incoming">
+                <span>📥 This step is triggered by external logic</span>
+                <button onclick="OL.traceLogic('${selectedStepId}', 'incoming')">View Source</button>
+            </div>
+        `;
+    }
+
     html += `
         <div class="card-section">
             <label class="modal-section-label">📝 Description & Technical Notes</label>
