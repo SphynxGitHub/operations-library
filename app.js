@@ -10997,37 +10997,56 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
     const isInsertingHere = (state.openInsertIndex === key);
 
     if (isInsertingHere) {
-        return `
-        <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" 
-             style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0;">
-            <div class="insert-header" style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <span class="tiny accent bold">INSERT LOGIC</span>
-                <button class="close-insert-btn" onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer; font-size: 16px;">×</button>
-            </div>
-            
-            ${!state.tempInsertMode ? `
-                <div class="insert-options" style="display:flex; gap:8px;">
-                    <div class="opt-btn" onclick="OL.setInsertMode('loose')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+        // 🚀 THE CHOICE MENU (Restored)
+        if (!state.tempInsertMode) {
+            return `
+            <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" 
+                 style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0; position: relative; z-index: 100;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span class="tiny accent bold">INSERT LOGIC</span>
+                    <button onclick="state.openInsertIndex = null; OL.refreshMap();" style="background:none; border:none; color:#64748b; cursor:pointer;">×</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <div onclick="OL.setInsertMode('loose')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
                         <span style="display:block; font-size:16px;">📝</span><b style="font-size:10px;">Loose Step</b>
                     </div>
-                    <div class="opt-btn" onclick="OL.setInsertMode('resource')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+                    <div onclick="OL.setInsertMode('resource')" style="flex:1; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px; cursor:pointer; text-align:center; border:1px solid rgba(255,255,255,0.1);">
                         <span style="display:block; font-size:16px;">🔗</span><b style="font-size:10px;">Resource</b>
                     </div>
                 </div>
-            ` : state.tempInsertMode === 'loose' ? renderInlineLooseForm(wf.id, index) : `
-                <div class="inline-form-box">
-                    <input type="text" class="mini-search" placeholder="Search resources..." 
-                        oninput="OL.handleInlineResourceSearch(this.value)" 
-                        style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:5px; border-radius:4px; font-size:11px;">
-                    <div id="inline-search-results" 
-                        style="background:#0f172a; border:1px solid #334155; border-top:none; max-height:150px; overflow-y:auto; border-radius:0 0 4px 4px;">
-                    </div>
+            </div>`;
+        }
+
+        // 📝 LOOSE STEP FORM
+        if (state.tempInsertMode === 'loose') {
+            return `
+            <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span class="tiny accent bold">NEW LOOSE STEP</span>
+                    <button onclick="OL.setInsertMode(null)" style="background:none; border:none; color:#64748b; cursor:pointer;">⬅</button>
                 </div>
-            `}
-        </div>`;
+                ${renderInlineLooseForm(wf.id, index)}
+            </div>`;
+        }
+
+        // 🔗 RESOURCE SEARCH FORM
+        if (state.tempInsertMode === 'resource') {
+            return `
+            <div class="inline-insert-card fade-in" onclick="event.stopPropagation()" style="background: #0f172a; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 4px 0; overflow: visible !important;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span class="tiny accent bold">LINK RESOURCE</span>
+                    <button onclick="OL.setInsertMode(null)" style="background:none; border:none; color:#64748b; cursor:pointer;">⬅</button>
+                </div>
+                <input type="text" class="mini-search" placeholder="Search or type new..." 
+                       oninput="OL.handleInlineResourceSearch(this.value)" 
+                       style="width:100%; background:#1e293b; border:1px solid #334155; color:white; padding:8px; border-radius:4px; font-size:11px; outline:none;">
+                <div id="inline-search-results" style="background:#0f172a; border:1px solid #334155; border-top:none; max-height:200px; overflow-y:auto; position:absolute; left:0; right:0; z-index:1000;"></div>
+            </div>`;
+        }
     }
 
-    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
+    // Standard "+" Divider
+    return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; state.tempInsertMode = null; OL.refreshMap();"><span>+</span></div>`;
 }
 
 OL.handleInlineResourceSearch = function(query) {
@@ -11200,9 +11219,12 @@ OL.openSmartInsertMenu = function(e, wfId, index, isVaultMode) {
 
 OL.toggleInlineInsert = function(wfId, index) {
     const key = `${wfId}-${index}`;
-    // Toggle off if clicking the same one, otherwise open
-    state.openInsertIndex = (state.openInsertIndex === key) ? null : key;
-    state.tempInsertMode = null; // Reset sub-mode
+    if (state.openInsertIndex === key) {
+        state.openInsertIndex = null;
+    } else {
+        state.openInsertIndex = key;
+        state.tempInsertMode = null; // 🚀 FORCE THE CHOICE MENU TO SHOW FIRST
+    }
     OL.refreshMap(); 
 };
 
