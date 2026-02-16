@@ -4350,7 +4350,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
   // --- SECTION: INCOMING LINKS ---
 
-  const targetId = isAtomicStep ? parentId : data.id;
   const allConnections = getAllIncomingLinks(targetId, allResources);
   
   // State for filtering (you can persist this in state.ui if desired)
