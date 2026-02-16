@@ -11033,28 +11033,69 @@ OL.handleInlineResourceSearch = function(query) {
     const isVault = location.hash.includes('vault');
     const client = getActiveClient();
     const allResources = isVault ? state.master.resources : client.projectData.localResources;
+    const insertIdParts = state.openInsertIndex.split('-'); // [wfId, index]
     
-    // Filter for technical assets (not workflows)
-    const filtered = allResources.filter(r => 
-        r.type !== 'Workflow' && 
-        r.name.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 5); // Limit to top 5 for the mini-popup
-
     const resultsContainer = document.getElementById('inline-search-results');
-    if (!resultsContainer) return;
-
-    if (!query) {
-        resultsContainer.innerHTML = '';
+    if (!resultsContainer || !query) {
+        if (resultsContainer) resultsContainer.innerHTML = '';
         return;
     }
 
-    resultsContainer.innerHTML = filtered.map(res => `
+    const filtered = allResources.filter(r => 
+        r.type !== 'Workflow' && 
+        r.name.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 5);
+
+    let html = filtered.map(res => `
         <div class="search-item tiny" 
-             style="padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); font-size:10px;"
-             onclick="OL.linkResourceToWorkflow('${state.openInsertIndex.split('-')[0]}', '${res.id}', ${state.openInsertIndex.split('-')[1]})">
+             style="padding:8px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); font-size:10px; color: #eee;"
+             onclick="OL.linkResourceToWorkflow('${insertIdParts[0]}', '${res.id}', ${insertIdParts[1]})">
             ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
         </div>
-    `).join('') || `<div class="p-10 muted tiny">No resources found</div>`;
+    `).join('');
+
+    // ✨ Add "Create New" option if results are low or empty
+    html += `
+        <div class="search-item tiny" 
+             style="padding:8px; cursor:pointer; background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-weight: bold; font-size:10px;"
+             onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
+            ➕ Create new "${esc(query)}"
+        </div>
+    `;
+
+    resultsContainer.innerHTML = html;
+};
+
+OL.createNewResourceAndLink = async function(wfId, name, index) {
+    const newId = 'res_' + Math.random().toString(36).substr(2, 9);
+    const isVault = location.hash.includes('vault');
+    
+    await OL.updateAndSync(() => {
+        const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        
+        // 1. Create the Library Asset
+        source.push({
+            id: newId,
+            name: name,
+            type: 'Zap', // Default type, user can change in inspector
+            steps: [],
+            description: 'New resource created from workflow'
+        });
+
+        // 2. Link it to the Workflow
+        const wf = source.find(r => r.id === wfId);
+        if (wf) {
+            if (!wf.steps) wf.steps = [];
+            wf.steps.splice(index, 0, {
+                id: 'link_' + Math.random().toString(36).substr(2, 9),
+                resourceLinkId: newId
+            });
+        }
+    });
+
+    state.openInsertIndex = null;
+    OL.refreshMap();
+    OL.loadInspector(newId, wfId); // Focus on the new tool immediately
 };
 
 // Toggle custom input visibility
