@@ -8388,7 +8388,7 @@ OL.handleInlineResourceSearch = function(query) {
         ? (context.data?.resources || []) 
         : (context.data?.localResources || []);
 
-    const insertIdParts = (state.openInsertIndex || "").split('-'); 
+    const insertIdParts = (state.openInsertIndex || "").split(':'); 
     if (insertIdParts.length < 2) return;
     
     console.log (insertIdParts, "Insert ID Parts");
