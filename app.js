@@ -11088,7 +11088,7 @@ OL.handleInlineResourceSearch = function(query) {
     // Always append "Create New"
     html += `
         <div class="search-item tiny" 
-             style="padding:12px; cursor:pointer; background: #38bdf8 !important; color: #000 !important; font-weight: 900; text-align: center; margin-top: 5px; border-radius: 4px;"
+             style="padding:12px; cursor:pointer; text-align: center; margin-top: 5px; border-radius: 4px;"
              onclick="OL.createNewResourceAndLink('${insertIdParts[0]}', '${esc(query)}', ${insertIdParts[1]})">
             ➕ CREATE NEW: "${esc(query)}"
         </div>
