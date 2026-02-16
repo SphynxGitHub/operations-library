@@ -2524,6 +2524,8 @@ body.is-visualizer #mainContent {
     padding-left: 15px;
     padding-bottom: 10px;
     width: 50vh;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 /*==================================================================
