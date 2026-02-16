@@ -8047,39 +8047,38 @@ OL.handleCanvasBackgroundClick = function(event) {
 };
 
 OL.focusToolbox = function(mode = 'workflow') {
-    const layout = document.querySelector('.three-pane-layout');
-    if (!layout) return;
+    console.log("🚀 Toolbox Focus Triggered. Mode:", mode);
 
-    // 1. Clear Inspector (Right) to make room
-    OL.clearInspector(); 
-    
-    // 2. Disable Zen Mode to reveal the Sidebar (Left)
+    // 1. Force State: These are the switches that 'unlock' the left sidebar
+    state.viewMode = 'focus'; 
     state.ui.zenMode = false;
-    layout.classList.remove('zen-mode-active');
+
+    // 2. Clear any deep-dive focus to ensure sidebar shows the top-level list
+    state.focusedWorkflowId = null;
+    state.focusedResourceId = null;
     
-    // 3. Update Toggle UI
-    const zenBtn = document.getElementById('zen-mode-toggle');
-    if (zenBtn) {
-        zenBtn.innerHTML = 'Hide Tools ⤓';
-        zenBtn.classList.remove('accent');
-    }
+    // 3. Clear the Right Sidebar (Inspector) to ensure layout shifts left
+    OL.clearInspector(); 
 
-    // 4. Reset Sidebar View Mode if needed
-    // This ensures that if we were in L2 (Resources), we switch back to L1 (Workflows)
-    if (mode === 'workflow') {
-        state.focusedWorkflowId = null;
-        state.focusedResourceId = null;
-        renderGlobalVisualizer(location.hash.includes('vault'));
-    }
+    // 4. Force a Full UI Repaint
+    const isVault = window.location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVault); 
 
-    // 5. Focus the Search
+    // 5. DOM Focus & Visual Feedback
     setTimeout(() => {
-        const id = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
-        const searchInput = document.getElementById(id);
+        const inputId = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
+        const searchInput = document.getElementById(inputId);
+        
         if (searchInput) {
             searchInput.focus();
-            searchInput.closest('.pane-drawer').style.boxShadow = '0 0 20px var(--accent)';
-            setTimeout(() => searchInput.closest('.pane-drawer').style.boxShadow = '', 1000);
+            // Pulse effect to show it's open
+            const drawer = searchInput.closest('.pane-drawer');
+            if (drawer) {
+                drawer.style.boxShadow = '0 0 30px var(--accent)';
+                setTimeout(() => drawer.style.boxShadow = '', 1000);
+            }
+        } else {
+            console.error("❌ Sidebar Search Input not found in DOM after render.");
         }
     }, 150);
 };
