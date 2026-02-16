@@ -5929,13 +5929,20 @@ OL.updateOutcomeDetail = function(resId, stepId, idx, field, value) {
     const res = OL.getResourceById(resId);
     const step = res?.steps.find(s => String(s.id) === String(stepId));
     
-    if (step && step.outcomes[idx]) {
+    if (step && step.outcomes && step.outcomes[idx]) {
+        // 🚀 FORCE UPDATE: Update the actual data object
         step.outcomes[idx][field] = value;
+        
+        console.log(`✅ Data Updated: Step ${stepId} [${idx}].${field} = "${value}"`);
+        
         OL.persist();
         
-        // Update background grid surgically to reflect the new custom name
+        // If we are in the inspector, we don't necessarily need to re-render the 
+        // whole map, but we DO need to make sure the tracer sees this new data.
         const mainList = document.getElementById('sop-step-list');
         if (mainList) mainList.innerHTML = renderSopStepList(res);
+    } else {
+        console.error("❌ Save Failed: Could not find step or outcome index", {stepId, idx});
     }
 };
 
