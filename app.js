@@ -10814,7 +10814,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                 resourceLinkId: step.resourceLinkId,
                 isLoose: step.isLoose,
                 steps: [step],
-                // The index where the NEXT "+" divider should insert after this group
                 insertAfterIndex: step.originalIndex + 1 
             });
         }
@@ -10866,34 +10865,44 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
             const isInScope = !!OL.isResourceInScope(asset.id);
 
-            groupHtml = `
+            return `
                 <div class="wf-resource-wrapper" id="l3-node-${asset.id}">
-                    <div class="asset-mini-card is-navigable ${isInspectingRes ? 'is-inspecting' : ''}" 
+                    <div class="asset-mini-card is-navigable ${isInspectingRes ? 'is-inspecting' : ''} ${isInScope ? 'is-in-scope' : ''}" 
                          onclick="event.stopPropagation(); OL.loadInspector('${asset.id}', '${wf.id}')"
-                         style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; border: 1px solid rgba(255,255,255,0.05);">
-                         <div style="font-size: 11px; font-weight: bold; color: #eee; margin-bottom:8px;">
-                            ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
+                         style="background: rgba(0,0,0,0.4); border-radius: 6px; padding: 10px; position:relative; cursor: pointer;
+                                border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; border: 1px solid rgba(255,255,255,0.05);">
+                         
+                         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom:8px;">
+                            <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
+                                ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
+                            </div>
+                            ${isInScope ? `<span class="pill tiny" style="background: #10b981; color: white; font-size: 9px; padding: 2px 4px;">$</span>` : ''}
                          </div>
+
+                         <div class="resource-description" style="font-size: 9px; color: #94a3b8; margin-bottom: 8px; line-height: 1.3;">
+                            ${esc(asset.description || '')}
+                         </div>
+
                          <div class="atomic-step-container">
                              ${group.steps.map(s => `
-                                <div class="tiny atomic-step-row" 
-                                     style="display:flex; align-items:center; gap:8px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);"
+                                <div class="tiny atomic-step-row" id="step-row-${s.id}" 
+                                     style="display:flex; align-items:center; gap:5px; padding: 2px 4px;"
                                      onclick="event.stopPropagation(); OL.loadInspector('${s.id}', '${wf.id}')">
-                                    <span class="logic-trace-icon in" style="font-size:8px;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'incoming')">🔀</span>
-                                    <span style="flex: 1; font-size:10px;">${esc(s.name)}</span>
-                                    <span class="logic-trace-icon out" style="font-size:8px;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'outgoing')">🔀</span>
+                                    <div style="width: 14px;">
+                                        <span class="logic-trace-icon in" style="cursor:pointer;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'incoming')">🔀</span>
+                                    </div>
+                                    <span style="color: #38bdf8; font-size:10px;">•</span>
+                                    <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(s.name)}</span>
+                                    <div style="width: 14px;">
+                                        <span class="logic-trace-icon out" style="cursor:pointer;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'outgoing')">🔀</span>
+                                    </div>
                                 </div>`).join('')}
                          </div>
                     </div>
-                </div>`;
+                </div>` + renderInlineInsertUI(wf, group.insertAfterIndex, `${wf.id}-${group.insertAfterIndex}`, isVaultMode);
         }
-
-        // 🚀 3. SUBSEQUENT INSERT POINT
-        groupHtml += renderInlineInsertUI(wf, group.insertAfterIndex, `${wf.id}-${group.insertAfterIndex}`, isVaultMode);
-
-        return groupHtml;
     }).join('');
-
+    
     html += `</div>
             ${hasOutgoing ? `<div class="logic-trace-trigger outgoing" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>` : ''}
         </div>`;
