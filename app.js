@@ -12094,7 +12094,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     const isGlobalMode = state.viewMode === 'global';
-
     state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
@@ -12130,9 +12129,11 @@ OL.loadInspector = function(targetId, parentId = null) {
     const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
     const isVaultMode = location.hash.includes('vault');
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-    const isTargetOfLogic = OL.checkIncomingLogic(selectedStepId);
+
+    // 🚀 NEW: Check for Incoming Logic using targetId
+    const isTargetOfLogic = OL.checkIncomingLogic(targetId);
      
-    OL.syncCanvasHighlights(); // ✨ Instant glow without flickering
+    OL.syncCanvasHighlights(); 
     OL.applyCanvasHighlight();
 
     // ------------------------------------------------------------
@@ -12165,16 +12166,29 @@ OL.loadInspector = function(targetId, parentId = null) {
         </div>`;
 
     // ------------------------------------------------------------
-    // 2. DESCRIPTION & NOTES
+    // 🚀 NEW: INCOMING LOGIC BADGE (Renders right under the title)
     // ------------------------------------------------------------
     if (isTargetOfLogic) {
         html += `
-            <div class="logic-badge incoming">
-                <span>📥 This step is triggered by external logic</span>
-                <button onclick="OL.traceLogic('${selectedStepId}', 'incoming')">View Source</button>
+            <div class="logic-badge incoming fade-in" style="margin-bottom: 20px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:14px;">📥</span>
+                    <div style="display:flex; flex-direction:column;">
+                        <span style="font-weight:bold; font-size:10px;">INCOMING CONNECTION</span>
+                        <span style="font-size:9px; opacity:0.8;">This step is triggered by external logic.</span>
+                    </div>
+                </div>
+                <button class="btn tiny primary" style="font-size:9px; padding:2px 10px;" 
+                        onclick="OL.traceLogic('${targetId}', 'incoming')">
+                    Trace Source
+                </button>
             </div>
         `;
     }
+
+    // ------------------------------------------------------------
+    // 2. DESCRIPTION & NOTES
+    // ------------------------------------------------------------
 
     html += `
         <div class="card-section">
