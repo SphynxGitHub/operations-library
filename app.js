@@ -10954,6 +10954,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 // 🚀 Logic detection for internal steps
                                 const stepIn = OL.checkIncomingLogic(s.id);
                                 const stepOut = (s.outcomes && s.outcomes.length > 0);
+                                const isStepActive = String(state.activeInspectorResId) === String(s.id);
 
                                 return `
                                     <div class="tiny atomic-step-row ${s.isPlaceholder ? 'muted italic' : ''} ${isStepActive ? 'is-inspecting step-active' : ''}" 
