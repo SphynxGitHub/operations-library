@@ -10927,6 +10927,43 @@ function renderInlineInsertUI(wf, index, key, isVaultMode) {
     return `<div class="insert-divider resource-gap" onclick="event.stopPropagation(); state.openInsertIndex = '${key}'; OL.refreshMap();"><span>+</span></div>`;
 }
 
+// Toggle custom input visibility
+OL.handleInlineCustomToggle = function(selectEl, wrapId) {
+    const wrap = document.getElementById(wrapId);
+    if (selectEl.value === 'CUSTOM') {
+        wrap.style.display = 'block';
+        wrap.querySelector('input').focus();
+    } else {
+        wrap.style.display = 'none';
+    }
+};
+
+// Finalize and Save
+OL.finalizeInlineInsert = function(wfId, index) {
+    const verbSelect = document.getElementById('verb-select');
+    const objSelect = document.getElementById('obj-select');
+    
+    const verb = verbSelect.value === 'CUSTOM' ? document.getElementById('verb-custom-input').value : verbSelect.value;
+    const obj = objSelect.value === 'CUSTOM' ? document.getElementById('obj-custom-input').value : objSelect.value;
+    
+    if (!verb || !obj) return alert("Please provide both a verb and an object.");
+
+    const wf = OL.getResourceById(wfId);
+    const newStep = {
+        id: 'id_' + Math.random().toString(36).substr(2, 9),
+        name: `${verb} ${obj}`,
+        type: 'Action', // Defaulted as requested
+        resourceLinkId: null
+    };
+
+    wf.steps.splice(index, 0, newStep);
+    state.openInsertIndex = null;
+    state.tempInsertMode = null;
+    
+    OL.persist();
+    OL.refreshMap();
+};
+
 // 🔄 The Master Refresh Bridge
 OL.refreshMap = OL.render = function() {
     const isVault = location.hash.includes('vault');
@@ -11139,17 +11176,41 @@ OL.setInsertMode = function(mode) {
 };
 
 function renderInlineLooseForm(wfId, index) {
+    // Access your existing library
+    const verbs = [...ATOMIC_STEP_LIB.ActionVerbs].sort();
+    const objects = [...ATOMIC_STEP_LIB.Objects].sort();
+
     return `
-        <div class="inline-form-box">
-            <div class="toggle-mini">
-                <button class="${state.tempType === 'Trigger' ? 'active' : ''}" onclick="state.tempType='Trigger'; OL.refreshMap()">Trigger</button>
-                <button class="${state.tempType === 'Action' ? 'active' : ''}" onclick="state.tempType='Action'; OL.refreshMap()">Action</button>
+        <div class="inline-form-box fade-in">
+            <div class="dual-input" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+                
+                <div class="select-wrapper">
+                    <label class="tiny muted">VERB</label>
+                    <select id="verb-select" class="modal-input tiny" onchange="OL.handleInlineCustomToggle(this, 'verb-custom-wrap')">
+                        ${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                        <option value="CUSTOM">-- Custom Verb --</option>
+                    </select>
+                    <div id="verb-custom-wrap" style="display:none; margin-top:5px;">
+                        <input type="text" id="verb-custom-input" class="modal-input tiny" placeholder="Enter custom verb...">
+                    </div>
+                </div>
+
+                <div class="select-wrapper">
+                    <label class="tiny muted">OBJECT</label>
+                    <select id="obj-select" class="modal-input tiny" onchange="OL.handleInlineCustomToggle(this, 'obj-custom-wrap')">
+                        ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                        <option value="CUSTOM">-- Custom Object --</option>
+                    </select>
+                    <div id="obj-custom-wrap" style="display:none; margin-top:5px;">
+                        <input type="text" id="obj-custom-input" class="modal-input tiny" placeholder="Enter custom object...">
+                    </div>
+                </div>
+
             </div>
-            <div class="input-row">
-                <input type="text" id="verb-input" placeholder="Verb..." autofocus>
-                <input type="text" id="obj-input" placeholder="Object...">
-            </div>
-            <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wfId}', ${index})">Confirm</button>
+            <button class="btn-confirm" onclick="OL.finalizeInlineInsert('${wfId}', ${index})" 
+                    style="width:100%; background:var(--accent); color:white; border:none; padding:8px; border-radius:4px; font-weight:bold; cursor:pointer;">
+                Confirm Step
+            </button>
         </div>
     `;
 }
