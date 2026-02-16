@@ -3987,14 +3987,25 @@ window.renderResourceCard = function (res) {
 };
 
 // 3. CREATE DRAFT RESOURCE MODAL
-OL.promptCreateResource = async function() {
-    const name = prompt("Enter Resource Name:");
-    if (!name) return null; // Return null if cancelled
+OL.promptCreateResource = async function(predefinedName = null) {
+    // 1. Get Name (either from search query or prompt)
+    const name = predefinedName || prompt("Enter Resource Name:");
+    if (!name) return null;
     
+    // 2. Resolve Context (The Safety Valve)
     const context = OL.getCurrentContext();
+    const data = context.data; // This is either state.master or client.projectData
+    
+    if (!data) {
+        console.error("❌ CRITICAL: No data source found for creation.");
+        return null;
+    }
+
+    // 3. Generate ID
     const timestamp = Date.now();
     const newId = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
+    // 4. Build the Object
     const newRes = {
         id: newId,
         name: name,
@@ -4003,12 +4014,19 @@ OL.promptCreateResource = async function() {
         createdDate: new Date().toISOString()
     };
 
-    // Push to the correct data pool
-    const targetList = context.isMaster ? context.data.resources : context.data.localResources;
-    targetList.push(newRes);
+    // 5. Push to the correct array (Resources vs localResources)
+    if (context.isMaster) {
+        if (!data.resources) data.resources = [];
+        data.resources.push(newRes);
+    } else {
+        if (!data.localResources) data.localResources = [];
+        data.localResources.push(newRes);
+    }
 
+    console.log(`✅ Resource Created in ${context.isMaster ? 'Vault' : 'Project'}:`, newRes);
+    
     await OL.persist();
-    return newId; // 👈 This is the key! We return the ID so other functions can use it.
+    return newId; 
 };
 
 // 3a. HANDLE THE FIRST UPDATE / SAVE DRAFT
@@ -11103,30 +11121,33 @@ OL.linkResourceToWorkflow = async function(wfId, resId, index) {
 };
 
 OL.createNewResourceAndLink = async function(wfId, name, index) {
-    // 🚀 REUSE: Just call the existing logic
-    // We pass the name if we have it, or let the prompt handle it
-    const newResId = await OL.promptCreateResource(); 
+    // 🚀 STEP 1: Use the global creator we just fixed
+    const newResId = await OL.promptCreateResource(name);
+    if (!newResId) return;
+
+    // 🚀 STEP 2: Link it to the workflow
+    // We use getResourceById to avoid 'prj is undefined' errors
+    const wf = OL.getResourceById(wfId);
     
-    if (!newResId) return; // User cancelled the prompt
-
-    // Now just do the mapping logic which is unique to this menu
-    const context = OL.getCurrentContext();
-    const targetResources = context.isMaster ? context.data.resources : context.data.localResources;
-    const wf = targetResources.find(r => String(r.id) === String(wfId));
-
     if (wf) {
         if (!wf.steps) wf.steps = [];
         wf.steps.splice(index, 0, {
-            id: uid(),
+            id: uid(), // Standard UID helper
             resourceLinkId: newResId
         });
+        
         await OL.persist();
+        console.log(`🔗 Linked ${newResId} to Workflow ${wfId} at index ${index}`);
     }
 
+    // 🚀 STEP 3: Cleanup UI
     state.openInsertIndex = null;
     state.tempInsertMode = null;
+    
     OL.refreshMap();
-    OL.loadInspector(newResId, wfId);
+    
+    // Small delay to let the DOM catch up before opening inspector
+    setTimeout(() => OL.loadInspector(newResId, wfId), 100);
 };
 
 // Toggle custom input visibility
