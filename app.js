@@ -10790,31 +10790,37 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     
-    // 1. Map raw steps to enriched data
+    // 1. FLATTEN: Combine Workflow-level structure with actual Resource data
     let flattenedSequence = [];
     (wf.steps || []).forEach((wfStep, wfIdx) => {
         if (!wfStep.resourceLinkId) {
             // It's a loose step: Add it directly
-            flattenedSequence.push({ ...wfStep, isLoose: true, originalWfIndex: wfIdx });
+            flattenedSequence.push({ 
+                ...wfStep, 
+                isLoose: true, 
+                originalWfIndex: wfIdx 
+            });
         } else {
-            // It's a Resource: Find it and add all its internal steps
+            // It's a Resource: Find the technical asset
             const asset = allResources.find(r => String(r.id) === String(wfStep.resourceLinkId));
             if (asset) {
                 const internalSteps = (asset.steps || []);
                 if (internalSteps.length === 0) {
-                    // Placeholder if resource has no internal steps yet
+                    // Placeholder if resource has no internal steps yet so the card still renders
                     flattenedSequence.push({ 
                         id: `empty-${asset.id}`, 
-                        name: "No steps defined", 
+                        name: "No internal steps defined", 
                         isPlaceholder: true, 
-                        asset, 
+                        asset: asset, 
+                        isLoose: false, 
                         originalWfIndex: wfIdx 
                     });
                 } else {
+                    // Pull in all internal steps from the technical resource
                     internalSteps.forEach(internalStep => {
                         flattenedSequence.push({ 
                             ...internalStep, 
-                            asset, 
+                            asset: asset, 
                             isLoose: false, 
                             originalWfIndex: wfIdx 
                         });
@@ -10824,21 +10830,21 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         }
     });
 
-    // 2. Group consecutive steps by Resource ID
+    // 2. GROUP: Group consecutive items that belong to the same technical asset
     const groupedItems = [];
-    enrichedSteps.forEach((step) => {
+    flattenedSequence.forEach((item) => {
         const lastGroup = groupedItems[groupedItems.length - 1];
         
-        // If it's the same resource as the previous step (and not a loose step), group them
-        if (lastGroup && !step.isLoose && lastGroup.resourceLinkId === step.resourceLinkId) {
-            lastGroup.steps.push(step);
+        // If this item is part of the same technical resource as the previous item, group them
+        if (lastGroup && !item.isLoose && !lastGroup.isLoose && lastGroup.resourceId === item.asset?.id) {
+            lastGroup.steps.push(item);
         } else {
             groupedItems.push({
-                resourceLinkId: step.resourceLinkId,
-                asset: item.asset || null,
-                isLoose: step.isLoose,
-                steps: [step],
-                insertAfterIndex: step.originalIndex + 1 
+                resourceId: item.isLoose ? null : item.asset?.id,
+                asset: item.isLoose ? null : item.asset,
+                isLoose: item.isLoose,
+                steps: [item],
+                insertIndex: item.originalWfIndex + 1 
             });
         }
     });
@@ -10852,7 +10858,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
              onclick="event.stopPropagation(); OL.loadInspector('${wf.id}')"
              style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; border-top: 2px solid var(--accent); cursor: pointer;">
 
-             ${hasIncoming ? `<div class="logic-trace-trigger incoming" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>` : ''}
+             ${hasIncoming ? `<div class="logic-trace-trigger incoming" title="View Incoming Logic" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'incoming')">🔀</div>` : ''}
             
              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="color: var(--accent); font-weight: 900; font-size: 12px; display: flex; align-items: center; gap: 8px;">
@@ -10863,26 +10869,25 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
             <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">`;
 
-    // 🚀 1. STARTING INSERT POINT
+    // 🚀 INITIAL INSERT POINT
     html += renderInlineInsertUI(wf, 0, `${wf.id}-0`, isVaultMode);
 
-    // 🚀 2. RENDER GROUPS
+    // 🚀 RENDER THE GROUPS
     html += groupedItems.map((group) => {
-       if (group.isLoose) {
+        if (group.isLoose) {
             const step = group.steps[0];
             return `
-                <div class="wf-resource-wrapper loose-step-wrapper">
+                <div class="wf-resource-wrapper loose-step-wrapper" id="step-row-${step.id}">
                     <div class="atomic-step-row loose-step-card" 
-                         onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${wf.id}')">
-                        <span class="logic-trace-icon in" onclick="OL.traceLogic('${step.id}', 'incoming')">🔀</span>
-                        <span style="font-size: 11px; color: #38bdf8; font-weight: bold; flex: 1;">📝 ${esc(step.name)}</span>
-                        <span class="logic-trace-icon out" onclick="OL.traceLogic('${step.id}', 'outgoing')">🔀</span>
+                         onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${wf.id}')"
+                         style="background: rgba(56, 189, 248, 0.05); border: 1px dashed rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'incoming')">🔀</span>
+                        <span style="font-size: 11px; color: #38bdf8; font-weight: bold; flex: 1;">📝 ${esc(step.name || "Draft Step")}</span>
+                        <span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</span>
                     </div>
                 </div>` + renderInlineInsertUI(wf, group.insertIndex, `${wf.id}-${group.insertIndex}`, isVaultMode);
         } else {
             const asset = group.asset;
-            if (!asset) return `<div class="tiny muted">⚠️ Missing Resource</div>`;
-            
             const isInspectingRes = String(state.activeInspectorResId) === String(asset.id);
             const isInScope = !!OL.isResourceInScope(asset.id);
 
@@ -10897,7 +10902,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
                                 ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                             </div>
-                            ${isInScope ? `<span class="pill tiny" style="background: #10b981; color: white; font-size: 9px; padding: 2px 4px;">$</span>` : ''}
+                            ${isInScope ? `<button class="btn tiny" title="View in Scoping" style="padding: 2px 4px; font-size: 9px; background: #10b981; color: white; border: none; border-radius: 4px;" onclick="event.stopPropagation(); OL.jumpToScopingItem('${asset.id}')">$</button>` : ''}
                          </div>
 
                          <div class="resource-description" style="font-size: 9px; color: #94a3b8; margin-bottom: 8px; line-height: 1.3;">
@@ -10906,26 +10911,26 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
 
                          <div class="atomic-step-container">
                              ${group.steps.map(s => `
-                                <div class="tiny atomic-step-row" id="step-row-${s.id}" 
+                                <div class="tiny atomic-step-row ${s.isPlaceholder ? 'muted italic' : ''}" id="step-row-${s.id}" 
                                      style="display:flex; align-items:center; gap:5px; padding: 2px 4px;"
-                                     onclick="event.stopPropagation(); OL.loadInspector('${s.id}', '${wf.id}')">
-                                    <div style="width: 14px;">
-                                        <span class="logic-trace-icon in" style="cursor:pointer;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'incoming')">🔀</span>
+                                     onclick="event.stopPropagation(); OL.loadInspector('${s.id}', '${asset.id}')">
+                                    <div style="width: 14px; display: flex; justify-content: center;">
+                                        <span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'incoming')">🔀</span>
                                     </div>
-                                    <span style="color: #38bdf8; font-size:10px;">•</span>
+                                    <span style="color: ${s.type === 'Trigger' ? '#ffbf00' : '#38bdf8'}; font-size:10px;">${s.type === 'Trigger' ? '⚡' : '•'}</span>
                                     <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(s.name)}</span>
-                                    <div style="width: 14px;">
-                                        <span class="logic-trace-icon out" style="cursor:pointer;" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'outgoing')">🔀</span>
+                                    <div style="width: 14px; display: flex; justify-content: center;">
+                                        <span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'outgoing')">🔀</span>
                                     </div>
                                 </div>`).join('')}
                          </div>
                     </div>
-                </div>` + renderInlineInsertUI(wf, group.insertAfterIndex, `${wf.id}-${group.insertAfterIndex}`, isVaultMode);
+                </div>` + renderInlineInsertUI(wf, group.insertIndex, `${wf.id}-${group.insertIndex}`, isVaultMode);
         }
     }).join('');
 
     html += `</div>
-            ${hasOutgoing ? `<div class="logic-trace-trigger outgoing" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>` : ''}
+            ${hasOutgoing ? `<div class="logic-trace-trigger outgoing" title="View Outgoing Logic" onclick="event.stopPropagation(); OL.traceLogic('${wf.id}', 'outgoing')">🔀</div>` : ''}
         </div>`;
     
     return html;
