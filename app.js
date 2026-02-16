@@ -5930,42 +5930,41 @@ OL.updateOutcomeValue = function(resId, stepId, idx, field, value) {
 };
 
 OL.updateOutcomeDetail = function(resId, stepId, idx, field, value) {
-    // 1. Attempt to find the resource through various state anchors
-    let res = OL.getResourceById(resId) || 
-              OL.getResourceById(state.activeInspectorParentId) ||
-              OL.getResourceById(state.activeInspectorResId);
-
-    // 2. If still not found, do a deep search across all resources
-    if (!res) {
-        const client = getActiveClient();
-        const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
-        res = all.find(r => r.steps && r.steps.some(s => String(s.id) === String(stepId)));
-    }
-
-    // 3. Safety Check: If res is still undefined, stop here
-    if (!res || !res.steps) {
-        console.error("❌ Save Error: Resource or Steps array undefined", { resId, stepId });
-        return;
-    }
-
-    // 4. Find the specific step
-    const step = res.steps.find(s => String(s.id) === String(stepId));
+    const client = getActiveClient();
+    const all = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
     
+    let res = null;
+    let step = null;
+
+    // 1. 🔍 THE HUNT: Find the resource that contains this stepId
+    res = all.find(r => (r.steps || []).some(s => String(s.id) === String(stepId)));
+
+    // 2. Fallback: If we can't find it by step ownership, try the direct resId
+    if (!res) res = OL.getResourceById(resId);
+
+    if (res && res.steps) {
+        step = res.steps.find(s => String(s.id) === String(stepId));
+    }
+
+    // 3. 💾 SAVE LOGIC
     if (step && step.outcomes && step.outcomes[idx]) {
-        // 5. Apply the update
         step.outcomes[idx][field] = value;
-        console.log(`💾 Logic Saved: Step ${stepId} Outcome[${idx}].${field} = "${value}"`);
+        console.log(`✅ Logic Saved to Resource [${res.name}]: ${field} = "${value}"`);
         
         OL.persist();
-        
-        // 6. Surgical UI Update (Optional)
-        // Only refresh the outcomes list if the element exists
+
+        // 4. Update Sidebar UI
         const outcomeList = document.getElementById('step-outcomes-list');
-        if (outcomeList && typeof renderStepOutcomes === 'function') {
-            // outcomeList.innerHTML = renderStepOutcomes(res.id, step);
+        if (outcomeList) {
+            // Re-render only the outcomes list to show the new value
+            outcomeList.innerHTML = renderStepOutcomes(res.id, step);
         }
     } else {
-        console.warn("⚠️ Save Warning: Step or Outcome index not found", { stepId, idx });
+        console.error("❌ Save Error: Target outcome not found.", { 
+            resFound: !!res, 
+            stepFound: !!step, 
+            idx 
+        });
     }
 };
 
