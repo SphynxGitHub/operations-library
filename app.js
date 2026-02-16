@@ -10894,9 +10894,11 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             const hasIn = OL.checkIncomingLogic(step.id);
             const hasOut = (step.outcomes && step.outcomes.length > 0);
 
+            const isStepActive = String(state.activeInspectorResId) === String(step.id);
+
             return `
                 <div class="wf-resource-wrapper loose-step-wrapper" id="step-row-${step.id}">
-                    <div class="atomic-step-row loose-step-card" 
+                    <div class="atomic-step-row loose-step-card" ${isStepActive ? 'step-active' : ''}
                         onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${wf.id}')"
                         style="background: rgba(56, 189, 248, 0.05); border: 1px dashed rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         
@@ -10907,10 +10909,10 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         ${hasOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</span>` : ''}
                     
                         <button class="card-delete-btn" 
-                                style="position:static; opacity: 0.4; font-size: 14px;"
-                                onmouseover="this.style.opacity='1'" 
-                                onmouseout="this.style.opacity='0.4'"
-                                onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">
+                            style="position:static; opacity: 0.4; font-size: 14px;"
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.4'"
+                            onclick="event.stopPropagation(); OL.removeStepFromCanvas('${wf.id}', '${step.id}')">
                             ×
                         </button>
                     </div>
