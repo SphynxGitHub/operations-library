@@ -10749,6 +10749,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         return { ...step, asset: linkedAsset };
     });
 
+    const hasIncoming = OL.checkIncomingLogic(wf.id);
     const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
 
     return `
