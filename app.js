@@ -10749,7 +10749,6 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         return { ...step, asset: linkedAsset };
     });
 
-    const hasIncoming = OL.checkIncomingLogic(atomic.id);
     const hasOutgoing = (wf.outcomes && wf.outcomes.length > 0);
 
     return `
@@ -10826,8 +10825,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 ${hasLogic ? `<span title="Has Conditional Logic" style="color:var(--vault-gold); font-size:10px;">🔀</span>` : ''}
                                 ${(asset.steps || []).map(atomic => {
                                     const isStepInspected = String(state.activeInspectorResId) === String(atomic.id);
-                                    const stepHasLogic = (atomic.outcomes || []).length > 0;
-                                    const hasIn = allResources.some(r => (r.outcomes || []).some(o => o.targetId === atomic.id));
+                                    const hasIn = OL.checkIncomingLogic(atomic.id);
                                     const hasOut = (atomic.outcomes && atomic.outcomes.length > 0);
                                     let previewText = "No Target";
                                     if (hasOut) {
