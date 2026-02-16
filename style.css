@@ -3128,6 +3128,32 @@ body.is-visualizer #mainContent {
     transform: none;
 }
 
+.loose-step {
+    background: rgba(15, 23, 42, 0.4) !important;
+    border: 1px dashed rgba(56, 189, 248, 0.3) !important;
+    margin: 8px 0;
+    border-left: 4px solid #64748b !important; /* Muted Slate */
+    border-radius: 6px;
+    opacity: 0.9;
+}
+
+.loose-step:hover {
+    border-color: #38bdf8 !important;
+    background: rgba(15, 23, 42, 0.8) !important;
+}
+
+.drop-zone {
+    height: 4px;
+    transition: height 0.2s, background 0.2s;
+    margin: 2px 0;
+}
+
+.drop-zone.active {
+    height: 20px;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px dashed #38bdf8;
+}
+
 /*==================================================================
   4. WORKFLOW CARDS
 ==================================================================*/

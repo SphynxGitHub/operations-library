@@ -10789,9 +10789,13 @@ OL.promptInsertWorkflow = async function(stageId, order, isVault) {
 
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
+   
     const workflowSteps = (wf.steps || []).map(step => {
+        if (!step.resourceLinkId) {
+            return { ...step, isLoose: true }; // Flag it as loose
+        }
         const linkedAsset = allResources.find(r => String(r.id) === String(step.resourceLinkId));
-        return { ...step, asset: linkedAsset };
+        return { ...step, asset: linkedAsset, isLoose: false };
     });
 
     const hasIncoming = OL.checkIncomingLogic(wf.id);
@@ -10822,6 +10826,23 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                  ondrop="OL.handleUniversalDrop(event, '${wf.id}', 'resource-stack')">
                 
                 ${workflowSteps.map((step, rIdx) => {
+                    if (step.isLoose) {
+                        return `
+                        <div class="wf-resource-wrapper loose-step-wrapper" id="step-row-${step.id}">
+                            <div class="atomic-step-row loose-step-card" 
+                                 onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${wf.id}')"
+                                 style="background: rgba(56, 189, 248, 0.05); border: 1px dashed rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                
+                                <span class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'incoming')">🔀</span>
+                                <span style="font-size: 11px; color: #38bdf8; font-weight: bold; flex: 1;">📝 ${esc(step.name || "Draft Step")}</span>
+                                <span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</span>
+                                
+                                <button class="card-delete-btn" style="position:static; font-size: 12px; margin-left: 5px;" 
+                                        onclick="event.stopPropagation(); OL.removeLooseStep('${wf.id}', '${step.id}')">×</button>
+                            </div>
+                            <div class="insert-divider" onclick="OL.promptInsertResourceInWorkflow('${wf.id}', ${rIdx + 1}, ${isVaultMode})"><span>+</span></div>
+                        </div>`;
+                    }
                     const asset = step.asset;
                     if (!asset) return `<div class="tiny muted" style="padding:5px; border:1px dashed #444;">⚠️ Missing: ${esc(step.name)}</div>`;
                     
@@ -10929,6 +10950,47 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
         </div>
     `;
 }
+
+function renderLooseStepRow(step, wfId) {
+    return `
+        <div class="drop-zone" ondrop="OL.handleMoveStep(event, '${wfId}', ${step.position})" ondragover="OL.showDropZone(this)"></div>
+        <div class="atomic-step-row loose-step" 
+             draggable="true" 
+             ondragstart="OL.handleStepDragStart(event, '${step.id}')"
+             onclick="OL.loadInspector('${step.id}')">
+            <div class="logic-trace-icon in" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'incoming')">🔀</div>
+            <span class="step-name">${esc(step.name)}</span>
+            <div class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</div>
+        </div>
+    `;
+}
+
+OL.handleMoveStep = function(e, wfId, targetIndex) {
+    const stepId = e.dataTransfer.getData("stepId");
+    const wf = OL.getWorkflowById(wfId);
+    
+    // Find the step and update its position and resourceId
+    const stepIdx = wf.steps.findIndex(s => String(s.id) === String(stepId));
+    const [step] = wf.steps.splice(stepIdx, 1);
+    
+    // If dropped into a loose zone, remove the resource assignment
+    step.resourceId = null; 
+    
+    // Re-insert at the new sequence position
+    wf.steps.splice(targetIndex, 0, step);
+    
+    OL.persist();
+    OL.refreshMap();
+};
+
+OL.assignResourceToStep = function(stepId, resourceId) {
+    const step = OL.getStepById(stepId);
+    if (step) {
+        step.resourceLinkId = resourceId;
+        OL.persist();
+        OL.refreshMap();
+    }
+};
 
 OL.checkIncomingLogic = function(stepId) {
     const client = getActiveClient();
