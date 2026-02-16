@@ -9213,7 +9213,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     // 🚀 PRIORITY 1: GLOBAL CANVAS (No Left Sidebar)
     if (isGlobalMode) {
-        toolboxHtml = ""; // Explicitly empty
+        toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderGlobalCanvas(isVaultMode);
         breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
     } 
@@ -9255,7 +9255,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     // 🚀 THE SIDEBAR TOGGLE: Completely omit the HTML if in Global Mode
     const sidebarHtml = /*isGlobalMode ? '' : */`<aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>`;
-    const layoutClass = /*isGlobalMode ? 'global-macro-layout no-sidebar' : */'vertical-lifecycle-mode';
+    const layoutClass = isGlobalMode ? 'global-macro-layout no-sidebar' : 'vertical-lifecycle-mode';
 
     if (state.isFiltering) {
         state.isFiltering = false;
