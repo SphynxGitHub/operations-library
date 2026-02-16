@@ -3142,6 +3142,24 @@ body.is-visualizer #mainContent {
     background: rgba(15, 23, 42, 0.8) !important;
 }
 
+/* 👁️ Hide logic icons on loose steps by default */
+.loose-step-card .logic-trace-icon {
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.2s ease;
+}
+
+/* 🔦 Show icons on hover */
+.loose-step-card:hover .logic-trace-icon {
+    opacity: 0.6;
+    transform: scale(1);
+}
+
+.loose-step-card .logic-trace-icon:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
 .drop-zone {
     height: 4px;
     transition: height 0.2s, background 0.2s;

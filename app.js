@@ -12362,30 +12362,41 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
 
     // 🟠 3. STEP -> RESOURCE
     if (isStep) {
+        // 1. Find current parent workflow
         const parentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.id) === String(targetObj.id)));
         
-        html += `
-            <div class="stack-field">
-                <label style="font-size:8px; color:var(--accent); font-weight:900; margin-bottom:4px; display:block;">WORKFLOW CONTAINER</label>
-                <select class="modal-input tiny full-width" onchange="OL.moveStepToWorkflow('${targetObj.id}', this.value, ${isVaultMode})">
-                    ${allResources.filter(r => r.type === 'Workflow').map(w => `
-                        <option value="${w.id}" ${parentWf?.id === w.id ? 'selected' : ''}>🔄 ${esc(w.name)}</option>
-                    `).join('')}
-                </select>
-            </div>
+        // 2. 🎯 Filter Resources: Only show resources that are already part of THIS workflow
+        // This prevents assigning a step to a Zap that belongs to a different process
+        const filteredResources = allResources.filter(res => {
+            const isNotWorkflow = res.type !== 'Workflow';
+            const isInThisWorkflow = (parentWf?.steps || []).some(s => String(s.resourceLinkId) === String(res.id));
+            return isNotWorkflow && isInThisWorkflow;
+        });
 
-            <div class="stack-field">
-                <label style="font-size:8px; color:var(--accent); font-weight:900; margin-bottom:4px; display:block;">RESOURCE ASSIGNMENT</label>
-                <select class="modal-input tiny full-width" onchange="OL.handleStepAssignmentChange('${targetObj.id}', this.value, ${isVaultMode})">
-                    <option value="LOOSE" ${!targetObj.resourceLinkId ? 'selected' : ''}>📝 Loose Step (Unassigned)</option>
-                    <optgroup label="Technical Resources">
-                        ${allResources.filter(r => r.type !== 'Workflow').map(res => `
-                            <option value="${res.id}" ${String(res.id) === String(targetObj.resourceLinkId) ? 'selected' : ''}>
-                                ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
-                            </option>
+        return `
+            <div class="hierarchy-stack" style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+                <div class="stack-field">
+                    <label class="tiny-label">WORKFLOW CONTAINER</label>
+                    <select class="modal-input tiny full-width" onchange="OL.moveStepToWorkflow('${targetObj.id}', this.value, ${isVaultMode})">
+                        ${allResources.filter(r => r.type === 'Workflow').map(w => `
+                            <option value="${w.id}" ${parentWf?.id === w.id ? 'selected' : ''}>🔄 ${esc(w.name)}</option>
                         `).join('')}
-                    </optgroup>
-                </select>
+                    </select>
+                </div>
+
+                <div class="stack-field">
+                    <label class="tiny-label">RESOURCE ASSIGNMENT</label>
+                    <select class="modal-input tiny full-width" onchange="OL.handleStepAssignmentChange('${targetObj.id}', this.value, ${isVaultMode})">
+                        <option value="LOOSE" ${!targetObj.resourceLinkId ? 'selected' : ''}>📝 Loose Step (Unassigned)</option>
+                        <optgroup label="Workflow Assets">
+                            ${filteredResources.map(res => `
+                                <option value="${res.id}" ${String(res.id) === String(targetObj.resourceLinkId) ? 'selected' : ''}>
+                                    ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
+                                </option>
+                            `).join('')}
+                        </optgroup>
+                    </select>
+                </div>
             </div>
         `;
     }
