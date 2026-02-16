@@ -11081,7 +11081,7 @@ OL.handleInlineResourceSearch = function(query) {
 
     let html = filtered.map(res => `
         <div class="search-item tiny" 
-             style="padding:10px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.05); color: #eee;"
+             style="padding:10px; cursor:pointer; color: #eee;"
              onclick="OL.linkResourceToWorkflow('${insertIdParts[0]}', '${res.id}', ${insertIdParts[1]})">
             ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
         </div>
