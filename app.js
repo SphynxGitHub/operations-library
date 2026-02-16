@@ -3569,11 +3569,11 @@ window.renderResourceManager = function () {
                     <div class="dropdown-plus-menu" style="right: 0; left: auto;">
                         <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
                         ${(state.master.resourceTypes || []).map(t => `
-                            <div class="dropdown-item" onclick="OL.quickCreateInLibrary('${t.type}')">
+                            <div class="dropdown-item" onclick="OL.universalCreate('${t.type}')">
                                 ${OL.getRegistryIcon(t.type)} ${t.type}
                             </div>
                         `).join('')}
-                        <div class="dropdown-item" onclick="OL.quickCreateInLibrary('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div class="dropdown-item" onclick="OL.universalCreate('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
                             📄 Basic SOP
                         </div>
                     </div>
@@ -3621,7 +3621,49 @@ window.renderResourceManager = function () {
     `;
 };
 
-OL.quickCreateInLibrary = function(type) {
+/*OL.promptCreateResource = async function(predefinedName = null) {
+    // 1. Get Name (either from search query or prompt)
+    const name = predefinedName || prompt("Enter Resource Name:");
+    if (!name) return null;
+    
+    // 2. Resolve Context (The Safety Valve)
+    const context = OL.getCurrentContext();
+    const data = context.data; // This is either state.master or client.projectData
+    
+    if (!data) {
+        console.error("❌ CRITICAL: No data source found for creation.");
+        return null;
+    }
+
+    // 3. Generate ID
+    const timestamp = Date.now();
+    const newId = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+
+    // 4. Build the Object
+    const newRes = {
+        id: newId,
+        name: name,
+        type: "SOP", 
+        steps: [],
+        createdDate: new Date().toISOString()
+    };
+
+    // 5. Push to the correct array (Resources vs localResources)
+    if (context.isMaster) {
+        if (!data.resources) data.resources = [];
+        data.resources.push(newRes);
+    } else {
+        if (!data.localResources) data.localResources = [];
+        data.localResources.push(newRes);
+    }
+
+    console.log(`✅ Resource Created in ${context.isMaster ? 'Vault' : 'Project'}:`, newRes);
+    
+    await OL.persist();
+    return newId; 
+};*/
+
+/*OL.quickCreateInLibrary = function(type) {
     const isVault = location.hash.startsWith('#/vault');
     const timestamp = Date.now();
     const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
@@ -3660,6 +3702,69 @@ OL.quickCreateInLibrary = function(type) {
             nameInput.select(); // Highlight "New [Type]" so they can just start typing
         }
     }, 50);
+};*/
+
+OL.universalCreate = async function(type, options = {}) {
+    const { name: predefinedName, linkToWfId, insertIdx } = options;
+    
+    // 1. Get Name
+    const name = predefinedName || prompt(`Enter ${type} Name:`);
+    if (!name) return null;
+
+    const context = OL.getCurrentContext();
+    const data = context.data;
+    if (!data) return console.error("❌ Context Data not found");
+
+    // 2. Generate Identity
+    const timestamp = Date.now();
+    const newId = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+
+    // 3. Define Default Archetype based on Type
+    const registry = state.master.resourceTypes || [];
+    const typeInfo = registry.find(t => t.type === type);
+    const archetype = typeInfo?.archetype || "Base";
+
+    const newRes = {
+        id: newId,
+        name: name,
+        type: type || "SOP",
+        archetype: archetype,
+        steps: [],
+        triggers: [],
+        data: {},
+        description: options.description || "",
+        createdDate: new Date().toISOString()
+    };
+
+    // 4. Atomic Database Update
+    await OL.updateAndSync(() => {
+        // A. Add to Library
+        const targetLibrary = context.isMaster ? data.resources : data.localResources;
+        targetLibrary.push(newRes);
+
+        // B. Optional: Link to a Workflow (Scenario: Inline Builder)
+        if (linkToWfId) {
+            const wf = targetLibrary.find(r => String(r.id) === String(linkToWfId));
+            if (wf) {
+                if (!wf.steps) wf.steps = [];
+                wf.steps.splice(insertIdx ?? wf.steps.length, 0, {
+                    id: uid(),
+                    resourceLinkId: newId
+                });
+            }
+        }
+    });
+
+    // 5. UI Orcherstration
+    if (linkToWfId) {
+        OL.refreshMap();
+        setTimeout(() => OL.loadInspector(newId, linkToWfId), 100);
+    } else {
+        renderResourceManager();
+        OL.openResourceModal(newId);
+    }
+
+    return newId;
 };
 
 
@@ -3937,47 +4042,6 @@ window.renderResourceCard = function (res) {
 };
 
 // 3. CREATE DRAFT RESOURCE MODAL
-OL.promptCreateResource = async function(predefinedName = null) {
-    // 1. Get Name (either from search query or prompt)
-    const name = predefinedName || prompt("Enter Resource Name:");
-    if (!name) return null;
-    
-    // 2. Resolve Context (The Safety Valve)
-    const context = OL.getCurrentContext();
-    const data = context.data; // This is either state.master or client.projectData
-    
-    if (!data) {
-        console.error("❌ CRITICAL: No data source found for creation.");
-        return null;
-    }
-
-    // 3. Generate ID
-    const timestamp = Date.now();
-    const newId = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
-
-    // 4. Build the Object
-    const newRes = {
-        id: newId,
-        name: name,
-        type: "SOP", 
-        steps: [],
-        createdDate: new Date().toISOString()
-    };
-
-    // 5. Push to the correct array (Resources vs localResources)
-    if (context.isMaster) {
-        if (!data.resources) data.resources = [];
-        data.resources.push(newRes);
-    } else {
-        if (!data.localResources) data.localResources = [];
-        data.localResources.push(newRes);
-    }
-
-    console.log(`✅ Resource Created in ${context.isMaster ? 'Vault' : 'Project'}:`, newRes);
-    
-    await OL.persist();
-    return newId; 
-};
 
 // 3a. HANDLE THE FIRST UPDATE / SAVE DRAFT
 OL.updateResourceMeta = function (resId, key, value) {
@@ -7785,9 +7849,9 @@ OL.globalRenameContent = function(type, oldName, newName, forceNewCat = null) {
     // Refresh the current view based on type
     if (type === 'apps') renderAppsGrid();
     else if (type === 'functions') renderFunctionsGrid();
-};
+};*/
 
-OL.globalDeleteContent = function(type, name, isFunction = false) {
+/*OL.globalDeleteContent = function(type, name, isFunction = false) {
     const isVaultMode = window.location.hash.includes('vault');
     
     let msg = isVaultMode 
@@ -8168,7 +8232,7 @@ window.renderScopingSheet = function () {
             </button>
             
             ${(state.adminMode || window.location.search.includes('admin=')) ? `
-                <button class="btn small soft" onclick="OL.promptCreateResource()">+ Create New Resource</button>
+                <button class="btn small soft" onclick="OL.universalCreate('SOP')">+ Create New Resource</button>
                 <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
             ` : ''}
         </div>
@@ -11216,7 +11280,7 @@ OL.linkResourceToWorkflow = async function(wfId, resId, index) {
 
 OL.createNewResourceAndLink = async function(wfId, name, index) {
     // 🚀 STEP 1: Use the global creator we just fixed
-    const newResId = await OL.promptCreateResource(name);
+    const newResId = await OL.universalCreate(detectedType, { name, linkToWfId: wfId, insertIdx: index });
     if (!newResId) return;
 
     // 🚀 STEP 2: Link it to the workflow
@@ -12413,7 +12477,7 @@ window.renderLevel2SidebarContent = function(allResources) {
                 <h3 style="color: var(--accent); margin:0;">📦 Resource Library</h3>
                 <button class="btn tiny primary" 
                         type="button" 
-                        onclick="event.preventDefault(); OL.promptCreateResource()">
+                        onclick="event.preventDefault(); OL.universalCreate(type)">
                     +
                 </button>
             </div>
