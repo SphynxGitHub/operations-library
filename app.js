@@ -8205,7 +8205,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             <div class="tier-3-resource-stack" style="display: flex; flex-direction: column; gap: 10px;">`;
 
     // 🚀 INITIAL INSERT POINT
-    html += renderInlineInsertUI(wf, 0, `${wf.id}-0`, isVaultMode);
+    html += renderInlineInsertUI(wf, 0, `${wf.id}:0`, isVaultMode);
 
     // 🚀 RENDER THE GROUPS
     html += groupedItems.map((group) => {
@@ -8303,7 +8303,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                             }).join('')}
                         </div>
                     </div>
-                </div>` + renderInlineInsertUI(wf, group.insertIndex, `${wf.id}-${group.insertIndex}`, isVaultMode);
+                </div>` + renderInlineInsertUI(wf, group.insertIndex, `${wf.id}:${group.insertIndex}`, isVaultMode);
         }
     }).join('');
 
