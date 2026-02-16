@@ -3600,6 +3600,27 @@ ARROWS
     width: 100%;
 }
 
+/* Force text wrapping across the app */
+.inspector-content, 
+.asset-mini-card, 
+.wf-global-node,
+.atomic-step-row {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important; /* Prevents text from staying on one line */
+}
+
+/* Ensure step names in the canvas also wrap if they are too long */
+.atomic-step-row span {
+    display: block;
+    line-height: 1.4;
+}
+
+/* Hide the horizontal scrollbar in the inspector */
+.inspector-scroll-content {
+    overflow-x: hidden !important;
+}
+
 .empty-inspector {
     padding: 40px 20px;
     text-align: center;

@@ -10701,21 +10701,34 @@ window.renderGlobalCanvas = function(isVaultMode) {
 };
 
 OL.handleCanvasBackgroundClick = function(event) {
-    // Only trigger if clicking the actual background grid, not a card or button
-    if (event.target.classList.contains('global-macro-map') || event.target.id === 'fs-canvas') {
-        const isZenPreferred = localStorage.getItem('ol_zen_mode') === 'true';
-        if (isZenPreferred) {
-            const layout = document.querySelector('.three-pane-layout');
-            if (layout) layout.classList.add('zen-mode-active');
-            
-            const zenBtn = document.getElementById('zen-mode-toggle');
-            if (zenBtn) zenBtn.innerHTML = 'Collapse ⤓';
-            
-            // Clear inspector highlights since we are "leaving" focus
-            OL.clearInspector();
-        }
+    // 🛑 STOP if we clicked a card, button, or input inside the canvas
+    if (event.target.closest('.wf-global-node') || 
+        event.target.closest('.asset-mini-card') || 
+        event.target.closest('.atomic-step-row') ||
+        event.target.closest('.btn') ||
+        event.target.closest('.insert-divider')) {
+        return; 
     }
-}
+
+    // ✅ If we clicked the grid background, clear the inspector
+    if (event.target.classList.contains('global-macro-map') || 
+        event.target.id === 'fs-canvas' || 
+        event.target.classList.contains('global-scroll-canvas')) {
+        
+        console.log("🧼 Canvas background clicked: Closing Inspector");
+        OL.clearInspector();
+        
+        // 🔄 Force layout back to full width if zen mode logic is linked
+        const layout = document.querySelector('.three-pane-layout');
+        if (layout) layout.classList.add('zen-mode-active');
+        
+        // Clear highlights on the canvas
+        state.activeInspectorResId = null;
+        state.activeInspectorParentId = null;
+        
+        OL.refreshMap(); 
+    }
+};
 
 // 🗑️ Handle Stage Deletion & Unmapping
 OL.handleStageDelete = async function(stageId, isVault) {
@@ -10892,6 +10905,14 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                         <span style="font-size: 11px; color: #38bdf8; font-weight: bold; flex: 1;">📝 ${esc(step.name || "Draft Step")}</span>
                         
                         ${hasOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${step.id}', 'outgoing')">🔀</span>` : ''}
+                    
+                        <button class="card-delete-btn" 
+                                style="position:static; opacity: 0.4; font-size: 14px;"
+                                onmouseover="this.style.opacity='1'" 
+                                onmouseout="this.style.opacity='0.4'"
+                                onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">
+                            ×
+                        </button>
                     </div>
                 </div>` + renderInlineInsertUI(wf, group.insertIndex, `${wf.id}-${group.insertIndex}`, isVaultMode);
         } else {
@@ -10915,6 +10936,13 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 title="View in Scoping" 
                                 style="padding: 2.25px 4px; font-size: 9px; background: #10b981; color: white; border: 1px solid white; border-radius: 180px;">
                             $</button>` : ''}
+                            <button class="card-delete-btn" 
+                                style="position:static; opacity: 0.4; font-size: 14px;"
+                                onmouseover="this.style.opacity='1'" 
+                                onmouseout="this.style.opacity='0.4'"
+                                onclick="event.stopPropagation(); OL.handleResourceUnmap('${wf.id}', '${asset.id}', ${isVaultMode})">
+                                ×
+                            </button>
                         </div>
 
                         <div class="resource-description" style="font-size: 9px; color: #94a3b8; margin-bottom: 8px; line-height: 1.3;">
@@ -10928,7 +10956,8 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 const stepOut = (s.outcomes && s.outcomes.length > 0);
 
                                 return `
-                                    <div class="tiny atomic-step-row ${s.isPlaceholder ? 'muted italic' : ''}" id="step-row-${s.id}" 
+                                    <div class="tiny atomic-step-row ${s.isPlaceholder ? 'muted italic' : ''} ${isStepActive ? 'is-inspecting step-active' : ''}" 
+                                        id="step-row-${s.id}" 
                                         style="display:flex; align-items:center; gap:5px; padding: 2px 4px;"
                                         onclick="event.stopPropagation(); OL.loadInspector('${s.id}', '${asset.id}')">
                                         
@@ -12580,7 +12609,6 @@ OL.loadInspector = function(targetId, parentId = null) {
         parentId = state.activeInspectorParentId;
     }
 
-    const isGlobalMode = state.viewMode === 'global';
     state.activeInspectorResId = targetId;
     const panel = document.getElementById('inspector-panel');
     if (!panel) return;
