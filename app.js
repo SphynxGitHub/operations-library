@@ -12157,17 +12157,28 @@ OL.addResourceToScope = function () {
     openModal(html);
 };
 
-OL.removeFromScope = async function(index) {
-    if (!confirm("Remove this item?")) return;
+OL.removeFromScope = async function(indexStr) {
+    if (!confirm("Remove this item from project scope?")) return;
+    
     const client = getActiveClient();
-    
-    // 1. Physically remove from the array
-    client.projectData.scopingSheets[0].lineItems.splice(index, 1);
-    
-    // 2. FORCE a full sync and WAIT for it to finish
-    await OL.persist();
-    
-    // 3. ONLY THEN refresh the view
+    if (!client || !client.projectData.scopingSheets) return;
+
+    const index = parseInt(indexStr, 10);
+    const sheet = client.projectData.scopingSheets[0];
+
+    console.log(`🗑️ Attempting to remove item at index: ${index}`);
+
+    // 🚀 THE SHIELD: Use updateAndSync to ensure Firebase saves the deletion
+    await OL.updateAndSync(() => {
+        if (index > -1 && index < sheet.lineItems.length) {
+            const removed = sheet.lineItems.splice(index, 1);
+            console.log("✅ Successfully removed item:", removed[0]);
+        } else {
+            console.error("❌ Removal failed: Index out of bounds", index);
+        }
+    });
+
+    // Refresh the UI
     renderScopingSheet();
 };
 
