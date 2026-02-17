@@ -10260,7 +10260,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     // If we're on a Step, we check where the Parent Resource is used. 
     // Otherwise, we check where this specific Resource/Workflow is used.
     const scannerTargetId = isAtomicStep ? parentId : targetId;
-    const allResources = isVaultMode ? state.master.resources : client.projectData.localResources;
 
         html += `
             <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
