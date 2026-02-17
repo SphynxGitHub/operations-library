@@ -4542,87 +4542,71 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
     const client = getActiveClient();
     const allResources = (client?.projectData?.localResources || []);
-    let currentStep = null;
-    let container = null;
-    let currentIndex = -1;
+    let html = `<div class="card-section"><label class="modal-section-label">🕸️ FLOW CONTEXT</label><div style="display: flex; flex-direction: column; gap: 24px; margin-top: 15px;">`;
 
-    // 🕵️ 1. DEEP SEARCH: Find the step in ANY possible sub-container
-    for (const res of allResources) {
-        // Check all common array names for steps
-        const possibleSteps = res.steps || res.proceduralSteps || res.lineItems || [];
-        
-        const foundIdx = possibleSteps.findIndex(s => String(s.id) === String(specificStepId));
-        
-        if (foundIdx > -1) {
-            currentStep = possibleSteps[foundIdx];
-            container = res;
-            currentIndex = foundIdx;
-            break;
-        }
-    }
-
-    // 🚨 Fallback: If we still can't find it by ID, try to find the first instance 
-    // of the resource link inside the active container.
-    if (!currentStep && specificStepId) {
-        console.warn("⚠️ Step ID mismatch. Falling back to resource search.");
-        for (const res of allResources) {
-            const steps = res.steps || res.proceduralSteps || [];
-            const foundIdx = steps.findIndex(s => String(s.resourceLinkId) === String(targetResId));
-            if (foundIdx > -1) {
-                currentStep = steps[foundIdx];
-                container = res;
-                currentIndex = foundIdx;
-                break;
+    // 1. Find ALL instances of this resource across ALL workflows/SOPs
+    let instances = [];
+    allResources.forEach(container => {
+        const steps = container.steps || container.proceduralSteps || [];
+        steps.forEach((step, idx) => {
+            if (String(step.resourceLinkId) === String(targetResId)) {
+                instances.push({ container, step, idx });
             }
+        });
+    });
+
+    // 2. If it's not used anywhere, show a clean "Standalone" state
+    if (instances.length === 0) {
+        return `
+            <div class="card-section">
+                <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
+                <div class="mini-map-container" style="text-align:center; padding: 20px; opacity: 0.6;">
+                    <div class="tiny muted">This resource is standalone and not currently part of a sequence.</div>
+                </div>
+            </div>`;
+    }
+
+    // 3. Render a Mini-Map for every instance found
+    html += instances.map(inst => {
+        const stepsArray = inst.container.steps || inst.container.proceduralSteps || [];
+        
+        // Resolve Neighbors
+        const preceding = stepsArray[inst.idx - 1] ? [stepsArray[inst.idx - 1]] : [];
+        const following = stepsArray[inst.idx + 1] ? [stepsArray[inst.idx + 1]] : [];
+
+        // If at start/end of a container, look for cross-resource logic
+        if (preceding.length === 0) {
+            const triggers = allResources.filter(r => (r.logicLinks || []).some(l => String(l.targetId) === String(inst.container.id)));
+            preceding.push(...triggers);
         }
-    }
+        if (following.length === 0) {
+            const outcomes = (inst.container.logicLinks || []).map(l => OL.getResourceById(l.targetId)).filter(Boolean);
+            following.push(...outcomes);
+        }
 
-    if (!currentStep) return `<div class="tiny muted" style="padding:20px;">ℹ️ No direct sequence context found.</div>`;
-
-    // 2. NEIGHBOR RESOLUTION (The "Logic Bridge")
-    const stepsArray = container.steps || container.proceduralSteps || [];
-    const precedingNodes = [];
-    const followingNodes = [];
-
-    // Left Side: Step before OR the thing that triggers this SOP
-    if (currentIndex > 0) {
-        precedingNodes.push(stepsArray[currentIndex - 1]);
-    } else {
-        const triggers = allResources.filter(r => 
-            (r.logicLinks || []).some(l => String(l.targetId) === String(container.id))
-        );
-        precedingNodes.push(...triggers);
-    }
-
-    // Right Side: Step after OR the thing this SOP leads to
-    if (currentIndex < stepsArray.length - 1) {
-        followingNodes.push(stepsArray[currentIndex + 1]);
-    } else {
-        const outcomes = (container.logicLinks || []).map(l => OL.getResourceById(l.targetId)).filter(Boolean);
-        followingNodes.push(...outcomes);
-    }
-
-    // 3. RENDER
-    return `
-        <div class="card-section">
-            <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
-            <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 25px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); margin-top:10px;">
+        return `
+            <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 20px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                <div class="tiny muted uppercase bold" style="margin-bottom: 15px; font-size: 8px; text-align: center; opacity: 0.5;">
+                    Instance in: ${esc(inst.container.name)}
+                </div>
                 <div style="display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 5px;">
-                    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
-                        ${precedingNodes.length > 0 ? precedingNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<span class="tiny muted">Input</span>'}
+                    <div style="display: flex; flex-direction: column; gap: 5px; align-items: flex-end;">
+                        ${preceding.length > 0 ? preceding.map(p => renderMiniNode(p, 'muted')).join('') : '<span class="tiny muted">Input</span>'}
                     </div>
                     <div class="mini-arrow">→</div>
                     <div style="display: flex; justify-content: center;">
-                        ${renderMiniNode(currentStep, 'active')}
+                        ${renderMiniNode(inst.step, 'active')}
                     </div>
                     <div class="mini-arrow">→</div>
-                    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
-                        ${followingNodes.length > 0 ? followingNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<span class="tiny muted">Output</span>'}
+                    <div style="display: flex; flex-direction: column; gap: 5px; align-items: flex-start;">
+                        ${following.length > 0 ? followingNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<span class="tiny muted">Output</span>'}
                     </div>
                 </div>
             </div>
-        </div>
-    `;
+        `;
+    }).join('');
+
+    return html + `</div></div>`;
 };
 
 // Helper to render the individual blocks
