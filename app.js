@@ -6086,59 +6086,51 @@ OL.executeAssignment = async function(resId, stepId, isTrigger, memberId, member
 
     console.log(`👤 Global Assignment Search: Member[${memberName}] Target[${stepId}]`);
 
+    // 🚀 THE FIX: Point directly to the source arrays in state, not a combined local variable
     const isVault = window.location.hash.includes('vault');
-    const allResources = isVault ? (state.master.resources || []) : (client.projectData.localResources || []);
+    const targetLibrary = isVault ? state.master.resources : client.projectData.localResources;
 
     let targetObj = null;
-    let actualParent = null;
+    let actualParentId = null;
 
-    // 🚀 THE GLOBAL SCAN: Find the object regardless of the parentId passed
-    for (const r of allResources) {
-        // 1. Is it the Resource itself?
+    // 1. Find the object inside the actual state reference
+    for (const r of targetLibrary) {
         if (String(r.id) === String(stepId)) {
             targetObj = r;
-            actualParent = r;
+            actualParentId = r.id;
             break;
         }
-        // 2. Is it a Step inside this resource?
         const foundStep = (r.steps || []).find(s => String(s.id) === String(stepId));
         if (foundStep) {
             targetObj = foundStep;
-            actualParent = r;
-            break;
-        }
-        // 3. Is it a Trigger?
-        const foundTrig = (r.triggers || []).find(t => String(t.id) === String(stepId));
-        if (foundTrig) {
-            targetObj = foundTrig;
-            actualParent = r;
+            actualParentId = r.id;
             break;
         }
     }
 
     if (targetObj) {
-        // 💾 APPLY DATA
+        // 2. Apply Data to the reference (this modifies the state object directly)
         targetObj.assigneeId = memberId;
         targetObj.assigneeName = memberName;
         targetObj.assigneeType = type;
         
-        console.log("✅ Assignment persisted to:", targetObj.name || targetObj.title || "Target Node");
-        
+        console.log("💾 Verified State Change:", targetObj);
+
+        // 3. FORCE PERSISTENCE
+        // We call OL.persist() which JSON.stringifies the 'state' variable
         await OL.persist();
 
-        // 🔄 UI REFRESH
-        // Refresh the specific Inspector view
-        OL.loadInspector(stepId, actualParent?.id);
-        
-        // Clear search UI
-        const results = document.getElementById("assignment-search-results");
-        if (results) results.innerHTML = "";
-        
-        // Sync the Canvas
-        OL.refreshMap();
+        // 4. UI REFRESH
+        // We use a small delay to ensure Firebase write is acknowledged
+        setTimeout(() => {
+            OL.loadInspector(stepId, actualParentId);
+            OL.refreshMap();
+            const results = document.getElementById("assignment-search-results");
+            if (results) results.innerHTML = "";
+        }, 100);
 
     } else {
-        console.error("❌ Assignment Failed: Target ID not found anywhere in the library.", stepId);
+        console.error("❌ Assignment Failed: Target not found in State tree.", stepId);
     }
 };
 
