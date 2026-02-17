@@ -11887,7 +11887,7 @@ function renderScopingRow (item, idx, showUnits) {
                 <div class="col-numeric">$0</div>
                 <div class="col-actions">
                     ${isAdmin ? `
-                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScope('${idx}')">×</button>
+                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeById('${item.id}')">×</button>
                     ` : ''}
                 </div>
             </div>
@@ -12009,7 +12009,7 @@ function renderScopingRow (item, idx, showUnits) {
 
         <div class="col-actions">
             ${isAdmin ? `
-                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScope('${idx}')">×</button>
+                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeById('${item.id}')">×</button>
             ` : ''}
         </div>
     </div>
@@ -12180,6 +12180,32 @@ OL.removeFromScope = async function(indexStr) {
 
     // Refresh the UI
     renderScopingSheet();
+};
+
+OL.removeFromScopeByID = async function(lineItemId) {
+    if (!confirm("Remove this specific item from project scope?")) return;
+    
+    const client = getActiveClient();
+    if (!client || !client.projectData.scopingSheets) return;
+
+    const sheet = client.projectData.scopingSheets[0];
+
+    // 🚀 THE FIX: Find the actual index of the item with this specific ID
+    const actualIndex = sheet.lineItems.findIndex(i => String(i.id) === String(lineItemId));
+
+    if (actualIndex > -1) {
+        console.log(`🗑️ Removing specific item ID: ${lineItemId} found at database index: ${actualIndex}`);
+        
+        await OL.updateAndSync(() => {
+            sheet.lineItems.splice(actualIndex, 1);
+        });
+
+        // 🔄 Surgical UI Update
+        renderScopingSheet();
+    } else {
+        console.error("❌ Could not find item ID in database:", lineItemId);
+        alert("Error: Item not found in database. Please refresh.");
+    }
 };
 
 OL.filterResourceForScope = function (query) {
