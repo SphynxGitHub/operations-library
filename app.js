@@ -58,31 +58,32 @@ OL.state = state;
 // 2. REAL-TIME CLOUD ENGINE
 // We keep the name 'persist' so we don't have to change the rest of the code.
 OL.persist = async function() {
+    state.isSaving = true; // 🚩 Raise the flag
+    
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
 
     try {
-        // 1. Create the clean clone (stripping security flags)
+        // Create clean clone
         const cleanState = JSON.parse(JSON.stringify(state));
         delete cleanState.adminMode; 
+        delete cleanState.isSaving; // Never save the lock flag to the DB
 
-        // 2. The Real-Time Push
-        // We use .set with {merge: false} because we want the cloud to 
-        // mirror our local memory exactly.
+        // The Real-Time Push
         await db.collection('systems').doc('main_state').set(cleanState);
         
         if(statusEl) statusEl.innerHTML = "✅ Synced";
-        setTimeout(() => { if(statusEl) statusEl.innerHTML = "☁️ Ready"; }, 2000);
     } catch (error) {
         console.error("❌ Real-time Sync Failed:", error);
         if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
+    } finally {
+        // 🏁 Release the lock after a tiny buffer
+        // This gives the Firestore listener time to ignore the echo of our own save
+        setTimeout(() => { 
+            state.isSaving = false; 
+            if(statusEl) statusEl.innerHTML = "☁️ Ready";
+        }, 300);
     }
-};
-
-// HELPER: Use this when you want to run logic AND sync in one go
-OL.updateAndSync = async function(updateFn) {
-    if (typeof updateFn === 'function') updateFn();
-    await OL.persist();
 };
 
 // 3. REAL-TIME SYNC ENGINE
@@ -91,45 +92,45 @@ OL.sync = function() {
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (!doc.exists) return;
-        const cloudData = doc.data();
 
-        // Preserve current local active ID before merging cloud data
+        // 🛡️ THE SHIELD: Block sync if local state is "Dirty" (Saving or Typing)
+        const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+        if (state.isSaving || isUserTyping) {
+            console.log("🛡️ Sync Blocked: Preservation Mode Active");
+            return; 
+        }
+
+        const cloudData = doc.data();
         const currentLocalActiveId = state.activeClientId;
 
+        // Update State
         state.master = cloudData.master;
         state.clients = cloudData.clients;
 
-        // 🚀 NEW: Check if there is "Fresh AI Content" waiting
+        // Check AI Inbox
         if (cloudData.ai_inbox && cloudData.ai_inbox.targetResId === state.focusedResourceId) {
             OL.processIncomingAI(cloudData.ai_inbox);
         }
 
-        // 🚀 THE LOGIC FIX: 
+        // Token Resolution
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('access');
-
         if (token) {
-            // Case A: End-client link. Force resolve via token.
             const matchedClient = Object.values(state.clients).find(c => c.publicToken === token);
             if (matchedClient) state.activeClientId = matchedClient.id;
         } else {
-            // Case B: Admin/Master dashboard. Keep the ID we just clicked.
             state.activeClientId = currentLocalActiveId;
         }
 
-        const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-
-        // 🚀 THE SHIELD: If someone is looking at the inspector, DO NOT rebuild the layout. 
-        // Rebuilding the layout is what causes the "select a node" reset.
-        if (!isUserTyping && !state.activeInspectorResId) {
+        // 🚀 SMART REBUILD
+        // If we have an active inspector, only refresh the inspector.
+        // Otherwise, rebuild the whole layout.
+        if (state.activeInspectorResId) {
+            console.log("⚡ Refreshing Inspector Content Only");
+            OL.loadInspector(state.activeInspectorResId);
+        } else {
             window.buildLayout();
             window.handleRoute(); 
-        } else {
-            console.log("🛡️ Sync blocked rebuild to preserve Inspector focus.");
-            // If we want the data to update inside the inspector WITHOUT rebuilding the whole screen:
-            if (state.activeInspectorResId) {
-                OL.loadInspector(state.activeInspectorResId);
-            }
         }
     });
 };
