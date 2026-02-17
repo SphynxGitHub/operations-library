@@ -8178,11 +8178,11 @@ OL.addLifecycleStageAt = function(index, isVault) {
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
     
-    // 1. Get steps and SORT them by mapOrder immediately
-    // This ensures that when we flatten/group, we are working in the correct sequence
     const sortedWfSteps = (wf.steps || []).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
     let flattenedSequence = [];
+    const seenAssetPlaceholders = new Set();
+
     sortedWfSteps.forEach((wfStep, wfIdx) => {
         if (!wfStep.resourceLinkId) {
             flattenedSequence.push({ 
@@ -8195,14 +8195,17 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             if (asset) {
                 const internalSteps = (asset.steps || []);
                 if (internalSteps.length === 0) {
-                    flattenedSequence.push({ 
-                        id: `empty-${asset.id}`, 
-                        name: "No internal steps defined", 
-                        isPlaceholder: true, 
-                        asset: asset, 
-                        isLoose: false, 
-                        originalWfIndex: wfIdx 
-                    });
+                    if (!seenAssetPlaceholders.has(asset.id)) {
+                        flattenedSequence.push({ 
+                            id: `empty-${asset.id}`, 
+                            name: "No internal steps defined", 
+                            isPlaceholder: true, 
+                            asset: asset, 
+                            isLoose: false, 
+                            originalWfIndex: wfIdx 
+                        });
+                        seenAssetPlaceholders.add(asset.id);
+                    }
                 } else {
                     internalSteps.forEach(internalStep => {
                         flattenedSequence.push({ 
