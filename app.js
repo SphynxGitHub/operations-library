@@ -4539,59 +4539,55 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     }, 10);
 };
 
-OL.renderResourceMiniMaps = function(targetResId) {
+OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
     const client = getActiveClient();
-    const allResources = client?.projectData?.localResources || [];
-    const instances = [];
+    const allWorkflows = (client?.projectData?.localResources || []).filter(r => r.type === 'Workflow');
+    let instances = [];
 
-    // Find every instance of this resource in any workflow
-    allResources.forEach(wf => {
-        if (wf.type === 'Workflow' && wf.steps) {
-            wf.steps.forEach((step, idx) => {
-                if (String(step.resourceLinkId) === String(targetResId)) {
-                    instances.push({ wf, step, idx });
-                }
-            });
-        }
+    // Search for the specific instance first
+    allWorkflows.forEach(wf => {
+        wf.steps.forEach((step, idx) => {
+            if (String(step.id) === String(specificStepId)) {
+                instances.push({ wf, step, idx, isCurrent: true });
+            }
+        });
     });
 
-    if (instances.length === 0) return "";
+    if (instances.length === 0) return `<div class="tiny muted">No flow context available.</div>`;
 
     return `
-        <div class="card-section" style="margin-top: 25px;">
+        <div class="card-section">
             <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
-            <div style="display: flex; flex-direction: column; gap: 30px; margin-top: 15px;">
-                ${instances.map((inst) => {
-                    // 1. Get Preceding (Previous step in SOP + any incoming logic links)
-                    const preceding = inst.wf.steps[inst.idx - 1] ? [inst.wf.steps[inst.idx - 1]] : [];
+            <div style="display: flex; flex-direction: column; gap: 24px; margin-top: 15px;">
+                ${instances.map(inst => {
+                    // Gather ALL steps that point TO this step (Preceding)
+                    const preceding = inst.wf.steps.filter((_, i) => i === inst.idx - 1);
                     
-                    // 2. Get Following (Next step in SOP + any outgoing logic branches)
-                    const following = inst.wf.steps[inst.idx + 1] ? [inst.wf.steps[inst.idx + 1]] : [];
+                    // Gather ALL steps this step points TO (Following)
+                    const following = inst.wf.steps.filter((_, i) => i === inst.idx + 1);
 
                     return `
-                        <div class="mini-map-container" style="background: rgba(0,0,0,0.3); padding: 25px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
-                            <div class="tiny muted uppercase bold" style="margin-bottom: 20px; text-align: center; letter-spacing: 1px;">
+                        <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="tiny muted uppercase bold" style="margin-bottom: 15px; text-align: center; font-size: 8px;">
                                 Context: ${esc(inst.wf.name)}
                             </div>
                             
-                            <div style="display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 10px;">
+                            <div style="display: grid; grid-template-columns: 1fr 30px 1.2fr 30px 1fr; align-items: center; gap: 10px;">
                                 
                                 <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
-                                    ${preceding.map(p => renderMiniNode(p, 'muted')).join('')}
-                                    ${preceding.length === 0 ? '<span class="tiny muted">Start of Flow</span>' : ''}
+                                    ${preceding.length > 0 ? preceding.map(p => renderMiniNode(p, 'muted')).join('') : '<span class="tiny muted">Start of Flow</span>'}
                                 </div>
 
-                                <div class="mini-arrow" style="text-align: center;">→</div>
+                                <div class="mini-arrow" style="text-align: center; opacity: 0.3;">→</div>
 
                                 <div style="display: flex; justify-content: center;">
                                     ${renderMiniNode(inst.step, 'active')}
                                 </div>
 
-                                <div class="mini-arrow" style="text-align: center;">→</div>
+                                <div class="mini-arrow" style="text-align: center; opacity: 0.3;">→</div>
 
                                 <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
-                                    ${following.map(f => renderMiniNode(f, 'muted')).join('')}
-                                    ${following.length === 0 ? '<span class="tiny muted">End of Flow</span>' : ''}
+                                    ${following.length > 0 ? following.map(f => renderMiniNode(f, 'muted')).join('') : '<span class="tiny muted">End of Flow</span>'}
                                 </div>
 
                             </div>
