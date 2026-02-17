@@ -5728,62 +5728,6 @@ OL.toggleStepOutcomes = function(event, resId, stepId) {
     }
 };
 
-/*
-OL.filterOutcomeSearch = function(resId, stepId, query) {
-    const listEl = document.getElementById("outcome-results");
-    if (!listEl) return;
-    const q = (query || "").toLowerCase();
-    const res = OL.getResourceById(resId);
-    const client = getActiveClient();
-
-    const logicActions = [
-        { id: 'next', name: 'Proceed to Next Step', icon: '➡️' },
-        { id: 'close', name: 'Close Workflow', icon: '🏁' },
-        { id: 'restartStep', name: 'Restart Step', icon: '🔁' }
-    ];
-    
-    const steps = (res.steps || []).filter(s => String(s.id) !== String(stepId));
-    const externalResources = (client?.projectData?.localResources || []).filter(r => r.id !== resId);
-
-    let html = '';
-
-    // 1. Workflow Logic
-    html += `<div class="search-group-header">Standard Logic</div>`;
-    logicActions.filter(a => a.name.toLowerCase().includes(q)).forEach(a => {
-        html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', '${a.id}', '${esc(a.icon + " " + a.name)}')">
-            ${a.icon} ${a.name}
-        </div>`;
-    });
-
-    // 2. Internal Jumps (Jump to another step in THIS resource)
-    const filteredSteps = steps.filter(s => val(s.name, "Unnamed Step").toLowerCase().includes(q));
-    if (filteredSteps.length) {
-        html += `<div class="search-group-header">Jump To Step (Internal)</div>`;
-        filteredSteps.forEach(s => {
-            const stepTitle = val(s.name, "Unnamed Step");
-            // 🚀 We tag this as jump_step_
-            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(stepTitle)}')">
-                ↪ Step: ${esc(stepTitle)}
-            </div>`;
-        });
-    }
-
-    // 3. External Jumps (Open a different Resource/Email/Form)
-    const filteredExt = externalResources.filter(r => r.name.toLowerCase().includes(q));
-    if (filteredExt.length) {
-        html += `<div class="search-group-header">Jump to External Resource</div>`;
-        filteredExt.forEach(r => {
-            // 🚀 We tag this as jump_res_
-            html += `<div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_res_${r.id}', '🚀 ${esc(r.name)}')">
-                🚀 ${esc(r.name)} <span class="pill tiny vault">${esc(r.type || 'Res')}</span>
-            </div>`;
-        });
-    }
-
-    listEl.innerHTML = html || `<div class="search-result-item muted">No outcomes found</div>`;
-};
-*/
-
 OL.filterOutcomeSearch = function(resId, stepId, query) {
     const listEl = document.getElementById("outcome-results");
     if (!listEl) return;
@@ -5865,19 +5809,22 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
         html += `<div class="search-group-header">Search Results</div>`;
         allResources.forEach(resource => {
             (resource.steps || []).forEach(s => {
-                if (s.name.toLowerCase().includes(q) && s.id !== stepId) {
+                // 🛡️ THE FIX: Add (s.name || "") before calling toLowerCase()
+                const stepName = (s.name || "").toLowerCase();
+                
+                if (stepName.includes(q) && String(s.id) !== String(stepId)) {
                     html += `
-                        <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(s.name)}')">
+                        <div class="search-result-item" onmousedown="OL.executeAssignmentOutcome('${resId}', '${stepId}', 'jump_step_${s.id}', '↪ Step: ${esc(s.name || "Unnamed Step")}')">
                             <div style="display:flex; flex-direction:column;">
-                                <span>↪ ${esc(s.name)}</span>
-                                <span class="tiny muted" style="font-size:8px;">In: ${esc(resource.name)}</span>
+                                <span>↪ ${esc(s.name || "Unnamed Step")}</span>
+                                <span class="tiny muted" style="font-size:8px;">In: ${esc(resource.name || "Unknown Resource")}</span>
                             </div>
                         </div>`;
                 }
             });
         });
     }
-
+    
     listEl.innerHTML = html || `<div class="search-result-item muted">No steps found</div>`;
 };
 
