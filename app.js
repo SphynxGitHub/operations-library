@@ -5540,63 +5540,58 @@ OL.addStepResource = function(resId, elementId, targetId, targetName, targetType
 
     console.log(`🔍 Link Attempt: Parent[${resId}] Element[${elementId}] Target[${targetName}]`);
 
-    // 1. DATA CONTEXT
     const isVault = window.location.hash.includes('vault');
-    const allResources = isVault ? state.master.resources : client.projectData.localResources;
+    const allResources = isVault ? (state.master.resources || []) : (client.projectData.localResources || []);
 
-    // 2. RESOLVE THE TARGET OBJECT (The container for the link)
     let targetObj = null;
 
-    // Strategy A: Direct Resource Link (e.g., linking directly to an SOP)
-    if (resId === elementId) {
-        targetObj = allResources.find(r => String(r.id) === String(resId));
-    } 
-    // Strategy B: Sub-Step Link (The item belongs to a specific step)
-    else {
-        // Look inside the specific parent first
-        const parentRes = allResources.find(r => String(r.id) === String(resId));
-        if (parentRes) {
-            targetObj = isTrigger ? parentRes.triggers?.[trigIdx] : parentRes.steps?.find(s => String(s.id) === String(elementId));
-        }
-        
-        // Strategy C: Global Step Search (If the parent ID passed was wrong)
-        if (!targetObj) {
-            for (const r of allResources) {
-                const found = r.steps?.find(s => String(s.id) === String(elementId));
-                if (found) {
-                    targetObj = found;
-                    break;
-                }
+    // 1. STRATEGY A: Is the element itself a top-level Resource? 
+    // (This handles clicking from the Inspector when viewing an SOP/Zap)
+    targetObj = allResources.find(r => String(r.id) === String(elementId));
+
+    // 2. STRATEGY B: Is it a nested Step or Trigger?
+    if (!targetObj) {
+        for (const r of allResources) {
+            // Check Steps
+            const foundStep = (r.steps || []).find(s => String(s.id) === String(elementId));
+            if (foundStep) { targetObj = foundStep; break; }
+            
+            // Check Triggers
+            if (isTrigger && String(r.id) === String(resId)) {
+                targetObj = r.triggers?.[trigIdx];
+                if (targetObj) break;
             }
         }
     }
 
     if (!targetObj) {
-        console.error("❌ Could not resolve sub-step/trigger for linking. ID:", elementId);
+        console.error("❌ Link failed: Target object not found in system.", elementId);
         return;
     }
 
-    // 3. AUTO-SHARE LOGIC
-    const isVaultSOP = targetId.startsWith('ht-vlt-') || (!targetId.includes('local') && targetType === 'sop');
-    if (isVaultSOP && !isVault) {
-        if (!client.sharedMasterIds) client.sharedMasterIds = [];
-        if (!client.sharedMasterIds.includes(targetId)) client.sharedMasterIds.push(targetId);
-    }
-
-    // 4. PERFORM LINK
+    // 3. PERFORM LINK
     if (!targetObj.links) targetObj.links = [];
-    if (!targetObj.links.some(l => l.id === targetId)) {
+    if (targetObj.links.some(l => String(l.id) === String(targetId))) {
+        console.warn("⚠️ Already linked.");
+    } else {
+        // Auto-share logic for Vault SOPs
+        const isVaultSOP = targetId.startsWith('ht-vlt-') || (!targetId.includes('local') && targetType === 'sop');
+        if (isVaultSOP && !isVault) {
+            if (!client.sharedMasterIds) client.sharedMasterIds = [];
+            if (!client.sharedMasterIds.includes(targetId)) client.sharedMasterIds.push(targetId);
+        }
+
         targetObj.links.push({ id: targetId, name: targetName, type: targetType });
-        console.log("✅ Link Success");
+        console.log("✅ Link Success to:", targetObj.name || "Unnamed Step");
     }
 
     OL.persist();
     
-    // UI Cleanup
+    // 4. UI REFRESH
     const results = document.getElementById(`resource-results-${elementId}`);
     if (results) results.innerHTML = "";
     
-    // Refresh view
+    // Keep inspector open on the element we just updated
     OL.loadInspector(elementId, resId !== elementId ? resId : null);
 };
 
