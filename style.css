@@ -3373,6 +3373,30 @@ body.is-visualizer #mainContent {
     font-family: monospace;
 }
 
+.mini-logic-label {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-dark);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 7px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    text-transform: uppercase;
+    font-weight: bold;
+    z-index: 5;
+    letter-spacing: 0.05em;
+}
+
+.mini-arrow {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.15);
+    line-height: 1;
+}
+
 .expand-map-btn {
     position: absolute;
     top: 10px;
