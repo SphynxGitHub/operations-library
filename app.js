@@ -4195,6 +4195,10 @@ OL.getResourceById = function(id) {
 OL.openResourceModal = function (targetId, draftObj = null) {
     if (!targetId) return;
 
+    const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
+    const isClientView = window.location.search.includes('access='); // 1. Context Detection
+    const isVaultMode = window.location.hash.includes('vault');
+
     OL.trackNav(targetId, 'resource');
     let res = null;
 
@@ -4208,9 +4212,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     const client = getActiveClient();
     const sheet = client?.projectData?.scopingSheets?.[0];
-    const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
-
-    const isVaultMode = window.location.hash.includes('vault');
     
     let lineItem = null;
 
@@ -4323,6 +4324,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         `;
     }
+
+    const miniMapsHtml = OL.renderResourceMiniMaps(res.id) : "";
+
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
     const isScopingSheet = hash.includes('scoping-sheet');
@@ -4522,6 +4526,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </div>
             </div>
             ${sopLibraryHtml}
+            ${miniMapsHtml}
         </div>
     `;
     
@@ -4530,6 +4535,55 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+OL.renderResourceMiniMaps = function(targetResId) {
+    const client = getActiveClient();
+    const allResources = client?.projectData?.localResources || [];
+    const instances = [];
+
+    // Find every workflow that contains this resource
+    allResources.forEach(wf => {
+        if (wf.type === 'Workflow' && wf.steps) {
+            wf.steps.forEach((step, idx) => {
+                if (String(step.resourceLinkId) === String(targetResId)) {
+                    instances.push({ wf, step, idx });
+                }
+            });
+        }
+    });
+
+    if (instances.length === 0) return "";
+
+    return `
+        <div class="card-section" style="margin-top: 25px;">
+            <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
+            <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 15px;">
+                ${instances.map((inst, i) => {
+                    // Grab 1 step before and 1 step after
+                    const prevStep = inst.wf.steps[inst.idx - 1];
+                    const nextStep = inst.wf.steps[inst.idx + 1];
+                    
+                    return `
+                        <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="tiny muted uppercase bold" style="margin-bottom: 10px; font-size: 9px;">Location: ${esc(inst.wf.name)}</div>
+                            <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
+                                
+                                ${prevStep ? `<div class="mini-node muted">${esc(prevStep.name || 'Prev')}</div>` : ''}
+                                ${prevStep ? `<div class="mini-arrow">→</div>` : ''}
+                                
+                                <div class="mini-node active">${esc(inst.step.name || 'This Resource')}</div>
+                                
+                                ${nextStep ? `<div class="mini-arrow">→</div>` : ''}
+                                ${nextStep ? `<div class="mini-node muted">${esc(nextStep.name || 'Next')}</div>` : ''}
+                                
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
 };
 
 // HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
