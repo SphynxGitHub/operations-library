@@ -4544,7 +4544,6 @@ OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
     const allResources = (client?.projectData?.localResources || []);
     let html = `<div class="card-section"><label class="modal-section-label">🕸️ FLOW CONTEXT</label><div style="display: flex; flex-direction: column; gap: 24px; margin-top: 15px;">`;
 
-    // 1. Find ALL instances of this resource across ALL workflows/SOPs
     let instances = [];
     allResources.forEach(container => {
         const steps = container.steps || container.proceduralSteps || [];
@@ -4555,26 +4554,24 @@ OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
         });
     });
 
-    // 2. If it's not used anywhere, show a clean "Standalone" state
     if (instances.length === 0) {
         return `
             <div class="card-section">
                 <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
                 <div class="mini-map-container" style="text-align:center; padding: 20px; opacity: 0.6;">
-                    <div class="tiny muted">This resource is standalone and not currently part of a sequence.</div>
+                    <div class="tiny muted">Standalone resource: No preceding or following steps found.</div>
                 </div>
             </div>`;
     }
 
-    // 3. Render a Mini-Map for every instance found
     html += instances.map(inst => {
         const stepsArray = inst.container.steps || inst.container.proceduralSteps || [];
         
-        // Resolve Neighbors
+        // 🟢 FIXED VARIABLE NAMES
         const preceding = stepsArray[inst.idx - 1] ? [stepsArray[inst.idx - 1]] : [];
         const following = stepsArray[inst.idx + 1] ? [stepsArray[inst.idx + 1]] : [];
 
-        // If at start/end of a container, look for cross-resource logic
+        // Logic Bridge for Start/End of containers
         if (preceding.length === 0) {
             const triggers = allResources.filter(r => (r.logicLinks || []).some(l => String(l.targetId) === String(inst.container.id)));
             preceding.push(...triggers);
@@ -4591,7 +4588,7 @@ OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 5px;">
                     <div style="display: flex; flex-direction: column; gap: 5px; align-items: flex-end;">
-                        ${preceding.length > 0 ? preceding.map(p => renderMiniNode(p, 'muted')).join('') : '<span class="tiny muted">Input</span>'}
+                        ${preceding.length > 0 ? preceding.map(p => renderMiniNode(p, 'muted')).join('') : '<span class="tiny muted">Start</span>'}
                     </div>
                     <div class="mini-arrow">→</div>
                     <div style="display: flex; justify-content: center;">
@@ -4599,7 +4596,7 @@ OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
                     </div>
                     <div class="mini-arrow">→</div>
                     <div style="display: flex; flex-direction: column; gap: 5px; align-items: flex-start;">
-                        ${following.length > 0 ? followingNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<span class="tiny muted">Output</span>'}
+                        ${following.length > 0 ? following.map(f => renderMiniNode(f, 'muted')).join('') : '<span class="tiny muted">End</span>'}
                     </div>
                 </div>
             </div>
@@ -4610,17 +4607,23 @@ OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
 };
 
 // Helper to render the individual blocks
-function renderMiniNode(step, status) {
-    const res = OL.getResourceById(step.resourceLinkId);
-    const icon = OL.getRegistryIcon(res?.type || 'SOP');
+function renderMiniNode(item, status) {
+    if (!item) return "";
+    
+    // Resolve Resource ID: Could be item.resourceLinkId (a step) or item.id (a full resource)
+    const resId = item.resourceLinkId || item.id;
+    const res = OL.getResourceById(resId);
+    
+    const icon = OL.getRegistryIcon(res?.type || item.type || 'SOP');
     const isActive = status === 'active';
+    const name = item.name || res?.name || "Unnamed Step";
     
     return `
         <div class="mini-node ${status}" style="${isActive ? 'border: 2px solid #fbbf24; background: rgba(251, 191, 36, 0.15); box-shadow: 0 0 15px rgba(251, 191, 36, 0.1);' : ''}">
             <div class="mini-node-content">
                 <div class="mini-icon-circle" style="${isActive ? 'color: #fbbf24;' : ''}">${icon}</div>
                 <div style="font-weight: ${isActive ? 'bold' : 'normal'}; color: ${isActive ? '#fff' : '#cbd5e1'};">
-                    ${esc(step.name)}
+                    ${esc(name)}
                 </div>
             </div>
         </div>
