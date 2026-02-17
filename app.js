@@ -4439,6 +4439,26 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             ${adminPricingHtml}
 
             <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">📝 Description & Access Notes</label>
+                <textarea class="modal-textarea" 
+                        placeholder="Enter login details, account purpose, or specific access instructions..." 
+                        style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
+                        onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+            </div>
+            
+            ${miniMapsHtml}
+            <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
+                <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+                <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
+                    <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
+                </div>
+                <div id="sop-step-list">
+                    ${renderSopStepList(res)}
+                </div>
+            </div>
+            ${sopLibraryHtml}
+            
+            <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">🌐 External Link & Source</label>
                 <div style="display:flex; gap:10px; margin-bottom:10px;">
                     <input type="text" class="modal-input tiny" 
@@ -4459,14 +4479,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     ` : ''}
                 </div>
                 ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
-            </div>
-            
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">📝 Description & Access Notes</label>
-                <textarea class="modal-textarea" 
-                        placeholder="Enter login details, account purpose, or specific access instructions..." 
-                        style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
-                        onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
             </div>
 
             <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
@@ -4516,17 +4528,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
 
             ${typeSpecificHtml}
-            <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                <label class="modal-section-label">📋 WORKFLOW STEPS</label>
-                <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                    <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-                </div>
-                <div id="sop-step-list">
-                    ${renderSopStepList(res)}
-                </div>
-            </div>
-            ${sopLibraryHtml}
-            ${miniMapsHtml}
         </div>
     `;
     
