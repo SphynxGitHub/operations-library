@@ -62,16 +62,24 @@ OL.persist = async function() {
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
 
     try {
-        // 1. CRITICAL: Ensure we are stringifying the LIVE state object
-        // We do this to break any weird proxy/observer references
+        // 1. Create a clean clone
         const rawState = JSON.parse(JSON.stringify(state));
-        
-        // 2. Clean up temporary session flags
         delete rawState.isSaving;
         delete rawState.adminMode;
 
-        // 3. THE ACTUAL PUSH
-        // We use await to ensure we don't move on until Firebase confirms
+        // 📏 SIZE CHECK (Crucial for 245+ resources)
+        const size = new TextEncoder().encode(JSON.stringify(rawState)).length;
+        const kb = (size / 1024).toFixed(2);
+        console.log(`📦 Outbound Data Size: ${kb} KB`);
+        
+        if (size > 1000000) {
+            console.error("❌ CRITICAL: Document exceeds 1MB limit. Firebase will reject this.");
+            if(statusEl) statusEl.innerHTML = "⚠️ DATA TOO LARGE";
+            return;
+        }
+
+        // 2. THE PUSH
+        // Using .update() instead of .set() can sometimes bypass full document overwrites
         await db.collection('systems').doc('main_state').set(rawState);
         
         console.log("☁️ Firebase Acknowledged Save");
@@ -80,7 +88,7 @@ OL.persist = async function() {
     } catch (error) {
         console.error("❌ Firebase Write ERROR:", error);
         if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
-        throw error; // Pass error back to updateAndSync
+        throw error; 
     }
 };
 
