@@ -11887,7 +11887,7 @@ function renderScopingRow (item, idx, showUnits) {
                 <div class="col-numeric">$0</div>
                 <div class="col-actions">
                     ${isAdmin ? `
-                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeById('${item.id}')">×</button>
+                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeByID('${item.id}')">×</button>
                     ` : ''}
                 </div>
             </div>
@@ -12009,7 +12009,7 @@ function renderScopingRow (item, idx, showUnits) {
 
         <div class="col-actions">
             ${isAdmin ? `
-                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeById('${item.id}')">×</button>
+                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeByID('${item.id}')">×</button>
             ` : ''}
         </div>
     </div>
