@@ -10264,14 +10264,6 @@ OL.loadInspector = function(targetId, parentId = null) {
     // Otherwise, we check where this specific Resource/Workflow is used.
     const scannerTargetId = isAtomicStep ? parentId : targetId;
     const allResources = isVaultMode ? state.master.resources : client.projectData.localResources;
-    const allConnections = getAllIncomingLinks(scannerTargetId, allResources);
-
-    if (allConnections.length > 0) {
-        const activeFilter = state.ui.relationshipFilter || 'All';
-        const types = ['All', ...new Set(allConnections.map(c => c.type))];
-        const filteredConnections = allConnections.filter(c => 
-            activeFilter === 'All' || c.type === activeFilter
-        );
 
         html += `
             <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
