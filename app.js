@@ -4504,8 +4504,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                                 </span>
                             </div>
                         `;
-                    }).join('') : `<div class="tiny muted" style="padding: 10px; text-align: center;">
-                        ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}</div>
+                    }).join('') : `<div class="tiny muted" style="padding: 10px; text-align: center;">${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}</div>`}
                 </div>
             </div>
 
