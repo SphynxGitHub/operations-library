@@ -10071,11 +10071,21 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
 
+    // 1. Get the list of types defined in your Type Manager
+    const dynamicTypes = Object.keys(state.master.rates?.variables || {});
+    
+    // 2. Identify the current item
     const isStage = targetId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
-    const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
-    const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;  
-    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
+
+    // 🛡️ THE DYNAMIC CHECK: 
+    // Is the current item's type found in the Type Manager?
+    const isTechnicalResource = dynamicTypes.some(t => t.toLowerCase() === (data.type || "").toLowerCase());
+
+    // 3. Define the labels based on the results
+    const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource; 
+    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? data.type : "Step";
+    
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
     // 🚀 NEW: Check for Incoming Logic using targetId
