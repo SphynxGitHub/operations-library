@@ -10101,7 +10101,8 @@ OL.loadInspector = function(targetId, parentId = null) {
     if (allConnections.length > 0) {
         // Unique types for the filter buttons
         const types = ['All', ...new Set(allConnections.map(c => c.type))];
-     
+    }
+  
     OL.syncCanvasHighlights(); 
     OL.applyCanvasHighlight();
 
