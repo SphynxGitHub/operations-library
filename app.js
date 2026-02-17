@@ -10255,6 +10255,28 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     // ------------------------------------------------------------
+    // 🔗 RESOURCE MAPPING AREA (Reusing Existing Logic)
+    // ------------------------------------------------------------
+    html += `
+        <div class="card-section" style="margin-top:25px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:20px;">
+            <label class="modal-section-label" style="font-size:9px; color:var(--accent);">🔗 LINKED RESOURCES & GUIDES</label>
+            
+            <div id="step-resources-list-${targetId}">
+                ${renderStepResources(parentId || targetId, data)}
+            </div>
+
+            <div class="search-map-container" style="position:relative; margin-top:5px;">
+                <input type="text" class="modal-input tiny" 
+                       placeholder="+ Link a Guide or SOP..." 
+                       onfocus="OL.filterResourceSearch('${parentId || targetId}', '${targetId}', this.value)"
+                       oninput="OL.filterResourceSearch('${parentId || targetId}', '${targetId}', this.value)">
+                
+                <div id="resource-results-${targetId}" class="search-results-overlay"></div>
+            </div>
+        </div>
+    `;
+    
+    // ------------------------------------------------------------
     // 🚀 UNIVERSAL RELATIONSHIP SCANNER (Moved OUTSIDE if(isAtomicStep))
     // ------------------------------------------------------------
     // If we're on a Step, we check where the Parent Resource is used. 
