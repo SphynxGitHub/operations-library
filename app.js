@@ -12472,7 +12472,7 @@ window.renderGrandTotals = function(lineItems, baseRate) {
       </div>
 
       <div class="total-item-disc">
-        <div class="tiny accent uppercase bold">Savings/Adjustments</div>
+        <div class="tiny accent uppercase bold">Adjustments</div>
         <div class="accent" style="font-size: 14px; font-weight: 600;">-$${totalAdjustments.toLocaleString()}</div>
       </div>
 
