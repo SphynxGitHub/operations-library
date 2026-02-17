@@ -10178,7 +10178,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     // 1. DYNAMIC HEADER & BACK BUTTON
     // ------------------------------------------------------------
     let html = `<div class="inspector-content fade-in" style="padding: 20px; width: 100%; box-sizing: border-box;">`;
-    html += OL.renderHierarchySelectors(data, isVaultMode);
+    html += OL.renderHierarchySelectors(data, isVaultMode, parentId);
 
     // 🚀 THE UNASSIGN TRIGGER
     if (isAtomicStep && isAssigned) {
