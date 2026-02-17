@@ -58,31 +58,29 @@ OL.state = state;
 // 2. REAL-TIME CLOUD ENGINE
 // We keep the name 'persist' so we don't have to change the rest of the code.
 OL.persist = async function() {
-    state.isSaving = true; // 🚩 Raise the flag
-    
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
 
     try {
-        // Create clean clone
-        const cleanState = JSON.parse(JSON.stringify(state));
-        delete cleanState.adminMode; 
-        delete cleanState.isSaving; // Never save the lock flag to the DB
-
-        // The Real-Time Push
-        await db.collection('systems').doc('main_state').set(cleanState);
+        // 1. CRITICAL: Ensure we are stringifying the LIVE state object
+        // We do this to break any weird proxy/observer references
+        const rawState = JSON.parse(JSON.stringify(state));
         
+        // 2. Clean up temporary session flags
+        delete rawState.isSaving;
+        delete rawState.adminMode;
+
+        // 3. THE ACTUAL PUSH
+        // We use await to ensure we don't move on until Firebase confirms
+        await db.collection('systems').doc('main_state').set(rawState);
+        
+        console.log("☁️ Firebase Acknowledged Save");
         if(statusEl) statusEl.innerHTML = "✅ Synced";
+
     } catch (error) {
-        console.error("❌ Real-time Sync Failed:", error);
+        console.error("❌ Firebase Write ERROR:", error);
         if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
-    } finally {
-        // 🏁 Release the lock after a tiny buffer
-        // This gives the Firestore listener time to ignore the echo of our own save
-        setTimeout(() => { 
-            state.isSaving = false; 
-            if(statusEl) statusEl.innerHTML = "☁️ Ready";
-        }, 300);
+        throw error; // Pass error back to updateAndSync
     }
 };
 
@@ -141,34 +139,23 @@ OL.sync = function() {
  * @param {Function} mutationFn - The logic to execute before syncing
  */
 OL.updateAndSync = async function(mutationFn) {
-    // 1. Raise the Shield: Block incoming cloud snapshots from overwriting memory
-    state.isSaving = true;
+    state.isSaving = true; // Start the shield
     
-    const statusEl = document.getElementById('cloud-status');
-    if (statusEl) statusEl.innerHTML = "⏳ Syncing...";
-
     try {
-        // 2. Execute the actual data change
-        // We 'await' it in case the mutation itself involves async logic
+        // Run your data change
         await mutationFn();
 
-        // 3. Persist the updated state to Firebase
+        // Push to cloud
         await OL.persist();
         
-        if (statusEl) statusEl.innerHTML = "✅ Synced";
-        console.log("📡 Cloud Sync Successful");
-
+        console.log("🚀 Update & Sync Success");
     } catch (error) {
-        console.error("❌ updateAndSync Failure:", error);
-        if (statusEl) statusEl.innerHTML = "⚠️ Sync Error";
-        // Alert the user if a major data operation fails
-        alert("Changes could not be saved to the cloud. Please check your connection.");
+        console.error("💀 FATAL SYNC FAILURE:", error);
+        // If it fails, we HAVE to alert so you don't keep working on "fake" data
+        alert("CRITICAL: Data did not save to cloud. Please refresh.");
     } finally {
-        // 4. Release the Shield
-        // A 300ms delay ensures the 'onSnapshot' echo from the server is ignored
-        setTimeout(() => { 
-            state.isSaving = false; 
-        }, 300);
+        // Only release the shield after a timeout
+        setTimeout(() => { state.isSaving = false; }, 800);
     }
 };
 
