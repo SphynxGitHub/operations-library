@@ -4236,12 +4236,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     // 3. Show button if Admin AND not already Master
     const canPromote = userIsAdmin && !isAlreadyMaster;
-
-     const hierarchyHtml = `
-        <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
-            ${OL.renderHierarchySelectors(res, isVaultMode)}
-        </div>`;
-        
+       
     // --- 🏷️ NEW: PILL & TAG UI ---
     // This replaces the dropdown with compact inline tags
     const originPill = `
@@ -4344,6 +4339,12 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </div>
             </div>`;
     }
+    else {
+        const hierarchyHtml = `
+            <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
+                ${OL.renderHierarchySelectors(res, isVaultMode)}
+            </div>`;
+    }
 
     // --- 📊 SECTION: ADMIN PRICING ---
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
@@ -4429,13 +4430,12 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </button>
                 ` : ''}
                 </div>
-                ${hierarchyHtml}
-
             </div>
         </div>
 
         <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
-            ${roundInputHtml} 
+            ${roundInputHtml}
+            ${hierarchyHtml}
             ${adminPricingHtml}
 
             <div class="card-section" style="margin-top:20px;">
@@ -4445,7 +4445,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                         style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
                         onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
             </div>
-            
+
             ${miniMapsHtml}
             <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
