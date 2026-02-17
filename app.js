@@ -5824,7 +5824,7 @@ OL.filterOutcomeSearch = function(resId, stepId, query) {
             });
         });
     }
-    
+
     listEl.innerHTML = html || `<div class="search-result-item muted">No steps found</div>`;
 };
 
@@ -6080,25 +6080,61 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     listEl.innerHTML = html || `<div class="search-result-item muted">No matching local assignments found</div>`;
 };
 
-OL.executeAssignment = function(resId, stepId, isTrigger, memberId, memberName, type) {
+OL.executeAssignment = async function(resId, stepId, isTrigger, memberId, memberName, type) {
     const activeResId = resId || state.lastUsedParentId;
     const res = OL.getResourceById(activeResId);
     if (!res) return;
 
+    console.log(`👤 Assigning [${memberName}] to Target [${stepId}] in Parent [${activeResId}]`);
+
+    let targetObj = null;
+
+    // 1. RESOLVE THE TARGET
+    // Check if the target is a nested STEP
     const step = res.steps?.find(s => String(s.id) === String(stepId));
+    
     if (step) {
-        step.assigneeId = memberId;
-        step.assigneeName = memberName;
-        step.assigneeType = type; // Store if it's a person, role, or system
-        OL.persist();
+        targetObj = step;
+    } 
+    // Check if the target is actually the RESOURCE itself (SOP/Workflow level)
+    else if (String(res.id) === String(stepId)) {
+        targetObj = res;
+    }
+    // Check if it's a TRIGGER (if applicable)
+    else if (isTrigger && res.triggers) {
+        targetObj = res.triggers.find(t => String(t.id) === String(stepId));
     }
 
-    // 🚀 SURGICAL UI SYNC
-    const wrapper = document.getElementById('l3-canvas-wrapper');
-    if (wrapper) wrapper.parentElement.innerHTML = renderLevel3Canvas(activeResId);
+    // 2. APPLY & PERSIST
+    if (targetObj) {
+        targetObj.assigneeId = memberId;
+        targetObj.assigneeName = memberName;
+        targetObj.assigneeType = type;
+        
+        console.log("✅ Assignment persisted to:", targetObj.name || "Unnamed Node");
+        await OL.persist();
 
-    // ⚓ LOCK CONTEXT
-    OL.loadInspector(stepId, activeResId);
+        // 3. SURGICAL UI SYNC
+        // Refresh Level 3 Canvas if visible
+        const l3wrapper = document.getElementById('l3-canvas-wrapper');
+        if (l3wrapper) l3wrapper.parentElement.innerHTML = renderLevel3Canvas(activeResId);
+
+        // Refresh Level 2/Global Canvas if visible
+        const isGlobal = state.viewMode === 'global';
+        if (isGlobal || state.focusedWorkflowId) {
+            OL.refreshMap(); 
+        }
+
+        // 4. RELOAD INSPECTOR (Keeps the sidebar updated with the new name)
+        OL.loadInspector(stepId, activeResId);
+        
+        // 🧹 Clear search results
+        const results = document.getElementById("assignment-search-results");
+        if (results) results.innerHTML = "";
+        
+    } else {
+        console.error("❌ Assignment Failed: Target ID not found in Parent context.", stepId);
+    }
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
