@@ -8181,37 +8181,44 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     const sortedWfSteps = (wf.steps || []).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
     let flattenedSequence = [];
-    const seenAssetPlaceholders = new Set();
+    // 🛡️ Track IDs to prevent double-rendering for the SAME asset
+    const seenAssetIds = new Set();
 
     sortedWfSteps.forEach((wfStep, wfIdx) => {
+        // 1. Check if this is a "Loose Step" (No Resource Link)
         if (!wfStep.resourceLinkId) {
             flattenedSequence.push({ 
                 ...wfStep, 
                 isLoose: true, 
+                asset: null, // Explicitly null
                 originalWfIndex: wfIdx 
             });
         } else {
+            // 2. It's a Linked Resource
             const asset = allResources.find(r => String(r.id) === String(wfStep.resourceLinkId));
-            if (asset) {
+            
+            // 🛑 DEDUPLICATION GUARD: If we've already rendered this asset in this workflow, skip it.
+            if (asset && !seenAssetIds.has(asset.id)) {
+                seenAssetIds.add(asset.id);
                 const internalSteps = (asset.steps || []);
+                
                 if (internalSteps.length === 0) {
-                    if (!seenAssetPlaceholders.has(asset.id)) {
-                        flattenedSequence.push({ 
-                            id: `empty-${asset.id}`, 
-                            name: "No internal steps defined", 
-                            isPlaceholder: true, 
-                            asset: asset, 
-                            isLoose: false, 
-                            originalWfIndex: wfIdx 
-                        });
-                        seenAssetPlaceholders.add(asset.id);
-                    }
+                    // Add Placeholder
+                    flattenedSequence.push({ 
+                        id: `empty-${asset.id}`, 
+                        name: "No internal steps defined", 
+                        isPlaceholder: true, 
+                        asset: asset, 
+                        isLoose: false, 
+                        originalWfIndex: wfIdx 
+                    });
                 } else {
+                    // Add real internal steps and FORCE the asset link
                     internalSteps.forEach(internalStep => {
                         flattenedSequence.push({ 
                             ...internalStep, 
                             asset: asset, 
-                            isLoose: false, 
+                            isLoose: false, // 🚀 FORCE FALSE: This is NOT a loose step
                             originalWfIndex: wfIdx 
                         });
                     });
@@ -8225,13 +8232,15 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
     flattenedSequence.forEach((item) => {
         const lastGroup = groupedItems[groupedItems.length - 1];
         
-        // If this item is part of the same technical resource as the previous item, group them
-        if (lastGroup && !item.isLoose && !lastGroup.isLoose && lastGroup.resourceId === item.asset?.id) {
+        // 🚀 THE FIX: Use item.asset?.id for the grouping key
+        const currentAssetId = item.isLoose ? null : item.asset?.id;
+
+        if (lastGroup && !item.isLoose && !lastGroup.isLoose && lastGroup.resourceId === currentAssetId) {
             lastGroup.steps.push(item);
         } else {
             groupedItems.push({
-                resourceId: item.isLoose ? null : item.asset?.id,
-                asset: item.isLoose ? null : item.asset,
+                resourceId: currentAssetId,
+                asset: item.asset,
                 isLoose: item.isLoose,
                 steps: [item],
                 insertIndex: item.originalWfIndex + 1 
