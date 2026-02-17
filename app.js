@@ -4157,45 +4157,37 @@ OL.getDraftById = function(id) {
 };
 
 OL.getResourceById = function(id) {
-    // 🚀 THE FIX: Strict check for falsy values AND literal strings "undefined"/"null"
     if (!id || id === "undefined" || id === "null") return null;
     
-    const idStr = String(id);
+    // 🚀 THE FIX: Strip UI prefixes to find the actual data ID
+    // This converts "empty-local-prj-123" back to "local-prj-123"
+    let cleanId = String(id).replace(/^(empty-|step-|link-)/, '');
 
-    // 1. Resolve the global state
-    const client = typeof getActiveClient === 'function' ? getActiveClient() : null;
-    const sourceData = location.hash.includes('vault') ? state.master : (client?.projectData || {});
-    const stage = (sourceData.stages || []).find(s => String(s.id) === idStr);
+    const client = getActiveClient();
+    const globalState = window.state || OL.state;
+
+    // 1. Check Stages
+    const sourceData = location.hash.includes('vault') ? globalState.master : (client?.projectData || {});
+    const stage = (sourceData.stages || []).find(s => String(s.id) === cleanId);
     if (stage) return stage;
 
-    const globalState = window.state || OL.state;
-    if (!globalState) {
-        console.error("❌ State not found.");
-        return null;
-    }
-
     // 2. Check Master Library
-    const fromMaster = (globalState.master?.resources || []).find(r => String(r.id) === idStr);
+    const fromMaster = (globalState.master?.resources || []).find(r => String(r.id) === cleanId);
     if (fromMaster) return fromMaster;
 
     // 3. Check Active Client Local Project
-    const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === idStr);
+    const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === cleanId);
     if (fromLocal) return fromLocal;
 
-    // 4. Search inside Workflows for nested steps
+    // 4. Deep Search inside Workflows for nested atomic steps
     const allLocalResources = client?.projectData?.localResources || [];
     for (const res of allLocalResources) {
-        if (res.steps && Array.isArray(res.steps)) {
-            const nestedStep = res.steps.find(s => String(s.id) === idStr);
+        if (res.steps) {
+            const nestedStep = res.steps.find(s => String(s.id) === cleanId);
             if (nestedStep) return nestedStep;
         }
     }
 
-    // 5. Final fallback (Silenced for Atomic Steps)
-    // Only warn if the ID looks like a real ID (e.g., contains 'res' or 'local')
-    if (idStr.includes('-')) {
-        console.warn(`⚠️ Resource ${idStr} not found in Master, Local, or Nested Steps.`);
-    }
     return null;
 };
 
@@ -10061,6 +10053,11 @@ OL.loadInspector = function(targetId, parentId = null) {
     const client = getActiveClient();
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const data = OL.getResourceById(targetId);
+    if (!data) {
+        const panel = document.getElementById('inspector-panel');
+        if (panel) panel.innerHTML = `<div class="p-20 muted text-center">Node data not found.</div>`;
+        return;
+    }
 
     // ⚓ THE ANCHOR: Lock the parent context for re-renders
     if (parentId) {
