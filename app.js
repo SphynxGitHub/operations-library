@@ -10053,6 +10053,11 @@ OL.loadInspector = function(targetId, parentId = null) {
     
     const isVaultMode = location.hash.includes('vault');
     const client = getActiveClient();
+
+    const allResources = isVaultMode 
+        ? (state.master.resources || []) 
+        : (client?.projectData?.localResources || []);
+        
     const data = OL.getResourceById(cleanId); // Use cleaned ID
 
     if (!data) {
