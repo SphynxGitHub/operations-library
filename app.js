@@ -4541,64 +4541,81 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
 OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
     const client = getActiveClient();
-    const allWorkflows = (client?.projectData?.localResources || []).filter(r => r.type === 'Workflow');
-    let instances = [];
+    const allResources = (client?.projectData?.localResources || []);
+    let contextFound = false;
+    let html = `<div class="card-section"><label class="modal-section-label">🕸️ FLOW CONTEXT</label><div style="display: flex; flex-direction: column; gap: 24px; margin-top: 15px;">`;
 
-    allWorkflows.forEach(wf => {
-        wf.steps.forEach((step, idx) => {
-            if (String(step.id) === String(specificStepId)) {
-                instances.push({ wf, step, idx });
-            }
-        });
-    });
+    // 1. DATA FINDER: Identify the specific instance and its container
+    let currentStep = null;
+    let container = null;
+    let currentIndex = -1;
 
-    if (instances.length === 0) return "";
+    for (const res of allResources) {
+        const steps = res.steps || res.proceduralSteps || [];
+        const foundIdx = steps.findIndex(s => String(s.id) === String(specificStepId));
+        if (foundIdx > -1) {
+            currentStep = steps[foundIdx];
+            container = res;
+            currentIndex = foundIdx;
+            contextFound = true;
+            break;
+        }
+    }
 
-    return `
-        <div class="card-section">
-            <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
-            <div style="display: flex; flex-direction: column; gap: 24px; margin-top: 15px;">
-                ${instances.map(inst => {
-                    const prevStep = inst.wf.steps[inst.idx - 1];
-                    const nextStep = inst.wf.steps[inst.idx + 1];
+    if (!contextFound) return `<div class="tiny muted" style="padding:20px;">ℹ️ No direct sequence context found.</div>`;
 
-                    // 🏷️ Pull logic labels (matching canvas logic)
-                    const incomingLabel = inst.step.logicLabel || inst.step.condition || "";
-                    const outgoingLabel = nextStep ? (nextStep.logicLabel || nextStep.condition || "") : "";
+    // 2. NEIGHBOR RESOLUTION
+    // Preceding: Step before OR the Resource that triggers this container
+    const precedingNodes = [];
+    if (currentIndex > 0) {
+        precedingNodes.push(container.steps[currentIndex - 1]);
+    } else {
+        // Look for any resource that has a logic link POINTING to this container
+        const triggers = allResources.filter(r => 
+            (r.logicLinks || []).some(l => String(l.targetId) === String(container.id))
+        );
+        precedingNodes.push(...triggers);
+    }
 
-                    return `
-                        <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 25px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
-                            <div style="display: grid; grid-template-columns: 1fr 50px 1.2fr 50px 1fr; align-items: center; gap: 5px;">
-                                
-                                <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                                    ${prevStep ? renderMiniNode(prevStep, 'muted') : '<span class="tiny muted">Start</span>'}
-                                </div>
+    // Following: Step after OR the Resource this container points to
+    const followingNodes = [];
+    if (currentIndex < container.steps.length - 1) {
+        followingNodes.push(container.steps[currentIndex + 1]);
+    } else {
+        // Look for the destination of this container's outgoing logic
+        const outcomes = (container.logicLinks || []).map(l => OL.getResourceById(l.targetId)).filter(Boolean);
+        followingNodes.push(...outcomes);
+    }
 
-                                <div style="position: relative; text-align: center;">
-                                    <div class="mini-arrow">→</div>
-                                    ${incomingLabel ? `<div class="mini-logic-label">${esc(incomingLabel)}</div>` : ''}
-                                </div>
+    // 3. RENDER STACKS
+    html += `
+        <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 25px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+            <div class="tiny muted uppercase bold" style="margin-bottom: 15px; text-align: center; font-size: 8px;">
+                Container: ${esc(container.name || 'SOP')}
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 5px;">
+                
+                <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+                    ${precedingNodes.length > 0 ? precedingNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<span class="tiny muted">Input Source</span>'}
+                </div>
 
-                                <div style="display: flex; justify-content: center;">
-                                    ${renderMiniNode(inst.step, 'active')}
-                                </div>
+                <div class="mini-arrow">→</div>
 
-                                <div style="position: relative; text-align: center;">
-                                    <div class="mini-arrow">→</div>
-                                    ${outgoingLabel ? `<div class="mini-logic-label">${esc(outgoingLabel)}</div>` : ''}
-                                </div>
+                <div style="display: flex; justify-content: center;">
+                    ${renderMiniNode(currentStep, 'active')}
+                </div>
 
-                                <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                                    ${nextStep ? renderMiniNode(nextStep, 'muted') : '<span class="tiny muted">End</span>'}
-                                </div>
+                <div class="mini-arrow">→</div>
 
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
+                <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+                    ${followingNodes.length > 0 ? followingNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<span class="tiny muted">End of SOP</span>'}
+                </div>
             </div>
         </div>
     `;
+
+    return html + `</div></div>`;
 };
 
 // Helper to render the individual blocks
