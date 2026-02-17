@@ -4482,7 +4482,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <div style="display: flex; flex-direction: column; gap: 6px;">
                     ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
                         <div class="pill accent is-clickable" 
-                             onclick="closeModal(); OL.loadInspector('${conn.id}')"
+                             onclick="OL.closeModal(); OL.loadInspector('${conn.id}')"
                              style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
