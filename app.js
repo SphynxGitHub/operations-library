@@ -9907,15 +9907,20 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
 
     // 🟠 3. STEP -> RESOURCE
     if (isStep) {
+        // 🚀 THE FIX: If targetObj doesn't have a linkId, but we are in a parent context, 
+        // it means THIS is the internal step.
+        const effectiveParentId = targetObj.resourceLinkId || parentId;
+
         const parentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.id) === String(targetObj.id)));
+        
         const filteredResources = allResources.filter(res => {
             const isNotWorkflow = res.type !== 'Workflow';
             const isInThisWorkflow = (parentWf?.steps || []).some(s => String(s.resourceLinkId) === String(res.id));
             return isNotWorkflow && isInThisWorkflow;
         });
 
-        html += `
-            <div class="hierarchy-stack" style="display:flex; flex-direction:column; gap:12px;">
+        return `
+            <div class="hierarchy-stack" style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
                 <div class="stack-field">
                     <label class="tiny-label">WORKFLOW CONTAINER</label>
                     <select class="modal-input tiny full-width" onchange="OL.moveStepToWorkflow('${targetObj.id}', this.value, ${isVaultMode})">
@@ -9928,10 +9933,10 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
                 <div class="stack-field">
                     <label class="tiny-label">RESOURCE ASSIGNMENT</label>
                     <select class="modal-input tiny full-width" onchange="OL.handleStepAssignmentChange('${targetObj.id}', this.value, ${isVaultMode})">
-                        <option value="LOOSE" ${!targetObj.resourceLinkId ? 'selected' : ''}>📝 Loose Step (Unassigned)</option>
+                        <option value="LOOSE" ${!effectiveParentId ? 'selected' : ''}>📝 Loose Step (Unassigned)</option>
                         <optgroup label="Workflow Assets">
                             ${filteredResources.map(res => `
-                                <option value="${res.id}" ${String(res.id) === String(targetObj.resourceLinkId) ? 'selected' : ''}>
+                                <option value="${res.id}" ${String(res.id) === String(effectiveParentId) ? 'selected' : ''}>
                                     ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
                                 </option>
                             `).join('')}
