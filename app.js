@@ -9849,13 +9849,22 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     
+    // 🚀 THE DYNAMIC FIX: Get all recognized types from the Type Manager
+    const dynamicTypes = Object.values(state.master.rates?.variables || {}).map(v => v.applyTo);
+    const recognizedTypes = [...new Set(dynamicTypes.filter(Boolean))];
+
     const isWorkflow = targetObj.type === 'Workflow';
-    const isResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(targetObj.type);
+    
+    // Check if targetObj.type matches ANY of the types in your Type Manager
+    const isResource = recognizedTypes.some(t => 
+        t.toLowerCase() === (targetObj.type || "").toLowerCase()
+    );
+    
     const isStep = !isWorkflow && !isResource;
 
     let html = `<div class="hierarchy-selectors" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid rgba(255,255,255,0.1);">`;
 
-   // 🟢 1. WORKFLOW -> STAGE
+    // 🟢 1. WORKFLOW -> STAGE
     if (isWorkflow) {
         html += `
             <div class="form-group">
@@ -9867,34 +9876,30 @@ OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
             </div>`;
     }
 
-    // 🔵 2. RESOURCE -> WORKFLOW
+    // 🔵 2. RESOURCE -> WORKFLOW (Reverse Lookup)
     if (isResource) {
         const currentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.resourceLinkId) === String(targetObj.id)));
         html += `
             <div class="form-group">
-                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Workflow</label>
-                <select class="modal-input tiny" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
-                    <option value="">-- No Workflow --</option>
-                    ${allResources.filter(r => r.type === 'Workflow').map(w => `<option value="${w.id}" ${currentWf?.id === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+                <label class="tiny muted bold uppercase" style="font-size:8px; color:var(--accent); margin-bottom:4px;">Workflow Assignment</label>
+                <select class="modal-input tiny full-width" onchange="OL.reassignHierarchy('${targetObj.id}', 'workflowId', this.value, ${isVaultMode})">
+                    <option value="" ${!currentWf ? 'selected' : ''}>-- Unmapped (Library Only) --</option>
+                    ${allResources.filter(r => r.type === 'Workflow').map(w => `<option value="${w.id}" ${currentWf?.id === w.id ? 'selected' : ''}>🔄 ${esc(w.name)}</option>`).join('')}
                 </select>
             </div>`;
     }
 
     // 🟠 3. STEP -> RESOURCE
     if (isStep) {
-        // 1. Find current parent workflow
         const parentWf = allResources.find(r => r.type === 'Workflow' && (r.steps || []).some(s => String(s.id) === String(targetObj.id)));
-        
-        // 2. 🎯 Filter Resources: Only show resources that are already part of THIS workflow
-        // This prevents assigning a step to a Zap that belongs to a different process
         const filteredResources = allResources.filter(res => {
             const isNotWorkflow = res.type !== 'Workflow';
             const isInThisWorkflow = (parentWf?.steps || []).some(s => String(s.resourceLinkId) === String(res.id));
             return isNotWorkflow && isInThisWorkflow;
         });
 
-        return `
-            <div class="hierarchy-stack" style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+        html += `
+            <div class="hierarchy-stack" style="display:flex; flex-direction:column; gap:12px;">
                 <div class="stack-field">
                     <label class="tiny-label">WORKFLOW CONTAINER</label>
                     <select class="modal-input tiny full-width" onchange="OL.moveStepToWorkflow('${targetObj.id}', this.value, ${isVaultMode})">
