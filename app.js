@@ -9985,6 +9985,9 @@ OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
     const item = OL.getResourceById(targetId);
     if (!item) return;
 
+    // 🛡️ THE SHIELD: Prevent incoming syncs from resetting the UI while we work
+    state.activeInspectorResId = targetId; 
+
     const client = getActiveClient();
     const sourceResources = isVault ? state.master.resources : client.projectData.localResources;
 
@@ -9992,17 +9995,18 @@ OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
         // 🟢 LEVEL 1: Move Workflow to different Stage
         if (level === 'stageId') {
             item.stageId = newParentId;
-            item.mapOrder = 999; // Default to end of list
+            item.mapOrder = 999; 
         } 
 
         // 🔵 LEVEL 2: Move Resource to different Workflow
         if (level === 'workflowId') {
-            // 1. Find old parent workflow and remove item
+            // 1. Remove from all other workflows first
             sourceResources.forEach(wf => {
-                if (wf.steps) wf.steps = wf.steps.filter(s => s.resourceLinkId !== targetId);
+                if (wf.steps) wf.steps = wf.steps.filter(s => String(s.resourceLinkId) !== String(targetId));
             });
-            // 2. Add to new parent workflow
-            const newWf = OL.getResourceById(newParentId);
+            
+            // 2. Add to the new parent workflow
+            const newWf = sourceResources.find(r => String(r.id) === String(newParentId));
             if (newWf) {
                 if (!newWf.steps) newWf.steps = [];
                 newWf.steps.push({ id: uid(), name: item.name, resourceLinkId: targetId });
@@ -10010,13 +10014,9 @@ OL.reassignHierarchy = async function(targetId, level, newParentId, isVault) {
         }
     });
 
-    // 🔄 UI Refresh Loop
+    // 🔄 Force a clean redraw
     renderGlobalVisualizer(isVault);
-    
-    // Refresh whichever view we are currently in
-    const modal = document.getElementById('active-modal-box');
-    if (modal) OL.openResourceModal(targetId);
-    else OL.loadInspector(targetId);
+    OL.loadInspector(targetId);
 };
 
 const getAllIncomingLinks = (targetId, allResources) => {
