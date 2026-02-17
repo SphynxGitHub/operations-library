@@ -6109,53 +6109,54 @@ OL.executeAssignment = async function(resId, stepId, isTrigger, memberId, member
     const client = getActiveClient();
     if (!client) return;
 
-    console.log(`👤 Global Assignment Search: Member[${memberName}] Target[${stepId}]`);
+    console.log(`👤 Assignment Request: [${memberName}] -> [${stepId}]`);
 
-    // 🚀 THE FIX: Point directly to the source arrays in state, not a combined local variable
+    // 🚀 THE FIX: We must find the reference INSIDE the global 'state' object
     const isVault = window.location.hash.includes('vault');
-    const targetLibrary = isVault ? state.master.resources : client.projectData.localResources;
+    
+    // Direct reference to the live array
+    const targetLibrary = isVault ? state.master.resources : state.clients[state.activeClientId].projectData.localResources;
 
     let targetObj = null;
-    let actualParentId = null;
+    let parentResId = null;
 
-    // 1. Find the object inside the actual state reference
-    for (const r of targetLibrary) {
+    // 1. Locate the live object reference
+    for (let r of targetLibrary) {
+        // Is it the resource itself?
         if (String(r.id) === String(stepId)) {
-            targetObj = r;
-            actualParentId = r.id;
+            targetObj = r; 
+            parentResId = r.id;
             break;
         }
-        const foundStep = (r.steps || []).find(s => String(s.id) === String(stepId));
-        if (foundStep) {
-            targetObj = foundStep;
-            actualParentId = r.id;
-            break;
+        // Is it a step inside this resource?
+        if (r.steps) {
+            let step = r.steps.find(s => String(s.id) === String(stepId));
+            if (step) {
+                targetObj = step;
+                parentResId = r.id;
+                break;
+            }
         }
     }
 
     if (targetObj) {
-        // 2. Apply Data to the reference (this modifies the state object directly)
-        targetObj.assigneeId = memberId;
-        targetObj.assigneeName = memberName;
-        targetObj.assigneeType = type;
+        // 2. Perform the update via updateAndSync to engage the Shield
+        await OL.updateAndSync(() => {
+            targetObj.assigneeId = memberId;
+            targetObj.assigneeName = memberName;
+            targetObj.assigneeType = type;
+            console.log("✅ Live State Mutation Verified:", targetObj);
+        });
+
+        // 3. UI REFRESH
+        OL.loadInspector(stepId, parentResId);
+        OL.refreshMap();
         
-        console.log("💾 Verified State Change:", targetObj);
-
-        // 3. FORCE PERSISTENCE
-        // We call OL.persist() which JSON.stringifies the 'state' variable
-        await OL.persist();
-
-        // 4. UI REFRESH
-        // We use a small delay to ensure Firebase write is acknowledged
-        setTimeout(() => {
-            OL.loadInspector(stepId, actualParentId);
-            OL.refreshMap();
-            const results = document.getElementById("assignment-search-results");
-            if (results) results.innerHTML = "";
-        }, 100);
-
+        const results = document.getElementById("assignment-search-results");
+        if (results) results.innerHTML = "";
+        
     } else {
-        console.error("❌ Assignment Failed: Target not found in State tree.", stepId);
+        console.error("❌ Assignment Failed: Target not found in Live State.");
     }
 };
 
