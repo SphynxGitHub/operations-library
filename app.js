@@ -4544,7 +4544,6 @@ OL.renderResourceMiniMaps = function(targetResId) {
     const allResources = client?.projectData?.localResources || [];
     const instances = [];
 
-    // Find every workflow that contains this resource
     allResources.forEach(wf => {
         if (wf.type === 'Workflow' && wf.steps) {
             wf.steps.forEach((step, idx) => {
@@ -4561,24 +4560,36 @@ OL.renderResourceMiniMaps = function(targetResId) {
         <div class="card-section" style="margin-top: 25px;">
             <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
             <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 15px;">
-                ${instances.map((inst, i) => {
-                    // Grab 1 step before and 1 step after
-                    const prevStep = inst.wf.steps[inst.idx - 1];
-                    const nextStep = inst.wf.steps[inst.idx + 1];
+                ${instances.map((inst) => {
+                    // Neighborhood scan
+                    const neighbors = [inst.idx - 1, inst.idx, inst.idx + 1].map(i => {
+                        const s = inst.wf.steps[i];
+                        if (!s) return null;
+                        const res = OL.getResourceById(s.resourceLinkId);
+                        return { name: s.name, type: res?.type || 'SOP', isActive: i === inst.idx };
+                    });
                     
                     return `
-                        <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-                            <div class="tiny muted uppercase bold" style="margin-bottom: 10px; font-size: 9px;">Location: ${esc(inst.wf.name)}</div>
-                            <div style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-                                
-                                ${prevStep ? `<div class="mini-node muted">${esc(prevStep.name || 'Prev')}</div>` : ''}
-                                ${prevStep ? `<div class="mini-arrow">→</div>` : ''}
-                                
-                                <div class="mini-node active">${esc(inst.step.name || 'This Resource')}</div>
-                                
-                                ${nextStep ? `<div class="mini-arrow">→</div>` : ''}
-                                ${nextStep ? `<div class="mini-node muted">${esc(nextStep.name || 'Next')}</div>` : ''}
-                                
+                        <div class="mini-map-container">
+                            <button class="expand-map-btn" onclick="OL.expandFlowMap('${inst.wf.id}', ${inst.idx})">⤢ Expand</button>
+                            <div class="tiny muted uppercase bold" style="margin-bottom: 12px; font-size: 8px; opacity: 0.5;">
+                                Workflow: ${esc(inst.wf.name)}
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                                ${neighbors.map((n, i) => {
+                                    if (!n) return '';
+                                    const icon = OL.getRegistryIcon(n.type);
+                                    const html = `
+                                        <div class="mini-node ${n.isActive ? 'active' : 'muted'}">
+                                            <div class="mini-node-content">
+                                                <div class="mini-icon-circle">${icon}</div>
+                                                <div style="width: 100%;">${esc(n.name)}</div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    const arrow = (i < 2 && neighbors[i+1]) ? '<div class="mini-arrow">→</div>' : '';
+                                    return html + arrow;
+                                }).join('')}
                             </div>
                         </div>
                     `;
@@ -4586,6 +4597,46 @@ OL.renderResourceMiniMaps = function(targetResId) {
             </div>
         </div>
     `;
+};
+
+OL.expandFlowMap = function(wfId, activeIdx) {
+    const wf = OL.getResourceById(wfId);
+    if (!wf) return;
+
+    const start = Math.max(0, activeIdx - 2);
+    const end = Math.min(wf.steps.length, activeIdx + 3);
+    const slice = wf.steps.slice(start, end);
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🕸️ Full Sequence: ${esc(wf.name)}</div>
+        </div>
+        <div class="modal-body" style="padding: 80px 40px; display: flex; align-items: center; justify-content: center; overflow-x: auto; background: #050816;">
+            <div style="display: flex; align-items: center; gap: 25px;">
+                ${slice.map((step, i) => {
+                    const isActualTarget = (start + i === activeIdx);
+                    const res = OL.getResourceById(step.resourceLinkId);
+                    const icon = OL.getRegistryIcon(res?.type || 'SOP');
+                    
+                    return `
+                        <div class="mini-node ${isActualTarget ? 'active' : 'muted'}" 
+                             style="width: 150px; font-size: 11px; padding: 20px; min-height: 80px; flex-shrink: 0;">
+                            <div class="mini-node-content">
+                                <div class="mini-icon-circle" style="width: 32px; height: 32px; font-size: 18px;">${icon}</div>
+                                <div>${esc(step.name)}</div>
+                            </div>
+                        </div>
+                        ${(i < slice.length - 1) ? '<div class="mini-arrow" style="font-size: 24px; opacity: 0.8;">→</div>' : ''}
+                    `;
+                }).join('')}
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn primary full" onclick="OL.closeModal()">Return to SOP</button>
+        </div>
+    `;
+    
+    openModal(html); 
 };
 
 // HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
