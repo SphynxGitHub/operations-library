@@ -8343,12 +8343,14 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 // 🚀 Logic detection for internal steps
                                 const stepIn = OL.checkIncomingLogic(s.id);
                                 const stepOut = (s.outcomes && s.outcomes.length > 0);
+                                
+                                // Check if the inspector is currently looking at this specific sub-step
                                 const isStepActive = String(state.activeInspectorResId) === String(s.id);
 
                                 return `
-                                    <div class="tiny atomic-step-row ${s.isPlaceholder ? 'muted italic' : ''} ${isStepActive ? 'is-inspecting step-active' : ''}" 
+                                    <div class="tiny atomic-step-row ${s.isPlaceholder ? 'muted italic' : ''} ${isStepActive ? 'step-active' : ''}" 
                                         id="step-row-${s.id}" 
-                                        style="display:flex; align-items:center; gap:5px; padding: 2px 4px;"
+                                        style="display:flex; align-items:center; gap:5px; padding: 2px 4px; border:none !important; background:transparent !important;"
                                         onclick="event.stopPropagation(); OL.loadInspector('${s.id}', '${asset.id}')">
                                         
                                         <div style="width: 14px; display: flex; justify-content: center; flex-shrink: 0;">
@@ -8359,7 +8361,9 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                             ${s.type === 'Trigger' ? '⚡' : '•'}
                                         </span>
                                         
-                                        <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(s.name)}</span>
+                                        <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #eee;">
+                                            ${esc(s.name)}
+                                        </span>
                                         
                                         <div style="width: 14px; display: flex; justify-content: center; flex-shrink: 0;">
                                             ${stepOut ? `<span class="logic-trace-icon out" onclick="event.stopPropagation(); OL.traceLogic('${s.id}', 'outgoing')">🔀</span>` : ''}
