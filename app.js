@@ -4502,7 +4502,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
                     <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
-                    <button class="btn tiny primary" onclick="OL.toggleWorkflowFullscreen('${res.id}')">📃 List Editor</button>
                 </div>
                 <div id="sop-step-list">
                     ${renderSopStepList(res)}
@@ -5128,7 +5127,7 @@ window.renderSopStepList = function (res) {
     html += steps.map((step, idx) => `
         <div class="step-group">
             <div class="dp-manager-row">
-                <span class="tiny muted">${idx + 1}</span>
+                <span class="tiny muted" style="margin-right: 1%">${idx + 1}</span>
                 <div class="bold tiny">${esc(step.name)}</div>
             </div>
         </div>
