@@ -4349,8 +4349,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         </div>`;
 
   // --- SECTION: INCOMING LINKS ---
-
-  const allConnections = getAllIncomingLinks(targetId, allResources);
+  const allResources = isVaultMode ? state.master.resources : (client?.projectData?.localResources || []);
+  const allConnections = getAllIncomingLinks(res.id, allResources);
   
   // State for filtering (you can persist this in state.ui if desired)
   const activeFilter = state.ui.relationshipFilter || 'All';
@@ -4358,9 +4358,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
       activeFilter === 'All' || c.type === activeFilter
   );
   
-  if (allConnections.length > 0) {
-      // Unique types for the filter buttons
-      const types = ['All', ...new Set(allConnections.map(c => c.type))];
+  const types = (allConnections.length > 0) 
+        ? ['All', ...new Set(allConnections.map(c => c.type))] 
+        : [];
 
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
@@ -4445,19 +4445,19 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 
                 <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
                     ${types.map(t => `
-                        <span onclick="state.ui.relationshipFilter = '${t}'; OL.refreshInspector();" 
-                              style="font-size: 9px; padding: 2px 8px; border-radius: 10px; cursor: pointer; 
+                        <span onclick="state.ui.relationshipFilter = '${t}'; OL.openResourceModal('${targetId}')" 
+                              style="font-size: 9px; padding: 2px 8px; border-radius: 100px; cursor: pointer; 
                               background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
                               color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
                             ${t.toUpperCase()}
                         </span>
                     `).join('')}
                 </div>
-    
+            
                 <div style="display: flex; flex-direction: column; gap: 6px;">
                     ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
                         <div class="pill accent is-clickable" 
-                             onclick="OL.loadInspector('${conn.id}')"
+                             onclick="closeModal(); OL.loadInspector('${conn.id}')"
                              style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
