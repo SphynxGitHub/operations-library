@@ -3363,6 +3363,16 @@ body.is-visualizer #mainContent {
     border: 1px solid var(--accent);
 }
 
+.mini-node.active {
+    transform: scale(1.05); /* Make the current step pop slightly */
+}
+
+.mini-arrow {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.2);
+    font-family: monospace;
+}
+
 .expand-map-btn {
     position: absolute;
     top: 10px;

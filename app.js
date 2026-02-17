@@ -4544,6 +4544,7 @@ OL.renderResourceMiniMaps = function(targetResId) {
     const allResources = client?.projectData?.localResources || [];
     const instances = [];
 
+    // Find every instance of this resource in any workflow
     allResources.forEach(wf => {
         if (wf.type === 'Workflow' && wf.steps) {
             wf.steps.forEach((step, idx) => {
@@ -4559,37 +4560,40 @@ OL.renderResourceMiniMaps = function(targetResId) {
     return `
         <div class="card-section" style="margin-top: 25px;">
             <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
-            <div style="display: flex; flex-direction: column; gap: 20px; margin-top: 15px;">
+            <div style="display: flex; flex-direction: column; gap: 30px; margin-top: 15px;">
                 ${instances.map((inst) => {
-                    // Neighborhood scan
-                    const neighbors = [inst.idx - 1, inst.idx, inst.idx + 1].map(i => {
-                        const s = inst.wf.steps[i];
-                        if (!s) return null;
-                        const res = OL.getResourceById(s.resourceLinkId);
-                        return { name: s.name, type: res?.type || 'SOP', isActive: i === inst.idx };
-                    });
+                    // 1. Get Preceding (Previous step in SOP + any incoming logic links)
+                    const preceding = inst.wf.steps[inst.idx - 1] ? [inst.wf.steps[inst.idx - 1]] : [];
                     
+                    // 2. Get Following (Next step in SOP + any outgoing logic branches)
+                    const following = inst.wf.steps[inst.idx + 1] ? [inst.wf.steps[inst.idx + 1]] : [];
+
                     return `
-                        <div class="mini-map-container">
-                            <button class="expand-map-btn" onclick="OL.expandFlowMap('${inst.wf.id}', ${inst.idx})">⤢ Expand</button>
-                            <div class="tiny muted uppercase bold" style="margin-bottom: 12px; font-size: 8px; opacity: 0.5;">
-                                Workflow: ${esc(inst.wf.name)}
+                        <div class="mini-map-container" style="background: rgba(0,0,0,0.3); padding: 25px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="tiny muted uppercase bold" style="margin-bottom: 20px; text-align: center; letter-spacing: 1px;">
+                                Context: ${esc(inst.wf.name)}
                             </div>
-                            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-                                ${neighbors.map((n, i) => {
-                                    if (!n) return '';
-                                    const icon = OL.getRegistryIcon(n.type);
-                                    const html = `
-                                        <div class="mini-node ${n.isActive ? 'active' : 'muted'}">
-                                            <div class="mini-node-content">
-                                                <div class="mini-icon-circle">${icon}</div>
-                                                <div style="width: 100%;">${esc(n.name)}</div>
-                                            </div>
-                                        </div>
-                                    `;
-                                    const arrow = (i < 2 && neighbors[i+1]) ? '<div class="mini-arrow">→</div>' : '';
-                                    return html + arrow;
-                                }).join('')}
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 10px;">
+                                
+                                <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+                                    ${preceding.map(p => renderMiniNode(p, 'muted')).join('')}
+                                    ${preceding.length === 0 ? '<span class="tiny muted">Start of Flow</span>' : ''}
+                                </div>
+
+                                <div class="mini-arrow" style="text-align: center;">→</div>
+
+                                <div style="display: flex; justify-content: center;">
+                                    ${renderMiniNode(inst.step, 'active')}
+                                </div>
+
+                                <div class="mini-arrow" style="text-align: center;">→</div>
+
+                                <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+                                    ${following.map(f => renderMiniNode(f, 'muted')).join('')}
+                                    ${following.length === 0 ? '<span class="tiny muted">End of Flow</span>' : ''}
+                                </div>
+
                             </div>
                         </div>
                     `;
@@ -4598,6 +4602,24 @@ OL.renderResourceMiniMaps = function(targetResId) {
         </div>
     `;
 };
+
+// Helper to render the individual blocks
+function renderMiniNode(step, status) {
+    const res = OL.getResourceById(step.resourceLinkId);
+    const icon = OL.getRegistryIcon(res?.type || 'SOP');
+    const isActive = status === 'active';
+    
+    return `
+        <div class="mini-node ${status}" style="${isActive ? 'border: 2px solid #fbbf24; background: rgba(251, 191, 36, 0.15); box-shadow: 0 0 15px rgba(251, 191, 36, 0.1);' : ''}">
+            <div class="mini-node-content">
+                <div class="mini-icon-circle" style="${isActive ? 'color: #fbbf24;' : ''}">${icon}</div>
+                <div style="font-weight: ${isActive ? 'bold' : 'normal'}; color: ${isActive ? '#fff' : '#cbd5e1'};">
+                    ${esc(step.name)}
+                </div>
+            </div>
+        </div>
+    `;
+}
 
 OL.expandFlowMap = function(wfId, activeIdx) {
     const wf = OL.getResourceById(wfId);
