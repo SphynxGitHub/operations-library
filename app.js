@@ -10049,13 +10049,14 @@ const getAllIncomingLinks = (targetId, allResources) => {
 };
 
 OL.loadInspector = function(targetId, parentId = null) {
+    const cleanId = String(targetId).replace(/^(empty-|step-|link-)/, '');
+    
     const isVaultMode = location.hash.includes('vault');
     const client = getActiveClient();
-    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const data = OL.getResourceById(targetId);
+    const data = OL.getResourceById(cleanId); // Use cleaned ID
+
     if (!data) {
-        const panel = document.getElementById('inspector-panel');
-        if (panel) panel.innerHTML = `<div class="p-20 muted text-center">Node data not found.</div>`;
+        console.error("❌ Inspector Error: No data found for", cleanId);
         return;
     }
 
@@ -10093,16 +10094,21 @@ OL.loadInspector = function(targetId, parentId = null) {
     const dynamicTypes = Object.keys(state.master.rates?.variables || {});
     
     // 2. Identify the current item
-    const isStage = targetId.startsWith('stage-');
+    const isStage = cleantId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
 
     // 🛡️ THE DYNAMIC CHECK: 
     // Is the current item's type found in the Type Manager?
-    const isTechnicalResource = dynamicTypes.some(t => t.toLowerCase() === (data.type || "").toLowerCase());
+   const isLibraryResource = isVaultMode 
+        ? state.master.resources.some(r => String(r.id) === cleanId)
+        : client.projectData.localResources.some(r => String(r.id) === cleanId);
 
-    // 3. Define the labels based on the results
-    const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource; 
-    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? data.type : "Step";
+    // 🛡️ THE FIX: A step is ONLY an atomic step if it's NOT in the library
+    // and NOT a stage/workflow.
+    const isAtomicStep = !isStage && !isWorkflow && !isLibraryResource;
+    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isLibraryResource ? (data.type || "Resource") : "Step";
+
+    console.log(`🕵️ Inspector Identity: [${data.name}] -> ${levelLabel} (isAtomic: ${isAtomicStep})`);
     
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
