@@ -9860,7 +9860,7 @@ OL.cloneResourceWorkflow = function(resId) {
 // Handles: Stages, Workflows, Resources, and Steps
 // ==========================================
 
-OL.renderHierarchySelectors = function(targetObj, isVaultMode) {
+OL.renderHierarchySelectors = function(targetObj, isVaultMode, parentId=null) {
     const client = getActiveClient();
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
