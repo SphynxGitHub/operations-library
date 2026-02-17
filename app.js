@@ -5538,48 +5538,49 @@ OL.addStepResource = function(resId, elementId, targetId, targetName, targetType
     const client = getActiveClient();
     if (!client) return;
 
-    // 1. AUTO-SHARE LOGIC: If it's a Vault SOP, ensure it's in sharedMasterIds
+    // 1. Resolve the Actual Target Object
+    // If elementId matches resId, we are linking to the top-level resource, not a sub-step.
+    const res = OL.getResourceById(resId);
+    if (!res) return console.error("❌ Link target resource not found:", resId);
+
+    let targetObj = res; // Default to the resource itself
+    if (elementId && elementId !== resId) {
+        targetObj = isTrigger ? res.triggers[trigIdx] : res.steps?.find(s => String(s.id) === String(elementId));
+    }
+
+    if (!targetObj) return console.error("❌ Could not resolve sub-step/trigger for linking");
+
+    // 2. AUTO-SHARE LOGIC (Master Vault Check)
     const isVaultSOP = targetId.startsWith('ht-vlt-') || (!targetId.includes('local') && targetType === 'sop');
-    
     if (isVaultSOP) {
         if (!client.sharedMasterIds) client.sharedMasterIds = [];
         if (!client.sharedMasterIds.includes(targetId)) {
             client.sharedMasterIds.push(targetId);
-            console.log(`🌍 Master SOP "${targetName}" has been auto-shared with this project.`);
         }
     }
 
-    // 2. Resolve the Resource and Step
-    const res = OL.getResourceById(resId);
-    if (!res) return;
-
-    let targetObj = isTrigger ? res.triggers[trigIdx] : res.steps?.find(s => String(s.id) === String(elementId));
-    if (!targetObj) return;
-
-    // 3. Add Link
+    // 3. Perform the Link
     if (!targetObj.links) targetObj.links = [];
-    if (targetObj.links.some(l => l.id === targetId)) return; // Prevent double-linking
+    if (targetObj.links.some(l => l.id === targetId)) {
+        console.warn("⚠️ Item already linked.");
+    } else {
+        targetObj.links.push({ 
+            id: targetId, 
+            name: targetName, 
+            type: targetType 
+        });
+        console.log(`✅ Linked ${targetName} to ${targetObj.name || 'Step'}`);
+    }
 
-    targetObj.links.push({ 
-        id: targetId, 
-        name: targetName, 
-        type: targetType 
-    });
-
-    // 4. Persist and Refresh
+    // 4. Save and Refresh UI
     OL.persist();
     
-    const listContainer = document.getElementById(`step-resources-list-${elementId}`);
-    if (listContainer) {
-        listContainer.innerHTML = renderStepResources(resId, targetObj, isTrigger, trigIdx);
-    }
-    
-    // 5. Close Dropdown
+    // Clear search results
     const resultsContainer = document.getElementById(`resource-results-${elementId}`);
     if (resultsContainer) resultsContainer.innerHTML = "";
-    
-    // Refresh background library if it's open
-    if (typeof renderResourceLibrary === 'function') renderResourceLibrary();
+
+    // Refresh Inspector
+    OL.loadInspector(elementId, resId !== elementId ? resId : null);
 };
 
 OL.removeStepLink = function(resId, stepId, linkIdx) {
@@ -10275,7 +10276,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             </div>
         </div>
     `;
-    
+
     // ------------------------------------------------------------
     // 🚀 UNIVERSAL RELATIONSHIP SCANNER (Moved OUTSIDE if(isAtomicStep))
     // ------------------------------------------------------------
