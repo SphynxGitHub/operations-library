@@ -2250,7 +2250,7 @@ body.fs-mode-active {
     .sidebar, .main-header, .app-header, .btn, .card-close, .top-bar, .card-delete-btn, .header-actions,
     .local-tag, div.cards-grid, .analysis-summary-card, #modal-layer, .fs-mode-toggle, .tiny-select
     .btn-vis-add, .vis-node-delete, .vis-header-actions, .vis-detail-toggle, .drag-handle, .vis-idx,
-    .search-map-container, .col-actions {
+    .search-map-container, .col-actions, .toolbar {
         display: none !important;
     }
 
