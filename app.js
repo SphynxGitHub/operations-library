@@ -10094,7 +10094,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const dynamicTypes = Object.keys(state.master.rates?.variables || {});
     
     // 2. Identify the current item
-    const isStage = cleantId.startsWith('stage-');
+    const isStage = cleanId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
 
     // 🛡️ THE DYNAMIC CHECK: 
