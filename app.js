@@ -10371,8 +10371,8 @@ OL.loadInspector = function(targetId, parentId = null) {
                 <div style="display: flex; flex-direction: column; gap: 6px;">
                     ${filteredConnections.map(conn => `
                         <div class="pill accent is-clickable" 
-                             onclick="OL.loadInspector('${conn.id}')"
-                             style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
+                             onclick="event.preventDefault(); event.stopPropagation(); OL.loadInspector('${conn.id}')"
+                             style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); pointer-events: auto !important;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
                                 <div style="display:flex; flex-direction:column;">
