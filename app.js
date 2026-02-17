@@ -8209,7 +8209,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
             }
         }
     });
-    
+
     // 2. GROUP: Group consecutive items that belong to the same technical asset
     const groupedItems = [];
     flattenedSequence.forEach((item) => {
@@ -10042,6 +10042,11 @@ const getAllIncomingLinks = (targetId, allResources) => {
 };
 
 OL.loadInspector = function(targetId, parentId = null) {
+    const isVaultMode = location.hash.includes('vault');
+    const client = getActiveClient();
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const data = OL.getResourceById(targetId);
+
     // ⚓ THE ANCHOR: Lock the parent context for re-renders
     if (parentId) {
         state.activeInspectorParentId = parentId;
@@ -10068,23 +10073,15 @@ OL.loadInspector = function(targetId, parentId = null) {
         OL.initSideResizers(); 
     }
 
-    const data = OL.getResourceById(targetId);
-    if (!data) {
-        contentWrapper.innerHTML = `<div class="p-20 muted">Select an item to inspect</div>`;
-        return;
-    }
-    
     const isAssigned = !!data.resourceLinkId;
 
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
 
-    const client = getActiveClient();
     const isStage = targetId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
     const isTechnicalResource = ['Zap', 'Form', 'Email', 'SOP', 'Signature', 'Event'].includes(data.type);
     const isAtomicStep = !isStage && !isWorkflow && !isTechnicalResource && parentId;  
     const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isTechnicalResource ? "Resource" : "Step";
-    const isVaultMode = location.hash.includes('vault');
     const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
 
     // 🚀 NEW: Check for Incoming Logic using targetId
