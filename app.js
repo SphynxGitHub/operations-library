@@ -4480,20 +4480,32 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 </div>
             
                 <div style="display: flex; flex-direction: column; gap: 6px;">
-                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
-                        <div class="pill accent is-clickable" 
-                             onclick="OL.closeModal(); OL.loadInspector('${conn.id}')"
-                             style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
-                                <div style="display:flex; flex-direction:column;">
-                                    <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
-                                    <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
+                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
+                        const isScopingEnv = window.location.hash.includes('scoping-sheet');
+    
+                        const navAction = isScopingEnv 
+                            ? `OL.closeModal(); OL.openResourceModal('${conn.id}')` 
+                            : `OL.closeModal(); OL.loadInspector('${conn.id}')`;
+                        
+                        return ` 
+                            <div class="pill accent is-clickable" 
+                                style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
+                                onclick="event.stopPropagation(); ${navAction}">
+
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
+                                    <div style="display:flex; flex-direction:column;">
+                                        <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
+                                        <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
+                                    </div>
                                 </div>
+                                <span style="font-size: 9px; opacity: 0.5;">
+                                    ${isScopingEnv ? 'Open Modal ↗' : 'Inspect ➔'}
+                                </span>
                             </div>
-                            <span style="font-size: 9px; opacity: 0.5;">Navigate →</span>
-                        </div>
-                    `).join('') : `<div class="tiny muted" style="padding: 10px; text-align: center;">No ${activeFilter} links found.</div>`}
+                        `;
+                    }).join('') : `<div class="tiny muted" style="padding: 10px; text-align: center;">
+                        ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}</div>
                 </div>
             </div>
 
