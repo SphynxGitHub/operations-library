@@ -10070,22 +10070,22 @@ const getAllIncomingLinks = (targetId, allResources) => {
 };
 
 OL.loadInspector = function(targetId, parentId = null) {
-    const cleanId = String(targetId).replace(/^(empty-|step-|link-)/, '');
-    
+    const cleanId = String(targetId).replace(/^(empty-|step-|link-)/, '');   
     const isVaultMode = location.hash.includes('vault');
     const client = getActiveClient();
-
-    const allResources = isVaultMode 
-        ? (state.master.resources || []) 
-        : (client?.projectData?.localResources || []);
-
     const data = OL.getResourceById(cleanId); // Use cleaned ID
-
+    
     if (!data) {
         console.error("❌ Inspector Error: No data found for", cleanId);
         return;
     }
 
+    const allResources = isVaultMode 
+        ? (state.master.resources || []) 
+        : (client?.projectData?.localResources || []);
+
+    const isTopLevelResource = allResources.some(r => String(r.id) === cleanId);
+    
     // ⚓ THE ANCHOR: Lock the parent context for re-renders
     if (parentId) {
         state.activeInspectorParentId = parentId;
