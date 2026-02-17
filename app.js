@@ -10057,7 +10057,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const allResources = isVaultMode 
         ? (state.master.resources || []) 
         : (client?.projectData?.localResources || []);
-        
+
     const data = OL.getResourceById(cleanId); // Use cleaned ID
 
     if (!data) {
@@ -10107,6 +10107,8 @@ OL.loadInspector = function(targetId, parentId = null) {
    const isLibraryResource = isVaultMode 
         ? state.master.resources.some(r => String(r.id) === cleanId)
         : client.projectData.localResources.some(r => String(r.id) === cleanId);
+
+    const isTechnicalResource = isLibraryResource && !isWorkflow;
 
     // 🛡️ THE FIX: A step is ONLY an atomic step if it's NOT in the library
     // and NOT a stage/workflow.
