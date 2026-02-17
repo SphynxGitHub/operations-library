@@ -6117,55 +6117,43 @@ OL.executeAssignment = async function(resId, stepId, isTrigger, memberId, member
     const client = getActiveClient();
     if (!client) return;
 
-    console.log(`👤 Assignment Request: [${memberName}] -> [${stepId}]`);
-
-    // 🚀 THE FIX: We must find the reference INSIDE the global 'state' object
+    // 1. Determine exactly which library we are in
     const isVault = window.location.hash.includes('vault');
-    
-    // Direct reference to the live array
     const targetLibrary = isVault ? state.master.resources : state.clients[state.activeClientId].projectData.localResources;
 
-    let targetObj = null;
-    let parentResId = null;
+    await OL.updateAndSync(() => {
+        let found = false;
 
-    // 1. Locate the live object reference
-    for (let r of targetLibrary) {
-        // Is it the resource itself?
-        if (String(r.id) === String(stepId)) {
-            targetObj = r; 
-            parentResId = r.id;
-            break;
-        }
-        // Is it a step inside this resource?
-        if (r.steps) {
-            let step = r.steps.find(s => String(s.id) === String(stepId));
-            if (step) {
-                targetObj = step;
-                parentResId = r.id;
+        for (let r of targetLibrary) {
+            // Case A: The target is the Resource itself
+            if (String(r.id) === String(stepId)) {
+                r.assigneeId = memberId;
+                r.assigneeName = memberName;
+                r.assigneeType = type;
+                found = true;
                 break;
             }
+
+            // Case B: The target is a Step inside this resource
+            if (r.steps) {
+                const stepIdx = r.steps.findIndex(s => String(s.id) === String(stepId));
+                if (stepIdx > -1) {
+                    r.steps[stepIdx].assigneeId = memberId;
+                    r.steps[stepIdx].assigneeName = memberName;
+                    r.steps[stepIdx].assigneeType = type;
+                    found = true;
+                    break;
+                }
+            }
         }
-    }
 
-    if (targetObj) {
-        // 2. Perform the update via updateAndSync to engage the Shield
-        await OL.updateAndSync(() => {
-            targetObj.assigneeId = memberId;
-            targetObj.assigneeName = memberName;
-            targetObj.assigneeType = type;
-            console.log("✅ Live State Mutation Verified:", targetObj);
-        });
+        if (!found) throw new Error("Target ID not found in live state tree.");
+        console.log("🎯 Property injected into Live State index.");
+    });
 
-        // 3. UI REFRESH
-        OL.loadInspector(stepId, parentResId);
-        OL.refreshMap();
-        
-        const results = document.getElementById("assignment-search-results");
-        if (results) results.innerHTML = "";
-        
-    } else {
-        console.error("❌ Assignment Failed: Target not found in Live State.");
-    }
+    // 2. UI REFRESH
+    OL.loadInspector(stepId, resId !== stepId ? resId : null);
+    OL.refreshMap();
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
