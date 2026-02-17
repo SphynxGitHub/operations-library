@@ -3313,6 +3313,36 @@ body.is-visualizer #mainContent {
     font-size: 11px;
 }
 
+.mini-node {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mini-node.active {
+    border: 1px solid var(--accent);
+    background: rgba(var(--accent-rgb), 0.1);
+    font-weight: bold;
+    color: var(--accent);
+}
+
+.mini-node.muted {
+    opacity: 0.5;
+    border-style: dashed;
+}
+
+.mini-arrow {
+    color: var(--accent);
+    font-weight: bold;
+    opacity: 0.5;
+}
+
 /*=================================================================
 ARROWS
 ===================================================================*/

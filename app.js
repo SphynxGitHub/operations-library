@@ -4325,7 +4325,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         `;
     }
 
-    const miniMapsHtml = OL.renderResourceMiniMaps(res.id) : "";
+    const miniMapsHtml = OL.renderResourceMiniMaps(res.id);
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
