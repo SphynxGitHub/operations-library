@@ -10220,7 +10220,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                    style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
                    onblur="${isAtomicStep  || isInternalStep ? 
                         `OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)` : 
-                        `OL.updateResourceMetadata('${targetId}', 'name', this.value)`}">
+                        `OL.updateResourceMetadata('${data.id}', 'name', this.value)`}">
             
         </div>`;
 
