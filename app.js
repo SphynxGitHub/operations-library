@@ -4326,6 +4326,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const hash = window.location.hash;
     const isScopingSheet = hash.includes('scoping-sheet');
     let roundInputHtml = "";
+    let hierarchyHtml = "";
     if (lineItem || isScopingSheet) {
         const activeId = lineItem ? lineItem.id : targetId;
         const currentRound = lineItem ? (lineItem.round || 1) : 1;
@@ -4340,7 +4341,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>`;
     }
     else {
-        const hierarchyHtml = `
+        hierarchyHtml = `
             <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
                 ${OL.renderHierarchySelectors(res, isVaultMode)}
             </div>`;
