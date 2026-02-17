@@ -5538,48 +5538,65 @@ OL.addStepResource = function(resId, elementId, targetId, targetName, targetType
     const client = getActiveClient();
     if (!client) return;
 
-    // 1. Resolve the Actual Target Object
-    // If elementId matches resId, we are linking to the top-level resource, not a sub-step.
-    const res = OL.getResourceById(resId);
-    if (!res) return console.error("❌ Link target resource not found:", resId);
+    console.log(`🔍 Link Attempt: Parent[${resId}] Element[${elementId}] Target[${targetName}]`);
 
-    let targetObj = res; // Default to the resource itself
-    if (elementId && elementId !== resId) {
-        targetObj = isTrigger ? res.triggers[trigIdx] : res.steps?.find(s => String(s.id) === String(elementId));
-    }
+    // 1. DATA CONTEXT
+    const isVault = window.location.hash.includes('vault');
+    const allResources = isVault ? state.master.resources : client.projectData.localResources;
 
-    if (!targetObj) return console.error("❌ Could not resolve sub-step/trigger for linking");
+    // 2. RESOLVE THE TARGET OBJECT (The container for the link)
+    let targetObj = null;
 
-    // 2. AUTO-SHARE LOGIC (Master Vault Check)
-    const isVaultSOP = targetId.startsWith('ht-vlt-') || (!targetId.includes('local') && targetType === 'sop');
-    if (isVaultSOP) {
-        if (!client.sharedMasterIds) client.sharedMasterIds = [];
-        if (!client.sharedMasterIds.includes(targetId)) {
-            client.sharedMasterIds.push(targetId);
+    // Strategy A: Direct Resource Link (e.g., linking directly to an SOP)
+    if (resId === elementId) {
+        targetObj = allResources.find(r => String(r.id) === String(resId));
+    } 
+    // Strategy B: Sub-Step Link (The item belongs to a specific step)
+    else {
+        // Look inside the specific parent first
+        const parentRes = allResources.find(r => String(r.id) === String(resId));
+        if (parentRes) {
+            targetObj = isTrigger ? parentRes.triggers?.[trigIdx] : parentRes.steps?.find(s => String(s.id) === String(elementId));
+        }
+        
+        // Strategy C: Global Step Search (If the parent ID passed was wrong)
+        if (!targetObj) {
+            for (const r of allResources) {
+                const found = r.steps?.find(s => String(s.id) === String(elementId));
+                if (found) {
+                    targetObj = found;
+                    break;
+                }
+            }
         }
     }
 
-    // 3. Perform the Link
-    if (!targetObj.links) targetObj.links = [];
-    if (targetObj.links.some(l => l.id === targetId)) {
-        console.warn("⚠️ Item already linked.");
-    } else {
-        targetObj.links.push({ 
-            id: targetId, 
-            name: targetName, 
-            type: targetType 
-        });
-        console.log(`✅ Linked ${targetName} to ${targetObj.name || 'Step'}`);
+    if (!targetObj) {
+        console.error("❌ Could not resolve sub-step/trigger for linking. ID:", elementId);
+        return;
     }
 
-    // 4. Save and Refresh UI
+    // 3. AUTO-SHARE LOGIC
+    const isVaultSOP = targetId.startsWith('ht-vlt-') || (!targetId.includes('local') && targetType === 'sop');
+    if (isVaultSOP && !isVault) {
+        if (!client.sharedMasterIds) client.sharedMasterIds = [];
+        if (!client.sharedMasterIds.includes(targetId)) client.sharedMasterIds.push(targetId);
+    }
+
+    // 4. PERFORM LINK
+    if (!targetObj.links) targetObj.links = [];
+    if (!targetObj.links.some(l => l.id === targetId)) {
+        targetObj.links.push({ id: targetId, name: targetName, type: targetType });
+        console.log("✅ Link Success");
+    }
+
     OL.persist();
     
-    // Clear search results
-    const resultsContainer = document.getElementById(`resource-results-${elementId}`);
-    if (resultsContainer) resultsContainer.innerHTML = "";
-
-    // Refresh Inspector
+    // UI Cleanup
+    const results = document.getElementById(`resource-results-${elementId}`);
+    if (results) results.innerHTML = "";
+    
+    // Refresh view
     OL.loadInspector(elementId, resId !== elementId ? resId : null);
 };
 
