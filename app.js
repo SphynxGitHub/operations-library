@@ -135,6 +135,43 @@ OL.sync = function() {
     });
 };
 
+/**
+ * 🚀 THE GLOBAL MUTATOR
+ * Wraps data changes in a sync-shield to prevent cloud "bounce-back"
+ * @param {Function} mutationFn - The logic to execute before syncing
+ */
+OL.updateAndSync = async function(mutationFn) {
+    // 1. Raise the Shield: Block incoming cloud snapshots from overwriting memory
+    state.isSaving = true;
+    
+    const statusEl = document.getElementById('cloud-status');
+    if (statusEl) statusEl.innerHTML = "⏳ Syncing...";
+
+    try {
+        // 2. Execute the actual data change
+        // We 'await' it in case the mutation itself involves async logic
+        await mutationFn();
+
+        // 3. Persist the updated state to Firebase
+        await OL.persist();
+        
+        if (statusEl) statusEl.innerHTML = "✅ Synced";
+        console.log("📡 Cloud Sync Successful");
+
+    } catch (error) {
+        console.error("❌ updateAndSync Failure:", error);
+        if (statusEl) statusEl.innerHTML = "⚠️ Sync Error";
+        // Alert the user if a major data operation fails
+        alert("Changes could not be saved to the cloud. Please check your connection.");
+    } finally {
+        // 4. Release the Shield
+        // A 300ms delay ensures the 'onSnapshot' echo from the server is ignored
+        setTimeout(() => { 
+            state.isSaving = false; 
+        }, 300);
+    }
+};
+
 OL.processIncomingAI = async function(inboxData) {
     const res = OL.getResourceById(inboxData.targetResId);
     if (!res) return;
@@ -10646,33 +10683,34 @@ OL.updateResourceMetadata = function(resId, field, value) {
     const res = OL.getResourceById(resId);
     if (!res) return;
 
-    const cleanValue = value.trim();
+    const cleanValue = (typeof value === 'string') ? value.trim() : value;
+    
     // 1. Only update if the value actually changed
     if (res[field] === cleanValue) return;
 
-    res[field] = cleanValue;
-    console.log(`📡 Updated ${field} to: ${cleanValue}`);
+    // 🛡️ Use the restored Global Mutator
+    OL.updateAndSync(() => {
+        res[field] = cleanValue;
+        console.log(`📡 [updateAndSync] Metadata ${field} -> ${cleanValue}`);
 
-    // 2. Persist to Firebase (Silent)
-    OL.persist();
+        // 2. THE SURGICAL UI FIX: 
+        // We do this inside the mutation block so it's protected by the shield
+        
+        // Update the card title on the canvas
+        const canvasCardTitle = document.querySelector(`#l1-node-${resId} .bold, #l2-node-${resId} .bold`);
+        if (canvasCardTitle && field === 'name') {
+            canvasCardTitle.innerText = cleanValue;
+        }
 
-    // 3. 🚀 THE SURGICAL FIX: 
-    // Update the specific UI elements instead of a full renderGlobalVisualizer()
-    
-    // Update the card title on the canvas if it exists
-    const canvasCardTitle = document.querySelector(`#l1-node-${resId} .bold, #l2-node-${resId} .bold`);
-    if (canvasCardTitle && field === 'name') {
-        canvasCardTitle.innerText = cleanValue;
-    }
+        // Update sidebar items
+        const sidebarItem = document.querySelector(`.draggable-workflow-item[onclick*="${resId}"] span:last-child`);
+        if (sidebarItem && (field === 'name' || field === 'title')) {
+            sidebarItem.innerText = cleanValue;
+        }
+    });
 
-    // Update any sidebar items that display this name
-    const sidebarItem = document.querySelector(`.draggable-workflow-item[onclick*="${resId}"] span:last-child`);
-    if (sidebarItem && field === 'name') {
-        sidebarItem.innerText = cleanValue;
-    }
-
-    // Note: We DO NOT call renderGlobalVisualizer here. 
-    // This keeps the Inspector open and the cursor focus stable.
+    // Note: Because updateAndSync handles persist(), we don't call it here.
+    // Because state.activeInspectorResId is set, OL.sync will skip buildLayout().
 };
 
 OL.updateResourceType = function(resId, newType) {
