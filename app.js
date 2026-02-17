@@ -10298,8 +10298,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                 </div>
             </div>
         `;
-    }
-
+    
     // ------------------------------------------------------------
     // 5. RECURSIVE LOGIC / OUTCOMES (Available on ALL levels)
     // ------------------------------------------------------------
