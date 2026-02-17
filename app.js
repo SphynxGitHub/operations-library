@@ -10085,7 +10085,7 @@ OL.loadInspector = function(targetId, parentId = null) {
         : (client?.projectData?.localResources || []);
 
     const isTopLevelResource = allResources.some(r => String(r.id) === cleanId);
-    
+
     // ⚓ THE ANCHOR: Lock the parent context for re-renders
     if (parentId) {
         state.activeInspectorParentId = parentId;
@@ -10119,6 +10119,10 @@ OL.loadInspector = function(targetId, parentId = null) {
     // 1. Get the list of types defined in your Type Manager
     const dynamicTypes = Object.keys(state.master.rates?.variables || {});
     
+    const isRecognizedType = dynamicTypes.some(t => 
+        t.toLowerCase() === (data.type || "").toLowerCase()
+    );
+
     // 2. Identify the current item
     const isStage = cleanId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
@@ -10130,11 +10134,17 @@ OL.loadInspector = function(targetId, parentId = null) {
         : client.projectData.localResources.some(r => String(r.id) === cleanId);
 
     const isTechnicalResource = isLibraryResource && !isWorkflow;
+    
+    const isInternalStep = !!parentId && parentId !== cleanId;
 
-    // 🛡️ THE FIX: A step is ONLY an atomic step if it's NOT in the library
-    // and NOT a stage/workflow.
-    const isAtomicStep = !isStage && !isWorkflow && !isLibraryResource;
-    const levelLabel = isStage ? "Stage" : isWorkflow ? "Workflow" : isLibraryResource ? (data.type || "Resource") : "Step";
+    // 🛡️ A step is ONLY atomic if it's NOT a stage, NOT a workflow, NOT in library, AND NOT internal
+    const isAtomicStep = !isStage && !isWorkflow && !isLibraryResource && !isInternalStep;
+
+    const levelLabel = 
+        isStage ? "Stage" : 
+        isWorkflow ? "Workflow" : 
+        isRecognizedType ? (data.type || "Resource") : 
+        (isInternalStep ? "Procedural Step" : "Step");
 
     console.log(`🕵️ Inspector Identity: [${data.name}] -> ${levelLabel} (isAtomic: ${isAtomicStep})`);
     
@@ -10203,7 +10213,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             
             <input type="text" class="header-editable-input" value="${esc(data.name || data.title)}" 
                    style="background:transparent; border:none; color:#fff; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                   onblur="${isAtomicStep ? 
+                   onblur="${isAtomicStep  || isInternalStep ? 
                         `OL.updateAtomicStep('${parentId}', '${data.id}', 'name', this.value)` : 
                         `OL.updateResourceMetadata('${targetId}', 'name', this.value)`}">
             
