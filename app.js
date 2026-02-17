@@ -6081,59 +6081,64 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
 };
 
 OL.executeAssignment = async function(resId, stepId, isTrigger, memberId, memberName, type) {
-    const activeResId = resId || state.lastUsedParentId;
-    const res = OL.getResourceById(activeResId);
-    if (!res) return;
+    const client = getActiveClient();
+    if (!client) return;
 
-    console.log(`👤 Assigning [${memberName}] to Target [${stepId}] in Parent [${activeResId}]`);
+    console.log(`👤 Global Assignment Search: Member[${memberName}] Target[${stepId}]`);
+
+    const isVault = window.location.hash.includes('vault');
+    const allResources = isVault ? (state.master.resources || []) : (client.projectData.localResources || []);
 
     let targetObj = null;
+    let actualParent = null;
 
-    // 1. RESOLVE THE TARGET
-    // Check if the target is a nested STEP
-    const step = res.steps?.find(s => String(s.id) === String(stepId));
-    
-    if (step) {
-        targetObj = step;
-    } 
-    // Check if the target is actually the RESOURCE itself (SOP/Workflow level)
-    else if (String(res.id) === String(stepId)) {
-        targetObj = res;
-    }
-    // Check if it's a TRIGGER (if applicable)
-    else if (isTrigger && res.triggers) {
-        targetObj = res.triggers.find(t => String(t.id) === String(stepId));
+    // 🚀 THE GLOBAL SCAN: Find the object regardless of the parentId passed
+    for (const r of allResources) {
+        // 1. Is it the Resource itself?
+        if (String(r.id) === String(stepId)) {
+            targetObj = r;
+            actualParent = r;
+            break;
+        }
+        // 2. Is it a Step inside this resource?
+        const foundStep = (r.steps || []).find(s => String(s.id) === String(stepId));
+        if (foundStep) {
+            targetObj = foundStep;
+            actualParent = r;
+            break;
+        }
+        // 3. Is it a Trigger?
+        const foundTrig = (r.triggers || []).find(t => String(t.id) === String(stepId));
+        if (foundTrig) {
+            targetObj = foundTrig;
+            actualParent = r;
+            break;
+        }
     }
 
-    // 2. APPLY & PERSIST
     if (targetObj) {
+        // 💾 APPLY DATA
         targetObj.assigneeId = memberId;
         targetObj.assigneeName = memberName;
         targetObj.assigneeType = type;
         
-        console.log("✅ Assignment persisted to:", targetObj.name || "Unnamed Node");
+        console.log("✅ Assignment persisted to:", targetObj.name || targetObj.title || "Target Node");
+        
         await OL.persist();
 
-        // 3. SURGICAL UI SYNC
-        // Refresh Level 3 Canvas if visible
-        const l3wrapper = document.getElementById('l3-canvas-wrapper');
-        if (l3wrapper) l3wrapper.parentElement.innerHTML = renderLevel3Canvas(activeResId);
-
-        // Refresh Level 2/Global Canvas if visible
-        const isGlobal = state.viewMode === 'global';
-        if (isGlobal || state.focusedWorkflowId) {
-            OL.refreshMap(); 
-        }
-
-        // 4. RELOAD INSPECTOR (Keeps the sidebar updated with the new name)
-        OL.loadInspector(stepId, activeResId);
+        // 🔄 UI REFRESH
+        // Refresh the specific Inspector view
+        OL.loadInspector(stepId, actualParent?.id);
         
-        // 🧹 Clear search results
+        // Clear search UI
         const results = document.getElementById("assignment-search-results");
         if (results) results.innerHTML = "";
         
+        // Sync the Canvas
+        OL.refreshMap();
+
     } else {
-        console.error("❌ Assignment Failed: Target ID not found in Parent context.", stepId);
+        console.error("❌ Assignment Failed: Target ID not found anywhere in the library.", stepId);
     }
 };
 
