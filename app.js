@@ -8375,7 +8375,7 @@ OL.addWorkflowToStage = async function(stageId, isVault) {
             if (reFoundEl) reFoundEl.scrollTo(x, y);
         });
     }
-};
+}; 
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
     const confirmMsg = "This will add 5 standard stages: Cold Lead, Warm Lead, Onboarding, New Client, Ongoing Client. Proceed?";
