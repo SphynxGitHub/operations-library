@@ -7021,7 +7021,14 @@ OL.filterAnalysisAppSearch = function (anlyId, isMaster, query) {
     const existingAppIds = (anly?.apps || []).map(a => a.appId);
 
     // 2. Aggregate all potential apps
-    const allApps = [...state.master.apps, ...(client?.projectData?.localApps || [])];
+    let allApps = [];
+    if (isMaster) {
+        // In Master Vault, only show Global Master Apps
+        allApps = state.master.apps || [];
+    } else {
+        // In Local Project, only show the client's Local Apps
+        allApps = client?.projectData?.localApps || [];
+    }
 
     // 3. Filter: Name match AND not already in the matrix
     const matches = allApps.filter(app => {
