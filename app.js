@@ -6672,14 +6672,6 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 };
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
-    const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
-    
-    // 1. Silent Hash Update
-    const newHash = `#/${viewPrefix}/${analysisId}`;
-    if (window.location.hash !== newHash) {
-        history.replaceState(null, null, newHash);
-    }
-    
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === analysisId);
@@ -6795,13 +6787,15 @@ OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
         anly[field] = value.trim();
         OL.persist(); 
 
-        // 🚀 THE FIX: Don't call renderAnalysisModule(). 
-        // Just call the opener to refresh the math/text in the table.
+        // 🚀 THE FIX: 
+        // 1. Refresh the Matrix UI
         OL.openAnalysisMatrix(anlyId, isMaster);
         
-        // Use a surgical update for the card title in the background
+        // 2. Surgically update the card in the background so it doesn't look "stale"
         const cardTitle = document.querySelector(`.card-title-${anlyId}`);
         if (cardTitle && field === 'name') cardTitle.innerText = anly[field];
+        
+        // 🛑 DO NOT call renderAnalysisModule() here. That is what causes the "Close".
     }
 };
 
