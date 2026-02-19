@@ -6691,6 +6691,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     
     const topScore = Math.max(...appResults.map(r => r.total), 0);
 
+    const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
+    window.location.hash = `#/${viewPrefix}/${analysisId}`;
+
     const html = `
         <div class="print-container">
             <div class="analysis-summary-card">
@@ -6815,13 +6818,19 @@ OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
         anly[field] = value.trim();
         OL.persist(); // Save to Firebase
         
-        // 🔄 Reactive UI: Refresh the module grid to show the new summary on the card face
-        renderAnalysisModule(isMaster); 
+        // 🚀 THE FIX: Update only the text labels in the DOM instead of re-rendering the module
+        // 1. Update the Matrix Title if it's visible
+        const matrixTitle = document.querySelector(`.m-name-${anlyId}`);
+        if (matrixTitle && field === 'name') matrixTitle.innerText = anly.name;
+
+        // 2. Update the Card Title in the background grid
+        const cardTitle = document.querySelector(`.card-title-${anlyId}`);
+        if (cardTitle && field === 'name') cardTitle.innerText = anly.name;
+
+        // Note: We REMOVED renderAnalysisModule(isMaster) from here.
+        // This keeps the "Active Matrix" open and scrolled into view.
         
-        // Ensure the matrix stays open after the grid refresh
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        
-        console.log(`✅ Analysis ${field} updated.`);
+        console.log(`✅ Analysis ${field} updated without view reset.`);
     }
 };
 
