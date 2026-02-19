@@ -620,11 +620,7 @@ window.handleRoute = function () {
         else if (hash.includes("apps")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
         else if (hash.includes("rates")) renderVaultRatesPage();
-        else if (hash.includes("analyses")) {
-            const analysisId = pathParts[2]; 
-            renderAnalysisModule(true); 
-            if (analysisId) OL.openAnalysisMatrix(analysisId, true);
-        }
+        else if (hash.includes("analyses")) renderAnalysisModule(); 
         else if (hash.includes("how-to")) renderHowToLibrary(); 
         else if (hash.includes("tasks")) renderBlueprintManager();
         else if (hash.includes("visualizer")) renderGlobalVisualizer(true);
@@ -636,17 +632,7 @@ window.handleRoute = function () {
         else if (hash.includes("#/applications")) renderAppsGrid();
         else if (hash.includes("#/functions")) renderFunctionsGrid();
         else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
-        else if (hash.includes("/analyze")) {
-            if (!client) {
-                main.innerHTML = `<div class="empty-hint" style="padding:100px;">Project data loading...</div>`;
-                return;
-            }
-            renderAnalysisModule(false);
-            // If hash is #/analyze/123, parts[1] is the ID. If just #/analyze, parts[1] is undefined.
-            if (parts[1]) {
-                OL.openAnalysisMatrix(parts[1], false);
-            }
-        }
+        else if (hash.includes("/analyze")) renderAnalysisModule();
         else if (hash.includes("#/client-tasks")) renderChecklistModule();
         else if (hash.includes("#/team")) renderTeamManager();
         else if (hash.includes("#/how-to")) renderHowToLibrary();
