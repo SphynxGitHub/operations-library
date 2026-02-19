@@ -8262,17 +8262,23 @@ window.renderGlobalCanvas = function(isVaultMode) {
 
     if (stages.length === 0) {
         return `
-            <div class="global-macro-map empty-state" style="display:flex; align-items:center; justify-content:center; height:100vh;">
+            <div class="global-macro-map empty-state" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:80vh; gap:20px;">
                 <div class="text-center">
-                    <h2 class="muted">No Stages Defined</h2>
-                    <button class="btn primary large" onclick="OL.addLifecycleStageAt(0, ${isVaultMode})">
-                        + Add Your First Lifecycle Stage
-                    </button>
+                    <h2 class="muted" style="margin-bottom:10px;">Canvas is Empty</h2>
+                    <p class="tiny muted uppercase bold" style="margin-bottom:20px;">Choose a starting point</p>
+                    
+                    <div style="display:flex; gap:15px; justify-content:center;">
+                        <button class="btn primary" onclick="OL.addLifecycleStageAt(0, ${isVaultMode})">
+                            + Manual Stage
+                        </button>
+                        <button class="btn accent" onclick="OL.applyStandardLifecycleTemplate(${isVaultMode})">
+                            ⚡ Apply 5-Stage Template
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
-    } 
-
+    }
     return `
         <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
              style="display: flex; padding: 60px; align-items: flex-start; min-height: 100vh;">
@@ -8333,6 +8339,35 @@ window.renderGlobalCanvas = function(isVaultMode) {
             `}).join('')}
         </div>
     `;
+};
+
+OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
+    const confirmMsg = "This will add 5 standard stages: Discovery, Evaluation, Implementation, Operations, and Optimization. Proceed?";
+    if (!confirm(confirmMsg)) return;
+
+    const stages = [
+        { name: "Cold Lead", order: 0 },
+        { name: "Warm Lead", order: 1 },
+        { name: "Onboarding", order: 2 },
+        { name: "New Client", order: 3 },
+        { name: "Ongoing Client", order: 4 }
+    ];
+
+    await OL.updateAndSync(() => {
+        const sourceData = isVaultMode ? state.master : getActiveClient().projectData;
+        if (!sourceData.stages) sourceData.stages = [];
+
+        stages.forEach(s => {
+            sourceData.stages.push({
+                id: "stage-" + Math.random().toString(36).substr(2, 9),
+                name: s.name,
+                order: s.order
+            });
+        });
+    });
+
+    // Refresh the view
+    window.renderGlobalVisualizer(isVaultMode);
 };
 
 OL.handleCanvasBackgroundClick = function(event) {
@@ -8426,15 +8461,35 @@ OL.handleStageDelete = async function(stageId, isVault) {
 
 // ➕ Insert Stage at specific index
 OL.addLifecycleStageAt = function(index, isVault) {
-    const source = isVault ? state.master : getActiveClient().projectData;
-    const newStage = { id: "stage-" + Date.now(), name: "New Phase", order: index };
+    const client = getActiveClient();
+    const source = isVault ? state.master : (client?.projectData || {});
     
-    // Shift existing orders
-    source.stages.forEach(s => { if(s.order >= index) s.order++; });
+    // 🚀 THE FIX: Ensure stages exists before doing ANYTHING else
+    if (!source.stages) source.stages = [];
+
+    // 1. Shift existing orders to make room (Safe now because we initialized above)
+    source.stages.forEach(s => { 
+        if (s.order >= index) s.order++; 
+    });
+
+    // 2. Create the new stage
+    const newStage = { 
+        id: "stage-" + Date.now(), 
+        name: "New Phase", 
+        order: index 
+    };
+    
     source.stages.push(newStage);
     
+    // 3. Save and Refresh
     OL.persist();
-    renderGlobalVisualizer(isVault);
+    
+    // Ensure the visualizer re-renders
+    if (typeof window.renderGlobalVisualizer === 'function') {
+        window.renderGlobalVisualizer(isVault);
+    } else {
+        OL.refreshActiveView();
+    }
 };
 
 function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
