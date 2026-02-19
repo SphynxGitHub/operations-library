@@ -6711,7 +6711,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     `;
 
     // Scroll to the matrix area
-    container.scrollIntoView({ behavior: 'smooth' });
+    if (!skipScroll) {
+        container.scrollIntoView({ behavior: 'smooth' });
+    }
 
     // Add category button if you want to re-add later
     /* <button class="btn tiny soft" onclick="OL.promptAddCategory('${analysisId}', ${isMaster})">
@@ -7084,20 +7086,21 @@ OL.addAppToAnalysis = function (anlyId, isMaster) {
 };
 
 OL.executeAddAppToAnalysis = function (anlyId, appId, isMaster) {
-  const source = isMaster
-    ? state.master.analyses
-    : getActiveClient()?.projectData?.localAnalyses || [];
-  const anly = source.find((a) => a.id === anlyId);
+    const source = isMaster
+        ? state.master.analyses
+        : getActiveClient()?.projectData?.localAnalyses || [];
+    const anly = source.find((a) => a.id === anlyId);
 
-  if (anly) {
-    if (!anly.apps) anly.apps = [];
-    if (!anly.apps.some((a) => a.appId === appId)) {
-      anly.apps.push({ appId, scores: {} });
-      OL.persist();
+    if (anly) {
+        if (!anly.apps) anly.apps = [];
+        if (!anly.apps.some((a) => a.appId === appId)) {
+            anly.apps.push({ appId, scores: {} });
+            OL.persist();
+        }
+        
+        OL.closeModal();
+        OL.openAnalysisMatrix(anlyId, isMaster); 
     }
-    OL.closeModal();
-    OL.openAnalysisMatrix(anlyId, isMaster);
-  }
 };
 
 OL.removeAppFromAnalysis = function(anlyId, appId, isMaster) {
@@ -7773,25 +7776,26 @@ OL.filterContentManager = function(query) {
 };
 
 // 4. MANAGE ADDING / EDITING FEATURES
-OL.executeAddFeature = function (anlyId, name, isMaster, category) {
-  const source = isMaster
-    ? state.master.analyses
-    : getActiveClient()?.projectData?.localAnalyses || [];
-  const anly = source.find((a) => a.id === anlyId);
+OL.executeAddFeature = function (anlyId, featName, isMaster, category = "General") {
+    const source = isMaster
+        ? state.master.analyses
+        : getActiveClient()?.projectData?.localAnalyses || [];
+    const anly = source.find((a) => a.id === anlyId);
 
-  if (anly) {
-    if (!anly.features) anly.features = [];
-    anly.features.push({
-      id: "feat-" + Date.now(),
-      name: name,
-      category: category || "General",
-      weight: 10,
-    });
-
-    OL.persist();
-    OL.closeModal();
-    OL.openAnalysisMatrix(anlyId, isMaster); // Refresh matrix view
-  }
+    if (anly) {
+        const newFeat = {
+            id: "feat-" + Date.now(),
+            name: featName,
+            category: category,
+            weight: 10
+        };
+        
+        anly.features.push(newFeat);
+        OL.persist();
+        OL.openAnalysisMatrix(anlyId, isMaster);
+        // Note: We don't necessarily need to close the modal if you want to add multiple features
+        // but typically you'd call OL.closeModal(); here.
+    }
 };
 
 OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
