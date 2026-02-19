@@ -2398,6 +2398,7 @@ body.fs-mode-active {
         table-layout: fixed !important;
         border-collapse: collapse !important;
         border: 1px solid #d3d3d3 !important;
+        font-size: 11.5px;
     }
 
     /* 5. Force Borders on all Cells */
