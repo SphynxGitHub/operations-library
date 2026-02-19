@@ -455,7 +455,6 @@ window.buildLayout = function () {
                     <nav class="menu">
                         <a href="#/" class="${hash === '#/' ? 'active' : ''}">
                             <i>🏠</i> <span>Dashboard</span>
-                            ${themeSection}
                         </a>
                     </nav>
                 </div>
@@ -492,6 +491,7 @@ window.buildLayout = function () {
                             <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
                         </div>
                     </div>
+                    ${themeSection}
 
                     <nav class="menu">
                         ${clientTabs.map(item => {
