@@ -11138,11 +11138,12 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
 };
 
 // LEVEL 2: Resources in Workflow Lanes
+// LEVEL 2: Resources in Workflow Lanes
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
     const items = (workflow.steps || [])
         .filter(s => s.gridLane === lane)
-        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0)); // Ensure sort is respected
+        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
     if (items.length === 0) {
         return `<div class="tiny muted italic" style="padding:20px; opacity:0.3; text-align:center;">
@@ -11150,19 +11151,35 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
         </div>`;
     }
     
-    return items.map((item, idx) => `
-        <div class="workflow-block-card vis-node" 
-             draggable="true" 
-             onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
-             ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
-            
-            <div class="bold accent">${esc(item.name)}</div>
-            <div class="tiny muted" style="margin-top:5px; font-size:9px;">
-                Step Order: ${item.mapOrder !== undefined ? item.mapOrder + 1 : idx + 1}
+    return items.map((item, idx) => {
+        // 🔍 THE LOOKUP: Fetch the actual library resource
+        const linkedRes = OL.getResourceById(item.resourceLinkId);
+        
+        // 🏷️ DATA FALLBACK: If no link (Atomic Step), use the step's own name
+        const displayName = linkedRes ? linkedRes.name : (item.name || "Untitled Step");
+        const displayIcon = linkedRes ? OL.getRegistryIcon(linkedRes.type) : "⚙️";
+        const isAtomic = !linkedRes;
+
+        return `
+            <div class="workflow-block-card vis-node ${isAtomic ? 'atomic-step' : ''}" 
+                 draggable="true" 
+                 style="${isAtomic ? 'border-left: 3px solid var(--vault-gold);' : ''}"
+                 onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId || item.id}')"
+                 ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
+                 ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId || item.id}')">
+                
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="step-icon">${displayIcon}</span>
+                    <div class="bold accent" style="font-size: 11px;">${esc(displayName)}</div>
+                </div>
+
+                <div class="tiny muted" style="margin-top:5px; font-size:9px; display:flex; justify-content:space-between;">
+                    <span>Order: ${item.mapOrder !== undefined ? item.mapOrder + 1 : idx + 1}</span>
+                    ${isAtomic ? '<span style="color:var(--vault-gold)">ATOMIC</span>' : ''}
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 };
 
 window.renderLevel3Canvas = function(resourceId) {
