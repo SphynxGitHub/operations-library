@@ -319,6 +319,37 @@ window.addEventListener('load', () => {
     }
 });
 
+OL.toggleTheme = function() {
+    // 1. Toggle the class on body
+    const isLight = document.body.classList.toggle('light-mode');
+    
+    // 2. Persist to localStorage
+    localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
+    
+    // 3. 🚀 CRITICAL: Re-render the main layout so the sidebar button text updates
+    if (typeof OL.renderLayout === 'function') {
+        OL.renderLayout(); 
+    } else {
+        // Fallback: reload if layout function isn't globally accessible
+        window.location.reload(); 
+    }
+};
+
+// Call this at the very top of your script execution
+(function initTheme() {
+    if (localStorage.getItem('ol_theme') === 'light') {
+        document.body.classList.add('light-mode');
+    }
+})();
+
+// 💡 Run this on app initialization to load saved theme
+OL.initTheme = function() {
+    if (localStorage.getItem('ol_theme') === 'light') {
+        document.body.classList.add('light-mode');
+    }
+};
+
+
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
   if (!root) {
@@ -430,19 +461,18 @@ window.buildLayout = function () {
     { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
   ];
 
-  const isLight = document.body.classList.contains('light-mode');
+  // Inside your layout/sidebar render function:
+    const isLight = document.body.classList.contains('light-mode');
 
     const themeSection = `
-        <div class="card-section" style="margin-top: 20px; border-top: 1px solid var(--line); padding-top: 20px;">
-            <label class="modal-section-label">🎨 APPEARANCE</label>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                <button class="btn soft tiny" onclick="OL.toggleTheme()" style="display: flex; align-items: center; gap: 8px; min-width: 100px; justify-content: center;">
-                    ${isLight ? '🌙 Switch to Dark Mode' : '☀️ Switch to Light Mode'}
-                </button>
-            </div>
+        <div class="theme-toggle-zone" style="padding: 0 15px; margin: 10px 0;">
+            <button class="btn soft tiny" onclick="OL.toggleTheme()" 
+                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--panel-soft); border: 1px solid var(--line); color: var(--text-main); padding: 8px; border-radius: 6px; cursor: pointer;">
+                ${isLight ? '🌙 Dark Mode' : '☀️ Light Mode'}
+            </button>
         </div>
     `;
-
+    
 // Append themeSection to your modal HTML assembly...
   root.innerHTML = `
         <aside class="sidebar">
@@ -1074,21 +1104,6 @@ OL.toggleClientModule = function(clientId, moduleId) {
         if (!client.modules) client.modules = {};
         client.modules[moduleId] = !client.modules[moduleId];
     });
-};
-
-OL.toggleTheme = function() {
-    const isLight = document.body.classList.toggle('light-mode');
-    localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
-    
-    // Refresh the modal to update the button icon/text
-    OL.openProfileModal();
-};
-
-// 💡 Run this on app initialization to load saved theme
-OL.initTheme = function() {
-    if (localStorage.getItem('ol_theme') === 'light') {
-        document.body.classList.add('light-mode');
-    }
 };
 
 OL.copyShareLink = function(token) {

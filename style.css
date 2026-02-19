@@ -47,9 +47,15 @@ body.light-mode {
     --text: #0f172a;
 }
 
+/* Add this to your CSS */
+.theme-toggle-zone button:hover {
+    background: var(--accent-glow) !important;
+    border-color: var(--accent) !important;
+}
+
 /* Ensure transition is smooth */
 body {
-    transition: background-color 0.3s, color 0.3s;
+    transition: background-color 0.3s, color 0.3s ease;
     background-color: var(--bg);
     color: var(--text);
 }
