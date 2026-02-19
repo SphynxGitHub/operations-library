@@ -238,6 +238,11 @@ body {
     display: none;
 }
 
+.sidebar.collapsed .theme-icon {
+    display: block;
+    padding: 3px 0 6px 0;
+}
+
 /* Adjust the main content margin to match */
 #mainContent {
     transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
