@@ -4248,36 +4248,37 @@ OL.getDraftById = function(id) {
 OL.getResourceById = function(id) {
     if (!id || id === "undefined" || id === "null") return null;
     
-    // 🚀 THE FIX: Strip UI prefixes to find the actual data ID
-    // This converts "empty-local-prj-123" back to "local-prj-123"
-    let cleanId = String(id).replace(/^(empty-|step-|link-)/, '');
+    // 1. Clean the ID
+    let cleanId = String(id).replace(/^(empty-|link-)/, '');
+    const isExplicitStepId = String(id).startsWith('step-');
 
     const client = getActiveClient();
     const globalState = window.state || OL.state;
+    const isVault = location.hash.includes('vault');
+    const sourceData = isVault ? globalState.master : (client?.projectData || {});
 
-    // 1. Check Stages
-    const sourceData = location.hash.includes('vault') ? globalState.master : (client?.projectData || {});
+    // 2. Check Stages
     const stage = (sourceData.stages || []).find(s => String(s.id) === cleanId);
     if (stage) return stage;
 
-    // 2. Check Master Library
-    const fromMaster = (globalState.master?.resources || []).find(r => String(r.id) === cleanId);
-    if (fromMaster) return fromMaster;
+    // 3. Check Master/Local Resources (The Library)
+    const resourcePool = isVault ? (globalState.master?.resources || []) : (client?.projectData?.localResources || []);
+    const resource = resourcePool.find(r => String(r.id) === cleanId);
+    if (resource) return resource;
 
-    // 3. Check Active Client Local Project
-    const fromLocal = (client?.projectData?.localResources || []).find(r => String(r.id) === cleanId);
-    if (fromLocal) return fromLocal;
-
-    // 4. Deep Search inside Workflows for nested atomic steps
-    const allLocalResources = client?.projectData?.localResources || [];
-    for (const res of allLocalResources) {
-        if (res.steps) {
-            const nestedStep = res.steps.find(s => String(s.id) === cleanId);
-            if (nestedStep) return nestedStep;
+    // 4. Deep Search for Steps (ONLY if we aren't explicitly looking for a library resource)
+    // If the renderer is asking for a 'resourceLinkId', we usually want to return null 
+    // if it's not in the main pool, rather than returning a Step object.
+    if (isExplicitStepId) {
+        for (const res of resourcePool) {
+            if (res.steps) {
+                const nestedStep = res.steps.find(s => String(s.id) === cleanId.replace('step-', ''));
+                if (nestedStep) return nestedStep;
+            }
         }
     }
 
-    return null;
+    return null; 
 };
 
 // 3c. OPEN RESOURCE MODAL
@@ -9722,36 +9723,42 @@ window.renderLevel2Canvas = function(workflowId) {
                  ondrop="OL.handleUniversalDrop(event, '${workflowId}')">
                 
                 ${steps.map((step, idx) => {
-                    const techAsset = OL.getResourceById(step.resourceLinkId);
-                    // 🛡️ Safety fallback if resource was deleted from library
-                    if (!techAsset) return `<div class="tiny danger">⚠️ Missing Resource: ${esc(step.name)}</div>`;
+                    // 1. Try to find the tech asset
+                    const techAsset = step.resourceLinkId ? OL.getResourceById(step.resourceLinkId) : null;
                     
-                    const isInspecting = state.activeInspectorResId === techAsset.id;
-                    const scopingItem = OL.isResourceInScope(techAsset.id);
+                    // 2. Identify if this is a Factory/Atomic step
+                    const isAtomic = !techAsset;
+                    
+                    // 3. Resolve Display Data (Use library asset if it exists, otherwise use step's internal data)
+                    const displayName = techAsset ? techAsset.name : (step.name || "Untitled Step");
+                    const displayIcon = techAsset ? OL.getRegistryIcon(techAsset.type) : "⚙️";
+                    const displayDesc = techAsset ? (techAsset.description || '') : "Atomic logical step from Procedure level.";
+                    
+                    const isInspecting = techAsset ? (state.activeInspectorResId === techAsset.id) : (state.activeInspectorResId === step.id);
+                    const scopingItem = techAsset ? OL.isResourceInScope(techAsset.id) : null;
                     const isInScope = !!scopingItem;
 
                     return `
-                    <div class="workflow-block-card l2-resource-node ${isInScope ? 'is-priced' : ''} ${isInspecting ? 'is-inspecting' : ''}" 
+                    <div class="workflow-block-card l2-resource-node ${isInScope ? 'is-priced' : ''} ${isInspecting ? 'is-inspecting' : ''} ${isAtomic ? 'is-atomic' : ''}" 
                         id="l2-node-${step.id}"
                         draggable="true"
                         ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
-                        onclick="event.stopPropagation(); OL.loadInspector('${techAsset.id}', '${workflowId}')"
-                        ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${techAsset.id}')"
-                        style="cursor: pointer; ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
+                        onclick="event.stopPropagation(); OL.loadInspector('${techAsset?.id || step.id}', '${workflowId}')"
+                        ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${techAsset?.id || step.id}')"
+                        style="cursor: pointer; ${isAtomic ? 'border-left: 4px solid var(--vault-gold) !important;' : ''} ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
                         
                         <div style="display:flex; justify-content:space-between; align-items:center; pointer-events: none;">
                             <span class="tiny muted">STEP ${idx + 1}</span>
-                            ${isInScope ? `
-                                <span class="pill tiny" style="background:#10b981; color:white; font-size:8px;">PRICED $</span>
-                            ` : ''}
+                            ${isAtomic ? `<span class="pill tiny" style="background:var(--vault-gold); color:black; font-size:8px; font-weight:bold;">ATOMIC</span>` : ''}
+                            ${isInScope ? `<span class="pill tiny" style="background:#10b981; color:white; font-size:8px;">PRICED $</span>` : ''}
                         </div>
 
                         <div class="bold accent" style="margin: 8px 0; font-size: 14px; pointer-events: none;">
-                            ${OL.getRegistryIcon(techAsset.type)} ${esc(techAsset.name)}
+                            ${displayIcon} ${esc(displayName)}
                         </div>
                         
                         <div class="tiny muted" style="font-size: 9px; line-height: 1.3; margin-bottom: 8px; pointer-events: none;">
-                             ${esc(techAsset.description || '')}
+                            ${esc(displayDesc)}
                         </div>
 
                         ${(step.outcomes || []).length > 0 ? `
@@ -9761,8 +9768,8 @@ window.renderLevel2Canvas = function(workflowId) {
                         ` : ''}
 
                         <div class="card-footer-meta" style="margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; pointer-events: none;">
-                             <span class="tiny muted">👤 ${esc(techAsset.assigneeName || 'Unassigned')}</span>
-                             <span class="tiny muted" style="opacity:0.5;">ID: ...${techAsset.id.slice(-4)}</span>
+                            <span class="tiny muted">👤 ${esc(techAsset?.assigneeName || 'System')}</span>
+                            <span class="tiny muted" style="opacity:0.5;">ID: ...${(techAsset?.id || step.id).slice(-4)}</span>
                         </div>
                     </div>
                     `;
@@ -11138,7 +11145,6 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
 };
 
 // LEVEL 2: Resources in Workflow Lanes
-// LEVEL 2: Resources in Workflow Lanes
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
     const items = (workflow.steps || [])
@@ -11152,30 +11158,34 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
     }
     
     return items.map((item, idx) => {
-        // 🔍 THE LOOKUP: Fetch the actual library resource
-        const linkedRes = OL.getResourceById(item.resourceLinkId);
+        // 1. Try to find the linked library asset
+        const linkedRes = item.resourceLinkId ? OL.getResourceById(item.resourceLinkId) : null;
         
-        // 🏷️ DATA FALLBACK: If no link (Atomic Step), use the step's own name
-        const displayName = linkedRes ? linkedRes.name : (item.name || "Untitled Step");
+        // 2. Resolve the Name (Priority: Library Asset > Step's Own Name > Fallback)
+        let displayName = "Unknown Step";
+        if (linkedRes) {
+            displayName = linkedRes.name;
+        } else if (item.name) {
+            displayName = item.name;
+        }
+
+        // 3. Resolve the Icon
         const displayIcon = linkedRes ? OL.getRegistryIcon(linkedRes.type) : "⚙️";
-        const isAtomic = !linkedRes;
 
         return `
-            <div class="workflow-block-card vis-node ${isAtomic ? 'atomic-step' : ''}" 
-                 draggable="true" 
-                 style="${isAtomic ? 'border-left: 3px solid var(--vault-gold);' : ''}"
-                 onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId || item.id}')"
-                 ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
-                 ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId || item.id}')">
+            <div class="workflow-block-card vis-node" 
+                draggable="true" 
+                onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId || item.id}')"
+                ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
+                ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId || item.id}')">
                 
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="step-icon">${displayIcon}</span>
                     <div class="bold accent" style="font-size: 11px;">${esc(displayName)}</div>
                 </div>
-
-                <div class="tiny muted" style="margin-top:5px; font-size:9px; display:flex; justify-content:space-between;">
-                    <span>Order: ${item.mapOrder !== undefined ? item.mapOrder + 1 : idx + 1}</span>
-                    ${isAtomic ? '<span style="color:var(--vault-gold)">ATOMIC</span>' : ''}
+                
+                <div class="tiny muted" style="margin-top:5px; font-size:9px;">
+                    Order: ${item.mapOrder !== undefined ? item.mapOrder + 1 : idx + 1}
                 </div>
             </div>
         `;
