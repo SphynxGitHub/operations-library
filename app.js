@@ -2254,45 +2254,69 @@ OL.executeMap = function(targetId, mode) {
     }
 };
 
-OL.executeCreateAndMap = function(name, mode) {
+OL.executeCreateAndMap = async function(name, mode, analysisId = null) {
     const client = getActiveClient();
     const contextId = OL.currentOpenModalId;
     const isVault = window.location.hash.startsWith('#/vault');
 
-    if (mode === 'apps') {
-        const newId = (isVault ? 'master-app-' : 'local-app-') + Date.now();
-        const newApp = {
-            id: newId,
-            name: name,
-            functionIds: [{ id: contextId, status: 'available' }],
-            capabilities: []
-        };
-        
-        if (isVault) {
-            state.master.apps.push(newApp);
-        } else if (client) {
-            client.projectData.localApps.push(newApp);
+    // 🚀 THE SHIELD: Wrap everything in one sync event
+    await OL.updateAndSync(() => {
+        // --- SCENARIO 1: Adding a Brand New App to an Analysis Matrix ---
+        if (mode === 'analysis-app') {
+            const newId = (isVault ? 'master-app-' : 'local-app-') + Date.now();
+            const newApp = {
+                id: newId,
+                name: name,
+                functionIds: [],
+                capabilities: [],
+                createdDate: new Date().toISOString()
+            };
+
+            // Save to Library
+            if (isVault) state.master.apps.push(newApp);
+            else if (client) client.projectData.localApps.push(newApp);
+
+            // Link to the Matrix
+            const source = isVault ? state.master.analyses : client.projectData.localAnalyses;
+            const anly = source.find(a => a.id === (analysisId || state.activeMatrixId));
+            if (anly) {
+                if (!anly.apps) anly.apps = [];
+                anly.apps.push({ appId: newId, scores: {} });
+            }
+        } 
+        // --- SCENARIO 2: Original 'apps' mode (Create App from Function Modal) ---
+        else if (mode === 'apps') {
+            const newId = (isVault ? 'master-app-' : 'local-app-') + Date.now();
+            const newApp = {
+                id: newId,
+                name: name,
+                functionIds: [{ id: contextId, status: 'available' }],
+                capabilities: []
+            };
+            if (isVault) state.master.apps.push(newApp);
+            else if (client) client.projectData.localApps.push(newApp);
+        } 
+        // --- SCENARIO 3: Original 'functions' mode (Create Function from App Modal) ---
+        else {
+            const newId = (isVault ? 'fn-' : 'local-fn-') + Date.now();
+            const newFn = { id: newId, name: name, description: "" };
+            if (isVault) state.master.functions.push(newFn);
+            else if (client) client.projectData.localFunctions.push(newFn);
+            
+            OL.toggleAppFunction(contextId, newId);
         }
-    } else {
-        // Handle creating a new Function from an App modal
-        const newId = (isVault ? 'fn-' : 'local-fn-') + Date.now();
-        const newFn = { id: newId, name: name, description: "" };
-        
-        if (isVault) {
-            state.master.functions.push(newFn);
-        } else if (client) {
-            client.projectData.localFunctions.push(newFn);
-        }
-        
-        // Map the new function to the current app
-        OL.toggleAppFunction(contextId, newId);
-    }
+    });
+
+    // 🔄 UI Cleanup & Refresh
+    OL.closeModal();
     
-    OL.persist();
-    OL.refreshActiveView();
-    // Refresh current modal
-    if (mode === 'apps') OL.openFunctionModal(contextId);
-    else OL.openAppModal(contextId);
+    if (mode === 'analysis-app') {
+        OL.openAnalysisMatrix(analysisId || state.activeMatrixId, isVault);
+    } else {
+        OL.refreshActiveView();
+        if (mode === 'apps') OL.openFunctionModal(contextId);
+        else OL.openAppModal(contextId);
+    }
 };
 
 OL.toggleAppFunction = function(appId, fnId, event) {
@@ -7045,7 +7069,18 @@ OL.filterAnalysisAppSearch = function (anlyId, isMaster, query) {
                 </span>
             </div>
         </div>
-    `).join('') || `<div class="search-result-item muted">${q ? 'No matches' : 'All available apps are already in this matrix'}</div>`;
+    `).join('')
+
+    if (q.length > 0 && !allApps.some(a => a.name.toLowerCase() === q)) {
+        html += `
+            <div class="search-result-item create-action" 
+                onmousedown="OL.executeCreateAndMap('${esc(query)}', 'analysis-app', '${anlyId}')">
+                <span class="pill tiny accent">+ New</span> Create & Add "${esc(query)}"
+            </div>
+        `;
+    }
+
+    listEl.innerHTML = html || `<div class="search-result-item muted">No apps found. Type to create new.</div>`;
 };
 
 OL.addAppToAnalysis = function (anlyId, isMaster) {
