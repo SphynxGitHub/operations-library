@@ -6673,9 +6673,12 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
-
-    const newURL = window.location.pathname + window.location.search + `#/${viewPrefix}/${analysisId}`;
-    history.replaceState(null, null, newURL);
+    
+    // 1. Silent Hash Update
+    const newHash = `#/${viewPrefix}/${analysisId}`;
+    if (window.location.hash !== newHash) {
+        history.replaceState(null, null, newHash);
+    }
     
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
@@ -6683,48 +6686,26 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 
     if (!anly) return console.error("Analysis not found:", analysisId);
 
-    const totalWeight = (anly.features || []).reduce((sum, f) => sum + (parseFloat(f.weight) || 0), 0);
+    const container = document.getElementById("activeAnalysisMatrix");
+    if (!container) return;
 
-    // 🏆 WINNER CALCULATION: Find the highest score among all apps
+    // 🏆 CALCULATIONS
+    const totalWeight = (anly.features || []).reduce((sum, f) => sum + (parseFloat(f.weight) || 0), 0);
     const appResults = (anly.apps || []).map(appObj => ({
         appId: appObj.appId,
         total: parseFloat(OL.calculateAnalysisScore(appObj, anly.features || []))
     }));
-    
     const topScore = Math.max(...appResults.map(r => r.total), 0);
 
-    const container = document.getElementById("activeAnalysisMatrix");
-    if (container) {
-        // Only scroll if the container was empty/hidden before
-        if (container.innerHTML === "") {
-            container.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
-
-    const html = `
-        <div class="print-container">
-            <div class="analysis-summary-card">
-                <strong style="font-size: 1.1em; color: #333;">${esc(anly.name)}</strong>
-                <span class="muted" style="font-size: 0.9em;">
-                    ${anly.features.length} Features  •  ${anly.apps.length} Apps
-                </span>
-            </div>
-
-            <div class="matrix-table-container">
-                <table class="matrix-table">
-                    </table>
-            </div>
+    // 2. BUILD THE INJECTION
+    // We combine the print-container and the interactive card into one string
+    let html = `
+        <div class="print-only">
+             <h2 style="color:#000;">${esc(anly.name)} - Analysis Summary</h2>
+             <p style="color:#000;">${anly.features.length} Features | ${anly.apps.length} Apps</p>
         </div>
-    `;
 
-    // Add category button if you want to re-add later
-    /* <button class="btn tiny soft" onclick="OL.promptAddCategory('${analysisId}', ${isMaster})">
-      + Add Category
-      </button>
-    */
-
-    container.innerHTML = `
-        <div class="card" style="border-top: 3px solid var(--accent); padding: 20px;">
+        <div class="card matrix-card-main" style="border-top: 3px solid var(--accent); padding: 20px; margin-bottom: 40px;">
             <div class="section-header">
                 <div>
                     <h3>📊 Matrix: 
@@ -6737,16 +6718,15 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                           ${esc(anly.name)}
                       </span>
                     </h3>
-                    <div class="subheader">Scores: 0 (Feature is N/A for app), 1 (<60% of desired performance), 2 (60 - 80% of desired performance), 3 (80%+ desired performance) </div>
+                    <div class="subheader">Scores: 0 (N/A), 1 (<60%), 2 (60-80%), 3 (80%+)</div>
                 </div>
                 <div class="header-actions">
                     ${!isMaster ? `
-                        <button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')" title="Save this matrix as a standard template in the Vault">
-                            ⭐ Push to Vault
-                        </button>
+                        <button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')">⭐ Push to Vault</button>
                     ` : ''}
-                    <button class="btn tiny primary" onclick="OL.printAnalysisPDF('${analysisId}', ${isMaster})">🖨️ Print PDF</button>
+                    <button class="btn tiny primary" onclick="OL.printAnalysisPDF('${analysisId}', ${isMaster})">🖨️ Print</button>
                     <button class="btn tiny soft" onclick="OL.addAppToAnalysis('${analysisId}', ${isMaster})">+ Add App</button>
+                    <button class="btn tiny danger soft" onclick="document.getElementById('activeAnalysisMatrix').innerHTML=''; history.replaceState(null, null, '#/analyze');" style="margin-left:10px;">✕</button>
                 </div>
             </div>
 
@@ -6754,25 +6734,18 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                 <thead>
                     <tr>
                         <th style="text-align: left;">Features</th>
-                        <th style="text-align: center;">Weight</th>
+                        <th style="text-align: center; width: 80px;">Weight</th>
                         ${(anly.apps || []).map(appObj => {
-                            const allAvailableApps = [
-                                ...(state.master.apps || []),
-                                ...(client?.projectData?.localApps || [])
-                            ];
-                            
-                            const matchedApp = allAvailableApps.find(a => a.id === appObj.appId);
-                            
+                            const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+                            const matchedApp = allApps.find(a => a.id === appObj.appId);
                             const isWinner = topScore > 0 && appResults.find(r => r.appId === appObj.appId)?.total === topScore;
                             
                             return `
-                                <th class="text-center" style="${isWinner ? 'background: rgba(255, 215, 0, 0.05); border-radius: 8px 8px 0 0;' : ''}">
+                                <th class="text-center" style="${isWinner ? 'background: rgba(251, 191, 36, 0.05);' : ''}">
                                     <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
-                                        <button class="card-delete-btn" 
-                                                onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${isMaster})"
-                                                style="font-size: 14px; opacity: 0.5;">×</button>
-                                        <span onclick="event.stopPropagation(); OL.openAppModal('${matchedApp.id}')" style="${isWinner ? 'color: var(--vault-gold); font-weight: bold;' : ''}">
-                                            ${isWinner ? '⭐ ' : ''}${esc(matchedApp?.name || 'Unknown App')}
+                                        <button class="card-delete-btn" onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${isMaster})">×</button>
+                                        <span class="is-clickable" onclick="OL.openAppModal('${matchedApp?.id}')" style="${isWinner ? 'color: var(--vault-gold); font-weight: bold;' : ''}">
+                                            ${isWinner ? '⭐ ' : ''}${esc(matchedApp?.name || 'Unknown')}
                                         </span>
                                     </div>
                                 </th>`;
@@ -6784,33 +6757,35 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                 </tbody>
                 <tfoot>
                     <tr style="border-top: 2px solid var(--line);">
-                        <td>
-                          <button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button>
-                        </td>
-                        <td class="bold" style="color: ${totalWeight === 100 ? 'var(--accent)' : '#ff4444'}">
-                            ${totalWeight.toFixed(2)}% 
-                            <button class="btn tiny soft" style="margin: 1%;"
-                                    onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})"
-                                    title="Equally distribute 100% weight across categories and features">
-                                ⚖️
-                            </button>
+                        <td><button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button></td>
+                        <td class="bold" style="color: ${Math.abs(totalWeight - 100) < 0.01 ? 'var(--success)' : 'var(--danger)'}">
+                            ${totalWeight.toFixed(1)}%
+                            <button class="btn tiny soft" onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" title="Balance Weights">⚖️</button>
                         </td>
                         ${(anly.apps || []).map(appObj => {
                             const score = OL.calculateAnalysisScore(appObj, anly.features || []);
-                            return `<td class="text-center"><span class="pill tiny ${score > 3.5 ? 'accent' : 'soft'}">${score}</span></td>`;
+                            return `<td class="text-center"><span class="pill tiny ${score > 2.5 ? 'accent' : 'soft'}">${score}</span></td>`;
                         }).join('')}
                     </tr>
                 </tfoot>
             </table>
+            
             <div class="card-section" style="margin-top: 25px; border-top: 1px solid var(--line); padding-top: 20px;">
-                <label class="modal-section-label">📋 Executive Summary / Final Verdict</label>
+                <label class="modal-section-label">📋 Executive Summary</label>
                 <textarea class="modal-textarea" 
-                          placeholder="Provide a high-level summary of the findings or recommend a specific tool..."
                           onblur="OL.updateAnalysisMeta('${anly.id}', 'summary', this.value, ${isMaster})"
-                          style="min-height: 80px; background: rgba(0,0,0,0.1); margin-top: 10px;">${esc(anly.summary || "")}</textarea>
+                          style="min-height: 80px; background: rgba(0,0,0,0.1); margin-top: 10px; width:100%;">${esc(anly.summary || "")}</textarea>
             </div>
         </div>
     `;
+
+    // 3. ATOMIC INJECTION
+    const isNewOpen = container.innerHTML === "";
+    container.innerHTML = html;
+
+    if (isNewOpen) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 };
 
 OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
