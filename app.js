@@ -1705,23 +1705,26 @@ OL.pushLocalAppToMaster = function(appId) {
 
 function renderStatusLegendHTML() {
     return `
-        <div class="status-legend" style="display:flex; gap:15px; margin-bottom:12px; align-items:center;">
-            <div style="display:flex; align-items:center; gap:6px;">
-                <span class="status-dot primary";"></span>
-                <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Primary</span>
+        <div class="status-legend" style="display:flex; justify-content: space-between; margin-bottom:12px; align-items:center; width: 100%;">
+            <div style="display:flex; gap:15px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="status-dot primary"></span>
+                    <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Primary</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="status-dot evaluating"></span>
+                    <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Evaluating</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="status-dot available"></span>
+                    <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Available</span>
+                </div>
             </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <span class="status-dot evaluating"></span>
-                <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Evaluating</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <span class="status-dot available"></span>
-                <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Available</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
-                 <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">
-                 Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap.
-                 </span>
+
+            <div style="text-align: right; opacity: 0.7;">
+                <span class="tiny muted uppercase bold" style="letter-spacing:0.5px; font-size: 0.75em;">
+                    Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap.
+                </span>
             </div>
         </div>
     `;
