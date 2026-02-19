@@ -10052,11 +10052,15 @@ window.renderLevel3SidebarContent = function(resourceId) {
             
             <label class="modal-section-label" style="color:#ffbf00">⚡ Trigger Builder</label>
             <div class="builder-box" style="background:rgba(255, 191, 0, 0.03); padding:12px; border-radius:8px; border: 1px solid rgba(255, 191, 0, 0.2); margin-bottom: 20px;">
-                <select id="trigger-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
-                <select id="trigger-verb" class="modal-input tiny">${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="trigger-object" class="modal-input tiny" style="margin-top:5px;">
+                    ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                </select>
+                <select id="trigger-verb" class="modal-input tiny">
+                    ${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                </select>
                 
                 <div class="draggable-factory-item trigger" draggable="true" 
-                     style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center; cursor: grab;" 
+                     style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center; padding:10px; border-radius:4px; cursor: grab;" 
                      ondragstart="event.stopPropagation(); OL.prepFactoryDrag(event, 'Trigger')">
                      ⚡ DRAG NEW TRIGGER
                 </div>
@@ -10064,19 +10068,23 @@ window.renderLevel3SidebarContent = function(resourceId) {
 
             <label class="modal-section-label">🎬 Action Builder</label>
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
-                <select id="builder-verb" class="modal-input tiny">${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
-                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <select id="builder-verb" class="modal-input tiny">
+                    ${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                </select>
+                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">
+                    ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                </select>
                 
                 <div class="draggable-factory-item action" draggable="true" 
-                    style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center; cursor: grab;" 
-                    ondragstart="event.stopPropagation();OL.prepFactoryDrag(event, 'Action')">
+                    style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center; padding:10px; border-radius:4px; cursor: grab;" 
+                    ondragstart="event.stopPropagation(); OL.prepFactoryDrag(event, 'Action')">
                     🚀 DRAG NEW ACTION
                 </div>
             </div>
-                
-            <div style="margin-top:20px; text-align:center;">
-                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Verbs')">+ Add Verb</button>
-                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Objects')">+ Add Object</button>
+            
+            <div style="margin-top:20px; text-align:center; display:flex; gap:10px; justify-content:center;">
+                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Verbs')">+ Verb</button>
+                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Objects')">+ Object</button>
             </div>
         </div>
     `;
@@ -11255,34 +11263,6 @@ window.renderLevel3Canvas = function(resourceId) {
     return html;
 };
 
-OL.removeStepFromCanvas = function(resId, stepId) {
-    // 1. Immediate confirmation
-    if (!confirm("Delete this step?")) return;
-
-    const res = OL.getResourceById(resId);
-    if (!res) return;
-
-    // 2. Identify and Clean Dual-Homed Triggers
-    const stepToDelete = res.steps.find(s => String(s.id) === String(stepId));
-    if (stepToDelete && stepToDelete.type === 'Trigger') {
-        // Remove from the list view array if it exists
-        res.triggers = (res.triggers || []).filter(t => t.name !== stepToDelete.name);
-    }
-
-    // 3. Remove from Steps
-    res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
-
-    // 4. Persistence & UI Reset
-    OL.persist();
-    renderGlobalVisualizer(location.hash.includes('vault'));
-    
-    // Clear the inspector so it doesn't show deleted data
-    const panel = document.getElementById('inspector-panel');
-    if (panel) panel.innerHTML = `<div class="p-20 muted text-center">Step removed.</div>`;
-    
-    console.log(`🗑️ Step ${stepId} removed.`);
-};
-
 OL.drawVerticalLogicLines = function(resId) {
     const svg = document.getElementById('vis-links-layer');
     const wrapper = document.getElementById('l3-canvas-wrapper');
@@ -11499,20 +11479,30 @@ OL.filterResourceToolbox = OL.filterToolbox;
 
 // --- DRAG & DROP ORCHESTRATION --DRAG OVER CANVAS AND DROPZONE HIGHLIGHT //
 
-OL.prepFactoryDrag = function(e, type) {
-    // 1. Get dynamic name from dropdowns
-    const prefix = type === 'Trigger' ? 'trigger' : 'builder';
-    const obj = document.getElementById(`${prefix}-object`)?.value || "Item";
-    const verb = document.getElementById(`${prefix}-verb`)?.value || "Action";
-    const finalName = type === 'Trigger' ? `${obj} ${verb}` : `${verb} ${obj}`;
+OL.prepFactoryDrag = function(e, stepType) {
+    // 1. Get values based on which builder was used
+    let verb, object;
+    if (stepType === 'Trigger') {
+        verb = document.getElementById('trigger-verb').value;
+        object = document.getElementById('trigger-object').value;
+    } else {
+        verb = document.getElementById('builder-verb').value;
+        object = document.getElementById('builder-object').value;
+    }
 
-    // 2. Set the dynamic data for the Drop Handler to find
-    e.dataTransfer.setData("stepName", finalName);
-    e.dataTransfer.setData("stepType", type);
+    const fullName = `${verb} ${object}`;
+
+    // 2. Set the data for our unified handleUniversalDrop
+    e.dataTransfer.setData("itemType", "factory");
+    e.dataTransfer.setData("moveId", `new-atomic-${Date.now()}`); // Unique ID for a new step
+    e.dataTransfer.setData("stepName", fullName);
+    e.dataTransfer.setData("stepType", stepType);
+
+    // 3. UI feedback
+    e.currentTarget.classList.add('dragging');
     
-    // 3. Trigger the unified visual logic
-    // We pass '0' as index because it's a new item, not an existing one
-    OL.handleDragStart(e, `new-${type}-${Date.now()}`, 'factory', 0);
+    // Hide inspector to clear the drop zones
+    document.querySelector('.three-pane-layout')?.classList.add('no-inspector');
 };
 
 OL.handleDragStart = function(e, id, type, index) {
@@ -11672,63 +11662,50 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             }
         }
 
-        // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3 - Moving Steps/Resources) ---
+        // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
             const parent = OL.getResourceById(activeParentId);
-            if (!parent) {
-                console.error("❌ Drop Failed: Could not find parent resource", activeParentId);
-                return;
-            }
-
+            if (!parent) return;
             if (!parent.steps) parent.steps = [];
 
-            // Case 1: NEW item from Sidebar Factory
-            if (itemType === 'factory' || itemType === 'resource') {
-                const stepName = e.dataTransfer.getData("stepName") || "New Step";
+            // 1. Dropping a NEW item from the Library Sidebar (Factory)
+            if (itemType === 'factory' || itemType === 'resource' || itemType === 'workflow') {
+                const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
                 
                 const newStep = { 
-                    id: 'step-' + Date.now(), 
+                    id: 'step-' + Date.now() + '-' + Math.floor(Math.random() * 1000), // Unique Step ID
                     name: stepName, 
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
                     gridLane: state.focusedWorkflowId ? sectionId : null,
-                    resourceLinkId: moveId // This links the step to the library resource
+                    resourceLinkId: moveId // 👈 CRITICAL: This is the ID of the actual library resource
                 };
                 
                 parent.steps.splice(targetIdx, 0, newStep);
             } 
-            // Case 2: MOVING an existing step
+            // 2. Moving an EXISTING step already on the canvas
             else if (itemType === 'step') {
-                // Find the step by ID if dragIdx is unreliable
                 const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
                 
                 if (actualDragIdx > -1) {
                     const [item] = parent.steps.splice(actualDragIdx, 1);
-                    
-                    // Context Check: Are we in Procedure (L3) or Workflow (L2)?
-                    if (state.focusedResourceId) {
-                        item.type = sectionId; // 'Trigger' or 'Action'
-                    } else {
-                        item.gridLane = sectionId; // 'Lane ID'
+                    if (item) {
+                        if (state.focusedResourceId) item.type = sectionId;
+                        else item.gridLane = sectionId;
+                        
+                        parent.steps.splice(targetIdx, 0, item);
                     }
-
-                    // Insert at targetIdx
-                    const finalIdx = Math.min(targetIdx, parent.steps.length);
-                    parent.steps.splice(finalIdx, 0, item);
                 }
             }
             
-            // 💾 MANDATORY: Clean up orders
+            // Normalize order
             parent.steps.forEach((s, i) => s.mapOrder = i);
 
-            // 🚀 THE PERSISTENCE TRIGGER: 
-            // We ensure the source array reflects the updated parent object
+            // Deep Save Trigger
             const client = getActiveClient();
             const source = isVault ? state.master.resources : client.projectData.localResources;
-            const parentIdx = source.findIndex(r => String(r.id) === String(activeParentId));
-            if (parentIdx > -1) {
-                source[parentIdx] = { ...parent }; // Break reference to force a deep-save
-            }
+            const pIdx = source.findIndex(r => String(r.id) === String(activeParentId));
+            if (pIdx > -1) source[pIdx] = { ...parent }; 
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
@@ -11806,6 +11783,35 @@ OL.closeSidebar = function() {
 };
 
 // --- UNMAPPING / TRASH LOGIC ---
+
+OL.removeStepFromCanvas = function(resId, stepId) {
+    // 1. Immediate confirmation
+    if (!confirm("Delete this step?")) return;
+
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    // 2. Identify and Clean Dual-Homed Triggers
+    const stepToDelete = res.steps.find(s => String(s.id) === String(stepId));
+    if (stepToDelete && stepToDelete.type === 'Trigger') {
+        // Remove from the list view array if it exists
+        res.triggers = (res.triggers || []).filter(t => t.name !== stepToDelete.name);
+    }
+
+    // 3. Remove from Steps
+    res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
+
+    // 4. Persistence & UI Reset
+    OL.persist();
+    renderGlobalVisualizer(location.hash.includes('vault'));
+    
+    // Clear the inspector so it doesn't show deleted data
+    const panel = document.getElementById('inspector-panel');
+    if (panel) panel.innerHTML = `<div class="p-20 muted text-center">Step removed.</div>`;
+    
+    console.log(`🗑️ Step ${stepId} removed.`);
+};
+
 
 OL.handleUnifiedDelete = function(e) {
     e.preventDefault();
