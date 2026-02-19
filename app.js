@@ -464,11 +464,15 @@ window.buildLayout = function () {
   // Inside your layout/sidebar render function:
     const isLight = document.body.classList.contains('light-mode');
 
+    const isLightMode = document.body.classList.contains('light-mode');
+    const themeIcon = isLightMode ? '🌙' : '☀️';
+    const themeLabel = isLightMode ? 'Dark Mode' : 'Light Mode';
+
     const themeSection = `
         <div class="theme-toggle-zone">
-            <button class="btn soft tiny theme-toggle-btn" onclick="OL.toggleTheme()" title="${isLight ? 'Dark Mode' : 'Light Mode'}">
-                <span class="theme-icon">${isLight ? '🌙' : '☀️'}</span>
-                <span class="theme-label">${isLight ? 'Dark Mode' : 'Light Mode'}</span>
+            <button class="theme-toggle-btn" onclick="OL.toggleTheme()" title="${themeLabel}">
+                <span class="theme-icon" style="min-width: 20px; text-align: center;">${themeIcon}</span>
+                <span class="theme-label">${themeLabel}</span>
             </button>
         </div>
     `;

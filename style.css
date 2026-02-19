@@ -53,20 +53,45 @@ body.light-mode {
     border-color: var(--accent) !important;
 }
 
-/* 🚀 COMPRESSED STATE: Only show the icon */
+/* 🎯 Theme Toggle Alignment Fix */
+.theme-toggle-zone {
+    padding: 10px 0; /* Remove side padding to allow centering */
+    margin-top: auto;
+    display: flex;
+    justify-content: center; /* Centers the button in the zone */
+}
+
+.theme-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 10px 14px; /* Matches your .menu a padding */
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+/* 🚀 COMPRESSED STATE: Perfect centering */
 .sidebar.compressed .theme-toggle-btn {
     justify-content: center;
     padding: 10px 0;
-    width: 40px;
-    margin: 0 auto;
 }
 
 .sidebar.compressed .theme-label {
-    display: none; /* Hide the text */
+    display: none;
 }
 
 .sidebar.compressed .theme-icon {
-    font-size: 16px;
+    font-size: 18px; /* Slightly larger to match menu icons */
+    display: block !important; /* Force visibility */
+}
+
+.theme-toggle-btn:hover {
+    color: var(--accent);
+    background: var(--accent-glow);
 }
 
 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
