@@ -8240,8 +8240,9 @@ window.renderGlobalCanvas = function(isVaultMode) {
                         
                         <div class="workflow-stack" stage-workflow-stream" 
                             data-stage-id="${stage.id}"
-                            ondragover="OL.handleCanvasDragOver(event)" 
-                            ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
+                            ondragover="OL.handleUniversalDragOver(event)" 
+                            ondragleave="OL.handleUniversalDragLeave(event)"
+                            ondrop="OL.handleUniversalDrop(event, '${stage.id}')">
                             
                             ${workflowsInStage.map((wf, wIdx) => {
                                 const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
@@ -9596,11 +9597,13 @@ OL.addLifecycleStage = function(isVaultMode) {
 // --- TIER 1 RENDERER ---
 window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     const stages = sourceData.stages || [];
-    // Ensure stages have an order property
     stages.sort((a, b) => (a.order || 0) - (b.order || 0));
 
     return stages.map((stage, i) => `
-        <div class="stage-container" draggable="true" ondragstart="OL.handleStageReorderStart(event, '${stage.id}')">
+        <div class="stage-container" 
+             draggable="true" 
+             ondragstart="OL.handleDragStart(event, '${stage.id}', 'stage', ${i})">
+            
             <div class="stage-header-row" style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:8px; flex:1;">
                     <span class="muted" style="cursor: grab; font-size: 12px;">⋮⋮</span>
@@ -9619,10 +9622,18 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
                     ×
                 </div>
             </div>
-            <div class="stage-workflow-stream" 
-                 ondragover="OL.handleCanvasDragOver(event)" 
-                 ondrop="OL.handleUniversalDrop(event, null, '${stage.id}')">
+
+            <div class="stage-workflow-stream grid-drop-target" 
+                 data-section-id="${stage.id}"
+                 ondragover="OL.handleUniversalDragOver(event)" 
+                 ondragleave="OL.handleUniversalDragLeave(event)"
+                 ondrop="OL.handleUniversalDrop(event, '${stage.id}')">
+                
                 ${renderWorkflowsInStage(stage.id, isVaultMode)}
+
+                <div class="insert-divider initial" onclick="event.stopPropagation(); OL.focusToolbox('${stage.id}')">
+                    <span>+ Add Workflow</span>
+                </div>
             </div>
         </div>`).join('');
 };
@@ -9707,8 +9718,9 @@ window.renderLevel2Canvas = function(workflowId) {
             
             <div class="vertical-process-spine" 
                  style="width: 400px; display: flex; flex-direction: column; gap: 30px;"
-                 ondragover="OL.handleCanvasDragOver(event)" 
-                 ondrop="OL.handleUniversalDrop(event, '${workflowId}', 'stream')">
+                 ondragover="OL.handleUniversalDragOver(event)" 
+                 ondragleave="OL.handleUniversalDragLeave(event)"
+                 ondrop="OL.handleUniversalDrop(event, '${workflowId}')">
                 
                 ${steps.map((step, idx) => {
                     const techAsset = OL.getResourceById(step.resourceLinkId);
@@ -9724,7 +9736,7 @@ window.renderLevel2Canvas = function(workflowId) {
                         id="l2-node-${step.id}"
                         draggable="true"
                         ondragstart="OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
-                        onclick="OL.loadInspector('${techAsset.id}', '${workflowId}')"
+                        onclick="event.stopPropagation(); OL.loadInspector('${techAsset.id}', '${workflowId}')"
                         ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${techAsset.id}')"
                         style="cursor: pointer; ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
                         
@@ -9816,7 +9828,9 @@ OL.drawLevel2LogicLines = function(workflowId) {
 // --- SIDEBAR RENDERERS ---
 
 window.renderLevel1SidebarContent = function(allResources) {
+    // Only show workflows that aren't already mapped to a stage
     const workflows = allResources.filter(res => (res.type || "").toLowerCase() === 'workflow' && !res.stageId);
+    
     return `
         <div class="drawer-header">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -9824,34 +9838,36 @@ window.renderLevel1SidebarContent = function(allResources) {
                 <button class="btn tiny primary" style="width:24px; height:24px; padding:0;" onclick="OL.quickCreateWorkflow()" title="Create New Workflow">+</button>
             </div>
             <input type="text" class="modal-input tiny sidebar-search" id="workflow-toolbox-search" 
-                   placeholder="Search..." 
-                   value="${state.lastSearchQuery || ''}"
-                   oninput="OL.filterToolbox(this.value)">
+                    placeholder="Search..." 
+                    value="${state.lastSearchQuery || ''}"
+                    oninput="OL.filterToolbox(this.value)">
         </div>
-        <div class="drawer-tools" id="toolbox-list">
+        
+        <div class="drawer-tools" id="toolbox-list" style="height: calc(100% - 150px); overflow-y: auto;">
             ${workflows.map(res => `
                 <div class="draggable-workflow-item" 
                      data-name="${res.name.toLowerCase()}" 
                      draggable="true" 
-                     ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                     ondragstart="OL.handleDragStart(event, '${res.id}', 'workflow', 0)">
                     <span>⚙️</span> 
                     <span style="flex:1;">${esc(res.name)}</span>
                     <button class="btn tiny soft clone-btn" 
                             style="padding: 2px 4px; font-size: 10px; opacity: 0.4;" 
-                            onclick="event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); OL.cloneResourceWorkflow('${res.id}')"
+                            onclick="event.preventDefault(); event.stopPropagation(); OL.cloneResourceWorkflow('${res.id}')"
                             title="Clone Workflow">⿻</button>
                 </div>
             `).join('')}
+            
             <div id="no-results-msg" class="tiny muted italic" style="display:none; padding:20px; text-align:center;">
                 No matching workflows found.
             </div>
         </div>
-        <div class="return-to-library-zone" 
-            ondragover="OL.handleCanvasDragOver(event)" 
-            onlink="this.classList.add('drag-over')"
-            ondragenter="this.classList.add('drag-over')"
-            ondragleave="this.classList.remove('drag-over')"
-            ondrop="OL.handleUnifiedDelete(event)">
+
+        <div class="return-to-library-zone grid-drop-target" 
+             style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding: 15px; text-align: center; transition: all 0.2s;"
+             ondragover="OL.handleUniversalDragOver(event)" 
+             ondragleave="OL.handleUniversalDragLeave(event)"
+             ondrop="OL.handleUnifiedDelete(event)">
             🗑️ Drop to Unmap
         </div>
     `;
@@ -9908,7 +9924,7 @@ window.renderLevel2SidebarContent = function(allResources) {
                     <div class="draggable-workflow-item" 
                          data-name="${res.name.toLowerCase()}" 
                          draggable="true" 
-                         ondragstart="OL.handleWorkflowDragStart(event, '${res.id}', '${esc(res.name)}')">
+                         ondragstart="OL.handleDragStart(event, '${res.id}', 'factory', 0)">
                         <span style="font-size: 1.2em; width: 24px; text-align: center;">${icon}</span>
                         <span style="flex: 1;">${esc(res.name)}</span>
                     </div>
@@ -9956,11 +9972,11 @@ window.renderLevel2SidebarContent = function(allResources) {
             <button class="btn tiny primary" style="width:100%; margin-top:8px; font-weight: bold;" 
                     onclick="OL.processQuickPaste()">Build Sequence</button>
         </div>
-        <div class="return-to-library-zone" 
-            ondragover="OL.handleCanvasDragOver(event)" 
-            ondragenter="this.classList.add('drag-over')"
-            ondragleave="this.classList.remove('drag-over')"
-            ondrop="OL.handleUnifiedDelete(event)">
+        <div class="return-to-library-zone grid-drop-target" 
+             style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding: 15px; text-align: center; transition: all 0.2s;"
+             ondragover="OL.handleUniversalDragOver(event)" 
+             ondragleave="OL.handleUniversalDragLeave(event)"
+             ondrop="OL.handleUnifiedDelete(event)">
             🗑️ Drop to Unmap
         </div>
     `;
@@ -10039,9 +10055,10 @@ window.renderLevel3SidebarContent = function(resourceId) {
             <div class="builder-box" style="background:rgba(255, 191, 0, 0.03); padding:12px; border-radius:8px; border: 1px solid rgba(255, 191, 0, 0.2); margin-bottom: 20px;">
                 <select id="trigger-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
                 <select id="trigger-verb" class="modal-input tiny">${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                
                 <div class="draggable-factory-item trigger" draggable="true" 
-                     style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center;" 
-                     ondragstart="OL.handleModularTriggerDrag(event)">
+                     style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center; cursor: grab;" 
+                     ondragstart="OL.prepFactoryDrag(event, 'Trigger')">
                      ⚡ DRAG NEW TRIGGER
                 </div>
             </div>
@@ -10050,13 +10067,14 @@ window.renderLevel3SidebarContent = function(resourceId) {
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
                 <select id="builder-verb" class="modal-input tiny">${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
                 <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                
                 <div class="draggable-factory-item action" draggable="true" 
-                     style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center;" 
-                     ondragstart="OL.handleModularAtomicDrag(event)">
-                     🚀 DRAG NEW ACTION
+                    style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center; cursor: grab;" 
+                    ondragstart="OL.prepFactoryDrag(event, 'Action')">
+                    🚀 DRAG NEW ACTION
                 </div>
             </div>
-            
+                
             <div style="margin-top:20px; text-align:center;">
                 <button class="btn tiny soft" onclick="OL.promptAddAtomic('Verbs')">+ Add Verb</button>
                 <button class="btn tiny soft" onclick="OL.promptAddAtomic('Objects')">+ Add Object</button>
@@ -10569,20 +10587,29 @@ OL.loadInspector = function(targetId, parentId = null) {
                     <label class="modal-section-label">⚙️ Procedure Steps</label>
                     ${isTechnicalResource ? `<button class="btn tiny primary" onclick="OL.promptInsertAtomicStep('${data.id}', ${data.steps?.length || 0}, ${isVaultMode})">+</button>` : ''}
                 </div>
-                <div id="inspector-step-list" style="display:flex; flex-direction:column; gap:5px;">
+                
+                <div id="inspector-step-list" 
+                     class="grid-drop-target"
+                     ondragover="OL.handleUniversalDragOver(event)"
+                     ondragleave="OL.handleUniversalDragLeave(event)"
+                     ondrop="OL.handleUniversalDrop(event, '${data.id}')"
+                     style="display:flex; flex-direction:column; gap:5px; min-height:50px; transition: background 0.2s;">
+                    
                     ${(data.steps || []).map((step, idx) => `
-                        <div class="inspector-step-row" 
+                        <div class="inspector-step-row vis-node" 
                              draggable="true"
-                             ondragstart="event.dataTransfer.setData('dragIdx', ${idx}); event.target.style.opacity='0.5'"
-                             ondragover="event.preventDefault()"
-                             ondrop="OL.handleInspectorStepDrop(event, '${data.id}', ${idx})"
-                             style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border: 1px solid rgba(255,255,255,0.05);">
+                             data-step-id="${step.id}"
+                             ondragstart="OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
+                             style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border: 1px solid rgba(255,255,255,0.05); cursor:default;">
+                            
                             <span class="muted" style="cursor:grab; font-size:10px;">⋮⋮</span>
                             <span class="tiny bold accent" style="width:15px;">${idx + 1}</span>
+                            
                             <div class="is-clickable" style="flex:1; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
                                  onclick="OL.loadInspector('${step.id || step.resourceLinkId}', '${data.id}')">
-                                ${esc(step.name || 'Unnamed Step')}
+                                 ${esc(step.name || 'Unnamed Step')}
                             </div>
+                            
                             <button class="card-delete-btn" style="position:static; font-size:14px;" 
                                     onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
                         </div>
@@ -11071,15 +11098,20 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
         .filter(r => String(r.stageId) === String(stageId))
         .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
-    if (matchedWorkflows.length === 0) return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px;">Drop Workflows Here</div>`;
+    // 🚀 UX FIX: Use the 'grid-drop-target' classes even in the empty state
+    if (matchedWorkflows.length === 0) {
+        return `<div class="tiny muted italic" style="opacity:0.3; padding: 20px; text-align:center; border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px;">
+            Drop Workflows Here
+        </div>`;
+    }
 
     return matchedWorkflows.map((res, idx) => {
         return `
-        <div class="workflow-block-card l1-workflow-node" 
+        <div class="workflow-block-card l1-workflow-node vis-node" 
              id="l1-node-${res.id}"
              draggable="true" 
              onmousedown="event.stopPropagation(); OL.loadInspector('${res.id}')"
-             ondragstart="OL.handleNodeMoveStart(event, '${res.id}', ${idx})"
+             ondragstart="OL.handleDragStart(event, '${res.id}', 'workflow', ${idx})"
              ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
             
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
@@ -11092,6 +11124,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
             
             <div class="tiny muted" style="margin-top: 8px; font-size: 9px; opacity: 0.5; display: flex; justify-content: space-between;">
                 <span>📝 ${(res.steps || []).length} Resources</span>
+                <span class="muted">Order: ${res.mapOrder || 0}</span>
             </div>
         </div>
     `}).join('');
@@ -11100,18 +11133,27 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
 // LEVEL 2: Resources in Workflow Lanes
 function renderResourcesInWorkflowLane(workflowId, lane) {
     const workflow = OL.getResourceById(workflowId);
-    const items = (workflow.steps || []).filter(s => s.gridLane === lane);
-    if (items.length === 0) return `<div class="tiny muted italic" style="padding:20px; opacity:0.3;">Drop Resources Here</div>`;
+    const items = (workflow.steps || [])
+        .filter(s => s.gridLane === lane)
+        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0)); // Ensure sort is respected
+
+    if (items.length === 0) {
+        return `<div class="tiny muted italic" style="padding:20px; opacity:0.3; text-align:center;">
+            Drop Resources Here
+        </div>`;
+    }
     
     return items.map((item, idx) => `
-        <div class="workflow-block-card" draggable="true" 
-             onmousedown="OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleNodeMoveStart(event, '${item.id}', ${idx})"
-             ondragover="OL.handleCanvasDragOver(event)"
-             ondrop="OL.handleNodeRearrange(event, '${lane}', ${idx})"
+        <div class="workflow-block-card vis-node" 
+             draggable="true" 
+             onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId}')"
+             ondragstart="OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
              ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
+            
             <div class="bold accent">${esc(item.name)}</div>
-            <div class="tiny muted">Step Order: ${idx + 1}</div>
+            <div class="tiny muted" style="margin-top:5px; font-size:9px;">
+                Step Order: ${item.mapOrder !== undefined ? item.mapOrder + 1 : idx + 1}
+            </div>
         </div>
     `).join('');
 };
@@ -11134,8 +11176,16 @@ window.renderLevel3Canvas = function(resourceId) {
 
         return `
             <div class="stage-container">
-                <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
-                <div class="stage-workflow-stream" ondragover="OL.handleCanvasDragOver(event)" ondrop="OL.handleUniversalDrop(event, '${resourceId}', '${group.type}')">
+                <div class="stage-header-row">
+                    <span class="stage-name" style="color:${group.color}">${group.label}</span>
+                </div>
+                
+                <div class="stage-workflow-stream grid-drop-target" 
+                    data-section-id="${group.type}"
+                    ondragover="OL.handleUniversalDragOver(event)" 
+                    ondragleave="OL.handleUniversalDragLeave(event)"
+                    ondrop="OL.handleUniversalDrop(event, '${group.type}')">
+                    
                     ${steps.map((step, idx) => {
                         const isTrigger = step.type === 'Trigger';
                         const typeIcon = isTrigger ? "⚡" : "🎬";
@@ -11158,9 +11208,8 @@ window.renderLevel3Canvas = function(resourceId) {
                                 id="step-node-${step.id}" 
                                 draggable="true" 
                                 style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px; cursor: pointer; z-index: 5;"
-                                onmousedown="OL.loadInspector('${step.id}', '${resourceId}')"
-                                ondragstart="OL.handleNodeMoveStart(event, '${step.id}', ${idx})">
-
+                                onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
+                                ondragstart="OL.handleDragStart(event, '${step.id}', 'step', ${idx})">
                                 <div class="card-delete-hitbox" 
                                     style="position: absolute; top: 0; right: 0; width: 30px; height: 30px; 
                                             display: flex; align-items: center; justify-content: center; 
@@ -11449,269 +11498,21 @@ OL.filterResourceToolbox = OL.filterToolbox;
 
 // --- DRAG & DROP ORCHESTRATION --DRAG OVER CANVAS AND DROPZONE HIGHLIGHT //
 
-// 1. Source: When you start dragging a Workflow or Resource from the sidebar
-/*OL.handleWorkflowDragStart = function(e, wfId, index) {
-    e.dataTransfer.setData("moveNodeId", wfId); // Key for "Rearrange" mode
-    e.dataTransfer.setData("dragIdx", index);
-    e.currentTarget.classList.add('is-dragging-source');
+OL.prepFactoryDrag = function(e, type) {
+    // 1. Get dynamic name from dropdowns
+    const prefix = type === 'Trigger' ? 'trigger' : 'builder';
+    const obj = document.getElementById(`${prefix}-object`)?.value || "Item";
+    const verb = document.getElementById(`${prefix}-verb`)?.value || "Action";
+    const finalName = type === 'Trigger' ? `${obj} ${verb}` : `${verb} ${obj}`;
+
+    // 2. Set the dynamic data for the Drop Handler to find
+    e.dataTransfer.setData("stepName", finalName);
+    e.dataTransfer.setData("stepType", type);
     
-    // Set a ghost image so it feels like you're carrying the card
-    e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+    // 3. Trigger the unified visual logic
+    // We pass '0' as index because it's a new item, not an existing one
+    OL.handleDragStart(e, `new-${type}-${Date.now()}`, 'factory', 0);
 };
-
-// 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
-OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
-    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
-    
-    e.dataTransfer.setData("moveStepId", stepId);
-    e.dataTransfer.setData("parentResId", parentResId);
-    e.dataTransfer.setData("draggedIndex", index);
-    e.target.style.opacity = "0.4";
-};
-
-OL.handleNodeMoveStart = function(e, id, index) {
-    e.dataTransfer.setData("moveNodeId", id);
-    e.dataTransfer.setData("draggedIndex", index);
-    e.target.classList.add('dragging');
-    setTimeout(() => e.target.classList.add('dragging'), 0);
-};
-
-OL.handleStepDragStart = function(event, index) {
-    // 1. Store the index for the drop handler
-    event.dataTransfer.setData("draggedIndex", index);
-    
-    // 2. Identify the element actually being dragged
-    // currentTarget is the element that has the ondragstart attribute
-    const dragTarget = event.currentTarget;
-    
-    if (dragTarget) {
-        dragTarget.style.opacity = '0.4';
-        // Optional: set the drag image to the whole row
-        event.dataTransfer.setDragImage(dragTarget, 0, 0);
-    } else {
-        // Fallback to finding the closest row if currentTarget fails
-        const fallback = event.target.closest('.dp-manager-row') || event.target.closest('.step-group');
-        if (fallback) fallback.style.opacity = '0.4';
-    }
-};
-
-// 1. Capture the Drag for Triggers
-OL.handleModularTriggerDrag = function(event) {
-    const verb = document.getElementById('trigger-verb').value;
-    const obj = document.getElementById('trigger-object').value;
-    event.dataTransfer.setData("stepType", "Trigger");
-    event.dataTransfer.setData("stepName", `${obj} ${verb}`);
-    event.dataTransfer.setData("objectContext", obj);
-    // Visual feedback for drag
-    event.target.classList.add('is-dragging-source');
-};
-
-// 2. Capture the Drag for Actions
-OL.handleModularAtomicDrag = function(event) {
-    const verb = document.getElementById('builder-verb').value;
-    const obj = document.getElementById('builder-object').value;
-    event.dataTransfer.setData("stepType", "Action");
-    event.dataTransfer.setData("stepName", `${verb} ${obj}`);
-    event.dataTransfer.setData("objectContext", obj);
-    event.target.classList.add('is-dragging-source');
-};
-
-OL.handleDragOver = function(event) {
-    event.preventDefault(); 
-    
-    const container = event.currentTarget; // The list or canvas container
-    container.classList.add('hovered'); // 🚀 Add blue "landing strip" highlight
-
-    // Identify the card currently under the mouse
-    const targetCard = event.target.closest('.vis-node');
-    
-    // Only show the ghost if we aren't hovering over the item we are dragging
-    if (targetCard && !targetCard.classList.contains('is-dragging-source')) {
-        let placeholder = document.querySelector('.drop-placeholder');
-        if (!placeholder) {
-            placeholder = document.createElement('div');
-            placeholder.className = 'drop-placeholder';
-            // Match the size of your vis-nodes
-            placeholder.style.width = targetCard.offsetWidth + 'px';
-            placeholder.style.height = '4px'; // Thin line for internal reordering
-            placeholder.style.margin = '10px 0';
-        }
-
-        // Determine if we should place the ghost above or below the target card
-        const rect = targetCard.getBoundingClientRect();
-        const midpoint = rect.top + rect.height / 2;
-        
-        if (event.clientY < midpoint) {
-            container.insertBefore(placeholder, targetCard);
-        } else {
-            container.insertBefore(placeholder, targetCard.nextSibling);
-        }
-    }
-};
-
-// 2. Destination: Required to allow the canvas to receive the drop
-OL.handleCanvasDragOver = function(e) {
-    e.preventDefault();
-    
-    e.dataTransfer.dropEffect = "move";
-
-    const container = e.currentTarget;
-    // Only show placeholder in the vertical streams
-    if (!container.classList.contains('stage-workflow-stream')) return;
-
-    // 1. Highlight the container
-    container.style.background = "rgba(56, 189, 248, 0.03)";
-
-    // 2. Find or Create Placeholder
-    let placeholder = container.querySelector('.drop-placeholder');
-    if (!placeholder) {
-        placeholder = document.createElement('div');
-        placeholder.className = 'drop-placeholder';
-    }
-
-    // 3. Calculate positioning
-    const cards = [...container.querySelectorAll('.workflow-block-card:not(.dragging)')];
-    
-    // Find the card that is currently under the mouse
-    const afterElement = cards.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = e.clientY - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-
-    // 4. Insert Placeholder
-    if (afterElement) {
-        container.insertBefore(placeholder, afterElement);
-        // Find the index of the card we are slipping in front of
-        state.currentDropIndex = cards.indexOf(afterElement);
-    } else {
-        container.appendChild(placeholder);
-        // We are at the bottom
-        state.currentDropIndex = cards.length;
-    }
-};
-
-OL.handleNodeRearrange = function(e, sectionId, targetIndex, forceId = null) {
-    cleanupUI();
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    
-    const moveId = forceId || e.dataTransfer.getData("moveNodeId");
-    if (!moveId) return;
-
-    // Use the Ghost Index from dragover, or the passed target
-    const finalIndex = (state.currentDropIndex !== null) ? state.currentDropIndex : targetIndex;
-    const isVaultMode = location.hash.includes('vault');
-    const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
-
-    // --- 🟢 TIER 1: Reordering Workflows across Stages ---
-    if (!actualParentId) {
-        const client = getActiveClient();
-        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
-        const item = source.find(r => String(r.id) === String(moveId));
-
-        if (item) {
-            // 1. Assign to new Stage
-            item.stageId = sectionId;
-            
-            // 2. Get all other items in that TARGET stage (excluding the one we are moving)
-            let siblings = source.filter(r => String(r.stageId) === String(sectionId) && String(r.id) !== String(moveId))
-                                 .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-            
-            // 3. Insert into the sibling array at the ghost index
-            siblings.splice(finalIndex, 0, item);
-            
-            // 4. Re-index mapOrder for the whole lane to ensure no gaps (0, 1, 2...)
-            siblings.forEach((r, i) => r.mapOrder = i);
-        }
-    } 
-    // --- 🔵 TIER 2 & 3: Reordering within a Workflow or Resource ---
-    else {
-        const parent = OL.getResourceById(actualParentId);
-        if (parent && parent.steps) {
-            const oldIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
-            
-            if (oldIdx > -1) {
-                const [item] = parent.steps.splice(oldIdx, 1);
-
-                // Update Metadata (Lane or Type)
-                if (state.focusedResourceId) item.type = sectionId;
-                else item.gridLane = sectionId;
-
-                // Find relevant siblings in the target section
-                const sectionItems = parent.steps.filter(s => 
-                    state.focusedResourceId ? 
-                    (item.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger') : 
-                    (s.gridLane === sectionId)
-                );
-
-                // Insert at the ghost position
-                const targetNeighbor = sectionItems[finalIndex];
-                if (targetNeighbor) {
-                    const absoluteInsertIdx = parent.steps.indexOf(targetNeighbor);
-                    parent.steps.splice(absoluteInsertIdx, 0, item);
-                } else {
-                    parent.steps.push(item);
-                }
-                
-                // Re-index mapOrder if your steps use it
-                parent.steps.forEach((s, i) => s.mapOrder = i);
-            }
-        }
-    }
-
-    state.currentDropIndex = null;
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
-
-OL.handleDragLeave = function(event) {
-    const container = event.currentTarget;
-    // Only clean up if we actually exit the container
-    if (!container.contains(event.relatedTarget)) {
-        container.classList.remove('hovered');
-        const placeholder = document.querySelector('.drop-placeholder');
-        if (placeholder) placeholder.remove();
-    }
-};
-
-OL.handleStepDrop = function(event, targetIndex, resId) {
-    event.preventDefault();
-
-    // 🚀 CLEANUP: Remove blue highlights and ghosts
-    const container = event.currentTarget;
-    if (container) container.classList.remove('hovered');
-    const placeholder = document.querySelector('.drop-placeholder');
-    if (placeholder) placeholder.remove();
-
-    // ... [Rest of your existing swap logic] ...
-    
-    const draggedIndex = parseInt(event.dataTransfer.getData("draggedIndex"));
-    if (draggedIndex === targetIndex) return;
-
-    const res = OL.getResourceById(resId);
-    const steps = res.steps;
-
-    const [movedItem] = steps.splice(draggedIndex, 1);
-    steps.splice(targetIndex, 0, movedItem);
-
-    OL.persist();
-    
-    // Refresh correct view
-    if (document.getElementById('vis-links-layer')) {
-        OL.renderVisualizer(resId);
-    } else {
-        const listEl = document.getElementById('sop-step-list');
-        if (listEl) listEl.innerHTML = renderSopStepList(res);
-    }
-};
-
-*/
-
-// --- UNIVERSAL FEEDBACK HANDLERS ---
 
 OL.handleDragStart = function(e, id, type, index) {
     // type: 'workflow', 'resource', 'step', or 'factory'
@@ -11756,6 +11557,62 @@ OL.handleUniversalDragOver = function(e) {
     } else {
         container.appendChild(ghost);
         state.currentDropIndex = cards.length;
+    }
+};
+
+OL.handleNodeRearrange = function(e, sectionId, targetIdx, moveId) {
+    const isVaultMode = location.hash.includes('vault');
+    const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
+
+    // 🟢 TIER 1: Reordering Workflows across Stages
+    if (!activeParentId) {
+        const client = getActiveClient();
+        const source = isVaultMode ? state.master.resources : client.projectData.localResources;
+        const wf = source.find(r => String(r.id) === String(moveId));
+
+        if (wf) {
+            wf.stageId = sectionId; // Update the column it belongs to
+            
+            // Re-sort the target lane
+            let siblings = source.filter(r => String(r.stageId) === String(sectionId) && String(r.id) !== String(moveId))
+                                 .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+            
+            siblings.splice(targetIdx, 0, wf);
+            siblings.forEach((r, i) => r.mapOrder = i);
+        }
+    } 
+    
+    // 🔵 TIER 2 & 3: Reordering Steps inside a Workflow or Procedure
+    else {
+        const parent = OL.getResourceById(activeParentId);
+        if (parent && parent.steps) {
+            const oldIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
+            
+            if (oldIdx > -1) {
+                const [item] = parent.steps.splice(oldIdx, 1);
+
+                // Update context (Lane for L2, Type for L3)
+                if (state.focusedResourceId) item.type = sectionId;
+                else item.gridLane = sectionId;
+
+                // Find items already in that specific column/type
+                const sectionItems = parent.steps.filter(s => 
+                    state.focusedResourceId ? s.type === sectionId : s.gridLane === sectionId
+                );
+
+                // Insert relative to the neighbors in that column
+                const targetNeighbor = sectionItems[targetIdx];
+                if (targetNeighbor) {
+                    const absoluteInsertIdx = parent.steps.indexOf(targetNeighbor);
+                    parent.steps.splice(absoluteInsertIdx, 0, item);
+                } else {
+                    parent.steps.push(item);
+                }
+                
+                // Final pass to ensure mapOrder is clean
+                parent.steps.forEach((s, i) => s.mapOrder = i);
+            }
+        }
     }
 };
 
@@ -11830,27 +11687,70 @@ const cleanupUI = () => {
     document.querySelectorAll('.stage-workflow-stream').forEach(el => el.style.background = "");
 };
 
-// 3. The "Smart Prompt" Logic (Run this inside your handleCanvasDrop function)
-OL.triggerSmartResourceMap = function(newStep, objectContext) {
-    const mapping = {
-        "Email": "Email",
-        "Form": "Form",
-        "Meeting": "Event",
-        "Event": "Event",
-        "Workflow": "Workflow",
-        "Signature Request": "Signature",
-        "Opportunity": "SOP"
-    };
+// --- UNMAPPING / TRASH LOGIC ---
 
-    const targetType = mapping[objectContext];
-    if (!targetType) return;
+OL.handleUnifiedDelete = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // 1. Extract IDs from the drag event
+    const moveId = e.dataTransfer.getData("moveNodeId") || e.dataTransfer.getData("moveStepId");
+    const resId = e.dataTransfer.getData("resId"); // Sidebar source
+    const isVaultMode = location.hash.includes('vault');
+    
+    // Clean up UI
+    e.currentTarget.classList.remove('drag-over');
 
-    if (confirm(`Detected "${objectContext}". Would you like to link an existing ${targetType} or create a new one?`)) {
-        // Here you would trigger your existing resource linker or quick-create logic
-        // For example:
-        OL.openResourceLinkerForStep(newStep.id, targetType);
+    // If we are dragging from the sidebar (resId), we don't need to delete anything
+    if (resId && !moveId) return;
+
+    const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
+
+    // --- SCENARIO A: UNMAPPING FROM TIER 1 (Lifecycle) ---
+    if (!actualParentId && moveId) {
+        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
+        const item = source.find(r => r.id === moveId);
+        if (item) {
+            item.stageId = null;
+            item.mapOrder = null;
+            console.log(`📥 Unmapped Workflow: ${item.name}`);
+        }
+    } 
+    // --- SCENARIO B: DELETING STEPS FROM TIER 2 OR 3 ---
+    else if (actualParentId && moveId) {
+        const parent = OL.getResourceById(actualParentId);
+        if (parent && parent.steps) {
+            const originalLength = parent.steps.length;
+            parent.steps = parent.steps.filter(s => s.id !== moveId);
+            
+            if (parent.steps.length < originalLength) {
+                console.log(`🗑️ Deleted Step ${moveId} from ${actualParentId}`);
+                OL.clearInspector();
+            }
+        }
+    }
+
+    OL.persist();
+    renderGlobalVisualizer(isVaultMode);
+};
+
+OL.handleUnifiedUnmap = function(e) {
+    e.preventDefault();
+    const moveId = e.dataTransfer.getData("moveNodeId");
+    if (!moveId) return;
+
+    const isVault = location.hash.includes('vault');
+    const res = OL.getResourceById(moveId);
+    
+    if (res && confirm(`Unmap "${res.name}" and return to library?`)) {
+        res.stageId = null;
+        res.mapOrder = null;
+        OL.persist();
+        renderGlobalVisualizer(isVault);
     }
 };
+
+// RESOURCE LINKING IN SIDEBAR or MODAL //
 
 OL.openResourceLinkerForStep = function(stepId, targetType) {
     // Note: stepId is used to identify where the link will be saved
@@ -11919,176 +11819,6 @@ OL.addResourceLinkToStep = function(parentResId, stepId, targetId, targetName) {
         OL.persist();
         OL.closeModal();
         OL.loadInspector(stepId, parentResId);
-    }
-};
-
-OL.handleUniversalDragStart = function(event, id, type, parentId = null) {
-    // Add a visual class to the element being dragged
-    const target = event.currentTarget;
-    target.classList.add('dragging-now');
-    
-    // Store the data in the dataTransfer object
-    const dragData = { id, type, parentId };
-    event.dataTransfer.setData('application/json', JSON.stringify(dragData));
-    event.dataTransfer.effectAllowed = 'move';
-    
-    // Optional: Create a custom ghost image or just let it use the default
-    console.log(`🚚 Started dragging ${type}: ${id}`);
-};
-
-OL.handleUniversalDrop = async function(e, parentId, sectionId) {
-    e.preventDefault();
-    const layout = document.querySelector('.three-pane-layout');
-    if (layout) layout.classList.remove('toolbox-focused');
-
-    const moveId = e.dataTransfer.getData("moveNodeId"); // Rearranging existing
-    const sidebarResId = e.dataTransfer.getData("resId"); // Dragging from library
-    const stepType = e.dataTransfer.getData("stepType"); // L3 Factory Type
-    const stepName = e.dataTransfer.getData("stepName"); // L3 Factory Name
-    const isVaultMode = location.hash.includes('vault');
-
-    // 🎯 Use the Ghost Index from the hover handler
-    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
-
-    await OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const resources = isVaultMode ? state.master.resources : client.projectData.localResources;
-
-        // 🚀 SCENARIO 1: REARRANGE EXISTING (Within Canvas)
-        if (moveId) {
-            OL.handleNodeRearrange(e, sectionId, targetIdx, moveId);
-        } 
-
-        // 🚀 SCENARIO 2: MAP FROM SIDEBAR (Tier 1 & Tier 2)
-        else if (sidebarResId) {
-            // TIER 1: Sidebar Workflow -> Stage Lane
-            if (!state.focusedWorkflowId && !state.focusedResourceId) {
-                const wf = resources.find(r => String(r.id) === String(sidebarResId));
-                if (wf) {
-                    wf.stageId = sectionId;
-                    
-                    // 🚀 FOCUS ON DROP: This ensures the Inspector opens AFTER the drop
-                    state.focusedWorkflowId = wf.id;
-
-                    const siblings = resources.filter(r => String(r.stageId) === String(sectionId) && r.id !== wf.id)
-                                              .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-                    siblings.splice(targetIdx, 0, wf);
-                    siblings.forEach((r, i) => r.mapOrder = i);
-                }
-            } 
-            // TIER 2: Sidebar Resource -> Workflow Sequence
-            else if (state.focusedWorkflowId) {
-                const workflow = OL.getResourceById(state.focusedWorkflowId);
-                if (workflow) {
-                    if (!workflow.steps) workflow.steps = [];
-                    workflow.steps.splice(targetIdx, 0, { 
-                        id: uid(), 
-                        name: sidebarResId.split('-').pop(), // Fallback name logic
-                        resourceLinkId: sidebarResId, 
-                        gridLane: sectionId 
-                    });
-                    workflow.steps.forEach((s, idx) => s.mapOrder = idx);
-                }
-            }
-        }
-
-        // 🚀 SCENARIO 3: ATOMIC STEPS (L3 Factory Builder)
-        else if (stepName && state.focusedResourceId) {
-            const res = OL.getResourceById(state.focusedResourceId);
-            if (res) {
-                if (!res.steps) res.steps = [];
-                
-                const newAtomicStep = {
-                    id: uid(),
-                    name: stepName,
-                    type: stepType || "Action",
-                    outcomes: [],
-                    createdDate: new Date().toISOString()
-                };
-
-                // Insert exactly where the placeholder was
-                res.steps.splice(targetIdx, 0, newAtomicStep);
-                
-                // Re-sync Dual-Homed Triggers if necessary
-                if (stepType === 'Trigger') {
-                    if (!res.triggers) res.triggers = [];
-                    res.triggers.push({ name: stepName, type: 'auto' });
-                }
-
-                console.log(`✨ Atomic ${stepType} created: ${stepName} at index ${targetIdx}`);
-            }
-        }
-    });
-
-    // 🧹 Finalize UI
-    state.currentDropIndex = null;
-    cleanupUI();
-    OL.closeSidebar();
-    renderGlobalVisualizer(isVaultMode);
-};
-
-window.addEventListener('dragend', cleanupUI);
-
-// --- UNMAPPING / TRASH LOGIC ---
-
-OL.handleUnifiedDelete = function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // 1. Extract IDs from the drag event
-    const moveId = e.dataTransfer.getData("moveNodeId") || e.dataTransfer.getData("moveStepId");
-    const resId = e.dataTransfer.getData("resId"); // Sidebar source
-    const isVaultMode = location.hash.includes('vault');
-    
-    // Clean up UI
-    e.currentTarget.classList.remove('drag-over');
-
-    // If we are dragging from the sidebar (resId), we don't need to delete anything
-    if (resId && !moveId) return;
-
-    const actualParentId = state.focusedResourceId || state.focusedWorkflowId;
-
-    // --- SCENARIO A: UNMAPPING FROM TIER 1 (Lifecycle) ---
-    if (!actualParentId && moveId) {
-        const source = isVaultMode ? state.master.resources : getActiveClient().projectData.localResources;
-        const item = source.find(r => r.id === moveId);
-        if (item) {
-            item.stageId = null;
-            item.mapOrder = null;
-            console.log(`📥 Unmapped Workflow: ${item.name}`);
-        }
-    } 
-    // --- SCENARIO B: DELETING STEPS FROM TIER 2 OR 3 ---
-    else if (actualParentId && moveId) {
-        const parent = OL.getResourceById(actualParentId);
-        if (parent && parent.steps) {
-            const originalLength = parent.steps.length;
-            parent.steps = parent.steps.filter(s => s.id !== moveId);
-            
-            if (parent.steps.length < originalLength) {
-                console.log(`🗑️ Deleted Step ${moveId} from ${actualParentId}`);
-                OL.clearInspector();
-            }
-        }
-    }
-
-    OL.persist();
-    renderGlobalVisualizer(isVaultMode);
-};
-
-OL.handleUnifiedUnmap = function(e) {
-    e.preventDefault();
-    const moveId = e.dataTransfer.getData("moveNodeId");
-    if (!moveId) return;
-
-    const isVault = location.hash.includes('vault');
-    const res = OL.getResourceById(moveId);
-    
-    if (res && confirm(`Unmap "${res.name}" and return to library?`)) {
-        res.stageId = null;
-        res.mapOrder = null;
-        OL.persist();
-        renderGlobalVisualizer(isVault);
     }
 };
 
