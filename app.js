@@ -11705,6 +11705,29 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             // Re-index mapOrder for persistence
             parent.steps.forEach((s, i) => s.mapOrder = i);
         }
+
+        // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
+        else if (itemType === 'stage') {
+            const sourceStages = isVault ? state.master.stages : client.projectData.stages;
+            const movingStage = sourceStages.find(s => String(s.id) === String(moveId));
+            
+            if (movingStage) {
+                // 1. Remove from old position
+                const oldIdx = sourceStages.findIndex(s => String(s.id) === String(moveId));
+                if (oldIdx > -1) sourceStages.splice(oldIdx, 1);
+                
+                // 2. Insert at new target index
+                // Since stages are usually a flat list, targetIdx corresponds to the column slot
+                sourceStages.splice(targetIdx, 0, movingStage);
+                
+                // 3. Normalize the 'order' property for persistence
+                sourceStages.forEach((s, i) => {
+                    s.order = i;
+                });
+                
+                console.log(`🏗️ Stage ${movingStage.name} moved to position ${targetIdx}`);
+            }
+        }
     });
 
     state.currentDropIndex = null;
