@@ -9538,9 +9538,16 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
-    // 🚀 THE SIDEBAR TOGGLE: Completely omit the HTML if in Global Mode
-    const sidebarHtml = /*isGlobalMode ? '' : */`<aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>`;
-    const layoutClass = isGlobalMode ? 'global-macro-layout no-sidebar' : 'vertical-lifecycle-mode';
+    // 🚀 THE SIDEBAR LOGIC: Only show if we are NOT in zen mode OR if the drawer is explicitly forced open
+    const showSidebar = !isZen || state.ui.sidebarOpen;
+    
+    // 🛠️ THE LAYOUT FIX: Remove 'no-sidebar' if state.ui.sidebarOpen is true
+    let layoutClass = isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode';
+    
+    // If the sidebar is NOT open and we are in global mode, then we add no-sidebar
+    if (isGlobalMode && !state.ui.sidebarOpen) {
+        layoutClass += ' no-sidebar';
+    }
 
     if (state.isFiltering) {
         state.isFiltering = false;
@@ -9548,19 +9555,19 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 
     container.innerHTML = `
-        <div class="three-pane-layout ${layoutClass} ${zenClass}">
-            ${sidebarHtml}
+        <div class="three-pane-layout ${layoutClass} ${zenClass} ${state.ui.sidebarOpen ? 'toolbox-focused' : ''}">
+            <aside id="pane-drawer" class="pane-drawer">
+                ${toolboxHtml}
+            </aside>
 
             <main class="pane-canvas-wrap">
                 <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
                     
                     <div style="display:flex; gap:10px;">
-                        ${!isGlobalMode ? `
-                            <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" onclick="OL.toggleZenMode()">
-                                ${isZen ? 'Show Tools ⤢' : 'Hide Tools ⤓'}
-                            </button>
-                        ` : ''}
+                        <button class="btn tiny ${state.ui.sidebarOpen ? 'accent' : 'soft'}" onclick="OL.toggleSidebar()">
+                            ${state.ui.sidebarOpen ? 'Close Tools' : 'Open Tools'}
+                        </button>
 
                         <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
                                 onclick="OL.toggleGlobalView(${isVaultMode})">
@@ -9569,12 +9576,12 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     </div>
                 </div>
                 
-                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">
+                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas" 
+                     onmousedown="OL.handleCanvasBackgroundClick(event)">
                     ${canvasHtml}
                 </div>
             </main>
-            <aside id="inspector-panel" class="pane-inspector">
-                 </aside>
+            <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
 
@@ -9591,6 +9598,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     
     // Only init resizers if sidebars exist
     setTimeout(OL.initSideResizers, 10);
+};
+
+OL.handleCanvasBackgroundClick = function(e) {
+    // If we click the actual background (the #fs-canvas) and not a child element
+    if (e.target.id === 'fs-canvas' && state.ui.sidebarOpen) {
+        console.log("🌊 Background clicked - retracting sidebar");
+        OL.closeSidebar();
+    }
 };
 
 OL.toggleZenMode = function() {
