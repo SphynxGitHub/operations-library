@@ -430,6 +430,21 @@ window.buildLayout = function () {
     { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
   ];
 
+  const isLight = document.body.classList.contains('light-mode');
+
+    const themeSection = `
+        <div class="card-section" style="margin-top: 20px; border-top: 1px solid var(--line); padding-top: 20px;">
+            <label class="modal-section-label">🎨 APPEARANCE</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                <span class="tiny muted">Switch between Light and Dark mode</span>
+                <button class="btn soft tiny" onclick="OL.toggleTheme()" style="display: flex; align-items: center; gap: 8px; min-width: 100px; justify-content: center;">
+                    ${isLight ? '🌙 Dark Mode' : '☀️ Light Mode'}
+                </button>
+            </div>
+        </div>
+    `;
+
+// Append themeSection to your modal HTML assembly...
   root.innerHTML = `
         <aside class="sidebar">
             <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
@@ -440,6 +455,7 @@ window.buildLayout = function () {
                     <nav class="menu">
                         <a href="#/" class="${hash === '#/' ? 'active' : ''}">
                             <i>🏠</i> <span>Dashboard</span>
+                            ${themeSection}
                         </a>
                     </nav>
                 </div>
@@ -989,7 +1005,7 @@ OL.onboardNewClient = function () {
   location.hash = "#/client-tasks";
 };
 
-// 3. BUILD CLIENT PROFILE SETTINGS / LINK / DELETE PROFILE
+//=======BUILD CLIENT PROFILE SETTINGS / LINK / DELETE PROFILE ===========//
 OL.openClientProfileModal = function(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
@@ -1059,6 +1075,21 @@ OL.toggleClientModule = function(clientId, moduleId) {
         if (!client.modules) client.modules = {};
         client.modules[moduleId] = !client.modules[moduleId];
     });
+};
+
+OL.toggleTheme = function() {
+    const isLight = document.body.classList.toggle('light-mode');
+    localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
+    
+    // Refresh the modal to update the button icon/text
+    OL.openProfileModal();
+};
+
+// 💡 Run this on app initialization to load saved theme
+OL.initTheme = function() {
+    if (localStorage.getItem('ol_theme') === 'light') {
+        document.body.classList.add('light-mode');
+    }
 };
 
 OL.copyShareLink = function(token) {

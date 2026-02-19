@@ -2,16 +2,18 @@
    CORE DESIGN TOKENS
    ============================================================ */
 :root {
-    /* Backgrounds */
+    /* 🌑 Default Dark Mode Variables */
     --bg: #050816;
     --panel: #0b1020;
+    --panel-dark: #070a14;
     --panel-soft: #111827;
     --panel-border: #1f2937;
+    --line: rgba(255, 255, 255, 0.1);
     
     /* Branding Colors */
-    --accent: #38bdf8;       /* Sphynx Blue */
+    --accent: #38bdf8; 
     --accent-glow: rgba(56, 189, 248, 0.15);
-    --vault-gold: #fbbf24;   /* Master Library Identifier */
+    --vault-gold: #fbbf24;
     --danger: #f87171;
     --success: #10b981;
     
@@ -19,9 +21,37 @@
     --text-main: #f9fafb;
     --text-dim: #9ca3af;
     --text-muted: #6b7280;
-    
-    /* Typography */
+    --text: #f8fafc; /* Bridge for legacy code */
+
     --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ☀️ Light Mode Overrides */
+body.light-mode {
+    --bg: #f1f5f9;
+    --panel: #ffffff;
+    --panel-dark: #e2e8f0;
+    --panel-soft: #f8fafc;
+    --panel-border: #cbd5e1;
+    --line: rgba(0, 0, 0, 0.1);
+    
+    /* Sharpening Branding for Light BG */
+    --accent: #0284c7;        /* Deeper blue for readability */
+    --accent-glow: rgba(2, 132, 199, 0.1);
+    --vault-gold: #b45309;   /* Deeper gold/amber */
+    
+    /* Text Overrides */
+    --text-main: #0f172a;
+    --text-dim: #475569;
+    --text-muted: #64748b;
+    --text: #0f172a;
+}
+
+/* Ensure transition is smooth */
+body {
+    transition: background-color 0.3s, color 0.3s;
+    background-color: var(--bg);
+    color: var(--text);
 }
 
 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
