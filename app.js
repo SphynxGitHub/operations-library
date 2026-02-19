@@ -6687,7 +6687,6 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
-    window.location.hash = `#/${viewPrefix}/${analysisId}`;
     
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
@@ -6832,21 +6831,11 @@ OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
 
     if (anly) {
         anly[field] = value.trim();
-        OL.persist(); // Save to Firebase
+        OL.persist();
         
-        // 🚀 THE FIX: Update only the text labels in the DOM instead of re-rendering the module
-        // 1. Update the Matrix Title if it's visible
-        const matrixTitle = document.querySelector(`.m-name-${anlyId}`);
-        if (matrixTitle && field === 'name') matrixTitle.innerText = anly.name;
-
-        // 2. Update the Card Title in the background grid
-        const cardTitle = document.querySelector(`.card-title-${anlyId}`);
-        if (cardTitle && field === 'name') cardTitle.innerText = anly.name;
-
-        // Note: We REMOVED renderAnalysisModule(isMaster) from here.
-        // This keeps the "Active Matrix" open and scrolled into view.
-        
-        console.log(`✅ Analysis ${field} updated without view reset.`);
+        // 🔙 UNDO: Go back to the full refresh that worked
+        renderAnalysisModule(isMaster); 
+        OL.openAnalysisMatrix(anlyId, isMaster);
     }
 };
 
