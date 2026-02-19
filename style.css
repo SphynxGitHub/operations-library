@@ -3148,6 +3148,7 @@ body.is-visualizer #mainContent {
     transition: background 0.2s;
 }
 
+
 /* 🚀 THE BLUE HIGHLIGHT */
 .grid-drop-target.hovered {
     background: rgba(56, 189, 248, 0.15);

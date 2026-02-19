@@ -5898,50 +5898,7 @@ OL.removeTriggerLink = function(resId, trigIdx, linkIdx) {
     }
 };
 
-OL.handleStepDrop = function(event, targetIndex, resId) {
-    event.preventDefault();
-
-    // Cleanup visual classes immediately
-    document.querySelectorAll('.vis-node').forEach(n => {
-        n.classList.remove('drop-target-active');
-        n.classList.remove('is-dragging-source');
-    });
-
-    const draggedIndex = parseInt(event.dataTransfer.getData("draggedIndex"));
-    if (draggedIndex === targetIndex) return;
-
-    const res = OL.getResourceById(resId);
-    const steps = res.steps;
-
-    // Move the item in the array
-    const [movedItem] = steps.splice(draggedIndex, 1);
-    steps.splice(targetIndex, 0, movedItem);
-
-    OL.persist();
-    
-    const visCanvas = document.getElementById('vis-links-layer');
-    if (visCanvas) {
-        OL.renderVisualizer(resId);
-    } else {
-        const listEl = document.getElementById('sop-step-list');
-        if (listEl) listEl.innerHTML = renderSopStepList(res);
-    }
-};
-
-OL.handleDragOver = function(event) {
-    event.preventDefault(); // Necessary to allow drop
-    
-    // Remove highlight from ALL nodes first
-    document.querySelectorAll('.vis-node').forEach(n => n.classList.remove('drop-target-active'));
-    
-    // Identify the card currently under the mouse
-    const targetCard = event.target.closest('.vis-node');
-    
-    // Only light it up if it's NOT the one we are currently dragging
-    if (targetCard && !targetCard.classList.contains('is-dragging-source')) {
-        targetCard.classList.add('drop-target-active');
-    }
-};
+// DRAG OVER CANVAS AND DROPZONE HIGHLIGHT //
 
 OL.handleStepDragStart = function(event, index) {
     // 1. Store the index for the drop handler
@@ -5959,6 +5916,80 @@ OL.handleStepDragStart = function(event, index) {
         // Fallback to finding the closest row if currentTarget fails
         const fallback = event.target.closest('.dp-manager-row') || event.target.closest('.step-group');
         if (fallback) fallback.style.opacity = '0.4';
+    }
+};
+
+OL.handleDragOver = function(event) {
+    event.preventDefault(); 
+    
+    const container = event.currentTarget; // The list or canvas container
+    container.classList.add('hovered'); // 🚀 Add blue "landing strip" highlight
+
+    // Identify the card currently under the mouse
+    const targetCard = event.target.closest('.vis-node');
+    
+    // Only show the ghost if we aren't hovering over the item we are dragging
+    if (targetCard && !targetCard.classList.contains('is-dragging-source')) {
+        let placeholder = document.querySelector('.drop-placeholder');
+        if (!placeholder) {
+            placeholder = document.createElement('div');
+            placeholder.className = 'drop-placeholder';
+            // Match the size of your vis-nodes
+            placeholder.style.width = targetCard.offsetWidth + 'px';
+            placeholder.style.height = '4px'; // Thin line for internal reordering
+            placeholder.style.margin = '10px 0';
+        }
+
+        // Determine if we should place the ghost above or below the target card
+        const rect = targetCard.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        
+        if (event.clientY < midpoint) {
+            container.insertBefore(placeholder, targetCard);
+        } else {
+            container.insertBefore(placeholder, targetCard.nextSibling);
+        }
+    }
+};
+
+OL.handleDragLeave = function(event) {
+    const container = event.currentTarget;
+    // Only clean up if we actually exit the container
+    if (!container.contains(event.relatedTarget)) {
+        container.classList.remove('hovered');
+        const placeholder = document.querySelector('.drop-placeholder');
+        if (placeholder) placeholder.remove();
+    }
+};
+
+OL.handleStepDrop = function(event, targetIndex, resId) {
+    event.preventDefault();
+
+    // 🚀 CLEANUP: Remove blue highlights and ghosts
+    const container = event.currentTarget;
+    if (container) container.classList.remove('hovered');
+    const placeholder = document.querySelector('.drop-placeholder');
+    if (placeholder) placeholder.remove();
+
+    // ... [Rest of your existing swap logic] ...
+    
+    const draggedIndex = parseInt(event.dataTransfer.getData("draggedIndex"));
+    if (draggedIndex === targetIndex) return;
+
+    const res = OL.getResourceById(resId);
+    const steps = res.steps;
+
+    const [movedItem] = steps.splice(draggedIndex, 1);
+    steps.splice(targetIndex, 0, movedItem);
+
+    OL.persist();
+    
+    // Refresh correct view
+    if (document.getElementById('vis-links-layer')) {
+        OL.renderVisualizer(resId);
+    } else {
+        const listEl = document.getElementById('sop-step-list');
+        if (listEl) listEl.innerHTML = renderSopStepList(res);
     }
 };
 
