@@ -9600,10 +9600,10 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     stages.sort((a, b) => (a.order || 0) - (b.order || 0));
 
     return stages.map((stage, i) => `
-        <div class="stage-container"            
-            <div class="stage-header-row" draggable="true" 
-             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${stage.id}', 'stage', ${i})
-             style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="stage-container"> <div class="stage-header-row" draggable="true" 
+                 ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${stage.id}', 'stage', ${i})"
+                 style="display:flex; justify-content:space-between; align-items:center;">
+                
                 <div style="display:flex; align-items:center; gap:8px; flex:1;">
                     <span class="muted" style="cursor: grab; font-size: 12px;">⋮⋮</span>
                     <span class="stage-number">${i+1}</span>
