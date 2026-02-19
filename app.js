@@ -6779,15 +6779,14 @@ OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
         anly[field] = value.trim();
         OL.persist(); 
 
-        // 🚀 THE FIX: 
-        // 1. Refresh the Matrix UI
+        // 🚀 THE FIX: Update only the Matrix
         OL.openAnalysisMatrix(anlyId, isMaster);
         
-        // 2. Surgically update the card in the background so it doesn't look "stale"
+        // 🚀 AND update the card title without redrawing the whole grid
         const cardTitle = document.querySelector(`.card-title-${anlyId}`);
-        if (cardTitle && field === 'name') cardTitle.innerText = anly[field];
-        
-        // 🛑 DO NOT call renderAnalysisModule() here. That is what causes the "Close".
+        if (cardTitle && field === 'name') {
+            cardTitle.innerText = anly.name;
+        }
     }
 };
 
