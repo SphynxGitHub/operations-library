@@ -53,6 +53,8 @@ body.light-mode {
     border-color: var(--accent) !important;
 }
 
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
 /* Ensure transition is smooth */
 body {
     transition: background-color 0.3s, color 0.3s;
@@ -60,21 +62,21 @@ body {
     color: var(--text);
 }
 
-* { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+html {
+    background-color: var(--bg); /* Set once at the highest level */
+}
 
-html, body {
+body {
     margin: 0;
     padding: 0;
-    background-color: var(--bg);
     color: var(--text-main);
     font-family: var(--font-main);
-    font-size: 13px; /* Slightly larger base for better legibility */
+    font-size: 13px;
     line-height: 1.5;
+    background-color: transparent; /* Let HTML background show through */
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-textarea {
-  font-family: var(--font-main);
-}
 /* ============================================================
    SYSTEM LAYOUT (Sidebar & Main Container)
    ============================================================ */
@@ -100,7 +102,10 @@ textarea {
     margin-left: 240px; 
     padding: 40px;
     height: 100vh;
-    background: radial-gradient(circle at top right, #0f172a, transparent);
+    /* 🚀 THE FIX: Use variables for the gradient colors */
+    background: radial-gradient(circle at top right, var(--accent-glow), transparent);
+    background-color: var(--bg); /* Ensures the 'transparent' part matches the theme */
+    transition: background 0.3s ease;
 }
 
 /* ============================================================
