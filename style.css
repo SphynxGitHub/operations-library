@@ -981,6 +981,7 @@ body:has(.sidebar.collapsed) #mainContent {
 .tiny-input {
     width: 50px !important;
     text-align: left;
+    font-size: 11.5px;
 }
 
 /* Standard UI adjustment to hide scrollbar in web view during preview */
@@ -1025,6 +1026,7 @@ body:has(.sidebar.collapsed) #mainContent {
     box-sizing: border-box !important;
     display: block !important;
     margin: 0 auto !important;
+    font-size: 11.5px;
 }
 
 /* 3. Total Weighted Score pills centering */
