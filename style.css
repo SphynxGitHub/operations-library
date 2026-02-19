@@ -53,6 +53,22 @@ body.light-mode {
     border-color: var(--accent) !important;
 }
 
+/* 🚀 COMPRESSED STATE: Only show the icon */
+.sidebar.compressed .theme-toggle-btn {
+    justify-content: center;
+    padding: 10px 0;
+    width: 40px;
+    margin: 0 auto;
+}
+
+.sidebar.compressed .theme-label {
+    display: none; /* Hide the text */
+}
+
+.sidebar.compressed .theme-icon {
+    font-size: 16px;
+}
+
 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
 
 /* Ensure transition is smooth */

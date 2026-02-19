@@ -465,14 +465,14 @@ window.buildLayout = function () {
     const isLight = document.body.classList.contains('light-mode');
 
     const themeSection = `
-        <div class="theme-toggle-zone" style="padding: 0 15px; margin: 10px 0;">
-            <button class="btn soft tiny" onclick="OL.toggleTheme()" 
-                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--panel-soft); border: 1px solid var(--line); color: var(--text-main); padding: 8px; border-radius: 6px; cursor: pointer;">
-                ${isLight ? '🌙 Dark Mode' : '☀️ Light Mode'}
+        <div class="theme-toggle-zone">
+            <button class="btn soft tiny theme-toggle-btn" onclick="OL.toggleTheme()" title="${isLight ? 'Dark Mode' : 'Light Mode'}">
+                <span class="theme-icon">${isLight ? '🌙' : '☀️'}</span>
+                <span class="theme-label">${isLight ? 'Dark Mode' : 'Light Mode'}</span>
             </button>
         </div>
     `;
-    
+
 // Append themeSection to your modal HTML assembly...
   root.innerHTML = `
         <aside class="sidebar">
