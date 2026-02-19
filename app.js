@@ -166,7 +166,7 @@ OL.updateAndSync = async function(mutationFn) {
         alert("CRITICAL: Data did not save to cloud. Please refresh.");
     } finally {
         // Only release the shield after a timeout
-        setTimeout(() => { state.isSaving = false; }, 800);
+        setTimeout(() => { state.isSaving = false; }, 1200);
     }
 };
 
@@ -7067,25 +7067,22 @@ OL.executeAddAppToAnalysis = async function (anlyId, appId, isMaster) {
     OL.openAnalysisMatrix(anlyId, isMaster); 
 };
 
-OL.removeAppFromAnalysis = function(anlyId, appId, isMaster) {
+OL.removeAppFromAnalysis = async function(anlyId, appId, isMaster) {
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : client.projectData.localAnalyses;
     const anly = source.find(a => a.id === anlyId);
 
     if (anly && anly.apps) {
-        // Find the app name for the confirmation message
-        const masterApp = state.master.apps.find(a => a.id === appId);
-        const appName = masterApp ? masterApp.name : "this application";
+        if (!confirm(`Are you sure you want to remove this app from the comparison?`)) return;
 
-        if (confirm(`Are you sure you want to remove ${appName} from this analysis? All scores for this app will be deleted.`)) {
-            // Filter out the app from the analysis apps array
+        // 🚀 THE SHIELD: Block sync-engine while deleting
+        await OL.updateAndSync(() => {
             anly.apps = anly.apps.filter(a => a.appId !== appId);
-            
-            OL.persist();
-            // Refresh the Matrix view immediately
-            OL.openAnalysisMatrix(anlyId, isMaster);
-            console.log(`✅ Removed app ${appId} from analysis ${anlyId}`);
-        }
+        });
+
+        // 🔄 SURGICAL REFRESH
+        OL.openAnalysisMatrix(anlyId, isMaster);
+        console.log("🗑️ App removed safely under shield.");
     }
 };
 
@@ -7198,7 +7195,7 @@ OL.addFeatureToAnalysis = function (anlyId, isMaster) {
 
 if (!state.master.analyses) state.master.analyses = [];
 
-OL.removeFeatureFromAnalysis = function(anlyId, featId, isMaster) {
+OL.removeFeatureFromAnalysis = async function(anlyId, featId, isMaster) {
     if (!confirm("Remove this feature? All scores for this feature will be lost.")) return;
     
     const client = getActiveClient();
@@ -7206,48 +7203,55 @@ OL.removeFeatureFromAnalysis = function(anlyId, featId, isMaster) {
     const anly = source.find(a => a.id === anlyId);
 
     if (anly) {
-        // Remove from features list
-        anly.features = anly.features.filter(f => f.id !== featId);
-        
-        // Cleanup scores in each app object
-        anly.apps.forEach(appObj => {
-            if (appObj.scores) delete appObj.scores[featId];
+        // 🚀 THE SHIELD: Block sync-engine while deleting
+        await OL.updateAndSync(() => {
+            // 1. Remove the feature row
+            anly.features = (anly.features || []).filter(f => f.id !== featId);
+            
+            // 2. Clear out any scores for this feature in mapped apps
+            (anly.apps || []).forEach(appObj => {
+                if (appObj.scores) delete appObj.scores[featId];
+            });
         });
 
-        OL.persist();
+        // 🔄 SURGICAL REFRESH
         OL.openAnalysisMatrix(anlyId, isMaster);
+        console.log("🗑️ Feature removed safely under shield.");
     }
 };
 
 // 4c. ADD CATEGORY TO ANALYSIS OR 
-OL.addAllFeaturesFromCategory = function(anlyId, catName, isMaster) {
+OL.addAllFeaturesFromCategory = async function(anlyId, catName, isMaster) {
     const client = getActiveClient();
     
     // 1. Pull feature definitions from the Master Library based on the category name
     const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
     const catFeatures = masterSource.filter(f => (f.category || "General") === catName);
 
-    // 2. Identify the specific active analysis (Destination)
+    // 2. Identify the destination analysis
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === anlyId);
 
     if (anly && catFeatures.length > 0) {
         if (!confirm(`Import all ${catFeatures.length} standard features from "${catName}" into this matrix?`)) return;
 
-        catFeatures.forEach(feat => {
-            // Deduplicate: Don't add if the feature name already exists in THIS matrix
-            if (!anly.features.some(f => f.name === feat.name)) {
-                anly.features.push({ 
-                    id: 'feat-' + Date.now() + Math.random(), // New unique ID for this instance
-                    name: feat.name,
-                    category: catName,
-                    weight: 10 // Default starting weight
-                });
-            }
+        // 🚀 THE SHIELD: Use the mutator to prevent page reload
+        await OL.updateAndSync(() => {
+            catFeatures.forEach(feat => {
+                // Deduplicate: Don't add if the feature name already exists
+                if (!anly.features.some(f => f.name === feat.name)) {
+                    anly.features.push({ 
+                        id: 'feat-' + Date.now() + Math.random(), 
+                        name: feat.name,
+                        category: catName,
+                        weight: 10 
+                    });
+                }
+            });
         });
 
-        OL.persist();
-        OL.openAnalysisMatrix(anlyId, isMaster); // Refresh the active matrix
+        // 🔄 Surgical Refresh
+        OL.openAnalysisMatrix(anlyId, isMaster); 
         OL.closeModal();
     }
 };
@@ -7785,14 +7789,15 @@ OL.filterFeatureCategoryAssignment = function(anlyId, featName, isMaster, query)
     if (!listEl) return;
 
     const q = (query || "").toLowerCase().trim();
-    
-    // 1. Get Unified Categories (Pillars + Analyses)
     const allCats = OL.getGlobalCategories();
     const masterFunctions = (state.master?.functions || []).map(f => (f.name || f).toString());
 
+    // 1. Prepare Master Source to check for "Import All" availability
+    const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
+
     let html = "";
 
-    // 🚀 2. ALWAYS SHOW "CREATE NEW" IF TEXT EXISTS (Priority #1)
+    // 🚀 2. SHOW "CREATE NEW"
     const exactMatch = allCats.some(c => c.toLowerCase() === q);
     if (q.length > 0 && !exactMatch) {
         html += `
@@ -7806,17 +7811,30 @@ OL.filterFeatureCategoryAssignment = function(anlyId, featName, isMaster, query)
             </div>`;
     }
 
-    // 🚀 3. FILTER EXISTING MATCHES
+    // 🚀 3. FILTER MATCHES & ADD "IMPORT ALL" BUTTON
     const matches = allCats.filter(c => c.toLowerCase().includes(q));
     
     html += matches.map(cat => {
         const isFunction = masterFunctions.includes(cat);
+        
+        // 🔍 Check if this specific category has features in the Master Library
+        const libraryFeats = masterSource.filter(f => (f.category || "General") === cat);
+        const hasLibraryContent = libraryFeats.length > 0;
+
         return `
-            <div class="search-result-item" onmousedown="OL.executeAddFeature('${anlyId}', '${esc(featName)}', ${isMaster}, '${esc(cat)}')">
-                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div onmousedown="OL.executeAddFeature('${anlyId}', '${esc(featName)}', ${isMaster}, '${esc(cat)}')" style="flex:1;">
                     <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
                     ${isFunction ? '<span class="pill tiny accent" style="font-size:8px;">PILLAR</span>' : ''}
                 </div>
+                
+                ${hasLibraryContent ? `
+                    <button class="btn tiny primary" 
+                            style="font-size:9px; background:var(--accent); color:black; font-weight:bold; white-space:nowrap;"
+                            onmousedown="event.stopPropagation(); OL.addAllFeaturesFromCategory('${anlyId}', '${esc(cat)}', ${isMaster})">
+                        + Import All (${libraryFeats.length})
+                    </button>
+                ` : ''}
             </div>`;
     }).join('');
 
