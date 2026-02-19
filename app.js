@@ -6709,11 +6709,6 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
         </div>
     `;
 
-    // Scroll to the matrix area
-    if (!skipScroll) {
-        container.scrollIntoView({ behavior: 'smooth' });
-    }
-
     // Add category button if you want to re-add later
     /* <button class="btn tiny soft" onclick="OL.promptAddCategory('${analysisId}', ${isMaster})">
       + Add Category
