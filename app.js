@@ -1723,7 +1723,7 @@ function renderStatusLegendHTML() {
 
             <div style="text-align: right; opacity: 0.7;">
                 <span class="tiny muted uppercase bold" style="letter-spacing:0.5px; font-size: 0.75em;">
-                    Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap.
+                    Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap
                 </span>
             </div>
         </div>
