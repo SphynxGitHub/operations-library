@@ -11171,7 +11171,9 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     html += groups.map(group => {
-        const steps = (res.steps || []).filter(s => (group.type === 'Trigger' ? s.type === 'Trigger' : s.type !== 'Trigger'));
+        const steps = (parent.steps || [])
+        .filter(s => String(s.type) === String(groupType)) // Trigger vs Action
+        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
         return `
             <div class="stage-container">
@@ -11673,48 +11675,60 @@ OL.handleUniversalDrop = async function(e, sectionId) {
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3 - Moving Steps/Resources) ---
         else if (activeParentId) {
             const parent = OL.getResourceById(activeParentId);
-            if (!parent) return;
+            if (!parent) {
+                console.error("❌ Drop Failed: Could not find parent resource", activeParentId);
+                return;
+            }
+
             if (!parent.steps) parent.steps = [];
 
-            // 1. Dropping a NEW item from the Library/Factory
-            if (itemType === 'factory') {
-                const stepName = e.dataTransfer.getData("stepName");
+            // Case 1: NEW item from Sidebar Factory
+            if (itemType === 'factory' || itemType === 'resource') {
+                const stepName = e.dataTransfer.getData("stepName") || "New Step";
                 const stepType = e.dataTransfer.getData("stepType");
                 
                 const newStep = { 
                     id: 'step-' + Date.now(), 
                     name: stepName, 
-                    type: state.focusedResourceId ? sectionId : (stepType || 'Action'), // L3: Trigger/Action vs L2: default
-                    gridLane: state.focusedWorkflowId ? sectionId : null, // L2: Lane assignment
-                    resourceLinkId: (moveId && !moveId.startsWith('new-')) ? moveId : null 
+                    type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
+                    gridLane: state.focusedWorkflowId ? sectionId : null,
+                    resourceLinkId: moveId // This links the step to the library resource
                 };
                 
                 parent.steps.splice(targetIdx, 0, newStep);
             } 
-            // 2. Moving an EXISTING step within the canvas
-            else {
-                // Find the index if dragIdx failed to pass through DataTransfer
-                const actualDragIdx = !isNaN(dragIdx) ? dragIdx : parent.steps.findIndex(s => String(s.id) === String(moveId));
+            // Case 2: MOVING an existing step
+            else if (itemType === 'step') {
+                // Find the step by ID if dragIdx is unreliable
+                const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
                 
                 if (actualDragIdx > -1) {
                     const [item] = parent.steps.splice(actualDragIdx, 1);
-                    if (item) {
-                        // Determine context: Are we in a Resource (L3) or Workflow (L2)?
-                        if (state.focusedResourceId) {
-                            item.type = sectionId; // Update 'Trigger' vs 'Action'
-                        } else {
-                            item.gridLane = sectionId; // Update the Lane (Role/App)
-                        }
-
-                        // If targetIdx is out of bounds, push to the end
-                        if (targetIdx >= parent.steps.length) parent.steps.push(item);
-                        else parent.steps.splice(targetIdx, 0, item);
+                    
+                    // Context Check: Are we in Procedure (L3) or Workflow (L2)?
+                    if (state.focusedResourceId) {
+                        item.type = sectionId; // 'Trigger' or 'Action'
+                    } else {
+                        item.gridLane = sectionId; // 'Lane ID'
                     }
+
+                    // Insert at targetIdx
+                    const finalIdx = Math.min(targetIdx, parent.steps.length);
+                    parent.steps.splice(finalIdx, 0, item);
                 }
             }
             
-            // 💾 Re-index all steps to maintain order integrity for the DB
+            // 💾 MANDATORY: Clean up orders
             parent.steps.forEach((s, i) => s.mapOrder = i);
+
+            // 🚀 THE PERSISTENCE TRIGGER: 
+            // We ensure the source array reflects the updated parent object
+            const client = getActiveClient();
+            const source = isVault ? state.master.resources : client.projectData.localResources;
+            const parentIdx = source.findIndex(r => String(r.id) === String(activeParentId));
+            if (parentIdx > -1) {
+                source[parentIdx] = { ...parent }; // Break reference to force a deep-save
+            }
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
