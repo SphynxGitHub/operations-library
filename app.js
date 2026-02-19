@@ -6686,6 +6686,8 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 
     if (!anly) return console.error("Analysis not found:", analysisId);
 
+    state.activeMatrixId = analysisId;
+
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
@@ -6780,12 +6782,8 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     `;
 
     // 3. ATOMIC INJECTION
-    const isNewOpen = container.innerHTML === "";
-    container.innerHTML = html;
-
-    if (isNewOpen) {
-        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    container.innerHTML = html; // Inject the table
+    container.scrollIntoView({ behavior: 'smooth' });
 };
 
 OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
@@ -6795,11 +6793,15 @@ OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
 
     if (anly) {
         anly[field] = value.trim();
-        OL.persist();
-        
-        // 🔙 UNDO: Go back to the full refresh that worked
-        renderAnalysisModule(isMaster); 
+        OL.persist(); 
+
+        // 🚀 THE FIX: Don't call renderAnalysisModule(). 
+        // Just call the opener to refresh the math/text in the table.
         OL.openAnalysisMatrix(anlyId, isMaster);
+        
+        // Use a surgical update for the card title in the background
+        const cardTitle = document.querySelector(`.card-title-${anlyId}`);
+        if (cardTitle && field === 'name') cardTitle.innerText = anly[field];
     }
 };
 
