@@ -7766,6 +7766,7 @@ OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "G
 
     // 🔄 Surgical Refresh
     OL.openAnalysisMatrix(anlyId, isMaster);
+    OL.closeModal();
 };
 
 OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
