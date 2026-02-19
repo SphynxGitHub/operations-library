@@ -6693,6 +6693,14 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     
     const topScore = Math.max(...appResults.map(r => r.total), 0);
 
+    const container = document.getElementById("activeAnalysisMatrix");
+    if (container) {
+        // Only scroll if the container was empty/hidden before
+        if (container.innerHTML === "") {
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
     const html = `
         <div class="print-container">
             <div class="analysis-summary-card">
@@ -6803,14 +6811,6 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
             </div>
         </div>
     `;
-
-    const container = document.getElementById("activeAnalysisMatrix");
-    if (container) {
-        // Only scroll if the container was empty/hidden before
-        if (container.innerHTML === "") {
-            container.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
 };
 
 OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
