@@ -6675,6 +6675,7 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 };
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
+    console.log("Top of Open Analysis Matrix");
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === analysisId);
@@ -6771,6 +6772,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 
     container.innerHTML = html;
     container.scrollIntoView({ behavior: 'smooth' });
+    console.log("Bottom of Open Analysis Matrix");
 }
 
 OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
