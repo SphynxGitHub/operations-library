@@ -6672,6 +6672,9 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 };
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
+    const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
+    window.location.hash = `#/${viewPrefix}/${analysisId}`;
+    
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === analysisId);
@@ -6690,9 +6693,6 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     }));
     
     const topScore = Math.max(...appResults.map(r => r.total), 0);
-
-    const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
-    window.location.hash = `#/${viewPrefix}/${analysisId}`;
 
     const html = `
         <div class="print-container">
