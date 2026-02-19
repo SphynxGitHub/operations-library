@@ -8324,7 +8324,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
 
                             ${workflowsInStage.length === 0 ? `
                                 <div class="insert-divider initial" style="position: relative; opacity: 1;" 
-                                     onclick="event.stopPropagation(); OL.focusToolbox()">
+                                     onclick="event.stopPropagation(); OL.focusToolbox('${stage.id}')">
                                     <span>+ Add Workflow</span>
                                 </div>
                             ` : ''}
@@ -8408,46 +8408,58 @@ OL.handleCanvasBackgroundClick = function(event) {
     }
 };
 
-OL.focusToolbox = function() {
+OL.focusToolbox = function(targetStageId = null) {
     console.log("🚀 Universal Sidebar Focus Triggered");
 
-    // ⚓ 1. Capture Current Scroll Position
     const canvas = document.querySelector('.global-scroll-canvas');
-    const scrollX = canvas ? canvas.scrollLeft : 0;
-    const scrollY = canvas ? canvas.scrollTop : 0;
+    let scrollX = canvas ? canvas.scrollLeft : 0;
+    let scrollY = canvas ? canvas.scrollTop : 0;
 
-    // 2. Identify Mode
+    // 🎯 1. CALCULATE CENTERING (If a stage was clicked)
+    if (targetStageId && canvas) {
+        const stageEl = document.querySelector(`[data-stage-id="${targetStageId}"]`);
+        if (stageEl) {
+            // Calculate the middle of the canvas and the middle of the stage
+            const stageRect = stageEl.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            // New X = Current Scroll + (Stage Left relative to Canvas) - (Half Canvas Width) + (Half Stage Width)
+            scrollX = canvas.scrollLeft + (stageRect.left - canvasRect.left) - (canvasRect.width / 2) + (stageRect.width / 2);
+        }
+    }
+
+    // 2. State & Mode Logic
     const mode = state.focusedWorkflowId ? 'resource' : 'workflow';
-
-    // 3. Set State Flags
     state.ui.zenMode = false;
     state.ui.sidebarOpen = true; 
-    
-    // 4. Clear Inspector (Right Side)
     OL.clearInspector();
 
-    // 5. Force Repaint (The part that usually causes the scroll jump)
+    // 3. Force Repaint
     const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault);
 
-    // ⚓ 6. Restore Scroll Position Immediately
+    // ⚓ 4. RESTORE OR CENTER SCROLL
     if (canvas) {
         requestAnimationFrame(() => {
             const reFoundCanvas = document.querySelector('.global-scroll-canvas');
             if (reFoundCanvas) {
-                reFoundCanvas.scrollTo(scrollX, scrollY);
+                reFoundCanvas.scrollTo({
+                    left: scrollX,
+                    top: scrollY,
+                    behavior: targetStageId ? 'smooth' : 'auto' // Smooth if centering, instant if just anchoring
+                });
             }
         });
     }
 
-    // 7. Apply CSS Classes
+    // 5. UI Layout Classes
     const layout = document.querySelector('.three-pane-layout');
     if (layout) {
         layout.classList.remove('zen-mode-active', 'no-sidebar');
         layout.classList.add('toolbox-focused');
     }
 
-    // 8. Focus Search
+    // 6. Focus Search
     setTimeout(() => {
         const id = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
         const el = document.getElementById(id);
