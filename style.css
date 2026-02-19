@@ -74,21 +74,6 @@ body.light-mode {
     transition: all 0.2s ease;
 }
 
-/* 🚀 COMPRESSED STATE: Perfect centering */
-.sidebar.compressed .theme-toggle-btn {
-    justify-content: center;
-    padding: 10px 0;
-}
-
-.sidebar.compressed .theme-label {
-    display: none;
-}
-
-.sidebar.compressed .theme-icon {
-    font-size: 18px; /* Slightly larger to match menu icons */
-    display: block !important; /* Force visibility */
-}
-
 .theme-toggle-btn:hover {
     color: var(--accent);
     background: var(--accent-glow);
