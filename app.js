@@ -6673,6 +6673,9 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     const viewPrefix = isMaster ? 'master-analysis' : 'analysis';
+
+    const newURL = window.location.pathname + window.location.search + `#/${viewPrefix}/${analysisId}`;
+    history.replaceState(null, null, newURL);
     
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
@@ -6681,9 +6684,6 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     if (!anly) return console.error("Analysis not found:", analysisId);
 
     const totalWeight = (anly.features || []).reduce((sum, f) => sum + (parseFloat(f.weight) || 0), 0);
-
-    const container = document.getElementById("activeAnalysisMatrix");
-    if (!container) return;
 
     // 🏆 WINNER CALCULATION: Find the highest score among all apps
     const appResults = (anly.apps || []).map(appObj => ({
@@ -6803,6 +6803,14 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
             </div>
         </div>
     `;
+
+    const container = document.getElementById("activeAnalysisMatrix");
+    if (container) {
+        // Only scroll if the container was empty/hidden before
+        if (container.innerHTML === "") {
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
 };
 
 OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
