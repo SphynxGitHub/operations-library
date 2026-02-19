@@ -1723,7 +1723,7 @@ function renderStatusLegendHTML() {
 
             <div style="text-align: right; opacity: 0.7;">
                 <span class="tiny muted uppercase bold" style="letter-spacing:0.5px; font-size: 0.75em;">
-                    Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap
+                    Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap.
                 </span>
             </div>
         </div>
@@ -6637,7 +6637,6 @@ OL.removeSopStep = function (resId, stepId) {
 
 // 1. RENDER WEIGHTED ANALYSIS MODULE
 window.renderAnalysisModule = function(isVaultMode = false) {
-    console.log("Top of Render Analysis Module")
     OL.registerView(renderAnalysisModule);
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
@@ -6687,11 +6686,9 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
         <div id="activeAnalysisMatrix" class="matrix-container" style="margin-top: 40px;"></div>
     `;
-    console.log("Bottom of Render Analyis Module")
 };
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
-    console.log("Top of Open Analysis Matrix");
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === analysisId);
@@ -6785,10 +6782,13 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
             </div>
         </div>
     `;
+    const isAlreadyOpen = container.innerHTML !== "" && state.activeMatrixId === analysisId;                            
 
     container.innerHTML = html;
-    container.scrollIntoView({ behavior: 'smooth' });
-    console.log("Bottom of Open Analysis Matrix");
+    if (!isAlreadyOpen) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    state.activeMatrixId = analysisId;
 }
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
