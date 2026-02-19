@@ -55,7 +55,7 @@ body.light-mode {
 
 /* Ensure transition is smooth */
 body {
-    transition: background-color 0.3s, color 0.3s ease;
+    transition: background-color 0.3s, color 0.3s;
     background-color: var(--bg);
     color: var(--text);
 }
