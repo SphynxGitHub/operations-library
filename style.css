@@ -2579,7 +2579,6 @@ body.is-visualizer #mainContent {
     width: 100% !important;
     height: calc(100vh); /* Adjust based on your top nav height */
     overflow: hidden;
-    background-color: #050816;
 }
 
 /* When no sidebar is present, let the canvas take the full starting width */
@@ -2618,8 +2617,7 @@ body.is-visualizer #mainContent {
     width: 280px;
     max-width: 40%;
     height: 100vh;
-    background: #0b0f1a;
-    border-right: 1px solid rgba(255,255,255,0.1);
+    border-right: 1px solid rgba(109, 108, 108, 0.1);
 }
 
 .sidebar-resizer {
@@ -2912,7 +2910,6 @@ body.is-visualizer #mainContent {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: #050816; /* Match your background color */
     width: 100%;
 }
 
