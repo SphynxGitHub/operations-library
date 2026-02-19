@@ -102,7 +102,10 @@ OL.sync = function() {
         // 🛡️ THE SHIELD: Block sync if local state is "Dirty" (Saving or Typing)
         const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
         if (state.isSaving || isUserTyping) {
-            console.log("🛡️ Sync Blocked: Preservation Mode Active");
+            const cloudData = doc.data();
+            state.master = cloudData.master;
+            state.clients = cloudData.clients;
+            console.log("🛡️ Data Synced Silently (UI Rebuild Blocked)");
             return; 
         }
 
@@ -7281,58 +7284,60 @@ OL.calculateAnalysisScore = function(app, features) {
 };
 
 OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
-  const client = getActiveClient();
-  const source = isMaster
-    ? state.master.analyses
-    : client?.projectData?.localAnalyses || [];
-  const anly = source.find((a) => a.id === anlyId);
+    OL.updateAndSync(() => { // 🚀 Wrap this!
+        const client = getActiveClient();
+        const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
+        const anly = source.find((a) => a.id === anlyId);
 
-  if (anly) {
-    const appObj = anly.apps.find((a) => a.appId === appId);
-    if (appObj) {
-      if (!appObj.scores) appObj.scores = {};
-      appObj.scores[featId] = parseFloat(value) || 0;
-      OL.persist();
-      OL.openAnalysisMatrix(anlyId, isMaster);
-    }
-  }
-}
+        if (anly) {
+            const appObj = anly.apps.find((a) => a.appId === appId);
+            if (appObj) {
+                if (!appObj.scores) appObj.scores = {};
+                appObj.scores[featId] = parseFloat(value) || 0;
+            }
+        }
+    });
+    // Re-render only the matrix
+    OL.openAnalysisMatrix(anlyId, isMaster); 
+};
 
 OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-    const anly = source.find(a => a.id === anlyId);
+    OL.updateAndSync(() => { // 🚀 Wrap the logic!
+        const client = getActiveClient();
+        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+        const anly = source.find(a => a.id === anlyId);
 
-    if (!anly || !anly.features || anly.features.length === 0) return;
+        if (!anly || !anly.features || anly.features.length === 0) return;
 
-    // 1. Identify categories that actually contain features
-    const activeCats = [...new Set(anly.features.map(f => f.category || "General"))];
-    const catCount = activeCats.length;
-    if (catCount === 0) return;
+        // 1. Identify categories that actually contain features
+        const activeCats = [...new Set(anly.features.map(f => f.category || "General"))];
+        const catCount = activeCats.length;
+        if (catCount === 0) return;
 
-    // 2. Distribute 100% across the categories
-    const weightPerCat = 100 / catCount;
+        // 2. Distribute 100% across the categories
+        const weightPerCat = 100 / catCount;
 
-    anly.features.forEach(f => {
-        const catFeatures = anly.features.filter(feat => (feat.category || "General") === (f.category || "General"));
-        const featCount = catFeatures.length;
-        // Divide the category's slice by the number of features in it
-        f.weight = parseFloat((weightPerCat / featCount).toFixed(2));
+        anly.features.forEach(f => {
+            const catFeatures = anly.features.filter(feat => (feat.category || "General") === (f.category || "General"));
+            const featCount = catFeatures.length;
+            // Divide the category's slice by the number of features in it
+            f.weight = parseFloat((weightPerCat / featCount).toFixed(2));
+        });
+
+        // 3. 🛡️ NORMALIZE: Ensure the sum is exactly 100.00
+        const currentTotal = anly.features.reduce((sum, f) => sum + f.weight, 0);
+        const difference = parseFloat((100 - currentTotal).toFixed(2));
+
+        if (difference !== 0 && anly.features.length > 0) {
+            // Apply the tiny remainder (e.g., 0.01) to the last feature
+            anly.features[anly.features.length - 1].weight = 
+                parseFloat((anly.features[anly.features.length - 1].weight + difference).toFixed(2));
+        }
     });
 
-    // 3. 🛡️ NORMALIZE: Ensure the sum is exactly 100.00
-    const currentTotal = anly.features.reduce((sum, f) => sum + f.weight, 0);
-    const difference = parseFloat((100 - currentTotal).toFixed(2));
-
-    if (difference !== 0 && anly.features.length > 0) {
-        // Apply the tiny remainder (e.g., 0.01) to the last feature
-        anly.features[anly.features.length - 1].weight = 
-            parseFloat((anly.features[anly.features.length - 1].weight + difference).toFixed(2));
-    }
-
-    OL.persist();
-    OL.openAnalysisMatrix(anlyId, isMaster);
-    console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
+        OL.persist();
+        OL.openAnalysisMatrix(anlyId, isMaster);
+        console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
 };
 
 // 6. IMPORT ANALYSIS FROM MASTER VAULT OR PUSH TO MASTER VAULT
