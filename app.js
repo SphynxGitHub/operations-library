@@ -621,7 +621,7 @@ window.handleRoute = function () {
         else if (hash.includes("functions")) renderFunctionsGrid();
         else if (hash.includes("rates")) renderVaultRatesPage();
         else if (hash.includes("analyses")) {
-            const analysisId = pathParts[3]; 
+            const analysisId = pathParts[2]; 
             renderAnalysisModule(true); 
             if (analysisId) OL.openAnalysisMatrix(analysisId, true);
         }
@@ -637,7 +637,7 @@ window.handleRoute = function () {
         else if (hash.includes("#/functions")) renderFunctionsGrid();
         else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
         else if (hash.includes("#/analyze")) {
-            const analysisId = pathParts[2];
+            const analysisId = pathParts[1];
             renderAnalysisModule(false);
             if (analysisId) OL.openAnalysisMatrix(analysisId, false);
         }
