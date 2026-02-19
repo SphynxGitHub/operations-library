@@ -8271,7 +8271,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 </div>
             </div>
         `;
-    }
+    } 
 
     return `
         <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
