@@ -11515,6 +11515,7 @@ OL.prepFactoryDrag = function(e, type) {
 };
 
 OL.handleDragStart = function(e, id, type, index) {
+    OL.closeSidebar();
     // type: 'workflow', 'resource', 'step', or 'factory'
     e.dataTransfer.setData("moveId", id);
     e.dataTransfer.setData("itemType", type);
@@ -11522,7 +11523,6 @@ OL.handleDragStart = function(e, id, type, index) {
     
     e.currentTarget.classList.add('is-dragging-source');
     e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
-    OL.closeSidebar();
 };
 
 OL.handleUniversalDragOver = function(e) {
