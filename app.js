@@ -8323,11 +8323,11 @@ window.renderGlobalCanvas = function(isVaultMode) {
                             `}).join('')}
 
                             ${workflowsInStage.length === 0 ? `
-                            <div class="insert-divider initial" 
-                                style="position: relative; opacity: 1; cursor: pointer;" 
-                                onclick="event.stopPropagation(); OL.addWorkflowToStage('${stage.id}', ${isVaultMode})">
-                                <span>+ Add Workflow</span>
-                            </div>` : ''}
+                                <div class="insert-divider initial" style="position: relative; opacity: 1;" 
+                                     onclick="event.stopPropagation(); OL.focusToolbox()">
+                                    <span>+ Add Workflow</span>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
 
@@ -8340,42 +8340,6 @@ window.renderGlobalCanvas = function(isVaultMode) {
         </div>
     `;
 };
-
-OL.addWorkflowToStage = async function(stageId, isVault) {
-    // ⚓ Capture Scroll
-    const scrollEl = document.querySelector('.global-scroll-canvas');
-    const x = scrollEl ? scrollEl.scrollLeft : 0;
-    const y = scrollEl ? scrollEl.scrollTop : 0;
-
-    const name = prompt("Enter Workflow Name:");
-    if (!name || name.trim() === "") return;
-
-    // 🚀 The Shield
-    await OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const source = isVault ? state.master : (client?.projectData || {});
-        if (!source.workflows) source.workflows = [];
-
-        source.workflows.push({
-            id: "wf-" + Date.now(),
-            stageId: stageId,
-            name: name.trim(),
-            nodes: []
-        });
-    });
-
-    // 🔄 Refresh UI
-    window.renderGlobalVisualizer(isVault);
-
-    // ⚓ Restore Scroll
-    if (scrollEl) {
-        // Use requestAnimationFrame for a smoother "instant" snap
-        requestAnimationFrame(() => {
-            const reFoundEl = document.querySelector('.global-scroll-canvas');
-            if (reFoundEl) reFoundEl.scrollTo(x, y);
-        });
-    }
-}; 
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
     const confirmMsg = "This will add 5 standard stages: Cold Lead, Warm Lead, Onboarding, New Client, Ongoing Client. Proceed?";
@@ -8447,28 +8411,43 @@ OL.handleCanvasBackgroundClick = function(event) {
 OL.focusToolbox = function() {
     console.log("🚀 Universal Sidebar Focus Triggered");
 
-    // 1. Identify Mode
+    // ⚓ 1. Capture Current Scroll Position
+    const canvas = document.querySelector('.global-scroll-canvas');
+    const scrollX = canvas ? canvas.scrollLeft : 0;
+    const scrollY = canvas ? canvas.scrollTop : 0;
+
+    // 2. Identify Mode
     const mode = state.focusedWorkflowId ? 'resource' : 'workflow';
 
-    // 2. Set State Flags
+    // 3. Set State Flags
     state.ui.zenMode = false;
-    state.ui.sidebarOpen = true; // 🚀 NEW FLAG: Forces the drawer to stay open
+    state.ui.sidebarOpen = true; 
     
-    // 3. Clear Inspector (Right Side)
+    // 4. Clear Inspector (Right Side)
     OL.clearInspector();
 
-    // 4. Force Repaint
+    // 5. Force Repaint (The part that usually causes the scroll jump)
     const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault);
 
-    // 5. Apply CSS Classes directly to be safe
+    // ⚓ 6. Restore Scroll Position Immediately
+    if (canvas) {
+        requestAnimationFrame(() => {
+            const reFoundCanvas = document.querySelector('.global-scroll-canvas');
+            if (reFoundCanvas) {
+                reFoundCanvas.scrollTo(scrollX, scrollY);
+            }
+        });
+    }
+
+    // 7. Apply CSS Classes
     const layout = document.querySelector('.three-pane-layout');
     if (layout) {
         layout.classList.remove('zen-mode-active', 'no-sidebar');
         layout.classList.add('toolbox-focused');
     }
 
-    // 6. Focus Search
+    // 8. Focus Search
     setTimeout(() => {
         const id = mode === 'workflow' ? 'workflow-toolbox-search' : 'resource-toolbox-search';
         const el = document.getElementById(id);
