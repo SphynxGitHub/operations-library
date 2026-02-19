@@ -9540,6 +9540,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 
     // 🚀 THE SIDEBAR LOGIC: Only show if we are NOT in zen mode OR if the drawer is explicitly forced open
     const showSidebar = !isZen || state.ui.sidebarOpen;
+    const showInspector = !!(state.focusedWorkflowId || state.focusedResourceId);
+    const inspectorClass = showInspector ? '' : 'no-inspector';
     
     // 🛠️ THE LAYOUT FIX: Remove 'no-sidebar' if state.ui.sidebarOpen is true
     let layoutClass = isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode';
@@ -9555,7 +9557,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     }
 
     container.innerHTML = `
-        <div class="three-pane-layout ${layoutClass} ${zenClass} ${state.ui.sidebarOpen ? 'toolbox-focused' : ''}">
+        <div class="three-pane-layout ${layoutClass} ${zenClass} ${inspectorClass} ${state.ui.sidebarOpen ? 'toolbox-focused' : ''}">
             <aside id="pane-drawer" class="pane-drawer">
                 ${toolboxHtml}
             </aside>
@@ -11817,7 +11819,10 @@ OL.handleUniversalDrop = async function(e, parentId, sectionId) {
                 const wf = resources.find(r => String(r.id) === String(sidebarResId));
                 if (wf) {
                     wf.stageId = sectionId;
-                    // Re-index mapOrder for the lane
+                    
+                    // 🚀 FOCUS ON DROP: This ensures the Inspector opens AFTER the drop
+                    state.focusedWorkflowId = wf.id;
+
                     const siblings = resources.filter(r => String(r.stageId) === String(sectionId) && r.id !== wf.id)
                                               .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                     siblings.splice(targetIdx, 0, wf);
@@ -11871,6 +11876,7 @@ OL.handleUniversalDrop = async function(e, parentId, sectionId) {
     // 🧹 Finalize UI
     state.currentDropIndex = null;
     cleanupUI();
+    OL.closeSidebar();
     renderGlobalVisualizer(isVaultMode);
 };
 
