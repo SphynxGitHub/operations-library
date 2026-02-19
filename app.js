@@ -11670,12 +11670,13 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             }
         }
 
-        // --- BRANCH B: INTERNAL REARRANGE ---
+        // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3 - Moving Steps/Resources) ---
         else if (activeParentId) {
             const parent = OL.getResourceById(activeParentId);
             if (!parent) return;
             if (!parent.steps) parent.steps = [];
 
+            // 1. Dropping a NEW item from the Library/Factory
             if (itemType === 'factory') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
@@ -11683,26 +11684,36 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 const newStep = { 
                     id: 'step-' + Date.now(), 
                     name: stepName, 
-                    type: stepType, 
-                    gridLane: sectionId,
+                    type: state.focusedResourceId ? sectionId : (stepType || 'Action'), // L3: Trigger/Action vs L2: default
+                    gridLane: state.focusedWorkflowId ? sectionId : null, // L2: Lane assignment
                     resourceLinkId: (moveId && !moveId.startsWith('new-')) ? moveId : null 
                 };
                 
                 parent.steps.splice(targetIdx, 0, newStep);
             } 
+            // 2. Moving an EXISTING step within the canvas
             else {
-                // Ensure dragIdx is valid
-                if (dragIdx >= 0 && dragIdx < parent.steps.length) {
-                    const [item] = parent.steps.splice(dragIdx, 1);
+                // Find the index if dragIdx failed to pass through DataTransfer
+                const actualDragIdx = !isNaN(dragIdx) ? dragIdx : parent.steps.findIndex(s => String(s.id) === String(moveId));
+                
+                if (actualDragIdx > -1) {
+                    const [item] = parent.steps.splice(actualDragIdx, 1);
                     if (item) {
-                        if (state.focusedResourceId) item.type = sectionId;
-                        else item.gridLane = sectionId;
-                        
-                        parent.steps.splice(targetIdx, 0, item);
+                        // Determine context: Are we in a Resource (L3) or Workflow (L2)?
+                        if (state.focusedResourceId) {
+                            item.type = sectionId; // Update 'Trigger' vs 'Action'
+                        } else {
+                            item.gridLane = sectionId; // Update the Lane (Role/App)
+                        }
+
+                        // If targetIdx is out of bounds, push to the end
+                        if (targetIdx >= parent.steps.length) parent.steps.push(item);
+                        else parent.steps.splice(targetIdx, 0, item);
                     }
                 }
             }
-            // Re-index mapOrder for persistence
+            
+            // 💾 Re-index all steps to maintain order integrity for the DB
             parent.steps.forEach((s, i) => s.mapOrder = i);
         }
 
