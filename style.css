@@ -2620,6 +2620,10 @@ body.is-visualizer #mainContent {
     border-right: 1px solid rgba(109, 108, 108, 0.1);
 }
 
+.pane-drawer.light-mode {
+    background: rgb(242, 245, 247);
+}
+
 .sidebar-resizer {
     position: absolute;
     top: 0;
