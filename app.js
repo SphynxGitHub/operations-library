@@ -8342,7 +8342,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
 };
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
-    const confirmMsg = "This will add 5 standard stages: Discovery, Evaluation, Implementation, Operations, and Optimization. Proceed?";
+    const confirmMsg = "This will add 5 standard stages: Cold Lead, Warm Lead, Onboarding, New Client, Ongoing Client. Proceed?";
     if (!confirm(confirmMsg)) return;
 
     const stages = [
