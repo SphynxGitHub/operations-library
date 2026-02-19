@@ -5898,101 +5898,6 @@ OL.removeTriggerLink = function(resId, trigIdx, linkIdx) {
     }
 };
 
-// DRAG OVER CANVAS AND DROPZONE HIGHLIGHT //
-
-OL.handleStepDragStart = function(event, index) {
-    // 1. Store the index for the drop handler
-    event.dataTransfer.setData("draggedIndex", index);
-    
-    // 2. Identify the element actually being dragged
-    // currentTarget is the element that has the ondragstart attribute
-    const dragTarget = event.currentTarget;
-    
-    if (dragTarget) {
-        dragTarget.style.opacity = '0.4';
-        // Optional: set the drag image to the whole row
-        event.dataTransfer.setDragImage(dragTarget, 0, 0);
-    } else {
-        // Fallback to finding the closest row if currentTarget fails
-        const fallback = event.target.closest('.dp-manager-row') || event.target.closest('.step-group');
-        if (fallback) fallback.style.opacity = '0.4';
-    }
-};
-
-OL.handleDragOver = function(event) {
-    event.preventDefault(); 
-    
-    const container = event.currentTarget; // The list or canvas container
-    container.classList.add('hovered'); // 🚀 Add blue "landing strip" highlight
-
-    // Identify the card currently under the mouse
-    const targetCard = event.target.closest('.vis-node');
-    
-    // Only show the ghost if we aren't hovering over the item we are dragging
-    if (targetCard && !targetCard.classList.contains('is-dragging-source')) {
-        let placeholder = document.querySelector('.drop-placeholder');
-        if (!placeholder) {
-            placeholder = document.createElement('div');
-            placeholder.className = 'drop-placeholder';
-            // Match the size of your vis-nodes
-            placeholder.style.width = targetCard.offsetWidth + 'px';
-            placeholder.style.height = '4px'; // Thin line for internal reordering
-            placeholder.style.margin = '10px 0';
-        }
-
-        // Determine if we should place the ghost above or below the target card
-        const rect = targetCard.getBoundingClientRect();
-        const midpoint = rect.top + rect.height / 2;
-        
-        if (event.clientY < midpoint) {
-            container.insertBefore(placeholder, targetCard);
-        } else {
-            container.insertBefore(placeholder, targetCard.nextSibling);
-        }
-    }
-};
-
-OL.handleDragLeave = function(event) {
-    const container = event.currentTarget;
-    // Only clean up if we actually exit the container
-    if (!container.contains(event.relatedTarget)) {
-        container.classList.remove('hovered');
-        const placeholder = document.querySelector('.drop-placeholder');
-        if (placeholder) placeholder.remove();
-    }
-};
-
-OL.handleStepDrop = function(event, targetIndex, resId) {
-    event.preventDefault();
-
-    // 🚀 CLEANUP: Remove blue highlights and ghosts
-    const container = event.currentTarget;
-    if (container) container.classList.remove('hovered');
-    const placeholder = document.querySelector('.drop-placeholder');
-    if (placeholder) placeholder.remove();
-
-    // ... [Rest of your existing swap logic] ...
-    
-    const draggedIndex = parseInt(event.dataTransfer.getData("draggedIndex"));
-    if (draggedIndex === targetIndex) return;
-
-    const res = OL.getResourceById(resId);
-    const steps = res.steps;
-
-    const [movedItem] = steps.splice(draggedIndex, 1);
-    steps.splice(targetIndex, 0, movedItem);
-
-    OL.persist();
-    
-    // Refresh correct view
-    if (document.getElementById('vis-links-layer')) {
-        OL.renderVisualizer(resId);
-    } else {
-        const listEl = document.getElementById('sop-step-list');
-        if (listEl) listEl.innerHTML = renderSopStepList(res);
-    }
-};
-
 // HANDLE OUTCOMES
 state.expandedSteps = state.expandedSteps || new Set();
 
@@ -11542,14 +11447,106 @@ OL.filterToolbox = function(query) {
 // Ensure both levels call the same logic
 OL.filterResourceToolbox = OL.filterToolbox;
 
-// --- DRAG & DROP ORCHESTRATION ---
+// --- DRAG & DROP ORCHESTRATION --DRAG OVER CANVAS AND DROPZONE HIGHLIGHT //
 
 // 1. Source: When you start dragging a Workflow or Resource from the sidebar
-OL.handleWorkflowDragStart = function(e, resId, resName, index=null) {
-    e.dataTransfer.setData("resId", resId);
-    e.dataTransfer.setData("resName", resName);
-    e.target.style.opacity = "0.5";
-    console.log(`Dragging Source: ${resName}`);
+/*OL.handleWorkflowDragStart = function(e, wfId, index) {
+    e.dataTransfer.setData("moveNodeId", wfId); // Key for "Rearrange" mode
+    e.dataTransfer.setData("dragIdx", index);
+    e.currentTarget.classList.add('is-dragging-source');
+    
+    // Set a ghost image so it feels like you're carrying the card
+    e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+};
+
+// 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
+OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+    
+    e.dataTransfer.setData("moveStepId", stepId);
+    e.dataTransfer.setData("parentResId", parentResId);
+    e.dataTransfer.setData("draggedIndex", index);
+    e.target.style.opacity = "0.4";
+};
+
+OL.handleNodeMoveStart = function(e, id, index) {
+    e.dataTransfer.setData("moveNodeId", id);
+    e.dataTransfer.setData("draggedIndex", index);
+    e.target.classList.add('dragging');
+    setTimeout(() => e.target.classList.add('dragging'), 0);
+};
+
+OL.handleStepDragStart = function(event, index) {
+    // 1. Store the index for the drop handler
+    event.dataTransfer.setData("draggedIndex", index);
+    
+    // 2. Identify the element actually being dragged
+    // currentTarget is the element that has the ondragstart attribute
+    const dragTarget = event.currentTarget;
+    
+    if (dragTarget) {
+        dragTarget.style.opacity = '0.4';
+        // Optional: set the drag image to the whole row
+        event.dataTransfer.setDragImage(dragTarget, 0, 0);
+    } else {
+        // Fallback to finding the closest row if currentTarget fails
+        const fallback = event.target.closest('.dp-manager-row') || event.target.closest('.step-group');
+        if (fallback) fallback.style.opacity = '0.4';
+    }
+};
+
+// 1. Capture the Drag for Triggers
+OL.handleModularTriggerDrag = function(event) {
+    const verb = document.getElementById('trigger-verb').value;
+    const obj = document.getElementById('trigger-object').value;
+    event.dataTransfer.setData("stepType", "Trigger");
+    event.dataTransfer.setData("stepName", `${obj} ${verb}`);
+    event.dataTransfer.setData("objectContext", obj);
+    // Visual feedback for drag
+    event.target.classList.add('is-dragging-source');
+};
+
+// 2. Capture the Drag for Actions
+OL.handleModularAtomicDrag = function(event) {
+    const verb = document.getElementById('builder-verb').value;
+    const obj = document.getElementById('builder-object').value;
+    event.dataTransfer.setData("stepType", "Action");
+    event.dataTransfer.setData("stepName", `${verb} ${obj}`);
+    event.dataTransfer.setData("objectContext", obj);
+    event.target.classList.add('is-dragging-source');
+};
+
+OL.handleDragOver = function(event) {
+    event.preventDefault(); 
+    
+    const container = event.currentTarget; // The list or canvas container
+    container.classList.add('hovered'); // 🚀 Add blue "landing strip" highlight
+
+    // Identify the card currently under the mouse
+    const targetCard = event.target.closest('.vis-node');
+    
+    // Only show the ghost if we aren't hovering over the item we are dragging
+    if (targetCard && !targetCard.classList.contains('is-dragging-source')) {
+        let placeholder = document.querySelector('.drop-placeholder');
+        if (!placeholder) {
+            placeholder = document.createElement('div');
+            placeholder.className = 'drop-placeholder';
+            // Match the size of your vis-nodes
+            placeholder.style.width = targetCard.offsetWidth + 'px';
+            placeholder.style.height = '4px'; // Thin line for internal reordering
+            placeholder.style.margin = '10px 0';
+        }
+
+        // Determine if we should place the ghost above or below the target card
+        const rect = targetCard.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        
+        if (event.clientY < midpoint) {
+            container.insertBefore(placeholder, targetCard);
+        } else {
+            container.insertBefore(placeholder, targetCard.nextSibling);
+        }
+    }
 };
 
 // 2. Destination: Required to allow the canvas to receive the drop
@@ -11596,28 +11593,6 @@ OL.handleCanvasDragOver = function(e) {
         // We are at the bottom
         state.currentDropIndex = cards.length;
     }
-};
-
-// 3. Source: Handling movement of existing nodes on the grid (Level 2/3)
-OL.handleStepMoveStart = function(e, stepId, parentResId, index) {
-    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
-    
-    e.dataTransfer.setData("moveStepId", stepId);
-    e.dataTransfer.setData("parentResId", parentResId);
-    e.dataTransfer.setData("draggedIndex", index);
-    e.target.style.opacity = "0.4";
-};
-
-OL.handleNodeMoveStart = function(e, id, index) {
-    e.dataTransfer.setData("moveNodeId", id);
-    e.dataTransfer.setData("draggedIndex", index);
-    e.target.classList.add('dragging');
-    setTimeout(() => e.target.classList.add('dragging'), 0);
-};
-
-const cleanupUI = () => {
-    document.querySelectorAll('.drop-placeholder').forEach(el => el.remove());
-    document.querySelectorAll('.stage-workflow-stream').forEach(el => el.style.background = "");
 };
 
 OL.handleNodeRearrange = function(e, sectionId, targetIndex, forceId = null) {
@@ -11693,25 +11668,166 @@ OL.handleNodeRearrange = function(e, sectionId, targetIndex, forceId = null) {
     renderGlobalVisualizer(isVaultMode);
 };
 
-// 1. Capture the Drag for Triggers
-OL.handleModularTriggerDrag = function(event) {
-    const verb = document.getElementById('trigger-verb').value;
-    const obj = document.getElementById('trigger-object').value;
-    event.dataTransfer.setData("stepType", "Trigger");
-    event.dataTransfer.setData("stepName", `${obj} ${verb}`);
-    event.dataTransfer.setData("objectContext", obj);
-    // Visual feedback for drag
-    event.target.classList.add('is-dragging-source');
+OL.handleDragLeave = function(event) {
+    const container = event.currentTarget;
+    // Only clean up if we actually exit the container
+    if (!container.contains(event.relatedTarget)) {
+        container.classList.remove('hovered');
+        const placeholder = document.querySelector('.drop-placeholder');
+        if (placeholder) placeholder.remove();
+    }
 };
 
-// 2. Capture the Drag for Actions
-OL.handleModularAtomicDrag = function(event) {
-    const verb = document.getElementById('builder-verb').value;
-    const obj = document.getElementById('builder-object').value;
-    event.dataTransfer.setData("stepType", "Action");
-    event.dataTransfer.setData("stepName", `${verb} ${obj}`);
-    event.dataTransfer.setData("objectContext", obj);
-    event.target.classList.add('is-dragging-source');
+OL.handleStepDrop = function(event, targetIndex, resId) {
+    event.preventDefault();
+
+    // 🚀 CLEANUP: Remove blue highlights and ghosts
+    const container = event.currentTarget;
+    if (container) container.classList.remove('hovered');
+    const placeholder = document.querySelector('.drop-placeholder');
+    if (placeholder) placeholder.remove();
+
+    // ... [Rest of your existing swap logic] ...
+    
+    const draggedIndex = parseInt(event.dataTransfer.getData("draggedIndex"));
+    if (draggedIndex === targetIndex) return;
+
+    const res = OL.getResourceById(resId);
+    const steps = res.steps;
+
+    const [movedItem] = steps.splice(draggedIndex, 1);
+    steps.splice(targetIndex, 0, movedItem);
+
+    OL.persist();
+    
+    // Refresh correct view
+    if (document.getElementById('vis-links-layer')) {
+        OL.renderVisualizer(resId);
+    } else {
+        const listEl = document.getElementById('sop-step-list');
+        if (listEl) listEl.innerHTML = renderSopStepList(res);
+    }
+};
+
+*/
+
+// --- UNIVERSAL FEEDBACK HANDLERS ---
+
+OL.handleDragStart = function(e, id, type, index) {
+    // type: 'workflow', 'resource', 'step', or 'factory'
+    e.dataTransfer.setData("moveId", id);
+    e.dataTransfer.setData("itemType", type);
+    e.dataTransfer.setData("dragIdx", index);
+    
+    e.currentTarget.classList.add('is-dragging-source');
+    e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+};
+
+OL.handleUniversalDragOver = function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    
+    const container = e.currentTarget;
+    container.classList.add('hovered');
+
+    // 1. Find or Create the Ghost Placeholder
+    let ghost = document.querySelector('.drop-placeholder');
+    if (!ghost) {
+        ghost = document.createElement('div');
+        ghost.className = 'drop-placeholder';
+    }
+
+    // 2. Identify all valid cards in this specific container
+    const cards = [...container.querySelectorAll('.workflow-card, .vis-node, .workflow-block-card')]
+                  .filter(c => !c.classList.contains('is-dragging-source'));
+
+    // 3. Determine insertion point
+    const afterElement = cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = e.clientY - (box.top + box.height / 2);
+        if (offset < 0 && offset > closest.offset) return { offset, element: child };
+        return closest;
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+    // 4. Position the ghost and save index
+    if (afterElement) {
+        container.insertBefore(ghost, afterElement);
+        state.currentDropIndex = cards.indexOf(afterElement);
+    } else {
+        container.appendChild(ghost);
+        state.currentDropIndex = cards.length;
+    }
+};
+
+OL.handleUniversalDragLeave = function(e) {
+    const container = e.currentTarget;
+    if (!container.contains(e.relatedTarget)) {
+        container.classList.remove('hovered');
+        const ghost = document.querySelector('.drop-placeholder');
+        if (ghost) ghost.remove();
+    }
+};
+
+OL.handleUniversalDrop = async function(e, sectionId) {
+    e.preventDefault();
+    const moveId = e.dataTransfer.getData("moveId");
+    const itemType = e.dataTransfer.getData("itemType"); // 'workflow', 'step', 'factory'
+    const dragIdx = parseInt(e.dataTransfer.getData("dragIdx"));
+    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
+    const isVault = location.hash.includes('vault');
+
+    // 🧹 Clean UI
+    document.querySelectorAll('.hovered').forEach(el => el.classList.remove('hovered'));
+    document.querySelectorAll('.drop-placeholder').forEach(el => el.remove());
+
+    await OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const source = isVault ? state.master.resources : client.projectData.localResources;
+        const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
+
+        // --- BRANCH A: GLOBAL REARRANGE (Tier 1) ---
+        if (!activeParentId && itemType === 'workflow') {
+            const wf = source.find(r => String(r.id) === String(moveId));
+            if (wf) {
+                wf.stageId = sectionId;
+                let siblings = source.filter(r => String(r.stageId) === String(sectionId) && r.id !== wf.id)
+                                     .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+                siblings.splice(targetIdx, 0, wf);
+                siblings.forEach((r, i) => r.mapOrder = i);
+            }
+        }
+
+        // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
+        else if (activeParentId) {
+            const parent = OL.getResourceById(activeParentId);
+            if (!parent.steps) parent.steps = [];
+
+            // 1. Handle NEW items from Sidebar
+            if (itemType === 'factory') {
+                const stepName = e.dataTransfer.getData("stepName");
+                const stepType = e.dataTransfer.getData("stepType");
+                parent.steps.splice(targetIdx, 0, { id: uid(), name: stepName, type: stepType, gridLane: sectionId });
+            } 
+            // 2. Handle MOVING existing items
+            else {
+                const [item] = parent.steps.splice(dragIdx, 1);
+                if (item) {
+                    item.gridLane = sectionId; // Update lane context
+                    parent.steps.splice(targetIdx, 0, item);
+                }
+            }
+            parent.steps.forEach((s, i) => s.mapOrder = i);
+        }
+    });
+
+    state.currentDropIndex = null;
+    OL.closeSidebar(); // Triggers the 'Elastic Scroll' bounce-back
+    window.renderGlobalVisualizer(isVault);
+};
+
+const cleanupUI = () => {
+    document.querySelectorAll('.drop-placeholder').forEach(el => el.remove());
+    document.querySelectorAll('.stage-workflow-stream').forEach(el => el.style.background = "");
 };
 
 // 3. The "Smart Prompt" Logic (Run this inside your handleCanvasDrop function)
