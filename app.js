@@ -1718,7 +1718,11 @@ function renderStatusLegendHTML() {
                 <span class="status-dot available"></span>
                 <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">Available</span>
             </div>
-            <div style="display:flex; align-items:center; gap:6px;">Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap.</div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                 <span class="tiny muted uppercase bold" style="letter-spacing:0.5px;">
+                 Right click pill to cycle. Left click pill to jump. Ctrl/Cmd click pill to unmap.
+                 </span>
+            </div>
         </div>
     `;
 }
