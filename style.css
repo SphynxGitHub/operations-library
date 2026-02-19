@@ -473,6 +473,7 @@ body:has(.sidebar.collapsed) #mainContent {
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 101;
     transition: color 0.2s, transform 0.2s;
 }
 
@@ -3883,13 +3884,4 @@ ARROWS
 .wf-global-node-wrapper:hover .insert-divider.vertical,
 .wf-global-node:hover .card-delete-btn {
     opacity: 1 !important;
-}
-
-/* 5. Force 'x' visibility (Ensures it's not hidden by global styles) */
-.card-delete-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 101;
 }
