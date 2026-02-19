@@ -636,10 +636,16 @@ window.handleRoute = function () {
         else if (hash.includes("#/applications")) renderAppsGrid();
         else if (hash.includes("#/functions")) renderFunctionsGrid();
         else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
-        else if (hash.includes("#/analyze")) {
-            const analysisId = pathParts[1];
+        else if (hash.includes("/analyze")) {
+            if (!client) {
+                main.innerHTML = `<div class="empty-hint" style="padding:100px;">Project data loading...</div>`;
+                return;
+            }
             renderAnalysisModule(false);
-            if (analysisId) OL.openAnalysisMatrix(analysisId, false);
+            // If hash is #/analyze/123, parts[1] is the ID. If just #/analyze, parts[1] is undefined.
+            if (parts[1]) {
+                OL.openAnalysisMatrix(parts[1], false);
+            }
         }
         else if (hash.includes("#/client-tasks")) renderChecklistModule();
         else if (hash.includes("#/team")) renderTeamManager();
