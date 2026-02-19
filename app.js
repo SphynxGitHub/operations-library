@@ -436,9 +436,8 @@ window.buildLayout = function () {
         <div class="card-section" style="margin-top: 20px; border-top: 1px solid var(--line); padding-top: 20px;">
             <label class="modal-section-label">🎨 APPEARANCE</label>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                <span class="tiny muted">Switch between Light and Dark mode</span>
                 <button class="btn soft tiny" onclick="OL.toggleTheme()" style="display: flex; align-items: center; gap: 8px; min-width: 100px; justify-content: center;">
-                    ${isLight ? '🌙 Dark Mode' : '☀️ Light Mode'}
+                    ${isLight ? '🌙 Switch to Dark Mode' : '☀️ Switch to Light Mode'}
                 </button>
             </div>
         </div>
