@@ -6623,6 +6623,7 @@ OL.removeSopStep = function (resId, stepId) {
 
 // 1. RENDER WEIGHTED ANALYSIS MODULE
 window.renderAnalysisModule = function(isVaultMode = false) {
+    console.log("Top of Render Analysis Module")
     OL.registerView(renderAnalysisModule);
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
@@ -6672,6 +6673,7 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
         <div id="activeAnalysisMatrix" class="matrix-container" style="margin-top: 40px;"></div>
     `;
+    console.log("Bottom of Render Analyis Module")
 };
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
