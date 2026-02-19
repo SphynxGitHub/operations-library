@@ -248,7 +248,8 @@ body {
 .sidebar.collapsed span, 
 .sidebar.collapsed .client-info, 
 .sidebar.collapsed .menu-category-label,
-.sidebar.collapsed .client-meta {
+.sidebar.collapsed .client-meta,
+.sidebar.collapsed .theme-label {
     display: none;
 }
 
