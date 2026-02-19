@@ -11522,6 +11522,7 @@ OL.handleDragStart = function(e, id, type, index) {
     
     e.currentTarget.classList.add('is-dragging-source');
     e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+    OL.closeSidebar();
 };
 
 OL.handleUniversalDragOver = function(e) {
@@ -11625,61 +11626,106 @@ OL.handleUniversalDragLeave = function(e) {
     }
 };
 
+// --- THE MASTER DROP HANDLER ---
 OL.handleUniversalDrop = async function(e, sectionId) {
     e.preventDefault();
+    
+    // 1. Data Extraction
     const moveId = e.dataTransfer.getData("moveId");
-    const itemType = e.dataTransfer.getData("itemType"); // 'workflow', 'step', 'factory'
+    const itemType = e.dataTransfer.getData("itemType"); // 'workflow', 'step', 'factory', or 'stage'
     const dragIdx = parseInt(e.dataTransfer.getData("dragIdx"));
-    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
     const isVault = location.hash.includes('vault');
+    
+    // Determine the drop index from our global state (set during DragOver)
+    // Fallback to 999 (end of list) if the placeholder wasn't active
+    const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
 
-    // 🧹 Clean UI
+    // 2. 🧹 Immediate UI Cleanup
+    // Remove ghosts and highlights BEFORE the heavy data lifting starts
     document.querySelectorAll('.hovered').forEach(el => el.classList.remove('hovered'));
     document.querySelectorAll('.drop-placeholder').forEach(el => el.remove());
 
+    // 3. 🛡️ Data Mutation Block
     await OL.updateAndSync(() => {
         const client = getActiveClient();
         const source = isVault ? state.master.resources : client.projectData.localResources;
         const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
 
-        // --- BRANCH A: GLOBAL REARRANGE (Tier 1) ---
+        // --- BRANCH A: GLOBAL REARRANGE (Tier 1 - Moving Workflows between Stages) ---
         if (!activeParentId && itemType === 'workflow') {
             const wf = source.find(r => String(r.id) === String(moveId));
             if (wf) {
+                // Update the stage assignment
                 wf.stageId = sectionId;
-                let siblings = source.filter(r => String(r.stageId) === String(sectionId) && r.id !== wf.id)
+                
+                // Re-sort the target stage's items
+                let siblings = source.filter(r => String(r.stageId) === String(sectionId) && String(r.id) !== String(moveId))
                                      .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+                
+                // Insert at the visual gap
                 siblings.splice(targetIdx, 0, wf);
+                
+                // Normalize mapOrder to integers (0, 1, 2...)
                 siblings.forEach((r, i) => r.mapOrder = i);
             }
         }
 
-        // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
+        // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3 - Moving Steps/Resources) ---
         else if (activeParentId) {
             const parent = OL.getResourceById(activeParentId);
+            if (!parent) return;
             if (!parent.steps) parent.steps = [];
 
-            // 1. Handle NEW items from Sidebar
+            // Case 1: Dropping a NEW item from the Library/Factory
             if (itemType === 'factory') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
-                parent.steps.splice(targetIdx, 0, { id: uid(), name: stepName, type: stepType, gridLane: sectionId });
+                
+                const newStep = { 
+                    id: 'step-' + Date.now(), 
+                    name: stepName, 
+                    type: stepType, 
+                    gridLane: sectionId, // For Workflow Lanes
+                    resourceLinkId: moveId.startsWith('new-') ? null : moveId // If dragging existing resource
+                };
+                
+                parent.steps.splice(targetIdx, 0, newStep);
             } 
-            // 2. Handle MOVING existing items
+            // Case 2: Moving an EXISTING step within the canvas
             else {
                 const [item] = parent.steps.splice(dragIdx, 1);
                 if (item) {
-                    item.gridLane = sectionId; // Update lane context
+                    // Update column context (Lanes for L2, Trigger/Action for L3)
+                    if (state.focusedResourceId) {
+                        item.type = sectionId; // 'Trigger' or 'Action'
+                    } else {
+                        item.gridLane = sectionId; // Lane ID
+                    }
                     parent.steps.splice(targetIdx, 0, item);
                 }
             }
+            
+            // Re-index all steps to maintain order integrity
             parent.steps.forEach((s, i) => s.mapOrder = i);
         }
     });
 
+    // 4. 🚀 THE SYNCED REFRESH
+    // Reset drop state before rendering
     state.currentDropIndex = null;
-    OL.closeSidebar(); // Triggers the 'Elastic Scroll' bounce-back
-    window.renderGlobalVisualizer(isVault);
+    
+    // Force the DOM to rebuild with the new data
+    if (typeof window.renderGlobalVisualizer === 'function') {
+        window.renderGlobalVisualizer(isVault);
+    }
+
+    // 5. 🏠 ELASTIC RECOVERY
+    // Close sidebar and bounce the scroll back to the original view
+    if (typeof OL.closeSidebar === 'function') {
+        OL.closeSidebar();
+    }
+    
+    console.log(`✅ Drop Successful: ${itemType} moved to ${sectionId} at index ${targetIdx}`);
 };
 
 const cleanupUI = () => {
