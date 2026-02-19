@@ -8412,6 +8412,10 @@ OL.focusToolbox = function(targetStageId = null) {
     console.log("🚀 Universal Sidebar Focus Triggered");
 
     const canvas = document.querySelector('.global-scroll-canvas');
+    if (canvas) {
+        // 💾 SAVE THE "HOME" POSITION before we move anything
+        state.ui.lastScrollPos = { x: canvas.scrollLeft, y: canvas.scrollTop };
+    }
     let scrollX = canvas ? canvas.scrollLeft : 0;
     let scrollY = canvas ? canvas.scrollTop : 0;
 
