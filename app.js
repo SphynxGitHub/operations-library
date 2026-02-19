@@ -8260,6 +8260,19 @@ window.renderGlobalCanvas = function(isVaultMode) {
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
+    if (stages.length === 0) {
+        return `
+            <div class="global-macro-map empty-state" style="display:flex; align-items:center; justify-content:center; height:100vh;">
+                <div class="text-center">
+                    <h2 class="muted">No Stages Defined</h2>
+                    <button class="btn primary large" onclick="OL.addLifecycleStageAt(0, ${isVaultMode})">
+                        + Add Your First Lifecycle Stage
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     return `
         <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
              style="display: flex; padding: 60px; align-items: flex-start; min-height: 100vh;">
