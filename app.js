@@ -6777,23 +6777,25 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     console.log("Bottom of Open Analysis Matrix");
 }
 
-OL.updateAnalysisMeta = function(anlyId, field, value, isMaster) {
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-    const anly = source.find(a => a.id === anlyId);
+OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
+    // 🚀 THE SHIELD
+    await OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+        const anly = source.find(a => a.id === anlyId);
 
-    if (anly) {
-        anly[field] = value.trim();
-        OL.persist(); 
-
-        // 🚀 THE FIX: Update only the Matrix
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        
-        // 🚀 AND update the card title without redrawing the whole grid
-        const cardTitle = document.querySelector(`.card-title-${anlyId}`);
-        if (cardTitle && field === 'name') {
-            cardTitle.innerText = anly.name;
+        if (anly) {
+            anly[field] = value.trim();
         }
+    });
+
+    // 🔄 Surgical Refresh of the Matrix only
+    OL.openAnalysisMatrix(anlyId, isMaster);
+    
+    // Manual sync for the background card title if the name changed
+    if (field === 'name') {
+        const cardTitle = document.querySelector(`.card-title-${anlyId}`);
+        if (cardTitle) cardTitle.innerText = value.trim();
     }
 };
 
@@ -7046,22 +7048,23 @@ OL.addAppToAnalysis = function (anlyId, isMaster) {
     openModal(html);
 };
 
-OL.executeAddAppToAnalysis = function (anlyId, appId, isMaster) {
-    const source = isMaster
-        ? state.master.analyses
-        : getActiveClient()?.projectData?.localAnalyses || [];
-    const anly = source.find((a) => a.id === anlyId);
+OL.executeAddAppToAnalysis = async function (anlyId, appId, isMaster) {
+    // 🚀 THE SHIELD
+    await OL.updateAndSync(() => {
+        const source = isMaster ? state.master.analyses : getActiveClient()?.projectData?.localAnalyses || [];
+        const anly = source.find((a) => a.id === anlyId);
 
-    if (anly) {
-        if (!anly.apps) anly.apps = [];
-        if (!anly.apps.some((a) => a.appId === appId)) {
-            anly.apps.push({ appId, scores: {} });
-            OL.persist();
+        if (anly) {
+            if (!anly.apps) anly.apps = [];
+            if (!anly.apps.some((a) => a.appId === appId)) {
+                anly.apps.push({ appId, scores: {} });
+            }
         }
-        
-        OL.closeModal();
-        OL.openAnalysisMatrix(anlyId, isMaster); 
-    }
+    });
+
+    OL.closeModal();
+    // 🔄 Surgical Refresh
+    OL.openAnalysisMatrix(anlyId, isMaster); 
 };
 
 OL.removeAppFromAnalysis = function(anlyId, appId, isMaster) {
@@ -7740,26 +7743,25 @@ OL.filterContentManager = function(query) {
 };
 
 // 4. MANAGE ADDING / EDITING FEATURES
-OL.executeAddFeature = function (anlyId, featName, isMaster, category = "General") {
-    const source = isMaster
-        ? state.master.analyses
-        : getActiveClient()?.projectData?.localAnalyses || [];
-    const anly = source.find((a) => a.id === anlyId);
+OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General") {
+    // 🚀 THE SHIELD
+    await OL.updateAndSync(() => {
+        const source = isMaster ? state.master.analyses : getActiveClient()?.projectData?.localAnalyses || [];
+        const anly = source.find((a) => a.id === anlyId);
 
-    if (anly) {
-        const newFeat = {
-            id: "feat-" + Date.now(),
-            name: featName,
-            category: category,
-            weight: 10
-        };
-        
-        anly.features.push(newFeat);
-        OL.persist();
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        // Note: We don't necessarily need to close the modal if you want to add multiple features
-        // but typically you'd call OL.closeModal(); here.
-    }
+        if (anly) {
+            const newFeat = {
+                id: "feat-" + Date.now(),
+                name: featName,
+                category: category,
+                weight: 10
+            };
+            anly.features.push(newFeat);
+        }
+    });
+
+    // 🔄 Surgical Refresh
+    OL.openAnalysisMatrix(anlyId, isMaster);
 };
 
 OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
