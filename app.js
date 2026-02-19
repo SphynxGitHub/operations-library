@@ -9600,11 +9600,9 @@ window.renderLevel1Canvas = function(sourceData, isVaultMode) {
     stages.sort((a, b) => (a.order || 0) - (b.order || 0));
 
     return stages.map((stage, i) => `
-        <div class="stage-container" 
-             draggable="true" 
-             ondragstart="OL.handleDragStart(event, '${stage.id}', 'stage', ${i})">
-            
-            <div class="stage-header-row" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="stage-container"            
+            <div class="stage-header-row" draggable="true" style="display:flex; justify-content:space-between; align-items:center;">
+             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${stage.id}', 'stage', ${i})">             
                 <div style="display:flex; align-items:center; gap:8px; flex:1;">
                     <span class="muted" style="cursor: grab; font-size: 12px;">⋮⋮</span>
                     <span class="stage-number">${i+1}</span>
@@ -9735,7 +9733,7 @@ window.renderLevel2Canvas = function(workflowId) {
                     <div class="workflow-block-card l2-resource-node ${isInScope ? 'is-priced' : ''} ${isInspecting ? 'is-inspecting' : ''}" 
                         id="l2-node-${step.id}"
                         draggable="true"
-                        ondragstart="OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
+                        ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
                         onclick="event.stopPropagation(); OL.loadInspector('${techAsset.id}', '${workflowId}')"
                         ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${techAsset.id}')"
                         style="cursor: pointer; ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
@@ -9848,7 +9846,7 @@ window.renderLevel1SidebarContent = function(allResources) {
                 <div class="draggable-workflow-item" 
                      data-name="${res.name.toLowerCase()}" 
                      draggable="true" 
-                     ondragstart="OL.handleDragStart(event, '${res.id}', 'workflow', 0)">
+                     ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${res.id}', 'workflow', 0)">
                     <span>⚙️</span> 
                     <span style="flex:1;">${esc(res.name)}</span>
                     <button class="btn tiny soft clone-btn" 
@@ -9924,7 +9922,7 @@ window.renderLevel2SidebarContent = function(allResources) {
                     <div class="draggable-workflow-item" 
                          data-name="${res.name.toLowerCase()}" 
                          draggable="true" 
-                         ondragstart="OL.handleDragStart(event, '${res.id}', 'factory', 0)">
+                         ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${res.id}', 'factory', 0)">
                         <span style="font-size: 1.2em; width: 24px; text-align: center;">${icon}</span>
                         <span style="flex: 1;">${esc(res.name)}</span>
                     </div>
@@ -10058,7 +10056,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
                 
                 <div class="draggable-factory-item trigger" draggable="true" 
                      style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center; cursor: grab;" 
-                     ondragstart="OL.prepFactoryDrag(event, 'Trigger')">
+                     ondragstart="event.stopPropagation(); OL.prepFactoryDrag(event, 'Trigger')">
                      ⚡ DRAG NEW TRIGGER
                 </div>
             </div>
@@ -10070,7 +10068,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
                 
                 <div class="draggable-factory-item action" draggable="true" 
                     style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center; cursor: grab;" 
-                    ondragstart="OL.prepFactoryDrag(event, 'Action')">
+                    ondragstart="event.stopPropagation();OL.prepFactoryDrag(event, 'Action')">
                     🚀 DRAG NEW ACTION
                 </div>
             </div>
@@ -10599,7 +10597,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                         <div class="inspector-step-row vis-node" 
                              draggable="true"
                              data-step-id="${step.id}"
-                             ondragstart="OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
+                             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
                              style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border: 1px solid rgba(255,255,255,0.05); cursor:default;">
                             
                             <span class="muted" style="cursor:grab; font-size:10px;">⋮⋮</span>
@@ -11111,7 +11109,7 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
              id="l1-node-${res.id}"
              draggable="true" 
              onmousedown="event.stopPropagation(); OL.loadInspector('${res.id}')"
-             ondragstart="OL.handleDragStart(event, '${res.id}', 'workflow', ${idx})"
+             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${res.id}', 'workflow', ${idx})"
              ondblclick="OL.drillDownIntoWorkflow('${res.id}')">
             
             <div class="bold" style="font-size: 12px; color: var(--accent);">${esc(res.name)}</div>
@@ -11147,7 +11145,7 @@ function renderResourcesInWorkflowLane(workflowId, lane) {
         <div class="workflow-block-card vis-node" 
              draggable="true" 
              onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId}')"
-             ondragstart="OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
+             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
              ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId}')">
             
             <div class="bold accent">${esc(item.name)}</div>
@@ -11209,7 +11207,7 @@ window.renderLevel3Canvas = function(resourceId) {
                                 draggable="true" 
                                 style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px; cursor: pointer; z-index: 5;"
                                 onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                                ondragstart="OL.handleDragStart(event, '${step.id}', 'step', ${idx})">
+                                ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})">
                                 <div class="card-delete-hitbox" 
                                     style="position: absolute; top: 0; right: 0; width: 30px; height: 30px; 
                                             display: flex; align-items: center; justify-content: center; 
