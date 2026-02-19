@@ -7455,26 +7455,27 @@ OL.deleteMasterAnalysis = function(anlyId) {
 
 // 7. UPDATE EXISTING MATRIX (AND SYNC CARD)
 OL.updateAnalysisFeature = function(anlyId, featId, key, value, isMaster) {
-    const client = getActiveClient();
-    // 🛡️ Source Selection: Master Vault vs Local Client
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-    const anly = source.find(a => a.id === anlyId);
+    // 🚀 THE SHIELD: Wrap in updateAndSync to block the Firebase "bounce-back"
+    OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+        const anly = source.find(a => a.id === anlyId);
 
-    if (anly && anly.features) {
-        const feat = anly.features.find(f => f.id === featId);
-        if (feat) {
-            // Convert to number if updating weight, otherwise keep as string
-            const val = key === 'weight' ? (parseFloat(value) || 0) : value;
-            feat[key] = val;
-
-            OL.persist();
-            
-            // 🔄 Reactive UI: Re-render the matrix to update Total Weights and Scores
-            OL.openAnalysisMatrix(anlyId, isMaster);
-            
-            console.log(`✅ Updated ${key} for feature ${featId} to ${val}`);
+        if (anly && anly.features) {
+            const feat = anly.features.find(f => f.id === featId);
+            if (feat) {
+                // Convert to number if updating weight, otherwise keep as string
+                const val = key === 'weight' ? (parseFloat(value) || 0) : value;
+                feat[key] = val;
+            }
         }
-    }
+    });
+
+    // 🔄 SURGICAL REFRESH: Only redraw the table, NOT the cards
+    // ❌ REMOVE ANY CALL TO: renderAnalysisModule(isMaster);
+    OL.openAnalysisMatrix(anlyId, isMaster); 
+    
+    console.log(`✅ Updated ${key} for feature ${featId} to ${value}`);
 };
 
 OL.syncMatrixName = function(el) {
