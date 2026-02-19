@@ -8323,11 +8323,11 @@ window.renderGlobalCanvas = function(isVaultMode) {
                             `}).join('')}
 
                             ${workflowsInStage.length === 0 ? `
-                                <div class="insert-divider initial" style="position: relative; opacity: 1;" 
-                                     onclick="event.stopPropagation(); OL.focusToolbox()">
-                                    <span>+ Add Workflow</span>
-                                </div>
-                            ` : ''}
+                            <div class="insert-divider initial" 
+                                style="position: relative; opacity: 1; cursor: pointer;" 
+                                onclick="event.stopPropagation(); OL.addWorkflowToStage('${stage.id}', ${isVaultMode})">
+                                <span>+ Add Workflow</span>
+                            </div>` : ''}
                         </div>
                     </div>
 
@@ -8339,6 +8339,42 @@ window.renderGlobalCanvas = function(isVaultMode) {
             `}).join('')}
         </div>
     `;
+};
+
+OL.addWorkflowToStage = async function(stageId, isVault) {
+    // ⚓ Capture Scroll
+    const scrollEl = document.querySelector('.global-scroll-canvas');
+    const x = scrollEl ? scrollEl.scrollLeft : 0;
+    const y = scrollEl ? scrollEl.scrollTop : 0;
+
+    const name = prompt("Enter Workflow Name:");
+    if (!name || name.trim() === "") return;
+
+    // 🚀 The Shield
+    await OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const source = isVault ? state.master : (client?.projectData || {});
+        if (!source.workflows) source.workflows = [];
+
+        source.workflows.push({
+            id: "wf-" + Date.now(),
+            stageId: stageId,
+            name: name.trim(),
+            nodes: []
+        });
+    });
+
+    // 🔄 Refresh UI
+    window.renderGlobalVisualizer(isVault);
+
+    // ⚓ Restore Scroll
+    if (scrollEl) {
+        // Use requestAnimationFrame for a smoother "instant" snap
+        requestAnimationFrame(() => {
+            const reFoundEl = document.querySelector('.global-scroll-canvas');
+            if (reFoundEl) reFoundEl.scrollTo(x, y);
+        });
+    }
 };
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
