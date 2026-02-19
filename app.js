@@ -11687,6 +11687,35 @@ const cleanupUI = () => {
     document.querySelectorAll('.stage-workflow-stream').forEach(el => el.style.background = "");
 };
 
+OL.closeSidebar = function() {
+    console.log("🧹 Closing Sidebar & Restoring Canvas");
+
+    const layout = document.querySelector('.three-pane-layout');
+    const canvas = document.querySelector('.global-scroll-canvas');
+
+    // 1. Remove Layout Class
+    if (layout) {
+        layout.classList.remove('toolbox-focused');
+    }
+
+    // 2. Update State
+    state.ui.sidebarOpen = false;
+
+    // 3. 🚀 THE ELASTIC BOUNCE
+    // Use the coordinates saved during focusToolbox to snap back
+    if (canvas && state.ui.lastScrollPos) {
+        canvas.scrollTo({
+            left: state.ui.lastScrollPos.x,
+            top: state.ui.lastScrollPos.y,
+            behavior: 'smooth'
+        });
+    }
+
+    // 4. Force Repaint to clear the sidebar from the DOM
+    const isVault = window.location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVault);
+};
+
 // --- UNMAPPING / TRASH LOGIC ---
 
 OL.handleUnifiedDelete = function(e) {
