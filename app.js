@@ -166,7 +166,7 @@ OL.updateAndSync = async function(mutationFn) {
         alert("CRITICAL: Data did not save to cloud. Please refresh.");
     } finally {
         // Only release the shield after a timeout
-        setTimeout(() => { state.isSaving = false; }, 1200);
+        setTimeout(() => { state.isSaving = false; }, 800);
     }
 };
 
