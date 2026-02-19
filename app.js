@@ -1614,6 +1614,12 @@ OL.openAppModal = function(appId, draftObj = null) {
             }
         }
     }
+    if (!app) {
+        console.error("❌ Modal Error: App object not found for ID:", appId);
+        // Optional: Close modal if it's broken to prevent white-screen
+        // OL.closeModal(); 
+        return; 
+    }
 
     // 2. Identify Modal Shell for Soft Refresh
     const modalLayer = document.getElementById("modal-layer");
