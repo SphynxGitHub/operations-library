@@ -2938,7 +2938,6 @@ body.is-visualizer #mainContent {
 .vertical-stage-canvas {
     flex: 1;
     overflow-y: auto;
-    background: #050816;
     padding: 40px 20px 100px 60px; /* Left padding for connectors */
     position: relative;
 }
