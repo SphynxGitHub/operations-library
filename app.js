@@ -9745,7 +9745,20 @@ window.renderLevel2Canvas = function(workflowId) {
                         ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
                         onclick="event.stopPropagation(); OL.loadInspector('${techAsset?.id || step.id}', '${workflowId}')"
                         ondblclick="event.stopPropagation(); OL.drillIntoResourceMechanics('${techAsset?.id || step.id}')"
-                        style="cursor: pointer; ${isAtomic ? 'border-left: 4px solid var(--vault-gold) !important;' : ''} ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}">
+                        style="cursor: pointer; 
+                        ${isAtomic ? 'border-left: 4px solid var(--vault-gold) !important;' : ''} 
+                        ${isInScope ? 'border-left: 4px solid #10b981 !important;' : ''}"
+                    >
+
+                        ${isAtomic ? `
+                            <div class="connect-resource-bridge" 
+                                style="margin-top:10px; padding:8px; background:rgba(255,191,0,0.05); border:1px dashed var(--vault-gold); border-radius:4px; text-align:center;"
+                                onclick="event.stopPropagation(); OL.openResourcePickerForStep('${step.id}')">
+                                <span class="tiny" style="color:var(--vault-gold); font-weight:bold; cursor:pointer;">
+                                    🔗 CONNECT TO LIBRARY RESOURCE
+                                </span>
+                            </div>
+                        ` : ''}
                         
                         <div style="display:flex; justify-content:space-between; align-items:center; pointer-events: none;">
                             <span class="tiny muted">STEP ${idx + 1}</span>
