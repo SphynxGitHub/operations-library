@@ -849,12 +849,13 @@ window.renderClientDashboard = function() {
         clients = clients.filter(c => c.meta.status === activeFilter);
     }
     
-    // Empty State
-    if (clients.length === 0 && activeFilter === 'All') {
+    // 🛡️ THE LOADING GUARD
+    // If we have no clients AND we haven't confirmed the cloud is empty, show loading
+    if (!state.clients || Object.keys(state.clients).length === 0) {
         container.innerHTML = `
-            <div style="padding:40px; text-align:center; opacity:0.5;">
-                <p>Registry is empty.</p>
-                <button class="btn primary" onclick="OL.onboardNewClient()">+ Add First Client Project</button>
+            <div style="padding:100px; text-align:center;">
+                <div class="spinner">⏳</div>
+                <h3 class="muted">Connecting to Registry...</h3>
             </div>`;
         return;
     }
