@@ -470,85 +470,87 @@ window.buildLayout = function () {
         </div>
     `;
 
-// Append themeSection to your modal HTML assembly...
-  root.innerHTML = `
-        <aside class="sidebar">
-            <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
-                <span class="toggle-icon">◀</span>
-            </button>
-            ${!isPublic ? `
-                <div class="admin-nav-zone">
-                    <nav class="menu">
-                        <a href="#/" class="${hash === '#/' ? 'active' : ''}">
-                            <i>🏠</i> <span>Dashboard</span>
+    // 1. Prepare the Sidebar HTML content
+  const sidebarContent = `
+        <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
+            <span class="toggle-icon">◀</span>
+        </button>
+        ${!isPublic ? `
+            <div class="admin-nav-zone">
+                <nav class="menu">
+                    <a href="#/" class="${hash === '#/' ? 'active' : ''}">
+                        <i>🏠</i> <span>Dashboard</span>
+                    </a>
+                </nav>
+            </div>
+            <div class="divider"></div>
+        ` : ''}
+
+        ${isMaster ? `
+            <div class="client-nav-zone admin-workspace">
+                <div class="menu-category-label">Global Administration</div>
+                <div class="client-profile-trigger is-master">
+                    <div class="client-avatar" style="background: var(--accent); color: white;">M</div>
+                    <div class="client-info">
+                        <div class="client-name">Master Vault</div>
+                        <div class="client-meta">Global Standards</div>
+                    </div>
+                </div>
+                <nav class="menu">
+                    ${masterTabs.map(item => `
+                        <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
+                            <i>${item.icon}</i> <span>${item.label}</span>
                         </a>
-                    </nav>
-                </div>
-                <div class="divider"></div>
-            ` : ''}
-
-            ${isMaster ? `
-                <div class="client-nav-zone admin-workspace">
-                    <div class="menu-category-label">Global Administration</div>
-                    <div class="client-profile-trigger is-master">
-                        <div class="client-avatar" style="background: var(--accent); color: white;">M</div>
-                        <div class="client-info">
-                            <div class="client-name">Master Vault</div>
-                            <div class="client-meta">Global Standards</div>
-                        </div>
+                    `).join('')}
+                </nav>
+            </div>
+        ` : client ? `
+            <div class="client-nav-zone">
+                <div class="menu-category-label">Project Workspace</div>
+                <div class="client-profile-trigger" 
+                     ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                    <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
+                    <div class="client-info">
+                        <div class="client-name">${esc(client.meta.name)}</div>
+                        <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
                     </div>
-                    <nav class="menu">
-                        ${masterTabs.map(item => `
-                            <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
+                </div>
+                ${themeSection}
+                <nav class="menu">
+                    ${clientTabs.map(item => {
+                        const perm = OL.checkPermission(item.key);
+                        if (perm === 'none') return '';
+                        const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
+                        if (!isModuleEnabled) return ''; 
+                        const isActive = hash.startsWith(item.href);
+                        return `
+                            <a href="${item.href}" class="${isActive ? 'active' : ''}">
                                 <i>${item.icon}</i> <span>${item.label}</span>
+                                ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                             </a>
-                        `).join('')}
-                    </nav>
-                </div>
-            ` : client ? `
-                <div class="client-nav-zone">
-                    <div class="menu-category-label">Project Workspace</div>
-                    
-                    <div class="client-profile-trigger" 
-                         ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                        <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
-                        <div class="client-info">
-                            <div class="client-name">${esc(client.meta.name)}</div>
-                            <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
-                        </div>
-                    </div>
-                    ${themeSection}
+                        `;
+                    }).join('')}
+                </nav>
+            </div>
+        ` : `
+            <div class="empty-context-hint"><p>Select a Client or enter Global Vault.</p></div>
+        `}
+  `;
 
-                    <nav class="menu">
-                        ${clientTabs.map(item => {
-                            // 1. Permission Check
-                            const perm = OL.checkPermission(item.key);
-                            // If permission is strictly 'none', hide it
-                            if (perm === 'none') return '';
+  // 2. 🚀 THE LOGIC: Check if we just need to update or build from scratch
+  const existingSidebar = root.querySelector('.sidebar');
+  const existingMain = document.getElementById('mainContent');
 
-                            // 2. Module Toggle Check (The Checkbox logic)
-                            // We check if Admin is forcing it, OR if the checkbox is checked in client.modules
-                            const isModuleEnabled = effectiveAdminMode || (client.modules && client.modules[item.key] === true);
-                            
-                            // 🚀 THE FIX: If the key is 'visualizer' but the checkbox is off, hide it
-                            if (!isModuleEnabled) return ''; 
-
-                            const isActive = hash.startsWith(item.href);
-
-                            return `
-                                <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                    <i>${item.icon}</i> <span>${item.label}</span>
-                                    ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
-                                </a>
-                            `;
-                        }).join('')}
-                    </nav>
-            ` : `
-                <div class="empty-context-hint"><p>Select a Client or enter Global Vault from Dashboard.</p></div>
-            `}
-        </aside>
-        <main id="mainContent"></main>
-    `;
+  if (existingSidebar && existingMain) {
+      // 🛡️ ONLY update the sidebar content. Leave mainContent (and your Flow Map) alone!
+      existingSidebar.innerHTML = sidebarContent;
+  } else {
+      // 🏗️ First-time build (Initial page load)
+      root.innerHTML = `
+          <aside class="sidebar">${sidebarContent}</aside>
+          <main id="mainContent"></main>
+      `;
+  }
 };
 
 window.handleRoute = function () {
