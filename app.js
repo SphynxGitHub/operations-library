@@ -11768,51 +11768,40 @@ OL.handleUniversalDrop = async function(e, sectionId) {
 
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
-            // 1. Identify EXACT location of parent data
-            const client = getActiveClient();
-            const isVault = location.hash.includes('vault');
-            const targetLibrary = isVault ? state.master.resources : client.projectData.localResources;
-            
-            // 2. Find by Reference (This ensures we are editing the LIVE state tree)
-            const parent = targetLibrary.find(r => String(r.id) === String(activeParentId));
-            
-            if (!parent) return console.error("❌ Parent not found in active library:", activeParentId);
-            if (!parent.steps) parent.steps = [];
+            const parent = OL.getResourceById(activeParentId);
+            if (!parent) return;
 
-            // 3. Perform the Data Change
+            // 1. Dropping a NEW item
             if (itemType.includes('factory') || itemType === 'resource') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
                 
-                parent.steps.splice(targetIdx, 0, { 
+                // 🚀 THE DUAL-WRITE FIX
+                // A. Update the Parent's Step Array (For Focus Mode)
+                const newStep = { 
                     id: 'step-' + Date.now(), 
                     name: stepName, 
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
-                    resourceLinkId: moveId === 'new' ? null : moveId,
-                    outcomes: []
-                });
-            } else if (itemType === 'step') {
-                const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
-                if (actualDragIdx > -1) {
-                    const [item] = parent.steps.splice(actualDragIdx, 1);
-                    if (state.focusedResourceId) item.type = sectionId;
-                    parent.steps.splice(targetIdx, 0, item);
+                    resourceLinkId: moveId === 'new' ? null : moveId 
+                };
+                if (!parent.steps) parent.steps = [];
+                parent.steps.splice(targetIdx, 0, newStep);
+
+                // B. Update the Resource Metadata (For Global Mode)
+                // If we are dropping a library resource, it needs to know what stage it belongs to
+                const droppedRes = OL.getResourceById(moveId);
+                if (droppedRes && parent.stageId) {
+                    droppedRes.stageId = parent.stageId; // Pin it to the stage for the Macro Map
+                    console.log(`📌 Global Sync: Linked ${droppedRes.name} to Stage ${parent.stageId}`);
                 }
+
+                // 2. 💾 PERSIST IMMEDIATELY
+                await OL.persist(); 
+                
+                // 3. 🔄 RE-RENDER
+                const isVault = location.hash.includes('vault');
+                window.renderGlobalVisualizer(isVault);
             }
-            
-            // 4. Normalize Order
-            parent.steps.forEach((s, i) => s.mapOrder = i);
-
-            // 5. 🚀 THE "FORCE-OVERWRITE" FIX
-            // We manually re-index the library array to ensure NO stale clones exist
-            const finalIdx = targetLibrary.findIndex(r => String(r.id) === String(activeParentId));
-            targetLibrary[finalIdx] = parent; 
-
-            console.log(`📡 State Prepared: ${parent.name} has ${parent.steps.length} steps.`);
-            
-            // ⚡ CLOUD PUSH
-            await OL.persist(); 
-            console.log("✅ CLOUD ACKNOWLEDGED: Data is safe.");
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
