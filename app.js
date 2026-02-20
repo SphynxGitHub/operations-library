@@ -9498,6 +9498,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
+    window.buildLayout();
+
     requestAnimationFrame(() => {
         setTimeout(() => { 
             state.isSaving = false; 
