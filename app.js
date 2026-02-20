@@ -198,18 +198,27 @@ window.addEventListener("load", () => {
     OL.sync(); 
 });
 
-const getActiveClient = () => {
-    // 1. Look for 'access' in the primary URL search (before the #)
+window.getActiveClient = function() {
     const urlParams = new URLSearchParams(window.location.search);
-    const accessId = urlParams.get('access');
+    const accessToken = urlParams.get('access');
 
-    // 2. If found, sync it to the state
-    if (accessId) {
-        state.activeClientId = accessId;
+    if (!accessToken || !state.clients) return null;
+
+    // 🚀 THE FINAL PIECE
+    // We search for the client where 'publicToken' matches the URL 'access' param
+    const allClients = Object.values(state.clients);
+    const foundClient = allClients.find(c => 
+        c.publicToken === accessToken || 
+        c.id === accessToken
+    );
+
+    if (foundClient) {
+        // Essential: Sync the internal state ID so other modules work
+        state.activeClientId = foundClient.id; 
+        return foundClient;
     }
 
-    // 3. Return the client data from the registry
-    return state.clients[state.activeClientId] || null;
+    return null;
 };
 
 // Controls what a user can SEE
@@ -555,7 +564,7 @@ window.handleRoute = function () {
     } else {
         console.warn("❌ Access Token invalid or Data not loaded yet.");
     }
-    
+
     const isVault = hash.includes('vault');
 
     // 3. The "Loading" Safety Net 🛡️
