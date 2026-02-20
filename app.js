@@ -9437,10 +9437,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const container = document.getElementById("mainContent");
     if (!container) return;
 
+    // 🚀 FORCE VIEWMODE: If nothing is set, default to 'global'
+    if (!state.viewMode) state.viewMode = 'global';
+
     // 1. 🚀 INITIALIZE ALL UI VARIABLES AT THE TOP 🚀
     // This prevents "ReferenceError" crashes later in the function
     let toolboxHtml = "";
     let canvasHtml = "";
+    
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
