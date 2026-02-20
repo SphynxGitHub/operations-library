@@ -94,43 +94,38 @@ OL.persist = async function() {
 
 // 3. REAL-TIME SYNC ENGINE
 // 3. REAL-TIME SYNC ENGINE (HARDENED)
+// 3. REAL-TIME SYNC ENGINE (IRON-CLAD VERSION)
 OL.sync = function() {
-    console.log("📡 Initializing Protected Sync...");
+    console.log("📡 Initializing Iron-Clad Sync...");
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        if (!doc.exists || state.isSaving) return; // Shield: Don't sync while we are the ones saving
-
-        const cloudData = doc.data();
-
-        // 🛡️ THE GATEKEEPER: Compare cloud vs local to prevent infinite loops
-        const cloudStr = JSON.stringify({ m: cloudData.master, r: cloudData.focusedResourceId, v: cloudData.viewMode });
-        const localStr = JSON.stringify({ m: state.master, r: state.focusedResourceId, v: state.viewMode });
-        
-        if (cloudStr === localStr) {
-            return; // 🛑 Stop the loop: Cloud and Local are already identical
-        }
-
-        // 1. Sync Data
-        state.master = cloudData.master;
-        state.clients = cloudData.clients;
-        
-        // 2. Sync Navigation State (Only if not currently interacting)
-        state.viewMode = cloudData.viewMode || 'global';
-        state.focusedWorkflowId = cloudData.focusedWorkflowId || null;
-        state.focusedResourceId = cloudData.focusedResourceId || null;
-
-        // 3. 🚀 SMART REBUILD: Check DOM readiness before firing
-        const container = document.getElementById("mainContent");
-        if (!container) {
-            console.warn("📡 Sync deferred: mainContent not found yet.");
+        // 1. 🛡️ THE SHIELD: Block if saving OR if a render just happened
+        const now = Date.now();
+        if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
             return; 
         }
 
+        const cloudData = doc.data();
+
+        // 2. 🧠 DEEP EQUALITY CHECK (Master & Focus only)
+        const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
+        const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
+
+        if (!hasFocusChanged && !hasDataChanged) return; 
+
+        console.log("🔄 Valid Cloud Change Detected. Updating UI...");
+
+        // 3. Update State
+        state.master = cloudData.master;
+        state.clients = cloudData.clients;
+        state.focusedResourceId = cloudData.focusedResourceId;
+        state.viewMode = cloudData.viewMode;
+
+        // 4. 🚀 DEBOUNCED RENDER
         clearTimeout(window.syncDebounce);
         window.syncDebounce = setTimeout(() => {
-            console.log("🔄 Sync-Triggered Render");
             window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-        }, 100); 
+        }, 300); 
     });
 };
 
@@ -9439,6 +9434,7 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
+    window.lastLocalRender = Date.now(); // 🚀 THE CIRCUIT BREAKER
     // 🛡️ RECURSIVE GUARD: Do not register view if we are inside a sync re-render
     if (!state.isSaving) {
         OL.registerView(() => renderGlobalVisualizer(isVaultMode));
