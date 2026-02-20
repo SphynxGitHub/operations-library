@@ -9492,8 +9492,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     
                     <div class="canvas-actions" style="display:flex; gap:10px;">
                         <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
-                                onclick="state.viewMode='global'; state.focusedResourceId=null; state.focusedWorkflowId=null; renderGlobalVisualizer(${isVaultMode})">
-                            🌐 Global Canvas
+                                onclick="OL.toggleGlobalView(${isVaultMode})">
+                            ${isGlobalMode ? '🔍 Focus Mode' : '🌐 Global View'}
                         </button>
 
                         <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" onclick="OL.toggleZenMode()">
