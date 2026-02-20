@@ -578,15 +578,19 @@ window.handleRoute = function () {
         if (inspector) inspector.innerHTML = '<div class="empty-inspector">Select an item to inspect</div>';
     }
 
-    // 4. 🎯 NAVIGATION ROUTING
+    // 4. // 🎯 NAVIGATION ROUTING: THE FLOW MAP BRIDGE
     if (hash.includes('visualizer')) {
         document.body.classList.add('is-visualizer', 'fs-mode-active');
-        renderGlobalVisualizer(hash.includes('vault'));
-        return; // Exit early so we don't trigger sub-renders
+        
+        // 🚀 THE FIX: If we have NO focus, we default to Tier 1 (Global/Lifecycle)
+        // This ensures clicking the link always shows SOMETHING.
+        const isVault = hash.includes('vault');
+        renderGlobalVisualizer(isVault);
+        return; 
     } else {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
     }
-
+    
     // 5. DATA RENDERING
     if (hash.startsWith("#/vault")) {
         if (hash.includes("resources")) renderResourceManager();
