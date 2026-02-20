@@ -9473,6 +9473,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
+    
+    window.buildLayout();
 
     setTimeout(() => {
         OL.initSideResizers();
