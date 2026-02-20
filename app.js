@@ -11773,34 +11773,45 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             const parent = OL.getResourceById(activeParentId);
             if (!parent) return;
 
-            // 1. Dropping a NEW item
+            // 1. Dropping a NEW item (Factory or Library Resource)
             if (itemType.includes('factory') || itemType === 'resource') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
                 
-                // 🚀 THE DUAL-WRITE FIX
+                // 🚀 CAPTURE DROPDOWN CONTEXT (For Factory Items)
+                // This ensures the verb/object choice persists
+                const isTrigger = sectionId === 'Trigger';
+                const verb = document.getElementById(isTrigger ? 'trigger-verb' : 'builder-verb')?.value;
+                const obj = document.getElementById(isTrigger ? 'trigger-object' : 'builder-object')?.value;
+
                 // A. Update the Parent's Step Array (For Focus Mode)
                 const newStep = { 
                     id: 'step-' + Date.now(), 
-                    name: stepName, 
+                    name: stepName || (verb ? `${verb} ${obj}` : "New Step"), 
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
-                    resourceLinkId: moveId === 'new' ? null : moveId 
+                    resourceLinkId: (moveId === 'new' || moveId === 'factory') ? null : moveId,
+                    verb: verb || null,
+                    object: obj || null,
+                    outcomes: []
                 };
+                
                 if (!parent.steps) parent.steps = [];
                 parent.steps.splice(targetIdx, 0, newStep);
 
                 // B. Update the Resource Metadata (For Global Mode)
-                // If we are dropping a library resource, it needs to know what stage it belongs to
-                const droppedRes = OL.getResourceById(moveId);
-                if (droppedRes && parent.stageId) {
-                    droppedRes.stageId = parent.stageId; // Pin it to the stage for the Macro Map
-                    console.log(`📌 Global Sync: Linked ${droppedRes.name} to Stage ${parent.stageId}`);
+                // ONLY do this if we are dragging an actual resource (not a factory item)
+                if (moveId !== 'new' && moveId !== 'factory') {
+                    const droppedRes = OL.getResourceById(moveId);
+                    if (droppedRes && parent.stageId) {
+                        droppedRes.stageId = parent.stageId;
+                        console.log(`📌 Global Sync: Linked ${droppedRes.name} to Stage ${parent.stageId}`);
+                    }
                 }
 
-                // 2. 💾 PERSIST IMMEDIATELY
+                // 2. 💾 PERSIST & RE-RENDER
+                console.log("💾 Persisting L3 Change:", newStep.name);
                 await OL.persist(); 
                 
-                // 3. 🔄 RE-RENDER
                 const isVault = location.hash.includes('vault');
                 window.renderGlobalVisualizer(isVault);
             }
