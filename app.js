@@ -9465,15 +9465,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const isZen = state.ui.zenMode;
     const zenClass = (isZen && !state.ui.sidebarOpen) ? 'zen-mode-active' : '';
 
-    // 🚀 PRIORITY 1: GLOBAL CANVAS (No Left Sidebar)
-    if (isGlobalMode) {
-        toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = renderGlobalCanvas(isVaultMode);
-        breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
-    } 
     // --- FOCUS MODE LOGIC (Only if NOT global) ---
     // TIER 3: RESOURCE > STEPS
-    else if (state.focusedResourceId) {
+    if (state.focusedResourceId) {
+        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
+        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
         const res = OL.getResourceById(state.focusedResourceId);
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
@@ -9484,12 +9480,11 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
             <span class="muted"> > </span>  
             <span class="breadcrumb-current">${esc(res?.name)}</span>`;
-        
-        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
-        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
     } 
     // TIER 2: WORKFLOW > RESOURCES
     else if (state.focusedWorkflowId) {
+        toolboxHtml = renderLevel2SidebarContent(allResources);
+        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
         
@@ -9497,14 +9492,12 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
             <span class="muted"> > </span> 
             <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
-        
-        toolboxHtml = renderLevel2SidebarContent(allResources);
-        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
     // TIER 1: FOCUS LIFESTYLE
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
+        canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
+        breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
     }
 
     // 🚀 THE SIDEBAR LOGIC: Only show if we are NOT in zen mode OR if the drawer is explicitly forced open
