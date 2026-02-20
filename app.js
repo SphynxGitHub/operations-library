@@ -9408,29 +9408,22 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-    console.log("🎨 Visualizer Engine Start. Mode:", isVaultMode ? 'Vault' : 'Project');
+    console.log("🎨 Visualizer Engine Start...");
     const client = getActiveClient();
     const container = document.getElementById("mainContent");
-    
-    if (!container) {
-        console.error("❌ mainContent container missing!");
-        return;
-    }
+    if (!container) return;
 
-    // 🛡️ DATA INTEGRITY CHECK
+    // 1. 🚀 INITIALIZE ALL UI VARIABLES AT THE TOP 🚀
+    // This prevents "ReferenceError" crashes later in the function
+    let toolboxHtml = "";
+    let canvasHtml = "";
+    let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
+
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
-    if (!sourceData.stages) {
-        console.warn("⚠️ No stages found. Initializing empty array.");
-        sourceData.stages = []; 
-    }
-
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const isGlobalMode = state.viewMode === 'global';
 
-    let toolboxHtml = "";
-    let canvasHtml = "";
-
-    // 🎯 PRIORITY 1: TIER 3 (RESOURCE > STEPS)
+    // 2. 🎯 TIER 3: RESOURCE FOCUS
     if (state.focusedResourceId) {
         const res = OL.getResourceById(state.focusedResourceId);
         if (res) {
@@ -9448,7 +9441,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             canvasHtml = renderLevel3Canvas(state.focusedResourceId);
         }
     } 
-    // 🎯 PRIORITY 2: TIER 2 (WORKFLOW > RESOURCES)
+    // 3. 🎯 TIER 2: WORKFLOW FOCUS
     else if (state.focusedWorkflowId) {
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
@@ -9461,36 +9454,30 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
-    // 🎯 PRIORITY 3: GLOBAL OR TIER 1
+    // 4. 🎯 TIER 1: GLOBAL VIEW
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
     }
 
-    // If we reach here and canvasHtml is empty, force a default
-    if (!canvasHtml) {
-        console.log("Empty canvasHtml, forcing Tier 1 render.");
-        toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
-    }
-
-    // Apply the HTML and FORCE heights
+    // 5. 🏗️ INJECT HTML (Now breadcrumbHtml is guaranteed to exist)
     container.innerHTML = `
-        <div class="three-pane-layout vertical-lifecycle-mode toolbox-focused" style="height: 100vh !important;">
-            <aside id="pane-drawer" class="pane-drawer" style="display: flex !important;">${toolboxHtml}</aside>
-            <main class="pane-canvas-wrap" style="flex: 1; display: flex; flex-direction: column;">
-                <div id="fs-canvas" class="vertical-stage-canvas" style="flex: 1; overflow: auto; min-height: 500px; display: block !important;">
-                    ${canvasHtml}
+        <div class="three-pane-layout vertical-lifecycle-mode toolbox-focused">
+            <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
+            <main class="pane-canvas-wrap">
+                <div class="canvas-header">
+                    <div class="breadcrumbs">${breadcrumbHtml}</div>
                 </div>
+                <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
             </main>
+            <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
 
-    // Initialize resizers and lines
     setTimeout(() => {
         OL.initSideResizers();
         if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
-    }, 100);
+    }, 50);
 };
 
 OL.handleCanvasBackgroundClick = function(e) {
