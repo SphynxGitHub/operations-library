@@ -93,41 +93,44 @@ OL.persist = async function() {
 };
 
 // 3. REAL-TIME SYNC ENGINE
+// 3. REAL-TIME SYNC ENGINE (HARDENED)
 OL.sync = function() {
+    console.log("📡 Initializing Protected Sync...");
+    
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        if (!doc.exists || state.isSaving) return; // 🛡️ Immediate exit if we are the one saving
+        if (!doc.exists || state.isSaving) return; // Shield: Don't sync while we are the ones saving
 
         const cloudData = doc.data();
 
-        // 1. Check for ACTUAL changes before doing anything
-        const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
-        const hasModeChanged = cloudData.viewMode !== state.viewMode;
-        const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
-
-        if (!hasFocusChanged && !hasModeChanged && !hasDataChanged) {
-            return; // 🛑 STOP THE LOOP: Nothing actually changed
+        // 🛡️ THE GATEKEEPER: Compare cloud vs local to prevent infinite loops
+        const cloudStr = JSON.stringify({ m: cloudData.master, r: cloudData.focusedResourceId, v: cloudData.viewMode });
+        const localStr = JSON.stringify({ m: state.master, r: state.focusedResourceId, v: state.viewMode });
+        
+        if (cloudStr === localStr) {
+            return; // 🛑 Stop the loop: Cloud and Local are already identical
         }
 
-        // 2. Sync the Data
+        // 1. Sync Data
         state.master = cloudData.master;
         state.clients = cloudData.clients;
         
-        // 3. Sync Navigation ONLY if different
+        // 2. Sync Navigation State (Only if not currently interacting)
         state.viewMode = cloudData.viewMode || 'global';
         state.focusedWorkflowId = cloudData.focusedWorkflowId || null;
         state.focusedResourceId = cloudData.focusedResourceId || null;
 
-        // 4. 🚀 SMART REBUILD (Protected)
-        // We use a small timeout to ensure we don't collide with other JS execution
+        // 3. 🚀 SMART REBUILD: Check DOM readiness before firing
+        const container = document.getElementById("mainContent");
+        if (!container) {
+            console.warn("📡 Sync deferred: mainContent not found yet.");
+            return; 
+        }
+
         clearTimeout(window.syncDebounce);
         window.syncDebounce = setTimeout(() => {
-            if (state.focusedResourceId) {
-                window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-            } else {
-                window.buildLayout();
-                window.handleRoute();
-            }
-        }, 50); 
+            console.log("🔄 Sync-Triggered Render");
+            window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+        }, 100); 
     });
 };
 
@@ -9436,10 +9439,14 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+    // 🛡️ RECURSIVE GUARD: Do not register view if we are inside a sync re-render
+    if (!state.isSaving) {
+        OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+    }
+
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
-    if (!container) return;
+    if (!container) return; // 🛑 No retries here; handleRoute manages the first load.
 
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
@@ -9449,29 +9456,26 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let canvasHtml = "";
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
-    const isZen = state.ui.zenMode;
-    const zenClass = (isZen && !state.ui.sidebarOpen) ? 'zen-mode-active' : '';
-
-    // --- FOCUS MODE LOGIC (Only if NOT global) ---
-    // TIER 3: RESOURCE > STEPS
+    // 🎯 PRIORITY 1: TIER 3 (RESOURCE > STEPS)
     if (state.focusedResourceId) {
-        toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
-        canvasHtml = renderLevel3Canvas(state.focusedResourceId);
         const res = OL.getResourceById(state.focusedResourceId);
-        const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
-        const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
+        if (res) {
+            const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
+            const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
 
-        breadcrumbHtml += ` <span class="muted"> > </span> 
-            <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
-            <span class="muted"> > </span> 
-            <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
-            <span class="muted"> > </span>  
-            <span class="breadcrumb-current">${esc(res?.name)}</span>`;
+            breadcrumbHtml += ` <span class="muted"> > </span> 
+                <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
+                <span class="muted"> > </span> 
+                <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
+                <span class="muted"> > </span>  
+                <span class="breadcrumb-current">${esc(res?.name)}</span>`;
+            
+            toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
+            canvasHtml = renderLevel3Canvas(state.focusedResourceId);
+        }
     } 
-    // TIER 2: WORKFLOW > RESOURCES
+    // 🎯 PRIORITY 2: TIER 2 (WORKFLOW > RESOURCES)
     else if (state.focusedWorkflowId) {
-        toolboxHtml = renderLevel2SidebarContent(allResources);
-        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
         
@@ -9479,75 +9483,43 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
             <span class="muted"> > </span> 
             <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
+        
+        toolboxHtml = renderLevel2SidebarContent(allResources);
+        canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
-    // TIER 1: FOCUS LIFESTYLE
+    // 🎯 PRIORITY 3: GLOBAL OR TIER 1
     else {
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
-        breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
     }
 
-    // 🚀 THE SIDEBAR LOGIC: Only show if we are NOT in zen mode OR if the drawer is explicitly forced open
-    const showSidebar = !isZen || state.ui.sidebarOpen;
+    // Standard Layout Logic...
+    const isZen = state.ui.zenMode;
+    const zenClass = (isZen && !state.ui.sidebarOpen) ? 'zen-mode-active' : '';
     const showInspector = !!(state.focusedWorkflowId || state.focusedResourceId);
     const inspectorClass = showInspector ? '' : 'no-inspector';
-    
-    // 🛠️ THE LAYOUT FIX: Remove 'no-sidebar' if state.ui.sidebarOpen is true
     let layoutClass = isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode';
-    
-    // If the sidebar is NOT open and we are in global mode, then we add no-sidebar
-    if (isGlobalMode && !state.ui.sidebarOpen) {
-        layoutClass += ' no-sidebar';
-    }
-
-    if (state.isFiltering) {
-        state.isFiltering = false;
-        return; 
-    }
+    if (isGlobalMode && !state.ui.sidebarOpen) layoutClass += ' no-sidebar';
 
     container.innerHTML = `
         <div class="three-pane-layout ${layoutClass} ${zenClass} ${inspectorClass} ${state.ui.sidebarOpen ? 'toolbox-focused' : ''}">
-            <aside id="pane-drawer" class="pane-drawer">
-                ${toolboxHtml}
-            </aside>
-
+            <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
-                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <div class="canvas-header">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
-                    
                     <div style="display:flex; gap:10px;">
                         <button class="btn tiny ${state.ui.sidebarOpen ? 'accent' : 'soft'}" onclick="OL.toggleSidebar()">
                             ${state.ui.sidebarOpen ? 'Close Tools' : 'Open Tools'}
                         </button>
-
-                        <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
-                                onclick="OL.toggleGlobalView(${isVaultMode})">
-                            ${isGlobalMode ? '🔍 Focus Mode' : '🌐 Global View'}
-                        </button>
                     </div>
                 </div>
-                
-                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas" 
-                     onmousedown="OL.handleCanvasBackgroundClick(event)">
-                    ${canvasHtml}
-                </div>
+                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">${canvasHtml}</div>
             </main>
             <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
 
-    // Persistence Logic for Search
-    if (state.lastSearchQuery && !isGlobalMode) {
-        const searchInput = document.getElementById('workflow-toolbox-search') || 
-                           document.getElementById('resource-toolbox-search');
-        if (searchInput) {
-            searchInput.value = state.lastSearchQuery;
-            searchInput.focus();
-            OL.filterToolbox(state.lastSearchQuery);
-        }
-    }
-    
-    // Only init resizers if sidebars exist
+    // Init resizers
     setTimeout(OL.initSideResizers, 10);
 };
 
