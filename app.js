@@ -9480,6 +9480,12 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         console.log("L3!!!");
         // 🏭 LEVEL 3: STEP FACTORY
         const res = OL.getResourceById(state.focusedResourceId);
+        const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
+        if (parentWorkflow) {
+            // 🚀 MAKE L2 CLICKABLE HERE
+            breadcrumbHtml += ` <span class="muted"> > </span> 
+                <span class="breadcrumb-item clickable" onclick="OL.drillDownIntoWorkflow('${parentWorkflow.id}')">${esc(parentWorkflow.name)}</span>`;
+        }
         if (res) {
             breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">Step Factory: ${esc(res.name)}</span>`;
             toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
