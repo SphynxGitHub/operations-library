@@ -95,34 +95,39 @@ OL.persist = async function() {
 // 3. REAL-TIME SYNC ENGINE
 OL.sync = function() {
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        if (!doc.exists) return;
+        if (!doc.exists || state.isSaving) return; // 🛡️ Immediate exit if we are the one saving
+
         const cloudData = doc.data();
 
-        // 1. 🛡️ Keep your existing Shield logic...
-        
-        // 2. 🌍 SYNC THE DATA
+        // 1. Check for ACTUAL changes before doing anything
+        const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
+        const hasModeChanged = cloudData.viewMode !== state.viewMode;
+        const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
+
+        if (!hasFocusChanged && !hasModeChanged && !hasDataChanged) {
+            return; // 🛑 STOP THE LOOP: Nothing actually changed
+        }
+
+        // 2. Sync the Data
         state.master = cloudData.master;
         state.clients = cloudData.clients;
+        
+        // 3. Sync Navigation ONLY if different
+        state.viewMode = cloudData.viewMode || 'global';
+        state.focusedWorkflowId = cloudData.focusedWorkflowId || null;
+        state.focusedResourceId = cloudData.focusedResourceId || null;
 
-        // 3. 📍 SYNC THE NAVIGATION (The Missing Link)
-        // Only sync these if we aren't currently "Dirty"
-        if (!state.isSaving) {
-            state.viewMode = cloudData.viewMode || 'global';
-            state.focusedWorkflowId = cloudData.focusedWorkflowId || null;
-            state.focusedResourceId = cloudData.focusedResourceId || null;
-            state.viewContext = cloudData.viewContext || 'L1';
-        }
-
-        // 4. 🚀 SMART REBUILD
-        if (state.focusedResourceId) {
-            // If we are drilled into L3, ensure we render the Factory
-            window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-        } else if (state.activeInspectorResId) {
-            OL.loadInspector(state.activeInspectorResId);
-        } else {
-            window.buildLayout();
-            window.handleRoute(); 
-        }
+        // 4. 🚀 SMART REBUILD (Protected)
+        // We use a small timeout to ensure we don't collide with other JS execution
+        clearTimeout(window.syncDebounce);
+        window.syncDebounce = setTimeout(() => {
+            if (state.focusedResourceId) {
+                window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+            } else {
+                window.buildLayout();
+                window.handleRoute();
+            }
+        }, 50); 
     });
 };
 
