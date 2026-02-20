@@ -551,6 +551,19 @@ window.buildLayout = function () {
 };
 
 window.handleRoute = function () {
+    const originalHandleRoute = window.handleRoute;
+        window.handleRoute = function() {
+        console.group("🚦 ROUTE DEBUG");
+        console.log("Current Hash:", window.location.hash);
+        console.log("Focus Before Route:", state.focusedResourceId);
+        
+        // Run the original logic
+        originalHandleRoute.apply(this, arguments);
+        
+        console.log("Focus After Route:", state.focusedResourceId);
+        console.groupEnd();
+    };
+
     const hash = window.location.hash || "#/";
     
     // 1. Force the Skeleton 🏗️
@@ -585,14 +598,24 @@ window.handleRoute = function () {
 
     // 3. 🎯 THE ROUTER
     if (hash.includes('visualizer')) {
-        // Apply layout-specific classes to body
+        // 🚀 RECOVERY: Ensure state is synced with sessionStorage BEFORE rendering
+        if (!state.focusedResourceId) {
+            state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+        }
+        if (!state.focusedWorkflowId) {
+            state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+        }
+
+        console.log("🕸️ Visualizer Context:", { 
+            L3: state.focusedResourceId, 
+            L2: state.focusedWorkflowId 
+        });
+
         document.body.classList.add('is-visualizer', 'fs-mode-active');
         
-        // NOW call the visualizer. Since buildLayout is already done, 
-        // this will fill the #mainContent without being overwritten.
         const isVault = hash.includes('vault');
         window.renderGlobalVisualizer(isVault);
-        return; // 🛑 EXIT HERE so we don't run the rest of the router
+        return; 
     }
 
    // 4. Standard Routes
