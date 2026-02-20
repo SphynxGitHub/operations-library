@@ -11246,8 +11246,9 @@ window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
+    // 🚀 FIX 1: Change to Flexbox, remove inline-block, and kill the fixed padding
     let html = `
-    <div id="l3-canvas-wrapper" style="position: relative; display: flex; flex-direction:row; min-width: 100%; min-height: 100%; padding-left: 100px;">
+    <div id="l3-canvas-wrapper" style="display: flex; flex-direction: row; gap: 40px; justify-content: center; align-items: flex-start; padding: 40px; min-height: 100%;">
         <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 1; overflow: visible;"></svg>`;
 
     const groups = [
@@ -11256,19 +11257,19 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     html += groups.map(group => {
-        // FIXED REFERENCES HERE:
         const steps = (res.steps || [])
             .filter(s => String(s.type || 'Action').toLowerCase() === String(group.type).toLowerCase())
             .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
         return `
-            <div class="stage-container">
-                <div class="stage-header-row">
-                    <span class="stage-name" style="color:${group.color}">${group.label}</span>
+            <div class="stage-container" style="width: 320px; flex-shrink: 0;">
+                <div class="stage-header-row" style="margin-bottom: 20px; text-align: center;">
+                    <span class="stage-name" style="color:${group.color}; font-weight: bold; letter-spacing: 1px;">${group.label}</span>
                 </div>
                 
                 <div class="stage-workflow-stream grid-drop-target" 
                     data-section-id="${group.type}"
+                    style="display: flex; flex-direction: column; gap: 15px; min-height: 200px; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px; padding: 10px;"
                     ondragover="OL.handleUniversalDragOver(event)" 
                     ondragleave="OL.handleUniversalDragLeave(event)"
                     ondrop="OL.handleUniversalDrop(event, '${group.type}')">
@@ -11295,7 +11296,7 @@ window.renderLevel3Canvas = function(resourceId) {
                             <div class="workflow-block-card" 
                                 id="step-node-${step.id}" 
                                 draggable="true" 
-                                style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px; cursor: pointer; z-index: 5;"
+                                style="position: relative; width: 100%; min-height: 85px; display: flex; flex-direction: column; padding: 12px; cursor: pointer; z-index: 5;"
                                 onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
                                 ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})">
                                 <div class="card-delete-hitbox" 
