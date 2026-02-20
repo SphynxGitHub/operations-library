@@ -9431,89 +9431,89 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-    console.log("🎨 Visualizer Engine Start...");
-    if (!state.viewMode) state.viewMode = 'global';
-    const client = getActiveClient();
+    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
+    const client = getActiveClient();
     if (!container) return;
 
-    // 🚀 FORCE VIEWMODE: If nothing is set, default to 'global'
-    if (!state.viewMode) state.viewMode = 'global';
-
-    // 1. 🚀 INITIALIZE ALL UI VARIABLES AT THE TOP 🚀
-    // This prevents "ReferenceError" crashes later in the function
-    let toolboxHtml = "";
-    let canvasHtml = "";
-    
-    let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
-
+    // 1. Resolve Data Sources
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    // 2. State & Mode Setup
+    if (!state.viewMode) state.viewMode = 'global';
     const isGlobalMode = state.viewMode === 'global';
-    const isZenSaved = localStorage.getItem('ol_zen_mode') === 'true';
+    const isZen = state.ui.zenMode;
+    const zenClass = (isZen && !state.ui.sidebarOpen) ? 'zen-mode-active' : '';
 
-    // 2. 🎯 TIER 3: RESOURCE FOCUS
-    if (state.focusedResourceId) {
+    let toolboxHtml = "";
+    let canvasHtml = "";
+    // 🚀 FIX: Breadcrumb always starts with clickable Global link
+    let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">🌐 Global Lifecycle</span>`;
+
+    // 3. DETERMINISTIC RENDERING LOGIC
+    if (isGlobalMode) {
+        // TIER 1: GLOBAL CANVAS
+        toolboxHtml = renderLevel1SidebarContent(allResources);
+        canvasHtml = renderGlobalCanvas(isVaultMode);
+    } 
+    else if (state.focusedResourceId) {
+        // TIER 3: STEP FACTORY (Resource Focus)
         const res = OL.getResourceById(state.focusedResourceId);
         if (res) {
-            const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
-            const parentStage = sourceData.stages?.find(s => s.id === parentWorkflow?.stageId);
-
-            breadcrumbHtml += ` <span class="muted"> > </span> 
-                <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
-                <span class="muted"> > </span> 
-                <span class="breadcrumb-item" onclick="OL.exitToWorkflow()">${esc(parentWorkflow?.name || 'Workflow')}</span>
-                <span class="muted"> > </span>  
-                <span class="breadcrumb-current">${esc(res?.name)}</span>`;
-            
+            breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">Step Factory: ${esc(res.name)}</span>`;
+            // 🚀 FIX: Call L3 Sidebar
             toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
             canvasHtml = renderLevel3Canvas(state.focusedResourceId);
         }
     } 
-    // 3. 🎯 TIER 2: WORKFLOW FOCUS
     else if (state.focusedWorkflowId) {
+        // TIER 2: WORKFLOW FOCUS
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
-        const parentStage = sourceData.stages?.find(s => s.id === focusedRes?.stageId);
-        
-        breadcrumbHtml += ` <span class="muted"> > </span> 
-            <span class="breadcrumb-item" onclick="OL.exitToLifecycle()">${esc(parentStage?.name || 'Stage')}</span>
-            <span class="muted"> > </span> 
-            <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
-        
+        breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
-    // 4. 🎯 TIER 1: GLOBAL VIEW
     else {
+        // FALLBACK TIER 1
         toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
+        canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
 
-    // 5. 🏗️ INJECT HTML (Now breadcrumbHtml is guaranteed to exist)
+    const layoutClass = isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode';
+
+    // 4. INJECT HTML
     container.innerHTML = `
-        <div class="three-pane-layout vertical-lifecycle-mode toolbox-focused">
+        <div class="three-pane-layout ${layoutClass} ${zenClass} toolbox-focused">
             <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
             <main class="pane-canvas-wrap">
-                <div class="canvas-header">
+                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px;">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
-                    <div class="canvas-actions">
-                        <button class="btn soft tiny" onclick="renderGlobalCanvas(${isVaultMode})">
-                            🌐 Global View
+                    
+                    <div class="canvas-actions" style="display:flex; gap:10px;">
+                        <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
+                                onclick="state.viewMode='global'; state.focusedResourceId=null; state.focusedWorkflowId=null; renderGlobalVisualizer(${isVaultMode})">
+                            🌐 Global Canvas
                         </button>
-                        <button id="zen-mode-toggle" class="btn soft tiny ${isZenSaved ? 'accent' : ''}" onclick="OL.toggleZenMode()">
-                            ${isZenSaved ? 'Collapse ⤓' : 'Full Screen ⤢'}
+
+                        <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" onclick="OL.toggleZenMode()">
+                            ${isZen ? 'Show Tools' : 'Full Screen'}
                         </button>
                     </div>
                 </div>
-                <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
+                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">
+                    ${canvasHtml}
+                </div>
             </main>
             <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
 
+    // 5. POST-RENDER SCRIPTS
     setTimeout(() => {
         OL.initSideResizers();
         if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
+        if (state.focusedWorkflowId) OL.drawLevel2LogicLines(state.focusedWorkflowId);
     }, 50);
 };
 
