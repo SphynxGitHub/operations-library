@@ -9414,11 +9414,7 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-
-    // 🛡️ RECURSIVE GUARD: Do not register view if we are inside a sync re-render
-    /*if (!state.isSaving) {
-        OL.registerView(() => renderGlobalVisualizer(isVaultMode));
-    }*/
+    const client = getActiveClient(); // 🚀 DEFINE THIS FIRST
 
     if (state.isSaving || state.isSyncing) return; 
 
