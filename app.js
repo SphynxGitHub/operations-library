@@ -11772,46 +11772,40 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             if (!parent) return;
             if (!parent.steps) parent.steps = [];
 
-            // 1. Dropping a NEW item from the Library Sidebar (Factory)
-            if (itemType === 'factory' || itemType === 'resource' || itemType === 'workflow' || itemType === 'factory-trigger' || itemType === 'factory-action') {
+            // 1. Logic for New vs Existing (keep your existing logic here...)
+            if (itemType.includes('factory') || itemType === 'resource') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
-                
-                const newStep = { 
-                    id: 'step-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                parent.steps.splice(targetIdx, 0, { 
+                    id: 'step-' + Date.now(), 
                     name: stepName, 
-                    // 🚀 FIX: Ensure sectionId is used correctly for L3 Type
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
-                    gridLane: state.focusedWorkflowId ? sectionId : null,
-                    resourceLinkId: moveId === 'new' ? null : moveId,
-                    outcomes: [],
-                    createdDate: new Date().toISOString()
-                };
-                
-                parent.steps.splice(targetIdx, 0, newStep);
-            } 
-            // 2. Moving an EXISTING step
-            else if (itemType === 'step') {
+                    resourceLinkId: moveId === 'new' ? null : moveId 
+                });
+            } else if (itemType === 'step') {
                 const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
-                
                 if (actualDragIdx > -1) {
                     const [item] = parent.steps.splice(actualDragIdx, 1);
-                    if (item) {
-                        if (state.focusedResourceId) item.type = sectionId;
-                        else item.gridLane = sectionId;
-                        
-                        parent.steps.splice(targetIdx, 0, item);
-                    }
+                    if (state.focusedResourceId) item.type = sectionId;
+                    parent.steps.splice(targetIdx, 0, item);
                 }
             }
             
-            // 3. Normalize order
             parent.steps.forEach((s, i) => s.mapOrder = i);
 
-            // 🚀 THE FIX: Remove the manual "source[pIdx] = ..." block.
-            // Since OL.getResourceById returns the actual object by reference, 
-            // the state is already updated. updateAndSync will handle the rest.
-            console.log("💾 Step sequence updated in state for:", parent.name);
+            // 🚀 THE "IRON-CLAD" FIX: Explicitly update the resource in the source array
+            const client = getActiveClient();
+            if (isVault) {
+                const idx = state.master.resources.findIndex(r => r.id === activeParentId);
+                if (idx > -1) state.master.resources[idx] = parent;
+            } else if (client) {
+                const idx = client.projectData.localResources.findIndex(r => r.id === activeParentId);
+                if (idx > -1) client.projectData.localResources[idx] = parent;
+            }
+
+            // ⚡ FORCE PUSH: Don't just wait for the next sync, call persist now
+            await OL.persist(); 
+            console.log("💾 Cloud Sync Confirmed for:", parent.name);
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
