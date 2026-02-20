@@ -14721,3 +14721,17 @@ OL.deployRequirementsFromResource = function(resourceId) {
     
     OL.persist();
 };
+
+// 🚀 THE FINAL BOOT TRIGGER
+// This ensures that when the page loads, it checks the URL and renders the right page.
+window.addEventListener("load", () => {
+    console.log("🏁 App Loaded. Running initial route...");
+    
+    // 1. If no hash exists, default to tasks (or whatever you prefer)
+    if (!window.location.hash || window.location.hash === "#/") {
+        window.location.hash = "#/client-tasks"; 
+    }
+    
+    // 2. Fire the router manually
+    window.handleRoute();
+});
