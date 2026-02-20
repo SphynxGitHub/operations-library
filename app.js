@@ -548,50 +548,40 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     
-    // 1. 🏗️ INJECT SKELETON FIRST
-    // buildLayout() creates the <aside> and the <main id="mainContent">
-    // Without this line at the top, document.getElementById("mainContent") will always fail on refresh.
-    buildLayout();
+    // 1. 🏗️ BUILD SKELETON FIRST (Ensures #mainContent exists)
+    window.buildLayout(); 
 
     const main = document.getElementById("mainContent");
-    
-    // 2. 🛡️ SAFETY CHECK (No recursive setTimeout)
-    if (!main) {
-        console.error("❌ CRITICAL: mainContent not found even after buildLayout.");
-        return; 
-    }
+    if (!main) return; // 🛡️ Safety exit
 
-    // 3. 🧠 REFINED BREAKOUT LOGIC
-    // Clear focus if we are explicitly leaving the Flow Map context
+    // 2. 🧠 NAVIGATION BREAKOUT
     const isLibraryRoute = hash.includes("resources") || hash.includes("apps") || 
                            hash.includes("functions") || hash.includes("team") || 
                            hash.includes("scoping-sheet");
     const isDashboardRoute = hash === "#/" || hash === "#/clients";
 
+    // Only clear focus if we are explicitly leaving the Flow Map context
     if (isLibraryRoute || isDashboardRoute) {
         state.focusedWorkflowId = null;
         state.focusedResourceId = null;
         sessionStorage.removeItem('active_workflow_id');
         sessionStorage.removeItem('active_resource_id');
-        
-        const inspector = document.getElementById('inspector-panel');
-        if (inspector) inspector.innerHTML = '<div class="empty-inspector">Select an item to inspect</div>';
     }
 
-    // 4. // 🎯 NAVIGATION ROUTING: THE FLOW MAP BRIDGE
+    // 3. 🎯 THE PRIORITY ROUTER
     if (hash.includes('visualizer')) {
+        // Force visualizer classes
         document.body.classList.add('is-visualizer', 'fs-mode-active');
         
-        // 🚀 THE FIX: If we have NO focus, we default to Tier 1 (Global/Lifecycle)
-        // This ensures clicking the link always shows SOMETHING.
-        const isVault = hash.includes('vault');
-        renderGlobalVisualizer(isVault);
+        // 🚀 THE FIX: Always call renderGlobalVisualizer. 
+        // Inside that function, it will check state.focusedResourceId to decide which tier to show.
+        renderGlobalVisualizer(hash.includes('vault'));
         return; 
     } else {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
     }
-    
-    // 5. DATA RENDERING
+
+    // 4. 🗄️ STANDARD MODULE ROUTING
     if (hash.startsWith("#/vault")) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -600,24 +590,18 @@ window.handleRoute = function () {
         else if (hash.includes("analyses")) renderAnalysisModule(); 
         else if (hash.includes("how-to")) renderHowToLibrary(); 
         else if (hash.includes("tasks")) renderBlueprintManager();
-        else renderAppsGrid();
+        else if (hash.includes("visualizer")) renderGlobalVisualizer(true);
     } else if (hash === "#/") {
         renderClientDashboard();
     } else if (getActiveClient()) {
-        const cHash = hash;
-        if (cHash.includes("#/resources")) renderResourceManager();
-        else if (cHash.includes("#/applications")) renderAppsGrid();
-        else if (cHash.includes("#/functions")) renderFunctionsGrid();
-        else if (cHash.includes("#/scoping-sheet")) renderScopingSheet();
-        else if (cHash.includes("/analyze")) renderAnalysisModule();
-        else if (cHash.includes("#/client-tasks")) renderChecklistModule();
-        else if (cHash.includes("#/team")) renderTeamManager();
-        else if (cHash.includes("#/how-to")) renderHowToLibrary();
-    } else {
-        main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
-            <h3>Loading Project...</h3>
-            <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
-        </div>`;
+        if (hash.includes("#/resources")) renderResourceManager();
+        else if (hash.includes("#/applications")) renderAppsGrid();
+        else if (hash.includes("#/functions")) renderFunctionsGrid();
+        else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("/analyze")) renderAnalysisModule();
+        else if (hash.includes("#/client-tasks")) renderChecklistModule();
+        else if (hash.includes("#/team")) renderTeamManager();
+        else if (hash.includes("#/how-to")) renderHowToLibrary();
     }
 };
 
