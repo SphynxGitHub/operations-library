@@ -9434,16 +9434,22 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-    window.lastLocalRender = Date.now(); // 🚀 THE CIRCUIT BREAKER
+
     // 🛡️ RECURSIVE GUARD: Do not register view if we are inside a sync re-render
-    if (!state.isSaving) {
+    /*if (!state.isSaving) {
         OL.registerView(() => renderGlobalVisualizer(isVaultMode));
-    }
+    }*/
+
+    if (state.isSaving || state.isSyncing) return; 
+
+    window.lastLocalRender = Date.now(); 
+    state.isSaving = true; // 🛡️ Temporarily lock the system during the write
 
     const container = document.getElementById("mainContent");
-    const client = getActiveClient();
-    if (!container) return; // 🛑 No retries here; handleRoute manages the first load.
-
+    if (!container) {
+        state.isSaving = false;
+        return;
+    }
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const isGlobalMode = state.viewMode === 'global';
@@ -9515,8 +9521,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    // Init resizers
-    setTimeout(OL.initSideResizers, 10);
+    requestAnimationFrame(() => {
+        setTimeout(() => { 
+            state.isSaving = false; 
+            OL.initSideResizers();
+            // 🔄 Only draw lines if we are still on the right tier
+            if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
+        }, 100);
+    });
 };
 
 OL.handleCanvasBackgroundClick = function(e) {
