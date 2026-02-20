@@ -547,19 +547,28 @@ window.buildLayout = function () {
 
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
+    
+    // 1. 🏗️ INJECT SKELETON FIRST
+    // buildLayout() creates the <aside> and the <main id="mainContent">
+    // Without this line at the top, document.getElementById("mainContent") will always fail on refresh.
+    buildLayout();
+
     const main = document.getElementById("mainContent");
-    // 🚀 THE FIX: If main is null, we can't render anything yet
+    
+    // 2. 🛡️ SAFETY CHECK (No recursive setTimeout)
     if (!main) {
-        console.warn("⏳ Main content container not ready. Retrying in 50ms...");
-        setTimeout(window.handleRoute, 50);
-        return;
+        console.error("❌ CRITICAL: mainContent not found even after buildLayout.");
+        return; 
     }
 
-    // 🚀 NEW: REFINED BREAKOUT LOGIC
-    // We only clear the focus if we are going back to the HOME Dashboard.
-    // If we are just switching project tabs (Scoping, Team, Tasks), we keep the memory
-    // so that when you click "Flow Map" again, you are still at the same depth.
-    if (hash === "#/" || hash === "#/clients") {
+    // 3. 🧠 REFINED BREAKOUT LOGIC
+    // Clear focus if we are explicitly leaving the Flow Map context
+    const isLibraryRoute = hash.includes("resources") || hash.includes("apps") || 
+                           hash.includes("functions") || hash.includes("team") || 
+                           hash.includes("scoping-sheet");
+    const isDashboardRoute = hash === "#/" || hash === "#/clients";
+
+    if (isLibraryRoute || isDashboardRoute) {
         state.focusedWorkflowId = null;
         state.focusedResourceId = null;
         sessionStorage.removeItem('active_workflow_id');
@@ -569,40 +578,16 @@ window.handleRoute = function () {
         if (inspector) inspector.innerHTML = '<div class="empty-inspector">Select an item to inspect</div>';
     }
 
-    // 🚀 NEW: BREAKOUT LOGIC
-    // If the hash is a standard library or dashboard link, clear the "Focus"
-    const isLibraryRoute = hash.includes("resources") || hash.includes("apps") || 
-                           hash.includes("functions") || hash.includes("team") || 
-                           hash.includes("scoping-sheet");
-    const isDashboardRoute = hash === "#/" || hash === "#/clients";
-
-    if (isLibraryRoute || isDashboardRoute) {
-        state.focusedWorkflowId = null;
-        state.focusedResourceId = null;
-        // Also clean up the inspector UI if it's open
-        const inspector = document.getElementById('inspector-panel');
-        if (inspector) inspector.innerHTML = '<div class="empty-inspector">Select an item to inspect</div>';
-    }
-
-    // Now, only trigger the visualizer redirect if we still have focus 
-    // AND the user isn't trying to go somewhere specific.
-    if ((state.focusedWorkflowId || state.focusedResourceId) && hash.includes('visualizer')) {
+    // 4. 🎯 NAVIGATION ROUTING
+    if (hash.includes('visualizer')) {
+        document.body.classList.add('is-visualizer', 'fs-mode-active');
         renderGlobalVisualizer(hash.includes('vault'));
-        return;
-    }
-    
-    if (main) {
-        if (hash.includes('visualizer')) {
-            document.body.classList.add('is-visualizer');
-            document.body.classList.add('fs-mode-active');
-        } else {
-            document.body.classList.remove('is-visualizer');
-            document.body.classList.remove('fs-mode-active');
-        }
+        return; // Exit early so we don't trigger sub-renders
+    } else {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
     }
 
-    buildLayout();
-
+    // 5. DATA RENDERING
     if (hash.startsWith("#/vault")) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -611,29 +596,24 @@ window.handleRoute = function () {
         else if (hash.includes("analyses")) renderAnalysisModule(); 
         else if (hash.includes("how-to")) renderHowToLibrary(); 
         else if (hash.includes("tasks")) renderBlueprintManager();
-        else if (hash.includes("visualizer")) renderGlobalVisualizer(true);
         else renderAppsGrid();
     } else if (hash === "#/") {
         renderClientDashboard();
     } else if (getActiveClient()) {
-        if (hash.includes("#/resources")) renderResourceManager();
-        else if (hash.includes("#/applications")) renderAppsGrid();
-        else if (hash.includes("#/functions")) renderFunctionsGrid();
-        else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
-        else if (hash.includes("/analyze")) renderAnalysisModule();
-        else if (hash.includes("#/client-tasks")) renderChecklistModule();
-        else if (hash.includes("#/team")) renderTeamManager();
-        else if (hash.includes("#/how-to")) renderHowToLibrary();
-        else if (hash.includes("#/visualizer")) renderGlobalVisualizer(false);
+        const cHash = hash;
+        if (cHash.includes("#/resources")) renderResourceManager();
+        else if (cHash.includes("#/applications")) renderAppsGrid();
+        else if (cHash.includes("#/functions")) renderFunctionsGrid();
+        else if (cHash.includes("#/scoping-sheet")) renderScopingSheet();
+        else if (cHash.includes("/analyze")) renderAnalysisModule();
+        else if (cHash.includes("#/client-tasks")) renderChecklistModule();
+        else if (cHash.includes("#/team")) renderTeamManager();
+        else if (cHash.includes("#/how-to")) renderHowToLibrary();
     } else {
-        if (main) {
-            main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
-                <h3>Loading Project...</h3>
-                <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
-            </div>`;
-        } else {
-            console.warn("📍 handleRoute: 'mainContent' element not found in DOM.");
-        }
+        main.innerHTML = `<div class="empty-hint" style="padding:100px; text-align:center;">
+            <h3>Loading Project...</h3>
+            <p class="muted">If this takes more than 5 seconds, the link may be invalid.</p>
+        </div>`;
     }
 };
 
