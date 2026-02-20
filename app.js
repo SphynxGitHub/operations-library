@@ -548,40 +548,33 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     
-    // 1. 🏗️ BUILD SKELETON FIRST (Ensures #mainContent exists)
+    // 1. 🏗️ ALWAYS BUILD SKELETON FIRST
+    // This creates #mainContent. Without this, the rest of the function fails.
     window.buildLayout(); 
 
     const main = document.getElementById("mainContent");
-    if (!main) return; // 🛡️ Safety exit
+    if (!main) return; 
 
-    // 2. 🧠 NAVIGATION BREAKOUT
-    const isLibraryRoute = hash.includes("resources") || hash.includes("apps") || 
-                           hash.includes("functions") || hash.includes("team") || 
-                           hash.includes("scoping-sheet");
-    const isDashboardRoute = hash === "#/" || hash === "#/clients";
-
-    // Only clear focus if we are explicitly leaving the Flow Map context
-    if (isLibraryRoute || isDashboardRoute) {
+    // 2. 🧠 FOCUS & DEPTH LOGIC
+    // If we're going to the Dashboard, clear the "drill-down" memory
+    if (hash === "#/" || hash === "#/clients") {
         state.focusedWorkflowId = null;
         state.focusedResourceId = null;
         sessionStorage.removeItem('active_workflow_id');
         sessionStorage.removeItem('active_resource_id');
     }
 
-    // 3. 🎯 THE PRIORITY ROUTER
+    // 3. 🎯 THE VISUALIZER ROUTE (Tier 1, 2, and 3)
     if (hash.includes('visualizer')) {
-        // Force visualizer classes
         document.body.classList.add('is-visualizer', 'fs-mode-active');
-        
-        // 🚀 THE FIX: Always call renderGlobalVisualizer. 
-        // Inside that function, it will check state.focusedResourceId to decide which tier to show.
+        // We let renderGlobalVisualizer handle the L3/L2/L1 priority internally
         renderGlobalVisualizer(hash.includes('vault'));
         return; 
-    } else {
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-    }
+    } 
 
-    // 4. 🗄️ STANDARD MODULE ROUTING
+    // 4. 🗄️ STANDARD MODULES (Tasks, Apps, etc.)
+    document.body.classList.remove('is-visualizer', 'fs-mode-active');
+
     if (hash.startsWith("#/vault")) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -590,7 +583,7 @@ window.handleRoute = function () {
         else if (hash.includes("analyses")) renderAnalysisModule(); 
         else if (hash.includes("how-to")) renderHowToLibrary(); 
         else if (hash.includes("tasks")) renderBlueprintManager();
-        else if (hash.includes("visualizer")) renderGlobalVisualizer(true);
+        else renderAppsGrid(); // Default vault tab
     } else if (hash === "#/") {
         renderClientDashboard();
     } else if (getActiveClient()) {
