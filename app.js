@@ -14701,16 +14701,20 @@ OL.deployRequirementsFromResource = function(resourceId) {
     OL.persist();
 };
 
-// 🚀 THE FINAL BOOT TRIGGER
-// This ensures that when the page loads, it checks the URL and renders the right page.
-window.addEventListener("load", () => {
-    console.log("🏁 App Loaded. Running initial route...");
-    
-    // 1. If no hash exists, default to tasks (or whatever you prefer)
+// 🚀 THE STARTER MOTOR
+// This runs once when the page is first loaded or refreshed
+window.addEventListener("DOMContentLoaded", () => {
+    console.log("🏁 App Initialized. Checking route...");
+
+    // 1. If the user is at the root, optional: default them to Tasks
     if (!window.location.hash || window.location.hash === "#/") {
-        window.location.hash = "#/client-tasks"; 
+        // window.location.hash = "#/client-tasks"; 
     }
-    
-    // 2. Fire the router manually
+
+    // 2. Manually fire the router to draw the current hash
     window.handleRoute();
 });
+
+// 🔄 THE EVENT LISTENER
+// This handles every click thereafter
+window.addEventListener("hashchange", window.handleRoute);
