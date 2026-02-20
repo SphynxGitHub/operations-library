@@ -199,23 +199,27 @@ window.addEventListener("load", () => {
 });
 
 window.getActiveClient = function() {
+    // 1. Check the URL for public access
     const urlParams = new URLSearchParams(window.location.search);
     const accessToken = urlParams.get('access');
 
-    if (!accessToken || !state.clients) return null;
+    if (!state.clients) return null;
 
-    // 🚀 THE FINAL PIECE
-    // We search for the client where 'publicToken' matches the URL 'access' param
-    const allClients = Object.values(state.clients);
-    const foundClient = allClients.find(c => 
-        c.publicToken === accessToken || 
-        c.id === accessToken
-    );
+    // 2. 🟢 IF WE HAVE A TOKEN: Use the Deep Search (Public View)
+    if (accessToken) {
+        const foundClient = Object.values(state.clients).find(c => 
+            c.publicToken === accessToken || c.id === accessToken
+        );
+        if (foundClient) {
+            state.activeClientId = foundClient.id;
+            return foundClient;
+        }
+    }
 
-    if (foundClient) {
-        // Essential: Sync the internal state ID so other modules work
-        state.activeClientId = foundClient.id; 
-        return foundClient;
+    // 3. 🔵 IF NO TOKEN: Use the Standard ID (Admin/Master View)
+    // This allows you to click between clients in the dashboard
+    if (state.activeClientId && state.clients[state.activeClientId]) {
+        return state.clients[state.activeClientId];
     }
 
     return null;
