@@ -352,6 +352,12 @@ window.buildLayout = function () {
   const token = urlParams.get("access");
   const isMaster = hash.startsWith("#/vault");
 
+  if (!client && !isMaster && !isPublic) {
+        // Only render the Dashboard link if no client context exists
+        root.innerHTML = `<aside class="sidebar"><nav class="menu"><a href="#/" class="active"><i>🏠</i> <span>Dashboard</span></a></nav></aside><main id="mainContent"></main>`;
+        return;
+    }  
+
   const effectiveAdminMode = isPublic ? false : state.adminMode;
 
   if (!root) return; // Safety guard
@@ -548,34 +554,39 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     
-    // 1. 🏗️ ALWAYS BUILD SKELETON FIRST
-    // This creates #mainContent. Without this, the rest of the function fails.
+    // 1. Force the Skeleton 🏗️
     window.buildLayout(); 
 
     const main = document.getElementById("mainContent");
     if (!main) return; 
 
-    // 2. 🧠 FOCUS & DEPTH LOGIC
-    // If we're going to the Dashboard, clear the "drill-down" memory
-    if (hash === "#/" || hash === "#/clients") {
-        state.focusedWorkflowId = null;
-        state.focusedResourceId = null;
-        sessionStorage.removeItem('active_workflow_id');
-        sessionStorage.removeItem('active_resource_id');
+    // 2. Identify Context 🔍
+    const client = getActiveClient();
+    const isVault = hash.includes('vault');
+
+    // 3. The "Loading" Safety Net 🛡️
+    // If we aren't in the Vault and don't have a client yet, show loading
+    if (!isVault && hash !== "#/" && !client) {
+        main.innerHTML = `
+            <div style="padding:100px; text-align:center; opacity:0.5;">
+                <div class="spinner">⏳</div>
+                <h3>Synchronizing Project Data...</h3>
+                <p class="tiny">If this persists, please return to the Dashboard.</p>
+            </div>`;
+        return; 
     }
 
-    // 3. 🎯 THE VISUALIZER ROUTE (Tier 1, 2, and 3)
+    // 4. 🎯 THE ROUTER
     if (hash.includes('visualizer')) {
         document.body.classList.add('is-visualizer', 'fs-mode-active');
-        // We let renderGlobalVisualizer handle the L3/L2/L1 priority internally
-        renderGlobalVisualizer(hash.includes('vault'));
+        renderGlobalVisualizer(isVault);
         return; 
     } 
 
-    // 4. 🗄️ STANDARD MODULES (Tasks, Apps, etc.)
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
-    if (hash.startsWith("#/vault")) {
+    // 5. DATA RENDERING
+    if (isVault) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
@@ -583,18 +594,19 @@ window.handleRoute = function () {
         else if (hash.includes("analyses")) renderAnalysisModule(); 
         else if (hash.includes("how-to")) renderHowToLibrary(); 
         else if (hash.includes("tasks")) renderBlueprintManager();
-        else renderAppsGrid(); // Default vault tab
-    } else if (hash === "#/") {
+        else renderAppsGrid(); 
+    } else if (hash === "#/" || hash === "#/clients") {
         renderClientDashboard();
-    } else if (getActiveClient()) {
-        if (hash.includes("#/resources")) renderResourceManager();
-        else if (hash.includes("#/applications")) renderAppsGrid();
-        else if (hash.includes("#/functions")) renderFunctionsGrid();
-        else if (hash.includes("#/scoping-sheet")) renderScopingSheet();
+    } else if (client) {
+        // Standard Client Project Routes
+        if (hash.includes("/resources")) renderResourceManager();
+        else if (hash.includes("/applications")) renderAppsGrid();
+        else if (hash.includes("/functions")) renderFunctionsGrid();
+        else if (hash.includes("/scoping-sheet")) renderScopingSheet();
         else if (hash.includes("/analyze")) renderAnalysisModule();
-        else if (hash.includes("#/client-tasks")) renderChecklistModule();
-        else if (hash.includes("#/team")) renderTeamManager();
-        else if (hash.includes("#/how-to")) renderHowToLibrary();
+        else if (hash.includes("/client-tasks")) renderChecklistModule();
+        else if (hash.includes("/team")) renderTeamManager();
+        else if (hash.includes("/how-to")) renderHowToLibrary();
     }
 };
 
