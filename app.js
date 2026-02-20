@@ -11262,7 +11262,7 @@ window.renderLevel3Canvas = function(resourceId) {
             .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
         return `
-            <div class="stage-container" style="width: 320px; flex-shrink: 0;">
+            <div class="stage-container" style="flex-shrink: 0;">
                 <div class="stage-header-row" style="margin-bottom: 20px; text-align: center;">
                     <span class="stage-name" style="color:${group.color}; font-weight: bold; letter-spacing: 1px;">${group.label}</span>
                 </div>
