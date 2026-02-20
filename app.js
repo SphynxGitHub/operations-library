@@ -126,6 +126,14 @@ OL.sync = function() {
         window.syncDebounce = setTimeout(() => {
             window.renderGlobalVisualizer(window.location.hash.includes('vault'));
         }, 300); 
+
+        onSnapshot(doc => {
+            const main = document.getElementById('mainContent');
+            if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
+                console.log("📡 Data arrived late. Nudging router...");
+                window.handleRoute();
+            }
+        });
     });
 };
 
@@ -14701,20 +14709,22 @@ OL.deployRequirementsFromResource = function(resourceId) {
     OL.persist();
 };
 
-// 🚀 THE STARTER MOTOR
-// This runs once when the page is first loaded or refreshed
-window.addEventListener("DOMContentLoaded", () => {
-    console.log("🏁 App Initialized. Checking route...");
-
-    // 1. If the user is at the root, optional: default them to Tasks
+// 🚀 THE BULLETPROOF STARTER
+function bootRouter() {
+    console.log("🏁 App Ignition: Checking route...");
+    // Force a default if empty
     if (!window.location.hash || window.location.hash === "#/") {
         // window.location.hash = "#/client-tasks"; 
     }
-
-    // 2. Manually fire the router to draw the current hash
     window.handleRoute();
-});
+}
 
-// 🔄 THE EVENT LISTENER
-// This handles every click thereafter
+// 🔄 Handle initial load (covers all browser timings)
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    bootRouter();
+} else {
+    window.addEventListener("DOMContentLoaded", bootRouter);
+}
+
+// 🔄 Handle every click thereafter
 window.addEventListener("hashchange", window.handleRoute);
