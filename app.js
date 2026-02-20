@@ -9408,25 +9408,27 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-    const client = getActiveClient(); // 🚀 DEFINE THIS FIRST
-
-    if (state.isSaving || state.isSyncing) return; 
-
-    window.lastLocalRender = Date.now(); 
-    state.isSaving = true; // 🛡️ Temporarily lock the system during the write
-
+    console.log("🎨 Visualizer Engine Start. Mode:", isVaultMode ? 'Vault' : 'Project');
+    const client = getActiveClient();
     const container = document.getElementById("mainContent");
+    
     if (!container) {
-        state.isSaving = false;
+        console.error("❌ mainContent container missing!");
         return;
     }
+
+    // 🛡️ DATA INTEGRITY CHECK
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    if (!sourceData.stages) {
+        console.warn("⚠️ No stages found. Initializing empty array.");
+        sourceData.stages = []; 
+    }
+
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const isGlobalMode = state.viewMode === 'global';
 
     let toolboxHtml = "";
     let canvasHtml = "";
-    let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">Global Lifecycle</span>`;
 
     // 🎯 PRIORITY 1: TIER 3 (RESOURCE > STEPS)
     if (state.focusedResourceId) {
@@ -9465,42 +9467,30 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
     }
 
-    // Standard Layout Logic...
-    const isZen = state.ui.zenMode;
-    const zenClass = (isZen && !state.ui.sidebarOpen) ? 'zen-mode-active' : '';
-    const showInspector = !!(state.focusedWorkflowId || state.focusedResourceId);
-    const inspectorClass = showInspector ? '' : 'no-inspector';
-    let layoutClass = isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode';
-    if (isGlobalMode && !state.ui.sidebarOpen) layoutClass += ' no-sidebar';
+    // If we reach here and canvasHtml is empty, force a default
+    if (!canvasHtml) {
+        console.log("Empty canvasHtml, forcing Tier 1 render.");
+        toolboxHtml = renderLevel1SidebarContent(allResources);
+        canvasHtml = isGlobalMode ? renderGlobalCanvas(isVaultMode) : renderLevel1Canvas(sourceData, isVaultMode);
+    }
 
+    // Apply the HTML and FORCE heights
     container.innerHTML = `
-        <div class="three-pane-layout ${layoutClass} ${zenClass} ${inspectorClass} ${state.ui.sidebarOpen ? 'toolbox-focused' : ''}">
-            <aside id="pane-drawer" class="pane-drawer">${toolboxHtml}</aside>
-            <main class="pane-canvas-wrap">
-                <div class="canvas-header">
-                    <div class="breadcrumbs">${breadcrumbHtml}</div>
-                    <div style="display:flex; gap:10px;">
-                        <button class="btn tiny ${state.ui.sidebarOpen ? 'accent' : 'soft'}" onclick="OL.toggleSidebar()">
-                            ${state.ui.sidebarOpen ? 'Close Tools' : 'Open Tools'}
-                        </button>
-                    </div>
+        <div class="three-pane-layout vertical-lifecycle-mode toolbox-focused" style="height: 100vh !important;">
+            <aside id="pane-drawer" class="pane-drawer" style="display: flex !important;">${toolboxHtml}</aside>
+            <main class="pane-canvas-wrap" style="flex: 1; display: flex; flex-direction: column;">
+                <div id="fs-canvas" class="vertical-stage-canvas" style="flex: 1; overflow: auto; min-height: 500px; display: block !important;">
+                    ${canvasHtml}
                 </div>
-                <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">${canvasHtml}</div>
             </main>
-            <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
 
-    window.buildLayout();
-
-    requestAnimationFrame(() => {
-        setTimeout(() => { 
-            state.isSaving = false; 
-            OL.initSideResizers();
-            // 🔄 Only draw lines if we are still on the right tier
-            if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
-        }, 100);
-    });
+    // Initialize resizers and lines
+    setTimeout(() => {
+        OL.initSideResizers();
+        if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
+    }, 100);
 };
 
 OL.handleCanvasBackgroundClick = function(e) {
