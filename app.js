@@ -9451,31 +9451,31 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     // 🚀 FIX: Breadcrumb always starts with clickable Global link
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">🌐 Global Lifecycle</span>`;
 
-    // 3. DETERMINISTIC RENDERING LOGIC
-    if (isGlobalMode) {
-        // TIER 1: GLOBAL CANVAS
-        toolboxHtml = renderLevel1SidebarContent(allResources);
-        canvasHtml = renderGlobalCanvas(isVaultMode);
-    } 
-    else if (state.focusedResourceId) {
-        // TIER 3: STEP FACTORY (Resource Focus)
+    // 3. DETERMINISTIC RENDERING LOGIC (Corrected Priority)
+    // We check for FOCUS first, then Global Mode.
+    if (state.focusedResourceId) {
+        // 🏭 LEVEL 3: STEP FACTORY
         const res = OL.getResourceById(state.focusedResourceId);
         if (res) {
             breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">Step Factory: ${esc(res.name)}</span>`;
-            // 🚀 FIX: Call L3 Sidebar
             toolboxHtml = renderLevel3SidebarContent(state.focusedResourceId);
             canvasHtml = renderLevel3Canvas(state.focusedResourceId);
         }
     } 
     else if (state.focusedWorkflowId) {
-        // TIER 2: WORKFLOW FOCUS
+        // 🔄 LEVEL 2: WORKFLOW FOCUS
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
+    else if (isGlobalMode) {
+        // 🌐 TIER 1: MACRO MAP (The Big Horizontal Map)
+        toolboxHtml = renderLevel1SidebarContent(allResources);
+        canvasHtml = renderGlobalCanvas(isVaultMode);
+    } 
     else {
-        // FALLBACK TIER 1
+        // 📋 TIER 1: FOCUS VIEW (Vertical Lifecycle)
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
