@@ -11466,12 +11466,42 @@ OL.drillDownIntoWorkflow = function(resId) {
 };
 
 OL.drillIntoResourceMechanics = function(resId) {
-    console.log("🔍 Drilling into Resource:", resId);
-    state.focusedResourceId = resId; 
-    sessionStorage.setItem('active_resource_id', resId); // 💾 Save for refresh
+    // Ensure the Focus Mode container exists
+    if (!document.getElementById('workflow-fs-overlay')) {
+        const fs = document.createElement('div');
+        fs.id = 'workflow-fs-overlay';
+        // Add necessary styles to make it a fullscreen cover
+        Object.assign(fs.style, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'var(--bg-panel)', // or #111
+            zIndex: '9999',
+            display: 'none', // Hidden until called
+            overflowY: 'auto'
+        });
+        document.body.appendChild(fs);
+    }
     
-    const isVaultMode = location.hash.includes('vault');
-    window.renderGlobalVisualizer(isVaultMode);
+    state.focusedResourceId = resId;
+    state.viewContext = 'L3'; // Ensure context is set
+    
+    const container = document.getElementById('workflow-fs-overlay') || document.getElementById('main-canvas');
+    
+    if (container) {
+        // 🚀 THE FIX: Force the HTML into the DOM
+        container.innerHTML = window.renderLevel3Canvas(resId);
+        
+        // Ensure we are showing the overlay
+        container.style.display = 'block';
+        
+        // Re-run any visual logic (lines, drag-drop listeners)
+        setTimeout(() => {
+            if (window.drawLevel3LogicLines) window.drawLevel3LogicLines(resId);
+        }, 100);
+    }
 };
 
 OL.exitToWorkflow = function() {
