@@ -11772,48 +11772,64 @@ OL.handleUniversalDrop = async function(e, sectionId) {
         else if (activeParentId) {
             const parent = OL.getResourceById(activeParentId);
             if (!parent) return;
+            if (!parent.steps) parent.steps = [];
 
             // 1. Dropping a NEW item (Factory or Library Resource)
-            if (itemType.includes('factory') || itemType === 'resource') {
+            if (itemType.includes('factory') || itemType === 'resource' || itemType === 'workflow') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
                 
-                // 🚀 CAPTURE DROPDOWN CONTEXT (For Factory Items)
-                // This ensures the verb/object choice persists
                 const isTrigger = sectionId === 'Trigger';
                 const verb = document.getElementById(isTrigger ? 'trigger-verb' : 'builder-verb')?.value;
                 const obj = document.getElementById(isTrigger ? 'trigger-object' : 'builder-object')?.value;
 
-                // A. Update the Parent's Step Array (For Focus Mode)
                 const newStep = { 
                     id: 'step-' + Date.now(), 
                     name: stepName || (verb ? `${verb} ${obj}` : "New Step"), 
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
+                    gridLane: state.focusedWorkflowId ? sectionId : null,
                     resourceLinkId: (moveId === 'new' || moveId === 'factory') ? null : moveId,
                     verb: verb || null,
                     object: obj || null,
                     outcomes: []
                 };
                 
-                if (!parent.steps) parent.steps = [];
                 parent.steps.splice(targetIdx, 0, newStep);
-
-                // B. Update the Resource Metadata (For Global Mode)
-                // ONLY do this if we are dragging an actual resource (not a factory item)
-                if (moveId !== 'new' && moveId !== 'factory') {
-                    const droppedRes = OL.getResourceById(moveId);
-                    if (droppedRes && parent.stageId) {
-                        droppedRes.stageId = parent.stageId;
-                        console.log(`📌 Global Sync: Linked ${droppedRes.name} to Stage ${parent.stageId}`);
-                    }
-                }
-
-                // 2. 💾 PERSIST & RE-RENDER
-                console.log("💾 Persisting L3 Change:", newStep.name);
-                await OL.persist(); 
+            } 
+            
+            // 🚀 2. REARRANGING AN EXISTING STEP (This was missing!)
+            else if (itemType === 'step') {
+                // Find the step in the current parent's array
+                const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
                 
-                const isVault = location.hash.includes('vault');
-                window.renderGlobalVisualizer(isVault);
+                if (actualDragIdx > -1) {
+                    // Remove it from old spot
+                    const [movingItem] = parent.steps.splice(actualDragIdx, 1);
+                    
+                    // Update its context (L3 uses sectionId as Type, L2 uses it as gridLane)
+                    if (state.focusedResourceId) {
+                        movingItem.type = sectionId;
+                    } else {
+                        movingItem.gridLane = sectionId;
+                    }
+                    
+                    // Insert at new target spot
+                    parent.steps.splice(targetIdx, 0, movingItem);
+                    console.log(`🔄 Rearranged Step: ${movingItem.name} to index ${targetIdx}`);
+                }
+            }
+
+            // 3. Normalize mapOrder for everyone in this parent
+            parent.steps.forEach((s, i) => {
+                s.mapOrder = i;
+            });
+
+            // 4. Persistence Sync
+            const client = getActiveClient();
+            const targetSource = isVault ? state.master.resources : client.projectData.localResources;
+            const pIdx = targetSource.findIndex(r => String(r.id) === String(activeParentId));
+            if (pIdx > -1) {
+                targetSource[pIdx] = { ...parent };
             }
         }
 
