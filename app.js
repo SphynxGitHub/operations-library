@@ -198,7 +198,19 @@ window.addEventListener("load", () => {
     OL.sync(); 
 });
 
-const getActiveClient = () => state.clients[state.activeClientId] || null;
+const getActiveClient = () => {
+    // 1. Look for 'access' in the primary URL search (before the #)
+    const urlParams = new URLSearchParams(window.location.search);
+    const accessId = urlParams.get('access');
+
+    // 2. If found, sync it to the state
+    if (accessId) {
+        state.activeClientId = accessId;
+    }
+
+    // 3. Return the client data from the registry
+    return state.clients[state.activeClientId] || null;
+};
 
 // Controls what a user can SEE
 OL.checkPermission = function (tabKey) {
@@ -536,6 +548,14 @@ window.handleRoute = function () {
 
     // 2. Identify Context 🔍
     const client = getActiveClient();
+
+    if (client) {
+        console.log("✅ Verified Client Access:", client.meta.name);
+        // Render your modules here
+    } else {
+        console.warn("❌ Access Token invalid or Data not loaded yet.");
+    }
+    
     const isVault = hash.includes('vault');
 
     // 3. The "Loading" Safety Net 🛡️
