@@ -11247,7 +11247,7 @@ window.renderLevel3Canvas = function(resourceId) {
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
     let html = `
-    <div id="l3-canvas-wrapper" style="position: relative; display: inline-block; min-width: 100%; min-height: 100%; padding-left: 100px;">
+    <div id="l3-canvas-wrapper" style="position: relative; display: flex; flex-direction:row; min-width: 100%; min-height: 100%; padding-left: 100px;">
         <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 1; overflow: visible;"></svg>`;
 
     const groups = [
@@ -11287,7 +11287,8 @@ window.renderLevel3Canvas = function(resourceId) {
                         const links = step.links || [];
                         const linkedAssetsHtml = links.map(link => {
                             const assetIcon = OL.getRegistryIcon(link.type);
-                            return `<span class="pill tiny soft" style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05);">${assetIcon}</span>`;
+                            return `<span class="pill tiny soft" style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.1); 
+                            border: 1px solid rgba(255,255,255,0.05);">${assetIcon}</span>`;
                         }).join('');
 
                         return `
