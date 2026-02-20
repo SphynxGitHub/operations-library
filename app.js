@@ -9878,6 +9878,29 @@ OL.drawLevel2LogicLines = function(workflowId) {
 
 // --- SIDEBAR RENDERERS ---
 
+OL.renderSidebarByContext = function() {
+    const sidebarContainer = document.querySelector('.sidebar-content') || document.querySelector('.left-pane-content');
+    if (!sidebarContainer) return;
+
+    const allResources = getActiveClient()?.projectData?.localResources || [];
+
+    // 🎯 ROUTE BASED ON CONTEXT
+    if (state.viewContext === 'L3' && state.focusedResourceId) {
+        // Mode 3: Atomic Step Factory
+        sidebarContainer.innerHTML = window.renderLevel3SidebarContent(state.focusedResourceId);
+    } 
+    else if (state.focusedWorkflowId) {
+        // Mode 2: Resource Library
+        sidebarContainer.innerHTML = window.renderLevel2SidebarContent(allResources);
+    } 
+    else {
+        // Mode 1: Workflow Library
+        sidebarContainer.innerHTML = window.renderLevel1SidebarContent(allResources);
+    }
+    
+    console.log(`🧭 Sidebar Switched to Level: ${state.viewContext || 'L1'}`);
+};
+
 window.renderLevel1SidebarContent = function(allResources) {
     // Only show workflows that aren't already mapped to a stage
     const workflows = allResources.filter(res => (res.type || "").toLowerCase() === 'workflow' && !res.stageId);
