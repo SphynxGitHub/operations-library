@@ -576,14 +576,20 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 4. 🎯 THE ROUTER
+    // 3. 🎯 THE ROUTER
     if (hash.includes('visualizer')) {
+        // Apply layout-specific classes to body
         document.body.classList.add('is-visualizer', 'fs-mode-active');
-        renderGlobalVisualizer(isVault);
-        return; 
-    } 
+        
+        // NOW call the visualizer. Since buildLayout is already done, 
+        // this will fill the #mainContent without being overwritten.
+        const isVault = hash.includes('vault');
+        window.renderGlobalVisualizer(isVault);
+        return; // 🛑 EXIT HERE so we don't run the rest of the router
+    }
 
-    document.body.classList.remove('is-visualizer', 'fs-mode-active');
+   // 4. Standard Routes
+   document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
     // 5. DATA RENDERING
     if (isVault) {
@@ -9473,8 +9479,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <aside id="inspector-panel" class="pane-inspector"></aside>
         </div>
     `;
-    
-    window.buildLayout();
 
     setTimeout(() => {
         OL.initSideResizers();
