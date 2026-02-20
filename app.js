@@ -10111,7 +10111,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
             <div class="builder-box" style="background:rgba(255, 191, 0, 0.03); padding:12px; border-radius:8px; border: 1px solid rgba(255, 191, 0, 0.2); margin-bottom: 20px;">
                 <select id="trigger-object" class="modal-input tiny">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
                 <select id="trigger-verb" class="modal-input tiny">${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
-                <div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleModularTriggerDrag(event)">
+                <div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleDragStart(event, 'new', 'factory-trigger', null)">
                      ⚡ DRAG NEW TRIGGER
                 </div>
             </div>
@@ -10120,7 +10120,7 @@ window.renderLevel3SidebarContent = function(resourceId) {
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
                 <select id="builder-verb" class="modal-input tiny">${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
                 <select id="builder-object" class="modal-input tiny">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
-                <div class="draggable-factory-item action" draggable="true" ondragstart="OL.handleModularAtomicDrag(event)">
+                <div class="draggable-factory-item action" draggable="true" ondragstart="OL.handleDragStart(event, 'new', 'factory-action', null)">
                      🚀 DRAG NEW ACTION
                 </div>
             </div>
@@ -11586,13 +11586,31 @@ OL.prepFactoryDrag = function(e, stepType) {
 };
 
 OL.handleDragStart = function(e, id, type, index) {
-    // type: 'workflow', 'resource', 'step', or 'factory'
+    // 1. Basic Data
     e.dataTransfer.setData("moveId", id);
     e.dataTransfer.setData("itemType", type);
     e.dataTransfer.setData("dragIdx", index);
-    
+
+    // 🚀 2. FACTORY LOGIC: If dragging a builder item, grab the name from dropdowns
+    if (type === 'factory-trigger' || type === 'factory-action') {
+        const isTrigger = type === 'factory-trigger';
+        const verb = document.getElementById(isTrigger ? 'trigger-verb' : 'builder-verb')?.value;
+        const obj = document.getElementById(isTrigger ? 'trigger-object' : 'builder-object')?.value;
+        
+        const finalName = isTrigger ? `${obj} ${verb}` : `${verb} ${obj}`;
+        
+        // Pass these specifically for OL.handleUniversalDrop to catch
+        e.dataTransfer.setData("stepName", finalName);
+        e.dataTransfer.setData("stepType", isTrigger ? 'Trigger' : 'Action');
+    }
+
+    // 3. UI Polish
     e.currentTarget.classList.add('is-dragging-source');
-    e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+    
+    // Fallback: If it's a sidebar item, we set a smaller drag ghost
+    if (e.currentTarget.classList.contains('draggable-factory-item')) {
+        e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
+    }
 };
 
 OL.handleUniversalDragOver = function(e) {
