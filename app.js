@@ -11768,19 +11768,28 @@ OL.handleUniversalDrop = async function(e, sectionId) {
 
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
-            const parent = OL.getResourceById(activeParentId);
-            if (!parent) return;
+            // 1. Identify EXACT location of parent data
+            const client = getActiveClient();
+            const isVault = location.hash.includes('vault');
+            const targetLibrary = isVault ? state.master.resources : client.projectData.localResources;
+            
+            // 2. Find by Reference (This ensures we are editing the LIVE state tree)
+            const parent = targetLibrary.find(r => String(r.id) === String(activeParentId));
+            
+            if (!parent) return console.error("❌ Parent not found in active library:", activeParentId);
             if (!parent.steps) parent.steps = [];
 
-            // 1. Logic for New vs Existing (keep your existing logic here...)
+            // 3. Perform the Data Change
             if (itemType.includes('factory') || itemType === 'resource') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
+                
                 parent.steps.splice(targetIdx, 0, { 
                     id: 'step-' + Date.now(), 
                     name: stepName, 
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
-                    resourceLinkId: moveId === 'new' ? null : moveId 
+                    resourceLinkId: moveId === 'new' ? null : moveId,
+                    outcomes: []
                 });
             } else if (itemType === 'step') {
                 const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
@@ -11791,21 +11800,19 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 }
             }
             
+            // 4. Normalize Order
             parent.steps.forEach((s, i) => s.mapOrder = i);
 
-            // 🚀 THE "IRON-CLAD" FIX: Explicitly update the resource in the source array
-            const client = getActiveClient();
-            if (isVault) {
-                const idx = state.master.resources.findIndex(r => r.id === activeParentId);
-                if (idx > -1) state.master.resources[idx] = parent;
-            } else if (client) {
-                const idx = client.projectData.localResources.findIndex(r => r.id === activeParentId);
-                if (idx > -1) client.projectData.localResources[idx] = parent;
-            }
+            // 5. 🚀 THE "FORCE-OVERWRITE" FIX
+            // We manually re-index the library array to ensure NO stale clones exist
+            const finalIdx = targetLibrary.findIndex(r => String(r.id) === String(activeParentId));
+            targetLibrary[finalIdx] = parent; 
 
-            // ⚡ FORCE PUSH: Don't just wait for the next sync, call persist now
+            console.log(`📡 State Prepared: ${parent.name} has ${parent.steps.length} steps.`);
+            
+            // ⚡ CLOUD PUSH
             await OL.persist(); 
-            console.log("💾 Cloud Sync Confirmed for:", parent.name);
+            console.log("✅ CLOUD ACKNOWLEDGED: Data is safe.");
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
