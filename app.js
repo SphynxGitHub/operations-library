@@ -11249,9 +11249,8 @@ window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
-    let html = `
-    <div id="l3-canvas-wrapper" style="position: relative; display: inline-block; min-width: 100%; min-height: 100%; padding-left: 100px;">
-        <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 1; overflow: visible;"></svg>`;
+    let html = `<div id="l3-canvas-wrapper" style="position: relative; display: inline-block; min-width: 100%; min-height: 100%; padding-left: 100px;">
+                <svg id="vis-links-layer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 1; overflow: visible;"></svg>`;
 
     const groups = [
         { type: 'Trigger', label: '⚡ ENTRY TRIGGERS', color: '#ffbf00' },
@@ -11259,89 +11258,30 @@ window.renderLevel3Canvas = function(resourceId) {
     ];
     
     html += groups.map(group => {
-        const steps = (parent.steps || [])
-        .filter(s => String(s.type) === String(groupType)) // Trigger vs Action
-        .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+        // FIXED REFERENCES HERE:
+        const steps = (res.steps || [])
+            .filter(s => String(s.type || 'Action').toLowerCase() === String(group.type).toLowerCase())
+            .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
         return `
-            <div class="stage-container">
-                <div class="stage-header-row">
-                    <span class="stage-name" style="color:${group.color}">${group.label}</span>
-                </div>
-                
-                <div class="stage-workflow-stream grid-drop-target" 
-                    data-section-id="${group.type}"
-                    ondragover="OL.handleUniversalDragOver(event)" 
-                    ondragleave="OL.handleUniversalDragLeave(event)"
-                    ondrop="OL.handleUniversalDrop(event, '${group.type}')">
-                    
-                    ${steps.map((step, idx) => {
-                        const isTrigger = step.type === 'Trigger';
-                        const typeIcon = isTrigger ? "⚡" : "🎬";
-                        
-                        // 📱 Resolve Application Icon
-                        const client = getActiveClient();
-                        const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-                        const linkedApp = allApps.find(a => String(a.id) === String(step.appId));
-                        const appIconHtml = linkedApp ? `<span title="${esc(linkedApp.name)}" style="font-size:10px; margin-left:5px; opacity:0.8;">📱</span>` : '';
-
-                        // 🔗 Generate Asset Icons
-                        const links = step.links || [];
-                        const linkedAssetsHtml = links.map(link => {
-                            const assetIcon = OL.getRegistryIcon(link.type);
-                            return `<span class="pill tiny soft" style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05);">${assetIcon}</span>`;
-                        }).join('');
-
-                        return `
-                            <div class="workflow-block-card" 
-                                id="step-node-${step.id}" 
-                                draggable="true" 
-                                style="position: relative; min-height: 85px; display: flex; flex-direction: column; padding: 12px; cursor: pointer; z-index: 5;"
-                                onmousedown="event.stopPropagation(); OL.loadInspector('${step.id}', '${resourceId}')"
-                                ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})">
-                                <div class="card-delete-hitbox" 
-                                    style="position: absolute; top: 0; right: 0; width: 30px; height: 30px; 
-                                            display: flex; align-items: center; justify-content: center; 
-                                            z-index: 999; pointer-events: auto;"
-                                    onmousedown="event.stopPropagation(); OL.removeStepFromCanvas('${resourceId}', '${step.id}')">
-                                    
-                                    <span class="delete-icon" 
-                                        style="font-size: 16px; color: rgba(255,255,255,0.4); transition: color 0.2s, transform 0.2s;"
-                                        onmouseover="this.style.color='#ef4444'; this.style.transform='scale(1.2)';"
-                                        onmouseout="this.style.color='rgba(255,255,255,0.4)'; this.style.transform='scale(1)';"
-                                        title="Delete Step">
-                                        &times;
-                                    </span>
-                                </div>
-                                
-                                <div style="display:flex; align-items:center; margin-bottom:8px; pointer-events: none;">
-                                    <span class="pill tiny ${isTrigger ? 'accent' : 'soft'}" style="font-size:9px; padding:2px 8px; display:flex; align-items:center; gap:4px;">
-                                        <span style="font-size:10px;">${typeIcon}</span> ${esc(step.type).toUpperCase()}
-                                    </span>
-                                </div>
-
-                                <div class="bold accent" style="line-height:1.2; font-size: 13px; display:flex; align-items:center; flex-wrap:wrap; pointer-events: none;">
-                                    ${esc(step.name || "Untitled")} ${appIconHtml}
-                                </div>
-
-                                <div class="node-linked-assets" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; min-height: 12px; pointer-events: none;">
-                                    ${linkedAssetsHtml}
-                                </div>
-                                
-                                <div class="tiny muted" style="font-size:9px; margin-top:auto; padding-top:8px; opacity:0.6; pointer-events: none;">
-                                    ${step.assigneeName ? `👤 ${esc(step.assigneeName)}` : '👥 Unassigned'}
-                                </div>
-                            </div>`;
-                    }).join('')}
+            <div class="stage-container" style="margin-bottom: 40px;">
+                <div class="stage-header-row"><span class="stage-name" style="color:${group.color}">${group.label}</span></div>
+                <div class="stage-workflow-stream">
+                    ${steps.map(step => `
+                        <div class="workflow-block-card" style="background: rgba(255,255,255,0.05); margin: 10px; padding: 15px; border-left: 3px solid ${group.color};">
+                            <div class="bold accent">${esc(step.name || "Untitled")}</div>
+                            <div class="tiny muted">${(step.type || 'Action').toUpperCase()}</div>
+                        </div>
+                    `).join('')}
                 </div>
             </div>`;
     }).join('');
 
-    html += `</div>`;
-    
-    setTimeout(() => OL.drawVerticalLogicLines(resourceId), 100);
-    return html;
+    return html + `</div>`;
 };
+
+// Now force the UI to use the new function
+document.getElementById('fs-canvas').innerHTML = window.renderLevel3Canvas(state.focusedResourceId);
 
 OL.drawVerticalLogicLines = function(resId) {
     const svg = document.getElementById('vis-links-layer');
