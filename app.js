@@ -93,47 +93,52 @@ OL.persist = async function() {
 };
 
 // 3. REAL-TIME SYNC ENGINE
-// 3. REAL-TIME SYNC ENGINE (HARDENED)
-// 3. REAL-TIME SYNC ENGINE (IRON-CLAD VERSION)
 OL.sync = function() {
     console.log("📡 Initializing Iron-Clad Sync...");
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        // 1. 🛡️ THE SHIELD: Block if saving OR if a render just happened
         const now = Date.now();
+        // 1. 🛡️ THE SHIELD
         if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
             return; 
         }
 
         const cloudData = doc.data();
 
-        // 2. 🧠 DEEP EQUALITY CHECK (Master & Focus only)
+        // 2. 🧠 SMART EQUALITY CHECK
+        // If state.master is undefined/null, this is our FIRST load. We MUST proceed.
+        const isFirstLoad = !state.master || Object.keys(state.master).length === 0;
         const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
         const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
+        const hasClientsChanged = JSON.stringify(cloudData.clients) !== JSON.stringify(state.clients);
 
-        if (!hasFocusChanged && !hasDataChanged) return; 
+        if (!isFirstLoad && !hasFocusChanged && !hasDataChanged && !hasClientsChanged) return; 
 
-        console.log("🔄 Valid Cloud Change Detected. Updating UI...");
+        console.log("🔄 Valid Cloud Change Detected. Updating State...");
 
         // 3. Update State
-        state.master = cloudData.master;
-        state.clients = cloudData.clients;
+        state.master = cloudData.master || {};
+        state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
-        state.viewMode = cloudData.viewMode;
+        state.viewMode = cloudData.viewMode || 'global';
 
-        // 4. 🚀 DEBOUNCED RENDER
-        clearTimeout(window.syncDebounce);
-        window.syncDebounce = setTimeout(() => {
-            window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-        }, 300); 
+        // 4. 🚀 THE NUDGE (Move this UP)
+        // If the screen is empty or loading, trigger the router immediately
+        const main = document.getElementById('mainContent');
+        if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
+            console.log("📡 Data arrived. Nudging router to draw the current page...");
+            window.handleRoute();
+            return; // Exit early because handleRoute will trigger the necessary render
+        }
 
-        onSnapshot(doc => {
-            const main = document.getElementById('mainContent');
-            if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-                console.log("📡 Data arrived late. Nudging router...");
-                window.handleRoute();
-            }
-        });
+        // 5. 🎨 DEBOUNCED VISUALIZER REFRESH
+        // Only do this if we are actually ON a visualizer page
+        if (window.location.hash.includes('visualizer')) {
+            clearTimeout(window.syncDebounce);
+            window.syncDebounce = setTimeout(() => {
+                window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+            }, 300); 
+        }
     });
 };
 
