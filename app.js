@@ -9417,6 +9417,7 @@ state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
     console.log("🎨 Visualizer Engine Start...");
+    if (!state.viewMode) state.viewMode = 'global';
     const client = getActiveClient();
     const container = document.getElementById("mainContent");
     if (!container) return;
