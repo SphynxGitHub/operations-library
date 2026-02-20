@@ -94,48 +94,30 @@ OL.persist = async function() {
 
 // 3. REAL-TIME SYNC ENGINE
 OL.sync = function() {
-    console.log("📡 Initializing Real-Time Sync...");
-    
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (!doc.exists) return;
-
-        // 🛡️ THE SHIELD: Block sync if local state is "Dirty" (Saving or Typing)
-        const isUserTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-        if (state.isSaving || isUserTyping) {
-            const cloudData = doc.data();
-            state.master = cloudData.master;
-            state.clients = cloudData.clients;
-            console.log("🛡️ Data Synced Silently (UI Rebuild Blocked)");
-            return; 
-        }
-
         const cloudData = doc.data();
-        const currentLocalActiveId = state.activeClientId;
 
-        // Update State
+        // 1. 🛡️ Keep your existing Shield logic...
+        
+        // 2. 🌍 SYNC THE DATA
         state.master = cloudData.master;
         state.clients = cloudData.clients;
 
-        // Check AI Inbox
-        if (cloudData.ai_inbox && cloudData.ai_inbox.targetResId === state.focusedResourceId) {
-            OL.processIncomingAI(cloudData.ai_inbox);
+        // 3. 📍 SYNC THE NAVIGATION (The Missing Link)
+        // Only sync these if we aren't currently "Dirty"
+        if (!state.isSaving) {
+            state.viewMode = cloudData.viewMode || 'global';
+            state.focusedWorkflowId = cloudData.focusedWorkflowId || null;
+            state.focusedResourceId = cloudData.focusedResourceId || null;
+            state.viewContext = cloudData.viewContext || 'L1';
         }
 
-        // Token Resolution
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('access');
-        if (token) {
-            const matchedClient = Object.values(state.clients).find(c => c.publicToken === token);
-            if (matchedClient) state.activeClientId = matchedClient.id;
-        } else {
-            state.activeClientId = currentLocalActiveId;
-        }
-
-        // 🚀 SMART REBUILD
-        // If we have an active inspector, only refresh the inspector.
-        // Otherwise, rebuild the whole layout.
-        if (state.activeInspectorResId) {
-            console.log("⚡ Refreshing Inspector Content Only");
+        // 4. 🚀 SMART REBUILD
+        if (state.focusedResourceId) {
+            // If we are drilled into L3, ensure we render the Factory
+            window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+        } else if (state.activeInspectorResId) {
             OL.loadInspector(state.activeInspectorResId);
         } else {
             window.buildLayout();
