@@ -11773,21 +11773,24 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             if (!parent.steps) parent.steps = [];
 
             // 1. Dropping a NEW item from the Library Sidebar (Factory)
-            if (itemType === 'factory' || itemType === 'resource' || itemType === 'workflow') {
+            if (itemType === 'factory' || itemType === 'resource' || itemType === 'workflow' || itemType === 'factory-trigger' || itemType === 'factory-action') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
                 
                 const newStep = { 
-                    id: 'step-' + Date.now() + '-' + Math.floor(Math.random() * 1000), // Unique Step ID
+                    id: 'step-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
                     name: stepName, 
+                    // 🚀 FIX: Ensure sectionId is used correctly for L3 Type
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
                     gridLane: state.focusedWorkflowId ? sectionId : null,
-                    resourceLinkId: moveId // 👈 CRITICAL: This is the ID of the actual library resource
+                    resourceLinkId: moveId === 'new' ? null : moveId,
+                    outcomes: [],
+                    createdDate: new Date().toISOString()
                 };
                 
                 parent.steps.splice(targetIdx, 0, newStep);
             } 
-            // 2. Moving an EXISTING step already on the canvas
+            // 2. Moving an EXISTING step
             else if (itemType === 'step') {
                 const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
                 
@@ -11802,14 +11805,13 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 }
             }
             
-            // Normalize order
+            // 3. Normalize order
             parent.steps.forEach((s, i) => s.mapOrder = i);
 
-            // Deep Save Trigger
-            const client = getActiveClient();
-            const source = isVault ? state.master.resources : client.projectData.localResources;
-            const pIdx = source.findIndex(r => String(r.id) === String(activeParentId));
-            if (pIdx > -1) source[pIdx] = { ...parent }; 
+            // 🚀 THE FIX: Remove the manual "source[pIdx] = ..." block.
+            // Since OL.getResourceById returns the actual object by reference, 
+            // the state is already updated. updateAndSync will handle the rest.
+            console.log("💾 Step sequence updated in state for:", parent.name);
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
