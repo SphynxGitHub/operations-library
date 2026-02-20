@@ -9450,6 +9450,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const isGlobalMode = state.viewMode === 'global';
+    const isZenSaved = localStorage.getItem('ol_zen_mode') === 'true';
 
     // 2. 🎯 TIER 3: RESOURCE FOCUS
     if (state.focusedResourceId) {
@@ -9495,6 +9496,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <main class="pane-canvas-wrap">
                 <div class="canvas-header">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
+                    <div class="canvas-actions">
+                        <button class="btn soft tiny" onclick="OL.setVisualizerView('global', ${isVaultMode})">
+                            🌐 Global View
+                        </button>
+                        <button id="zen-mode-toggle" class="btn soft tiny ${isZenSaved ? 'accent' : ''}" onclick="OL.toggleZenMode()">
+                            ${isZenSaved ? 'Collapse ⤓' : 'Full Screen ⤢'}
+                        </button>
+                    </div>
                 </div>
                 <div class="vertical-stage-canvas" id="fs-canvas">${canvasHtml}</div>
             </main>
