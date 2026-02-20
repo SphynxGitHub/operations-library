@@ -9497,7 +9497,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 <div class="canvas-header">
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
                     <div class="canvas-actions">
-                        <button class="btn soft tiny" onclick="OL.toggleZenMode('global', ${isVaultMode})">
+                        <button class="btn soft tiny" onclick="OL. renderGlobalCanvas(${isVaultMode})">
                             🌐 Global View
                         </button>
                         <button id="zen-mode-toggle" class="btn soft tiny ${isZenSaved ? 'accent' : ''}" onclick="OL.toggleZenMode()">
