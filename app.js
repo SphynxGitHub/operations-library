@@ -5341,41 +5341,66 @@ OL.universalDelete = async function(id, type, options = {}) {
 window.renderSopStepList = function (res) {
     if (!res) return "";
 
-    const triggers = res.triggers || [];
-    // 🚀 THE FIX: Filter out Triggers from the Steps array for this view
-    const steps = (res.steps || []).filter(s => s.type !== 'Trigger'); 
+    // 1. Gather all "Triggers" (both dedicated array and trigger-type steps)
+    const entryTriggers = res.triggers || [];
+    const stepTriggers = (res.steps || []).filter(s => s.type === 'Trigger');
+    
+    // 2. Filter for only Actions in the Sequence section
+    const actionSteps = (res.steps || []).filter(s => s.type !== 'Trigger'); 
     
     let html = "";
 
-    // --- ⚡ SECTION 1: ENTRY TRIGGERS ---
-    // (This part stays the same, it uses res.triggers)
+    // --- ⚡ SECTION 1: TRIGGERS (Combined) ---
     html += `
-        <div class="triggers-container" ...>
-            <label class="tiny accent bold uppercase">⚡ Entry Triggers</label>
-            <div id="triggers-list">
-                ${triggers.map((t, idx) => `
+        <div class="triggers-container" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,191,0,0.1); padding-bottom: 10px;">
+            <label class="tiny accent bold uppercase" style="color:var(--vault-gold)">⚡ Entry Triggers & Events</label>
+            <div id="triggers-list" style="margin-top:8px;">
+                ${entryTriggers.map(t => `
                     <div class="dp-manager-row">
                         <span class="bold tiny" style="color:#ffbf00">${esc(t.name)}</span>
+                    </div>
+                `).join("")}
+                
+                ${stepTriggers.map(s => `
+                    <div class="dp-manager-row" style="background: rgba(255,191,0,0.05); border-left: 2px solid #ffbf00;">
+                         <span class="tiny" style="margin-right:8px; opacity:0.5;">L3</span>
+                         <input class="ghost-input tiny bold" 
+                                style="color:#ffbf00"
+                                value="${esc(s.name)}" 
+                                onchange="OL.updateStepName('${res.id}', '${s.id}', this.value)">
                     </div>
                 `).join("")}
             </div>
         </div>
     `;
 
-    // --- 📝 SECTION 2: SEQUENTIAL STEPS ---
-    // (Now this only shows Actions/Steps, not Triggers)
-    html += `<label class="tiny muted bold uppercase">📝 Sequence Overview</label>`;
+    // --- 📝 SECTION 2: SEQUENTIAL ACTIONS ---
+    html += `<label class="tiny muted bold uppercase">📝 Action Sequence</label>`;
     
-    html += steps.map((step, idx) => `
+    html += actionSteps.map((step, idx) => `
         <div class="step-group">
             <div class="dp-manager-row">
-                <span class="tiny muted" style="margin-right: 1%">${idx + 1}</span>
-                <div class="bold tiny">${esc(step.name)}</div>
+                <span class="tiny muted" style="min-width: 15px;">${idx + 1}</span>
+                <input class="ghost-input tiny bold" 
+                       style="width: 100%"
+                       value="${esc(step.name)}" 
+                       onchange="OL.updateStepName('${res.id}', '${step.id}', this.value)">
             </div>
         </div>
     `).join("");
 
     return html;
+};
+
+OL.toggleStepType = function(resId, stepId) {
+    const res = OL.getResourceById(resId);
+    const step = res.steps.find(s => s.id === stepId);
+    if (step) {
+        step.type = (step.type === 'Trigger') ? 'Action' : 'Trigger';
+        OL.persist();
+        // Refresh the FS overlay or list
+        OL.addSopStep(resId); // Or a dedicated refresh call
+    }
 };
 
 // Helper for Trigger Toggle
@@ -5560,25 +5585,31 @@ OL.addSopStep = function(resId) {
     const newId = uid(); 
     
     if (!res.steps) res.steps = [];
-    res.steps.push({ id: newId, name: "", outcomes: [], description: "" });
+
+    // 🛡️ THE FIX: Add 'type: "Action"' so the L3 Column filter catches it
+    res.steps.push({ 
+        id: newId, 
+        name: "", 
+        type: "Action", // 👈 Crucial for L3 visibility
+        outcomes: [], 
+        description: "",
+        mapOrder: res.steps.length // Optional: helps keep sorting consistent
+    });
     
-    // Set the new step as the one being edited
     state.editingStepId = newId;
     OL.persist();
 
     // 🚀 THE FULLSCREEN FIX:
     const fsOverlay = document.getElementById('workflow-fs-overlay');
     if (fsOverlay) {
-        // If fullscreen is active, use switchFSMode to force a total redraw of the canvas
         const isVisualMode = document.getElementById('mode-visual')?.classList.contains('active');
         OL.switchFSMode(isVisualMode ? 'visual' : 'editor', resId);
     } else {
-        // Standard Modal Refresh Logic
         const listEl = document.getElementById('sop-step-list');
         if (listEl) listEl.innerHTML = renderSopStepList(res);
     }
     
-    // Auto-focus the new input (delay slightly to allow DOM redraw)
+    // Auto-focus logic remains the same
     setTimeout(() => {
         const inputs = document.querySelectorAll('.ghost-input, .vis-input-ghost');
         if (inputs.length > 0) inputs[inputs.length - 1].focus();
@@ -9844,6 +9875,7 @@ OL.drawLevel2LogicLines = function(workflowId) {
     svg.innerHTML = pathsHtml;
 };
 
+
 // --- SIDEBAR RENDERERS ---
 
 window.renderLevel1SidebarContent = function(allResources) {
@@ -11158,52 +11190,60 @@ window.renderWorkflowsInStage = function(stageId, isVaultMode) {
 };
 
 // LEVEL 2: Resources in Workflow Lanes
-function renderResourcesInWorkflowLane(workflowId, lane) {
+function renderResourcesInWorkflowLane(workflowId, laneId) {
     const workflow = OL.getResourceById(workflowId);
-    const items = (workflow.steps || [])
-        .filter(s => s.gridLane === lane)
+    if (!workflow || !workflow.steps) return '';
+
+    // Filter items in this lane (could be a Resource or a loose Step)
+    const items = workflow.steps
+        .filter(s => String(s.gridLane) === String(laneId))
         .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
-    if (items.length === 0) {
-        return `<div class="tiny muted italic" style="padding:20px; opacity:0.3; text-align:center;">
-            Drop Resources Here
-        </div>`;
-    }
-    
     return items.map((item, idx) => {
-        // 1. Try to find the linked library asset
+        // 🔍 Check if this step is a "Resource Container" or an "Atomic Step"
         const linkedRes = item.resourceLinkId ? OL.getResourceById(item.resourceLinkId) : null;
         
-        // 2. Resolve the Name (Priority: Library Asset > Step's Own Name > Fallback)
-        let displayName = "Unknown Step";
-        if (linkedRes) {
-            displayName = linkedRes.name;
-        } else if (item.name) {
-            displayName = item.name;
-        }
-
-        // 3. Resolve the Icon
-        const displayIcon = linkedRes ? OL.getRegistryIcon(linkedRes.type) : "⚙️";
+        // If it's a resource, it might have nested steps of its own (L3)
+        const nestedStepCount = linkedRes?.steps?.length || 0;
+        
+        const displayName = linkedRes ? linkedRes.name : (item.name || "Loose Step");
+        const displayIcon = linkedRes ? OL.getRegistryIcon(linkedRes.type) : "✏️";
+        const isLoose = !linkedRes;
 
         return `
-            <div class="workflow-block-card vis-node" 
-                draggable="true" 
-                onmousedown="event.stopPropagation(); OL.loadInspector('${item.resourceLinkId || item.id}')"
-                ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
-                ondblclick="OL.drillIntoResourceMechanics('${item.resourceLinkId || item.id}')">
+            <div class="workflow-block-card l2-node ${isLoose ? 'is-loose-step' : 'is-resource'}" 
+                 draggable="true" 
+                 ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${item.id}', 'step', ${idx})"
+                 onclick="event.stopPropagation(); OL.loadInspector('${linkedRes?.id || item.id}')"
+                 style="${isLoose ? 'border-left: 4px solid var(--vault-gold) !important;' : 'border-left: 4px solid var(--accent) !important;'}">
                 
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="step-icon">${displayIcon}</span>
-                    <div class="bold accent" style="font-size: 11px;">${esc(displayName)}</div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span>${displayIcon}</span>
+                        <div class="bold accent">${esc(displayName)}</div>
+                    </div>
+                    <span class="tiny muted">#${idx + 1}</span>
                 </div>
-                
-                <div class="tiny muted" style="margin-top:5px; font-size:9px;">
-                    Order: ${item.mapOrder !== undefined ? item.mapOrder + 1 : idx + 1}
-                </div>
+
+                ${!isLoose && nestedStepCount > 0 ? `
+                    <div class="tiny" style="margin-top:8px; color:var(--accent); opacity:0.8;">
+                        📋 Contains ${nestedStepCount} Sub-Steps (L3)
+                    </div>
+                ` : ''}
+
+                ${isLoose ? `
+                    <div class="connect-resource-bridge" 
+                         style="margin-top:10px; padding:6px; background:rgba(255,191,0,0.05); border:1px dashed var(--vault-gold); border-radius:4px; text-align:center; cursor:pointer;"
+                         onclick="event.stopPropagation(); OL.openResourcePickerForStep('${item.id}')">
+                        <span class="tiny" style="color:var(--vault-gold); font-size:9px; font-weight:bold;">
+                            🔗 WRAP IN RESOURCE
+                        </span>
+                    </div>
+                ` : ''}
             </div>
         `;
     }).join('');
-};
+}
 
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
