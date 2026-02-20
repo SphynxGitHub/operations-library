@@ -11457,30 +11457,21 @@ OL.drillDownIntoWorkflow = function(resId) {
     renderGlobalVisualizer(location.hash.includes('vault'));
 };
 
-OL.drillIntoResourceMechanics = function(resId) {
-    state.focusedResourceId = resId;
-    state.viewContext = 'L3';
-
-    // 🎯 Use the ID we found in your console log
-    const target = document.getElementById('fs-canvas');
+OL.drillIntoResourceMechanics = function(resId) { 
+    console.log("🏭 Entering Step Factory (L3) for:", resId);
     
-    if (target) {
-        // 1. Inject the HTML
-        target.innerHTML = window.renderLevel3Canvas(resId);
-        
-        // 2. Make sure it's visible (remove 'hidden' classes or set display)
-        target.style.display = 'block'; 
-        target.classList.add('active'); // If you use CSS transitions
-        
-        console.log("🚀 L3 successfully injected into #fs-canvas");
-        
-        // 3. Re-draw connection lines
-        setTimeout(() => {
-            if (window.drawLevel3LogicLines) window.drawLevel3LogicLines(resId);
-        }, 100);
-    } else {
-        console.error("Could not find #fs-canvas in the DOM.");
-    }
+    // 1. Update State & Memory
+    state.focusedResourceId = resId;
+    state.viewMode = 'focus'; // Ensure we aren't in Macro mode
+    sessionStorage.setItem('active_resource_id', resId);
+
+    // 2. 🚀 THE CRITICAL STEP: Call the orchestrator
+    // This function handles the sidebar (toolboxHtml), header, AND canvas
+    const isVaultMode = window.location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVaultMode);
+    
+    // 3. Focus the inspector on the resource we just entered
+    OL.loadInspector(resId);
 };
 
 OL.exitToWorkflow = function() {
