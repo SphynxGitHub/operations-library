@@ -168,47 +168,6 @@ OL.updateAndSync = async function(mutationFn) {
     }
 };
 
-OL.processIncomingAI = async function(inboxData) {
-    const res = OL.getResourceById(inboxData.targetResId);
-    if (!res) return;
-
-    // 🚀 THE PARSE: Zapier sends a string, we need an array.
-    let newSteps = [];
-    try {
-        newSteps = typeof inboxData.steps === 'string' ? JSON.parse(inboxData.steps) : inboxData.steps;
-    } catch(e) {
-        console.error("AI JSON Parse Error:", e);
-        return;
-    }
-
-    // 1. Assign real UIDs to every new step
-    newSteps.forEach(s => s.id = uid());
-
-    // 2. Resolve targetIdx to actual jump_step_IDs
-    newSteps.forEach(step => {
-        if (step.outcomes) {
-            step.outcomes.forEach(oc => {
-                if (oc.targetIdx !== undefined) {
-                    const targetStep = newSteps.find(s => s.tempIdx === oc.targetIdx);
-                    if (targetStep) oc.action = `jump_step_${targetStep.id}`;
-                }
-            });
-        }
-        // Clean up temp mapping data
-        delete step.tempIdx;
-    });
-
-    // 3. Append to sequence and Persist
-    res.steps = [...(res.steps || []), ...newSteps];
-    
-    // 🧹 CLEAR THE INBOX: Delete the ai_inbox field so we don't repeat this
-    await db.collection('systems').doc('main_state').update({
-        ai_inbox: firebase.firestore.FieldValue.delete()
-    });
-
-    console.log("✨ AI Workflow integrated successfully.");
-    renderGlobalVisualizer(false);
-};
 
 window.addEventListener("load", () => {
     // 1. Admin Verification
@@ -608,6 +567,7 @@ window.handleRoute = function () {
 
     // 5. DATA RENDERING
     if (isVault) {
+        // Vault logic is fine...
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
@@ -619,15 +579,24 @@ window.handleRoute = function () {
     } else if (hash === "#/" || hash === "#/clients") {
         renderClientDashboard();
     } else if (client) {
-        // Standard Client Project Routes
-        if (hash.includes("/resources")) renderResourceManager();
-        else if (hash.includes("/applications")) renderAppsGrid();
-        else if (hash.includes("/functions")) renderFunctionsGrid();
-        else if (hash.includes("/scoping-sheet")) renderScopingSheet();
-        else if (hash.includes("/analyze")) renderAnalysisModule();
-        else if (hash.includes("/client-tasks")) renderChecklistModule();
-        else if (hash.includes("/team")) renderTeamManager();
-        else if (hash.includes("/how-to")) renderHowToLibrary();
+        console.log("🟢 Routing to Client Module:", hash);
+        
+        // Use simplified includes that match your clientTabs hrefs
+        if (hash.includes("client-tasks")) renderChecklistModule();
+        else if (hash.includes("resources")) renderResourceManager();
+        else if (hash.includes("applications")) renderAppsGrid();
+        else if (hash.includes("functions")) renderFunctionsGrid();
+        else if (hash.includes("scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("analyze")) renderAnalysisModule();
+        else if (hash.includes("team")) renderTeamManager();
+        else if (hash.includes("how-to")) renderHowToLibrary();
+        else {
+            console.warn("❓ Unknown client hash, defaulting to Tasks");
+            renderChecklistModule();
+        }
+    } else {
+        console.error("🔴 No client found for hash:", hash);
+        renderClientDashboard(); // Fallback if lost
     }
 };
 
