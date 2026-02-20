@@ -9454,6 +9454,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     // 3. DETERMINISTIC RENDERING LOGIC (Corrected Priority)
     // We check for FOCUS first, then Global Mode.
     if (state.focusedResourceId) {
+        console.log("L3!!!");
         // 🏭 LEVEL 3: STEP FACTORY
         const res = OL.getResourceById(state.focusedResourceId);
         if (res) {
@@ -9463,6 +9464,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         }
     } 
     else if (state.focusedWorkflowId) {
+        console.log("L2!!!");
         // 🔄 LEVEL 2: WORKFLOW FOCUS
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
@@ -9470,11 +9472,13 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
     else if (isGlobalMode) {
+        console.log("L1!!!");
         // 🌐 TIER 1: MACRO MAP (The Big Horizontal Map)
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderGlobalCanvas(isVaultMode);
     } 
     else {
+        console.log("FALLBACK!!!");
         // 📋 TIER 1: FOCUS VIEW (Vertical Lifecycle)
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
@@ -10038,51 +10042,69 @@ const ATOMIC_STEP_LIB = {
 };
 
 window.renderLevel3SidebarContent = function(resourceId) {
-    const dbLib = state.master?.atomicLibrary || { Verbs: [], Objects: [], Triggers: [] };
-    
-    const triggerVerbs = [...new Set([...ATOMIC_STEP_LIB.TriggerVerbs, ...(dbLib.Verbs || [])])].sort();
-    const actionVerbs = [...new Set([...ATOMIC_STEP_LIB.ActionVerbs, ...(dbLib.Verbs || [])])].sort();
-    const objects = [...new Set([...ATOMIC_STEP_LIB.Objects, ...(dbLib.Objects || [])])].sort();
+    console.group("🏭 L3 SIDEBAR DEBUG");
+    console.log("1. Received resourceId:", resourceId);
 
+    // Clean ID
+    const cleanId = String(resourceId).replace(/^(l3-node-|step-node-|empty-)/, '');
+    console.log("2. Cleaned ID for lookup:", cleanId);
+
+    // Check Data
+    const res = OL.getResourceById(cleanId);
+    if (!res) {
+        console.error("❌ CRITICAL: OL.getResourceById returned NULL for:", cleanId);
+        console.log("Current state.master.resources:", state.master.resources);
+        console.log("Current state.clients:", state.clients);
+        console.groupEnd();
+        return `<div class="p-20 tiny danger">⚠️ ERROR: Resource Data Missing for ${cleanId}</div>`;
+    }
+
+    console.log("3. Resource Found:", res.name);
+
+    // Check Library
+    const dbLib = state.master?.atomicLibrary;
+    if (!dbLib) {
+        console.warn("⚠️ state.master.atomicLibrary is MISSING. Using hardcoded fallbacks.");
+    } else {
+        console.log("4. Library Data Found:", dbLib);
+    }
+
+    const triggerVerbs = [...new Set([...ATOMIC_STEP_LIB.TriggerVerbs, ...(dbLib?.TriggerVerbs || [])])].sort();
+    const actionVerbs = [...new Set([...ATOMIC_STEP_LIB.ActionVerbs, ...(dbLib?.ActionVerbs || [])])].sort();
+    const objects = [...new Set([...ATOMIC_STEP_LIB.Objects, ...(dbLib?.Objects || [])])].sort();
+
+    console.log("5. Builder Lists Ready - Triggers:", triggerVerbs.length, "Actions:", actionVerbs.length);
+    console.groupEnd();
+
+    // The actual HTML return
     return `
-        <div class="drawer-header"><h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3></div>
-        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto; height: calc(100vh - 100px);">
+        <div class="drawer-header">
+            <h3 style="color:var(--vault-gold)">🛠️ Step Factory</h3>
+            <div class="tiny muted uppercase bold" style="margin-top:4px;">${esc(res.name)}</div>
+        </div>
+        <div class="factory-scroll-zone" style="padding:15px; overflow-y:auto; height: calc(100vh - 120px);">
             
             <label class="modal-section-label" style="color:#ffbf00">⚡ Trigger Builder</label>
             <div class="builder-box" style="background:rgba(255, 191, 0, 0.03); padding:12px; border-radius:8px; border: 1px solid rgba(255, 191, 0, 0.2); margin-bottom: 20px;">
-                <select id="trigger-object" class="modal-input tiny" style="margin-top:5px;">
-                    ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
-                </select>
-                <select id="trigger-verb" class="modal-input tiny">
-                    ${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}
-                </select>
-                
-                <div class="draggable-factory-item trigger" draggable="true" 
-                     style="margin-top:10px; background:rgba(255, 191, 0, 0.1); border: 1px dashed #ffbf00; text-align:center; padding:10px; border-radius:4px; cursor: grab;" 
-                     ondragstart="event.stopPropagation(); OL.prepFactoryDrag(event, 'Trigger')">
+                <select id="trigger-object" class="modal-input tiny">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <select id="trigger-verb" class="modal-input tiny">${triggerVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <div class="draggable-factory-item trigger" draggable="true" ondragstart="OL.handleModularTriggerDrag(event)">
                      ⚡ DRAG NEW TRIGGER
                 </div>
             </div>
 
             <label class="modal-section-label">🎬 Action Builder</label>
             <div class="builder-box" style="background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; border: 1px solid var(--line);">
-                <select id="builder-verb" class="modal-input tiny">
-                    ${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}
-                </select>
-                <select id="builder-object" class="modal-input tiny" style="margin-top:5px;">
-                    ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
-                </select>
-                
-                <div class="draggable-factory-item action" draggable="true" 
-                    style="margin-top:10px; background:var(--accent-glow); border: 1px solid var(--accent); text-align:center; padding:10px; border-radius:4px; cursor: grab;" 
-                    ondragstart="event.stopPropagation(); OL.prepFactoryDrag(event, 'Action')">
-                    🚀 DRAG NEW ACTION
+                <select id="builder-verb" class="modal-input tiny">${actionVerbs.map(v => `<option value="${v}">${v}</option>`).join('')}</select>
+                <select id="builder-object" class="modal-input tiny">${objects.map(o => `<option value="${o}">${o}</option>`).join('')}</select>
+                <div class="draggable-factory-item action" draggable="true" ondragstart="OL.handleModularAtomicDrag(event)">
+                     🚀 DRAG NEW ACTION
                 </div>
             </div>
             
-            <div style="margin-top:20px; text-align:center; display:flex; gap:10px; justify-content:center;">
-                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Verbs')">+ Verb</button>
-                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Objects')">+ Object</button>
+            <div style="margin-top:20px; text-align:center;">
+                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Verbs')">+ Add Verb</button>
+                <button class="btn tiny soft" onclick="OL.promptAddAtomic('Objects')">+ Add Object</button>
             </div>
         </div>
     `;
