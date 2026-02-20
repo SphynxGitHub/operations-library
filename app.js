@@ -11281,7 +11281,13 @@ window.renderLevel3Canvas = function(resourceId) {
 };
 
 // Now force the UI to use the new function
-document.getElementById('fs-canvas').innerHTML = window.renderLevel3Canvas(state.focusedResourceId);
+const fsCanvas = document.getElementById('fs-canvas');
+
+if (fsCanvas) {
+    fsCanvas.innerHTML = window.renderLevel3Canvas(state.focusedResourceId);
+} else {
+    console.warn("📡 Sync attempted, but #fs-canvas is not in the DOM yet.");
+}
 
 OL.drawVerticalLogicLines = function(resId) {
     const svg = document.getElementById('vis-links-layer');
