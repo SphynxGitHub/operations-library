@@ -5600,11 +5600,11 @@ OL.addSopStep = function(resId) {
     OL.persist();
 
     // 🚀 THE FULLSCREEN FIX:
-    const fsOverlay = document.getElementById('workflow-fs-overlay');
-    if (fsOverlay) {
-        const isVisualMode = document.getElementById('mode-visual')?.classList.contains('active');
-        OL.switchFSMode(isVisualMode ? 'visual' : 'editor', resId);
-    } else {
+    const fsOverlay = document.getElementById('fs-canvas'); // 👈 Updated ID
+    if (fsOverlay && fsOverlay.style.display !== 'none') {
+        // Force the refresh of the L3 view
+        fsOverlay.innerHTML = window.renderLevel3Canvas(resId);
+    }else {
         const listEl = document.getElementById('sop-step-list');
         if (listEl) listEl.innerHTML = renderSopStepList(res);
     }
@@ -11466,41 +11466,28 @@ OL.drillDownIntoWorkflow = function(resId) {
 };
 
 OL.drillIntoResourceMechanics = function(resId) {
-    // Ensure the Focus Mode container exists
-    if (!document.getElementById('workflow-fs-overlay')) {
-        const fs = document.createElement('div');
-        fs.id = 'workflow-fs-overlay';
-        // Add necessary styles to make it a fullscreen cover
-        Object.assign(fs.style, {
-            position: 'fixed',
-            top: '0',
-            left: '0',
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: 'var(--bg-panel)', // or #111
-            zIndex: '9999',
-            display: 'none', // Hidden until called
-            overflowY: 'auto'
-        });
-        document.body.appendChild(fs);
-    }
-    
     state.focusedResourceId = resId;
-    state.viewContext = 'L3'; // Ensure context is set
+    state.viewContext = 'L3';
+
+    // 🎯 Use the ID we found in your console log
+    const target = document.getElementById('fs-canvas');
     
-    const container = document.getElementById('workflow-fs-overlay') || document.getElementById('main-canvas');
-    
-    if (container) {
-        // 🚀 THE FIX: Force the HTML into the DOM
-        container.innerHTML = window.renderLevel3Canvas(resId);
+    if (target) {
+        // 1. Inject the HTML
+        target.innerHTML = window.renderLevel3Canvas(resId);
         
-        // Ensure we are showing the overlay
-        container.style.display = 'block';
+        // 2. Make sure it's visible (remove 'hidden' classes or set display)
+        target.style.display = 'block'; 
+        target.classList.add('active'); // If you use CSS transitions
         
-        // Re-run any visual logic (lines, drag-drop listeners)
+        console.log("🚀 L3 successfully injected into #fs-canvas");
+        
+        // 3. Re-draw connection lines
         setTimeout(() => {
             if (window.drawLevel3LogicLines) window.drawLevel3LogicLines(resId);
         }, 100);
+    } else {
+        console.error("Could not find #fs-canvas in the DOM.");
     }
 };
 
