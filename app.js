@@ -7422,7 +7422,7 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
 
-    // 1. Unified Data Pull (Centralized logic)
+    // 1. Unified Data Pull
     const allFeatures = [
         ...(client?.projectData?.localAnalyses || []).flatMap(a => a.features || []),
         ...(state.master.analyses || []).flatMap(a => a.features || [])
@@ -7435,9 +7435,9 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
                 const nameLower = f.name.toLowerCase();
                 const matchesQuery = nameLower.includes(q);
                 const alreadyOnMatrix = excludeNames.includes(nameLower);
-                return matchesQuery && !alreadyOnMatrix; // 🚀 THE FILTER
+                return matchesQuery && !alreadyOnMatrix;
             })
-            .map(f => f.name.toLowerCase().trim()) // Use normalized names for the Set
+            .map(f => f.name.toLowerCase().trim())
     )).map(name => allFeatures.find(f => f.name.toLowerCase().trim() === name));
 
     let html = "";
@@ -7455,18 +7455,22 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
         </div>
     `).join('');
 
-    // 4. "Create New" Logic
+    // 4. "Create New" Logic (ID Fixed to feat-cat-input)
     if (q && !uniqueMatches.some(m => m.name.toLowerCase() === q)) {
         html += `
             <div class="search-result-item create-action" onmousedown="
-                document.getElementById('feat-search-results').style.display='none';
-                document.getElementById('new-feat-cat-input').focus();
+                document.getElementById('${targetElementId}').style.display='none';
+                const catInp = document.getElementById('feat-cat-input');
+                if(catInp) catInp.focus();
             ">
                 <span class="pill tiny accent">+ New</span> Create Feature "${esc(query)}"
             </div>`;
     }
 
-    listEl.innerHTML = html || `<div class="search-result-item muted">No unlinked features found.</div>`;
+    listEl.innerHTML = html || `<div class="search-result-item muted">No new features found.</div>`;
+    
+    // 🚀 THE REVEAL: Ensure the list is visible
+    listEl.style.display = 'block';
 };
 
 OL.unifiedAddFlow = function(query, anlyId, isMaster, excludeNames=[]) {
