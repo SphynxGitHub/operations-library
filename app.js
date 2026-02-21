@@ -7909,9 +7909,9 @@ OL.openGlobalContentManager = function() {
                 <table class="matrix-table" style="width:100%; border-collapse: collapse;">
                     <thead style="position: sticky; top:0; background: var(--bg-card); z-index:10; border-bottom:2px solid var(--line);">
                         <tr>
-                            <th style="width:25%; padding:10px;">Category</th>
-                            <th style="width:55%; padding:10px;">Feature Name</th>
-                            <th style="width:20%; padding:10px; text-align:center;">Type</th>
+                            <th style="width:50px;"></th>
+                            <th style="width:75%; text-align:left; padding-left:10px;">Feature Name</th>
+                            <th style="width:20%; text-align:right; padding-right:10px;">Type</th>
                         </tr>
                     </thead>
                     <tbody id="lib-manager-tbody">
@@ -7926,42 +7926,70 @@ OL.openGlobalContentManager = function() {
 
 // 🚀 Use (allFeats = []) to prevent the "reading map of undefined" error
 OL.renderLibraryManagerRows = function(allFeats = []) {
-    
-    // Sort logic
+    // 1. Grouped Sorting: Priority Weight -> Category Name -> Feature Name
     allFeats.sort((a, b) => {
+        const weightA = OL.getCategorySortWeight(a.category);
+        const weightB = OL.getCategorySortWeight(b.category);
+        if (weightA !== weightB) return weightA - weightB;
+        
         const catA = (a.category || "General").toLowerCase();
         const catB = (b.category || "General").toLowerCase();
         return catA.localeCompare(catB) || a.name.localeCompare(b.name);
     });
 
-    if (allFeats.length === 0) return '<tr><td colspan="3" class="center muted p-20">Library is empty.</td></tr>';
+    if (allFeats.length === 0) {
+        return '<tr><td colspan="3" class="center muted p-20">No features found matching your search.</td></tr>';
+    }
 
-    return allFeats.map(f => {
+    let currentCategory = null;
+    let html = "";
+
+    allFeats.forEach(f => {
+        const rawCat = (f.category || "General").trim();
+        const compareCat = rawCat.toLowerCase();
+
+        // 2. 📁 Inject Header Row when category changes
+        if (compareCat !== currentCategory) {
+            currentCategory = compareCat;
+            html += `
+                <tr class="lib-category-header" style="background: rgba(255,255,255,0.03);">
+                    <td colspan="3" style="padding: 12px 10px; border-bottom: 1px solid var(--line);">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="opacity: 0.5;">📁</span>
+                            <span style="font-weight: bold; color: var(--accent); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.5px;">
+                                ${esc(rawCat)}
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // 3. 📝 Render Feature Row
         const isMaster = f.origin === 'master';
-        
-        return `
-            <tr style="border-bottom: 1px solid var(--line); background: ${isMaster ? 'transparent' : 'rgba(var(--accent-rgb), 0.05)'}">
-                <td style="padding:8px;">
+        html += `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <td style="padding-left: 35px; width: 30px;">
+                    ${isMaster ? '🔒' : '✏️'}
+                </td>
+                <td style="padding: 10px 8px;">
                     ${isMaster ? 
-                        `<span class="muted" style="font-size:0.9rem;">${esc(f.category || 'General')}</span>` : 
-                        `<input type="text" class="tiny-input" value="${esc(f.category || 'General')}" onblur="OL.updateLocalLibraryFeature('${f.id}', 'category', this.value)">`
+                        `<span style="font-weight: 500;">${esc(f.name)}</span>` : 
+                        `<input type="text" class="tiny-input" style="font-weight: bold; color: var(--accent);" 
+                                value="${esc(f.name)}" 
+                                onblur="OL.updateLocalLibraryFeature('${f.id}', 'name', this.value)">`
                     }
                 </td>
-                <td style="padding:8px;">
-                    ${isMaster ? 
-                        `<span style="font-weight:500;">${esc(f.name)}</span>` : 
-                        `<input type="text" class="tiny-input" style="font-weight:bold; color:var(--accent);" value="${esc(f.name)}" onblur="OL.updateLocalLibraryFeature('${f.id}', 'name', this.value)">`
-                    }
-                </td>
-                <td style="padding:8px; text-align:center;">
-                    ${isMaster ? 
-                        '<span class="pill tiny muted">🔒 Master</span>' : 
-                        '<span class="pill tiny primary">✏️ Local</span>'
-                    }
+                <td style="padding: 10px 8px; text-align: right;">
+                    <span class="pill tiny ${isMaster ? 'muted' : 'primary'}" style="opacity: 0.7;">
+                        ${isMaster ? 'Master Definition' : 'Local Extension'}
+                    </span>
                 </td>
             </tr>
         `;
-    }).join('');
+    });
+
+    return html;
 };
 
 OL.filterLibraryManager = function(query) {
