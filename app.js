@@ -6857,17 +6857,51 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                     <input type="number" class="tiny-input" style="width:45px" value="${feat.weight || 0}" 
                            onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
                 </td>
-                ${(anly.apps || []).map(appObj => `
-                    <td class="text-center" style="padding: 8px;">
-                        <input type="number" class="matrix-score-input" 
-                              value="${appObj.scores?.[feat.id] || 0}"
-                              onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
-                    </td>
-                `).join('')}
+                ${(anly.apps || []).map(appObj => {
+                    // 🎯 Retrieve existing values
+                    const currentScore = appObj.scores?.[feat.id] || 0;
+                    const currentNote = appObj.notes?.[feat.id] || ""; // Assuming you store notes in appObj.notes
+
+                    return `
+                        <td style="padding: 8px; border-right: 1px solid var(--line-light);">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <div style="display: flex; align-items: center; gap: 5px;">
+                                    <span class="tiny muted" style="font-size: 9px;">PTS</span>
+                                    <input type="number" class="matrix-score-input" 
+                                        style="width: 100%; font-weight: bold; text-align: center;"
+                                        value="${currentScore}"
+                                        onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
+                                </div>
+                                
+                                <textarea class="matrix-note-input" 
+                                        placeholder="Notes..."
+                                        style="width: 100%; height: 32px; font-size: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); color: var(--text-dim); resize: none; padding: 2px;"
+                                        onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
+                                >${esc(currentNote)}</textarea>
+                            </div>
+                        </td>
+                    `;
+                }).join('')}
             </tr>
         `;
     });
     return rowsHtml;
+};
+
+OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
+    // 1. Get the analysis object (from state.master or state.currentProject)
+    const anly = OL.getAnalysisById(analysisId, isMaster); 
+    if (!anly) return;
+
+    // 2. Find the specific app entry
+    const appEntry = anly.apps.find(a => String(a.appId) === String(appId));
+    if (appEntry) {
+        if (!appEntry.notes) appEntry.notes = {};
+        appEntry.notes[featId] = value;
+        
+        logger.save(`Matrix Note Updated: App ${appId}, Feature ${featId}`);
+        await OL.persist();
+    }
 };
 
 OL.printAnalysisPDF = function(analysisId, isMaster) {
