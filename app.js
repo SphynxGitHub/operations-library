@@ -6843,6 +6843,16 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
         // Standard Row (Features)
         rowsHtml += `
             <tr>
+                <td style="padding-left: 28px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button class="card-delete-btn" onclick="OL.removeFeatureFromAnalysis('${analysisId}', '${feat.id}', ${isMaster})">×</button> 
+                        <span class="small feature-edit-link" 
+                              style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
+                              onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
+                            ${esc(feat.name)}
+                        </span>
+                    </div>
+                </td>
                 <td style="padding: 0; border: 1px solid var(--line); width: 85px; vertical-align: top; background: rgba(0,0,0,0.15);">
                     <div style="display: flex; flex-direction: column; height: 100%;">
                         <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.04);">
@@ -6858,10 +6868,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                             <span style="font-size: 8px; color: var(--text-dim); opacity: 0.5; text-transform: uppercase;">Priority</span>
                         </div>
                     </div>
-                </td>
-                <td>
-                    <input type="number" class="tiny-input" style="width:45px" value="${feat.weight || 0}" 
-                           onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
                 </td>
                 ${(anly.apps || []).map(appObj => {
                     const currentScore = appObj.scores?.[feat.id] || 0;
@@ -6897,40 +6903,38 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     return rowsHtml;
 };
 
-OL.updateAnalysisScore = async function(analysisId, appId, featId, value, isMaster) {
-    // 1. Sanitize the value (Convert to Int and Clamp between 0 and 3)
-    let score = parseInt(value) || 0;
-    if (score < 0) score = 0;
-    if (score > 3) score = 3;
-
-    // 2. Find the analysis using the same "Deep Scan" we used for notes
-    const clientList = Array.isArray(state.clients) ? state.clients : Object.values(state.clients || {});
+OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
 
-    // Check Master/Client/Local paths
+    // 🎯 TARGETED SEARCH: Now that we know it's in localAnalyses
+    const clientList = Array.isArray(state.clients) ? state.clients : Object.values(state.clients || {});
+    
+    // Check Master first
     anly = (state.master?.analyses || []).find(a => String(a.id) === String(analysisId));
+
+    // Check Clients (Searching both 'analyses' and 'localAnalyses')
     if (!anly) {
         clientList.forEach(c => {
-            const pool = [...(c.projectData?.localAnalyses || []), ...(c.projectData?.analyses || [])];
+            const pool = [
+                ...(c.projectData?.localAnalyses || []),
+                ...(c.projectData?.analyses || []),
+                ...(c.analyses || [])
+            ];
             const found = pool.find(a => String(a.id) === String(analysisId));
             if (found) anly = found;
         });
     }
 
-    if (anly) {
-        const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
-        if (appEntry) {
-            if (!appEntry.scores) appEntry.scores = {};
-            
-            // 3. Update the score
-            appEntry.scores[featId] = score;
-            
-            console.log(`🔢 Score clamped to ${score} for App ${appId}`);
-            await OL.persist();
-            
-            // 4. Optional: Refresh UI to show the clamped number if they typed something higher
-            // window.renderGlobalVisualizer(location.hash.includes('vault'));
-        }
+    if (!anly) return console.error("❌ Still can't find analysis:", analysisId);
+
+    // 2. Apply the update
+    const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
+    if (appEntry) {
+        if (!appEntry.notes) appEntry.notes = {};
+        appEntry.notes[featId] = value;
+
+        console.log(`💾 Note persisted to localAnalyses for ${anly.name}`);
+        await OL.persist();
     }
 };
 
