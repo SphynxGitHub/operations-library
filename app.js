@@ -6813,15 +6813,9 @@ OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
 window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     let currentCategory = null;
     let rowsHtml = "";
+    
     const features = anly.features || [];
-    const totalColspan = apps.length + 2;git add app.js style.css
-git commit -m "refactor: consolidate category search engine and finalize analysis matrix UX" -m "
-- Centralized category search into OL.universalCategorySearch
-- Fixed persistence for feature descriptions and app rationale notes
-- Unified Matrix UI with color-coded weight and score tiers
-- Implemented 0-3 score clamping and recursive state lookup
-- Consolidated feature editors across Matrix and Content Manager"
-git push origin main
+    const totalColspan = apps.length + 2;
     
     features.forEach(feat => {
         const catName = feat.category || "General";
