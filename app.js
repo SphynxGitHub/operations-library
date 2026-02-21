@@ -7611,8 +7611,130 @@ OL.renameMatrix = function(anlyId, newName, isMaster) {
     }
 };
 
-//======================= FEATURES MANAGEMENT SECTION =======================//
+//======================= CONSOLIDATED FEATURES MANAGEMENT =======================//
 
+/**
+ * 💡 HELPER: Returns the correct analysis pool based on current URL hash
+ */
+OL.getScopedAnalyses = function() {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    return isVault ? (state.master.analyses || []) : (client?.projectData?.localAnalyses || []);
+};
+
+/**
+ * 💡 HELPER: Universal Sync - Updates name/cat/desc across all instances in scope
+ */
+OL.syncFeatureChanges = function(oldName, newData, isVault) {
+    const pool = OL.getScopedAnalyses();
+    pool.forEach(anly => {
+        anly.features?.forEach(f => {
+            if (f.name === oldName) {
+                if (newData.name) f.name = newData.name;
+                if (newData.category) f.category = newData.category;
+                if (newData.description !== undefined) f.description = newData.description;
+            }
+        });
+        // Always maintain sorting after a sync
+        anly.features.sort((a, b) => {
+            const wA = OL.getCategoryWeight(a.category || "General");
+            const wB = OL.getCategoryWeight(b.category || "General");
+            return (wA - wB) || (a.category || "").localeCompare(b.category || "");
+        });
+    });
+};
+
+// --- 1. GLOBAL CONTENT MANAGER ---
+OL.openGlobalContentManager = function() {
+    const isVault = window.location.hash.includes('vault');
+    const analyses = OL.getScopedAnalyses();
+    const masterFunctions = (state.master?.functions || []).map(f => f.name);
+    const featureGroups = {};
+
+    // Populate Groups
+    analyses.forEach(anly => {
+        anly.features?.forEach(f => {
+            const cat = f.category || "General";
+            if (!featureGroups[cat]) featureGroups[cat] = new Set();
+            featureGroups[cat].add(f.name);
+        });
+    });
+
+    const allCats = OL.getGlobalCategories().filter(cat => featureGroups[cat]);
+
+    // ... (Keep your HTML template here, it's solid) ...
+    // Note: Point the '⚙️' button to OL.openGlobalFeatureEditor
+};
+
+// --- 2. THE EDITORS ---
+
+// This handles the "Global" library edit
+OL.openGlobalFeatureEditor = function(featName) {
+    const isVault = window.location.hash.includes('vault');
+    const analyses = OL.getScopedAnalyses();
+    
+    // Find first instance to use as template
+    const feat = analyses.flatMap(a => a.features || []).find(f => f.name === featName);
+    if (!feat) return;
+
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">⚙️ Global Definition: ${esc(featName)}</div></div>
+        <div class="modal-body">
+            <label class="modal-section-label">Feature Name</label>
+            <input type="text" id="global-edit-name" class="modal-input" value="${esc(feat.name)}">
+            
+            <label class="modal-section-label">Global Description</label>
+            <textarea id="global-edit-desc" class="modal-textarea" style="height:100px;">${esc(feat.description || "")}</textarea>
+            
+            <div class="info-box tiny muted">ℹ️ This updates all instances in the current ${isVault ? 'Vault' : 'Project'}.</div>
+            
+            <div style="display:flex; gap:10px; justify-content: flex-end;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.executeGlobalFeatureUpdate('${esc(featName)}', ${isVault})">Update All</button>
+            </div>
+        </div>`;
+    openModal(html);
+};
+
+// This executes the save for both the Matrix Edit and the Global Manager
+OL.executeEditFeature = function(anlyId, featId, isMaster) {
+    const name = document.getElementById("edit-feat-name").value.trim();
+    const cat = document.getElementById("edit-feat-cat-value").value.trim() || "General";
+    const desc = document.getElementById('edit-feat-description').value;
+    const isGlobal = document.getElementById("edit-feat-global").checked;
+
+    const analyses = OL.getScopedAnalyses();
+    const anly = analyses.find(a => a.id === anlyId);
+    const feat = anly?.features.find(f => f.id === featId);
+    const oldName = feat?.name;
+
+    if (feat) {
+        feat.name = name;
+        feat.category = cat;
+        feat.description = desc;
+
+        if (isGlobal && oldName) {
+            OL.syncFeatureChanges(oldName, { name, category: cat, description: desc }, isMaster);
+        }
+
+        OL.persist();
+        OL.closeModal();
+        OL.openAnalysisMatrix(anlyId, isMaster);
+    }
+};
+
+OL.executeGlobalFeatureUpdate = async function(originalName, isVault) {
+    const name = document.getElementById('global-edit-name').value.trim();
+    const description = document.getElementById('global-edit-desc').value;
+
+    OL.syncFeatureChanges(originalName, { name, description }, isVault);
+    
+    await OL.persist();
+    OL.closeModal();
+    OL.openGlobalContentManager();
+};
+
+/*
 // 1. RENDER FEATURE MANAGER LIST GROUPED BY CATEGORY/FUNCTION
 OL.openGlobalContentManager = function() {
     const isVaultMode = window.location.hash.includes('vault');
@@ -7721,40 +7843,58 @@ OL.openGlobalContentManager = function() {
 };
 
 // 2. OPEN INDIVIDUAL FEATURE EDITOR MODAL
-OL.openGlobalFeatureEditor = function (featName) {
-  // Find the current category for this feature from the global state
-  const client = getActiveClient();
-  const allAnalyses = [
-    ...(state.master.analyses || []),
-    ...Object.values(state.clients).flatMap(
-      (c) => c.projectData?.localAnalyses || [],
-    ),
-  ];
+OL.openGlobalFeatureEditor = function(featName) {
+    const isVaultMode = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    
+    // Find the object so we can get the description
+    const analyses = isVaultMode 
+        ? (state.master.analyses || []) 
+        : (client?.projectData?.localAnalyses || []);
+    
+    let targetFeat = null;
+    let targetAnlyId = null;
 
-  const instance = allAnalyses
-    .flatMap((a) => a.features || [])
-    .find((f) => f.name === featName);
-  const currentCat = instance?.category || "General";
+    // Find the first occurrence to act as the "Template"
+    for (const anly of analyses) {
+        const found = anly.features?.find(f => f.name === featName);
+        if (found) {
+            targetFeat = found;
+            targetAnlyId = anly.id;
+            break;
+        }
+    }
 
-  const html = `
-        <div class="modal-head"><div class="modal-title-text">Edit Global Feature</div></div>
+    if (!targetFeat) return alert("Feature data not found.");
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">⚙️ Edit Global Definition: ${esc(featName)}</div>
+        </div>
         <div class="modal-body">
-            <label class="modal-section-label">Rename Feature</label>
-            <input type="text" id="global-feat-name" class="modal-input" value="${esc(featName)}">
-            
-            <label class="modal-section-label" style="margin-top:15px;">Move to Category</label>
-            <input type="text" id="global-feat-cat-search" class="modal-input" value="${esc(currentCat)}"
-                   onfocus="OL.filterGlobalManagerCategorySearch(this.value)"
-                   oninput="OL.filterGlobalManagerCategorySearch(this.value)">
-            <div id="global-cat-results" class="search-results-overlay"></div>
-            
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                <button class="btn soft" onclick="OL.openGlobalContentManager()">Back</button>
-                <button class="btn primary" onclick="OL.executeGlobalFeatureUpdate('${esc(featName)}')">Save System-Wide</button>
+            <div style="margin-bottom: 15px;">
+                <label class="modal-section-label">Feature Name</label>
+                <input type="text" id="global-edit-name" class="modal-input" value="${esc(targetFeat.name)}">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label class="modal-section-label">Global Description / Requirements</label>
+                <textarea id="global-edit-desc" class="modal-input" 
+                    style="height: 120px; resize: vertical; padding: 10px; line-height: 1.4;"
+                    placeholder="Enter the standard definition for this feature...">${esc(targetFeat.description || "")}</textarea>
+            </div>
+
+            <div class="info-box tiny muted" style="margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 4px;">
+                ℹ️ Saving here will update <b>all instances</b> of this feature within the current ${isVaultMode ? 'Master Vault' : 'Project'}.
+            </div>
+
+            <div style="display:flex; gap:10px; justify-content: flex-end;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.executeGlobalFeatureUpdate('${esc(featName)}', ${isVaultMode})">Update All Instances</button>
             </div>
         </div>
     `;
-  openModal(html);
+    openModal(html);
 };
 
 OL.editFeatureModal = function(anlyId, featId, isMaster) {
@@ -7842,7 +7982,7 @@ OL.filterContentManager = function(query) {
         }
     });
 };
-
+*/
 // 4. MANAGE ADDING / EDITING FEATURES
 OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General") {
     // 🚀 THE SHIELD
@@ -8110,13 +8250,35 @@ OL.demoteFromFunction = function (catName) {
   OL.openGlobalContentManager();
 };
 
-OL.executeGlobalFeatureUpdate = function(oldName) {
-    const newName = document.getElementById("global-feat-name").value.trim();
-    const newCat = document.getElementById("global-feat-cat-search").value.trim() || "General";
+OL.executeGlobalFeatureUpdate = async function(originalName, isVaultMode) {
+    const newName = document.getElementById('global-edit-name').value.trim();
+    const newDesc = document.getElementById('global-edit-desc').value;
+    const client = getActiveClient();
+
+    if (!newName) return alert("Name required");
+
+    // Determine which pool to update
+    const analyses = isVaultMode 
+        ? (state.master.analyses || []) 
+        : (client?.projectData?.localAnalyses || []);
+
+    // Update every single feature that matches the original name
+    analyses.forEach(anly => {
+        anly.features?.forEach(f => {
+            if (f.name === originalName) {
+                f.name = newName;
+                f.description = newDesc;
+            }
+        });
+    });
+
+    console.log(`🌎 Global Update Sync: ${originalName} -> ${newName}`);
     
-    // Trigger your existing global rename logic with the 'isGlobal' behavior forced to true
-    OL.globalRenameContent('feature', oldName, newName, newCat);
-    OL.openGlobalContentManager(); // Return to list
+    await OL.persist();
+    OL.closeModal();
+    
+    // Refresh the Content Manager to reflect name changes
+    OL.openGlobalContentManager();
 };
 
 OL.globalRenameContent = function(type, oldName, newName, forceNewCat = null) {
