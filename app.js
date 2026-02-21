@@ -6855,10 +6855,9 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                 </td>
                 <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background: rgba(251, 191, 36, 0.05);">
                     <div style="display: flex; align-items: center; justify-content: space-between; height: 32px;">
-                        <span style="font-size: 8px; color: #fbbf24; font-weight: bold; opacity: 0.8; letter-spacing: 0.5px;">WEIGHT</span>
                         <input type="number" 
                             class="tiny-input" 
-                            style="width: 40px; background: transparent; border: none; color: #fbbf24; text-align: right; font-weight: bold; font-size: 13px; outline: none;"
+                            style="width: 40px; background: transparent; border: none; color: var(--accent) text-align: right; font-weight: bold; font-size: 13px; outline: none;"
                             value="${feat.weight || 0}" 
                             onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
                     </div>
