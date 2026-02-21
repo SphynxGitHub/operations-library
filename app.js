@@ -7283,22 +7283,21 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
 };
 
 OL.addFeatureToAnalysis = function (anlyId, isMaster) {
-  const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">🔎 Add Feature to Analysis</div>
-        </div>
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">🔎 Step 1: Add Feature</div></div>
         <div class="modal-body">
-            <div class="search-map-container">
-                <input type="text" class="modal-input" 
-                      placeholder="Click to view global features or type new..." 
-                      onfocus="OL.universalFeatureSearch('${anlyId}', ${isMaster}, '')"
-                      oninput="OL.universalFeatureSearch('${anlyId}', ${isMaster}, this.value)" 
-                      autofocus>
-                <div id="feat-search-results" class="search-results-overlay" style="margin-top:10px;"></div>
-            </div>
-        </div>
-    `;
-  openModal(html);
+            <input type="text" id="feat-focus-target" class="modal-input" 
+                   placeholder="Search global features or type new..." 
+                   onfocus="OL.universalFeatureSearch('', '${anlyId}', ${isMaster}, 'feat-search-results')"
+                   oninput="OL.universalFeatureSearch(this.value, '${anlyId}', ${isMaster}, 'feat-search-results')">
+            <div id="feat-search-results" class="search-results-overlay" style="margin-top:10px;"></div>
+        </div>`;
+    openModal(html);
+
+    requestAnimationFrame(() => {
+        const el = document.getElementById('feat-focus-target');
+        if (el) el.focus();
+    });
 };
 
 if (!state.master.analyses) state.master.analyses = [];
@@ -7838,57 +7837,6 @@ OL.executeAddFeature = async function (anlyId, featName, isMaster, category = nu
     OL.closeModal(); // Now it only closes once the category is confirmed
 };
 
-OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">📁 Assign Category to "${esc(featName)}"</div>
-        </div>
-        <div class="modal-body">
-            <input type="text" class="modal-input" placeholder="Search or create category..." 
-                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })" 
-                   autofocus>
-            <div id="feat-cat-assign-results" class="search-results-overlay" style="margin-top:10px;"></div>
-        </div>
-    `;
-    openModal(html);
-    
-    // 🚀 Initialize results immediately using the universal engine
-    OL.universalCategorySearch("", 'assign-to-feature', 'feat-cat-assign-results', { 
-        anlyId: anlyId, 
-        featName: featName, 
-        isMaster: isMaster 
-    });
-};
-
-OL.handleCategorySelection = function(catName, type, params = {}) {
-    const { anlyId, isMaster, featName } = params;
-
-    // 🎯 ROUTE 1: Feature Editor (L3 Matrix)
-    if (type === 'edit-feature') {
-        const searchInput = document.getElementById("edit-feat-cat-search");
-        const hiddenInput = document.getElementById("edit-feat-cat-value");
-        if (searchInput) searchInput.value = catName;
-        if (hiddenInput) hiddenInput.value = catName;
-        document.getElementById("edit-cat-search-results").style.display = "none";
-    } 
-
-    // 🎯 ROUTE 2: Analysis Assignment (Adding a Cat to a Matrix)
-    else if (type === 'add-to-analysis') {
-        OL.executeAddCategoryToAnalysis(anlyId, catName, isMaster);
-    }
-
-    // 🎯 ROUTE 3: Global Content Manager (Library)
-    else if (type === 'global-manager') {
-        document.getElementById('global-feat-cat-search').value = catName;
-        document.getElementById('global-cat-results').innerHTML = '';
-    }
-
-    // 🎯 ROUTE 4: Feature-to-Category Import
-    else if (type === 'assign-to-feature') {
-        OL.executeAddFeature(anlyId, featName, isMaster, catName);
-    }
-};
-
 OL.pushFeatureToVault = function (featName) {
   const client = getActiveClient();
   const feat = client.projectData.localAnalyses
@@ -8119,24 +8067,57 @@ OL.getCategoryWeight = function(catName) {
 OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📁 Assign Category to "${esc(featName)}"</div>
+            <div class="modal-title-text">📁 Step 2: Category for "${esc(featName)}"</div>
         </div>
         <div class="modal-body">
-            <input type="text" class="modal-input" placeholder="Search or create category..." 
-                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })" 
-                   autofocus>
+            <input type="text" id="cat-focus-target" class="modal-input" 
+                   placeholder="Search or create category..." 
+                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })">
             <div id="feat-cat-assign-results" class="search-results-overlay" style="margin-top:10px;"></div>
         </div>
     `;
     openModal(html);
     
-    // 🚀 Initialize results immediately using the universal engine
+    // 🚀 THE FIX: Wait for the browser to paint the modal, then force focus
+    requestAnimationFrame(() => {
+        const el = document.getElementById('cat-focus-target');
+        if (el) el.focus();
+    });
+
     OL.universalCategorySearch("", 'assign-to-feature', 'feat-cat-assign-results', { 
-        anlyId: anlyId, 
-        featName: featName, 
-        isMaster: isMaster 
+        anlyId, featName, isMaster 
     });
 };
+
+OL.handleCategorySelection = function(catName, type, params = {}) {
+    const { anlyId, isMaster, featName } = params;
+
+    // 🎯 ROUTE 1: Feature Editor (L3 Matrix)
+    if (type === 'edit-feature') {
+        const searchInput = document.getElementById("edit-feat-cat-search");
+        const hiddenInput = document.getElementById("edit-feat-cat-value");
+        if (searchInput) searchInput.value = catName;
+        if (hiddenInput) hiddenInput.value = catName;
+        document.getElementById("edit-cat-search-results").style.display = "none";
+    } 
+
+    // 🎯 ROUTE 2: Analysis Assignment (Adding a Cat to a Matrix)
+    else if (type === 'add-to-analysis') {
+        OL.executeAddCategoryToAnalysis(anlyId, catName, isMaster);
+    }
+
+    // 🎯 ROUTE 3: Global Content Manager (Library)
+    else if (type === 'global-manager') {
+        document.getElementById('global-feat-cat-search').value = catName;
+        document.getElementById('global-cat-results').innerHTML = '';
+    }
+
+    // 🎯 ROUTE 4: Feature-to-Category Import
+    else if (type === 'assign-to-feature') {
+        OL.executeAddFeature(anlyId, featName, isMaster, catName);
+    }
+};
+
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
