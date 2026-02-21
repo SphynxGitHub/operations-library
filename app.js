@@ -7833,13 +7833,16 @@ OL.executeGlobalFeatureUpdate = async function(originalName, isVault) {
 };
 
 // 4. MANAGE ADDING / EDITING FEATURES
-OL.executeAddFeature = async function (anlyId, featName, isMaster, category = null) {
-    // If no category is provided, redirect to the category selector instead of saving
-    if (!category || category === "General") {
+// 4. MANAGE ADDING / EDITING FEATURES
+OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General", isFinal = false) {
+    
+    // 🚀 THE BYPASS: If NOT finalized and category is default/missing, trigger Step 2
+    if (!isFinal && (!category || category === "General")) {
         OL.promptFeatureCategory(anlyId, featName, isMaster);
         return;
     }
 
+    // 🛡️ THE SHIELD: If we reach here, we have a category and the green light to save
     await OL.updateAndSync(() => {
         const source = isMaster ? state.master.analyses : getActiveClient()?.projectData?.localAnalyses || [];
         const anly = source.find((a) => a.id === anlyId);
@@ -7848,7 +7851,7 @@ OL.executeAddFeature = async function (anlyId, featName, isMaster, category = nu
             const newFeat = {
                 id: "feat-" + Date.now(),
                 name: featName,
-                category: category,
+                category: category, // This will now be the chosen category
                 weight: 10
             };
             anly.features.push(newFeat);
@@ -7856,7 +7859,7 @@ OL.executeAddFeature = async function (anlyId, featName, isMaster, category = nu
     });
 
     OL.openAnalysisMatrix(anlyId, isMaster);
-    OL.closeModal(); // Now it only closes once the category is confirmed
+    OL.closeModal(); 
 };
 
 OL.pushFeatureToVault = function (featName) {
@@ -8100,8 +8103,9 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
 
     // 🎯 ROUTE 4: Feature-to-Category Import
     else if (type === 'assign-to-feature') {
-        OL.executeAddFeature(anlyId, featName, isMaster, catName);
+        OL.executeAddFeature(anlyId, featName, isMaster, catName, true);
     }
+    if (window._tmpSearchParams) delete window._tmpSearchParams;
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
