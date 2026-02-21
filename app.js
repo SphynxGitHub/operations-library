@@ -6632,7 +6632,9 @@ OL.removeSopStep = function (resId, stepId) {
 
 //======================= ANALYSIS MATRIX SECTION =======================//
 
-// 1. RENDER WEIGHTED ANALYSIS MODULE
+if (!state.master.analyses) state.master.analyses = [];
+
+// 1. RENDER ANALYSIS LIBRARY AND CARDS
 window.renderAnalysisModule = function(isVaultMode = false) {
     OL.registerView(renderAnalysisModule);
     const container = document.getElementById("mainContent");
@@ -6684,6 +6686,245 @@ window.renderAnalysisModule = function(isVaultMode = false) {
         <div id="activeAnalysisMatrix" class="matrix-container" style="margin-top: 40px;"></div>
     `;
 };
+
+window.renderAnalysisCard = function (anly, isMaster) {
+    const client = getActiveClient();
+    const featCount = (anly.features || []).length;
+    const appsInMatrix = anly.apps || [];
+    const appCount = (anly.apps || []).length;
+
+    const allApps = [
+        ...(state.master.apps || []),
+        ...(client?.projectData?.localApps || [])
+    ];
+    
+    // Standardized tag styling
+    const tagLabel = isMaster ? "MASTER" : "LOCAL";
+    const tagStyle = isMaster 
+        ? "background: var(--accent); color: white; border: none;" 
+        : "background: var(--panel-border); color: var(--text-dim); border: 1px solid var(--line);";
+
+    return `
+        <div class="card is-clickable" onclick="OL.openAnalysisMatrix('${anly.id}', ${isMaster})">
+            <div class="card-header">
+                <div class="card-title card-title-${anly.id}">${esc(anly.name)}</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="vault-tag" style="${tagStyle}">${tagLabel}</span>
+                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.deleteAnalysis('${anly.id}', ${isMaster})">×</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div style="display: flex; gap: 12px; margin-bottom: 10px;">
+                    <div class="tiny muted">
+                        <b style="color: var(--text-main);">${featCount}</b> Features
+                    </div>
+                    <div class="tiny muted">
+                        <b style="color: var(--text-main);">${appCount}</b> Apps
+                    </div>
+                </div>
+
+                ${anly.summary ? `
+                    <div class="tiny muted italic" style="margin-bottom: 10px; border-left: 2px solid var(--accent); padding-left: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        "${esc(anly.summary)}"
+                    </div>
+                ` : ''}
+
+                <div class="pills-row">
+                    ${(anly.apps || []).map(aObj => {
+                        const matchedApp = allApps.find(a => a.id === aObj.appId);
+                        if (!matchedApp) return '';
+
+                        return `
+                            <span class="pill tiny soft is-clickable" 
+                                  style="font-size: 9px; opacity: 0.8; cursor: pointer;"
+                                  onclick="event.stopPropagation(); OL.openAppModal('${matchedApp.id}')">
+                                ${esc(matchedApp.name)}
+                            </span>`;
+                    }).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+OL.syncMatrixName = function(el) {
+    const matrixId = el.getAttribute('data-m-id');
+    const newName = el.innerText;
+    
+    // Find all elements with this matrix ID class and update them
+    const relatedElements = document.querySelectorAll(`.m-name-${matrixId}`);
+    relatedElements.forEach(item => {
+        if (item !== el) {
+            item.innerText = newName;
+        }
+    });
+};
+
+// 2. ANALYSIS CORE ACTIONS
+OL.createNewMasterAnalysis = function () {
+  const name = prompt("Enter Master Template Name:");
+  if (!name) return;
+
+  state.master.analyses.push({
+    id: "master-anly-" + Date.now(),
+    name: name,
+    features: [],
+    apps: [],
+    categories: ["General"],
+    createdDate: new Date().toISOString(),
+  });
+
+  OL.persist();
+  renderAnalysisModule(true);
+};
+
+OL.createNewAnalysisSandbox = function () {
+  const name = prompt("Name your Analysis (e.g., CRM Comparison):");
+  if (!name) return;
+
+  const client = getActiveClient();
+  if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
+
+  client.projectData.localAnalyses.push({
+    id: "anly-" + Date.now(),
+    name: name,
+    features: [],
+    apps: [],
+    categories: ["General"],
+    createdDate: new Date().toISOString(),
+  });
+
+  OL.persist();
+  renderAnalysisModule(false);
+};
+
+OL.deleteAnalysis = function (anlyId, isVaultMode) {
+  if (!confirm("Are you sure you want to delete this analysis?")) return;
+
+  if (isVaultMode) {
+    state.master.analyses = state.master.analyses.filter(
+      (a) => a.id !== anlyId,
+    );
+  } else {
+    const client = getActiveClient();
+    client.projectData.localAnalyses = client.projectData.localAnalyses.filter(
+      (a) => a.id !== anlyId,
+    );
+  }
+
+  OL.persist();
+  renderAnalysisModule(isVaultMode);
+};
+
+OL.importAnalysisFromVault = function () {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📚 Import Analysis Template</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Search templates (e.g. CRM, AI)..." 
+                       onfocus="OL.filterMasterAnalysisImport('')"
+                       oninput="OL.filterMasterAnalysisImport(this.value)" 
+                       autofocus>
+                <div id="master-anly-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterMasterAnalysisImport = function(query) {
+    const listEl = document.getElementById("master-anly-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const available = (state.master.analyses || []).filter(a => 
+        a.name.toLowerCase().includes(q)
+    );
+
+    listEl.innerHTML = available.map(anly => `
+        <div class="search-result-item" onmousedown="OL.executeAnalysisImportById('${anly.id}')">
+            📈 ${esc(anly.name)}
+        </div>
+    `).join('') || `<div class="search-result-item muted">No templates found.</div>`;
+};
+
+// Helper to handle the specific ID from search
+OL.executeAnalysisImportById = function(templateId) {
+    const template = state.master.analyses.find(t => t.id === templateId);
+    const client = getActiveClient();
+    if (!template || !client) return;
+
+    const newAnalysis = JSON.parse(JSON.stringify(template));
+    newAnalysis.id = "anly-" + Date.now();
+    
+    if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
+    client.projectData.localAnalyses.push(newAnalysis);
+
+    OL.persist();
+    OL.closeModal();
+    renderAnalysisModule(false);
+};
+
+OL.pushMatrixToMasterLibrary = function(anlyId) {
+    const client = getActiveClient();
+    const anly = (client?.projectData?.localAnalyses || []).find(a => a.id === anlyId);
+
+    if (!anly) return;
+
+    if (!confirm(`This will save "${anly.name}" as a standard template in your Master Library for use with all future clients. Proceed?`)) return;
+
+    // 1. Create a Master-standard copy of the analysis
+    const masterCopy = JSON.parse(JSON.stringify(anly));
+    masterCopy.id = 'master-anly-' + Date.now();
+    masterCopy.isMaster = true;
+    
+    // Optional: Templates usually start with blank scores, though they keep feature weights
+    masterCopy.apps = []; 
+
+    // 2. Sync Local Categories to Global Registry
+    if (anly.categories) {
+        if (!state.master.categories) state.master.categories = [];
+        anly.categories.forEach(cat => {
+            if (!state.master.categories.includes(cat)) {
+                state.master.categories.push(cat);
+            }
+        });
+    }
+
+    // 3. Sync Local Features to Global Registry
+    if (anly.features) {
+        anly.features.forEach(feat => {
+            // Logic to ensure these names appear in future searchable dropdowns
+            // (Assumes you have a master features list or rely on getGlobalFeatures)
+        });
+    }
+
+    // 4. Save to Master State
+    if (!state.master.analyses) state.master.analyses = [];
+    state.master.analyses.push(masterCopy);
+
+    OL.persist();
+    alert(`✅ Matrix "${anly.name}" is now a Master Template.`);
+    
+    // Redirect to the Vault Library to see the new template
+    window.location.hash = '#/vault/analyses';
+};
+
+OL.deleteMasterAnalysis = function(anlyId) {
+    if (!confirm("Are you sure you want to permanently delete this Master Template? It will no longer be available for import into new client projects.")) return;
+
+    state.master.analyses = (state.master.analyses || []).filter(a => a.id !== anlyId);
+    
+    OL.persist();
+    renderAnalysisModule(true); // Refresh the Vault view
+};
+
+// 3. OPEN INDIVIDUAL ANALYSIS MATRIX
 
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     const client = getActiveClient();
@@ -6900,7 +7141,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     return rowsHtml;
 };
 
-
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
 
@@ -6952,121 +7192,27 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
     container.classList.remove("print-target");
 };
 
-// 2. RENDER ANALYSIS CARDS
-window.renderAnalysisCard = function (anly, isMaster) {
+OL.renameMatrix = function(anlyId, newName, isMaster) {
+    const cleanName = newName.trim();
+    if (!cleanName) return;
+
     const client = getActiveClient();
-    const featCount = (anly.features || []).length;
-    const appsInMatrix = anly.apps || [];
-    const appCount = (anly.apps || []).length;
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === anlyId);
 
-    const allApps = [
-        ...(state.master.apps || []),
-        ...(client?.projectData?.localApps || [])
-    ];
-    
-    // Standardized tag styling
-    const tagLabel = isMaster ? "MASTER" : "LOCAL";
-    const tagStyle = isMaster 
-        ? "background: var(--accent); color: white; border: none;" 
-        : "background: var(--panel-border); color: var(--text-dim); border: 1px solid var(--line);";
-
-    return `
-        <div class="card is-clickable" onclick="OL.openAnalysisMatrix('${anly.id}', ${isMaster})">
-            <div class="card-header">
-                <div class="card-title card-title-${anly.id}">${esc(anly.name)}</div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="vault-tag" style="${tagStyle}">${tagLabel}</span>
-                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.deleteAnalysis('${anly.id}', ${isMaster})">×</button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div style="display: flex; gap: 12px; margin-bottom: 10px;">
-                    <div class="tiny muted">
-                        <b style="color: var(--text-main);">${featCount}</b> Features
-                    </div>
-                    <div class="tiny muted">
-                        <b style="color: var(--text-main);">${appCount}</b> Apps
-                    </div>
-                </div>
-
-                ${anly.summary ? `
-                    <div class="tiny muted italic" style="margin-bottom: 10px; border-left: 2px solid var(--accent); padding-left: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                        "${esc(anly.summary)}"
-                    </div>
-                ` : ''}
-
-                <div class="pills-row">
-                    ${(anly.apps || []).map(aObj => {
-                        const matchedApp = allApps.find(a => a.id === aObj.appId);
-                        if (!matchedApp) return '';
-
-                        return `
-                            <span class="pill tiny soft is-clickable" 
-                                  style="font-size: 9px; opacity: 0.8; cursor: pointer;"
-                                  onclick="event.stopPropagation(); OL.openAppModal('${matchedApp.id}')">
-                                ${esc(matchedApp.name)}
-                            </span>`;
-                    }).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-};
-
-// 3. ANALYSIS CORE ACTIONS
-OL.createNewMasterAnalysis = function () {
-  const name = prompt("Enter Master Template Name:");
-  if (!name) return;
-
-  state.master.analyses.push({
-    id: "master-anly-" + Date.now(),
-    name: name,
-    features: [],
-    apps: [],
-    categories: ["General"],
-    createdDate: new Date().toISOString(),
-  });
-
-  OL.persist();
-  renderAnalysisModule(true);
-};
-
-OL.createNewAnalysisSandbox = function () {
-  const name = prompt("Name your Analysis (e.g., CRM Comparison):");
-  if (!name) return;
-
-  const client = getActiveClient();
-  if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
-
-  client.projectData.localAnalyses.push({
-    id: "anly-" + Date.now(),
-    name: name,
-    features: [],
-    apps: [],
-    categories: ["General"],
-    createdDate: new Date().toISOString(),
-  });
-
-  OL.persist();
-  renderAnalysisModule(false);
-};
-
-OL.deleteAnalysis = function (anlyId, isVaultMode) {
-  if (!confirm("Are you sure you want to delete this analysis?")) return;
-
-  if (isVaultMode) {
-    state.master.analyses = state.master.analyses.filter(
-      (a) => a.id !== anlyId,
-    );
-  } else {
-    const client = getActiveClient();
-    client.projectData.localAnalyses = client.projectData.localAnalyses.filter(
-      (a) => a.id !== anlyId,
-    );
-  }
-
-  OL.persist();
-  renderAnalysisModule(isVaultMode);
+    if (anly) {
+        anly.name = cleanName;
+        OL.persist();
+        
+        // 🚀 SURGICAL DOM UPDATE:
+        // Find the card title in the background grid and update it without re-rendering
+        const cardTitles = document.querySelectorAll(`.card-title-${anlyId}`);
+        cardTitles.forEach(el => {
+            el.innerText = cleanName;
+        });
+        
+        console.log(`💾 Matrix ${anlyId} synced to card UI: ${cleanName}`);
+    }
 };
 
 // 4. ADD APP TO ANALYSIS OR REMOVE
@@ -7300,7 +7446,73 @@ OL.addFeatureToAnalysis = function (anlyId, isMaster) {
     });
 };
 
-if (!state.master.analyses) state.master.analyses = [];
+OL.updateAnalysisFeature = function(anlyId, featId, key, value, isMaster) {
+    // 🚀 THE SHIELD: Wrap in updateAndSync to block the Firebase "bounce-back"
+    OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+        const anly = source.find(a => a.id === anlyId);
+
+        if (anly && anly.features) {
+            const feat = anly.features.find(f => f.id === featId);
+            if (feat) {
+                // Convert to number if updating weight, otherwise keep as string
+                const val = key === 'weight' ? (parseFloat(value) || 0) : value;
+                feat[key] = val;
+            }
+        }
+    });
+
+    // 🔄 SURGICAL REFRESH: Only redraw the table, NOT the cards
+    // ❌ REMOVE ANY CALL TO: renderAnalysisModule(isMaster);
+    OL.openAnalysisMatrix(anlyId, isMaster); 
+    
+    console.log(`✅ Updated ${key} for feature ${featId} to ${value}`);
+};
+
+OL.syncFeatureChanges = function(oldName, newData, isVault) {
+    const pool = OL.getScopedAnalyses();
+    pool.forEach(anly => {
+        anly.features?.forEach(f => {
+            if (f.name === oldName) {
+                if (newData.name) f.name = newData.name;
+                if (newData.category) f.category = newData.category;
+                if (newData.description !== undefined) f.description = newData.description;
+            }
+        });
+        // Always maintain sorting after a sync
+        anly.features.sort((a, b) => {
+            const wA = OL.getCategoryWeight(a.category || "General");
+            const wB = OL.getCategoryWeight(b.category || "General");
+            return (wA - wB) || (a.category || "").localeCompare(b.category || "");
+        });
+    });
+};
+
+OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📁 Step 2: Category for "${esc(featName)}"</div>
+        </div>
+        <div class="modal-body">
+            <input type="text" id="cat-focus-target" class="modal-input" 
+                   placeholder="Search or create category..." 
+                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })">
+            <div id="feat-cat-assign-results" class="search-results-overlay" style="margin-top:10px;"></div>
+        </div>
+    `;
+    openModal(html);
+    
+    // 🚀 THE FIX: Wait for the browser to paint the modal, then force focus
+    requestAnimationFrame(() => {
+        const el = document.getElementById('cat-focus-target');
+        if (el) el.focus();
+    });
+
+    OL.universalCategorySearch("", 'assign-to-feature', 'feat-cat-assign-results', { 
+        anlyId, featName, isMaster 
+    });
+};
 
 OL.removeFeatureFromAnalysis = async function(anlyId, featId, isMaster) {
     if (!confirm("Remove this feature? All scores for this feature will be lost.")) return;
@@ -7327,7 +7539,7 @@ OL.removeFeatureFromAnalysis = async function(anlyId, featId, isMaster) {
     }
 };
 
-// 4c. ADD CATEGORY TO ANALYSIS OR 
+// 4c. ADD CATEGORY TO ANALYSIS OR REMOVE
 OL.addAllFeaturesFromCategory = async function(anlyId, catName, isMaster) {
     const client = getActiveClient();
     
@@ -7463,175 +7675,7 @@ OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
         console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
 };
 
-// 6. IMPORT ANALYSIS FROM MASTER VAULT OR PUSH TO MASTER VAULT
-OL.importAnalysisFromVault = function () {
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">📚 Import Analysis Template</div>
-            <div class="spacer"></div>
-            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
-        </div>
-        <div class="modal-body">
-            <div class="search-map-container">
-                <input type="text" class="modal-input" 
-                       placeholder="Search templates (e.g. CRM, AI)..." 
-                       onfocus="OL.filterMasterAnalysisImport('')"
-                       oninput="OL.filterMasterAnalysisImport(this.value)" 
-                       autofocus>
-                <div id="master-anly-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
-            </div>
-        </div>
-    `;
-    openModal(html);
-};
-
-OL.filterMasterAnalysisImport = function(query) {
-    const listEl = document.getElementById("master-anly-import-results");
-    if (!listEl) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const available = (state.master.analyses || []).filter(a => 
-        a.name.toLowerCase().includes(q)
-    );
-
-    listEl.innerHTML = available.map(anly => `
-        <div class="search-result-item" onmousedown="OL.executeAnalysisImportById('${anly.id}')">
-            📈 ${esc(anly.name)}
-        </div>
-    `).join('') || `<div class="search-result-item muted">No templates found.</div>`;
-};
-
-// Helper to handle the specific ID from search
-OL.executeAnalysisImportById = function(templateId) {
-    const template = state.master.analyses.find(t => t.id === templateId);
-    const client = getActiveClient();
-    if (!template || !client) return;
-
-    const newAnalysis = JSON.parse(JSON.stringify(template));
-    newAnalysis.id = "anly-" + Date.now();
-    
-    if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
-    client.projectData.localAnalyses.push(newAnalysis);
-
-    OL.persist();
-    OL.closeModal();
-    renderAnalysisModule(false);
-};
-
-OL.pushMatrixToMasterLibrary = function(anlyId) {
-    const client = getActiveClient();
-    const anly = (client?.projectData?.localAnalyses || []).find(a => a.id === anlyId);
-
-    if (!anly) return;
-
-    if (!confirm(`This will save "${anly.name}" as a standard template in your Master Library for use with all future clients. Proceed?`)) return;
-
-    // 1. Create a Master-standard copy of the analysis
-    const masterCopy = JSON.parse(JSON.stringify(anly));
-    masterCopy.id = 'master-anly-' + Date.now();
-    masterCopy.isMaster = true;
-    
-    // Optional: Templates usually start with blank scores, though they keep feature weights
-    masterCopy.apps = []; 
-
-    // 2. Sync Local Categories to Global Registry
-    if (anly.categories) {
-        if (!state.master.categories) state.master.categories = [];
-        anly.categories.forEach(cat => {
-            if (!state.master.categories.includes(cat)) {
-                state.master.categories.push(cat);
-            }
-        });
-    }
-
-    // 3. Sync Local Features to Global Registry
-    if (anly.features) {
-        anly.features.forEach(feat => {
-            // Logic to ensure these names appear in future searchable dropdowns
-            // (Assumes you have a master features list or rely on getGlobalFeatures)
-        });
-    }
-
-    // 4. Save to Master State
-    if (!state.master.analyses) state.master.analyses = [];
-    state.master.analyses.push(masterCopy);
-
-    OL.persist();
-    alert(`✅ Matrix "${anly.name}" is now a Master Template.`);
-    
-    // Redirect to the Vault Library to see the new template
-    window.location.hash = '#/vault/analyses';
-};
-
-OL.deleteMasterAnalysis = function(anlyId) {
-    if (!confirm("Are you sure you want to permanently delete this Master Template? It will no longer be available for import into new client projects.")) return;
-
-    state.master.analyses = (state.master.analyses || []).filter(a => a.id !== anlyId);
-    
-    OL.persist();
-    renderAnalysisModule(true); // Refresh the Vault view
-};
-
 // 7. UPDATE EXISTING MATRIX (AND SYNC CARD)
-OL.updateAnalysisFeature = function(anlyId, featId, key, value, isMaster) {
-    // 🚀 THE SHIELD: Wrap in updateAndSync to block the Firebase "bounce-back"
-    OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-        const anly = source.find(a => a.id === anlyId);
-
-        if (anly && anly.features) {
-            const feat = anly.features.find(f => f.id === featId);
-            if (feat) {
-                // Convert to number if updating weight, otherwise keep as string
-                const val = key === 'weight' ? (parseFloat(value) || 0) : value;
-                feat[key] = val;
-            }
-        }
-    });
-
-    // 🔄 SURGICAL REFRESH: Only redraw the table, NOT the cards
-    // ❌ REMOVE ANY CALL TO: renderAnalysisModule(isMaster);
-    OL.openAnalysisMatrix(anlyId, isMaster); 
-    
-    console.log(`✅ Updated ${key} for feature ${featId} to ${value}`);
-};
-
-OL.syncMatrixName = function(el) {
-    const matrixId = el.getAttribute('data-m-id');
-    const newName = el.innerText;
-    
-    // Find all elements with this matrix ID class and update them
-    const relatedElements = document.querySelectorAll(`.m-name-${matrixId}`);
-    relatedElements.forEach(item => {
-        if (item !== el) {
-            item.innerText = newName;
-        }
-    });
-};
-
-OL.renameMatrix = function(anlyId, newName, isMaster) {
-    const cleanName = newName.trim();
-    if (!cleanName) return;
-
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-    const anly = source.find(a => a.id === anlyId);
-
-    if (anly) {
-        anly.name = cleanName;
-        OL.persist();
-        
-        // 🚀 SURGICAL DOM UPDATE:
-        // Find the card title in the background grid and update it without re-rendering
-        const cardTitles = document.querySelectorAll(`.card-title-${anlyId}`);
-        cardTitles.forEach(el => {
-            el.innerText = cleanName;
-        });
-        
-        console.log(`💾 Matrix ${anlyId} synced to card UI: ${cleanName}`);
-    }
-};
 
 //======================= CONSOLIDATED FEATURES MANAGEMENT =======================//
 
@@ -7642,28 +7686,6 @@ OL.getScopedAnalyses = function() {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
     return isVault ? (state.master.analyses || []) : (client?.projectData?.localAnalyses || []);
-};
-
-/**
- * 💡 HELPER: Universal Sync - Updates name/cat/desc across all instances in scope
- */
-OL.syncFeatureChanges = function(oldName, newData, isVault) {
-    const pool = OL.getScopedAnalyses();
-    pool.forEach(anly => {
-        anly.features?.forEach(f => {
-            if (f.name === oldName) {
-                if (newData.name) f.name = newData.name;
-                if (newData.category) f.category = newData.category;
-                if (newData.description !== undefined) f.description = newData.description;
-            }
-        });
-        // Always maintain sorting after a sync
-        anly.features.sort((a, b) => {
-            const wA = OL.getCategoryWeight(a.category || "General");
-            const wB = OL.getCategoryWeight(b.category || "General");
-            return (wA - wB) || (a.category || "").localeCompare(b.category || "");
-        });
-    });
 };
 
 // --- 1. GLOBAL CONTENT MANAGER ---
@@ -8029,30 +8051,14 @@ OL.universalCategorySearch = function(query, type, targetElementId, extraParams 
     html += matches.map(cat => {
         const isFunction = masterFunctions.includes(cat);
 
-        // 1. Pre-process the JSON to avoid quote clashing in the HTML attribute
-        // We escape single quotes so the entire string is safe inside '${...}'
-        const paramsStr = JSON.stringify(extraParams).replace(/'/g, "\\'");
-
-        let importBtn = "";
-        if (type === 'assign-to-feature') {
-            const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
-            const libraryFeats = masterSource.filter(f => (f.category || "General") === cat);
-            if (libraryFeats.length > 0) {
-                importBtn = `
-                    <button class="btn tiny primary" 
-                            style="font-size:9px; background:var(--accent); color:black; font-weight:bold;"
-                            onmousedown="event.stopPropagation(); OL.addAllFeaturesFromCategory('${extraParams.anlyId}', '${esc(cat)}', ${extraParams.isMaster})">
-                        + Import All (${libraryFeats.length})
-                    </button>`;
-            }
-        }
+        // We'll pass the params via a global state reference to avoid all quote/syntax issues
+        window._tmpSearchParams = extraParams;
 
         return `
             <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
-                <div onmousedown="OL.handleCategorySelection('${esc(cat)}', '${type}', ${paramsStr})" style="flex:1;">
+                <div onmousedown="OL.handleCategorySelection('${esc(cat)}', '${type}', window._tmpSearchParams)" style="flex:1;">
                     <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
                 </div>
-                ${importBtn}
             </div>`;
     }).join('');
 
@@ -8067,31 +8073,6 @@ OL.getCategoryWeight = function(catName) {
     const index = coreLogic.indexOf(normalized);
     // If it's in our core list, return its position (0-4), otherwise return a high number
     return index !== -1 ? index : 99; 
-};
-
-OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">📁 Step 2: Category for "${esc(featName)}"</div>
-        </div>
-        <div class="modal-body">
-            <input type="text" id="cat-focus-target" class="modal-input" 
-                   placeholder="Search or create category..." 
-                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })">
-            <div id="feat-cat-assign-results" class="search-results-overlay" style="margin-top:10px;"></div>
-        </div>
-    `;
-    openModal(html);
-    
-    // 🚀 THE FIX: Wait for the browser to paint the modal, then force focus
-    requestAnimationFrame(() => {
-        const el = document.getElementById('cat-focus-target');
-        if (el) el.focus();
-    });
-
-    OL.universalCategorySearch("", 'assign-to-feature', 'feat-cat-assign-results', { 
-        anlyId, featName, isMaster 
-    });
 };
 
 OL.handleCategorySelection = function(catName, type, params = {}) {
@@ -8122,7 +8103,6 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
         OL.executeAddFeature(anlyId, featName, isMaster, catName);
     }
 };
-
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
@@ -9753,7 +9733,6 @@ OL.drawLevel2LogicLines = function(workflowId) {
     });
     svg.innerHTML = pathsHtml;
 };
-
 
 // --- SIDEBAR RENDERERS ---
 
