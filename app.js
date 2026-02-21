@@ -8002,28 +8002,32 @@ OL.finalizeFeatureAddition = async function(anlyId, featName, category, isMaster
 OL.addFeatureToAnalysis = function (anlyId, isMaster) {
     const analyses = OL.getScopedAnalyses();
     const anly = analyses.find(a => a.id === anlyId);
-    
-    // 🛡️ Get names of features already in this matrix to exclude them from search
     const existingFeatureNames = (anly?.features || []).map(f => f.name.toLowerCase());
+    const excludeJson = JSON.stringify(existingFeatureNames).replace(/"/g, '&quot;');
+
     const html = `
         <div class="modal-head"><div class="modal-title-text">🔎 Add Feature</div></div>
         <div class="modal-body">
             <label class="modal-section-label">Feature Name</label>
             <input type="text" id="feat-name-input" class="modal-input" 
-                   placeholder="Search library or type new..." 
-                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${JSON.stringify(existingFeatureNames).replace(/"/g, '&quot;')})">
+                   placeholder="Search library..." 
+                   onclick="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeJson})"
+                   onfocus="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeJson})"
+                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeJson})">
             <div id="feat-search-results" class="search-results-overlay"></div>
 
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">Category</label>
-                <input type="text" id="feat-cat-input" class="modal-input" 
-                       placeholder="Select category..."
-                       onfocus="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')"
-                       oninput="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')">
-                <div id="feat-cat-results" class="search-results-overlay"></div>
+                <div style="position:relative;">
+                    <input type="text" id="feat-cat-input" class="modal-input" 
+                           placeholder="Select category..."
+                           onclick="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')"
+                           onfocus="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')"
+                           oninput="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')">
+                    <div id="feat-cat-results" class="search-results-overlay"></div>
+                </div>
                 
-                <button class="btn primary full-width" style="margin-top:20px;" 
-                        onclick="OL.finalizeFeatureAddition('${anlyId}', document.getElementById('feat-name-input').value, document.getElementById('feat-cat-input').value, ${isMaster})">
+                <button class="btn primary full-width" style="margin-top:20px;" id="finalize-btn">
                     Add to Matrix
                 </button>
             </div>
