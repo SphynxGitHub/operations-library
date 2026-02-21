@@ -7244,48 +7244,39 @@ OL.filterContentManager = function(query) {
     });
 };
 
-OL.filterAnalysisFeatureSearch = function (anlyId, isMaster, query) {
-    const listEl = document.getElementById("feat-search-results");
+OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
+    const listEl = document.getElementById(targetElementId);
     if (!listEl) return;
 
-    // 🚀 THE FIX: Allow empty string to show all results on focus
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
 
-    // 1. Gather all unique features from existing analyses
-    const localFeats = client?.projectData?.localAnalyses
-        ? client.projectData.localAnalyses.flatMap((a) => a.features || [])
-        : [];
-    const masterFeats = (state.master.analyses || []).flatMap(
-        (a) => a.features || [],
-    );
-    const allFeatures = [...localFeats, ...masterFeats];
+    // 1. Unified Data Pull (Centralized logic)
+    const allFeatures = [
+        ...(client?.projectData?.localAnalyses || []).flatMap(a => a.features || []),
+        ...(state.master.analyses || []).flatMap(a => a.features || [])
+    ];
 
-    // 2. Filter matches (if q is empty, matches every name)
-    const matches = allFeatures.filter((f) => f.name.toLowerCase().includes(q));
+    // 2. Filter & Deduplicate
+    const uniqueMatches = Array.from(new Set(
+        allFeatures
+            .filter(f => f.name.toLowerCase().includes(q))
+            .map(f => f.name)
+    )).map(name => allFeatures.find(f => f.name === name));
 
-    // 3. Deduplicate matches by name
-    const uniqueMatches = Array.from(new Set(matches.map((m) => m.name))).map(
-        (name) => matches.find((m) => m.name === name),
-    );
+    // 3. Build HTML
+    let html = uniqueMatches.map(feat => `
+        <div class="search-result-item" onmousedown="OL.executeAddFeature('${anlyId}', '${esc(feat.name)}', ${isMaster}, '${esc(feat.category || "General")}')">
+            ✨ ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
+        </div>
+    `).join('');
 
-    let html = uniqueMatches
-        .map(
-            (feat) => `
-            <div class="search-result-item" onmousedown="OL.executeAddFeature('${anlyId}', '${esc(feat.name)}', ${isMaster}, '${esc(feat.category || "General")}')">
-                ✨ ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
-            </div>
-        `,
-        )
-        .join("");
-
-    // 4. Option to create brand new feature
-    if (q && !uniqueMatches.some((m) => m.name.toLowerCase() === q)) {
+    // 4. "Create New" Logic
+    if (q && !uniqueMatches.some(m => m.name.toLowerCase() === q)) {
         html += `
             <div class="search-result-item create-action" onmousedown="OL.executeAddFeature('${anlyId}', '${esc(query)}', ${isMaster}, 'General')">
                 <span class="pill tiny accent">+ New</span> Create Feature "${esc(query)}"
-            </div>
-        `;
+            </div>`;
     }
 
     listEl.innerHTML = html || `<div class="search-result-item muted">No unlinked features found.</div>`;
@@ -7300,8 +7291,8 @@ OL.addFeatureToAnalysis = function (anlyId, isMaster) {
             <div class="search-map-container">
                 <input type="text" class="modal-input" 
                       placeholder="Click to view global features or type new..." 
-                      onfocus="OL.filterAnalysisFeatureSearch('${anlyId}', ${isMaster}, '')"
-                      oninput="OL.filterAnalysisFeatureSearch('${anlyId}', ${isMaster}, this.value)" 
+                      onfocus="OL.universalFeatureSearch('${anlyId}', ${isMaster}, '')"
+                      oninput="OL.universalFeatureSearch('${anlyId}', ${isMaster}, this.value)" 
                       autofocus>
                 <div id="feat-search-results" class="search-results-overlay" style="margin-top:10px;"></div>
             </div>
