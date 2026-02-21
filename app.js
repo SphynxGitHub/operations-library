@@ -7812,8 +7812,13 @@ OL.executeGlobalFeatureUpdate = async function(originalName, isVault) {
 };
 
 // 4. MANAGE ADDING / EDITING FEATURES
-OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General") {
-    // 🚀 THE SHIELD
+OL.executeAddFeature = async function (anlyId, featName, isMaster, category = null) {
+    // If no category is provided, redirect to the category selector instead of saving
+    if (!category || category === "General") {
+        OL.promptFeatureCategory(anlyId, featName, isMaster);
+        return;
+    }
+
     await OL.updateAndSync(() => {
         const source = isMaster ? state.master.analyses : getActiveClient()?.projectData?.localAnalyses || [];
         const anly = source.find((a) => a.id === anlyId);
@@ -7829,9 +7834,8 @@ OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "G
         }
     });
 
-    // 🔄 Surgical Refresh
     OL.openAnalysisMatrix(anlyId, isMaster);
-    OL.closeModal();
+    OL.closeModal(); // Now it only closes once the category is confirmed
 };
 
 OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
@@ -7857,7 +7861,7 @@ OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
 };
 
 OL.handleCategorySelection = function(catName, type, params = {}) {
-    const { anlyId, featId, isMaster, featName } = params;
+    const { anlyId, isMaster, featName } = params;
 
     // 🎯 ROUTE 1: Feature Editor (L3 Matrix)
     if (type === 'edit-feature') {
