@@ -7465,7 +7465,7 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
     listEl.innerHTML = html || `<div class="search-result-item muted">No unlinked features found.</div>`;
 };
 
-OL.unifiedAddFlow = function(query, anlyId, isMaster) {
+OL.unifiedAddFlow = function(query, anlyId, isMaster, excludeNames=[]) {
     const q = query.trim();
     
     // 1. Run Feature Search
@@ -8018,7 +8018,7 @@ OL.addFeatureToAnalysis = function (anlyId, isMaster) {
                    oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeData})">
             
             <div id="feat-search-results" class="search-results-overlay" style="margin-top:10px; max-height: 150px;"></div>
-            
+
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">Category</label>
                 <div style="position:relative;">
