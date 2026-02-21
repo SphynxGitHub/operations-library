@@ -6814,26 +6814,31 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     let currentCategory = null;
     let rowsHtml = "";
     const features = anly.features || [];
+    const totalColspan = apps.length + 2;git add app.js style.css
+git commit -m "refactor: consolidate category search engine and finalize analysis matrix UX" -m "
+- Centralized category search into OL.universalCategorySearch
+- Fixed persistence for feature descriptions and app rationale notes
+- Unified Matrix UI with color-coded weight and score tiers
+- Implemented 0-3 score clamping and recursive state lookup
+- Consolidated feature editors across Matrix and Content Manager"
+git push origin main
     
     features.forEach(feat => {
         const catName = feat.category || "General";
 
-        // Inject Editable Category Header Row
+        // 1. Inject Category Header Row
         if (catName !== currentCategory) {
             currentCategory = catName;
             rowsHtml += `
                 <tr class="category-header-row" style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--line);">
-                    <td colspan="${(anly.apps || []).length + 2}" style="padding: 10px 12px;">
+                    <td colspan="${totalColspan}" style="padding: 10px 12px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="tiny muted">📁</span>
                             <span class="is-clickable"
-                                  style="color: var(--accent); font-weight: bold; text-transform: uppercase; cursor: text; border-bottom: 1px dashed transparent;"
-                                  onfocus="this.style.borderBottom='1px dashed var(--accent)'"
-                                  onblur="OL.renameFeatureCategory('${analysisId}', '${esc(catName)}', this.innerText, ${isMaster})"
+                                  style="color: var(--accent); font-weight: bold; text-transform: uppercase; cursor: pointer;"
                                   onclick="OL.openGlobalContentManager(); setTimeout(() => OL.filterContentManager('${esc(catName)}'), 50)">
                                 ${esc(catName)}
                             </span>
-                            <span class="tiny muted" style="font-size: 9px;"></span>
                         </div>
                     </td>
                 </tr>
@@ -7386,6 +7391,11 @@ OL.calculateAnalysisScore = function(app, features) {
 };
 
 OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
+    // 🛡️ Enforce the 0-3 limit globally
+    let score = parseFloat(value) || 0;
+    if (score < 0) score = 0;
+    if (score > 3) score = 3;
+
     OL.updateAndSync(() => { // 🚀 Wrap this!
         const client = getActiveClient();
         const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
@@ -7706,7 +7716,6 @@ OL.editFeatureModal = function(anlyId, featId, isMaster) {
 
     const currentCat = feat.category || "General";
 
-    // This is the HTML the UI expects to see when the modal opens
     const html = `
         <div class="modal-head"><div class="modal-title-text">⚙️ Edit Feature</div></div>
         <div class="modal-body">
@@ -7721,8 +7730,9 @@ OL.editFeatureModal = function(anlyId, featId, isMaster) {
                       value="${esc(currentCat)}" 
                       placeholder="Search functions or categories..."
                       autocomplete="off"
-                      onfocus="OL.filterEditCategorySearch('${anlyId}', '${featId}', ${isMaster}, this.value)"
-                      oninput="OL.filterEditCategorySearch('${anlyId}', '${featId}', ${isMaster}, this.value)">
+                      onfocus="OL.universalCategorySearch(this.value, 'edit-feature', 'edit-cat-search-results', { anlyId: '${anlyId}' })"
+                      oninput="OL.universalCategorySearch(this.value, 'edit-feature', 'edit-cat-search-results', { anlyId: '${anlyId}' })">
+                
                 <div id="edit-cat-search-results" class="search-results-overlay" 
                     style="margin-top:5px; max-height: 200px; overflow-y: auto; border: 1px solid var(--line); display: none;">
                 </div>
@@ -7732,11 +7742,11 @@ OL.editFeatureModal = function(anlyId, featId, isMaster) {
             <div style="margin-bottom: 15px;">
                 <label class="modal-section-label">Description / Business Rule</label>
                 <textarea id="edit-feat-description" class="modal-input" 
-                    style="height: 80px; resize: vertical; padding-top: 8px;">${esc(feat.description || "")}</textarea>
+                    style="height: 80px; resize: vertical; padding-top: 8px; font-family: inherit; line-height: 1.4;">${esc(feat.description || "")}</textarea>
             </div>
 
             <div style="margin-bottom: 25px; padding: 10px; background: rgba(255, 215, 0, 0.05); border-radius: 4px; border: 1px solid rgba(255, 215, 0, 0.2);">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
                     <input type="checkbox" id="edit-feat-global" style="width: 16px; height: 16px;">
                     <strong>Update Globally?</strong>
                 </label>
@@ -7789,255 +7799,6 @@ OL.executeGlobalFeatureUpdate = async function(originalName, isVault) {
     OL.openGlobalContentManager();
 };
 
-/*
-// 1. RENDER FEATURE MANAGER LIST GROUPED BY CATEGORY/FUNCTION
-OL.openGlobalContentManager = function() {
-    const isVaultMode = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const isAdmin = !window.location.hash.includes('client-view'); 
-    
-    // 1. Initialize function names for UI badges/styling
-    const masterFunctions = (state.master?.functions || []).map(f => f.name);
-    const featureGroups = {};
-    
-    // 🚀 THE FIX: Strict Data Scope
-    // If in Vault mode, ONLY load master analyses.
-    // If in Client mode, ONLY load that specific client's local analyses.
-    const analysesToLoad = isVaultMode 
-        ? (state.master.analyses || []) 
-        : (client?.projectData?.localAnalyses || []);
-        
-    // Always keep a reference of what is already in Master to handle the "Push to Vault" Star UI
-    const masterFeatureNames = new Set(
-        (state.master.analyses || []).flatMap(a => (a.features || []).map(f => f.name))
-    );
-
-    // 2. Scan only the scoped analyses to populate the management groups
-    analysesToLoad.forEach(anly => {
-        anly.features?.forEach(feat => {
-            const cat = feat.category || "General";
-            if (!featureGroups[cat]) featureGroups[cat] = new Set();
-            featureGroups[cat].add(feat.name);
-        });
-    });
-
-    // 3. Filter the global categories list to only show those active in the current scope
-    const allCats = OL.getGlobalCategories().filter(cat => featureGroups[cat]);
-
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚙️ ${isVaultMode ? 'Master Library' : 'Project Content'} Manager</div>
-            <div class="spacer"></div>
-            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
-        </div>
-        <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
-            <div style="position: sticky; top: 0; background: var(--panel-bg); padding-bottom: 15px; z-index: 10;">
-                <input type="text" class="modal-input" placeholder="Search categories or features..." 
-                       oninput="OL.filterContentManager(this.value)">
-            </div>
-
-            <p class="tiny muted" style="margin-bottom: 20px;">
-                ${isVaultMode 
-                    ? "Editing here updates <b>Master Templates</b> globally." 
-                    : `Editing here updates <b>${esc(client?.meta.name)}</b> project data only.`}
-            </p>
-
-            <div id="manager-content-root">
-                ${allCats.map(catName => {
-                    const isFunction = masterFunctions.includes(catName);
-                    const featuresInCat = Array.from(featureGroups[catName] || []);
-                    
-                    return `
-                        <div class="content-manager-group" data-cat="${esc(catName).toLowerCase()}" style="margin-bottom: 25px;">
-                            <div class="dp-manager-row" style="background: var(--panel-soft); border-left: 3px solid ${isFunction ? 'var(--accent)' : 'var(--panel-border)'}; padding: 8px 12px; margin-bottom: 8px;">
-                                <div style="flex:1;">
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span contenteditable="true" 
-                                              style="font-weight: bold; color: ${isFunction ? 'var(--accent)' : 'inherit'}; text-transform: uppercase; cursor: text;"
-                                              onblur="OL.globalRenameContent('category', '${esc(catName)}', this.innerText)">
-                                            ${esc(catName)}
-                                        </span>
-                                        ${isFunction ? 
-                                            `<span class="pill tiny accent" style="font-size:8px; cursor:pointer;" onclick="OL.demoteFromFunction('${esc(catName)}')" title="Click to Demote to Standard Category">FUNCTION ✕</span>` :
-                                            `<button class="btn tiny soft" onclick="OL.promoteToFunction('${esc(catName)}')" title="Promote to Master Function">⚡ Promote</button>`
-                                        }
-                                    </div>
-                                </div>
-                                <button class="card-delete-btn" onclick="OL.universalDelete(null, 'category', '${esc(catName)}', ${isFunction})">×</button>
-                            </div>
-
-                            <div class="content-manager-features" style="padding-left: 15px;">
-                                ${featuresInCat.map(featName => {
-                                    const inMaster = masterFeatureNames.has(featName);
-                                    // Only show the star if we are NOT in the vault and the feature isn't already standardized
-                                    const showStar = !isVaultMode && isAdmin && !inMaster;
-
-                                    return `
-                                    <div class="dp-manager-row content-item" data-feat="${esc(featName).toLowerCase()}" 
-                                    style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 8px 0;">
-                                    
-                                    <div class="dp-name-cell" style="cursor: pointer; font-size: 13px; flex: 1;" 
-                                        onclick="OL.openGlobalFeatureEditor('${esc(featName)}')">
-                                        ✨ ${esc(featName)}
-                                    </div>
-
-                                    <div style="display:flex; gap: 8px; align-items: center; margin-left: 15px;">
-                                        ${showStar ? `<button class="btn tiny accent" onclick="OL.pushFeatureToVault('${esc(featName)}')" title="Push to Master Vault">⭐</button>` : ''}
-                                        <button class="btn tiny soft" onclick="OL.openGlobalFeatureEditor('${esc(featName)}')">⚙️</button>
-                                        <button class="card-delete-btn" style="position: static;" onclick="OL.universalDelete(null, 'feature', '${esc(featName)}')">×</button>
-                                    </div>
-                                </div>`;
-                                }).join('')}
-                            </div>
-                        </div>`;
-                }).join('')}
-            </div>
-        </div>
-    `;
-    openModal(html);
-};
-
-// 2. OPEN INDIVIDUAL FEATURE EDITOR MODAL
-OL.openGlobalFeatureEditor = function(featName) {
-    const isVaultMode = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    
-    // Find the object so we can get the description
-    const analyses = isVaultMode 
-        ? (state.master.analyses || []) 
-        : (client?.projectData?.localAnalyses || []);
-    
-    let targetFeat = null;
-    let targetAnlyId = null;
-
-    // Find the first occurrence to act as the "Template"
-    for (const anly of analyses) {
-        const found = anly.features?.find(f => f.name === featName);
-        if (found) {
-            targetFeat = found;
-            targetAnlyId = anly.id;
-            break;
-        }
-    }
-
-    if (!targetFeat) return alert("Feature data not found.");
-
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚙️ Edit Global Definition: ${esc(featName)}</div>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom: 15px;">
-                <label class="modal-section-label">Feature Name</label>
-                <input type="text" id="global-edit-name" class="modal-input" value="${esc(targetFeat.name)}">
-            </div>
-
-            <div style="margin-bottom: 20px;">
-                <label class="modal-section-label">Global Description / Requirements</label>
-                <textarea id="global-edit-desc" class="modal-input" 
-                    style="height: 120px; resize: vertical; padding: 10px; line-height: 1.4;"
-                    placeholder="Enter the standard definition for this feature...">${esc(targetFeat.description || "")}</textarea>
-            </div>
-
-            <div class="info-box tiny muted" style="margin-bottom: 20px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 4px;">
-                ℹ️ Saving here will update <b>all instances</b> of this feature within the current ${isVaultMode ? 'Master Vault' : 'Project'}.
-            </div>
-
-            <div style="display:flex; gap:10px; justify-content: flex-end;">
-                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary" onclick="OL.executeGlobalFeatureUpdate('${esc(featName)}', ${isVaultMode})">Update All Instances</button>
-            </div>
-        </div>
-    `;
-    openModal(html);
-};
-
-OL.editFeatureModal = function(anlyId, featId, isMaster) {
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : (client.projectData.localAnalyses || []);
-    const anly = source.find(a => a.id === anlyId);
-    const feat = anly.features.find(f => f.id === featId);
-
-    if (!feat) return;
-
-    const currentCat = feat.category || "General";
-
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚙️ Edit Feature</div>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom: 15px;">
-                <label class="modal-section-label">Feature Name</label>
-                <input type="text" id="edit-feat-name" class="modal-input" value="${esc(feat.name)}">
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label class="modal-section-label">Category Group / Function</label>
-                <input type="text" id="edit-feat-cat-search" class="modal-input" 
-                      value="${esc(currentCat)}" 
-                      placeholder="Search functions or categories..."
-                      autocomplete="off"
-                      onfocus="OL.filterEditCategorySearch('${anlyId}', '${featId}', ${isMaster}, this.value)"
-                      oninput="OL.filterEditCategorySearch('${anlyId}', '${featId}', ${isMaster}, this.value)">
-                <div id="edit-cat-search-results" class="search-results-overlay" 
-                    style="margin-top:5px; max-height: 200px; overflow-y: auto; border: 1px solid var(--line); display: none;">
-                </div>
-                <input type="hidden" id="edit-feat-cat-value" value="${esc(currentCat)}">
-            </div>
-
-            <div style="margin-bottom: 15px;">
-                <label class="modal-section-label">Description / Business Rule</label>
-                <textarea id="edit-feat-description" class="modal-input" 
-                    style="height: 80px; resize: vertical; padding-top: 8px; font-family: inherit; line-height: 1.4;"
-                    placeholder="Enter implementation details or requirement logic...">${esc(feat.description || "")}</textarea>
-            </div>
-
-            <div style="margin-bottom: 25px; padding: 10px; background: rgba(255, 215, 0, 0.05); border-radius: 4px; border: 1px solid rgba(255, 215, 0, 0.2);">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="checkbox" id="edit-feat-global" style="width: 16px; height: 16px;">
-                    <strong>Update Globally?</strong>
-                </label>
-            </div>
-
-            <div style="display:flex; gap:10px; justify-content: flex-end;">
-                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary" onclick="OL.executeEditFeature('${anlyId}', '${featId}', ${isMaster})">Save Changes</button>
-            </div>
-        </div>
-    `;
-    openModal(html);
-};
-
-// 3. SEARCH FOR FEATURE FROM LIST
-OL.filterContentManager = function(query) {
-    const q = query.toLowerCase().trim();
-    const groups = document.querySelectorAll('.content-manager-group');
-
-    groups.forEach(group => {
-        const catName = group.getAttribute('data-cat');
-        const items = group.querySelectorAll('.content-item');
-        let hasVisibleFeature = false;
-
-        items.forEach(item => {
-            const featName = item.getAttribute('data-feat');
-            if (featName.includes(q) || catName.includes(q)) {
-                item.style.display = 'flex';
-                hasVisibleFeature = true;
-            } else {
-                item.style.display = 'none';
-            }
-        });
-
-        // Show group if category matches OR if it contains a matching feature
-        if (catName.includes(q) || hasVisibleFeature) {
-            group.style.display = 'block';
-        } else {
-            group.style.display = 'none';
-        }
-    });
-};
-*/
 // 4. MANAGE ADDING / EDITING FEATURES
 OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General") {
     // 🚀 THE SHIELD
@@ -8068,80 +7829,48 @@ OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
         </div>
         <div class="modal-body">
             <input type="text" class="modal-input" placeholder="Search or create category..." 
-                   oninput="OL.filterFeatureCategoryAssignment('${anlyId}', '${esc(featName)}', ${isMaster}, this.value)" autofocus>
+                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })" 
+                   autofocus>
             <div id="feat-cat-assign-results" class="search-results-overlay" style="margin-top:10px;"></div>
         </div>
     `;
     openModal(html);
-    // Initialize results with all available global categories
-    OL.filterFeatureCategoryAssignment(anlyId, featName, isMaster, "");
-};
-
-OL.filterFeatureCategoryAssignment = function(anlyId, featName, isMaster, query) {
-    const listEl = document.getElementById("feat-cat-assign-results");
-    if (!listEl) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const allCats = OL.getGlobalCategories();
-    const masterFunctions = (state.master?.functions || []).map(f => (f.name || f).toString());
-
-    // 1. Prepare Master Source to check for "Import All" availability
-    const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
-
-    let html = "";
-
-    // 🚀 2. SHOW "CREATE NEW"
-    const exactMatch = allCats.some(c => c.toLowerCase() === q);
-    if (q.length > 0 && !exactMatch) {
-        html += `
-            <div class="search-result-item create-action" 
-                 style="background: rgba(var(--accent-rgb), 0.15) !important; border-bottom: 2px solid var(--accent); margin-bottom: 8px;"
-                 onmousedown="OL.executeAddFeature('${anlyId}', '${esc(featName)}', ${isMaster}, '${esc(query)}')">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="pill tiny accent" style="background:var(--accent); color:white; font-weight:bold;">+ CREATE NEW</span> 
-                    <span style="color:var(--accent);">"${esc(query)}"</span>
-                </div>
-            </div>`;
-    }
-
-    // 🚀 3. FILTER MATCHES & ADD "IMPORT ALL" BUTTON
-    const matches = allCats.filter(c => c.toLowerCase().includes(q));
     
-    html += matches.map(cat => {
-        const isFunction = masterFunctions.includes(cat);
-        
-        // 🔍 Check if this specific category has features in the Master Library
-        const libraryFeats = masterSource.filter(f => (f.category || "General") === cat);
-        const hasLibraryContent = libraryFeats.length > 0;
-
-        return `
-            <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-                <div onmousedown="OL.executeAddFeature('${anlyId}', '${esc(featName)}', ${isMaster}, '${esc(cat)}')" style="flex:1;">
-                    <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
-                    ${isFunction ? '<span class="pill tiny accent" style="font-size:8px;">PILLAR</span>' : ''}
-                </div>
-                
-                ${hasLibraryContent ? `
-                    <button class="btn tiny primary" 
-                            style="font-size:9px; background:var(--accent); color:black; font-weight:bold; white-space:nowrap;"
-                            onmousedown="event.stopPropagation(); OL.addAllFeaturesFromCategory('${anlyId}', '${esc(cat)}', ${isMaster})">
-                        + Import All (${libraryFeats.length})
-                    </button>
-                ` : ''}
-            </div>`;
-    }).join('');
-
-    // 🚀 4. FINAL RENDER
-    if (!html) {
-        listEl.innerHTML = '<div class="search-result-item muted">Search or type a new category...</div>';
-    } else {
-        listEl.innerHTML = html;
-    }
+    // 🚀 Initialize results immediately using the universal engine
+    OL.universalCategorySearch("", 'assign-to-feature', 'feat-cat-assign-results', { 
+        anlyId: anlyId, 
+        featName: featName, 
+        isMaster: isMaster 
+    });
 };
 
-OL.confirmFeatureWithCategory = function(anlyId, featName, isMaster) {
-    const cat = document.getElementById("new-feat-cat-select").value;
-    OL.executeAddFeature(anlyId, featName, isMaster, cat);
+OL.handleCategorySelection = function(catName, type, params = {}) {
+    const { anlyId, featId, isMaster, featName } = params;
+
+    // 🎯 ROUTE 1: Feature Editor (L3 Matrix)
+    if (type === 'edit-feature') {
+        const searchInput = document.getElementById("edit-feat-cat-search");
+        const hiddenInput = document.getElementById("edit-feat-cat-value");
+        if (searchInput) searchInput.value = catName;
+        if (hiddenInput) hiddenInput.value = catName;
+        document.getElementById("edit-cat-search-results").style.display = "none";
+    } 
+
+    // 🎯 ROUTE 2: Analysis Assignment (Adding a Cat to a Matrix)
+    else if (type === 'add-to-analysis') {
+        OL.executeAddCategoryToAnalysis(anlyId, catName, isMaster);
+    }
+
+    // 🎯 ROUTE 3: Global Content Manager (Library)
+    else if (type === 'global-manager') {
+        document.getElementById('global-feat-cat-search').value = catName;
+        document.getElementById('global-cat-results').innerHTML = '';
+    }
+
+    // 🎯 ROUTE 4: Feature-to-Category Import
+    else if (type === 'assign-to-feature') {
+        OL.executeAddFeature(anlyId, featName, isMaster, catName);
+    }
 };
 
 OL.pushFeatureToVault = function (featName) {
@@ -8200,73 +7929,6 @@ OL.renameFeatureCategory = function(anlyId, oldCatName, newCatName, isMaster) {
 
         OL.persist();
         OL.openAnalysisMatrix(anlyId, isMaster); // Refresh UI
-    }
-};
-
-OL.executeEditFeature = function(anlyId, featId, isMaster) {
-    const newName = document.getElementById("edit-feat-name").value.trim();
-    const newCat = document.getElementById("edit-feat-cat-value").value.trim() || "General";
-    const newDesc = document.getElementById('edit-feat-description').value; // 🚀 Captured
-    const isGlobal = document.getElementById("edit-feat-global").checked;
-
-    if (!newName) { alert("Feature name cannot be empty"); return; }
-
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-    const anly = source.find(a => a.id === anlyId);
-    const originalFeat = anly?.features.find(f => f.id === featId);
-    const originalName = originalFeat?.name;
-
-    const weightedSort = (features) => {
-        features.sort((a, b) => {
-            const wA = OL.getCategoryWeight(a.category || "General");
-            const wB = OL.getCategoryWeight(b.category || "General");
-            if (wA !== wB) return wA - wB; 
-            return (a.category || "").localeCompare(b.category || ""); 
-        });
-    };
-
-    if (originalFeat) {
-        // 1. UPDATE THE TARGET INSTANCE
-        originalFeat.name = newName;
-        originalFeat.category = newCat;
-        originalFeat.description = newDesc; // 🚀 Apply to single instance
-        weightedSort(anly.features);
-
-        // 🚀 2. STRICTLY SCOPED SYNC
-        if (isGlobal && originalName) {
-            const targetScope = isMaster 
-                ? state.master.analyses 
-                : (client?.projectData?.localAnalyses || []);
-            
-            targetScope.forEach(a => {
-                if (!a.features) return;
-
-                a.features.forEach(f => {
-                    if (f.name === originalName) {
-                        f.name = newName;
-                        f.category = newCat;
-                        f.description = newDesc; // 🚀 Apply to all matching features in scope
-                    }
-                });
-
-                // Deduplicate within the scope
-                const seenNames = new Set();
-                a.features = a.features.filter(f => {
-                    if (seenNames.has(f.name)) return false;
-                    seenNames.add(f.name);
-                    return true;
-                });
-
-                weightedSort(a.features);
-            });
-        }
-
-        OL.persist();
-        OL.closeModal();
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        
-        console.log(`✅ Feature updated: ${newName}`);
     }
 };
 
@@ -8369,6 +8031,65 @@ OL.globalRenameContent = function(type, oldName, newName, forceNewCat = null) {
     OL.persist();
 };
 
+//======================= CONSOLIDATED CATEGORY SEARCH =======================//
+
+OL.universalCategorySearch = function(query, type, targetElementId, extraParams = {}) {
+    const listEl = document.getElementById(targetElementId);
+    if (!listEl) return;
+
+    listEl.style.display = "block";
+    const q = (query || "").toLowerCase().trim();
+    const allCats = OL.getGlobalCategories();
+    const masterFunctions = (state.master?.functions || []).map(f => f.name || f);
+
+    // 1. Filter matches
+    const matches = allCats.filter(c => c.toLowerCase().includes(q));
+    const exactMatch = matches.some(m => m.toLowerCase() === q);
+
+    let html = "";
+
+    // 🚀 THE "CREATE NEW" ACTION (Priority 1)
+    if (q.length > 0 && !exactMatch) {
+        html += `
+            <div class="search-result-item create-action" 
+                 style="background: rgba(var(--accent-rgb), 0.15) !important; border-bottom: 2px solid var(--accent); margin-bottom: 5px;"
+                 onmousedown="OL.handleCategorySelection('${esc(query)}', '${type}', ${JSON.stringify(extraParams)})">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="pill tiny accent" style="background:var(--accent); color:white; font-weight:bold;">+ CREATE NEW</span> 
+                    <span style="color:var(--accent);">"${esc(query)}"</span>
+                </div>
+            </div>`;
+    }
+
+    // 🚀 THE EXISTING MATCHES (Priority 2)
+    html += matches.map(cat => {
+        const isFunction = masterFunctions.includes(cat);
+
+        let importBtn = "";
+        if (type === 'assign-to-feature') {
+            const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
+            const libraryFeats = masterSource.filter(f => (f.category || "General") === cat);
+            if (libraryFeats.length > 0) {
+                importBtn = `
+                    <button class="btn tiny primary" 
+                            style="font-size:9px; background:var(--accent); color:black; font-weight:bold;"
+                            onmousedown="event.stopPropagation(); OL.addAllFeaturesFromCategory('${extraParams.anlyId}', '${esc(cat)}', ${extraParams.isMaster})">
+                        + Import All (${libraryFeats.length})
+                    </button>`;
+            }
+        }
+        return `
+            <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
+                <div onmousedown="OL.handleCategorySelection('${esc(cat)}', '${type}', ${JSON.stringify(extraParams)})" style="flex:1;">
+                    <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
+                </div>
+                ${importBtn}
+            </div>`;
+    }).join('');
+
+    listEl.innerHTML = html || '<div class="search-result-item muted">No categories found...</div>';
+};
+
 // 4b. MANAGE ADDING / EDITING CATEGORIES
 OL.getCategoryWeight = function(catName) {
     const coreLogic = ["GENERAL", "PRICING", "SECURITY", "ARCHITECTURE", "TEAM ACCESS"];
@@ -8379,141 +8100,26 @@ OL.getCategoryWeight = function(catName) {
     return index !== -1 ? index : 99; 
 };
 
-OL.promptAddCategory = function(anlyId, isMaster) {
+OL.promptFeatureCategory = function(anlyId, featName, isMaster) {
     const html = `
-        <div class="modal-head"><div class="modal-title-text">📁 Add Global Category</div></div>
+        <div class="modal-head">
+            <div class="modal-title-text">📁 Assign Category to "${esc(featName)}"</div>
+        </div>
         <div class="modal-body">
-            <input type="text" class="modal-input" placeholder="Search categories..." 
-                   oninput="OL.filterGlobalCategorySearch('${anlyId}', ${isMaster}, this.value)" autofocus>
-            <div id="cat-search-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            <input type="text" class="modal-input" placeholder="Search or create category..." 
+                   oninput="OL.universalCategorySearch(this.value, 'assign-to-feature', 'feat-cat-assign-results', { anlyId: '${anlyId}', featName: '${esc(featName)}', isMaster: ${isMaster} })" 
+                   autofocus>
+            <div id="feat-cat-assign-results" class="search-results-overlay" style="margin-top:10px;"></div>
         </div>
     `;
     openModal(html);
-};
-
-OL.filterGlobalCategorySearch = function(anlyId, isMaster, query) {
-    const listEl = document.getElementById("cat-search-results");
-    if (!listEl) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const allCats = OL.getGlobalCategories();
-    const matches = allCats.filter(c => c.toLowerCase().includes(q));
-
-    let html = matches.map(cat => `
-        <div class="search-result-item" onclick="OL.executeAddCategoryToAnalysis('${anlyId}', '${esc(cat)}', ${isMaster})">
-            📁 ${esc(cat)}
-        </div>
-    `).join('');
-
-    if (q && !matches.some(m => m.toLowerCase() === q)) {
-        html += `
-            <div class="search-result-item create-action" onclick="OL.executeAddCategoryToAnalysis('${anlyId}', '${esc(query)}', ${isMaster})">
-                <span class="pill tiny accent">+ New</span> Create Category "${esc(query)}"
-            </div>
-        `;
-    }
-    listEl.innerHTML = html;
-};
-
-OL.filterGlobalManagerCategorySearch = function(query) {
-    const listEl = document.getElementById("global-cat-results");
-    if (!listEl) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const allCats = OL.getGlobalCategories();
-    const masterFunctions = (state.master?.functions || []).map(f => (f.name || f).toString());
     
-    // 1. Filter existing matches
-    const matches = allCats.filter(c => c.toLowerCase().includes(q));
-
-    // 2. Build the HTML string starting with existing matches
-    let html = matches.map(cat => {
-        const isFunction = masterFunctions.includes(cat);
-        return `
-            <div class="search-result-item" onmousedown="document.getElementById('global-feat-cat-search').value='${esc(cat)}'; document.getElementById('global-cat-results').innerHTML=''">
-                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                    <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
-                    ${isFunction ? '<span class="pill tiny accent" style="font-size:7px;">PILLAR</span>' : ''}
-                </div>
-            </div>`;
-    }).join('');
-
-    // 🚀 3. THE FIX: If there is text and no exact match, APPEND the "Create New" button to the string
-    const exactMatch = matches.some(m => m.toLowerCase() === q);
-    if (q.length > 0 && !exactMatch) {
-        html += `
-            <div class="search-result-item create-action" 
-                 style="background: rgba(var(--accent-rgb), 0.15) !important; border-top: 1px solid var(--line); margin-top: 5px;"
-                 onmousedown="document.getElementById('global-feat-cat-search').value='${esc(query)}'; document.getElementById('global-cat-results').innerHTML=''">
-                <span class="pill tiny accent">+ NEW</span> Create "${esc(query)}"
-            </div>
-        `;
-    }
-
-    // 4. Final Render: Now 'html' will NOT be empty if 'q' has text, so the fallback won't show
-    if (!html && !q) {
-        listEl.innerHTML = '<div class="search-result-item muted">Start typing to see categories...</div>';
-    } else {
-        listEl.innerHTML = html || '<div class="search-result-item muted">No categories found</div>';
-    }
-};
-
-OL.filterEditCategorySearch = function(anlyId, featId, isMaster, query) {
-    const listEl = document.getElementById("edit-cat-search-results");
-    if (!listEl) return;
-
-    listEl.style.display = "block";
-    const q = (query || "").toLowerCase().trim();
-    
-    // Build Data context
-    const allCats = OL.getGlobalCategories();
-    const masterFunctions = (state.master?.functions || []).map(f => f.name || f);
-
-    let html = "";
-
-    // 🚀 PRIORITY 1: Force "Create New" if text exists
-    if (q.length > 0) {
-        html += `
-            <div class="search-result-item create-action" 
-                 style="background: rgba(var(--accent-rgb), 0.15) !important; border-bottom: 2px solid var(--accent); margin-bottom: 5px;"
-                 onmousedown="OL.selectEditCategory('${esc(query)}')">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="pill tiny accent" style="background:var(--accent); color:white; font-weight:bold;">+ CREATE NEW</span> 
-                    <span style="color:var(--accent);">"${esc(query)}"</span>
-                </div>
-            </div>`;
-    }
-
-    // 🚀 PRIORITY 2: Map existing matches
-    const matches = allCats.filter(c => c.toLowerCase().includes(q));
-    
-    html += matches.map(cat => {
-        const isFunction = masterFunctions.includes(cat);
-        return `
-            <div class="search-result-item" onmousedown="OL.selectEditCategory('${esc(cat)}')">
-                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                    <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
-                    ${isFunction ? '<span class="pill tiny accent" style="font-size:8px;">PILLAR</span>' : ''}
-                </div>
-            </div>`;
-    }).join('');
-
-    // 🚀 PRIORITY 3: Fallback if everything is empty
-    if (!html) {
-        html = '<div class="search-result-item muted">Search or type a new category...</div>';
-    }
-
-    listEl.innerHTML = html;
-};
-
-OL.selectEditCategory = function(catName) {
-    const searchInput = document.getElementById("edit-feat-cat-search");
-    const hiddenInput = document.getElementById("edit-feat-cat-value");
-    const resultsEl = document.getElementById("edit-cat-search-results");
-
-    if (searchInput) searchInput.value = catName;
-    if (hiddenInput) hiddenInput.value = catName;
-    if (resultsEl) resultsEl.style.display = "none";
+    // 🚀 Initialize results immediately using the universal engine
+    OL.universalCategorySearch("", 'assign-to-feature', 'feat-cat-assign-results', { 
+        anlyId: anlyId, 
+        featName: featName, 
+        isMaster: isMaster 
+    });
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
