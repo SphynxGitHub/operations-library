@@ -6869,8 +6869,8 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
 
                     return `
                         <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
-                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <div style="display: flex; align-items: center; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <div style="display: flex; align-items: gap: 10px; center; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
                                     <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
                                     <input type="number" 
                                         min="0"
