@@ -6848,7 +6848,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                         <button class="card-delete-btn" onclick="OL.removeFeatureFromAnalysis('${analysisId}', '${feat.id}', ${isMaster})">×</button> 
                         <span class="small feature-edit-link" 
                               style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
-                              onclick="OL.renderFeatureEditModal('${analysisId}', '${feat.id}', ${isMaster})">
+                              onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
                             ${esc(feat.name)}
                             <span style="font-size: 10px; opacity: 0.3;">📝</span>
                         </span>
@@ -6899,6 +6899,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     });
     return rowsHtml;
 };
+
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
@@ -7693,6 +7694,46 @@ OL.openGlobalFeatureEditor = function(featName) {
                 <button class="btn primary" onclick="OL.executeGlobalFeatureUpdate('${esc(featName)}', ${isVault})">Update All</button>
             </div>
         </div>`;
+    openModal(html);
+};
+
+OL.editFeatureModal = function(anlyId, featId, isMaster) {
+    const analyses = OL.getScopedAnalyses();
+    const anly = analyses.find(a => a.id === anlyId);
+    const feat = anly?.features.find(f => f.id === featId);
+
+    if (!feat) return;
+
+    const currentCat = feat.category || "General";
+
+    // This is the HTML the UI expects to see when the modal opens
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">⚙️ Edit Feature</div></div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="modal-section-label">Feature Name</label>
+                <input type="text" id="edit-feat-name" class="modal-input" value="${esc(feat.name)}">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label class="modal-section-label">Description / Business Rule</label>
+                <textarea id="edit-feat-description" class="modal-input" 
+                    style="height: 80px; resize: vertical; padding-top: 8px;">${esc(feat.description || "")}</textarea>
+            </div>
+
+            <div style="margin-bottom: 25px; padding: 10px; background: rgba(255, 215, 0, 0.05); border-radius: 4px; border: 1px solid rgba(255, 215, 0, 0.2);">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="edit-feat-global" style="width: 16px; height: 16px;">
+                    <strong>Update Globally?</strong>
+                </label>
+            </div>
+
+            <div style="display:flex; gap:10px; justify-content: flex-end;">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.executeEditFeature('${anlyId}', '${featId}', ${isMaster})">Save Changes</button>
+            </div>
+        </div>
+    `;
     openModal(html);
 };
 
