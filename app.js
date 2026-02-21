@@ -7650,35 +7650,48 @@ OL.openCategoryManagerModal = function(anlyId, catName, isMaster) {
 OL.addAllFeaturesFromCategory = async function(anlyId, catName, isMaster) {
     const client = getActiveClient();
     
-    // 1. Pull feature definitions from the Master Library based on the category name
+    // 1. Pull unique feature definitions from the Master Library for this category
     const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
     const catFeatures = masterSource.filter(f => (f.category || "General") === catName);
+    
+    // Deduplicate the source list by name first
+    const uniqueSourceFeats = Array.from(new Set(catFeatures.map(f => f.name)))
+        .map(name => catFeatures.find(f => f.name === name));
 
-    // 2. Identify the destination analysis
+    // 2. Identify destination
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === anlyId);
 
-    if (anly && catFeatures.length > 0) {
-        if (!confirm(`Import all ${catFeatures.length} standard features from "${catName}" into this matrix?`)) return;
+    if (anly && uniqueSourceFeats.length > 0) {
+        // 🚀 THE FIX: Only identify features that don't exist in THIS analysis (any category)
+        const incomingFeats = uniqueSourceFeats.filter(feat => 
+            !anly.features.some(f => f.name.toLowerCase() === feat.name.toLowerCase())
+        );
 
-        // 🚀 THE SHIELD: Use the mutator to prevent page reload
+        if (incomingFeats.length === 0) {
+            alert(`All standard features for "${catName}" are already in your matrix.`);
+            return;
+        }
+
+        if (!confirm(`Import ${incomingFeats.length} new features into "${catName}"?`)) return;
+
+        // 🛡️ THE SHIELD: Batch update
         await OL.updateAndSync(() => {
-            catFeatures.forEach(feat => {
-                // Deduplicate: Don't add if the feature name already exists
-                if (!anly.features.some(f => f.name === feat.name)) {
-                    anly.features.push({ 
-                        id: 'feat-' + Date.now() + Math.random(), 
-                        name: feat.name,
-                        category: catName,
-                        weight: 10 
-                    });
-                }
+            incomingFeats.forEach(feat => {
+                anly.features.push({ 
+                    id: 'feat-' + Date.now() + Math.random(), 
+                    name: feat.name,
+                    category: catName,
+                    description: feat.description || "", // Carry over the library description
+                    weight: 10 
+                });
             });
         });
 
-        // 🔄 Surgical Refresh
+        // 🔄 Refresh Matrix & Close Modal
         OL.openAnalysisMatrix(anlyId, isMaster); 
         OL.closeModal();
+        console.log(`✅ Bulk Import: ${incomingFeats.length} features added.`);
     }
 };
 
@@ -7940,33 +7953,42 @@ OL.executeGlobalFeatureUpdate = async function(originalName, isVault) {
 };
 
 // 4. MANAGE ADDING / EDITING FEATURES
-// 4. MANAGE ADDING / EDITING FEATURES
 OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General", isFinal = false) {
     
-    // 🚀 THE BYPASS: If NOT finalized and category is default/missing, trigger Step 2
+    // 1. Wizard Check
     if (!isFinal && (!category || category === "General")) {
-        OL.promptFeatureCategory(anlyId, featName, isMaster);
-        return;
+        return OL.promptFeatureCategory(anlyId, featName, isMaster);
     }
 
-    // 🛡️ THE SHIELD: If we reach here, we have a category and the green light to save
-    await OL.updateAndSync(() => {
-        const source = isMaster ? state.master.analyses : getActiveClient()?.projectData?.localAnalyses || [];
-        const anly = source.find((a) => a.id === anlyId);
+    // 2. Duplicate Check
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
+    const anly = source.find((a) => a.id === anlyId);
 
-        if (anly) {
-            const newFeat = {
+    if (anly) {
+        const isDuplicate = anly.features.some(f => 
+            f.name.toLowerCase() === featName.toLowerCase() && 
+            (f.category || "General").toLowerCase() === category.toLowerCase()
+        );
+
+        if (isDuplicate) {
+            alert(`🚫 "${featName}" already exists in the "${category}" category on this matrix.`);
+            return; // 🛑 Stop the process
+        }
+
+        // 3. Save Logic (If not a duplicate)
+        await OL.updateAndSync(() => {
+            anly.features.push({
                 id: "feat-" + Date.now(),
                 name: featName,
-                category: category, // This will now be the chosen category
+                category: category,
                 weight: 10
-            };
-            anly.features.push(newFeat);
-        }
-    });
+            });
+        });
 
-    OL.openAnalysisMatrix(anlyId, isMaster);
-    OL.closeModal(); 
+        OL.openAnalysisMatrix(anlyId, isMaster);
+        OL.closeModal();
+    }
 };
 
 OL.pushFeatureToVault = function (featName) {
