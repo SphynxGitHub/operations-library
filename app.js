@@ -7440,6 +7440,8 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
             .map(f => f.name)
     )).map(name => allFeatures.find(f => f.name === name));
 
+    let html = "";
+
     // 3. Build HTML
     html += uniqueMatches.map(feat => `        
         <div class="search-result-item" onmousedown="
