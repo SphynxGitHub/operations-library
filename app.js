@@ -7868,55 +7868,108 @@ OL.getScopedAnalyses = function() {
 
 // --- 1. GLOBAL CONTENT MANAGER ---
 OL.openGlobalContentManager = function() {
-    const isVault = window.location.hash.includes('vault');
-    const analyses = OL.getScopedAnalyses();
-    const masterFunctions = (state.master?.functions || []).map(f => f.name);
-    const featureGroups = {};
+    const client = getActiveClient();
+    
+    // 1. Gather Master Data (Immutable)
+    const masterFeatures = (state.master.analyses || []).flatMap(a => a.features || []);
+    
+    // 2. Gather Local Data (Editable) - Features unique to this client's local analyses
+    const localAnalyses = client?.projectData?.localAnalyses || [];
+    const localFeatures = localAnalyses.flatMap(a => a.features || [])
+        .filter(lf => !masterFeatures.some(mf => mf.name.toLowerCase() === lf.name.toLowerCase()));
 
-    // Populate Groups
-    analyses.forEach(anly => {
-        anly.features?.forEach(f => {
-            const cat = f.category || "General";
-            if (!featureGroups[cat]) featureGroups[cat] = new Set();
-            featureGroups[cat].add(f.name);
-        });
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📚 Content & Library Manager</div>
+        </div>
+        <div class="modal-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <input type="text" id="lib-search" class="modal-input" placeholder="Search all features..." 
+                       oninput="OL.filterLibraryManager(this.value)" style="width:70%;">
+                <button class="btn primary" onclick="OL.openAddLocalFeatureModal()">+ Add Local Feature</button>
+            </div>
+
+            <div class="library-scroll-area" style="max-height: 550px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;">
+                <table class="matrix-table" style="width:100%; border-collapse: collapse;">
+                    <thead style="position: sticky; top:0; background: var(--bg-card); z-index:10; border-bottom:2px solid var(--line);">
+                        <tr>
+                            <th style="width:25%; padding:10px;">Category</th>
+                            <th style="width:55%; padding:10px;">Feature Name</th>
+                            <th style="width:20%; padding:10px; text-align:center;">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lib-manager-tbody">
+                        ${OL.renderLibraryManagerRows(masterFeatures, localFeatures)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.renderLibraryManagerRows = function(masterFeats, localFeats) {
+    const all = [
+        ...masterFeats.map(f => ({ ...f, origin: 'master' })),
+        ...localFeats.map(f => ({ ...f, origin: 'local' }))
+    ];
+
+    // Standard sorting: Category Priority -> Name
+    all.sort((a, b) => {
+        const catA = (a.category || "General").toLowerCase();
+        const catB = (b.category || "General").toLowerCase();
+        return catA.localeCompare(catB) || a.name.localeCompare(b.name);
     });
 
-    const allCats = OL.getGlobalCategories().filter(cat => featureGroups[cat]);
+    if (all.length === 0) return '<tr><td colspan="3" class="center muted p-20">Library is empty.</td></tr>';
 
-    // ... (Keep your HTML template here, it's solid) ...
-    // Note: Point the '⚙️' button to OL.openGlobalFeatureEditor
+    return all.map(f => {
+        const isMaster = f.origin === 'master';
+        
+        return `
+            <tr style="border-bottom: 1px solid var(--line); background: ${isMaster ? 'transparent' : 'rgba(var(--accent-rgb), 0.05)'}">
+                <td style="padding:8px;">
+                    ${isMaster ? 
+                        `<span class="muted" style="font-size:0.9rem;">${esc(f.category)}</span>` : 
+                        `<input type="text" class="tiny-input" value="${esc(f.category)}" onblur="OL.updateLocalLibraryFeature('${f.id}', 'category', this.value)">`
+                    }
+                </td>
+                <td style="padding:8px;">
+                    ${isMaster ? 
+                        `<span style="font-weight:500;">${esc(f.name)}</span>` : 
+                        `<input type="text" class="tiny-input" style="font-weight:bold; color:var(--accent);" value="${esc(f.name)}" onblur="OL.updateLocalLibraryFeature('${f.id}', 'name', this.value)">`
+                    }
+                </td>
+                <td style="padding:8px; text-align:center;">
+                    ${isMaster ? 
+                        '<span class="pill tiny muted">🔒 Master</span>' : 
+                        '<span class="pill tiny primary">✏️ Local</span>'
+                    }
+                </td>
+            </tr>
+        `;
+    }).join('');
+};
+
+OL.updateLocalLibraryFeature = async function(featId, property, newValue) {
+    const client = getActiveClient();
+    const val = newValue.trim();
+    if (!val) return;
+
+    await OL.updateAndSync(() => {
+        client.projectData.localAnalyses.forEach(anly => {
+            anly.features.forEach(f => {
+                // If it matches the ID being edited, update it everywhere
+                if (f.id === featId) {
+                    f[property] = val;
+                }
+            });
+        });
+    });
+    console.log(`Synced Local Library change: ${property} -> ${val}`);
 };
 
 // --- 2. THE EDITORS ---
-
-// This handles the "Global" library edit
-OL.openGlobalFeatureEditor = function(featName) {
-    const isVault = window.location.hash.includes('vault');
-    const analyses = OL.getScopedAnalyses();
-    
-    // Find first instance to use as template
-    const feat = analyses.flatMap(a => a.features || []).find(f => f.name === featName);
-    if (!feat) return;
-
-    const html = `
-        <div class="modal-head"><div class="modal-title-text">⚙️ Global Definition: ${esc(featName)}</div></div>
-        <div class="modal-body">
-            <label class="modal-section-label">Feature Name</label>
-            <input type="text" id="global-edit-name" class="modal-input" value="${esc(feat.name)}">
-            
-            <label class="modal-section-label">Global Description</label>
-            <textarea id="global-edit-desc" class="modal-textarea" style="height:100px;">${esc(feat.description || "")}</textarea>
-            
-            <div class="info-box tiny muted">ℹ️ This updates all instances in the current ${isVault ? 'Vault' : 'Project'}.</div>
-            
-            <div style="display:flex; gap:10px; justify-content: flex-end;">
-                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary" onclick="OL.executeGlobalFeatureUpdate('${esc(featName)}', ${isVault})">Update All</button>
-            </div>
-        </div>`;
-    openModal(html);
-};
 
 OL.editFeatureModal = function(anlyId, featId, isMaster) {
     const analyses = OL.getScopedAnalyses();
