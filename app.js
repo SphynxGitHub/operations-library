@@ -7714,6 +7714,20 @@ OL.editFeatureModal = function(anlyId, featId, isMaster) {
                 <label class="modal-section-label">Feature Name</label>
                 <input type="text" id="edit-feat-name" class="modal-input" value="${esc(feat.name)}">
             </div>
+
+            <div style="margin-bottom: 15px;">
+                <label class="modal-section-label">Category Group / Function</label>
+                <input type="text" id="edit-feat-cat-search" class="modal-input" 
+                      value="${esc(currentCat)}" 
+                      placeholder="Search functions or categories..."
+                      autocomplete="off"
+                      onfocus="OL.filterEditCategorySearch('${anlyId}', '${featId}', ${isMaster}, this.value)"
+                      oninput="OL.filterEditCategorySearch('${anlyId}', '${featId}', ${isMaster}, this.value)">
+                <div id="edit-cat-search-results" class="search-results-overlay" 
+                    style="margin-top:5px; max-height: 200px; overflow-y: auto; border: 1px solid var(--line); display: none;">
+                </div>
+                <input type="hidden" id="edit-feat-cat-value" value="${esc(currentCat)}">
+            </div>
             
             <div style="margin-bottom: 15px;">
                 <label class="modal-section-label">Description / Business Rule</label>
