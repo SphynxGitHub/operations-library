@@ -7415,7 +7415,7 @@ OL.filterContentManager = function(query) {
     });
 };
 
-OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
+OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, excludeNames = []) {
     const listEl = document.getElementById(targetElementId);
     if (!listEl) return;
 
@@ -7431,7 +7431,12 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
     // 2. Filter & Deduplicate
     const uniqueMatches = Array.from(new Set(
         allFeatures
-            .filter(f => f.name.toLowerCase().includes(q))
+            .filter(f => {
+                const nameLower = f.name.toLowerCase();
+                const matchesQuery = nameLower.includes(q);
+                const alreadyOnMatrix = excludeNames.includes(nameLower);
+                return matchesQuery && !alreadyOnMatrix; // 🚀 THE FILTER
+            })
             .map(f => f.name)
     )).map(name => allFeatures.find(f => f.name === name));
 
@@ -7464,7 +7469,7 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster) {
     const q = query.trim();
     
     // 1. Run Feature Search
-    OL.universalFeatureSearch(query, anlyId, isMaster, 'feat-search-results');
+    OL.universalFeatureSearch(query, anlyId, isMaster, 'feat-search-results', excludeNames);
 
     // 2. Setup the Finalizer Button logic safely
     const finalizeBtn = document.getElementById('finalize-btn');
@@ -7995,13 +8000,18 @@ OL.finalizeFeatureAddition = async function(anlyId, featName, category, isMaster
 
 // 2. THE UI FLOW (The "Single Modal")
 OL.addFeatureToAnalysis = function (anlyId, isMaster) {
+    const analyses = OL.getScopedAnalyses();
+    const anly = analyses.find(a => a.id === anlyId);
+    
+    // 🛡️ Get names of features already in this matrix to exclude them from search
+    const existingFeatureNames = (anly?.features || []).map(f => f.name.toLowerCase());
     const html = `
         <div class="modal-head"><div class="modal-title-text">🔎 Add Feature</div></div>
         <div class="modal-body">
             <label class="modal-section-label">Feature Name</label>
             <input type="text" id="feat-name-input" class="modal-input" 
                    placeholder="Search library or type new..." 
-                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster})">
+                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${JSON.stringify(existingFeatureNames).replace(/"/g, '&quot;')})">
             <div id="feat-search-results" class="search-results-overlay"></div>
 
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
