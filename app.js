@@ -6858,25 +6858,26 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                            onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
                 </td>
                 ${(anly.apps || []).map(appObj => {
-                    // 🎯 Retrieve existing values
                     const currentScore = appObj.scores?.[feat.id] || 0;
-                    const currentNote = appObj.notes?.[feat.id] || ""; // Assuming you store notes in appObj.notes
+                    // 🛡️ Safe access for notes
+                    const currentNote = (appObj.notes && appObj.notes[feat.id]) ? appObj.notes[feat.id] : "";
 
                     return `
-                        <td style="padding: 8px; border-right: 1px solid var(--line-light);">
+                        <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <div style="display: flex; align-items: center; gap: 5px;">
-                                    <span class="tiny muted" style="font-size: 9px;">PTS</span>
-                                    <input type="number" class="matrix-score-input" 
-                                        style="width: 100%; font-weight: bold; text-align: center;"
+                                <div style="display: flex; align-items: center; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
+                                    <span style="font-size: 8px; color: var(--muted); font-weight: bold; width: 25px;">PTS</span>
+                                    <input type="number" 
+                                        class="matrix-score-input" 
+                                        style="width: 100%; background: transparent; border: none; color: var(--accent); font-weight: bold; text-align: right; font-size: 12px;"
                                         value="${currentScore}"
                                         onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                                 </div>
                                 
-                                <textarea class="matrix-note-input" 
-                                        placeholder="Notes..."
-                                        style="width: 100%; height: 32px; font-size: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); color: var(--text-dim); resize: none; padding: 2px;"
-                                        onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
+                                <textarea 
+                                    placeholder="Rationale..."
+                                    style="width: 100%; height: 45px; font-size: 10px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
+                                    onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
                                 >${esc(currentNote)}</textarea>
                             </div>
                         </td>
@@ -6889,17 +6890,26 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
-    // 1. Get the analysis object (from state.master or state.currentProject)
-    const anly = OL.getAnalysisById(analysisId, isMaster); 
-    if (!anly) return;
+    // 1. Find the analysis container
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : client.projectData.analyses;
+    const anly = source.find(a => String(a.id) === String(analysisId));
 
-    // 2. Find the specific app entry
+    if (!anly) return console.error("Analysis not found");
+
+    // 2. Find the specific app within that analysis
     const appEntry = anly.apps.find(a => String(a.appId) === String(appId));
+    
     if (appEntry) {
+        // 🚀 CRITICAL: Initialize the notes object if it's missing
         if (!appEntry.notes) appEntry.notes = {};
-        appEntry.notes[featId] = value;
         
-        logger.save(`Matrix Note Updated: App ${appId}, Feature ${featId}`);
+        // 3. Update the value
+        appEntry.notes[featId] = value;
+
+        console.log(`💾 Note Saved for App: ${appId}, Feature: ${featId}`);
+        
+        // 4. Global Save
         await OL.persist();
     }
 };
