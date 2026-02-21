@@ -6890,41 +6890,38 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
-    // 1. Find the correct analysis by searching everywhere
     let anly = null;
+
     if (isMaster) {
         anly = (state.master.analyses || []).find(a => String(a.id) === String(analysisId));
     } else {
-        // Look through all clients to find the one containing this analysis
-        state.clients.forEach(c => {
+        // 🚀 THE FIX: Use Object.values to safely iterate even if state.clients is an object
+        const clientList = Array.isArray(state.clients) ? state.clients : Object.values(state.clients || {});
+        
+        clientList.forEach(c => {
             const found = (c.projectData?.analyses || []).find(a => String(a.id) === String(analysisId));
             if (found) anly = found;
         });
     }
 
     if (!anly) {
-        console.error("❌ Analysis not found in State for ID:", analysisId);
+        console.error("❌ Analysis not found for ID:", analysisId);
         return;
     }
 
-    // 2. Find the app entry
+    // Find the specific app within the analysis
     const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
     
     if (appEntry) {
-        // Initialize the notes object if it's missing
         if (!appEntry.notes) appEntry.notes = {};
-        
-        // Update value
         appEntry.notes[featId] = value;
 
-        console.log(`💾 Note Saved: ${value.substring(0, 15)}...`);
+        console.log(`💾 Note Updated: App ${appId}, Feature ${featId}`);
         
-        // 🚀 CRITICAL: Use your app's global persistence call
+        // ☁️ Trigger persistence
         if (typeof OL.persist === 'function') {
             await OL.persist();
         }
-    } else {
-        console.error("❌ App Entry not found in Analysis:", appId);
     }
 };
 
