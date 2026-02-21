@@ -7218,6 +7218,32 @@ OL.getGlobalFeatures = function() {
     return [...new Set([...localFeats, ...masterFeats].map(f => f.name))].sort();
 };
 
+OL.filterContentManager = function(query) {
+    const q = (query || "").toLowerCase().trim();
+    const groups = document.querySelectorAll('.content-manager-group');
+
+    groups.forEach(group => {
+        const catName = group.getAttribute('data-cat') || "";
+        const items = group.querySelectorAll('.content-item');
+        let hasVisibleFeature = false;
+
+        // 1. Filter Individual Features
+        items.forEach(item => {
+            const featName = item.getAttribute('data-feat') || "";
+            if (featName.includes(q) || catName.includes(q)) {
+                item.style.display = 'flex';
+                hasVisibleFeature = true;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        // 2. Hide/Show the entire Category Group
+        // Show if the category name matches OR it contains a matching feature
+        group.style.display = (catName.includes(q) || hasVisibleFeature) ? 'block' : 'none';
+    });
+};
+
 OL.filterAnalysisFeatureSearch = function (anlyId, isMaster, query) {
     const listEl = document.getElementById("feat-search-results");
     if (!listEl) return;
