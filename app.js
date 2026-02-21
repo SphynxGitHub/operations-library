@@ -7051,11 +7051,36 @@ OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
     }
 };
 
+OL.getCategorySortWeight = function(catName) {
+    const normalized = (catName || "General").trim().toUpperCase();
+    
+    // 💡 Define your priority order here (Lower number = Higher on the page)
+    const priorityMap = {
+        "GENERAL": 10,
+        "SECURITY": 20,
+        "INTEGRATIONS": 30,
+        "RATINGS": 900,
+        "SUMMARY": 910
+    };
+
+    return priorityMap[normalized] || 100; // Default categories go to the middle (100)
+};
+
 window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     let currentCategory = null;
     let rowsHtml = "";
 
     const features = anly.features || [];
+    features.sort((a, b) => {
+        const weightA = OL.getCategorySortWeight(a.category);
+        const weightB = OL.getCategorySortWeight(b.category);
+        
+        if (weightA !== weightB) return weightA - weightB;
+        
+        // Secondary sort: Alphabetical by category name if weights are equal
+        return (a.category || "").localeCompare(b.category || "");
+    });
+    
     const apps = anly.apps || [];
     const totalColspan = apps.length + 2;
     
