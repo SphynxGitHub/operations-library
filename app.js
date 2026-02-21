@@ -7964,6 +7964,40 @@ OL.renderLibraryManagerRows = function(allFeats = []) {
     }).join('');
 };
 
+OL.filterLibraryManager = function(query) {
+    const q = query.toLowerCase().trim();
+    const client = getActiveClient();
+    
+    // 1. Re-gather all data
+    const allMaster = (state.master?.analyses || []).flatMap(a => a.features || []);
+    const allLocal = (client?.projectData?.localAnalyses || []).flatMap(a => a.features || []);
+
+    // 2. Re-deduplicate
+    const uniqueMap = new Map();
+    allMaster.forEach(f => {
+        const key = f.name.toLowerCase().trim();
+        if (!uniqueMap.has(key)) uniqueMap.set(key, { ...f, origin: 'master' });
+    });
+    allLocal.forEach(f => {
+        const key = f.name.toLowerCase().trim();
+        if (!uniqueMap.has(key)) uniqueMap.set(key, { ...f, origin: 'local' });
+    });
+
+    const dedupedList = Array.from(uniqueMap.values());
+
+    // 3. Filter based on query
+    const filtered = dedupedList.filter(f => 
+        f.name.toLowerCase().includes(q) || 
+        (f.category || "").toLowerCase().includes(q)
+    );
+
+    // 4. Update the DOM
+    const tbody = document.getElementById('lib-manager-tbody');
+    if (tbody) {
+        tbody.innerHTML = OL.renderLibraryManagerRows(filtered);
+    }
+};
+
 OL.updateLocalLibraryFeature = async function(featId, property, newValue) {
     const client = getActiveClient();
     const val = newValue.trim();
