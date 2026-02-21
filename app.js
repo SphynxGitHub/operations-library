@@ -6892,33 +6892,35 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
 
-    // 🚀 NEW: Deep Search Strategy
-    // We search Master and ALL potential client slots simultaneously
-    const searchPool = [
-        ...(state.master?.analyses || []),
-        ...Object.values(state.clients || {}).flatMap(c => c.projectData?.analyses || []),
-        ...Object.values(state.clients || {}).flatMap(c => c.analyses || []) // Backup path
-    ];
+    // 🚀 THE ULTIMATE SEARCH: Scan every corner of the state object
+    const findAllAnalyses = (obj) => {
+        let results = [];
+        for (let key in obj) {
+            if (key === 'analyses' && Array.isArray(obj[key])) {
+                results = results.concat(obj[key]);
+            } else if (obj[key] && typeof obj[key] === 'object') {
+                results = results.concat(findAllAnalyses(obj[key]));
+            }
+        }
+        return results;
+    };
 
-    anly = searchPool.find(a => String(a.id) === String(analysisId));
+    const globalPool = findAllAnalyses(state);
+    anly = globalPool.find(a => String(a.id) === String(analysisId));
 
     if (!anly) {
-        // 🚨 EMERGENCY LOG: If it's still missing, let's see what IS in the pool
-        console.error("❌ Analysis not found in pool for ID:", analysisId);
-        console.log("Current Search Pool IDs:", searchPool.map(a => a.id));
+        console.error("❌ CRITICAL: Analysis ID still not found even with Deep Scan:", analysisId);
         return;
     }
 
-    // (Rest of the code remains the same: find appEntry -> initialize notes -> persist)
+    // 2. Find the app entry and update
     const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
     if (appEntry) {
         if (!appEntry.notes) appEntry.notes = {};
         appEntry.notes[featId] = value;
         
-        if (typeof OL.persist === 'function') {
-            await OL.persist();
-            console.log(`✅ Note Saved to Cloud: ${analysisId}`);
-        }
+        console.log(`✅ Note Saved: ${anly.name} -> ${appId}`);
+        await OL.persist();
     }
 };
 
