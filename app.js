@@ -7924,30 +7924,27 @@ OL.openGlobalContentManager = function() {
     openModal(html);
 };
 
-OL.renderLibraryManagerRows = function(masterFeats, localFeats) {
-    const all = [
-        ...masterFeats.map(f => ({ ...f, origin: 'master' })),
-        ...localFeats.map(f => ({ ...f, origin: 'local' }))
-    ];
-
-    // Standard sorting: Category Priority -> Name
-    all.sort((a, b) => {
+// 🚀 Use (allFeats = []) to prevent the "reading map of undefined" error
+OL.renderLibraryManagerRows = function(allFeats = []) {
+    
+    // Sort logic
+    allFeats.sort((a, b) => {
         const catA = (a.category || "General").toLowerCase();
         const catB = (b.category || "General").toLowerCase();
         return catA.localeCompare(catB) || a.name.localeCompare(b.name);
     });
 
-    if (all.length === 0) return '<tr><td colspan="3" class="center muted p-20">Library is empty.</td></tr>';
+    if (allFeats.length === 0) return '<tr><td colspan="3" class="center muted p-20">Library is empty.</td></tr>';
 
-    return all.map(f => {
+    return allFeats.map(f => {
         const isMaster = f.origin === 'master';
         
         return `
             <tr style="border-bottom: 1px solid var(--line); background: ${isMaster ? 'transparent' : 'rgba(var(--accent-rgb), 0.05)'}">
                 <td style="padding:8px;">
                     ${isMaster ? 
-                        `<span class="muted" style="font-size:0.9rem;">${esc(f.category)}</span>` : 
-                        `<input type="text" class="tiny-input" value="${esc(f.category)}" onblur="OL.updateLocalLibraryFeature('${f.id}', 'category', this.value)">`
+                        `<span class="muted" style="font-size:0.9rem;">${esc(f.category || 'General')}</span>` : 
+                        `<input type="text" class="tiny-input" value="${esc(f.category || 'General')}" onblur="OL.updateLocalLibraryFeature('${f.id}', 'category', this.value)">`
                     }
                 </td>
                 <td style="padding:8px;">
