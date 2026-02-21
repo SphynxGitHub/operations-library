@@ -6853,11 +6853,11 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                         </span>
                     </div>
                 </td>
-                <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background: rgba(251, 191, 36, 0.05);">
+                <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background:rgba(255,255,255,0.01);">
                     <div style="display: flex; align-items: center; justify-content: space-between; height: 32px;">
                         <input type="number" 
                             class="tiny-input" 
-                            style="width: 40px; background: transparent; border: none; color: var(--accent) text-align: right; font-weight: bold; font-size: 13px; outline: none;"
+                            style="width: 40px; background: transparent; border: none; color: var(--accent) text-align: right; font-weight: bold; font-size: 12px; outline: none;"
                             value="${feat.weight || 0}" 
                             onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
                     </div>
@@ -6871,7 +6871,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                         <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
                             <div style="display: flex; flex-direction: column; gap: 4px;">
                                 <div style="display: flex; align-items: center; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
-                                    <span style="font-size: 8px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
+                                    <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
                                     <input type="number" 
                                         min="0"
                                         max="3"
@@ -6883,7 +6883,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                                 
                                 <textarea 
                                     placeholder="Rationale..."
-                                    style="width: 100%; height: 45px; font-size: 10px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
+                                    style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
                                     onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
                                 >${esc(currentNote)}</textarea>
                             </div>
