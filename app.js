@@ -6853,20 +6853,14 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                         </span>
                     </div>
                 </td>
-                <td style="padding: 0; border: 1px solid var(--line); width: 85px; vertical-align: top; background: rgba(0,0,0,0.15);">
-                    <div style="display: flex; flex-direction: column; height: 100%;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.04);">
-                            <span style="font-size: 8px; color: #fbbf24; font-weight: bold; opacity: 0.9;">WEIGHT</span>
-                            <input type="number" 
-                                class="tiny-input" 
-                                style="width: 35px; background: transparent; border: none; color: #fbbf24; text-align: right; font-weight: bold; font-size: 13px; outline: none;"
-                                value="${feat.weight || 0}" 
-                                onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
-                        </div>
-                        
-                        <div style="flex-grow: 1; padding: 4px; display: flex; align-items: center; justify-content: center;">
-                            <span style="font-size: 8px; color: var(--text-dim); opacity: 0.5; text-transform: uppercase;">Priority</span>
-                        </div>
+                <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background: rgba(251, 191, 36, 0.05);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; height: 32px;">
+                        <span style="font-size: 8px; color: #fbbf24; font-weight: bold; opacity: 0.8; letter-spacing: 0.5px;">WEIGHT</span>
+                        <input type="number" 
+                            class="tiny-input" 
+                            style="width: 40px; background: transparent; border: none; color: #fbbf24; text-align: right; font-weight: bold; font-size: 13px; outline: none;"
+                            value="${feat.weight || 0}" 
+                            onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
                     </div>
                 </td>
                 ${(anly.apps || []).map(appObj => {
