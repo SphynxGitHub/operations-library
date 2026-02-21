@@ -7424,7 +7424,10 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
     // 4. "Create New" Logic
     if (q && !uniqueMatches.some(m => m.name.toLowerCase() === q)) {
         html += `
-            <div class="search-result-item create-action" onmousedown="OL.executeAddFeature('${anlyId}', '${esc(query)}', ${isMaster}, 'General')">
+            <div class="search-result-item create-action" onmousedown="
+                document.getElementById('feat-search-results').style.display='none';
+                document.getElementById('new-feat-cat-input').focus();
+            ">
                 <span class="pill tiny accent">+ New</span> Create Feature "${esc(query)}"
             </div>`;
     }
@@ -7438,15 +7441,23 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster) {
     // 1. Run Feature Search
     OL.universalFeatureSearch(query, anlyId, isMaster, 'feat-search-results');
 
-    // 2. Setup the Finalizer Button
-    document.getElementById('finalize-btn').onclick = () => {
+    // 2. Setup the Finalizer Button logic
+    const saveAction = () => {
         const featName = document.getElementById('feat-focus-target').value.trim();
         const catName = document.getElementById('new-feat-cat-input').value.trim() || "General";
         
         if (!featName) return alert("Please enter a feature name.");
         
-        // Pass 'true' as isFinal to bypass the old 2-step prompt logic
-        OL.executeAddFeature(anlyId, featName, isMaster, catName, true);
+        // 🚀 Using the new finalized function we just built
+        OL.finalizeFeatureAddition(anlyId, featName, catName, isMaster);
+    };
+
+    // Attach to the button
+    document.getElementById('finalize-btn').onclick = saveAction;
+
+    // ⌨️ Keyboard Shortcut: If they hit Enter in the category box, save it.
+    document.getElementById('new-feat-cat-input').onkeydown = (e) => {
+        if (e.key === 'Enter') saveAction();
     };
 };
 
@@ -8199,7 +8210,7 @@ OL.getCategoryWeight = function(catName) {
 OL.handleCategorySelection = function(catName, type, params = {}) {
     const { anlyId, isMaster, featName } = params;
 
-    // 🎯 ROUTE 1: Feature Editor (L3 Matrix)
+    // 🎯 ROUTE 1: Feature Editor (L3 Matrix Modal)
     if (type === 'edit-feature') {
         const searchInput = document.getElementById("edit-feat-cat-search");
         const hiddenInput = document.getElementById("edit-feat-cat-value");
@@ -8208,21 +8219,31 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
         document.getElementById("edit-cat-search-results").style.display = "none";
     } 
 
-    // 🎯 ROUTE 2: Analysis Assignment (Adding a Cat to a Matrix)
+    // 🎯 ROUTE 2: Analysis Assignment (Adding a blank Category to a Matrix)
     else if (type === 'add-to-analysis') {
         OL.executeAddCategoryToAnalysis(anlyId, catName, isMaster);
     }
 
-    // 🎯 ROUTE 3: Global Content Manager (Library)
+    // 🎯 ROUTE 3: Global Content Manager (Library Search)
     else if (type === 'global-manager') {
-        document.getElementById('global-feat-cat-search').value = catName;
+        const input = document.getElementById('global-feat-cat-search');
+        if (input) input.value = catName;
         document.getElementById('global-cat-results').innerHTML = '';
     }
 
-    // 🎯 ROUTE 4: Feature-to-Category Import
-    else if (type === 'assign-to-feature') {
-        OL.executeAddFeature(anlyId, featName, isMaster, catName, true);
+    // 🎯 ROUTE 4: The Unified "Add Feature" UI (Pre-filling the category field)
+    else if (type === 'local-ui-only' || type === 'assign-to-feature') {
+        const catInput = document.getElementById('feat-cat-input') || document.getElementById('new-feat-cat-input');
+        if (catInput) catInput.value = catName;
+        
+        // Close whichever results div is open
+        const res1 = document.getElementById('feat-cat-results');
+        const res2 = document.getElementById('new-feat-cat-results');
+        if (res1) res1.style.display = 'none';
+        if (res2) res2.style.display = 'none';
     }
+
+    // Cleanup global state safety bridge
     if (window._tmpSearchParams) delete window._tmpSearchParams;
 };
 
