@@ -7432,40 +7432,6 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
     listEl.innerHTML = html || `<div class="search-result-item muted">No unlinked features found.</div>`;
 };
 
-OL.addFeatureToAnalysis = function (anlyId, isMaster) {
-    const html = `
-        <div class="modal-head"><div class="modal-title-text">🔎 Add Feature to Matrix</div></div>
-        <div class="modal-body">
-            <div style="margin-bottom: 20px;">
-                <label class="modal-section-label">Feature Name</label>
-                <input type="text" id="feat-focus-target" class="modal-input" 
-                       placeholder="Search library or type new name..." 
-                       style="font-size: 1.1rem; border-bottom: 2px solid var(--accent); background: transparent;"
-                       oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster})">
-                <div id="feat-search-results" class="search-results-overlay" style="margin-top:5px; max-height: 120px;"></div>
-            </div>
-
-            <div id="new-feat-config" style="margin-top: 10px; padding-top: 20px; border-top: 1px solid var(--line);">
-                <label class="modal-section-label">Target Category</label>
-                <div style="position: relative;">
-                    <input type="text" id="new-feat-cat-input" class="modal-input" 
-                           placeholder="Search or create category..."
-                           onfocus="OL.universalCategorySearch(this.value, 'local-ui-only', 'new-feat-cat-results')"
-                           oninput="OL.universalCategorySearch(this.value, 'local-ui-only', 'new-feat-cat-results')">
-                    <div id="new-feat-cat-results" class="search-results-overlay"></div>
-                </div>
-                
-                <button class="btn primary full-width" style="margin-top:20px; height: 40px; font-weight: bold;" id="finalize-btn">
-                    Confirm & Add Feature
-                </button>
-            </div>
-        </div>`;
-    openModal(html);
-    
-    // Auto-focus the name field
-    requestAnimationFrame(() => document.getElementById('feat-focus-target').focus());
-};
-
 OL.unifiedAddFlow = function(query, anlyId, isMaster) {
     const q = query.trim();
     
@@ -7953,42 +7919,65 @@ OL.executeGlobalFeatureUpdate = async function(originalName, isVault) {
 };
 
 // 4. MANAGE ADDING / EDITING FEATURES
-OL.executeAddFeature = async function (anlyId, featName, isMaster, category = "General", isFinal = false) {
-    
-    // 1. Wizard Check
-    if (!isFinal && (!category || category === "General")) {
-        return OL.promptFeatureCategory(anlyId, featName, isMaster);
+OL.finalizeFeatureAddition = async function(anlyId, featName, category, isMaster) {
+    const analyses = OL.getScopedAnalyses();
+    const anly = analyses.find(a => a.id === anlyId);
+
+    if (!anly) return console.error("Analysis not found");
+
+    // 🛡️ DUPLICATE CHECK
+    const isDuplicate = (anly.features || []).some(f => 
+        f.name.toLowerCase() === featName.toLowerCase() && 
+        (f.category || "General").toLowerCase() === category.toLowerCase()
+    );
+
+    if (isDuplicate) {
+        alert(`🚫 "${featName}" is already in the "${category}" category.`);
+        return;
     }
 
-    // 2. Duplicate Check
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
-    const anly = source.find((a) => a.id === anlyId);
-
-    if (anly) {
-        const isDuplicate = anly.features.some(f => 
-            f.name.toLowerCase() === featName.toLowerCase() && 
-            (f.category || "General").toLowerCase() === category.toLowerCase()
-        );
-
-        if (isDuplicate) {
-            alert(`🚫 "${featName}" already exists in the "${category}" category on this matrix.`);
-            return; // 🛑 Stop the process
-        }
-
-        // 3. Save Logic (If not a duplicate)
-        await OL.updateAndSync(() => {
-            anly.features.push({
-                id: "feat-" + Date.now(),
-                name: featName,
-                category: category,
-                weight: 10
-            });
+    await OL.updateAndSync(() => {
+        if (!anly.features) anly.features = [];
+        anly.features.push({
+            id: "feat-" + Date.now() + Math.random().toString(36).substr(2, 5),
+            name: featName.trim(),
+            category: category.trim() || "General",
+            weight: 10,
+            description: "" 
         });
+    });
 
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        OL.closeModal();
-    }
+    OL.closeModal();
+    OL.openAnalysisMatrix(anlyId, isMaster);
+};
+
+// 2. THE UI FLOW (The "Single Modal")
+OL.addFeatureToAnalysis = function (anlyId, isMaster) {
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">🔎 Add Feature</div></div>
+        <div class="modal-body">
+            <label class="modal-section-label">Feature Name</label>
+            <input type="text" id="feat-name-input" class="modal-input" 
+                   placeholder="Search library or type new..." 
+                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster})">
+            <div id="feat-search-results" class="search-results-overlay"></div>
+
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
+                <label class="modal-section-label">Category</label>
+                <input type="text" id="feat-cat-input" class="modal-input" 
+                       placeholder="Select category..."
+                       onfocus="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')"
+                       oninput="OL.universalCategorySearch(this.value, 'local-ui-only', 'feat-cat-results')">
+                <div id="feat-cat-results" class="search-results-overlay"></div>
+                
+                <button class="btn primary full-width" style="margin-top:20px;" 
+                        onclick="OL.finalizeFeatureAddition('${anlyId}', document.getElementById('feat-name-input').value, document.getElementById('feat-cat-input').value, ${isMaster})">
+                    Add to Matrix
+                </button>
+            </div>
+        </div>`;
+    openModal(html);
+    requestAnimationFrame(() => document.getElementById('feat-name-input').focus());
 };
 
 OL.pushFeatureToVault = function (featName) {
