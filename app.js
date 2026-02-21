@@ -7080,7 +7080,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
         // Secondary sort: Alphabetical by category name if weights are equal
         return (a.category || "").localeCompare(b.category || "");
     });
-    
+
     const apps = anly.apps || [];
     const totalColspan = apps.length + 2;
     
@@ -7466,24 +7466,30 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster) {
     // 1. Run Feature Search
     OL.universalFeatureSearch(query, anlyId, isMaster, 'feat-search-results');
 
-    // 2. Setup the Finalizer Button logic
-    const saveAction = () => {
-        const featName = document.getElementById('feat-focus-target').value.trim();
-        const catName = document.getElementById('new-feat-cat-input').value.trim() || "General";
-        
-        if (!featName) return alert("Please enter a feature name.");
-        
-        // 🚀 Using the new finalized function we just built
-        OL.finalizeFeatureAddition(anlyId, featName, catName, isMaster);
-    };
+    // 2. Setup the Finalizer Button logic safely
+    const finalizeBtn = document.getElementById('finalize-btn');
+    
+    // 🚀 THE FIX: Only attach if the button is found
+    if (finalizeBtn) {
+        finalizeBtn.onclick = () => {
+            const featName = document.getElementById('feat-name-input')?.value.trim();
+            const catName = document.getElementById('feat-cat-input')?.value.trim() || "General";
+            
+            if (!featName) return alert("Please enter a feature name.");
+            OL.finalizeFeatureAddition(anlyId, featName, catName, isMaster);
+        };
+    }
 
-    // Attach to the button
-    document.getElementById('finalize-btn').onclick = saveAction;
-
-    // ⌨️ Keyboard Shortcut: If they hit Enter in the category box, save it.
-    document.getElementById('new-feat-cat-input').onkeydown = (e) => {
-        if (e.key === 'Enter') saveAction();
-    };
+    // ⌨️ Keyboard Shortcut for the category box
+    const catInput = document.getElementById('feat-cat-input');
+    if (catInput) {
+        catInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const featName = document.getElementById('feat-name-input')?.value.trim();
+                if (featName) OL.finalizeFeatureAddition(anlyId, featName, catInput.value, isMaster);
+            }
+        };
+    }
 };
 
 // 💡 Update handleCategorySelection to support the 'local-ui-only' mode
