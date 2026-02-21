@@ -7072,7 +7072,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                             <span class="tiny muted">📁</span>
                             <span class="is-clickable"
                                   style="color: var(--accent); font-weight: bold; text-transform: uppercase; cursor: pointer;"
-                                  onclick="OL.openGlobalContentManager(); setTimeout(() => OL.filterContentManager('${esc(catName)}'), 50)">
+                                  onclick="OL.openCategoryManagerModal('${analysisId}', '${esc(catName)}', ${isMaster})">
                                 ${esc(catName)}
                             </span>
                         </div>
@@ -7411,8 +7411,12 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
     )).map(name => allFeatures.find(f => f.name === name));
 
     // 3. Build HTML
-    let html = uniqueMatches.map(feat => `
-        <div class="search-result-item" onmousedown="OL.executeAddFeature('${anlyId}', '${esc(feat.name)}', ${isMaster}, '${esc(feat.category || "General")}')">
+    let html = uniqueMatches.map(feat => `        
+        <div class="search-result-item" onmousedown="
+            document.getElementById('feat-focus-target').value='${esc(feat.name)}';
+            document.getElementById('new-feat-cat-input').value='${esc(feat.category || "General")}';
+            document.getElementById('feat-search-results').style.display='none';
+        ">
             ✨ ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
         </div>
     `).join('');
@@ -7430,20 +7434,67 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId) {
 
 OL.addFeatureToAnalysis = function (anlyId, isMaster) {
     const html = `
-        <div class="modal-head"><div class="modal-title-text">🔎 Step 1: Add Feature</div></div>
+        <div class="modal-head"><div class="modal-title-text">🔎 Add Feature to Matrix</div></div>
         <div class="modal-body">
-            <input type="text" id="feat-focus-target" class="modal-input" 
-                   placeholder="Search global features or type new..." 
-                   onfocus="OL.universalFeatureSearch('', '${anlyId}', ${isMaster}, 'feat-search-results')"
-                   oninput="OL.universalFeatureSearch(this.value, '${anlyId}', ${isMaster}, 'feat-search-results')">
-            <div id="feat-search-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            <div style="margin-bottom: 20px;">
+                <label class="modal-section-label">Feature Name</label>
+                <input type="text" id="feat-focus-target" class="modal-input" 
+                       placeholder="Search library or type new name..." 
+                       style="font-size: 1.1rem; border-bottom: 2px solid var(--accent); background: transparent;"
+                       oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster})">
+                <div id="feat-search-results" class="search-results-overlay" style="margin-top:5px; max-height: 120px;"></div>
+            </div>
+
+            <div id="new-feat-config" style="margin-top: 10px; padding-top: 20px; border-top: 1px solid var(--line);">
+                <label class="modal-section-label">Target Category</label>
+                <div style="position: relative;">
+                    <input type="text" id="new-feat-cat-input" class="modal-input" 
+                           placeholder="Search or create category..."
+                           onfocus="OL.universalCategorySearch(this.value, 'local-ui-only', 'new-feat-cat-results')"
+                           oninput="OL.universalCategorySearch(this.value, 'local-ui-only', 'new-feat-cat-results')">
+                    <div id="new-feat-cat-results" class="search-results-overlay"></div>
+                </div>
+                
+                <button class="btn primary full-width" style="margin-top:20px; height: 40px; font-weight: bold;" id="finalize-btn">
+                    Confirm & Add Feature
+                </button>
+            </div>
         </div>`;
     openModal(html);
+    
+    // Auto-focus the name field
+    requestAnimationFrame(() => document.getElementById('feat-focus-target').focus());
+};
 
-    requestAnimationFrame(() => {
-        const el = document.getElementById('feat-focus-target');
-        if (el) el.focus();
-    });
+OL.unifiedAddFlow = function(query, anlyId, isMaster) {
+    const q = query.trim();
+    
+    // 1. Run Feature Search
+    OL.universalFeatureSearch(query, anlyId, isMaster, 'feat-search-results');
+
+    // 2. Setup the Finalizer Button
+    document.getElementById('finalize-btn').onclick = () => {
+        const featName = document.getElementById('feat-focus-target').value.trim();
+        const catName = document.getElementById('new-feat-cat-input').value.trim() || "General";
+        
+        if (!featName) return alert("Please enter a feature name.");
+        
+        // Pass 'true' as isFinal to bypass the old 2-step prompt logic
+        OL.executeAddFeature(anlyId, featName, isMaster, catName, true);
+    };
+};
+
+// 💡 Update handleCategorySelection to support the 'local-ui-only' mode
+// This just fills the input field without triggering a database save
+OL.handleCategorySelection = function(catName, type, params = {}) {
+    if (type === 'local-ui-only') {
+        const input = document.getElementById('new-feat-cat-input');
+        if (input) input.value = catName;
+        document.getElementById('new-feat-cat-results').style.display = 'none';
+        return;
+    }
+    
+    // ... rest of your existing handleCategorySelection logic ...
 };
 
 OL.updateAnalysisFeature = function(anlyId, featId, key, value, isMaster) {
@@ -7540,6 +7591,62 @@ OL.removeFeatureFromAnalysis = async function(anlyId, featId, isMaster) {
 };
 
 // 4c. ADD CATEGORY TO ANALYSIS OR REMOVE
+OL.openCategoryManagerModal = function(anlyId, catName, isMaster) {
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === anlyId);
+    
+    // 1. Get all features in this category currently in the matrix
+    const localFeatNames = (anly.features || [])
+        .filter(f => (f.category || "General") === catName)
+        .map(f => f.name);
+
+    // 2. Scan Master Library for features in this category NOT in the matrix
+    const masterFeats = (state.master.analyses || [])
+        .flatMap(a => a.features || [])
+        .filter(f => (f.category || "General") === catName && !localFeatNames.includes(f.name));
+    
+    // Deduplicate library results
+    const uniqueLibFeats = Array.from(new Set(masterFeats.map(f => f.name)))
+        .map(name => masterFeats.find(f => f.name === name));
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📁 Manage Category: ${esc(catName)}</div>
+        </div>
+        <div class="modal-body">
+            <label class="modal-section-label">Rename Category Globally</label>
+            <input type="text" id="edit-cat-name-input" class="modal-input" 
+                   style="font-size: 1.1rem; font-weight: bold; color: var(--accent);"
+                   value="${esc(catName)}">
+            
+            <div style="margin-top: 25px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <label class="modal-section-label" style="margin:0;">Library Suggestions</label>
+                    ${uniqueLibFeats.length > 0 ? 
+                        `<button class="btn tiny primary" onclick="OL.addAllFeaturesFromCategory('${anlyId}', '${esc(catName)}', ${isMaster})">Import All (${uniqueLibFeats.length})</button>` : 
+                        ''}
+                </div>
+                
+                <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,0,0,0.2);">
+                    ${uniqueLibFeats.length > 0 ? uniqueLibFeats.map(f => `
+                        <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>✨ ${esc(f.name)}</span>
+                            <button class="btn tiny soft" onclick="OL.executeAddFeature('${anlyId}', '${esc(f.name)}', ${isMaster}, '${esc(catName)}', true)">+ Add</button>
+                        </div>
+                    `).join('') : '<div class="padding-20 muted tiny center">All library features for this category are already in your matrix.</div>'}
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; justify-content: flex-end; margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--line);">
+                <button class="btn soft" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary" onclick="OL.renameFeatureCategory('${anlyId}', '${esc(catName)}', document.getElementById('edit-cat-name-input').value, ${isMaster})">Save Changes</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
 OL.addAllFeaturesFromCategory = async function(anlyId, catName, isMaster) {
     const client = getActiveClient();
     
