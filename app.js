@@ -6890,27 +6890,41 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
-    // 1. Find the analysis container
-    const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : client.projectData.analyses;
-    const anly = source.find(a => String(a.id) === String(analysisId));
+    // 1. Find the correct analysis by searching everywhere
+    let anly = null;
+    if (isMaster) {
+        anly = (state.master.analyses || []).find(a => String(a.id) === String(analysisId));
+    } else {
+        // Look through all clients to find the one containing this analysis
+        state.clients.forEach(c => {
+            const found = (c.projectData?.analyses || []).find(a => String(a.id) === String(analysisId));
+            if (found) anly = found;
+        });
+    }
 
-    if (!anly) return console.error("Analysis not found");
+    if (!anly) {
+        console.error("❌ Analysis not found in State for ID:", analysisId);
+        return;
+    }
 
-    // 2. Find the specific app within that analysis
-    const appEntry = anly.apps.find(a => String(a.appId) === String(appId));
+    // 2. Find the app entry
+    const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
     
     if (appEntry) {
-        // 🚀 CRITICAL: Initialize the notes object if it's missing
+        // Initialize the notes object if it's missing
         if (!appEntry.notes) appEntry.notes = {};
         
-        // 3. Update the value
+        // Update value
         appEntry.notes[featId] = value;
 
-        console.log(`💾 Note Saved for App: ${appId}, Feature: ${featId}`);
+        console.log(`💾 Note Saved: ${value.substring(0, 15)}...`);
         
-        // 4. Global Save
-        await OL.persist();
+        // 🚀 CRITICAL: Use your app's global persistence call
+        if (typeof OL.persist === 'function') {
+            await OL.persist();
+        }
+    } else {
+        console.error("❌ App Entry not found in Analysis:", appId);
     }
 };
 
