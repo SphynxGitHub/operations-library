@@ -8002,8 +8002,10 @@ OL.finalizeFeatureAddition = async function(anlyId, featName, category, isMaster
 OL.addFeatureToAnalysis = function (anlyId, isMaster) {
     const analyses = OL.getScopedAnalyses();
     const anly = analyses.find(a => a.id === anlyId);
+
+    // 🛡️ Get names and stringify them for the HTML attributes
     const existingFeatureNames = (anly?.features || []).map(f => f.name.toLowerCase());
-    const excludeJson = JSON.stringify(existingFeatureNames).replace(/"/g, '&quot;');
+    const excludeData = JSON.stringify(existingFeatureNames).replace(/"/g, '&quot;');
 
     const html = `
         <div class="modal-head"><div class="modal-title-text">🔎 Add Feature</div></div>
@@ -8011,11 +8013,12 @@ OL.addFeatureToAnalysis = function (anlyId, isMaster) {
             <label class="modal-section-label">Feature Name</label>
             <input type="text" id="feat-name-input" class="modal-input" 
                    placeholder="Search library..." 
-                   onclick="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeJson})"
-                   onfocus="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeJson})"
-                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeJson})">
-            <div id="feat-search-results" class="search-results-overlay"></div>
-
+                   onclick="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeData})"
+                   onfocus="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeData})"
+                   oninput="OL.unifiedAddFlow(this.value, '${anlyId}', ${isMaster}, ${excludeData})">
+            
+            <div id="feat-search-results" class="search-results-overlay" style="margin-top:10px; max-height: 150px;"></div>
+            
             <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">Category</label>
                 <div style="position:relative;">
