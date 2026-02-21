@@ -6848,7 +6848,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                         <button class="card-delete-btn" onclick="OL.removeFeatureFromAnalysis('${analysisId}', '${feat.id}', ${isMaster})">×</button> 
                         <span class="small feature-edit-link" 
                               style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
-                              onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
+                              onclick="OL.renderFeatureEditModal('${analysisId}', '${feat.id}', ${isMaster})">
                             ${esc(feat.name)}
                             <span style="font-size: 10px; opacity: 0.3;">📝</span>
                         </span>
