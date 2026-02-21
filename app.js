@@ -7437,8 +7437,8 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
                 const alreadyOnMatrix = excludeNames.includes(nameLower);
                 return matchesQuery && !alreadyOnMatrix; // 🚀 THE FILTER
             })
-            .map(f => f.name)
-    )).map(name => allFeatures.find(f => f.name === name));
+            .map(f => f.name.toLowerCase().trim()) // Use normalized names for the Set
+    )).map(name => allFeatures.find(f => f.name.toLowerCase().trim() === name));
 
     let html = "";
 
@@ -7853,13 +7853,8 @@ OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
         console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
 };
 
-// 7. UPDATE EXISTING MATRIX (AND SYNC CARD)
-
 //======================= CONSOLIDATED FEATURES MANAGEMENT =======================//
 
-/**
- * 💡 HELPER: Returns the correct analysis pool based on current URL hash
- */
 OL.getScopedAnalyses = function() {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
@@ -7870,13 +7865,30 @@ OL.getScopedAnalyses = function() {
 OL.openGlobalContentManager = function() {
     const client = getActiveClient();
     
-    // 1. Gather Master Data (Immutable)
-    const masterFeatures = (state.master.analyses || []).flatMap(a => a.features || []);
-    
-    // 2. Gather Local Data (Editable) - Features unique to this client's local analyses
-    const localAnalyses = client?.projectData?.localAnalyses || [];
-    const localFeatures = localAnalyses.flatMap(a => a.features || [])
-        .filter(lf => !masterFeatures.some(mf => mf.name.toLowerCase() === lf.name.toLowerCase()));
+    // 1. Gather ALL potential features
+    const allMaster = (state.master.analyses || []).flatMap(a => a.features || []);
+    const allLocal = (client?.projectData?.localAnalyses || []).flatMap(a => a.features || []);
+
+    // 2. 🛡️ THE DEDUPLICATOR: Use a Map to keep only the first unique instance of a name
+    const uniqueMap = new Map();
+
+    // Process Master first (so they take precedence as 'locked' items)
+    allMaster.forEach(f => {
+        const key = f.name.toLowerCase().trim();
+        if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, { ...f, origin: 'master' });
+        }
+    });
+
+    // Process Local second (only add if not already in Master)
+    allLocal.forEach(f => {
+        const key = f.name.toLowerCase().trim();
+        if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, { ...f, origin: 'local' });
+        }
+    });
+
+    const dedupedList = Array.from(uniqueMap.values());
 
     const html = `
         <div class="modal-head">
@@ -7899,7 +7911,7 @@ OL.openGlobalContentManager = function() {
                         </tr>
                     </thead>
                     <tbody id="lib-manager-tbody">
-                        ${OL.renderLibraryManagerRows(masterFeatures, localFeatures)}
+                        ${OL.renderLibraryManagerRows(dedupedList)}
                     </tbody>
                 </table>
             </div>
