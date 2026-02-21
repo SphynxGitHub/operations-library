@@ -6850,9 +6850,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                               style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
                               onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
                             ${esc(feat.name)}
-                            <span style="cursor: pointer; font-size: 10px; opacity: 0.3;" 
-                                title="Edit Description"
-                                onclick="OL.promptFeatureDescription('${analysisId}', '${feat.id}', ${isMaster})">📝</span>
+                            <span style="font-size: 10px; opacity: 0.3;">📝</span>
                         </span>
                     </div>
                     <div style="font-size: 10px; color: var(--text-dim); line-height: 1.3; font-style: italic; max-width: 260px; padding-left: 20px;">
@@ -6900,24 +6898,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
         `;
     });
     return rowsHtml;
-};
-
-OL.promptFeatureDescription = async function(analysisId, featId, isMaster) {
-    // Find the feature to get current value
-    const anly = OL.getAnalysisById(analysisId, isMaster);
-    const feat = anly?.features?.find(f => String(f.id) === String(featId));
-    
-    const newDesc = prompt("Enter feature description:", feat?.description || "");
-    
-    if (newDesc !== null) {
-        // Use your existing update function but targeting the 'description' field
-        await OL.updateAnalysisFeature(analysisId, featId, 'description', newDesc, isMaster);
-        
-        // Refresh the matrix to show the change
-        if (typeof window.renderGlobalVisualizer === 'function') {
-            window.renderGlobalVisualizer(location.hash.includes('vault'));
-        }
-    }
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
@@ -7811,6 +7791,13 @@ OL.editFeatureModal = function(anlyId, featId, isMaster) {
                 <input type="hidden" id="edit-feat-cat-value" value="${esc(currentCat)}">
             </div>
 
+            <div style="margin-bottom: 15px;">
+                <label class="modal-section-label">Description / Business Rule</label>
+                <textarea id="edit-feat-description" class="modal-input" 
+                    style="height: 80px; resize: vertical; padding-top: 8px; font-family: inherit; line-height: 1.4;"
+                    placeholder="Enter implementation details or requirement logic...">${esc(feat.description || "")}</textarea>
+            </div>
+
             <div style="margin-bottom: 25px; padding: 10px; background: rgba(255, 215, 0, 0.05); border-radius: 4px; border: 1px solid rgba(255, 215, 0, 0.2);">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
                     <input type="checkbox" id="edit-feat-global" style="width: 16px; height: 16px;">
@@ -8024,6 +8011,7 @@ OL.renameFeatureCategory = function(anlyId, oldCatName, newCatName, isMaster) {
 OL.executeEditFeature = function(anlyId, featId, isMaster) {
     const newName = document.getElementById("edit-feat-name").value.trim();
     const newCat = document.getElementById("edit-feat-cat-value").value.trim() || "General";
+    const newDesc = document.getElementById('edit-feat-description').value; // 🚀 Captured
     const isGlobal = document.getElementById("edit-feat-global").checked;
 
     if (!newName) { alert("Feature name cannot be empty"); return; }
@@ -8047,11 +8035,11 @@ OL.executeEditFeature = function(anlyId, featId, isMaster) {
         // 1. UPDATE THE TARGET INSTANCE
         originalFeat.name = newName;
         originalFeat.category = newCat;
+        originalFeat.description = newDesc; // 🚀 Apply to single instance
         weightedSort(anly.features);
 
-        // 🚀 2. STRICTLY SCOPED SYNC (The Fix)
+        // 🚀 2. STRICTLY SCOPED SYNC
         if (isGlobal && originalName) {
-            // Determine source based ONLY on where we are currently working
             const targetScope = isMaster 
                 ? state.master.analyses 
                 : (client?.projectData?.localAnalyses || []);
@@ -8059,15 +8047,15 @@ OL.executeEditFeature = function(anlyId, featId, isMaster) {
             targetScope.forEach(a => {
                 if (!a.features) return;
 
-                // Only update features that match the name within this scope
                 a.features.forEach(f => {
                     if (f.name === originalName) {
                         f.name = newName;
                         f.category = newCat;
+                        f.description = newDesc; // 🚀 Apply to all matching features in scope
                     }
                 });
 
-                // Deduplicate within the scope to prevent array bloating
+                // Deduplicate within the scope
                 const seenNames = new Set();
                 a.features = a.features.filter(f => {
                     if (seenNames.has(f.name)) return false;
@@ -8082,6 +8070,8 @@ OL.executeEditFeature = function(anlyId, featId, isMaster) {
         OL.persist();
         OL.closeModal();
         OL.openAnalysisMatrix(anlyId, isMaster);
+        
+        console.log(`✅ Feature updated: ${newName}`);
     }
 };
 
