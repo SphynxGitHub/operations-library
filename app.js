@@ -7441,11 +7441,13 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
     )).map(name => allFeatures.find(f => f.name === name));
 
     // 3. Build HTML
-    let html = uniqueMatches.map(feat => `        
+    html += uniqueMatches.map(feat => `        
         <div class="search-result-item" onmousedown="
-            document.getElementById('feat-focus-target').value='${esc(feat.name)}';
-            document.getElementById('new-feat-cat-input').value='${esc(feat.category || "General")}';
-            document.getElementById('feat-search-results').style.display='none';
+            const nameInput = document.getElementById('feat-name-input');
+            const catInput = document.getElementById('feat-cat-input');
+            if (nameInput) nameInput.value = '${esc(feat.name)}';
+            if (catInput) catInput.value = '${esc(feat.category || "General")}';
+            this.parentElement.style.display = 'none';
         ">
             ✨ ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
         </div>
@@ -7500,14 +7502,55 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster, excludeNames=[]) {
 // 💡 Update handleCategorySelection to support the 'local-ui-only' mode
 // This just fills the input field without triggering a database save
 OL.handleCategorySelection = function(catName, type, params = {}) {
-    if (type === 'local-ui-only') {
-        const input = document.getElementById('new-feat-cat-input');
-        if (input) input.value = catName;
-        document.getElementById('new-feat-cat-results').style.display = 'none';
-        return;
+    const { anlyId, isMaster, featName } = params;
+
+    // 🎯 ROUTE 1: Feature Editor (L3 Matrix Modal)
+    if (type === 'edit-feature') {
+        const searchInput = document.getElementById("edit-feat-cat-search");
+        const hiddenInput = document.getElementById("edit-feat-cat-value");
+        if (searchInput) searchInput.value = catName;
+        if (hiddenInput) hiddenInput.value = catName;
+        document.getElementById("edit-cat-search-results").style.display = "none";
+    } 
+
+    // 🎯 ROUTE 2: Analysis Assignment (Adding a blank Category to a Matrix)
+    else if (type === 'add-to-analysis') {
+        OL.executeAddCategoryToAnalysis(anlyId, catName, isMaster);
     }
-    
-    // ... rest of your existing handleCategorySelection logic ...
+
+    // 🎯 ROUTE 3: Global Content Manager (Library Search)
+    else if (type === 'global-manager') {
+        const input = document.getElementById('global-feat-cat-search');
+        if (input) input.value = catName;
+        document.getElementById('global-cat-results').innerHTML = '';
+    }
+
+    // 🎯 ROUTE 4: The Unified "Add Feature" UI (Pre-filling the category field)
+    else if (type === 'local-ui-only' || type === 'assign-to-feature') {
+        const catInput = document.getElementById('feat-cat-input') || document.getElementById('new-feat-cat-input');
+        if (catInput) catInput.value = catName;
+        
+        // Close whichever results div is open
+        const res1 = document.getElementById('feat-cat-results');
+        const res2 = document.getElementById('new-feat-cat-results');
+        if (res1) res1.style.display = 'none';
+        if (res2) res2.style.display = 'none';
+    }
+
+    else if (type === 'local-ui-only' || type === 'assign-to-feature') {
+        // 🚀 Check for both potential ID names to be safe
+        const catInput = document.getElementById('feat-cat-input') || document.getElementById('new-feat-cat-input');
+        
+        if (catInput) {
+            catInput.value = catName;
+        } else {
+            console.warn("⚠️ Could not find category input field in DOM.");
+        }
+        
+        // Hide any open results overlays
+        const res = document.getElementById('feat-cat-results') || document.getElementById('new-feat-cat-results');
+        if (res) res.style.display = 'none';
+    }
 };
 
 OL.updateAnalysisFeature = function(anlyId, featId, key, value, isMaster) {
