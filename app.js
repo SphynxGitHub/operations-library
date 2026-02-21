@@ -6813,8 +6813,9 @@ OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
 window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     let currentCategory = null;
     let rowsHtml = "";
-    
+
     const features = anly.features || [];
+    const apps = anly.apps || [];
     const totalColspan = apps.length + 2;
     
     features.forEach(feat => {
