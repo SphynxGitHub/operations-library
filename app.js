@@ -6850,7 +6850,13 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                               style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
                               onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
                             ${esc(feat.name)}
+                            <span style="cursor: pointer; font-size: 10px; opacity: 0.3;" 
+                                title="Edit Description"
+                                onclick="OL.promptFeatureDescription('${analysisId}', '${feat.id}', ${isMaster})">📝</span>
                         </span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-dim); line-height: 1.3; font-style: italic; max-width: 260px; padding-left: 20px;">
+                        ${feat.description ? esc(feat.description) : '<span style="opacity: 0.2;">No description added...</span>'}
                     </div>
                 </td>
                 <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background:rgba(255,255,255,0.01);">
@@ -6894,6 +6900,24 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
         `;
     });
     return rowsHtml;
+};
+
+OL.promptFeatureDescription = async function(analysisId, featId, isMaster) {
+    // Find the feature to get current value
+    const anly = OL.getAnalysisById(analysisId, isMaster);
+    const feat = anly?.features?.find(f => String(f.id) === String(featId));
+    
+    const newDesc = prompt("Enter feature description:", feat?.description || "");
+    
+    if (newDesc !== null) {
+        // Use your existing update function but targeting the 'description' field
+        await OL.updateAnalysisFeature(analysisId, featId, 'description', newDesc, isMaster);
+        
+        // Refresh the matrix to show the change
+        if (typeof window.renderGlobalVisualizer === 'function') {
+            window.renderGlobalVisualizer(location.hash.includes('vault'));
+        }
+    }
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
