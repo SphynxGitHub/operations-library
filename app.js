@@ -6892,34 +6892,34 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
 
-    // 🚀 THE ULTIMATE SEARCH: Scan every corner of the state object
-    const findAllAnalyses = (obj) => {
-        let results = [];
-        for (let key in obj) {
-            if (key === 'analyses' && Array.isArray(obj[key])) {
-                results = results.concat(obj[key]);
-            } else if (obj[key] && typeof obj[key] === 'object') {
-                results = results.concat(findAllAnalyses(obj[key]));
-            }
-        }
-        return results;
-    };
+    // 🎯 TARGETED SEARCH: Now that we know it's in localAnalyses
+    const clientList = Array.isArray(state.clients) ? state.clients : Object.values(state.clients || {});
+    
+    // Check Master first
+    anly = (state.master?.analyses || []).find(a => String(a.id) === String(analysisId));
 
-    const globalPool = findAllAnalyses(state);
-    anly = globalPool.find(a => String(a.id) === String(analysisId));
-
+    // Check Clients (Searching both 'analyses' and 'localAnalyses')
     if (!anly) {
-        console.error("❌ CRITICAL: Analysis ID still not found even with Deep Scan:", analysisId);
-        return;
+        clientList.forEach(c => {
+            const pool = [
+                ...(c.projectData?.localAnalyses || []),
+                ...(c.projectData?.analyses || []),
+                ...(c.analyses || [])
+            ];
+            const found = pool.find(a => String(a.id) === String(analysisId));
+            if (found) anly = found;
+        });
     }
 
-    // 2. Find the app entry and update
+    if (!anly) return console.error("❌ Still can't find analysis:", analysisId);
+
+    // 2. Apply the update
     const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
     if (appEntry) {
         if (!appEntry.notes) appEntry.notes = {};
         appEntry.notes[featId] = value;
-        
-        console.log(`✅ Note Saved: ${anly.name} -> ${appId}`);
+
+        console.log(`💾 Note persisted to localAnalyses for ${anly.name}`);
         await OL.persist();
     }
 };
