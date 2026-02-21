@@ -8029,6 +8029,10 @@ OL.universalCategorySearch = function(query, type, targetElementId, extraParams 
     html += matches.map(cat => {
         const isFunction = masterFunctions.includes(cat);
 
+        // 1. Pre-process the JSON to avoid quote clashing in the HTML attribute
+        // We escape single quotes so the entire string is safe inside '${...}'
+        const paramsStr = JSON.stringify(extraParams).replace(/'/g, "\\'");
+
         let importBtn = "";
         if (type === 'assign-to-feature') {
             const masterSource = (state.master.analyses || []).flatMap(a => a.features || []);
@@ -8042,9 +8046,10 @@ OL.universalCategorySearch = function(query, type, targetElementId, extraParams 
                     </button>`;
             }
         }
+
         return `
             <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
-                <div onmousedown="OL.handleCategorySelection('${esc(cat)}', '${type}', ${JSON.stringify(extraParams)})" style="flex:1;">
+                <div onmousedown="OL.handleCategorySelection('${esc(cat)}', '${type}', ${paramsStr})" style="flex:1;">
                     <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
                 </div>
                 ${importBtn}
