@@ -8679,7 +8679,6 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
-// Ensure this function returns the HTML string instead of setting it
 window.renderGlobalCanvas = function(isVaultMode) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
@@ -8692,19 +8691,14 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 <div class="text-center">
                     <h2 class="muted" style="margin-bottom:10px;">Canvas is Empty</h2>
                     <p class="tiny muted uppercase bold" style="margin-bottom:20px;">Choose a starting point</p>
-                    
                     <div style="display:flex; gap:15px; justify-content:center;">
-                        <button class="btn primary" onclick="OL.addLifecycleStageAt(0, ${isVaultMode})">
-                            + Manual Stage
-                        </button>
-                        <button class="btn accent" onclick="OL.applyStandardLifecycleTemplate(${isVaultMode})">
-                            ⚡ Apply 5-Stage Template
-                        </button>
+                        <button class="btn primary" onclick="OL.addLifecycleStageAt(0, ${isVaultMode})">+ Manual Stage</button>
+                        <button class="btn accent" onclick="OL.applyStandardLifecycleTemplate(${isVaultMode})">⚡ Apply 5-Stage Template</button>
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
     }
+
     return `
         <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
              style="display: flex; padding: 60px; align-items: flex-start; min-height: 100vh;">
@@ -8716,7 +8710,11 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 ).sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
                 
                 return `
-                <div class="macro-stage-col" style="display: flex; align-items: flex-start; position: relative;">
+                <div class="macro-stage-col" 
+                     draggable="true" 
+                     ondragstart="OL.handleDragStart(event, '${stage.id}', 'stage', ${sIdx})"
+                     style="display: flex; align-items: flex-start; position: relative;">
+                    
                     <div style="min-width: 300px;">
                         <div class="stage-header ${isInspectingStage ? 'is-inspecting' : ''}" 
                              style="border-bottom: 3px solid var(--accent); margin-bottom: 20px; padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center; cursor: pointer;"
@@ -8728,17 +8726,20 @@ window.renderGlobalCanvas = function(isVaultMode) {
                             <button class="card-delete-btn" onclick="event.stopPropagation(); OL.handleStageDelete('${stage.id}', ${isVaultMode})">×</button>
                         </div>
                         
-                        <div class="workflow-stack" stage-workflow-stream" 
+                        <div class="workflow-stack stage-workflow-stream" 
                             data-stage-id="${stage.id}"
                             ondragover="OL.handleUniversalDragOver(event)" 
                             ondragleave="OL.handleUniversalDragLeave(event)"
-                            ondrop="OL.handleUniversalDrop(event, '${stage.id}')">
+                            ondrop="OL.handleUniversalDrop(event, '${stage.id}')"
+                            style="min-height: 100px;">
                             
                             ${workflowsInStage.map((wf, wIdx) => {
                                 const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
                                 return `
                                 <div class="wf-node-container ${isInspectingWorkflow ? 'is-inspecting' : ''}" 
-                                     style="margin-bottom:25px; border-radius: 10px; position: relative;">
+                                     draggable="true"
+                                     ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${wf.id}', 'workflow', ${wIdx})"
+                                     style="margin-bottom:25px; border-radius: 10px; position: relative; cursor: grab;">
                                     
                                     ${renderGlobalWorkflowNode(wf, allResources, isVaultMode)}
                                     
@@ -8746,15 +8747,14 @@ window.renderGlobalCanvas = function(isVaultMode) {
                                          onclick="event.stopPropagation(); OL.focusToolbox()">
                                         <span>+</span>
                                     </div>
-                                </div>
-                            `}).join('')}
+                                </div>`;
+                            }).join('')}
 
                             ${workflowsInStage.length === 0 ? `
                                 <div class="insert-divider initial" style="position: relative; opacity: 1;" 
                                      onclick="event.stopPropagation(); OL.focusToolbox('${stage.id}')">
                                     <span>+ Add Workflow</span>
-                                </div>
-                            ` : ''}
+                                </div>` : ''}
                         </div>
                     </div>
 
@@ -8762,10 +8762,9 @@ window.renderGlobalCanvas = function(isVaultMode) {
                          onclick="OL.addLifecycleStageAt(${sIdx + 1}, ${isVaultMode})">
                         <span>+</span>
                     </div>
-                </div>
-            `}).join('')}
-        </div>
-    `;
+                </div>`;
+            }).join('')}
+        </div>`;
 };
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
