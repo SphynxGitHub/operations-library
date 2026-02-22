@@ -12119,8 +12119,8 @@ OL.handleUniversalDragOver = function(e) {
 
     // 🚀 BRANCH A: HORIZONTAL REARRANGE (STAGES)
     if (draggingType === 'stage') {
-        const stageCols = [...document.querySelectorAll('.macro-stage-col')]
-                          .filter(c => !c.classList.contains('is-dragging-source'));
+        const stageCols = [...mainMap.children]
+            .filter(c => c.classList.contains('macro-stage-col') && !c.classList.contains('is-dragging-source'));
 
         // Calculate based on horizontal X axis
         const afterStage = stageCols.reduce((closest, child) => {
@@ -12140,11 +12140,24 @@ OL.handleUniversalDragOver = function(e) {
         }
 
         // Style ghost as a tall vertical divider
+        ghost.style.display = "block";
+        ghost.style.flexShrink = "0";
         ghost.style.height = "80vh";
         ghost.style.width = "40px";
-        ghost.style.margin = "0 20px";
-        ghost.style.display = "block";
-        return; // Exit early
+        ghost.style.background = "rgba(var(--accent-rgb), 0.1)";
+        ghost.style.border = "2px dashed var(--accent)";
+        ghost.style.margin = "0 15px";
+        ghost.style.borderRadius = "8px";
+
+        if (afterStage) {
+            // Since afterStage is a direct child of mainMap, this will now work
+            mainMap.insertBefore(ghost, afterStage);
+            state.currentDropIndex = stageCols.indexOf(afterStage);
+        } else {
+            mainMap.appendChild(ghost);
+            state.currentDropIndex = stageCols.length;
+        }
+        return; 
     }
 
     // 2. Identify all valid cards in this specific container
