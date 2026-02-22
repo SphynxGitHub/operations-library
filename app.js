@@ -12224,11 +12224,12 @@ OL.handleUniversalDrop = async function(e, sectionId) {
 
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
-            // 🎯 Use the existing source array we defined at the top of the function
-            const parent = source.find(r => String(r.id) === String(activeParentId));
+            const isL3Drop = (sectionId === 'Trigger' || sectionId === 'Action');
+    
+            const parentId = isL3Drop ? state.focusedResourceId : state.focusedWorkflowId;
+            const parent = source.find(r => String(r.id) === String(parentId));
             
-            if (!parent) return;
-            if (!parent.steps) parent.steps = [];
+            if (!parent) return console.error("Drop failed: Parent not found for ID", parentId);
 
             // 1. Dropping a NEW item
             if (itemType.includes('factory') || itemType === 'resource' || itemType === 'workflow') {
@@ -12243,8 +12244,8 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                     id: 'step-' + Date.now(), 
                     name: stepName || (verb ? `${verb} ${obj}` : "New Step"), 
                     // 🚀 Ensure L3 (focusedResourceId) always gets the sectionId as the type
-                    type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
-                    gridLane: state.focusedWorkflowId ? sectionId : null,
+                    type: isL3Drop ? sectionId : (stepType || 'Action'),
+                    gridLane: !isL3Drop ? sectionId : null,
                     resourceLinkId: (moveId === 'new' || moveId === 'factory') ? null : moveId,
                     verb: verb || null,
                     object: obj || null,
