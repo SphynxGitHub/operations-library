@@ -8731,7 +8731,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
                             ondragover="OL.handleUniversalDragOver(event)" 
                             ondragleave="OL.handleUniversalDragLeave(event)"
                             ondrop="OL.handleUniversalDrop(event, '${stage.id}')"
-                            style="min-height: 100px;">
+                            style="min-height: 100px; display: flex; flex-direction: column; gap: 20px; min-height: 150px; width: 100%;">
                             
                             ${workflowsInStage.map((wf, wIdx) => {
                                 const isInspectingWorkflow = String(state.activeInspectorResId) === String(wf.id);
