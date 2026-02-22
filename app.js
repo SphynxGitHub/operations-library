@@ -6974,14 +6974,16 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                 </div>
 
                 <table class="matrix-table" style="width: 100%; margin-top: 20px; border-collapse: collapse;">
-                    <thead>
+                   <thead>
                         <tr>
                             <th style="text-align: left;">Features</th>
                             <th style="text-align: center; width: 80px;">Weight</th>
+
                             ${(anly.apps || []).map(appObj => {
                                 const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
                                 const matchedApp = allApps.find(a => a.id === appObj.appId);
                                 const isWinner = topScore > 0 && appResults.find(r => r.appId === appObj.appId)?.total === topScore;
+                                
                                 return `
                                     <th class="text-center" style="${isWinner ? 'background: rgba(251, 191, 36, 0.05);' : ''}">
                                         <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
@@ -6992,10 +6994,16 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                         </div>
                                     </th>`;
                             }).join('')}
+
+                            <th style="width: 150px; text-align: center;">Pricing Status</th>
+
+                            ${(anly.competitors || []).map(c => `
+                                <th style="text-align: center;">${esc(c.name)}</th>
+                            `).join('')}
                         </tr>
                     </thead>
                     <tbody>
-                        ${renderAnalysisMatrixRows(anly, analysisId, isMaster)}
+                        ${OL.renderPricingHeader(anly)} ${renderAnalysisMatrixRows(anly, analysisId, isMaster)}
                     </tbody>
                     <tfoot>
                         <tr style="border-top: 2px solid var(--line);">
