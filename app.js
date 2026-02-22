@@ -7028,15 +7028,28 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                                     onblur="OL.updateAppBasePrice('${analysisId}', '${appObj.appId}', this.value)">
                                             </div>
                                             
-                                            <div class="tiny-tiers-list" style="display:flex; flex-direction:column; gap:4px;">
+                                            <div class="stacked-tiers-list" style="display:flex; flex-direction:column; gap:10px;">
                                                 ${tiers.map((t, idx) => `
-                                                    <div style="display:flex; gap:2px; align-items:center;">
-                                                        <input type="text" class="price-input-tiny" style="flex:2; font-size:10px;" placeholder="Tier" value="${esc(t.name)}" onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value)">
-                                                        <input type="number" class="price-input-tiny" style="flex:1; font-size:10px;" placeholder="$" value="${t.price}" onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
-                                                        <button onclick="OL.removeAppTier('${analysisId}', '${appObj.appId}', ${idx})" style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:12px;">×</button>
+                                                    <div class="tier-entry" style="position:relative; background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px;">
+                                                        <button onclick="OL.removeAppTier('${analysisId}', '${appObj.appId}', ${idx})" 
+                                                                style="position:absolute; top:-2px; right:2px; background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0;">×</button>
+                                                        
+                                                        <div style="display:flex; flex-direction:column; gap:4px;">
+                                                            <input type="text" class="price-input-tiny" style="width:100%; font-size:10px; background:transparent;" 
+                                                                placeholder="Tier Name (e.g. Pro)" value="${esc(t.name)}" 
+                                                                onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value)">
+                                                            
+                                                            <div style="display:flex; align-items:center; gap:4px;">
+                                                                <span class="tiny muted">$</span>
+                                                                <input type="number" class="price-input-tiny" style="width:100%; font-size:11px; font-weight:bold;" 
+                                                                    placeholder="0" value="${t.price}" 
+                                                                    onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 `).join('')}
-                                                <button class="btn tiny soft full-width" style="margin-top:5px; font-size:9px;" onclick="OL.addAppTier('${analysisId}', '${appObj.appId}')">+ Add Tier</button>
+                                                <button class="btn tiny soft full-width" style="margin-top:4px; font-size:9px; border-style:dashed;" 
+                                                        onclick="OL.addAppTier('${analysisId}', '${appObj.appId}')">+ Add Tier</button>
                                             </div>
                                         </div>
                                     </td>`;
