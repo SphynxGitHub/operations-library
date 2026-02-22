@@ -7003,7 +7003,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                         </tr>
                     </thead>
                     <tbody>
-                        ${OL.renderPricingHeader(anly)} ${renderAnalysisMatrixRows(anly, analysisId, isMaster)}
+                        ${OL.renderPricingHeader(anly, totalColspan)} ${renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
                     </tbody>
                     <tfoot>
                         <tr style="border-top: 2px solid var(--line);">
@@ -7074,7 +7074,7 @@ OL.getCategorySortWeight = function(catName) {
     return priorityMap[normalized] || 100; // Default categories go to the middle (100)
 };
 
-window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
+window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalColspan) {
     let currentCategory = null;
     let rowsHtml = "";
 
@@ -7300,7 +7300,7 @@ OL.renameMatrix = function(anlyId, newName, isMaster) {
 };
 
 // New function to render the Pricing Rate Card at the top of the matrix
-OL.renderPricingHeader = function(anly) {
+OL.renderPricingHeader = function(anly, totalColspan) {
     const tiers = anly.pricingTiers || []; // Array of {name: "Pro", price: 50}
     
     return `
