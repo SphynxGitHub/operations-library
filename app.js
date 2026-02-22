@@ -7030,9 +7030,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                             
                                             <div class="stacked-tiers-list" style="display:flex; flex-direction:column; gap:10px;">
                                                 ${tiers.map((t, idx) => `
-                                                    <div class="tier-entry" style="position:relative; background: rgba(0,0,0,0.15); padding: 6px; border-radius: 4px;">
+                                                    <div class="tier-entry" style="position:relative; padding: 6px; border-radius: 4px;">
                                                         <button onclick="OL.removeAppTier('${analysisId}', '${appObj.appId}', ${idx})" 
-                                                                style="position:absolute; top:-2px; right:2px; background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0;">×</button>
+                                                                style="position:absolute; top:-2px; right:-14px; background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0;">×</button>
                                                         
                                                         <div style="display:flex; flex-direction:column; gap:4px;">
                                                             <input type="text" class="price-input-tiny" style="width:100%; font-size:10px; background:transparent;" 
@@ -7041,7 +7041,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                                             
                                                             <div style="display:flex; align-items:center; gap:4px;">
                                                                 <span class="tiny muted">$</span>
-                                                                <input type="number" class="price-input-tiny" style="width:100%; font-size:11px; font-weight:bold;" 
+                                                                <input type="number" class="price-input-tiny" style="width:100%; font-size:11px;" 
                                                                     placeholder="0" value="${t.price}" 
                                                                     onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
                                                             </div>
@@ -7060,17 +7060,54 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                         ${renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
                     </tbody>
                     
-                    <tfoot>
-                        <tr style="border-top: 2px solid var(--line); background: rgba(255,255,255,0.05);">
-                            <td colspan="2" style="text-align: right; padding: 10px; font-weight: bold;">TOTAL ESTIMATED COST:</td>
+                    <tfoot style="border-top: 2px solid var(--line);">
+                        <tr style="background: rgba(255,255,255,0.02);">
+                            <td style="padding: 15px 10px;">
+                                <button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button>
+                            </td>
+                            <td class="bold center" style="color: ${Math.abs(totalWeight - 100) < 0.1 ? 'var(--success)' : 'var(--danger)'}; border: 1px solid var(--line);">
+                                <div style="font-size: 10px; color: var(--muted); margin-bottom: 2px;">TOTAL WEIGHT</div>
+                                ${totalWeight.toFixed(1)}%
+                                <div onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent);">⚖️ Balance</div>
+                            </td>
+                            ${(anly.apps || []).map(appObj => {
+                                const score = OL.calculateAnalysisScore(appObj, anly.features || []);
+                                return `
+                                    <td class="text-center" style="border: 1px solid var(--line); vertical-align: middle;">
+                                        <div style="font-size: 9px; color: var(--muted); margin-bottom: 4px; font-weight: bold;">TOTAL SCORE</div>
+                                        <span class="pill ${score > 2.5 ? 'accent' : 'soft'}" style="font-size: 1.1rem; padding: 4px 12px;">${score}</span>
+                                    </td>`;
+                            }).join('')}
+                            ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
+                        </tr>
+
+                        <tr style="background: rgba(var(--accent-rgb), 0.1);">
+                            <td colspan="2" style="text-align: right; padding: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: var(--accent);">
+                                Est. Monthly Total Cost
+                            </td>
                             ${(anly.apps || []).map(appObj => {
                                 const cost = OL.calculateAppTotalCost(appObj);
-                                return `<td class="text-center" style="color:var(--accent); font-weight:bold; font-size:1.1rem;">$${cost.toLocaleString()}</td>`;
+                                return `
+                                    <td class="text-center" style="border: 1px solid var(--line); padding: 15px 5px;">
+                                        <div style="font-size: 1.2rem; font-weight: bold; color: var(--accent);">$${cost.toLocaleString()}</div>
+                                        <div style="font-size: 9px; opacity: 0.6; margin-top: 2px;">PER USER / MO</div>
+                                    </td>`;
                             }).join('')}
-                            ${(anly.competitors || []).map(() => `<td></td>`).join('')}
+                            ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
                         </tr>
                     </tfoot>
                 </table>
+
+                <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--line);">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                        <span style="font-size: 1.2rem;">📋</span>
+                        <label class="modal-section-label" style="margin: 0; font-size: 1rem; color: var(--accent);">Executive Summary & Recommendations</label>
+                    </div>
+                    <textarea class="modal-textarea" 
+                              placeholder="Add your final analysis notes or decision rationale here..."
+                              onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
+                              style="min-height: 120px; width: 100%; background: rgba(255,255,255,0.03); color: #ddd; border: 1px solid rgba(255,255,255,0.1); padding: 12px; font-family: inherit; font-size: 14px; line-height: 1.5; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
+                </div>
             </div>
         </div>
     `;
