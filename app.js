@@ -7094,8 +7094,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
         // Secondary sort: Alphabetical by category name if weights are equal
         return (a.category || "").localeCompare(b.category || "");
     });
-
-    const apps = anly.apps || [];
     
     features.forEach(feat => {
         const catName = feat.category || "General";
@@ -7122,86 +7120,88 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 
         // Standard Row (Features)
         rowsHtml += `
-            <tr>
-                <td style="padding-left: 28px;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <button class="card-delete-btn" onclick="OL.removeFeatureFromAnalysis('${analysisId}', '${feat.id}', ${isMaster})">×</button> 
-                        <span class="small feature-edit-link" 
-                              style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
-                              onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
-                            ${esc(feat.name)}
-                            <span style="font-size: 10px; opacity: 0.3;">📝</span>
-                        </span>
-                    </div>
-                    <div style="font-size: 10px; color: var(--text-dim); line-height: 1.3; font-style: italic; max-width: 260px; padding-left: 20px;">
-                        ${feat.description ? esc(feat.description) : '<span style="opacity: 0.2;">No description added...</span>'}
-                    </div>
-                </td>
-                <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background:rgba(255,255,255,0.01);">
-                    <div style="display: flex; align-items: center; justify-content: space-between; height: 32px;">
-                        <input type="number" 
-                            class="tiny-input" 
-                            style="width: 40px; background: transparent; border: none; color: var(--accent) text-align: right; font-weight: bold; font-size: 12px; outline: none;"
-                            value="${feat.weight || 0}" 
-                            onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
-                    </div>
-                </td>
-                ${(anly.apps || []).map(appObj => {
-                    const currentScore = appObj.scores?.[feat.id] || 0;
-                    // 🛡️ Safe access for notes
-                    const currentNote = (appObj.notes && appObj.notes[feat.id]) ? appObj.notes[feat.id] : "";
+        <tr>
+            <td style="padding-left: 28px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button class="card-delete-btn" onclick="OL.removeFeatureFromAnalysis('${analysisId}', '${feat.id}', ${isMaster})">×</button> 
+                    <span class="small feature-edit-link" 
+                            style="cursor: pointer; border-bottom: 1px dotted var(--muted);"
+                            onclick="OL.editFeatureModal('${analysisId}', '${feat.id}', ${isMaster})">
+                        ${esc(feat.name)}
+                        <span style="font-size: 10px; opacity: 0.3;">📝</span>
+                    </span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-dim); line-height: 1.3; font-style: italic; max-width: 260px; padding-left: 20px;">
+                    ${feat.description ? esc(feat.description) : '<span style="opacity: 0.2;">No description added...</span>'}
+                </div>
+            </td>
+            <td style="padding: 0 8px; border: 1px solid var(--line); width: 100px; background:rgba(255,255,255,0.01);">
+                <div style="display: flex; align-items: center; justify-content: space-between; height: 32px;">
+                    <input type="number" 
+                        class="tiny-input" 
+                        style="width: 40px; background: transparent; border: none; color: var(--accent) text-align: right; font-weight: bold; font-size: 12px; outline: none;"
+                        value="${feat.weight || 0}" 
+                        onblur="OL.updateAnalysisFeature('${analysisId}', '${feat.id}', 'weight', this.value, ${isMaster})">
+                </div>
+            </td>`;
 
-                    return `
-                        <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
-                            <div style="display: flex; flex-direction: column; gap: 10px;">
-                                <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
-                                    <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
-                                    <input type="number" 
-                                        min="0"
-                                        max="3"
-                                        class="matrix-score-input" 
-                                        style="width: 100%; background: transparent; border: none; color: var(--accent); font-weight: bold; text-align: right; font-size: 12px;"
-                                        value="${currentScore}"
-                                        onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
-                                </div>
-                                
-                                <textarea 
-                                    placeholder="Rationale..."
-                                    style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
-                                    onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
-                                >${esc(currentNote)}</textarea>
+            rowsHtml += (anly.apps || []).map(appObj => {
+                const currentScore = appObj.scores?.[feat.id] || 0;
+                // 🛡️ Safe access for notes
+                const currentNote = (appObj.notes && appObj.notes[feat.id]) ? appObj.notes[feat.id] : "";
+
+                return `
+                    <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
+                                <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
+                                <input type="number" 
+                                    min="0"
+                                    max="3"
+                                    class="matrix-score-input" 
+                                    style="width: 100%; background: transparent; border: none; color: var(--accent); font-weight: bold; text-align: right; font-size: 12px;"
+                                    value="${currentScore}"
+                                    onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                             </div>
-                        </td>
-                        <td class="pricing-cell">
-                            <select class="tiny-select" onchange="OL.updateFeatureCostType('${analysisId}', '${f.id}', this.value)">
-                                <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
-                                <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
-                                <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
+                            
+                            <textarea 
+                                placeholder="Rationale..."
+                                style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
+                                onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
+                            >${esc(currentNote)}</textarea>
+                        </div>
+                    </td>`;
+            }).join('');
+
+            rowsHtml +=`
+                <td class="pricing-cell">
+                    <select class="tiny-select" onchange="OL.updateFeatureCostType('${analysisId}', '${f.id}', this.value)">
+                        <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
+                        <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
+                        <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
+                    </select>
+
+                    <div class="cost-detail-area" style="margin-top: 5px;">
+                        ${costType === 'tier' ? `
+                            <select class="tiny-select tier-selector" onchange="OL.updateFeatureTier('${anlyId}', '${f.id}', this.value)">
+                                <option value="">Select Tier...</option>
+                                ${(anly.pricingTiers || []).map(t => `
+                                    <option value="${esc(t.name)}" ${f.tierName === t.name ? 'selected' : ''}>${esc(t.name)}</option>
+                                `).join('')}
                             </select>
+                        ` : ''}
 
-                            <div class="cost-detail-area" style="margin-top: 5px;">
-                                ${costType === 'tier' ? `
-                                    <select class="tiny-select tier-selector" onchange="OL.updateFeatureTier('${anlyId}', '${f.id}', this.value)">
-                                        <option value="">Select Tier...</option>
-                                        ${(anly.pricingTiers || []).map(t => `
-                                            <option value="${esc(t.name)}" ${f.tierName === t.name ? 'selected' : ''}>${esc(t.name)}</option>
-                                        `).join('')}
-                                    </select>
-                                ` : ''}
-
-                                ${costType === 'addon' ? `
-                                    <div style="display:flex; align-items:center; gap:2px;">
-                                        <span class="tiny">$</span>
-                                        <input type="number" class="price-input-tiny" value="${f.addonPrice || 0}" 
-                                            onblur="OL.updateFeatureAddonPrice('${anlyId}', '${f.id}', this.value)">
-                                    </div>
-                                ` : ''}
+                        ${costType === 'addon' ? `
+                            <div style="display:flex; align-items:center; gap:2px;">
+                                <span class="tiny">$</span>
+                                <input type="number" class="price-input-tiny" value="${f.addonPrice || 0}" 
+                                    onblur="OL.updateFeatureAddonPrice('${anlyId}', '${f.id}', this.value)">
                             </div>
-                        </td>
-                    `;
-                }).join('')}
-            </tr>
-        `;
+                        ` : ''}
+                    </div>
+                </td>`;
+            rowsHtml += 
+        `</tr>`;
     });
     return rowsHtml;
 };
