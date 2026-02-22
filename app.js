@@ -10154,7 +10154,7 @@ window.renderLevel2Canvas = function(workflowId) {
     state.focusedResourceId = null; 
     
     console.log("📍 View Context Set: L2 Mode (L3 Cleared)");
-
+    
     const res = OL.getResourceById(workflowId);
     if (!res) return `<div class="p-20 muted text-center">Workflow not found</div>`;
 
@@ -11097,7 +11097,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     if (isTechnicalResource || isWorkflow) {
         html += `
             <div class="card-section" style="margin-top:25px;">
-                <div style="display:flex; flex-direction: column; gap:8px; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <label class="modal-section-label">⚙️ Procedure Steps</label>
                     ${isTechnicalResource ? `<button class="btn tiny primary" onclick="OL.promptInsertAtomicStep('${data.id}', ${data.steps?.length || 0}, ${isVaultMode})">+</button>` : ''}
                 </div>
@@ -11110,38 +11110,24 @@ OL.loadInspector = function(targetId, parentId = null) {
                      style="display:flex; flex-direction:column; gap:5px; min-height:50px; transition: background 0.2s;">
                     
                     ${(data.steps || []).map((step, idx) => `
-                    <div class="inspector-step-row vis-node" 
-                        draggable="true"
-                        data-step-id="${step.id}"
-                        ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
-                        style="
-                            display: flex !important; 
-                            position: relative !important; /* 🚀 Stops the pile-up */
-                            left: 0 !important; 
-                            top: 0 !important; 
-                            margin-bottom: 8px; /* Spacing between rows */
-                            align-items: center; 
-                            gap: 8px; 
-                            background: rgba(255,255,255,0.05); 
-                            padding: 10px; 
-                            border-radius: 4px; 
-                            border: 1px solid rgba(255,255,255,0.1); 
-                            cursor: default;
-                            width: 100%;
-                        ">
-                        
-                        <span class="muted" style="cursor:grab; font-size:12px; opacity:0.5;">⋮⋮</span>
-                        <span class="tiny bold accent" style="width:18px;">${idx + 1}</span>
-                        
-                        <div class="is-clickable" style="flex:1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
-                            onclick="OL.loadInspector('${step.id || step.resourceLinkId}', '${data.id}')">
-                            ${esc(step.name || 'Unnamed Step')}
+                        <div class="inspector-step-row vis-node" 
+                             draggable="true"
+                             data-step-id="${step.id}"
+                             ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
+                             style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:8px; border-radius:4px; border: 1px solid rgba(255,255,255,0.05); cursor:default;">
+                            
+                            <span class="muted" style="cursor:grab; font-size:10px;">⋮⋮</span>
+                            <span class="tiny bold accent" style="width:15px;">${idx + 1}</span>
+                            
+                            <div class="is-clickable" style="flex:1; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                                 onclick="OL.loadInspector('${step.id || step.resourceLinkId}', '${data.id}')">
+                                 ${esc(step.name || 'Unnamed Step')}
+                            </div>
+                            
+                            <button class="card-delete-btn" style="position:static; font-size:14px;" 
+                                    onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
                         </div>
-                        
-                        <button class="card-delete-btn" style="position:static; font-size:16px; opacity:0.7;" 
-                                onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
-                    </div>
-                `).join('')} || '<div class="tiny muted italic">No steps defined.</div>'}
+                    `).join('') || '<div class="tiny muted italic">No steps defined.</div>'}
                 </div>
             </div>`;
     }
