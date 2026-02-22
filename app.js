@@ -8700,7 +8700,8 @@ window.renderGlobalCanvas = function(isVaultMode) {
     }
 
     return `
-        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
+        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" ondragover="OL.handleUniversalDragOver(event)" 
+         ondrop="OL.handleUniversalDrop(event, 'canvas')"
              style="display: flex; padding: 60px; align-items: flex-start; min-height: 100vh;">
             
             ${stages.map((stage, sIdx) => {
