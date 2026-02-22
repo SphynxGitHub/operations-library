@@ -7907,13 +7907,6 @@ OL.openGlobalContentManager = function() {
 
             <div class="library-scroll-area" style="max-height: 550px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;">
                 <table class="matrix-table" style="width:100%; border-collapse: collapse;">
-                    <thead style="position: sticky; top:0; background: var(--bg-card); z-index:10; border-bottom:2px solid var(--line);">
-                        <tr>
-                            <th style="width:50px;"></th>
-                            <th style="width:75%; text-align:left; padding-left:10px;">Feature Name</th>
-                            <th style="width:20%; text-align:right; padding-right:10px;">Type</th>
-                        </tr>
-                    </thead>
                     <tbody id="lib-manager-tbody">
                         ${OL.renderLibraryManagerRows(dedupedList)}
                     </tbody>
@@ -7969,7 +7962,7 @@ OL.renderLibraryManagerRows = function(allFeats = []) {
         const isMaster = f.origin === 'master';
         html += `
             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                <td style="padding-left: 35px; width: 30px;">
+                <td style="padding-left: 35px; width: 5%;">
                     ${isMaster ? '🔒' : '✏️'}
                 </td>
                 <td style="padding: 10px 8px;">
