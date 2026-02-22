@@ -6998,6 +6998,24 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                                 ${isWinner ? '⭐ ' : ''}${esc(matchedApp?.name || 'Unknown')}
                                             </span>
                                         </div>
+                                        <div class="app-rate-card" style="border-top: 1px solid var(--line); padding-top: 8px; text-align: left;">
+                                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                                                <span class="tiny muted">BASE $</span>
+                                                <input type="number" class="price-input-tiny" style="width:60px;" 
+                                                    value="${appObj.basePrice || 0}" 
+                                                    onblur="OL.updateAppBasePrice('${analysisId}', '${appObj.appId}', this.value)">
+                                            </div>
+                                            
+                                            <div class="tiny-tiers-list">
+                                                ${tiers.map((t, idx) => `
+                                                    <div class="tier-tag">
+                                                        <input type="text" value="${esc(t.name)}" onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value)">
+                                                        <input type="number" value="${t.price}" onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
+                                                    </div>
+                                                `).join('')}
+                                                <button class="btn tiny soft full-width" onclick="OL.addAppTier('${analysisId}', '${appObj.appId}')">+ Tier</button>
+                                            </div>
+                                        </div>
                                     </th>`;
                             }).join('')}
 
@@ -7009,7 +7027,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                         </tr>
                     </thead>
                     <tbody>
-                        ${OL.renderPricingHeader(anly, totalColspan)} ${renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
+                        ${renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
                     </tbody>
                     <tfoot>
                         <tr style="border-top: 2px solid var(--line);">
@@ -7163,7 +7181,33 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                     value="${currentScore}"
                                     onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                             </div>
-                            
+
+                            <div style="padding: 6px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
+                                <select class="tiny-select" onchange="OL.updateAppFeatCostType('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                    <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
+                                    <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
+                                    <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
+                                </select>
+
+                                <div style="margin-top: 4px;">
+                                    ${costType === 'tier' ? `
+                                        <select class="tiny-select" onchange="OL.updateAppFeatTier('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                            <option value="">Select Tier...</option>
+                                            ${(appObj.pricingTiers || []).map(t => `
+                                                <option value="${esc(t.name)}" ${currentTier === t.name ? 'selected' : ''}>${esc(t.name)} ($${t.price})</option>
+                                            `).join('')}
+                                        </select>` : ''}
+                                    
+                                    ${costType === 'addon' ? `
+                                        <div style="display:flex; align-items:center; gap:2px;">
+                                            <span class="tiny">$</span>
+                                            <input type="number" class="price-input-tiny" style="width:100%;" 
+                                                value="${currentAddonPrice || 0}" 
+                                                onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                        </div>` : ''}
+                                </div>
+                            </div>
+                                            
                             <textarea 
                                 placeholder="Rationale..."
                                 style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
@@ -7172,34 +7216,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                         </div>
                     </td>`;
             }).join('');
-
-            rowsHtml +=`
-                <td class="pricing-cell">
-                    <select class="tiny-select" onchange="OL.updateFeatureCostType('${analysisId}', '${feat.id}', this.value)">
-                        <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
-                        <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
-                        <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
-                    </select>
-
-                    <div class="cost-detail-area" style="margin-top: 5px;">
-                        ${costType === 'tier' ? `
-                            <select class="tiny-select tier-selector" onchange="OL.updateFeatureTier('${anlyId}', '${f.id}', this.value)">
-                                <option value="">Select Tier...</option>
-                                ${(anly.pricingTiers || []).map(t => `
-                                    <option value="${esc(t.name)}" ${f.tierName === t.name ? 'selected' : ''}>${esc(t.name)}</option>
-                                `).join('')}
-                            </select>
-                        ` : ''}
-
-                        ${costType === 'addon' ? `
-                            <div style="display:flex; align-items:center; gap:2px;">
-                                <span class="tiny">$</span>
-                                <input type="number" class="price-input-tiny" value="${f.addonPrice || 0}" 
-                                    onblur="OL.updateFeatureAddonPrice('${anlyId}', '${f.id}', this.value)">
-                            </div>
-                        ` : ''}
-                    </div>
-                </td>`;
             rowsHtml += 
         `</tr>`;
     });
