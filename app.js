@@ -11141,7 +11141,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                         <button class="card-delete-btn" style="position:static; font-size:16px; opacity:0.7;" 
                                 onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
                     </div>
-                `).join('')} || '<div class="tiny muted italic">No steps defined.</div>'}
+                `).join('')}
                 </div>
             </div>`;
     }
