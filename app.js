@@ -7090,7 +7090,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     });
 
     const apps = anly.apps || [];
-    const totalColspan = apps.length + 2;
     
     features.forEach(feat => {
         const catName = feat.category || "General";
