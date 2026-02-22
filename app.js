@@ -12117,7 +12117,7 @@ OL.handleUniversalDragOver = function(e) {
     }
 
     // 🚀 BRANCH A: HORIZONTAL REARRANGE (STAGES)
-    if (itemType === 'stage') {
+    if (draggingType === 'stage') {
         const stageCols = [...document.querySelectorAll('.macro-stage-col')]
                           .filter(c => !c.classList.contains('is-dragging-source'));
 
