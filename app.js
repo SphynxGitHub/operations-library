@@ -12132,7 +12132,7 @@ OL.handleUniversalDragOver = function(e) {
 
         const mainMap = document.querySelector('.global-macro-map');
         if (afterStage) {
-            mainMap.insertBefore(ghost, afterStage);
+            afterStage.parentNode.insertBefore(ghost, afterStage);
             state.currentDropIndex = stageCols.indexOf(afterStage);
         } else {
             mainMap.appendChild(ghost);
