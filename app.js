@@ -6946,11 +6946,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     }));
     const topScore = Math.max(...appResults.map(r => r.total), 0);
 
-    const appCount = (anly.apps || []).length;
-    const compCount = (anly.competitors || []).length;
-
     // 1 (Feature) + 1 (Weight) + Apps + 1 (Pricing) + Competitors
-    const totalColspan = 2 + appCount + 1 + compCount;
+    // Remove the '+ 1' for the pricing column
+    const totalColspan = 2 + (anly.apps || []).length + (anly.competitors || []).length;
 
     // 🚀 THE FIX: Wrap in a div that kills event bubbling to prevent the parent from closing it
     // And remove the history.replaceState from the 'X' button to prevent router pings.
@@ -7223,6 +7221,8 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     return rowsHtml;
 };
 
+// PRICING PARAMETERS //
+
 OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
     await OL.updateAndSync(() => {
         const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
@@ -7230,6 +7230,15 @@ OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
         if (!app.featPricing) app.featPricing = {};
         if (!app.featPricing[featId]) app.featPricing[featId] = {};
         app.featPricing[featId].type = type;
+    });
+    OL.openAnalysisMatrix(anlyId);
+};
+
+OL.updateAppFeatTier = async function(anlyId, appId, featId, tierName) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
+        app.featPricing[featId].tierName = tierName;
     });
     OL.openAnalysisMatrix(anlyId);
 };
@@ -7384,6 +7393,39 @@ OL.calculateTotalCost = function(anly) {
     
     total += addons;
     return total;
+};
+
+// Update the Base Price for a specific App in the analysis
+OL.updateAppBasePrice = async function(anlyId, appId, value) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
+        if (app) app.basePrice = parseFloat(value) || 0;
+    });
+};
+
+// Add a new Tier to a specific App
+OL.addAppTier = async function(anlyId, appId) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
+        if (app) {
+            if (!app.pricingTiers) app.pricingTiers = [];
+            app.pricingTiers.push({ name: "New Tier", price: 0 });
+        }
+    });
+    OL.openAnalysisMatrix(anlyId); // Refresh to show new input
+};
+
+// Update an existing Tier (name or price)
+OL.updateAppTier = async function(anlyId, appId, tierIdx, field, value) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
+        if (app?.pricingTiers?.[tierIdx]) {
+            app.pricingTiers[tierIdx][field] = field === 'price' ? (parseFloat(value) || 0) : value;
+        }
+    });
 };
 
 // 4. ADD APP TO ANALYSIS OR REMOVE
