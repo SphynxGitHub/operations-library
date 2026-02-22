@@ -7175,7 +7175,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 
             rowsHtml +=`
                 <td class="pricing-cell">
-                    <select class="tiny-select" onchange="OL.updateFeatureCostType('${analysisId}', '${f.id}', this.value)">
+                    <select class="tiny-select" onchange="OL.updateFeatureCostType('${analysisId}', '${feat.id}', this.value)">
                         <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
                         <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
                         <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
