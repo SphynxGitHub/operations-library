@@ -7906,7 +7906,7 @@ OL.openGlobalContentManager = function() {
             </div>
 
             <div class="library-scroll-area" style="max-height: 550px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;">
-                <table class="matrix-table" style="width:100%; border-collapse: collapse;">
+                <table class="matrix-table" style="width:95%; border-collapse: collapse;">
                     <tbody id="lib-manager-tbody">
                         ${OL.renderLibraryManagerRows(dedupedList)}
                     </tbody>
