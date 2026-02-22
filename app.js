@@ -7106,10 +7106,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     features.sort((a, b) => {
         const weightA = OL.getCategorySortWeight(a.category);
         const weightB = OL.getCategorySortWeight(b.category);
-        
         if (weightA !== weightB) return weightA - weightB;
-        
-        // Secondary sort: Alphabetical by category name if weights are equal
         return (a.category || "").localeCompare(b.category || "");
     });
     
@@ -7136,7 +7133,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
             `;
         }
 
-        // Standard Row (Features)
+        // 2. Standard Rows (Features)
         rowsHtml += `
         <tr>
             <td style="padding-left: 28px;">
@@ -7163,10 +7160,14 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                 </div>
             </td>`;
 
+            // 3. Map Apps
             rowsHtml += (anly.apps || []).map(appObj => {
                 const currentScore = appObj.scores?.[feat.id] || 0;
-                // 🛡️ Safe access for notes
                 const currentNote = (appObj.notes && appObj.notes[feat.id]) ? appObj.notes[feat.id] : "";
+                const pricing = appObj.featPricing?.[feat.id] || {};
+                const costType = pricing.type || 'included'; 
+                const currentTier = pricing.tierName || '';
+                const currentAddonPrice = pricing.addonPrice || 0;
 
                 return `
                     <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
@@ -7222,18 +7223,15 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     return rowsHtml;
 };
 
-OL.updateFeatureCostType = async function(anlyId, featId, type) {
+OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
     await OL.updateAndSync(() => {
         const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const feat = anly?.features.find(f => f.id === featId);
-        if (feat) {
-            feat.costType = type;
-            // Clean up old values to keep data tiny
-            if (type !== 'tier') delete feat.tierName;
-            if (type !== 'addon') delete feat.addonPrice;
-        }
+        const app = anly?.apps.find(a => a.appId === appId);
+        if (!app.featPricing) app.featPricing = {};
+        if (!app.featPricing[featId]) app.featPricing[featId] = {};
+        app.featPricing[featId].type = type;
     });
-    OL.openAnalysisMatrix(anlyId); // Refresh UI
+    OL.openAnalysisMatrix(anlyId);
 };
 
 OL.updateFeatureTier = async function(anlyId, featId, tierName) {
