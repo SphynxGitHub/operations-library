@@ -12077,7 +12077,7 @@ OL.handleDragStart = function(e, id, type, index) {
     e.dataTransfer.setData("moveId", id);
     e.dataTransfer.setData("itemType", type);
     e.dataTransfer.setData("dragIdx", index);
-
+    
     // 🚀 2. FACTORY LOGIC: If dragging a builder item, grab the name from dropdowns
     if (type === 'factory-trigger' || type === 'factory-action') {
         const isTrigger = type === 'factory-trigger';
@@ -12115,8 +12115,9 @@ OL.handleUniversalDragOver = function(e) {
     }
 
     // 2. Identify all valid cards in this specific container
-    const cards = [...container.querySelectorAll('.workflow-card, .vis-node, .workflow-block-card')]
-                  .filter(c => !c.classList.contains('is-dragging-source'));
+    // Add .wf-node-container to the selector list
+    const cards = [...container.querySelectorAll('.wf-node-container, .workflow-block-card, .inspector-step-row')]
+                .filter(c => !c.classList.contains('is-dragging-source'));
 
     // 3. Determine insertion point
     const afterElement = cards.reduce((closest, child) => {
@@ -12221,7 +12222,7 @@ OL.handleUniversalDrop = async function(e, sectionId) {
         const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
 
         // --- BRANCH A: GLOBAL REARRANGE ---
-        if (!activeParentId && itemType === 'workflow') {
+        /* if (!activeParentId && itemType === 'workflow') {
             const wf = source.find(r => String(r.id) === String(moveId));
             if (wf) {
                 wf.stageId = sectionId;
@@ -12245,8 +12246,45 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                     r.mapOrder = i;
                 });
             }
-        }
+        }*/
+        // --- BRANCH A: GLOBAL REARRANGE ---
+        if (!activeParentId && itemType === 'workflow') {
+            const wf = source.find(r => String(r.id) === String(moveId));
+            if (wf) {
+                const oldStageId = wf.stageId;
+                wf.stageId = sectionId;
 
+                // 1. Get all siblings in the target stage
+                let siblings = source.filter(r => String(r.stageId) === String(sectionId));
+                siblings.sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+                // 2. If moving within the SAME stage, we need to handle the index shift
+                const isSameStage = String(oldStageId) === String(sectionId);
+                const currentIdxInSiblings = siblings.findIndex(r => String(r.id) === String(moveId));
+
+                if (isSameStage && currentIdxInSiblings !== -1) {
+                    siblings.splice(currentIdxInSiblings, 1);
+                } else {
+                    // If coming from a different stage, remove it from its old stage siblings 
+                    // (The source.find and stageId update already handles the logic, 
+                    // but we ensure the target array is clean)
+                    const cleanSourceIdx = siblings.findIndex(r => String(r.id) === String(moveId));
+                    if (cleanSourceIdx > -1) siblings.splice(cleanSourceIdx, 1);
+                }
+
+                // 3. Insert at the new visual target
+                // We use Math.min to ensure we don't go out of bounds
+                const finalInsertIdx = Math.min(targetIdx, siblings.length);
+                siblings.splice(finalInsertIdx, 0, wf);
+
+                // 4. Update the original objects' mapOrder
+                siblings.forEach((r, i) => {
+                    r.mapOrder = i;
+                });
+                
+                console.log(`📍 Workflow ${wf.name} moved to ${sectionId} at index ${finalInsertIdx}`);
+            }
+        }
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
             const isL3Drop = (sectionId === 'Trigger' || sectionId === 'Action');
