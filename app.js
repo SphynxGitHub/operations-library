@@ -12114,6 +12114,36 @@ OL.handleUniversalDragOver = function(e) {
         ghost.className = 'drop-placeholder';
     }
 
+    // 🚀 BRANCH A: HORIZONTAL REARRANGE (STAGES)
+    if (itemType === 'stage') {
+        const stageCols = [...document.querySelectorAll('.macro-stage-col')]
+                          .filter(c => !c.classList.contains('is-dragging-source'));
+
+        // Calculate based on horizontal X axis
+        const afterStage = stageCols.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = e.clientX - (box.left + box.width / 2); // 🎯 Use X axis
+            if (offset < 0 && offset > closest.offset) return { offset, element: child };
+            return closest;
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+        const mainMap = document.querySelector('.global-macro-map');
+        if (afterStage) {
+            mainMap.insertBefore(ghost, afterStage);
+            state.currentDropIndex = stageCols.indexOf(afterStage);
+        } else {
+            mainMap.appendChild(ghost);
+            state.currentDropIndex = stageCols.length;
+        }
+
+        // Style ghost as a tall vertical divider
+        ghost.style.height = "80vh";
+        ghost.style.width = "40px";
+        ghost.style.margin = "0 20px";
+        ghost.style.display = "block";
+        return; // Exit early
+    }
+
     // 2. Identify all valid cards in this specific container
     // Add .wf-node-container to the selector list
     const cards = [...container.querySelectorAll('.wf-node-container, .workflow-block-card, .inspector-step-row')]
