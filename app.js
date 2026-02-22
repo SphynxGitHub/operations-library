@@ -6988,8 +6988,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
                                 const matchedApp = allApps.find(a => a.id === appObj.appId);
                                 const isWinner = topScore > 0 && appResults.find(r => r.appId === appObj.appId)?.total === topScore;
-                                const tiers = appObj.pricingTiers || [];
-                                
+
                                 return `
                                     <th class="text-center" style="${isWinner ? 'background: rgba(251, 191, 36, 0.05);' : ''}">
                                         <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
@@ -7014,20 +7013,13 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 
                         <tr style="background: rgba(255,255,255,0.02); vertical-align: top;">
                             <td colspan="2" style="padding: 15px; color: var(--muted); font-size: 11px; line-height: 1.4;">
-                                <strong>Rate Card:</strong><br>Define the base monthly cost and available plan tiers for each provider.
+                                <strong>Rate Card:</strong><br>Aailable plan tiers and cost for each provider.
                             </td>
                             ${(anly.apps || []).map(appObj => {
                                 const tiers = appObj.pricingTiers || [];
                                 return `
                                     <td style="padding: 10px; border: 1px solid var(--line);">
-                                        <div class="app-rate-card">
-                                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                                <span class="tiny muted uppercase" style="font-size:9px;">Base $</span>
-                                                <input type="number" class="price-input-tiny" style="width:60px;" 
-                                                    value="${appObj.basePrice || 0}" 
-                                                    onblur="OL.updateAppBasePrice('${analysisId}', '${appObj.appId}', this.value)">
-                                            </div>
-                                            
+                                        <div class="app-rate-card">                                           
                                             <div class="stacked-tiers-list" style="display:flex; flex-direction:column; gap:10px;">
                                                 ${tiers.map((t, idx) => `
                                                     <div class="tier-entry" style="position:relative; padding: 6px; border-radius: 4px;">
@@ -7228,6 +7220,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                 const costType = pricing.type || 'included'; 
                 const currentTier = pricing.tierName || '';
                 const currentAddonPrice = pricing.addonPrice || 0;
+                const appTiers = appObj.pricingTiers || [];
 
                 return `
                     <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
@@ -7243,34 +7236,31 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                     onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                             </div>
 
-                            <div style="padding: 6px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
-                                <select class="tiny-select" onchange="OL.updateAppFeatCostType('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                    <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
-                                    <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
+                           <div style="padding: 6px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
+                                <select class="tiny-select" style="width:100%;" 
+                                    onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                    <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
+                                    <optgroup label="Included In:">
+                                        ${appTiers.map(t => `
+                                            <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
+                                                ${esc(t.name)}
+                                            </option>
+                                        `).join('')}
+                                    </optgroup>
                                     <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
                                 </select>
 
-                                <div style="margin-top: 4px;">
-                                    ${costType === 'tier' ? `
-                                        <select class="tiny-select" onchange="OL.updateAppFeatTier('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                            <option value="">Select Tier...</option>
-                                            ${(appObj.pricingTiers || []).map(t => `
-                                                <option value="${esc(t.name)}" ${currentTier === t.name ? 'selected' : ''}>${esc(t.name)} ($${t.price})</option>
-                                            `).join('')}
-                                        </select>` : ''}
-                                    
-                                    ${costType === 'addon' ? `
-                                        <div style="display:flex; align-items:center; gap:2px;">
-                                            <span class="tiny">$</span>
-                                            <input type="number" class="price-input-tiny" style="width:100%;" 
-                                                value="${currentAddonPrice || 0}" 
-                                                onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                        </div>` : ''}
+                                <div id="addon-price-${appObj.appId}-${feat.id}" 
+                                    style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                    <span class="tiny muted">Fee $</span>
+                                    <input type="number" class="price-input-tiny" style="width:100%;" 
+                                        value="${currentAddonPrice}" 
+                                        onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
                                 </div>
                             </div>
                                             
                             <textarea 
-                                placeholder="Rationale..."
+                                placeholder="Notes..."
                                 style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
                                 onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
                             >${esc(currentNote)}</textarea>
@@ -7359,33 +7349,64 @@ OL.renameMatrix = function(anlyId, newName, isMaster) {
 
 // PRICING PARAMETERS //
 
-OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        if (!app.featPricing) app.featPricing = {};
-        if (!app.featPricing[featId]) app.featPricing[featId] = {};
-        app.featPricing[featId].type = type;
-    });
-    OL.openAnalysisMatrix(anlyId);
-};
-
-OL.updateAppFeatTier = async function(anlyId, appId, featId, tierName) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        app.featPricing[featId].tierName = tierName;
-    });
-    OL.openAnalysisMatrix(anlyId);
-};
-
 // Update the Base Price for a specific App in the analysis
-OL.updateAppBasePrice = async function(anlyId, appId, value) {
+// 🎯 Optimized Total Cost Calculation
+OL.calculateAppTotalCost = function(appObj) {
+    let total = 0; // 🚀 No longer starts with basePrice
+
+    // 1. Calculate Tier Cost (High-Water Mark)
+    const activeTierNames = new Set();
+    if (appObj.featPricing) {
+        Object.values(appObj.featPricing).forEach(p => {
+            if (p.type === 'tier' && p.tierName) activeTierNames.add(p.tierName);
+        });
+    }
+
+    if (activeTierNames.size > 0) {
+        const tierPrices = (appObj.pricingTiers || [])
+            .filter(t => activeTierNames.has(t.name))
+            .map(t => parseFloat(t.price) || 0);
+        
+        if (tierPrices.length > 0) {
+            total += Math.max(...tierPrices);
+        }
+    }
+
+    // 2. Add-ons (Cumulative)
+    if (appObj.featPricing) {
+        Object.values(appObj.featPricing).forEach(p => {
+            if (p.type === 'addon') {
+                total += parseFloat(p.addonPrice || 0);
+            }
+        });
+    }
+
+    return total;
+};
+
+// 🎯 Refined Dropdown Logic
+OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
     await OL.updateAndSync(() => {
         const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        if (app) app.basePrice = parseFloat(value) || 0;
+        const appObj = anly?.apps.find(a => a.appId === appId);
+        
+        if (!appObj) return;
+        if (!appObj.featPricing) appObj.featPricing = {};
+        
+        const [type, tierName] = value.split('|');
+        
+        // We preserve the addonPrice so it's not lost if they toggle back and forth
+        const existingAddon = appObj.featPricing[featId]?.addonPrice || 0;
+        
+        appObj.featPricing[featId] = {
+            type: type, // 'not_included', 'tier', or 'addon'
+            tierName: tierName || null,
+            addonPrice: existingAddon
+        };
     });
+
+    // Full refresh to update all Totals and UI states
+    OL.openAnalysisMatrix(anlyId);
 };
 
 // Add a new Tier to a specific App
@@ -7422,39 +7443,21 @@ OL.removeAppTier = async function(anlyId, appId, idx) {
     OL.openAnalysisMatrix(anlyId);
 };
 
-OL.calculateAppTotalCost = function(appObj) {
-    let total = parseFloat(appObj.basePrice || 0);
-    
-    // 1. Calculate Tier Cost (High-Water Mark)
-    // We find the highest price among all tiers that are currently selected for at least one feature
-    const activeTierNames = new Set();
-    if (appObj.featPricing) {
-        Object.values(appObj.featPricing).forEach(p => {
-            if (p.type === 'tier' && p.tierName) activeTierNames.add(p.tierName);
-        });
-    }
-
-    if (activeTierNames.size > 0) {
-        const tierPrices = (appObj.pricingTiers || [])
-            .filter(t => activeTierNames.has(t.name))
-            .map(t => parseFloat(t.price) || 0);
+OL.updateAppFeatAddonPrice = async function(anlyId, appId, featId, value) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
         
-        if (tierPrices.length > 0) {
-            total += Math.max(...tierPrices);
+        if (app && app.featPricing && app.featPricing[featId]) {
+            // Convert to float, defaulting to 0 if empty or invalid
+            app.featPricing[featId].addonPrice = parseFloat(value) || 0;
         }
-    }
-
-    // 2. Calculate Add-ons (Cumulative)
-    if (appObj.featPricing) {
-        Object.values(appObj.featPricing).forEach(p => {
-            if (p.type === 'addon') {
-                total += parseFloat(p.addonPrice || 0);
-            }
-        });
-    }
-
-    return total;
+    });
+    
+    // Refresh to update the "Est. Monthly Total Cost" at the bottom
+    OL.openAnalysisMatrix(anlyId);
 };
+
 
 // 4. ADD APP TO ANALYSIS OR REMOVE
 
