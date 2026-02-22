@@ -7050,9 +7050,6 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                         </tr>
 
                         ${renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
-                    </tbody>
-                    
-                    <tfoot style="border-top: 2px solid var(--line);">
                         <tr style="background: rgba(255,255,255,0.02);">
                             <td style="padding: 15px 10px;">
                                 <button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button>
@@ -7088,7 +7085,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                             }).join('')}
                             ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
                         </tr>
-                    </tfoot>
+                    </tobdy>
                 </table>
 
                 <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; border-radius: 8px; border: 1px solid var(--line);">

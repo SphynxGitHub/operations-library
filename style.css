@@ -2401,6 +2401,7 @@ body.fs-mode-active {
         border-collapse: collapse !important;
         border: 1px solid #d3d3d3 !important;
         font-size: 11.5px;
+        page-break-after: auto;
     }
 
     /* 5. Force Borders on all Cells */
@@ -2437,6 +2438,30 @@ body.fs-mode-active {
     .category-header-row td {
         background-color: #f9f9f9 !important;
         -webkit-print-color-adjust: exact; /* Ensure background prints */
+    }
+
+    /* 1. Prevent the table footer from repeating on every page */
+    .matrix-table tfoot {
+        display: table-row-group !important;
+    }
+
+    /* 2. Force the footer to stay attached to the bottom of the table data */
+    .matrix-table tfoot tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    /* 3. Ensure the summary box doesn't get split across pages */
+    .executive-summary-wrapper {
+        page-break-inside: avoid;
+        margin-top: 30px;
+    }
+
+    .matrix-final-footer {
+        position: relative;
+        margin-top: 50px;
+        page-break-inside: avoid;
+        display: block !important;
     }
 
     /* 2. Force the Workspace to the very top */
