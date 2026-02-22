@@ -12293,43 +12293,43 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 });
             }
         }*/
-        // --- BRANCH A: GLOBAL REARRANGE ---
+        // --- BRANCH A: GLOBAL REARRANGE (Safety First) ---
         if (!activeParentId && itemType === 'workflow') {
-            const wf = source.find(r => String(r.id) === String(moveId));
-            if (wf) {
-                const oldStageId = wf.stageId;
-                wf.stageId = sectionId;
+            // 1. Find the actual object in the master source
+            const wfIndex = source.findIndex(r => String(r.id) === String(moveId));
+            if (wfIndex === -1) return console.error("Workflow not found in source.");
+            
+            // 2. Extract the workflow (Remove it from its old spot entirely)
+            const [wf] = source.splice(wfIndex, 1);
+            
+            // 3. Update its destination
+            wf.stageId = sectionId;
 
-                // 1. Get all siblings in the target stage
-                let siblings = source.filter(r => String(r.stageId) === String(sectionId));
-                siblings.sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+            // 4. Identify where it lands among its NEW siblings
+            // We filter the source (which now lacks the moving wf) to find its new neighbors
+            const siblings = source
+                .filter(r => String(r.stageId) === String(sectionId))
+                .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
-                // 2. If moving within the SAME stage, we need to handle the index shift
-                const isSameStage = String(oldStageId) === String(sectionId);
-                const currentIdxInSiblings = siblings.findIndex(r => String(r.id) === String(moveId));
-
-                if (isSameStage && currentIdxInSiblings !== -1) {
-                    siblings.splice(currentIdxInSiblings, 1);
-                } else {
-                    // If coming from a different stage, remove it from its old stage siblings 
-                    // (The source.find and stageId update already handles the logic, 
-                    // but we ensure the target array is clean)
-                    const cleanSourceIdx = siblings.findIndex(r => String(r.id) === String(moveId));
-                    if (cleanSourceIdx > -1) siblings.splice(cleanSourceIdx, 1);
-                }
-
-                // 3. Insert at the new visual target
-                // We use Math.min to ensure we don't go out of bounds
-                const finalInsertIdx = Math.min(targetIdx, siblings.length);
-                siblings.splice(finalInsertIdx, 0, wf);
-
-                // 4. Update the original objects' mapOrder
-                siblings.forEach((r, i) => {
-                    r.mapOrder = i;
-                });
-                
-                console.log(`📍 Workflow ${wf.name} moved to ${sectionId} at index ${finalInsertIdx}`);
+            // 5. Determine the Absolute Index in the 'source' array
+            let absoluteInsertIdx;
+            if (siblings.length > 0 && targetIdx < siblings.length) {
+                const neighbor = siblings[targetIdx];
+                absoluteInsertIdx = source.indexOf(neighbor);
+            } else {
+                // Drop at the end of the source array if no neighbor is found
+                absoluteInsertIdx = source.length;
             }
+
+            // 6. Re-insert into the master source
+            source.splice(absoluteInsertIdx, 0, wf);
+
+            // 7. Normalize mapOrder for all items in that stage
+            source
+                .filter(r => String(r.stageId) === String(sectionId))
+                .forEach((r, i) => r.mapOrder = i);
+
+            console.log(`✅ Workflow ${wf.name} secured in Stage ${sectionId}`);
         }
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
