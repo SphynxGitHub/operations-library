@@ -7974,7 +7974,7 @@ OL.renderLibraryManagerRows = function(allFeats = []) {
                     }
                 </td>
                 <td style="padding: 10px 8px; text-align: right;">
-                    <span class="pill tiny ${isMaster ? 'muted' : 'primary'}" style="opacity: 0.7;">
+                    <span class="pill tiny muted" style="opacity: 0.7;">
                         ${isMaster ? 'Master Definition' : 'Local Extension'}
                     </span>
                 </td>
