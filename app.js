@@ -6946,6 +6946,12 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     }));
     const topScore = Math.max(...appResults.map(r => r.total), 0);
 
+    const appCount = (anly.apps || []).length;
+    const compCount = (anly.competitors || []).length;
+
+    // 1 (Feature) + 1 (Weight) + Apps + 1 (Pricing) + Competitors
+    const totalColspan = 2 + appCount + 1 + compCount;
+
     // 🚀 THE FIX: Wrap in a div that kills event bubbling to prevent the parent from closing it
     // And remove the history.replaceState from the 'X' button to prevent router pings.
     let html = `
