@@ -7968,7 +7968,7 @@ OL.renderLibraryManagerRows = function(allFeats = []) {
                 <td style="padding: 10px 8px;">
                     ${isMaster ? 
                         `<span style="font-weight: 500;">${esc(f.name)}</span>` : 
-                        `<input type="text" class="tiny-input" style="font-weight: bold; color: var(--accent);" 
+                        `<input type="text" class="tiny-input" 
                                 value="${esc(f.name)}" 
                                 onblur="OL.updateLocalLibraryFeature('${f.id}', 'name', this.value)">`
                     }
