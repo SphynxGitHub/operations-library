@@ -12107,6 +12107,8 @@ OL.handleUniversalDragOver = function(e) {
     const container = e.currentTarget;
     container.classList.add('hovered');
 
+    const draggingType = state.currentDraggingType;
+
     // 1. Find or Create the Ghost Placeholder
     let ghost = document.querySelector('.drop-placeholder');
     if (!ghost) {
