@@ -7094,6 +7094,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
     
     features.forEach(feat => {
         const catName = feat.category || "General";
+        const costType = feat.costType || 'included';
 
         // 1. Inject Category Header Row
         if (catName !== currentCategory) {
@@ -7166,12 +7167,62 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster) {
                                 >${esc(currentNote)}</textarea>
                             </div>
                         </td>
+                        <td class="pricing-cell">
+                            <select class="tiny-select" onchange="OL.updateFeatureCostType('${anlyId}', '${f.id}', this.value)">
+                                <option value="included" ${costType === 'included' ? 'selected' : ''}>Included</option>
+                                <option value="tier" ${costType === 'tier' ? 'selected' : ''}>Tiered</option>
+                                <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
+                            </select>
+
+                            <div class="cost-detail-area" style="margin-top: 5px;">
+                                ${costType === 'tier' ? `
+                                    <select class="tiny-select tier-selector" onchange="OL.updateFeatureTier('${anlyId}', '${f.id}', this.value)">
+                                        <option value="">Select Tier...</option>
+                                        ${(anly.pricingTiers || []).map(t => `
+                                            <option value="${esc(t.name)}" ${f.tierName === t.name ? 'selected' : ''}>${esc(t.name)}</option>
+                                        `).join('')}
+                                    </select>
+                                ` : ''}
+
+                                ${costType === 'addon' ? `
+                                    <div style="display:flex; align-items:center; gap:2px;">
+                                        <span class="tiny">$</span>
+                                        <input type="number" class="price-input-tiny" value="${f.addonPrice || 0}" 
+                                            onblur="OL.updateFeatureAddonPrice('${anlyId}', '${f.id}', this.value)">
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </td>
                     `;
                 }).join('')}
             </tr>
         `;
     });
     return rowsHtml;
+};
+
+OL.updateFeatureCostType = async function(anlyId, featId, type) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const feat = anly?.features.find(f => f.id === featId);
+        if (feat) {
+            feat.costType = type;
+            // Clean up old values to keep data tiny
+            if (type !== 'tier') delete feat.tierName;
+            if (type !== 'addon') delete feat.addonPrice;
+        }
+    });
+    OL.openAnalysisMatrix(anlyId); // Refresh UI
+};
+
+OL.updateFeatureTier = async function(anlyId, featId, tierName) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const feat = anly?.features.find(f => f.id === featId);
+        if (feat) feat.tierName = tierName;
+    });
+    // No full refresh needed, but we do it to update the footer total
+    OL.openAnalysisMatrix(anlyId);
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
