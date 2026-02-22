@@ -7065,10 +7065,11 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                             <td style="padding: 15px 10px;">
                                 <button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button>
                             </td>
-                            <td class="bold center" style="color: ${Math.abs(totalWeight - 100) < 0.1 ? 'var(--success)' : 'var(--danger)'}; border: 1px solid var(--line);">
-                                <div style="font-size: 10px; color: var(--muted); margin-bottom: 2px;">TOTAL WEIGHT</div>
+                            <td class="bold center" style="color: ${Math.abs(totalWeight - 100) < 0.1 ? 'var(--success)' : 'var(--danger)'}; border: 1px solid var(--line); font-weight: bold; padding:.5%;">
+                                <div style="font-size: 10px; color: var(--muted); margin-bottom: 2px;">TOTAL</div>
                                 ${totalWeight.toFixed(1)}%
-                                <div onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent);">⚖️ Balance</div>
+                                <div onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" 
+                                style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%">⚖️ Balance</div>
                             </td>
                             ${(anly.apps || []).map(appObj => {
                                 const score = OL.calculateAnalysisScore(appObj, anly.features || []);
@@ -7098,7 +7099,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     </tfoot>
                 </table>
 
-                <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--line);">
+                <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
                         <span style="font-size: 1.2rem;">📋</span>
                         <label class="modal-section-label" style="margin: 0; font-size: 1rem; color: var(--accent);">Executive Summary & Recommendations</label>
