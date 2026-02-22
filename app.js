@@ -8700,8 +8700,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
     }
 
     return `
-        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" ondragover="OL.handleUniversalDragOver(event)" 
-         ondrop="OL.handleUniversalDrop(event, 'canvas')"
+        <div class="global-macro-map" onclick="OL.handleCanvasBackgroundClick(event)" 
              style="display: flex; padding: 60px; align-items: flex-start; min-height: 100vh;">
             
             ${stages.map((stage, sIdx) => {
@@ -12119,8 +12118,8 @@ OL.handleUniversalDragOver = function(e) {
 
     // 🚀 BRANCH A: HORIZONTAL REARRANGE (STAGES)
     if (draggingType === 'stage') {
-        const stageCols = [...mainMap.children]
-            .filter(c => c.classList.contains('macro-stage-col') && !c.classList.contains('is-dragging-source'));
+        const stageCols = [...document.querySelectorAll('.macro-stage-col')]
+                          .filter(c => !c.classList.contains('is-dragging-source'));
 
         // Calculate based on horizontal X axis
         const afterStage = stageCols.reduce((closest, child) => {
@@ -12132,7 +12131,7 @@ OL.handleUniversalDragOver = function(e) {
 
         const mainMap = document.querySelector('.global-macro-map');
         if (afterStage) {
-            afterStage.parentNode.insertBefore(ghost, afterStage);
+            mainMap.insertBefore(ghost, afterStage);
             state.currentDropIndex = stageCols.indexOf(afterStage);
         } else {
             mainMap.appendChild(ghost);
@@ -12140,24 +12139,11 @@ OL.handleUniversalDragOver = function(e) {
         }
 
         // Style ghost as a tall vertical divider
-        ghost.style.display = "block";
-        ghost.style.flexShrink = "0";
         ghost.style.height = "80vh";
         ghost.style.width = "40px";
-        ghost.style.background = "rgba(var(--accent-rgb), 0.1)";
-        ghost.style.border = "2px dashed var(--accent)";
-        ghost.style.margin = "0 15px";
-        ghost.style.borderRadius = "8px";
-
-        if (afterStage) {
-            // Since afterStage is a direct child of mainMap, this will now work
-            mainMap.insertBefore(ghost, afterStage);
-            state.currentDropIndex = stageCols.indexOf(afterStage);
-        } else {
-            mainMap.appendChild(ghost);
-            state.currentDropIndex = stageCols.length;
-        }
-        return; 
+        ghost.style.margin = "0 20px";
+        ghost.style.display = "block";
+        return; // Exit early
     }
 
     // 2. Identify all valid cards in this specific container
@@ -12293,36 +12279,43 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 });
             }
         }*/
-        // --- BRANCH A: GLOBAL REARRANGE (Safety First) ---
+        // --- BRANCH A: GLOBAL REARRANGE ---
         if (!activeParentId && itemType === 'workflow') {
-            // 1. Find the target object
             const wf = source.find(r => String(r.id) === String(moveId));
-            if (!wf) return console.error("❌ Critical Error: Workflow not found in source array.");
+            if (wf) {
+                const oldStageId = wf.stageId;
+                wf.stageId = sectionId;
 
-            // 2. Update metadata immediately
-            wf.stageId = sectionId;
+                // 1. Get all siblings in the target stage
+                let siblings = source.filter(r => String(r.stageId) === String(sectionId));
+                siblings.sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
-            // 3. Get all items that AREN'T the one we are moving
-            let others = source.filter(r => String(r.id) !== String(moveId));
-            
-            // 4. Identify siblings in the NEW stage
-            let stageSiblings = others
-                .filter(r => String(r.stageId) === String(sectionId))
-                .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+                // 2. If moving within the SAME stage, we need to handle the index shift
+                const isSameStage = String(oldStageId) === String(sectionId);
+                const currentIdxInSiblings = siblings.findIndex(r => String(r.id) === String(moveId));
 
-            // 5. Insert the moving workflow into the stageSiblings list
-            const finalIdx = (targetIdx > stageSiblings.length) ? stageSiblings.length : targetIdx;
-            stageSiblings.splice(finalIdx, 0, wf);
+                if (isSameStage && currentIdxInSiblings !== -1) {
+                    siblings.splice(currentIdxInSiblings, 1);
+                } else {
+                    // If coming from a different stage, remove it from its old stage siblings 
+                    // (The source.find and stageId update already handles the logic, 
+                    // but we ensure the target array is clean)
+                    const cleanSourceIdx = siblings.findIndex(r => String(r.id) === String(moveId));
+                    if (cleanSourceIdx > -1) siblings.splice(cleanSourceIdx, 1);
+                }
 
-            // 6. 🚀 THE SYNC: Map the new order back to the 'source' items
-            // This ensures they have mapOrders like 0, 1, 2...
-            stageSiblings.forEach((r, i) => {
-                r.mapOrder = i;
-            });
+                // 3. Insert at the new visual target
+                // We use Math.min to ensure we don't go out of bounds
+                const finalInsertIdx = Math.min(targetIdx, siblings.length);
+                siblings.splice(finalInsertIdx, 0, wf);
 
-            // 7. Final Safety: Ensure the item is still in the main 'source' 
-            // (Filtering/Finding doesn't remove it, so it can't disappear from the database)
-            console.log(`✅ Workflow [${wf.name}] relocated to stage [${sectionId}] at index [${finalIdx}]`);
+                // 4. Update the original objects' mapOrder
+                siblings.forEach((r, i) => {
+                    r.mapOrder = i;
+                });
+                
+                console.log(`📍 Workflow ${wf.name} moved to ${sectionId} at index ${finalInsertIdx}`);
+            }
         }
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
