@@ -10149,6 +10149,12 @@ OL.deleteLifecycleStage = function(isVaultMode, stageId) {
 
 // --- TIER 2 RENDERER ---
 window.renderLevel2Canvas = function(workflowId) {
+    // ⚡ THE GHOST KILLER: Ensure L3 is nulled when entering L2
+    state.focusedWorkflowId = workflowId;
+    state.focusedResourceId = null; 
+    
+    console.log("📍 View Context Set: L2 Mode (L3 Cleared)");
+    
     const res = OL.getResourceById(workflowId);
     if (!res) return `<div class="p-20 muted text-center">Workflow not found</div>`;
 
@@ -11697,6 +11703,12 @@ function renderResourcesInWorkflowLane(workflowId, laneId) {
 // LEVEL 3: Render Steps in Resources
 
 window.renderLevel3Canvas = function(resourceId) {
+    // ⚡ THE GHOST KILLER: Ensure L2 is nulled when entering L3
+    state.focusedResourceId = resourceId;
+    state.focusedWorkflowId = null; 
+    
+    console.log("📍 View Context Set: L3 Mode (L2 Cleared)");
+
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
 
