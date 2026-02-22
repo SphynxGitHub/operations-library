@@ -6946,12 +6946,13 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     }));
     const topScore = Math.max(...appResults.map(r => r.total), 0);
 
-    // 1 (Feature) + 1 (Weight) + Apps + 1 (Pricing) + Competitors
-    // Remove the '+ 1' for the pricing column
-    const totalColspan = 2 + (anly.apps || []).length + (anly.competitors || []).length;
+    const appCount = (anly.apps || []).length;
+    const compCount = (anly.competitors || []).length;
 
-    // 🚀 THE FIX: Wrap in a div that kills event bubbling to prevent the parent from closing it
-    // And remove the history.replaceState from the 'X' button to prevent router pings.
+    // 🚀 THE FIX: Dynamic Colspan Calculation
+    // Total = Feature Name (1) + Weight (1) + Apps count + Competitors count
+    const totalColspan = 2 + appCount + compCount;
+
     let html = `
         <div class="matrix-interaction-wrapper" onclick="event.stopPropagation()">
             <div class="card matrix-card-main" style="border-top: 3px solid var(--accent); padding: 20px; margin-bottom: 40px;">
@@ -6987,6 +6988,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
                                 const matchedApp = allApps.find(a => a.id === appObj.appId);
                                 const isWinner = topScore > 0 && appResults.find(r => r.appId === appObj.appId)?.total === topScore;
+                                const tiers = appObj.pricingTiers || [];
                                 
                                 return `
                                     <th class="text-center" style="${isWinner ? 'background: rgba(251, 191, 36, 0.05);' : ''}">
