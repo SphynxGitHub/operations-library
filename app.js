@@ -12295,41 +12295,34 @@ OL.handleUniversalDrop = async function(e, sectionId) {
         }*/
         // --- BRANCH A: GLOBAL REARRANGE (Safety First) ---
         if (!activeParentId && itemType === 'workflow') {
-            // 1. Find the actual object in the master source
-            const wfIndex = source.findIndex(r => String(r.id) === String(moveId));
-            if (wfIndex === -1) return console.error("Workflow not found in source.");
-            
-            // 2. Extract the workflow (Remove it from its old spot entirely)
-            const [wf] = source.splice(wfIndex, 1);
-            
-            // 3. Update its destination
+            // 1. Find the target object
+            const wf = source.find(r => String(r.id) === String(moveId));
+            if (!wf) return console.error("❌ Critical Error: Workflow not found in source array.");
+
+            // 2. Update metadata immediately
             wf.stageId = sectionId;
 
-            // 4. Identify where it lands among its NEW siblings
-            // We filter the source (which now lacks the moving wf) to find its new neighbors
-            const siblings = source
+            // 3. Get all items that AREN'T the one we are moving
+            let others = source.filter(r => String(r.id) !== String(moveId));
+            
+            // 4. Identify siblings in the NEW stage
+            let stageSiblings = others
                 .filter(r => String(r.stageId) === String(sectionId))
                 .sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
 
-            // 5. Determine the Absolute Index in the 'source' array
-            let absoluteInsertIdx;
-            if (siblings.length > 0 && targetIdx < siblings.length) {
-                const neighbor = siblings[targetIdx];
-                absoluteInsertIdx = source.indexOf(neighbor);
-            } else {
-                // Drop at the end of the source array if no neighbor is found
-                absoluteInsertIdx = source.length;
-            }
+            // 5. Insert the moving workflow into the stageSiblings list
+            const finalIdx = (targetIdx > stageSiblings.length) ? stageSiblings.length : targetIdx;
+            stageSiblings.splice(finalIdx, 0, wf);
 
-            // 6. Re-insert into the master source
-            source.splice(absoluteInsertIdx, 0, wf);
+            // 6. 🚀 THE SYNC: Map the new order back to the 'source' items
+            // This ensures they have mapOrders like 0, 1, 2...
+            stageSiblings.forEach((r, i) => {
+                r.mapOrder = i;
+            });
 
-            // 7. Normalize mapOrder for all items in that stage
-            source
-                .filter(r => String(r.stageId) === String(sectionId))
-                .forEach((r, i) => r.mapOrder = i);
-
-            console.log(`✅ Workflow ${wf.name} secured in Stage ${sectionId}`);
+            // 7. Final Safety: Ensure the item is still in the main 'source' 
+            // (Filtering/Finding doesn't remove it, so it can't disappear from the database)
+            console.log(`✅ Workflow [${wf.name}] relocated to stage [${sectionId}] at index [${finalIdx}]`);
         }
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
