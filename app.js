@@ -12222,7 +12222,7 @@ OL.handleUniversalDrop = async function(e, sectionId) {
         const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
 
         // --- BRANCH A: GLOBAL REARRANGE ---
-        if (!activeParentId && itemType === 'workflow') {
+        /*if (!activeParentId && itemType === 'workflow') {
             const wf = source.find(r => String(r.id) === String(moveId));
             if (wf) {
                 wf.stageId = sectionId;
@@ -12245,6 +12245,35 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 siblings.forEach((r, i) => {
                     r.mapOrder = i;
                 });
+            }
+        }*/
+
+        // --- BRANCH A: GLOBAL REARRANGE ---
+        // 🚀 THE FIX: Check for itemType 'workflow' first, 
+        // and ensure we aren't trying to drop it into an L3 section like 'Trigger'
+        if (itemType === 'workflow' && sectionId !== 'Trigger' && sectionId !== 'Action') {
+            const wf = source.find(r => String(r.id) === String(moveId));
+            if (wf) {
+                wf.stageId = sectionId;
+
+                // 1. Get all siblings in the target stage
+                const siblings = source.filter(r => String(r.stageId) === String(sectionId));
+                siblings.sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
+
+                // 2. Remove the moving workflow from its current sibling position
+                const oldIdx = siblings.findIndex(r => String(r.id) === String(moveId));
+                if (oldIdx > -1) siblings.splice(oldIdx, 1);
+
+                // 3. Insert at the new visual target
+                siblings.splice(targetIdx, 0, wf);
+
+                // 4. Update the original objects
+                siblings.forEach((r, i) => {
+                    r.mapOrder = i;
+                });
+                
+                console.log(`✅ Global Move: ${wf.name} moved to stage ${sectionId}`);
+                return; // 🚀 STOP HERE so it doesn't fall into Branch B
             }
         }
 
