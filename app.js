@@ -7232,38 +7232,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     return rowsHtml;
 };
 
-// PRICING PARAMETERS //
-
-OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        if (!app.featPricing) app.featPricing = {};
-        if (!app.featPricing[featId]) app.featPricing[featId] = {};
-        app.featPricing[featId].type = type;
-    });
-    OL.openAnalysisMatrix(anlyId);
-};
-
-OL.updateAppFeatTier = async function(anlyId, appId, featId, tierName) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        app.featPricing[featId].tierName = tierName;
-    });
-    OL.openAnalysisMatrix(anlyId);
-};
-
-OL.updateFeatureTier = async function(anlyId, featId, tierName) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const feat = anly?.features.find(f => f.id === featId);
-        if (feat) feat.tierName = tierName;
-    });
-    // No full refresh needed, but we do it to update the footer total
-    OL.openAnalysisMatrix(anlyId);
-};
-
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
 
@@ -7338,82 +7306,27 @@ OL.renameMatrix = function(anlyId, newName, isMaster) {
     }
 };
 
-OL.removeAppTier = async function(anlyId, appId, idx) {
-    if(!confirm("Remove this pricing tier?")) return;
+
+// PRICING PARAMETERS //
+
+OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
     await OL.updateAndSync(() => {
         const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
         const app = anly?.apps.find(a => a.appId === appId);
-        if (app?.pricingTiers) app.pricingTiers.splice(idx, 1);
+        if (!app.featPricing) app.featPricing = {};
+        if (!app.featPricing[featId]) app.featPricing[featId] = {};
+        app.featPricing[featId].type = type;
     });
     OL.openAnalysisMatrix(anlyId);
 };
 
-// New function to render the Pricing Rate Card at the top of the matrix
-OL.renderPricingHeader = function(anly, totalColspan) {
-    const tiers = anly.pricingTiers || []; // Array of {name: "Pro", price: 50}
-    
-    return `
-        <tr class="category-header-row" style="background: rgba(var(--accent-rgb), 0.1);">
-            <td colspan="${totalColspan}" style="padding: 15px;">
-                <div style="display: flex; gap: 20px; align-items: center;">
-                    <div style="flex: 1;">
-                        <label class="tiny muted uppercase">Base Fee (per user/mo)</label>
-                        <input type="number" class="price-input" value="${anly.basePrice || 0}" 
-                               onblur="OL.updateAnalysisPrice('${anly.id}', 'basePrice', this.value)">
-                    </div>
-                    <div id="tiers-container" style="display: flex; gap: 15px; flex: 3;">
-                        ${tiers.map((t, idx) => `
-                            <div class="tier-pill">
-                                <input type="text" class="tier-name" value="${esc(t.name)}" onblur="OL.updateTier('${anly.id}', ${idx}, 'name', this.value)">
-                                <input type="number" class="tier-price" value="${t.price}" onblur="OL.updateTier('${anly.id}', ${idx}, 'price', this.value)">
-                                <button class="tiny-close" onclick="OL.removeTier('${anly.id}', ${idx})">×</button>
-                            </div>
-                        `).join('')}
-                        <button class="btn tiny soft" onclick="OL.addTier('${anly.id}')">+ Add Tier</button>
-                    </div>
-                </div>
-            </td>
-        </tr>
-    `;
-};
-
-// Inside renderAnalysisMatrixRows for each feature
-const costLogic = (f) => {
-    if (f.costType === 'addon') {
-        return `<input type="number" class="tiny-price" value="${f.costValue || 0}" 
-                       onblur="OL.updateFeaturePrice('${anlyId}', '${f.id}', this.value)">`;
-    }
-    if (f.costType === 'tier') {
-        return `<select class="tiny-select" onchange="OL.updateFeatureTier('${anlyId}', '${f.id}', this.value)">
-                    ${anly.pricingTiers.map(t => `<option value="${t.name}" ${f.tierName === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
-                </select>`;
-    }
-    return `<span class="tiny muted">Included</span>`;
-};
-
-OL.calculateTotalCost = function(anly) {
-    let total = parseFloat(anly.basePrice || 0);
-    
-    // 1. Find the most expensive Tier selected across all features
-    const selectedTierNames = (anly.features || [])
-        .filter(f => f.costType === 'tier')
-        .map(f => f.tierName);
-    
-    const activeTiers = (anly.pricingTiers || [])
-        .filter(t => selectedTierNames.includes(t.name));
-    
-    if (activeTiers.length > 0) {
-        const maxTierCost = Math.max(...activeTiers.map(t => t.price));
-        total += maxTierCost;
-    }
-
-    // 2. Add all standalone Add-ons
-    const addons = (anly.features || [])
-        .filter(f => f.costType === 'addon')
-        .reduce((sum, f) => sum + parseFloat(f.costValue || 0), 0);
-    
-    total += addons;
-    return total;
+OL.updateAppFeatTier = async function(anlyId, appId, featId, tierName) {
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
+        app.featPricing[featId].tierName = tierName;
+    });
+    OL.openAnalysisMatrix(anlyId);
 };
 
 // Update the Base Price for a specific App in the analysis
@@ -7447,6 +7360,50 @@ OL.updateAppTier = async function(anlyId, appId, tierIdx, field, value) {
             app.pricingTiers[tierIdx][field] = field === 'price' ? (parseFloat(value) || 0) : value;
         }
     });
+};
+
+OL.removeAppTier = async function(anlyId, appId, idx) {
+    if(!confirm("Remove this pricing tier?")) return;
+    await OL.updateAndSync(() => {
+        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+        const app = anly?.apps.find(a => a.appId === appId);
+        if (app?.pricingTiers) app.pricingTiers.splice(idx, 1);
+    });
+    OL.openAnalysisMatrix(anlyId);
+};
+
+OL.calculateAppTotalCost = function(appObj) {
+    let total = parseFloat(appObj.basePrice || 0);
+    
+    // 1. Calculate Tier Cost (High-Water Mark)
+    // We find the highest price among all tiers that are currently selected for at least one feature
+    const activeTierNames = new Set();
+    if (appObj.featPricing) {
+        Object.values(appObj.featPricing).forEach(p => {
+            if (p.type === 'tier' && p.tierName) activeTierNames.add(p.tierName);
+        });
+    }
+
+    if (activeTierNames.size > 0) {
+        const tierPrices = (appObj.pricingTiers || [])
+            .filter(t => activeTierNames.has(t.name))
+            .map(t => parseFloat(t.price) || 0);
+        
+        if (tierPrices.length > 0) {
+            total += Math.max(...tierPrices);
+        }
+    }
+
+    // 2. Calculate Add-ons (Cumulative)
+    if (appObj.featPricing) {
+        Object.values(appObj.featPricing).forEach(p => {
+            if (p.type === 'addon') {
+                total += parseFloat(p.addonPrice || 0);
+            }
+        });
+    }
+
+    return total;
 };
 
 // 4. ADD APP TO ANALYSIS OR REMOVE
