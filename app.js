@@ -7240,6 +7240,74 @@ OL.renameMatrix = function(anlyId, newName, isMaster) {
     }
 };
 
+// New function to render the Pricing Rate Card at the top of the matrix
+OL.renderPricingHeader = function(anly) {
+    const tiers = anly.pricingTiers || []; // Array of {name: "Pro", price: 50}
+    
+    return `
+        <tr class="category-header-row" style="background: rgba(var(--accent-rgb), 0.1);">
+            <td colspan="${totalColspan}" style="padding: 15px;">
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <div style="flex: 1;">
+                        <label class="tiny muted uppercase">Base Fee (per user/mo)</label>
+                        <input type="number" class="price-input" value="${anly.basePrice || 0}" 
+                               onblur="OL.updateAnalysisPrice('${anly.id}', 'basePrice', this.value)">
+                    </div>
+                    <div id="tiers-container" style="display: flex; gap: 15px; flex: 3;">
+                        ${tiers.map((t, idx) => `
+                            <div class="tier-pill">
+                                <input type="text" class="tier-name" value="${esc(t.name)}" onblur="OL.updateTier('${anly.id}', ${idx}, 'name', this.value)">
+                                <input type="number" class="tier-price" value="${t.price}" onblur="OL.updateTier('${anly.id}', ${idx}, 'price', this.value)">
+                                <button class="tiny-close" onclick="OL.removeTier('${anly.id}', ${idx})">×</button>
+                            </div>
+                        `).join('')}
+                        <button class="btn tiny soft" onclick="OL.addTier('${anly.id}')">+ Add Tier</button>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    `;
+};
+
+// Inside renderAnalysisMatrixRows for each feature
+const costLogic = (f) => {
+    if (f.costType === 'addon') {
+        return `<input type="number" class="tiny-price" value="${f.costValue || 0}" 
+                       onblur="OL.updateFeaturePrice('${anlyId}', '${f.id}', this.value)">`;
+    }
+    if (f.costType === 'tier') {
+        return `<select class="tiny-select" onchange="OL.updateFeatureTier('${anlyId}', '${f.id}', this.value)">
+                    ${anly.pricingTiers.map(t => `<option value="${t.name}" ${f.tierName === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
+                </select>`;
+    }
+    return `<span class="tiny muted">Included</span>`;
+};
+
+OL.calculateTotalCost = function(anly) {
+    let total = parseFloat(anly.basePrice || 0);
+    
+    // 1. Find the most expensive Tier selected across all features
+    const selectedTierNames = (anly.features || [])
+        .filter(f => f.costType === 'tier')
+        .map(f => f.tierName);
+    
+    const activeTiers = (anly.pricingTiers || [])
+        .filter(t => selectedTierNames.includes(t.name));
+    
+    if (activeTiers.length > 0) {
+        const maxTierCost = Math.max(...activeTiers.map(t => t.price));
+        total += maxTierCost;
+    }
+
+    // 2. Add all standalone Add-ons
+    const addons = (anly.features || [])
+        .filter(f => f.costType === 'addon')
+        .reduce((sum, f) => sum + parseFloat(f.costValue || 0), 0);
+    
+    total += addons;
+    return total;
+};
+
 // 4. ADD APP TO ANALYSIS OR REMOVE
 
 OL.filterAnalysisAppSearch = function (anlyId, isMaster, query) {
