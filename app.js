@@ -7357,7 +7357,6 @@ OL.renameMatrix = function(anlyId, newName, isMaster) {
     }
 };
 
-
 // PRICING PARAMETERS //
 
 OL.updateAppFeatCostType = async function(anlyId, appId, featId, type) {
@@ -11695,6 +11694,8 @@ function renderResourcesInWorkflowLane(workflowId, laneId) {
     }).join('');
 }
 
+// LEVEL 3: Render Steps in Resources
+
 window.renderLevel3Canvas = function(resourceId) {
     const res = OL.getResourceById(resourceId);
     if (!res) return `<div class="p-20 muted text-center">Resource not found</div>`;
@@ -12223,11 +12224,13 @@ OL.handleUniversalDrop = async function(e, sectionId) {
 
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
         else if (activeParentId) {
-            const parent = OL.getResourceById(activeParentId);
+            // 🎯 Use the existing source array we defined at the top of the function
+            const parent = source.find(r => String(r.id) === String(activeParentId));
+            
             if (!parent) return;
             if (!parent.steps) parent.steps = [];
 
-            // 1. Dropping a NEW item (Factory or Library Resource)
+            // 1. Dropping a NEW item
             if (itemType.includes('factory') || itemType === 'resource' || itemType === 'workflow') {
                 const stepName = e.dataTransfer.getData("stepName");
                 const stepType = e.dataTransfer.getData("stepType");
@@ -12239,51 +12242,40 @@ OL.handleUniversalDrop = async function(e, sectionId) {
                 const newStep = { 
                     id: 'step-' + Date.now(), 
                     name: stepName || (verb ? `${verb} ${obj}` : "New Step"), 
+                    // 🚀 Ensure L3 (focusedResourceId) always gets the sectionId as the type
                     type: state.focusedResourceId ? sectionId : (stepType || 'Action'),
                     gridLane: state.focusedWorkflowId ? sectionId : null,
                     resourceLinkId: (moveId === 'new' || moveId === 'factory') ? null : moveId,
                     verb: verb || null,
                     object: obj || null,
-                    outcomes: []
+                    outcomes: [],
+                    mapOrder: targetIdx
                 };
                 
                 parent.steps.splice(targetIdx, 0, newStep);
             } 
             
-            // 🚀 2. REARRANGING AN EXISTING STEP (This was missing!)
+            // 2. Rearranging Existing
             else if (itemType === 'step') {
-                // Find the step in the current parent's array
                 const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
-                
                 if (actualDragIdx > -1) {
-                    // Remove it from old spot
                     const [movingItem] = parent.steps.splice(actualDragIdx, 1);
                     
-                    // Update its context (L3 uses sectionId as Type, L2 uses it as gridLane)
+                    // 🚀 Update context based on which view we are in
                     if (state.focusedResourceId) {
-                        movingItem.type = sectionId;
+                        movingItem.type = sectionId; // 'Trigger' or 'Action'
                     } else {
-                        movingItem.gridLane = sectionId;
+                        movingItem.gridLane = sectionId; // L2 Grid Lane ID
                     }
                     
-                    // Insert at new target spot
                     parent.steps.splice(targetIdx, 0, movingItem);
-                    console.log(`🔄 Rearranged Step: ${movingItem.name} to index ${targetIdx}`);
                 }
             }
 
-            // 3. Normalize mapOrder for everyone in this parent
+            // 3. 💾 Normalize mapOrder for PERSISTENCE
             parent.steps.forEach((s, i) => {
                 s.mapOrder = i;
             });
-
-            // 4. Persistence Sync
-            const client = getActiveClient();
-            const targetSource = isVault ? state.master.resources : client.projectData.localResources;
-            const pIdx = targetSource.findIndex(r => String(r.id) === String(activeParentId));
-            if (pIdx > -1) {
-                targetSource[pIdx] = { ...parent };
-            }
         }
 
         // --- BRANCH C: STAGE REARRANGE (Moving Columns) ---
