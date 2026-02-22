@@ -7069,7 +7069,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 <div style="font-size: 10px; color: var(--muted); margin-bottom: 2px;">TOTAL</div>
                                 ${totalWeight.toFixed(1)}%
                                 <div onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" 
-                                style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%">⚖️ Balance</div>
+                                style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%">⚖️</div>
                             </td>
                             ${(anly.apps || []).map(appObj => {
                                 const score = OL.calculateAnalysisScore(appObj, anly.features || []);
