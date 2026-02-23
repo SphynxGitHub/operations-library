@@ -2526,6 +2526,31 @@ body.fs-mode-active {
         display: none !important;
     }
 
+    .print-placeholder {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        border: none !important;
+        background: transparent !important;
+        color: #000 !important;
+        font-family: inherit;
+        font-size: 11px;
+        line-height: 1.4;
+        margin: 0;
+        padding: 5px 0;
+    }
+
+    /* Executive summary placeholder should be larger */
+    .executive-summary-wrapper .print-placeholder {
+        font-size: 14px;
+        padding: 10px 0;
+    }
+
+    /* Hide empty placeholders so they don't take up space */
+    .print-placeholder:empty {
+        display: none !important;
+    }
+    
     /* 2. Force the Workspace to the very top */
     #workflow-fs-overlay {
         position: absolute !important; 

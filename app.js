@@ -7323,20 +7323,39 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
-    // 🚀 Force-calculate every textarea's scrollHeight right now
-    container.querySelectorAll('textarea').forEach(ta => {
-        ta.style.height = 'auto'; // Reset
-        ta.style.height = ta.scrollHeight + 'px'; // Set to exact content height
+    // 1. Find all textareas (Notes + Executive Summary)
+    const textareas = container.querySelectorAll('textarea');
+    const placeholders = [];
+
+    // 2. Swap them for DIVs so they flow naturally in print
+    textareas.forEach((ta, i) => {
+        const div = document.createElement('div');
+        div.className = 'print-placeholder ' + ta.className;
+        div.style.whiteSpace = 'pre-wrap';
+        div.style.minHeight = '20px';
+        div.innerText = ta.value;
+        
+        // Hide the original textarea, insert the div
+        ta.style.display = 'none';
+        ta.parentNode.insertBefore(div, ta);
+        placeholders.push({ ta, div });
     });
 
     document.body.classList.add("print-mode-active");
     container.classList.add("print-target");
 
-    // Give the browser 250ms to reflow the layout with the new heights
+    // 3. Trigger Print
     setTimeout(() => {
         window.print();
+
+        // 4. Cleanup: Put it back to normal for the screen
         document.body.classList.remove("print-mode-active");
         container.classList.remove("print-target");
+        
+        placeholders.forEach(({ ta, div }) => {
+            ta.style.display = 'block';
+            div.remove();
+        });
     }, 250);
 };
 
