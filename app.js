@@ -7323,40 +7323,43 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
-    // 1. Find all textareas (Notes + Executive Summary)
-    const textareas = container.querySelectorAll('textarea');
-    const placeholders = [];
+    // 1. Cleanup any existing placeholders just in case
+    container.querySelectorAll('.print-placeholder').forEach(el => el.remove());
 
-    // 2. Swap them for DIVs so they flow naturally in print
-    textareas.forEach((ta, i) => {
+    const textareas = container.querySelectorAll('textarea');
+    const itemsToRestore = [];
+
+    // 2. Create the flowable divs
+    textareas.forEach((ta) => {
         const div = document.createElement('div');
-        div.className = 'print-placeholder ' + ta.className;
-        div.style.whiteSpace = 'pre-wrap';
-        div.style.minHeight = '20px';
+        div.className = 'print-placeholder';
+        // Match the text exactly including line breaks
         div.innerText = ta.value;
         
-        // Hide the original textarea, insert the div
-        ta.style.display = 'none';
+        // Style the div to match the location
+        div.setAttribute('style', 'white-space: pre-wrap; width: 100%; display: block;');
+        
+        // Insert it and track it
         ta.parentNode.insertBefore(div, ta);
-        placeholders.push({ ta, div });
+        itemsToRestore.push({ ta, div });
     });
 
+    // 3. Enter Print Mode
     document.body.classList.add("print-mode-active");
     container.classList.add("print-target");
 
-    // 3. Trigger Print
     setTimeout(() => {
         window.print();
 
-        // 4. Cleanup: Put it back to normal for the screen
+        // 4. Exit Print Mode & Cleanup
         document.body.classList.remove("print-mode-active");
         container.classList.remove("print-target");
         
-        placeholders.forEach(({ ta, div }) => {
-            ta.style.display = 'block';
+        itemsToRestore.forEach(({ ta, div }) => {
             div.remove();
         });
-    }, 250);
+        console.log("✅ Print cleanup complete.");
+    }, 500); // Slightly longer delay to ensure the OS print spooler has the data
 };
 
 OL.renameMatrix = function(anlyId, newName, isMaster) {
