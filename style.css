@@ -1398,7 +1398,6 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
     padding: 10px 12px;
     border-radius: 8px;
     font-family: inherit;
-    font-size: 13px;
     outline: none;
     transition: border-color 0.2s;
 }
