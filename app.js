@@ -7055,9 +7055,8 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 <button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button>
                             </td>
                             <td class="bold center" style="color: ${Math.abs(totalWeight - 100) < 0.1 ? 'var(--success)' : 'var(--danger)'}; border: 1px solid var(--line); font-weight: bold; padding:.5%;">
-                                <div style="font-size: 10px; color: var(--muted); margin-bottom: 2px;">TOTAL</div>
                                 ${totalWeight.toFixed(1)}%
-                                <div onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" 
+                                <div id="balance-button" onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" 
                                 style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%">⚖️</div>
                             </td>
                             ${(anly.apps || []).map(appObj => {
