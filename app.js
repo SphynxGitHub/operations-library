@@ -7020,7 +7020,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 return `
                                     <td style="padding: 10px; border: 1px solid var(--line);">
                                         <div class="app-rate-card">                                           
-                                            <div class="stacked-tiers-list" style="display:flex; flex-direction:column; gap:10px;">
+                                            <div class="stacked-tiers-list" style="display:flex; flex-direction:column; gap:2px;">
                                                 ${tiers.map((t, idx) => `
                                                     <div class="tier-entry" style="position:relative; padding: 6px; border-radius: 4px;">
                                                         <button class="card-delete-btn" onclick="OL.removeAppTier('${analysisId}', '${appObj.appId}', ${idx})" 
