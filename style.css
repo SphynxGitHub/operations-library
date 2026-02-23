@@ -2479,32 +2479,38 @@ body.fs-mode-active {
         color: transparent;
         opacity: 0 !important;
     }
-
-    textarea, 
+    
     .matrix-notes-auto, 
-    .modal-textarea {
+    .modal-textarea,
+    .executive-summary-wrapper textarea {
+        display: block !important;
         height: auto !important;
         min-height: auto !important;
         max-height: none !important;
         overflow: visible !important;
         border: none !important;
-        resize: none !important;
-        display: block !important;
-        white-space: pre-wrap !important; /* Preserves line breaks */
+        padding: 0 !important;
+        margin: 0 !important;
+        line-height: 1.4 !important;
+        white-space: pre-wrap !important; /* This preserves your line breaks */
+        background: transparent !important;
+        color: #000 !important; /* Ensure high contrast for printing */
+        -webkit-print-color-adjust: exact;
     }
 
-    /* 2. Fix the Executive Summary container */
-    .executive-summary-wrapper {
+    /* Force the parent wrapper to expand to the child's height */
+    .executive-summary-wrapper,
+    .matrix-card-main {
         height: auto !important;
         overflow: visible !important;
-        page-break-inside: avoid !important;
-        border: 1px solid #eee !important;
+        display: block !important;
+        page-break-inside: auto !important;
     }
 
-    /* 3. Ensure the table cells don't restrict height */
+    /* Ensure table cells don't constrain the height */
     .matrix-table td {
         height: auto !important;
-        overflow: visible !important;
+        vertical-align: top !important;
     }
 
     /* 4. Hide scrollbars on the main containers */

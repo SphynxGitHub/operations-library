@@ -7323,16 +7323,16 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
-    // 🚀 NEW: Force all auto-height elements to recalculate before printing
-    container.querySelectorAll('textarea').forEach(el => {
-        el.style.height = 'auto';
-        el.style.height = el.scrollHeight + 'px';
+    // 🚀 Force-calculate every textarea's scrollHeight right now
+    container.querySelectorAll('textarea').forEach(ta => {
+        ta.style.height = 'auto'; // Reset
+        ta.style.height = ta.scrollHeight + 'px'; // Set to exact content height
     });
 
     document.body.classList.add("print-mode-active");
     container.classList.add("print-target");
 
-    // Small delay to let the DOM settle before the print dialog freezes the thread
+    // Give the browser 250ms to reflow the layout with the new heights
     setTimeout(() => {
         window.print();
         document.body.classList.remove("print-mode-active");
