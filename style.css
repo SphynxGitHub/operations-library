@@ -2397,6 +2397,7 @@ body.fs-mode-active {
     
     .price-input-tiny, input, textarea {
         border: none !important;
+        color: #000 !important; /* Ensure high contrast for printing */
     }
     .tiny-select {
         border: none !important;
@@ -2470,13 +2471,6 @@ body.fs-mode-active {
         margin-top: 50px;
         page-break-inside: avoid;
         display: block !important;
-    }
-
-    .matrix-notes-auto {
-        height: auto !important;
-        overflow: visible !important;
-        border: none !important;
-        padding: 0 !important;
     }
     
     /* Hide the placeholder text during print */
