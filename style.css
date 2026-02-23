@@ -2472,7 +2472,6 @@ body.fs-mode-active {
         overflow: visible !important;
         border: none !important;
         padding: 0 !important;
-        color: #333 !important; /* Darker text for paper */
     }
     
     /* Hide the placeholder text during print */

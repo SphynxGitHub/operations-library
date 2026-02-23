@@ -7095,7 +7095,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     <textarea class="modal-textarea" 
                               placeholder="Add your final analysis notes or decision rationale here..."
                               onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
-                              style="min-height: 120px; width: 100%; background: rgba(255,255,255,0.03); color: #ddd; border: 1px solid rgba(255,255,255,0.1); padding: 12px; font-family: inherit; font-size: 14px; line-height: 1.5; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
+                              style="min-height: 120px; height: 100%; overflow:hidden; width: 100%; background: rgba(255,255,255,0.03); 
+                              color: #ddd; border: 1px solid rgba(255,255,255,0.1); padding: 12px; font-family: inherit; 
+                              line-height: 1.5; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
                 </div>
             </div>
         </div>
@@ -7264,7 +7266,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                             <textarea 
                             placeholder="Notes..." 
                             class="matrix-notes-auto"
-                            style="width: 100%; min-height: 40px; height: auto; overflow: hidden; font-size: 11px; line-height: 1.4; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
+                            style="width: 100%; min-height: 40px; height: auto; overflow: hidden; line-height: 1.1; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
                             oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
                             onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
                         >${esc(currentNote)}</textarea>
