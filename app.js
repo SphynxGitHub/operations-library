@@ -7107,6 +7107,13 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
         container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     state.activeMatrixId = analysisId;
+
+    // Add at the end of OL.openAnalysisMatrix
+    setTimeout(() => {
+        document.querySelectorAll('.matrix-notes-auto').forEach(el => {
+            el.style.height = el.scrollHeight + 'px';
+        });
+    }, 50);
 }
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
@@ -7255,12 +7262,14 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                 </div>
                             </div>
                             <textarea 
-                                placeholder="Notes..."
-                                style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
-                                onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
-                            >${esc(currentNote)}</textarea>
-                        </div>
-                    </td>`;
+                            placeholder="Notes..." 
+                            class="matrix-notes-auto"
+                            style="width: 100%; min-height: 40px; height: auto; overflow: hidden; font-size: 11px; line-height: 1.4; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
+                            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                            onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
+                        >${esc(currentNote)}</textarea>
+                    </div>
+                </td>`;
             }).join('');
             rowsHtml += 
         `</tr>`;

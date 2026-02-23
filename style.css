@@ -2467,6 +2467,20 @@ body.fs-mode-active {
         display: block !important;
     }
 
+    .matrix-notes-auto {
+        height: auto !important;
+        overflow: visible !important;
+        border: none !important;
+        padding: 0 !important;
+        color: #333 !important; /* Darker text for paper */
+    }
+    
+    /* Hide the placeholder text during print */
+    .matrix-notes-auto::placeholder {
+        color: transparent;
+        opacity: 0 !important;
+    }
+
     /* 2. Force the Workspace to the very top */
     #workflow-fs-overlay {
         position: absolute !important; 
