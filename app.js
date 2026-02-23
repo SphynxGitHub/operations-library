@@ -7234,7 +7234,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                         onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                                 </div>
 
-                                <select class="tiny-select" style="width:100%;" 
+                                <select class="tiny-select" 
                                     onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
                                     <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
                                     <optgroup label="Included In:">
