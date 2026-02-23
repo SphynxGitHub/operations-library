@@ -7027,13 +7027,13 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                                                 style="position:absolute; top:-2px; right:-10px; background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0;">×</button>
                                                         
                                                         <div style="display:flex; justify-content: space-between; gap:4px;">
-                                                            <input type="text" class="price-input-tiny" style="width:100%; color: #ccc; background:transparent;" 
+                                                            <input type="text" class="price-input-tiny" style="width:100%; color: #ccc; background:transparent;  border: 1px solid var(--panel-border);" 
                                                                 placeholder="Tier Name (e.g. Pro)" value="${esc(t.name)}" 
                                                                 onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value)">
                                                             
                                                             <div style="display:flex; align-items:center; gap:4px;">
                                                                 <span class="tiny muted">$</span>
-                                                                <input type="number" class="price-input-tiny" style="width:100%; color: #ccc; background:transparent;" 
+                                                                <input type="number" class="price-input-tiny" style="width:100%; color: #ccc; background:transparent;  border: 1px solid var(--panel-border);" 
                                                                     placeholder="0" value="${t.price}" 
                                                                     onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
                                                             </div>
@@ -7249,7 +7249,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                 <div id="addon-price-${appObj.appId}-${feat.id}" 
                                     style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
                                     <span class="tiny muted">$</span>
-                                    <input type="number" class="price-input-tiny" style="max-width:40px; color: #ccc; background:transparent;"
+                                    <input type="number" class="price-input-tiny" style="max-width:40px; color: #ccc; background:transparent; border: 1px solid var(--panel-border);"
                                         value="${currentAddonPrice}" 
                                         onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
                                 </div>
