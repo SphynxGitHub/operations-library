@@ -6978,7 +6978,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     </div>
                 </div>
 
-                <table class="matrix-table" style="width: 100%; margin-top: 20px; border-collapse: collapse;">
+                <table class="matrix-table" style="width: 100%; margin-top: 20px; border-collapse: collapse; table-layout: fixed;">
                    <thead>
                         <tr>
                             <th style="text-align: left;">Features</th>
@@ -7026,7 +7026,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                                         <button class="card-delete-btn" onclick="OL.removeAppTier('${analysisId}', '${appObj.appId}', ${idx})" 
                                                                 style="position:absolute; top:-2px; right:-10px; background:none; border:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0;">×</button>
                                                         
-                                                        <div style="display:flex; flex-direction:column; gap:4px;">
+                                                        <div style="display:flex; justify-content: space-between; gap:4px;">
                                                             <input type="text" class="price-input-tiny" style="width:100%; font-size:10px; background:transparent;" 
                                                                 placeholder="Tier Name (e.g. Pro)" value="${esc(t.name)}" 
                                                                 onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value)">
