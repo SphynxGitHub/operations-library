@@ -2434,6 +2434,10 @@ body.fs-mode-active {
         font-size: 10pt !important;
     }
 
+    .tiny-select {
+        border: none;
+    }
+
     /* 8. Categorization Headers - Ensure they span correctly */
     .category-header-row td {
         background-color: #f9f9f9 !important;
