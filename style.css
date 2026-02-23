@@ -2399,7 +2399,7 @@ body.fs-mode-active {
         border: none !important;
     }
 
-    textarea {
+    textarea, .price-input-tiny {
         color: #000 !important; /* Ensure high contrast for printing */
     }
 
