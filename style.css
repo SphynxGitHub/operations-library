@@ -2390,8 +2390,8 @@ body.fs-mode-active {
       padding: 4pt auto;
     }
     
-    input, textarea, .price-input-tiny {
-      border: none;
+    input, textarea, .price-input-tiny, tiny-select {
+        border: none;
     }
 
     .matrix-table {
@@ -2432,10 +2432,6 @@ body.fs-mode-active {
         background: transparent !important;
         font-family: inherit !important;
         font-size: 10pt !important;
-    }
-
-    .tiny-select {
-        border: none;
     }
 
     /* 8. Categorization Headers - Ensure they span correctly */
