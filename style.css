@@ -2390,8 +2390,8 @@ body.fs-mode-active {
       padding: 4pt auto;
     }
     
-    input, textarea, .price-input-tiny, tiny-select {
-        border: none;
+    .price-input-tiny, tiny-select, input, textarea {
+        border: none !important;
     }
 
     .matrix-table {
