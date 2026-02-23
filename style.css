@@ -2390,7 +2390,7 @@ body.fs-mode-active {
       padding: 4pt auto;
     }
     
-    input, textarea {
+    input, textarea, .price-input-tiny {
       border: none;
     }
 
