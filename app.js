@@ -7091,14 +7091,13 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
                         <label class="modal-section-label" style="margin: 0; font-size: 1rem; color: var(--accent);">Executive Summary & Recommendations</label>
                     </div>
-                    <textarea class="modal-textarea" 
-                              placeholder="Add your final analysis notes or decision rationale here..."
-                              oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
-                              onblur="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
-                              onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
-                              style="display: block; height: auto; min-height: auto; max-height: none; overflow:hidden; width: 100%; 
-                              background: rgba(255,255,255,0.03); color: #ddd; border: 1px solid rgba(255,255,255,0.1); 
-                              padding: 12px; font-family: inherit; line-height: 1.1; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
+                    <textarea class="modal-textarea matrix-notes-auto" 
+                            placeholder="Add your final analysis notes or decision rationale here..."
+                            oninput="this.style.height = 'auto'; this.style.height = this.scrollHeight + 'px'"
+                            onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
+                            style="display: block; width: 100%; height: auto; min-height: 100px; overflow: hidden; 
+                                    background: rgba(255,255,255,0.03); color: #ddd; border: 1px solid rgba(255,255,255,0.1); 
+                                    padding: 12px; font-family: inherit; line-height: 1.4; border-radius: 4px; resize: none;">${esc(anly.summary || "")}</textarea>
                 </div>
             </div>
         </div>
@@ -7116,6 +7115,11 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
         document.querySelectorAll('.matrix-notes-auto').forEach(el => {
             el.style.height = el.scrollHeight + 'px';
         });
+        const textareas = container.querySelectorAll('textarea');
+        textareas.forEach(ta => {
+            ta.style.height = 'auto';
+            ta.style.height = ta.scrollHeight + 'px';
+        })
     }, 50);
 }
 
