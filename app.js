@@ -7174,7 +7174,6 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     
     features.forEach(feat => {
         const catName = feat.category || "General";
-        const costType = feat.costType || 'included';
 
         // 1. Inject Category Header Row
         if (catName !== currentCategory) {
@@ -7287,34 +7286,22 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
     let anly = null;
 
-    // 🎯 TARGETED SEARCH: Now that we know it's in localAnalyses
-    const clientList = Array.isArray(state.clients) ? state.clients : Object.values(state.clients || {});
-    
-    // Check Master first
-    anly = (state.master?.analyses || []).find(a => String(a.id) === String(analysisId));
-
-    // Check Clients (Searching both 'analyses' and 'localAnalyses')
-    if (!anly) {
-        clientList.forEach(c => {
-            const pool = [
-                ...(c.projectData?.localAnalyses || []),
-                ...(c.projectData?.analyses || []),
-                ...(c.analyses || [])
-            ];
-            const found = pool.find(a => String(a.id) === String(analysisId));
-            if (found) anly = found;
-        });
+    // 🚀 THE SCOPE FIX: Direct path to data source
+    if (isMaster) {
+        anly = (state.master?.analyses || []).find(a => String(a.id) === String(analysisId));
+    } else {
+        const client = getActiveClient();
+        anly = (client?.projectData?.localAnalyses || []).find(a => String(a.id) === String(analysisId));
     }
 
-    if (!anly) return console.error("❌ Still can't find analysis:", analysisId);
+    if (!anly) return console.error("❌ Analysis not found in scope:", analysisId);
 
-    // 2. Apply the update
     const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
     if (appEntry) {
         if (!appEntry.notes) appEntry.notes = {};
         appEntry.notes[featId] = value;
 
-        console.log(`💾 Note persisted to localAnalyses for ${anly.name}`);
+        console.log(`💾 Note persisted to ${isMaster ? 'Master' : 'Local'} scope.`);
         await OL.persist();
     }
 };
