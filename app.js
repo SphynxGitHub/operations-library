@@ -7223,7 +7223,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                         <div style="display: flex; flex-direction: column; gap: 4px;">
                             <div style="display: flex; justify-content: space-between">
                                 <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
-                                    <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
+                                    <span style="color: var(--muted); font-weight: bold; width: 25px;">Score</span>
                                     <input type="number" 
                                         min="0"
                                         max="3"
@@ -7239,7 +7239,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                     <optgroup label="Included In:">
                                         ${appTiers.map(t => `
                                             <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
-                                                Tier: ${esc(t.name)}
+                                                <span style=" font-weight: bold;">Tier: ${esc(t.name)}</span>
                                             </option>
                                         `).join('')}
                                     </optgroup>
