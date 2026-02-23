@@ -7234,27 +7234,25 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                         onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                                 </div>
 
-                               <div style="padding: 6px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
-                                    <select class="tiny-select" style="width:100%;" 
-                                        onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                        <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
-                                        <optgroup label="Included In:">
-                                            ${appTiers.map(t => `
-                                                <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
-                                                    Tier: ${esc(t.name)}
-                                                </option>
-                                            `).join('')}
-                                        </optgroup>
-                                        <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
-                                    </select>
+                                <select class="tiny-select" style="width:100%;" 
+                                    onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                    <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
+                                    <optgroup label="Included In:">
+                                        ${appTiers.map(t => `
+                                            <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
+                                                Tier: ${esc(t.name)}
+                                            </option>
+                                        `).join('')}
+                                    </optgroup>
+                                    <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
+                                </select>
 
-                                    <div id="addon-price-${appObj.appId}-${feat.id}" 
-                                        style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                        <span class="tiny muted">Fee $</span>
-                                        <input type="number" class="price-input-tiny" style="width:100%;" 
-                                            value="${currentAddonPrice}" 
-                                            onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                    </div>
+                                <div id="addon-price-${appObj.appId}-${feat.id}" 
+                                    style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                    <span class="tiny muted">Fee $</span>
+                                    <input type="number" class="price-input-tiny" style="width:100%;" 
+                                        value="${currentAddonPrice}" 
+                                        onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
                                 </div>
                             </div>
                             <textarea 
