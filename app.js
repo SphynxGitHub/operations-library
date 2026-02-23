@@ -7249,7 +7249,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 
                                 <div id="addon-price-${appObj.appId}-${feat.id}" 
                                     style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                    <span class="tiny muted">Fee $</span>
+                                    <span class="tiny muted">$</span>
                                     <input type="number" class="price-input-tiny" style="width:100%;" 
                                         value="${currentAddonPrice}" 
                                         onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
