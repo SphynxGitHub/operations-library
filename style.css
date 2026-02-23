@@ -2545,11 +2545,11 @@ body.fs-mode-active {
         margin: 0;
         padding: 5px 0;
         page-break-inside: avoid; /* Prevents a single note from splitting mid-sentence if possible */
+        text-align: left;
     }
 
     /* Executive summary placeholder should be larger */
     .executive-summary-wrapper .print-placeholder {
-        font-size: 14px;
         padding: 10px 0;
         page-break-inside: auto; /* Allows summary to span pages */
     }
