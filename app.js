@@ -7318,16 +7318,21 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
-    // 1. Add a temporary class for print styling
+    // 🚀 NEW: Force all auto-height elements to recalculate before printing
+    container.querySelectorAll('textarea').forEach(el => {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    });
+
     document.body.classList.add("print-mode-active");
     container.classList.add("print-target");
 
-    // 2. Trigger the native print dialog
-    window.print();
-
-    // 3. Cleanup
-    document.body.classList.remove("print-mode-active");
-    container.classList.remove("print-target");
+    // Small delay to let the DOM settle before the print dialog freezes the thread
+    setTimeout(() => {
+        window.print();
+        document.body.classList.remove("print-mode-active");
+        container.classList.remove("print-target");
+    }, 250);
 };
 
 OL.renameMatrix = function(anlyId, newName, isMaster) {

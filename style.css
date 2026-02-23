@@ -2480,6 +2480,47 @@ body.fs-mode-active {
         opacity: 0 !important;
     }
 
+    textarea, 
+    .matrix-notes-auto, 
+    .modal-textarea {
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        border: none !important;
+        resize: none !important;
+        display: block !important;
+        white-space: pre-wrap !important; /* Preserves line breaks */
+    }
+
+    /* 2. Fix the Executive Summary container */
+    .executive-summary-wrapper {
+        height: auto !important;
+        overflow: visible !important;
+        page-break-inside: avoid !important;
+        border: 1px solid #eee !important;
+    }
+
+    /* 3. Ensure the table cells don't restrict height */
+    .matrix-table td {
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* 4. Hide scrollbars on the main containers */
+    .matrix-interaction-wrapper,
+    .matrix-card-main,
+    #activeAnalysisMatrix {
+        overflow: visible !important;
+        height: auto !important;
+        display: block !important;
+    }
+
+    /* 5. Hide the actual scrollbar track in Webkit browsers */
+    ::-webkit-scrollbar {
+        display: none !important;
+    }
+
     /* 2. Force the Workspace to the very top */
     #workflow-fs-overlay {
         position: absolute !important; 
