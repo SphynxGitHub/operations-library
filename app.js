@@ -7004,7 +7004,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     <tbody>
                         <tr class="category-header-row" style="background: rgba(var(--accent-rgb), 0.1); border-bottom: 1px solid var(--line);">
                             <td colspan="${totalColspan}" style="padding: 10px 12px;">
-                                <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="display: flex; align-items: center; gap: 2px;">
                                     <span class="tiny">💰</span>
                                     <span style="color: var(--accent); font-weight: bold; text-transform: uppercase;">PRICING & TIERS DEFINITION</span>
                                 </div>
