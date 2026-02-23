@@ -7222,40 +7222,41 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                 return `
                     <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
                         <div style="display: flex; flex-direction: column; gap: 10px;">
-                            <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
-                                <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
-                                <input type="number" 
-                                    min="0"
-                                    max="3"
-                                    class="matrix-score-input" 
-                                    style="width: 100%; background: transparent; border: none; color: var(--accent); font-weight: bold; text-align: right; font-size: 12px;"
-                                    value="${currentScore}"
-                                    onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
-                            </div>
+                            <div style="display: flex; justify-content: space-between">
+                                <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px;">
+                                    <span style="font-size: 9px; color: var(--muted); font-weight: bold; width: 25px;">Score</span>
+                                    <input type="number" 
+                                        min="0"
+                                        max="3"
+                                        class="matrix-score-input" 
+                                        style="width: 100%; background: transparent; border: none; color: var(--accent); font-weight: bold; text-align: right; font-size: 12px;"
+                                        value="${currentScore}"
+                                        onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
+                                </div>
 
-                           <div style="padding: 6px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
-                                <select class="tiny-select" style="width:100%;" 
-                                    onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                    <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
-                                    <optgroup label="Included In:">
-                                        ${appTiers.map(t => `
-                                            <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
-                                                ${esc(t.name)}
-                                            </option>
-                                        `).join('')}
-                                    </optgroup>
-                                    <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
-                                </select>
+                               <div style="padding: 6px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
+                                    <select class="tiny-select" style="width:100%;" 
+                                        onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                        <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
+                                        <optgroup label="Included In:">
+                                            ${appTiers.map(t => `
+                                                <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
+                                                    Tier: ${esc(t.name)}
+                                                </option>
+                                            `).join('')}
+                                        </optgroup>
+                                        <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
+                                    </select>
 
-                                <div id="addon-price-${appObj.appId}-${feat.id}" 
-                                    style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                    <span class="tiny muted">Fee $</span>
-                                    <input type="number" class="price-input-tiny" style="width:100%;" 
-                                        value="${currentAddonPrice}" 
-                                        onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                    <div id="addon-price-${appObj.appId}-${feat.id}" 
+                                        style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                        <span class="tiny muted">Fee $</span>
+                                        <input type="number" class="price-input-tiny" style="width:100%;" 
+                                            value="${currentAddonPrice}" 
+                                            onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                    </div>
                                 </div>
                             </div>
-                                            
                             <textarea 
                                 placeholder="Notes..."
                                 style="width: 100%; height: 45px; font-size: 11px; line-height: 1.2; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
