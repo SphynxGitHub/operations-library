@@ -7238,8 +7238,8 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                     <option value="included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
                                     <optgroup label="Included In:">
                                         ${appTiers.map(t => `
-                                            <option value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
-                                                <span style=" font-weight: bold;">Tier: ${esc(t.name)}</span>
+                                            <option style="font-weight: bold;" value="tier|${esc(t.name)}" ${pricing.tierName === t.name ? 'selected' : ''}>
+                                                Tier: ${esc(t.name)}
                                             </option>
                                         `).join('')}
                                     </optgroup>
