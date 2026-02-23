@@ -7089,15 +7089,15 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 
                 <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                        <span style="font-size: 1.2rem;">📋</span>
                         <label class="modal-section-label" style="margin: 0; font-size: 1rem; color: var(--accent);">Executive Summary & Recommendations</label>
                     </div>
                     <textarea class="modal-textarea" 
                               placeholder="Add your final analysis notes or decision rationale here..."
+                              oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
                               onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
-                              style="min-height: 120px; height: 100%; overflow:hidden; width: 100%; background: rgba(255,255,255,0.03); 
-                              color: #ddd; border: 1px solid rgba(255,255,255,0.1); padding: 12px; font-family: inherit; 
-                              line-height: 1.5; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
+                              style="display: block; height: auto; min-height: auto; max-height: none; overflow:visible; width: 100%; 
+                              background: rgba(255,255,255,0.03); color: #ddd; border: 1px solid rgba(255,255,255,0.1); 
+                              padding: 12px; font-family: inherit; line-height: 1.1; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
                 </div>
             </div>
         </div>
