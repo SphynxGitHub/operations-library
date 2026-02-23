@@ -7095,7 +7095,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                               placeholder="Add your final analysis notes or decision rationale here..."
                               oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
                               onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
-                              style="display: block; height: auto; min-height: auto; max-height: none; overflow:visible; width: 100%; 
+                              style="display: block; height: auto; min-height: auto; max-height: none; overflow:hidden; width: 100%; 
                               background: rgba(255,255,255,0.03); color: #ddd; border: 1px solid rgba(255,255,255,0.1); 
                               padding: 12px; font-family: inherit; line-height: 1.1; border-radius: 4px;">${esc(anly.summary || "")}</textarea>
                 </div>
