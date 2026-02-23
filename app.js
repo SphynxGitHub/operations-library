@@ -6638,36 +6638,36 @@ if (!state.master.analyses) state.master.analyses = [];
 window.renderAnalysisModule = function(isVaultMode = false) {
     OL.registerView(renderAnalysisModule);
     const container = document.getElementById("mainContent");
-    const client = getActiveClient();
     
-    // 1. Updated Guard: Only exit if we aren't in Vault AND have no client
-    if (!isVaultMode && !client) return;
+    // 🚀 THE FIX: Use hash check if isVaultMode wasn't explicitly passed
+    const isActuallyVault = isVaultMode || window.location.hash.startsWith('#/vault');
+    const client = isActuallyVault ? null : getActiveClient();
+    
+    if (!isActuallyVault && !client) return;
     if (!container) return;
 
-    // 2. Get Data Sources
     const masterTemplates = state.master.analyses || [];
     
-    // If in Vault, show all. If in Client, show only shared templates.
-    const templatesToDisplay = isVaultMode 
+    // 🏗️ Determine which templates and local analyses to show
+    const templatesToDisplay = isActuallyVault 
         ? masterTemplates 
         : masterTemplates.filter(t => client?.sharedMasterIds?.includes(t.id));
 
-    // Local analyses only exist in Client mode
-    const localAnalyses = (!isVaultMode && client) ? (client.projectData.localAnalyses || []) : [];
+    const localAnalyses = (!isActuallyVault && client) ? (client.projectData.localAnalyses || []) : [];
 
     container.innerHTML = `
         <div class="section-header">
             <div>
-                <h2>${isVaultMode ? '📚 Master Analysis Library' : '📈 Feature Analysis & Comparison'}</h2>
+                <h2>${isActuallyVault ? '📚 Master Analysis Library' : '📈 Feature Analysis & Comparison'}</h2>
                 <div class="small muted subheader">
-                    ${isVaultMode ? 'Global templates for standardized scoring' : `Helping ${esc(client?.meta.name)} find the right fit`}
+                    ${isActuallyVault ? 'Global templates for standardized scoring' : `Helping ${esc(client?.meta.name)} find the right fit`}
                 </div>
             </div>
             <div class="header-actions">
                 <button class="btn small soft" onclick="OL.openGlobalContentManager()" style="margin-right: 8px;" title="Manage Global Content">
                     ⚙️
                 </button>
-                ${isVaultMode ? 
+                ${isActuallyVault ? 
                     `<button class="btn primary" onclick="OL.createNewMasterAnalysis()">+ Create Template</button>` : 
                     `<button class="btn small soft" onclick="OL.createNewAnalysisSandbox()">+ Create Local Analysis</button>
                     <button class="btn primary" onclick="OL.importAnalysisFromVault()" style="margin-right:8px;">⬇ Import from Master</button>`
@@ -6677,9 +6677,7 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
         <div class="cards-grid">
             ${templatesToDisplay.map(anly => renderAnalysisCard(anly, true)).join('')}
-            
-            ${!isVaultMode ? localAnalyses.map(anly => renderAnalysisCard(anly, false)).join('') : ''}
-            
+            ${!isActuallyVault ? localAnalyses.map(anly => renderAnalysisCard(anly, false)).join('') : ''}
             ${(templatesToDisplay.length === 0 && localAnalyses.length === 0) ? '<div class="empty-hint">No analyses found.</div>' : ''}
         </div>
 
