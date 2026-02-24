@@ -9197,17 +9197,30 @@ state.v2.connectionMode = {
     sourceId: null
 };
 
-OL.toggleConnectTool = function() {
-    state.v2.connectionMode.active = !state.v2.connectionMode.active;
-    state.v2.connectionMode.sourceId = null;
+OL.toggleStepView = function(nodeId) {
+    const container = document.getElementById(`steps-${nodeId}`);
+    const isVisible = container.style.display === 'block';
     
-    const btn = document.getElementById('connect-tool-btn');
-    if (btn) btn.classList.toggle('accent', state.v2.connectionMode.active);
+    if (isVisible) {
+        container.style.display = 'none';
+    } else {
+        const node = OL.getResourceById(nodeId);
+        const steps = node.sop?.steps || [];
+        
+        if (steps.length === 0) return;
+
+        container.innerHTML = steps.map((step, i) => `
+            <div class="v2-step-item">
+                <span class="v2-step-number">${i + 1}</span>
+                <span class="v2-step-text">${esc(step.text || step.instruction)}</span>
+            </div>
+        `).join('');
+        
+        container.style.display = 'block';
+    }
     
-    const viewport = document.getElementById('v2-viewport');
-    if (viewport) viewport.style.cursor = state.v2.connectionMode.active ? 'crosshair' : 'grab';
-    
-    console.log("🔌 Connect Tool:", state.v2.connectionMode.active ? "ON" : "OFF");
+    // 🚀 Refresh connections because the card height changed!
+    OL.drawV2Connections();
 };
 
 OL.handleNodeClick = async function(nodeId) {
