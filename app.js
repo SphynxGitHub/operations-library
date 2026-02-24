@@ -9378,24 +9378,25 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
 
     const pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
 
-    // Create a group to hold line + button
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", "v2-leash-group");
+    // 🚀 CALCULATE ACTUAL BEZIER MIDPOINT (t=0.5)
+    // Formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+    const t = 0.5;
+    const midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
+    const midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
 
+    // 🚀 DRAW THE LINE (Lower Layer)
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)");
     path.setAttribute("stroke-width", "2");
     path.setAttribute("stroke-dasharray", "6,4");
     path.setAttribute("fill", "none");
-    group.appendChild(path);
+    svg.prepend(path); // Lines stay behind cards
 
-    // 🚀 CALCULATE MIDPOINT FOR DELETE BTN
-    // Simplistic midpoint for Bezier: (S + E) / 2
-    const midX = (s.x + e.x) / 2;
-    const midY = (s.y + e.y) / 2;
-
+    // 🚀 DRAW THE BUTTON (Upper Layer)
+    // Use append instead of prepend so it stays on top of the lines
     const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    deleteBtn.setAttribute("class", "v2-leash-delete");
     deleteBtn.setAttribute("style", "cursor: pointer; pointer-events: auto;");
     deleteBtn.onclick = (event) => {
         event.stopPropagation();
@@ -9403,12 +9404,11 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     };
 
     deleteBtn.innerHTML = `
-        <circle cx="${midX}" cy="${midY}" r="8" fill="#ef4444" stroke="white" stroke-width="1" />
-        <text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="9" fill="white" font-weight="bold" style="pointer-events:none;">×</text>
+        <circle cx="${midX}" cy="${midY}" r="10" fill="#ef4444" stroke="#fff" stroke-width="2" />
+        <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-size="12" fill="white" font-weight="bold" style="pointer-events:none; font-family: Arial;">×</text>
     `;
 
-    group.appendChild(deleteBtn);
-    svg.prepend(group); 
+    svg.appendChild(deleteBtn); // Buttons stay on top
 };
 
 OL.startParentLinking = function(e, sourceId) {

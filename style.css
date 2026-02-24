@@ -4407,4 +4407,33 @@ ARROWS
     cursor: crosshair;
     z-index: 100;
     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    pointer-events: none;
+}
+
+.v2-corner-link {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: rgba(251, 191, 36, 0.2); /* Faint amber */
+    border: 1px solid rgba(0,0,0,0.2);
+    border-radius: 3px;
+    z-index: 110;
+    cursor: crosshair;
+}
+.v2-corner-link:hover { background: #fbbf24; }
+
+.tl { top: -6px; left: -6px; }
+.tr { top: -6px; right: -6px; }
+.bl { bottom: -6px; left: -6px; }
+.br { bottom: -6px; right: -6px; }
+
+#v2-connections g, 
+#v2-connections circle, 
+#v2-connections text {
+    pointer-events: auto !important; /* BUT allow clicking the actual buttons */
+}
+
+.v2-leash-delete:hover circle {
+    fill: #ff0000;
+    r: 12; /* Slightly grow on hover */
 }
