@@ -9225,6 +9225,13 @@ OL.createMiniMenu = function(midX, midY, isLeash, sourceId, targetId, outcomeIdx
     menuGroup.setAttribute("class", "v2-mini-menu");
     menuGroup.setAttribute("transform", `translate(${midX}, ${midY})`);
 
+    // An invisible circle that covers the entire menu area to prevent flicker
+    const bridge = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    bridge.setAttribute("r", "50"); // Large enough to cover all icons
+    bridge.setAttribute("fill", "transparent");
+    bridge.setAttribute("style", "pointer-events: auto;");
+    menuGroup.appendChild(bridge);
+    
     // Define our buttons: [Label/Icon, Color, Action]
     const actions = [
         { id: 'logic', icon: 'λ', color: '#8b5cf6', title: 'Add Logic' },

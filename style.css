@@ -4163,15 +4163,227 @@ ARROWS
     box-shadow: 0 0 10px #fbbf24;
 }
 
+.v2-connection-group {
+    pointer-events: stroke; /* Only trigger hover when touching the line */
+}
+
+.v2-connection-group:hover path {
+    stroke: #ef4444 !important;
+    stroke-width: 3px;
+}
+
+.v2-connection-group:hover .v2-line-delete-trigger {
+    opacity: 1 !important;
+}
+
+.reorder-item:hover {
+    border-color: var(--accent);
+}
+
+.global-shelf-container {
+    position: absolute;
+    /* Position it significantly above the start of Stage 1 */
+    top: -350px; 
+    left: -2000px; /* Stretch wide to cover lateral pans */
+    width: 5000px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 2px dashed rgba(56, 189, 248, 0.2);
+    padding: 30px;
+    pointer-events: none; /* Let clicks pass to the canvas background */
+    z-index: 1;
+}
+
+.global-shelf-label {
+    position: sticky;
+    left: 20px;
+    color: #38bdf8;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    opacity: 0.4;
+    text-transform: uppercase;
+}
+
+.v2-step-badge {
+    position: absolute;
+    top: -10px;
+    right: 15px;
+    background: var(--accent);
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    z-index: 999;
+}
+
+.v2-steps-preview {
+    margin-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 8px;
+    display: none; /* Hidden by default */
+}
+
+.v2-step-item {
+    font-size: 11px;
+    color: #cbd5e1;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    gap: 8px;
+}
+
+.v2-step-number {
+    color: var(--accent);
+    font-weight: bold;
+    opacity: 0.7;
+}
+
+.v2-node-card.drop-hover {
+    border: 2px solid var(--accent) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
+    transform: scale(1.05);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.v2-step-eject {
+    margin-left: auto;
+    cursor: pointer;
+    opacity: 0; /* Hidden by default */
+    color: #94a3b8;
+    transition: all 0.2s;
+}
+
+.v2-step-item:hover .v2-step-eject {
+    opacity: 1; /* Show on hover */
+}
+
+.v2-step-eject:hover {
+    color: #38bdf8;
+    transform: scale(1.2);
+}
+
+.v2-context-corner {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    font-size: 10px;
+    z-index: 10;
+}
+
+.parent-link-icon {
+    color: #38bdf8; /* Blue link */
+    cursor: help;
+}
+
+.muted-icon {
+    color: rgba(255,255,255,0.2);
+    opacity: 0.5;
+}
+
+/* Optional: Pulse the parent card when hovering the link icon */
+.parent-highlight {
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.8) !important;
+    border: 2px solid #38bdf8 !important;
+}
+
+.v2-node-card.is-loose {
+    border: 2px dashed rgba(251, 191, 36, 0.5) !important;
+    background: rgba(251, 191, 36, 0.05);
+}
+
+.v2-node-card.is-resource {
+    border: 2px solid rgba(56, 189, 248, 0.3);
+}
+
+.v2-step-item {
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.step-port-out {
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: #fbbf24; /* Amber for steps */
+    border-radius: 50%;
+    border: 1px solid #000;
+    cursor: crosshair;
+    z-index: 20;
+}
+
+.step-port-out:hover {
+    background: #fff;
+    transform: translateY(-50%) scale(1.4);
+}
+
+.step-port-in {
+    position: absolute;
+    left: -5px; /* Sits on the left edge */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: #38bdf8; /* Blue for inbound steps */
+    border-radius: 50%;
+    border: 1px solid #000;
+    cursor: crosshair;
+    z-index: 20;
+}
+
+.step-port-in:hover {
+    background: #fff;
+    transform: translateY(-50%) scale(1.4);
+}
+
+/* Move Linker to Left Center */
+.v2-parent-linker {
+    position: absolute;
+    left: -12px; /* Hangs off the left edge */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    background: #fbbf24;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: crosshair;
+    border: 2px solid #000;
+    color: #000;
+    font-size: 10px;
+    z-index: 30;
+    transition: transform 0.2s;
+}
+
+.v2-parent-linker:hover {
+    transform: translateY(-50%) scale(1.2);
+    background: #fff;
+}
+
+/* Adjust Card padding to accommodate the left-side button */
+.v2-node-card.is-loose {
+    padding-left: 20px; 
+    border-left: 3px dashed #fbbf24; /* Visual cue that this side is for linking */
+}
 /* 🚀 THE CONNECTION CONTAINER */
 .v2-connection-group {
     pointer-events: auto; /* Required for the group to maintain hover state */
+    paint-order: stroke fill;
 }
 
 /* 🚀 THE HIT AREA (Invisible Fat Path) */
 path[stroke="transparent"] {
     pointer-events: stroke !important;
     cursor: pointer;
+    transition: stroke-width 0.2s;
 }
 
 /* 🚀 THE VISUAL PATH (The actual line) */
@@ -4206,9 +4418,16 @@ path[stroke="transparent"] {
     transform: scale(1);
 }
 
+.v2-mini-menu circle[fill="transparent"] {
+    cursor: default;
+    /* This invisible circle bridges the gap between the line and the buttons */
+    pointer-events: all !important; 
+}
+
 /* Individual Button Polish */
 .menu-item {
     transition: transform 0.1s ease;
+    pointer-events: auto;
 }
 
 .menu-item:hover {
