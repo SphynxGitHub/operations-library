@@ -9371,23 +9371,44 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     // 🚀 4. Path Math (Organic Curve)
     const dx = e.x - s.x;
     const dy = e.y - s.y;
-    
-    // Create a "Jump" by offsetting control points based on distance
-    const cp1x = s.x + (Math.abs(dx) < 50 ? 50 : dx * 0.2);
-    const cp1y = s.y + dy * 0.8;
-    const cp2x = e.x - (Math.abs(dx) < 50 ? 50 : dx * 0.2);
-    const cp2y = e.y - dy * 0.8;
+    const cp1x = s.x + (dx * 0.1);
+    const cp1y = s.y + (dy * 0.9);
+    const cp2x = e.x - (dx * 0.1);
+    const cp2y = e.y - (dy * 0.9);
 
     const pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
 
+    // Create a group to hold line + button
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("class", "v2-leash-group");
+
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    path.setAttribute("stroke", "rgba(251, 191, 36, 0.4)");
+    path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)");
     path.setAttribute("stroke-width", "2");
     path.setAttribute("stroke-dasharray", "6,4");
     path.setAttribute("fill", "none");
-    
-    svg.prepend(path);
+    group.appendChild(path);
+
+    // 🚀 CALCULATE MIDPOINT FOR DELETE BTN
+    // Simplistic midpoint for Bezier: (S + E) / 2
+    const midX = (s.x + e.x) / 2;
+    const midY = (s.y + e.y) / 2;
+
+    const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    deleteBtn.setAttribute("style", "cursor: pointer; pointer-events: auto;");
+    deleteBtn.onclick = (event) => {
+        event.stopPropagation();
+        OL.unlinkParent(nodeId);
+    };
+
+    deleteBtn.innerHTML = `
+        <circle cx="${midX}" cy="${midY}" r="8" fill="#ef4444" stroke="white" stroke-width="1" />
+        <text x="${midX}" y="${midY + 3}" text-anchor="middle" font-size="9" fill="white" font-weight="bold" style="pointer-events:none;">×</text>
+    `;
+
+    group.appendChild(deleteBtn);
+    svg.prepend(group); 
 };
 
 OL.startParentLinking = function(e, sourceId) {
@@ -9523,6 +9544,24 @@ OL.showParentLine = function(childId, parentId) {
 OL.hideParentLine = function() {
     const ghostLine = document.getElementById('v2-ghost-line');
     if (ghostLine) ghostLine.style.display = 'none';
+};
+
+OL.unlinkParent = async function(nodeId) {
+    if (!confirm("Remove this leash? The card will stay loose on the canvas.")) return;
+
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    const node = source.find(n => n.id === nodeId);
+    if (node) {
+        await OL.updateAndSync(() => {
+            delete node.parentId; // 🚀 Sever the connection
+        });
+        
+        // Refresh visuals
+        renderVisualizerV2(isVault);
+    }
 };
 
 OL.toggleStepView = function(nodeId) {
