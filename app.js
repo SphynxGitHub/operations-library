@@ -8957,7 +8957,7 @@ OL.commitBrainDump = async function() {
 function renderV2Nodes(isVault) {
     const client = getActiveClient();
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const nodes = allResources.filter(r => (r.type || "").toLowerCase() !== 'workflow');
+    const nodes = allResources//.filter(r => (r.type || "").toLowerCase() !== 'workflow');
 
     return nodes.map((node, idx) => {
         const x = node.coords?.x || (100 + (idx % 4) * 250);
