@@ -8711,6 +8711,13 @@ state.v2 = {
     dragContext: null
 };
 
+state.v2.connectionMode = {
+    active: false,
+    sourceId: null
+};
+
+state.v2.expandedNodes = state.v2.expandedNodes || new Set();
+
 window.renderVisualizerV2 = function(isVault) {
     const container = document.getElementById("mainContent");
     
@@ -9031,12 +9038,13 @@ function renderV2Nodes(isVault) {
         const x = (node.coords && typeof node.coords.x === 'number') ? node.coords.x : (100 + (idx % 4) * 250);
         const y = (node.coords && typeof node.coords.y === 'number') ? node.coords.y : (100 + Math.floor(idx / 4) * 200);
         const icon = OL.getRegistryIcon(node.type);
+
         // 🚀 1. Handle Global Status
         const globalClass = node.isGlobal ? 'is-global' : '';
 
         // 🚀 2. Identify Steps (Internal SOP vs Loose Step)
         const steps = Array.isArray(node.steps) ? node.steps : [];
-        const isLooseStep = node.type === 'step' || node.type === 'instruction';
+        const isLooseStep = node.type ==='sop' || node.type === 'step' || node.type === 'instruction';
         
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
@@ -9302,11 +9310,6 @@ OL.showParentLine = function(childId, parentId) {
 OL.hideParentLine = function() {
     const ghostLine = document.getElementById('v2-ghost-line');
     if (ghostLine) ghostLine.style.display = 'none';
-};
-
-state.v2.connectionMode = {
-    active: false,
-    sourceId: null
 };
 
 OL.toggleStepView = function(nodeId) {
