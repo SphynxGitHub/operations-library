@@ -9104,7 +9104,7 @@ function renderV2Nodes(isVault) {
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
                 ${parentHandle}
-                
+
                 <div class="v2-context-corner">${contextIcon}</div>
                 ${stepBadge}
                 
@@ -9446,16 +9446,18 @@ OL.startParentLinking = function(e, sourceId) {
 };
 
 OL.linkStepToParent = async function(stepId, targetResourceId) {
-    const isVault = window.location.hash.includes('vault');
-    const source = isVault ? (state.master.resources || []) : (getActiveClient()?.projectData?.localResources || []);
-    const node = source.find(n => n.id === stepId);
-    
-    if (node) {
-        await OL.updateAndSync(() => {
-            node.parentId = targetResourceId;
-        });
-        renderVisualizerV2(isVault);
-    }
+    await OL.updateAndSync(() => {
+        const isVault = window.location.hash.includes('vault');
+        const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        const node = source.find(n => n.id === stepId);
+        
+        if (node) {
+            node.parentId = targetResourceId; // 🎯 Save it
+        }
+    });
+
+    // 🚀 CRITICAL: You must manually call this to update the lines immediately
+    OL.drawV2Connections(); 
 };
 
 OL.showParentLine = function(childId, parentId) {
