@@ -8746,8 +8746,9 @@ window.renderVisualizerV2 = function(isVault) {
     // At the bottom of renderVisualizerV2
     setTimeout(() => {
         OL.initV2Panning(); // Activates grid movement
+        OL.drawV2Connections();
         console.log("🎮 Graph Engine Initialized");
-    }, 50);
+    }, 100);
 };
 
 OL.openBrainDump = function() {
@@ -8833,55 +8834,46 @@ OL.zoom = function(delta) {
 };
 
 OL.startNodeDrag = function(e, nodeId) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.stopPropagation(); // Stop the canvas from trying to pan
 
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    const canvas = document.getElementById('v2-canvas');
-    if (!nodeEl || !canvas) return;
+    if (!nodeEl) return;
 
-    // 1. Calculate the offset between cursor and card corner
-    // We adjust for zoom so dragging feels natural at any scale
+    let hasMoved = false;
     const zoom = state.v2.zoom || 1;
     let startX = e.clientX / zoom - nodeEl.offsetLeft;
     let startY = e.clientY / zoom - nodeEl.offsetTop;
 
-    nodeEl.style.zIndex = "1000"; // Bring to front
-    nodeEl.style.cursor = "grabbing";
-
     const onMouseMove = (moveEvent) => {
-        // 2. Calculate new position
+        hasMoved = true;
         const newX = moveEvent.clientX / zoom - startX;
         const newY = moveEvent.clientY / zoom - startY;
 
-        // 3. SURGICAL UPDATE: Update DOM directly for 60fps performance
         nodeEl.style.left = `${newX}px`;
         nodeEl.style.top = `${newY}px`;
-        OL.drawV2Connections();
+        OL.drawV2Connections(); 
     };
 
     const onMouseUp = async () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-        
-        nodeEl.style.zIndex = "10";
-        nodeEl.style.cursor = "grab";
 
-        // 4. PERSISTENCE: Save final coordinates to State & Firebase once
+        // 🎯 THE FIX: If the mouse didn't move, treat it as a CLICK
+        if (!hasMoved) {
+            OL.handleNodeClick(nodeId);
+            return;
+        }
+
+        // Otherwise, save the new position
         const finalX = parseInt(nodeEl.style.left);
         const finalY = parseInt(nodeEl.style.top);
 
         await OL.updateAndSync(() => {
             const isVault = window.location.hash.includes('vault');
-            const client = getActiveClient();
-            const source = isVault ? state.master.resources : client.projectData.localResources;
+            const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
             const nodeData = source.find(n => n.id === nodeId);
-            
-            if (nodeData) {
-                nodeData.coords = { x: finalX, y: finalY };
-            }
+            if (nodeData) nodeData.coords = { x: finalX, y: finalY };
         });
-        console.log(`📍 Node ${nodeId} parked at:`, finalX, finalY);
     };
 
     document.addEventListener('mousemove', onMouseMove);
@@ -8949,9 +8941,8 @@ function renderV2Nodes(isVault) {
         return `
             <div class="v2-node-card" 
                 id="v2-node-${node.id}"
-                style="position: absolute; left: ${x}px; top: ${y}px;"
-                onmousedown="OL.startNodeDrag(event, '${node.id}')"
-                onclick="OL.handleNodeClick('${node.id}')">
+                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 100; pointer-events: auto;"
+                onmousedown="OL.startNodeDrag(event, '${node.id}')">
                 
                 <div class="v2-port port-in"></div>
                 <div class="v2-port port-out"></div>

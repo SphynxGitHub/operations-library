@@ -4067,6 +4067,27 @@ ARROWS
     opacity: 0.5;
 }
 
+/* style.css */
+.v2-svg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none !important; /* 🚀 This allows clicks to pass through to nodes */
+    z-index: 10;
+}
+
+.v2-node-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Container is passthrough */
+    z-index: 20;
+}
+
 .v2-node-card {
     width: 220px; /* Wider to accommodate Zap names seen in your screenshot */
     min-height: 60px;
@@ -4078,6 +4099,7 @@ ARROWS
     user-select: none;
     will-change: left, top; /* 🚀 Critical for performance */
     transition: border-color 0.2s, box-shadow 0.2s, transform 0.1s;
+    pointer-events: auto !important; /* 🚀 But the cards themselves are clickable */
 }
 
 .v2-port {
