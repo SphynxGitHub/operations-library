@@ -9275,57 +9275,52 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
     // 4. DRAW THE CURVE (The rest of your path creation logic follows...)
     let pathData;
+    let midX, midY;
 
-    if (useVertical) {
-        // 🚀 THE STRAIGHT LINE FIX: Use a simple Line (L) instead of a Curve (C)
-        // We can also use a "Direct Line" M -> L
+    if (Math.abs(e.y - s.y) > Math.abs(e.x - s.x)) {
+        // Straight line for vertical
         pathData = `M ${s.x} ${s.y} L ${e.x} ${e.y}`;
+        midX = (s.x + e.x) / 2;
+        midY = (s.y + e.y) / 2;
     } else {
-        // Keep the nice S-Curve for horizontal left-to-right flow
+        // Curve for horizontal
         const cpOffset = Math.min(Math.abs(e.x - s.x) / 2, 150);
-        pathData = `M ${s.x} ${s.y} C ${s.x + (dx > 0 ? cpOffset : -cpOffset)} ${s.y}, ${e.x + (dx > 0 ? -cpOffset : cpOffset)} ${e.y}, ${e.x} ${e.y}`;
+        const cp1x = s.x + cpOffset;
+        const cp1y = s.y;
+        const cp2x = e.x - cpOffset;
+        const cp2y = e.y;
+        
+        pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
+        
+        // 🚀 Midpoint for Curve (t=0.5)
+        const t = 0.5;
+        midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
+        midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
     }
 
-    // --- SVG Creation ---
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", "v2-connection-group");
-
+    // 🚀 2. DRAW LINE (Send to Back)
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
     path.setAttribute("stroke-width", "3");
     path.setAttribute("fill", "none");
-    group.appendChild(path);
+    svg.prepend(path); // Lines go behind
 
-    // Midpoint for delete button
-    const midX = s.x + (e.x - s.x) / 2;
-    const midY = s.y + (e.y - s.y) / 2;
-    
-    const deleteBtnGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    deleteBtnGroup.setAttribute("class", "v2-line-delete-btn");
-    deleteBtnGroup.setAttribute("style", "cursor: pointer; pointer-events: auto;");
-    
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", midX); circle.setAttribute("cy", midY);
-    circle.setAttribute("r", "10"); circle.setAttribute("fill", "#ef4444");
-    deleteBtnGroup.appendChild(circle);
-
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", midX); text.setAttribute("y", midY + 4);
-    text.setAttribute("text-anchor", "middle"); text.setAttribute("fill", "white");
-    text.setAttribute("style", "font-size: 12px; font-weight: bold; pointer-events: none;");
-    text.textContent = "×";
-    deleteBtnGroup.appendChild(text);
-
-    deleteBtnGroup.onclick = (event) => {
-        event.stopPropagation();
-        if(confirm("Disconnect these nodes?")) {
-            OL.removeConnection(sourceId, outcomeIdx); 
-        }
+    // 🚀 3. DRAW DELETE BUTTON (Bring to Front)
+    const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    deleteBtn.setAttribute("class", "v2-line-delete-btn");
+    deleteBtn.style.cursor = "pointer";
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        if(confirm("Disconnect these cards?")) OL.removeConnection(sourceId, outcomeIdx);
     };
 
-    group.appendChild(deleteBtnGroup);
-    svg.appendChild(group);
+    deleteBtn.innerHTML = `
+        <circle cx="${midX}" cy="${midY}" r="10" fill="#ef4444" stroke="#fff" stroke-width="2" />
+        <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-size="12" fill="white" font-weight="bold" style="pointer-events:none;">×</text>
+    `;
+
+    svg.appendChild(deleteBtn); // Buttons go on top
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
