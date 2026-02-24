@@ -9037,8 +9037,11 @@ function renderV2Nodes(isVault) {
 
         // 🚀 PERSISTENCE LOGIC
         const steps = Array.isArray(node.steps) ? node.steps : [];
-        const isExpanded = state.v2.expandedNodes.has(node.id); // Check our Set
-        const isLooseStep = node.type === 'SOP' || node.type === 'step' || node.type === 'instruction';
+        const isExpanded = state.v2.expandedNodes.has(node.id);
+        
+        // 🛠️ CASE INSENSITIVE CHECK + PARENT CHECK
+        const typeClean = (node.type || "").toUpperCase();
+        const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
         // Dynamic Badge Icon
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
@@ -9046,7 +9049,6 @@ function renderV2Nodes(isVault) {
                 ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
             </div>` : '';
 
-        // 🚀 DECLARATIVE HTML: Build steps only if the state says they are open
         const stepsHtml = isExpanded ? steps.map((step, i) => `
             <div class="v2-step-item" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -9057,13 +9059,13 @@ function renderV2Nodes(isVault) {
             </div>
         `).join('') : '';
 
-        const isLoose = !node.parentId;
         const contextIcon = isLooseStep
             ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
             : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
 
+        // 🚀 ADDING 'is-loose' CLASS FOR THE DASHED BORDER
         return `
-            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''} ${isExpanded ? 'is-expanded' : ''}" 
+            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="position: absolute; left: ${x}px; top: ${y}px;"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">

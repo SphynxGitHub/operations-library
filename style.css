@@ -4296,3 +4296,12 @@ ARROWS
     box-shadow: 0 0 20px rgba(56, 189, 248, 0.8) !important;
     border: 2px solid #38bdf8 !important;
 }
+
+.v2-node-card.is-loose {
+    border: 2px dashed rgba(251, 191, 36, 0.5) !important;
+    background: rgba(251, 191, 36, 0.05);
+}
+
+.v2-node-card.is-resource {
+    border: 2px solid rgba(56, 189, 248, 0.3);
+}
