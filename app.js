@@ -9113,45 +9113,49 @@ OL.toggleConnectTool = function() {
 };
 
 OL.handleNodeClick = async function(nodeId) {
-    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    
-    // 1. PHASE 1: Selecting the Source
+    // If we aren't in connection mode, just load the inspector as normal
+    if (!state.v2.connectionMode.active) {
+        OL.loadInspector(nodeId);
+        return;
+    }
+
+    // PHASE 1: Selecting the Source
     if (!state.v2.connectionMode.sourceId) {
         state.v2.connectionMode.sourceId = nodeId;
-        nodeEl.classList.add('source-selected');
-        console.log("📍 Source selected for wiring:", nodeId);
+        document.getElementById(`v2-node-${nodeId}`).style.borderColor = "#fbbf24";
+        console.log("📍 Source selected:", nodeId);
         return;
     }
 
-    // 2. PHASE 2: Selecting the Target
+    // PHASE 2: Selecting the Target (and preventing self-linking)
+    if (state.v2.connectionMode.sourceId === nodeId) return;
+
     const sourceId = state.v2.connectionMode.sourceId;
-    
-    // If you click the same node twice, we just deselect it
-    if (sourceId === nodeId) {
-        OL.resetWiringState();
-        return;
-    }
+    const targetId = nodeId;
 
-    console.log(`🔗 Linking ${sourceId} to ${nodeId}`);
+    console.log(`🔗 Linking ${sourceId} to ${targetId}`);
 
     await OL.updateAndSync(() => {
         const isVault = window.location.hash.includes('vault');
         const client = getActiveClient();
         const source = isVault ? state.master.resources : client.projectData.localResources;
-        const sourceNode = source.find(n => n.id === sourceId);
         
+        const sourceNode = source.find(n => n.id === sourceId);
         if (sourceNode) {
             if (!sourceNode.outcomes) sourceNode.outcomes = [];
+            // Create a new outcome link
             sourceNode.outcomes.push({
                 id: 'link_' + Date.now(),
-                action: `jump_res_${nodeId}`,
-                label: "Connected Path"
+                action: `jump_res_${targetId}`,
+                label: "Connected Path",
+                condition: ""
             });
         }
     });
 
-    OL.resetWiringState();
-    OL.drawV2Connections(); // Redraw lines
+    // Reset Tool
+    OL.toggleConnectTool();
+    OL.drawV2Connections(); // Redraw lines immediately
 };
 
 OL.resetWiringState = function() {
