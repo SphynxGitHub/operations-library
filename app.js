@@ -9088,6 +9088,14 @@ function renderV2Nodes(isVault) {
         const contextIcon = isLooseStep
             ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
             : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
+        
+        const parentHandle = isLooseStep ? `
+            <div class="v2-parent-linker" 
+                title="Drag to a Resource to link"
+                onmousedown="event.stopPropagation(); OL.startParentLinking(event, '${node.id}')">
+                <i class="fas fa-link"></i>
+            </div>
+        ` : '';
 
         return `
             <div class="v2-node-card ${globalClass} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
@@ -9110,7 +9118,7 @@ function renderV2Nodes(isVault) {
                 <div class="v2-node-body" style="pointer-events: none;">
                     ${esc(node.name || node.text || "Untitled Step")}
                 </div>
-
+                ${parentHandle}
                 <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
                     ${stepsHtml}
                 </div>
@@ -9183,6 +9191,16 @@ OL.drawV2Connections = function() {
     // Inside OL.drawV2Connections
     source.forEach(node => {
         if (!node.outcomes) return;
+
+        if (node.parentId) {
+            const childEl = document.getElementById(`v2-node-${node.id}`);
+            const parentEl = document.getElementById(`v2-node-${node.parentId}`);
+
+            if (childEl && parentEl) {
+                // Draw a dashed "Leash" line
+                OL.drawLeashLine(svg, childEl, parentEl, node.id);
+            }
+        }
 
         node.outcomes.forEach((outcome, idx) => {
             const fromEl = document.getElementById(`v2-node-${node.id}`);
@@ -9316,6 +9334,107 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
     group.appendChild(deleteBtnGroup);
     svg.appendChild(group);
+};
+
+OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
+    const canvas = document.getElementById('v2-canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+
+    // Use centers for a simple "leash" look
+    const cRect = childEl.getBoundingClientRect();
+    const pRect = parentEl.getBoundingClientRect();
+
+    const start = {
+        x: (cRect.left - canvasRect.left + (cRect.width / 2)) / zoom,
+        y: (cRect.top - canvasRect.top + (cRect.height / 2)) / zoom
+    };
+    const end = {
+        x: (pRect.left - canvasRect.left + (pRect.width / 2)) / zoom,
+        y: (pRect.top - canvasRect.top + (pRect.height / 2)) / zoom
+    };
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    path.setAttribute("x1", start.x);
+    path.setAttribute("y1", start.y);
+    path.setAttribute("x2", end.x);
+    path.setAttribute("y2", end.y);
+    path.setAttribute("stroke", "rgba(255, 255, 255, 0.2)");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-dasharray", "5,5"); // 🚀 Dashed line look
+    path.setAttribute("class", "v2-parent-leash");
+    
+    svg.prepend(path); // Put it behind the cards
+};
+
+OL.startParentLinking = function(e, sourceId) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const canvas = document.getElementById('v2-canvas');
+    const svg = document.getElementById('v2-svg-layer');
+    const sourceEl = document.getElementById(`v2-node-${sourceId}`);
+    if (!sourceEl) return;
+
+    // 1. Create a "Ghost Line" (Visual Feedback during drag)
+    const ghostLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    ghostLine.setAttribute("stroke", "#fbbf24");
+    ghostLine.setAttribute("stroke-width", "2");
+    ghostLine.setAttribute("stroke-dasharray", "5,5");
+    svg.appendChild(ghostLine);
+
+    const onMouseMove = (moveEvent) => {
+        const zoom = state.v2.zoom || 1;
+        const canvasRect = canvas.getBoundingClientRect();
+        const sourceRect = sourceEl.getBoundingClientRect();
+
+        const x1 = (sourceRect.left - canvasRect.left + sourceRect.width / 2) / zoom;
+        const y1 = (sourceRect.top - canvasRect.top + sourceRect.height / 2) / zoom;
+        const x2 = (moveEvent.clientX - canvasRect.left) / zoom;
+        const y2 = (moveEvent.clientY - canvasRect.top) / zoom;
+
+        ghostLine.setAttribute("x1", x1); ghostLine.setAttribute("y1", y1);
+        ghostLine.setAttribute("x2", x2); ghostLine.setAttribute("y2", y2);
+
+        // Highlight the Resource card we are hovering over
+        const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        const targetCard = hit?.closest('.v2-node-card.is-resource');
+        
+        document.querySelectorAll('.v2-node-card').forEach(c => c.style.outline = '');
+        if (targetCard) targetCard.style.outline = '2px solid #fbbf24';
+    };
+
+    const onMouseUp = (upEvent) => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        svg.removeChild(ghostLine);
+
+        const hit = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+        const targetCard = hit?.closest('.v2-node-card.is-resource');
+        document.querySelectorAll('.v2-node-card').forEach(c => c.style.outline = '');
+
+        if (targetCard) {
+            const targetId = targetCard.id.replace('v2-node-', '');
+            // 🚀 This is where the permanent link happens
+            OL.linkStepToParent(sourceId, targetId);
+        }
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+};
+
+OL.linkStepToParent = async function(stepId, targetResourceId) {
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? (state.master.resources || []) : (getActiveClient()?.projectData?.localResources || []);
+    const node = source.find(n => n.id === stepId);
+    
+    if (node) {
+        await OL.updateAndSync(() => {
+            node.parentId = targetResourceId;
+        });
+        renderVisualizerV2(isVault);
+    }
 };
 
 OL.showParentLine = function(childId, parentId) {

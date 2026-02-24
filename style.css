@@ -4348,3 +4348,28 @@ ARROWS
     background: #fff;
     transform: translateY(-50%) scale(1.4);
 }
+
+.v2-parent-linker {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 24px;
+    background: #fbbf24;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: crosshair;
+    border: 2px solid #000;
+    color: #000;
+    font-size: 10px;
+    z-index: 30;
+    transition: all 0.2s;
+}
+
+.v2-parent-linker:hover {
+    transform: translateX(-50%) scale(1.2);
+    background: #fff;
+}
