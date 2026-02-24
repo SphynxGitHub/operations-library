@@ -4070,10 +4070,10 @@ ARROWS
 /* style.css */
 .v2-svg-layer {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: -1000;
+    left: -2000;
+    width: 200%;
+    height: 200%;
     pointer-events: none !important; /* 🚀 This allows clicks to pass through to nodes */
     z-index: 10;
 }
