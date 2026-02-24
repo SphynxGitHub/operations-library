@@ -9038,7 +9038,17 @@ function renderV2Nodes(isVault) {
         // 🚀 PERSISTENCE LOGIC
         const steps = Array.isArray(node.steps) ? node.steps : [];
         const isExpanded = state.v2.expandedNodes.has(node.id); // Check our Set
-        const isLooseStep = node.type === 'sop' || node.type === 'step' || node.type === 'instruction';
+        const nodeType = (node.type || "").toUpperCase();
+
+        // 🚀 THE FIX: A node is loose if it meets ANY of these criteria:
+        const isLooseStep = 
+            nodeType === 'SOP' || 
+            nodeType === 'STEP' || 
+            nodeType === 'INSTRUCTION' ||
+            !node.parentId; // If it has no parent, it's a loose floating item
+
+        // Apply the class based on this truth
+        const stepClass = isLooseStep ? 'is-loose type-sop' : 'is-resource';
         
         // Dynamic Badge Icon
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
@@ -9063,7 +9073,7 @@ function renderV2Nodes(isVault) {
             : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
 
         return `
-            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''} ${isExpanded ? 'is-expanded' : ''}" 
+            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''} ${stepClass} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="position: absolute; left: ${x}px; top: ${y}px;"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
