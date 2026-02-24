@@ -4020,7 +4020,7 @@ ARROWS
 .v2-viewport {
     position: relative;
     width: 100%;
-    height: 85vh; /* Adjust based on your header */
+    height: 100vh; /* Adjust based on your header */
     overflow: hidden;
     background-color: #050816;
     cursor: grab;
