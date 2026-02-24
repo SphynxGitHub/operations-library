@@ -8726,6 +8726,32 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
+OL.handleContextAction = function(action) {
+    const conn = state.v2.activeConnection;
+    if (!conn) return;
+
+    console.log(`🚀 Global Action: ${action} on`, conn);
+
+    switch(action) {
+        case 'delete':
+            if (conn.isLeash) OL.unlinkParent(conn.sourceId);
+            else OL.removeConnection(conn.sourceId, conn.outcomeIdx);
+            // Hide bar after delete
+            document.getElementById('v2-context-toolbar').style.display = 'none';
+            break;
+            
+        case 'reorder':
+            OL.requestReorder(conn.sourceId, conn.targetId);
+            break;
+
+        case 'logic':
+            alert("Logic Builder for " + conn.sourceId);
+            break;
+            
+        // ... other cases ...
+    }
+};
+
 window.renderVisualizerV2 = function(isVault) {
     const container = document.getElementById("mainContent");
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
@@ -8764,6 +8790,16 @@ window.renderVisualizerV2 = function(isVault) {
                     <div class="divider-v"></div>
                     <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                     <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
+                </div>
+                <div id="v2-context-toolbar" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; border-color: #fbbf24;">
+                    <span class="tiny bold muted" style="margin-right: 8px; color: #fbbf24;">CONNECTION:</span>
+                    <button class="btn soft" onclick="OL.handleContextAction('logic')" title="Logic">λ</button>
+                    <button class="btn soft" onclick="OL.handleContextAction('delay')" title="Delay">⏱</button>
+                    <button class="btn soft" onclick="OL.handleContextAction('loop')" title="Loop">↻</button>
+                    <button class="btn soft" onclick="OL.handleContextAction('reroute')" title="Reroute">⇄</button>
+                    <button id="ctx-reorder-btn" class="btn soft" onclick="OL.handleContextAction('reorder')" title="Reorder">☰</button>
+                    <div class="divider-v"></div>
+                    <button class="btn soft" style="color: #ef4444;" onclick="OL.handleContextAction('delete')" title="Delete">×</button>
                 </div>
             </div>
         </div>
@@ -9413,56 +9449,49 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
     }
 
-    // 1. Create a parent group for the entire connection
+    // 1. Create a parent group
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group flow-link");
 
-    // 2 The Curved Path
+    // 2. The Visual Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
     path.setAttribute("stroke-width", "3");
     path.setAttribute("fill", "none");
-    svg.prepend(path); // Lines go behind
     group.appendChild(path);
 
-    // 3. Create a wide hit-area path
+    // 3. The Hit Area (Sensitivity Boost)
     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitArea.setAttribute("d", pathData);
     hitArea.setAttribute("stroke", "transparent");
-    hitArea.setAttribute("stroke-width", "30"); // 🚀 The "Magic" sensitivity boost
+    hitArea.setAttribute("stroke-width", "30");
     hitArea.setAttribute("fill", "none");
     hitArea.style.cursor = "pointer";
 
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        const svgLayer = document.getElementById('v2-connections'); 
-        const wasSticky = group.classList.contains('is-sticky');
+        const targetId = endCard.id.replace('v2-node-', '');
+        
+        state.v2.activeConnection = {
+            sourceId: sourceId,
+            targetId: targetId,
+            outcomeIdx: outcomeIdx,
+            isLeash: false
+        };
 
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
+        group.classList.add('is-sticky');
 
-        if (!wasSticky) {
-            group.classList.add('is-sticky');
-            
-            // 🚀 THE COORDINATE SYNC
-            const pt = OL.getRelativePointer(e, svgLayer);
-            const menuEl = group.querySelector('.v2-mini-menu');
-            if (menuEl) {
-                // Force the transform immediately
-                menuEl.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
-                console.log(`📍 Menu snapped to click: ${pt.x}, ${pt.y}`);
-            }
+        const ctxBar = document.getElementById('v2-context-toolbar');
+        if (ctxBar) {
+            ctxBar.style.display = 'flex';
+            document.getElementById('ctx-reorder-btn').style.display = 'none';
         }
     };
 
     group.appendChild(hitArea);
-
-    // 4. THE MINI-MENU (Pass false for isLeash)
-    const targetId = endCard.id.replace('v2-node-', '');
-    const menu = OL.createMiniMenu(midX, midY, false, sourceId, targetId, outcomeIdx);
-    group.appendChild(menu);
-
-    svg.appendChild(group); // Flow lines stay on top of leashes
+    svg.appendChild(group);
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
@@ -9521,58 +9550,47 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     const midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
     const midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
 
-    // 1. Create a parent group for the entire connection
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group leash-group");
 
-    // 2. The Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)");
     path.setAttribute("stroke-width", "2");
     path.setAttribute("stroke-dasharray", "6,4");
     path.setAttribute("fill", "none");
-    svg.prepend(path); // Lines stay behind cards
     group.appendChild(path);
 
-    // 3. Create a wide hit-area path
     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitArea.setAttribute("d", pathData);
     hitArea.setAttribute("stroke", "transparent");
-    hitArea.setAttribute("stroke-width", "30"); // 🚀 The "Magic" sensitivity boost
+    hitArea.setAttribute("stroke-width", "30");
     hitArea.setAttribute("fill", "none");
     hitArea.style.cursor = "pointer";
 
-    // Toggle sticky menu on click
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        const svgLayer = document.getElementById('v2-connections'); 
-        const wasSticky = group.classList.contains('is-sticky');
+        const parentId = parentEl.id.replace('v2-node-', '');
+
+        state.v2.activeConnection = {
+            sourceId: nodeId,
+            targetId: parentId,
+            outcomeIdx: undefined,
+            isLeash: true
+        };
 
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
+        group.classList.add('is-sticky');
 
-        if (!wasSticky) {
-            group.classList.add('is-sticky');
-            
-            // 🚀 THE COORDINATE SYNC
-            const pt = OL.getRelativePointer(e, svgLayer);
-            const menuEl = group.querySelector('.v2-mini-menu');
-            if (menuEl) {
-                // Force the transform immediately
-                menuEl.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
-                console.log(`📍 Menu snapped to click: ${pt.x}, ${pt.y}`);
-            }
+        const ctxBar = document.getElementById('v2-context-toolbar');
+        if (ctxBar) {
+            ctxBar.style.display = 'flex';
+            document.getElementById('ctx-reorder-btn').style.display = 'block';
         }
     };
 
     group.appendChild(hitArea);
-
-    // 4. THE MINI-MENU (Pass true for isLeash)
-    const parentId = parentEl.id.replace('v2-node-', '');
-    const menu = OL.createMiniMenu(midX, midY, true, nodeId, parentId);
-    group.appendChild(menu);
-
-    svg.appendChild(group);
+    svg.prepend(group); // Leashes stay behind cards
 };
 
 OL.startParentLinking = function(e, sourceId) {
