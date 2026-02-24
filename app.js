@@ -9223,7 +9223,11 @@ OL.drawV2Connections = function() {
 OL.createMiniMenu = function(midX, midY, isLeash, sourceId, targetId, outcomeIdx) {
     const menuGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     menuGroup.setAttribute("class", "v2-mini-menu");
-    menuGroup.setAttribute("transform", `translate(${midX}, ${midY})`);
+    
+    const safeX = isNaN(midX) ? 100 : midX;
+    const safeY = isNaN(midY) ? 100 : midY;
+    
+    menuGroup.setAttribute("transform", `translate(${safeX}, ${safeY})`);
 
     // An invisible circle that covers the entire menu area to prevent flicker
     const bridge = document.createElementNS("http://www.w3.org/2000/svg", "circle");
