@@ -8837,28 +8837,22 @@ OL.zoom = function(delta) {
 };
 
 OL.startNodeDrag = function(e, nodeId) {
-    if (e.target.classList.contains('v2-port')) return;
+    if (e.target.classList.contains('v2-port') || e.target.classList.contains('v2-step-eject')) return;
     e.preventDefault();
 
     const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
     const nodeData = source.find(n => n.id === nodeId);
     if (!nodeData) return;
 
-    // 🚀 Define your constants at the start of the drag
     const viewport = document.getElementById('v2-viewport');
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    const type = (nodeData.type || "").toUpperCase();
-
-    const isStep = type === 'STEP' || 
-                type === 'SOP' || 
-                type === 'INSTRUCTION';
-
-    console.log(`Dragging node: ${nodeData.name} (Type: ${type}) | isStep: ${isStep}`);
-
+    
+    // 🚀 THE FIX: Use the correct zoom path
     const zoom = state.v2.zoom || 1;
 
-    // 🚀 Capture where the drag started
+    // Capture starting points
     const startMouseX = e.clientX;
     const startMouseY = e.clientY;
     const startNodeX = nodeData.coords?.x || 0;
@@ -8870,7 +8864,7 @@ OL.startNodeDrag = function(e, nodeId) {
     const onMouseMove = (moveEvent) => {
         lastEvent = moveEvent;
 
-        // 🚀 THE MATH: (New Mouse - Old Mouse) / Zoom + Original Position
+        // 🚀 THE MATH: Subtract start from current, adjust for zoom, then add to original position
         const dx = (moveEvent.clientX - startMouseX) / zoom;
         const dy = (moveEvent.clientY - startMouseY) / zoom;
 
@@ -8879,26 +8873,26 @@ OL.startNodeDrag = function(e, nodeId) {
             y: startNodeY + dy
         };
 
-        // 1. Temporarily make the card we are dragging invisible to the mouse
-        if (nodeEl) nodeEl.style.pointerEvents = 'none';
+        // 🚀 THE VISUAL: Update the DOM element immediately for smooth 60fps movement
+        if (nodeEl) {
+            nodeEl.style.left = `${nodeData.coords.x}px`;
+            nodeEl.style.top = `${nodeData.coords.y}px`;
+        }
         
-        // 2. See what is EXACTLY under the cursor
-        const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-        
-        // 3. Find the closest card container (climbing up from icons/text)
-        const hoverEl = hit?.closest('.v2-node-card');
-        
-        // 4. Turn pointer events back on so we can still 'drop' it
-        if (nodeEl) nodeEl.style.pointerEvents = 'auto';
+        // Handle Hover Glow for Step Absorption
+        const type = (nodeData.type || "").toUpperCase();
+        const isStep = type === 'STEP' || type === 'SOP' || type === 'INSTRUCTION';
 
-        // 5. Clear all old glows
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-        
-        // 6. Apply glow if we found a valid target
-        if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
-            // 🚀 DEBUG: Let's see what we are hitting in the console
-            // console.log("Hovering over:", hoverEl.id); 
-            hoverEl.classList.add('drop-hover');
+        if (isStep && nodeEl) {
+            nodeEl.style.pointerEvents = 'none'; // Ghost the dragged card
+            const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+            const hoverEl = hit?.closest('.v2-node-card');
+            nodeEl.style.pointerEvents = 'auto'; // Bring it back
+
+            document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+            if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
+                hoverEl.classList.add('drop-hover');
+            }
         }
 
         OL.drawV2Connections();
@@ -8910,6 +8904,10 @@ OL.startNodeDrag = function(e, nodeId) {
         document.removeEventListener('mouseup', onMouseUp);
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
 
+        // Handle Absorption logic
+        const type = (nodeData.type || "").toUpperCase();
+        const isStep = type === 'STEP' || type === 'SOP' || type === 'INSTRUCTION';
+
         if (isStep) {
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
             const dropTargetEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)?.closest('.v2-node-card');
@@ -8919,30 +8917,23 @@ OL.startNodeDrag = function(e, nodeId) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => n.id === targetId);
 
-                // 🎯 Ensure we aren't dropping an SOP into another SOP
                 if (targetNode && (targetNode.type || "").toUpperCase() !== 'SOP') {
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
-
-                        // 🚀 If the dragged node has its own steps, merge them!
                         const stepsToAdd = Array.isArray(nodeData.steps) && nodeData.steps.length > 0 
                             ? nodeData.steps 
                             : [{ text: nodeData.name, id: Date.now() }];
-
                         targetNode.steps.push(...stepsToAdd);
-
-                        // Delete the original loose SOP node
                         const idx = source.findIndex(n => n.id === nodeId);
                         if (idx > -1) source.splice(idx, 1);
                     });
-
-                    if (typeof renderVisualizerV2 === 'function') renderVisualizerV2(isVault);
-                    return;
+                    renderVisualizerV2(isVault);
+                    return; 
                 }
             }
         }
 
-        // Save the final position
+        // Standard Save
         await OL.updateAndSync(() => {
             const nodeToUpdate = source.find(n => n.id === nodeId);
             if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
