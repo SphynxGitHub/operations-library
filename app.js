@@ -8716,7 +8716,8 @@ window.renderVisualizerV2 = function(isVault) {
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
-            <div class="v2-canvas" id="v2-canvas" style="transform: scale(${state.v2.zoom});">
+                <div class="v2-canvas" id="v2-canvas" 
+                    style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
                 
                 <div class="v2-stage-layer">
                     ${renderV2Stages(isVault)}
@@ -8765,6 +8766,40 @@ OL.openBrainDump = function() {
     `;
     openModal(html);
     OL.syncDumpOptions(); 
+};
+
+OL.initV2Panning = function() {
+    const viewport = document.getElementById('v2-viewport');
+    const canvas = document.getElementById('v2-canvas');
+    if (!viewport || !canvas) return;
+
+    let isPanning = false;
+    let startX, startY;
+
+    viewport.onmousedown = (e) => {
+        // Only pan if clicking the background, not a card
+        if (e.target !== viewport && e.target !== canvas) return;
+        
+        isPanning = true;
+        startX = e.clientX - state.v2.pan.x;
+        startY = e.clientY - state.v2.pan.y;
+        viewport.style.cursor = 'grabbing';
+    };
+
+    window.onmousemove = (e) => {
+        if (!isPanning) return;
+        
+        state.v2.pan.x = e.clientX - startX;
+        state.v2.pan.y = e.clientY - startY;
+
+        // 🚀 THE GPU FIX: Use translate3d to avoid layout thrashing
+        canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
+    };
+
+    window.onmouseup = () => {
+        isPanning = false;
+        viewport.style.cursor = 'grab';
+    };
 };
 
 OL.syncDumpOptions = function() {
