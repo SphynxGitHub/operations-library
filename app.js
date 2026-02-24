@@ -9216,6 +9216,13 @@ function renderV2Nodes(isVault) {
 OL.jumpToScopingItem = function(nodeId) {
     console.log("🚀 Jumping to Scoping for:", nodeId);
 
+    state.v2.returnTo = {
+        viewMode: state.viewMode,
+        pan: { ...state.v2.pan },
+        zoom: state.v2.zoom,
+        nodeId: nodeId
+    };
+
     // 1. Set the target ID so the scoping sheet knows what to highlight
     state.scopingTargetId = nodeId;
 
@@ -9239,6 +9246,33 @@ OL.jumpToScopingItem = function(nodeId) {
             element.classList.add('row-flash-highlight');
         }
     }, 400); // Slightly longer delay to ensure the scoping sheet is built
+};
+
+OL.returnToFlow = function() {
+    if (!state.v2.returnTo) return;
+
+    const { viewMode, pan, zoom, nodeId } = state.v2.returnTo;
+
+    // 1. Restore the state
+    state.viewMode = viewMode;
+    state.v2.pan = pan;
+    state.v2.zoom = zoom;
+
+    // 2. Clear the return state so the button disappears
+    state.v2.returnTo = null;
+
+    // 3. Navigate back
+    if (typeof handleRoute === 'function') {
+        handleRoute(viewMode);
+    }
+
+    // 4. Highlight the node we came from
+    setTimeout(() => {
+        const nodeEl = document.querySelector(`#node-${nodeId}`);
+        if (nodeEl) {
+            nodeEl.classList.add('v2-node-highlight-flash');
+        }
+    }, 500);
 };
 
 OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
@@ -14386,12 +14420,20 @@ function renderScopingRow (item, idx, showUnits) {
     ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
     : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
 
+    // Inside your Scoping Row or Inspector template:
+    const backBtn = state.v2.returnTo ? `
+        <button class="btn-back-to-flow" onclick="OL.returnToFlow()">
+            ⬅ Back to Flow
+        </button>
+    ` : '';
+
     return `
         <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
             <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
                 <span style="font-size: 1.2em; line-height: 1; margin-top: 2px;">${typeIcon}</span>
                 ${esc(res.name || "Manual Item")}
+                ${backBtn}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
             ${unitsHtml}
