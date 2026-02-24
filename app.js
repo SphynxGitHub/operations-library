@@ -9298,29 +9298,35 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
     }
 
-    // 🚀 2. DRAW LINE (Send to Back)
+    // Create a parent group for the entire connection
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("class", "v2-connection-group");
+
+    // 1. The Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
     path.setAttribute("stroke-width", "3");
     path.setAttribute("fill", "none");
     svg.prepend(path); // Lines go behind
+    group.appendChild(path);
 
     // 🚀 3. DRAW DELETE BUTTON (Bring to Front)
     const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    deleteBtn.setAttribute("class", "v2-line-delete-btn");
+    deleteBtn.setAttribute("class", "v2-delete-trigger");
     deleteBtn.style.cursor = "pointer";
     deleteBtn.onclick = (e) => {
         e.stopPropagation();
         if(confirm("Disconnect these cards?")) OL.removeConnection(sourceId, outcomeIdx);
     };
+    group.appendChild(deleteBtn);
 
     deleteBtn.innerHTML = `
         <circle cx="${midX}" cy="${midY}" r="10" fill="#ef4444" stroke="#fff" stroke-width="2" />
         <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-size="12" fill="white" font-weight="bold" style="pointer-events:none;">×</text>
     `;
 
-    svg.appendChild(deleteBtn); // Buttons go on top
+    svg.appendChild(group);
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
@@ -9381,7 +9387,7 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
 
     // Create a parent group for the entire connection
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", "v2-connection-group");
+    group.setAttribute("class", "v2-connection-group leash-group");
 
     // 1. The Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
