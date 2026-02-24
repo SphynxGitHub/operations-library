@@ -8800,7 +8800,7 @@ window.renderVisualizerV2 = function(isVault) {
                     <div class="v2-toolbar">
                         <select class="v2-toolbar-select" onchange="state.v2.activeScope = this.value; renderVisualizerV2(${isVault});">
                             <option value="all">ALL SCOPES</option>
-                            ${[...new Set(nodes.map(n => n.scope).filter(Boolean))].map(s => 
+                            ${[...new Set(nodes.map(n => n.scope || n.originProject).filter(Boolean))].map(s => 
                                 `<option value="${s}" ${state.v2.activeScope === s ? 'selected' : ''}>${s.toUpperCase()}</option>`
                             ).join('')}
                         </select>
@@ -9101,9 +9101,9 @@ function renderV2Nodes(isVault) {
     const client = getActiveClient();
     let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    // 🚀 THE FILTER: If a scope is selected in state, narrow the list
+   // 🚀 Update the Scope Filter to use 'archetype' or 'originProject' if 'scope' is missing
     if (state.v2.activeScope && state.v2.activeScope !== 'all') {
-        nodes = nodes.filter(n => n.scope === state.v2.activeScope);
+        nodes = nodes.filter(n => (n.scope === state.v2.activeScope || n.originProject === state.v2.activeScope));
     }
 
     return nodes.map((node, idx) => {
@@ -9118,19 +9118,20 @@ function renderV2Nodes(isVault) {
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
-        const isInScopeCheck = typeof OL.isResourceInScope === 'function' ? OL.isResourceInScope(node.id) : false;
-        const hasScopeName = !!node.scope;
+        const isInScope = !!OL.isResourceInScope(node.id);
+        
+        // 2. Fallback to originProject if that's what you consider the "Scope"
+        const displayScope = node.scope || node.originProject;
 
-        // 🚀 SHOW BADGE if it has a scope name OR is technically "In Scope"
-        const scopeBadge = (hasScopeName || isInScopeCheck) ? `
+        const scopeBadge = (isInScope || displayScope) ? `
             <div class="v2-scope-badge" 
-                onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
-                title="View in Scoping"
-                style="position: absolute; top: -10px; left: 12px; background: #10b981; color: white; 
-                        font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 10px; 
+                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
+                 title="View in Scoping"
+                 style="position: absolute; top: -10px; left: 12px; background: #10b981; color: white; 
+                        font-size: 9px; font-weight: 800; padding: 2.25px 8px; border-radius: 10px; 
                         cursor: pointer; z-index: 999; text-transform: uppercase; border: 1px solid white;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                ${esc(node.scope || 'Scoped')}
+                ${esc(displayScope || 'Scoped')}
             </div>
         ` : '';
 
