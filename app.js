@@ -8740,6 +8740,12 @@ window.renderVisualizerV2 = function(isVault) {
             </div>
         </div>
     `;
+    
+    // At the bottom of renderVisualizerV2
+    setTimeout(() => {
+        OL.initV2Panning(); // Activates grid movement
+        console.log("🎮 Graph Engine Initialized");
+    }, 50);
 };
 
 OL.openBrainDump = function() {
@@ -8905,28 +8911,25 @@ function renderV2Stages(isVault) {
 function renderV2Nodes(isVault) {
     const client = getActiveClient();
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    
-    // In V2, we are looking for "Steps" that have coordinates.
-    // For now, let's render every technical resource as a node if it's not a Workflow.
     const nodes = allResources.filter(r => (r.type || "").toLowerCase() !== 'workflow');
 
     return nodes.map(node => {
-        // Use saved coordinates or default to a cascade
-        const x = node.coords?.x || 100;
+        // Fallback coordinates if none exist to prevent pile-up
+        const x = node.coords?.x || 50;
         const y = node.coords?.y || 100;
         const icon = OL.getRegistryIcon(node.type);
 
         return `
             <div class="v2-node-card" 
                  id="v2-node-${node.id}"
-                 style="left: ${x}px; top: ${y}px;"
+                 style="position: absolute; left: ${x}px; top: ${y}px; z-index: 10;"
                  onmousedown="OL.startNodeDrag(event, '${node.id}')"
                  onclick="event.stopPropagation(); OL.loadInspector('${node.id}')">
-                <div class="v2-node-header">
-                    <span>${icon}</span>
-                    <span class="tiny muted uppercase bold">${esc(node.type)}</span>
+                <div class="v2-node-header" style="pointer-events: none;">
+                    <span style="font-size: 14px;">${icon}</span>
+                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
                 </div>
-                <div class="v2-node-body">${esc(node.name)}</div>
+                <div class="v2-node-body" style="pointer-events: none; font-size: 11px;">${esc(node.name)}</div>
             </div>
         `;
     }).join('');

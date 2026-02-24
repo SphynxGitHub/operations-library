@@ -4039,6 +4039,7 @@ ARROWS
     background-size: 30px 30px; /* Dot grid spacing */
     transform-origin: 0 0;
     transition: transform 0.1s ease-out;
+    contain: layout style;
 }
 
 /* Stage Lanes in V2 */
@@ -4064,4 +4065,16 @@ ARROWS
     text-transform: uppercase;
     font-size: 14px;
     opacity: 0.5;
+}
+
+.v2-node-card {
+    width: 220px; /* Wider to accommodate Zap names seen in your screenshot */
+    min-height: 60px;
+    background: #111827; /* Darker, high-contrast gray */
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+    user-select: none;
+    will-change: left, top; /* 🚀 Critical for performance */
 }
