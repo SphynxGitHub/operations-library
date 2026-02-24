@@ -8838,118 +8838,91 @@ OL.zoom = function(delta) {
 
 OL.startNodeDrag = function(e, nodeId) {
     if (e.target.classList.contains('v2-port') || e.target.classList.contains('v2-step-eject')) return;
-    e.preventDefault();
-
-    const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-    const nodeData = source.find(n => String(n.id) === String(nodeId));
-    if (!nodeData) return;
+    
+    // 🛑 1. THE EMERGENCY BRAKE
+    window.BLOCK_RENDER = true; 
+    state.isSaving = true; 
 
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
+    if (!nodeEl) return;
 
-    // 🚀 THE NEW CHECK: Detect "Step-ness" by its CSS classes
     const isStep = nodeEl.classList.contains('is-loose') || 
                    nodeEl.classList.contains('type-step') || 
                    nodeEl.classList.contains('type-sop');
 
     const viewport = document.getElementById('v2-viewport');
     const zoom = state.v2.zoom || 1;
-
     const startMouseX = e.clientX;
     const startMouseY = e.clientY;
-    const startNodeX = nodeData.coords?.x || 0;
-    const startNodeY = nodeData.coords?.y || 0;
+    const startNodeX = parseFloat(nodeEl.style.left);
+    const startNodeY = parseFloat(nodeEl.style.top);
     
     let lastEvent = e;
-    state.isSaving = true; // Lock sync engine
-    if (viewport) viewport.classList.add('is-dragging');
 
     const onMouseMove = (moveEvent) => {
         lastEvent = moveEvent;
         const dx = (moveEvent.clientX - startMouseX) / zoom;
         const dy = (moveEvent.clientY - startMouseY) / zoom;
 
-        // 1. Update position in memory
-        nodeData.coords = { x: startNodeX + dx, y: startNodeY + dy };
+        // Visual only update - NO SAVING HERE
+        nodeEl.style.left = `${startNodeX + dx}px`;
+        nodeEl.style.top = `${startNodeY + dy}px`;
+        nodeEl.style.zIndex = "9999";
 
-        // 2. Immediate Visual Update (Direct DOM)
-        if (nodeEl) {
-            nodeEl.style.left = `${nodeData.coords.x}px`;
-            nodeEl.style.top = `${nodeData.coords.y}px`;
-            nodeEl.style.zIndex = "9999";
-        }
+        if (isStep) {
+            nodeEl.style.pointerEvents = 'none';
+            const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+            const hoverEl = hit?.closest('.v2-node-card');
+            nodeEl.style.pointerEvents = 'auto';
 
-        // 3. 🎯 THE DEEP-SCAN HIT TEST
-        // We ghost the dragged element AND the SVG layer to see what's behind them
-        if (nodeEl) nodeEl.style.pointerEvents = 'none';
-        const svgLayer = document.getElementById('v2-connections');
-        if (svgLayer) svgLayer.style.pointerEvents = 'none';
-
-        // Get the element at coordinates
-        const hitEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-        // Standardize: Look for the nearest card parent
-        const hoverEl = hitEl?.closest('.v2-node-card');
-
-        // 🚀 Restore pointer events so the card is still "grabbable"
-        if (nodeEl) nodeEl.style.pointerEvents = 'auto';
-        if (svgLayer) svgLayer.style.pointerEvents = 'auto';
-
-        // 4. Clear old glows and apply new one
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-        
-        if (isStep && hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
-            // Only glow if it's NOT another loose step
-            if (!hoverEl.classList.contains('is-loose')) {
+            document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+            if (hoverEl && hoverEl.id !== `v2-node-${nodeId}` && !hoverEl.classList.contains('is-loose')) {
                 hoverEl.classList.add('drop-hover');
             }
         }
-
-        // 🚀 CRITICAL: Don't call OL.persist() or updateAndSync here! 
-        // Only update visual connections.
-        OL.drawV2Connections(); 
+        OL.drawV2Connections();
     };
 
     const onMouseUp = async () => {
-        state.isSaving = false; // Release the shield
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-        if (viewport) viewport.classList.remove('is-dragging');
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+        
+        const finalX = parseFloat(nodeEl.style.left);
+        const finalY = parseFloat(nodeEl.style.top);
 
-        // 📥 FINAL CHECK: Did we drop it on a resource?
-        if (isStep) {
-            if (nodeEl) nodeEl.style.pointerEvents = 'none';
-            const finalHit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
-            const dropTargetEl = finalHit?.closest('.v2-node-card');
-            if (nodeEl) nodeEl.style.pointerEvents = 'auto';
+        // Check for drop
+        nodeEl.style.pointerEvents = 'none';
+        const dropTarget = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)?.closest('.v2-node-card');
+        nodeEl.style.pointerEvents = 'auto';
 
-            if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}` && !dropTargetEl.classList.contains('is-loose')) {
-                const targetId = dropTargetEl.id.replace('v2-node-', '');
-                const targetNode = source.find(n => String(n.id) === String(targetId));
-
-                if (targetNode) {
-                    console.log("🎯 Absorption starting...");
-                    await OL.updateAndSync(() => {
-                        if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
-                        targetNode.steps.push({
-                            text: nodeData.name || nodeData.text || "Ejected Step",
-                            id: Date.now()
-                        });
-                        const idx = source.findIndex(n => String(n.id) === String(nodeId));
-                        if (idx > -1) source.splice(idx, 1);
-                    });
-                    renderVisualizerV2(isVault);
-                    return; // 🛑 EXIT early to prevent coordinate saving for a deleted node
+        if (isStep && dropTarget && !dropTarget.classList.contains('is-loose')) {
+            const targetId = dropTarget.id.replace('v2-node-', '');
+            // ABSORB LOGIC
+            await OL.updateAndSync(() => {
+                const source = window.location.hash.includes('vault') ? state.master.resources : getActiveClient().projectData.localResources;
+                const nodeData = source.find(n => n.id === nodeId);
+                const targetNode = source.find(n => n.id === targetId);
+                if (targetNode && nodeData) {
+                    if (!targetNode.steps) targetNode.steps = [];
+                    targetNode.steps.push({ text: nodeData.name, id: Date.now() });
+                    source.splice(source.indexOf(nodeData), 1);
                 }
-            }
+            });
+        } else {
+            // REGULAR MOVE SAVE
+            await OL.updateAndSync(() => {
+                const source = window.location.hash.includes('vault') ? state.master.resources : getActiveClient().projectData.localResources;
+                const node = source.find(n => n.id === nodeId);
+                if (node) node.coords = { x: finalX, y: finalY };
+            });
         }
 
-        // 💾 STANDARD SAVE: Only runs if absorption didn't happen
-        await OL.updateAndSync(() => {
-            const nodeToUpdate = source.find(n => String(n.id) === String(nodeId));
-            if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
-        });
+        // 🟢 2. RELEASE THE BRAKE
+        window.BLOCK_RENDER = false;
+        state.isSaving = false;
+        renderVisualizerV2(window.location.hash.includes('vault'));
     };
+
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 };
