@@ -8718,6 +8718,14 @@ state.v2.connectionMode = {
 
 state.v2.expandedNodes = state.v2.expandedNodes || new Set();
 
+document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('.v2-connection-group')) {
+        document.querySelectorAll('.v2-connection-group.is-sticky').forEach(el => {
+            el.classList.remove('is-sticky');
+        });
+    }
+});
+
 window.renderVisualizerV2 = function(isVault) {
     const container = document.getElementById("mainContent");
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
@@ -9392,7 +9400,28 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     svg.prepend(path); // Lines go behind
     group.appendChild(path);
 
-    // 3. THE MINI-MENU (Pass false for isLeash)
+    // 3. Create a wide hit-area path
+    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    hitArea.setAttribute("d", pathData);
+    hitArea.setAttribute("stroke", "transparent");
+    hitArea.setAttribute("stroke-width", "30"); // 🚀 The "Magic" sensitivity boost
+    hitArea.setAttribute("fill", "none");
+    hitArea.style.cursor = "pointer";
+
+    // Toggle sticky menu on click
+    hitArea.onclick = (e) => {
+        e.stopPropagation();
+        const isSticky = group.classList.toggle('is-sticky');
+        
+        // Close any other sticky menus
+        document.querySelectorAll('.v2-connection-group.is-sticky').forEach(el => {
+            if (el !== group) el.classList.remove('is-sticky');
+        });
+    };
+
+    group.appendChild(hitArea);
+
+    // 4. THE MINI-MENU (Pass false for isLeash)
     const targetId = endCard.id.replace('v2-node-', '');
     const menu = OL.createMiniMenu(midX, midY, false, sourceId, targetId, outcomeIdx);
     group.appendChild(menu);
@@ -9470,12 +9499,33 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     svg.prepend(path); // Lines stay behind cards
     group.appendChild(path);
 
-    // 3. THE MINI-MENU (Pass true for isLeash)
+    // 3. Create a wide hit-area path
+    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    hitArea.setAttribute("d", pathData);
+    hitArea.setAttribute("stroke", "transparent");
+    hitArea.setAttribute("stroke-width", "30"); // 🚀 The "Magic" sensitivity boost
+    hitArea.setAttribute("fill", "none");
+    hitArea.style.cursor = "pointer";
+
+    // Toggle sticky menu on click
+    hitArea.onclick = (e) => {
+        e.stopPropagation();
+        const isSticky = group.classList.toggle('is-sticky');
+        
+        // Close any other sticky menus
+        document.querySelectorAll('.v2-connection-group.is-sticky').forEach(el => {
+            if (el !== group) el.classList.remove('is-sticky');
+        });
+    };
+
+    group.appendChild(hitArea);
+
+    // 4. THE MINI-MENU (Pass true for isLeash)
     const parentId = parentEl.id.replace('v2-node-', '');
     const menu = OL.createMiniMenu(midX, midY, true, nodeId, parentId);
     group.appendChild(menu);
 
-    svg.prepend(group);
+    svg.appendChild(group);
 };
 
 OL.startParentLinking = function(e, sourceId) {

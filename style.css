@@ -4477,3 +4477,27 @@ ARROWS
 .menu-item:active {
     transform: scale(0.9);
 }
+
+/* Ensure the group keeps the menu alive while mouse is inside it */
+.v2-connection-group {
+    pointer-events: auto;
+}
+
+/* 🚀 SENSITIVITY FIX: Reveal menu on hover OR if sticky class is present */
+.v2-connection-group:hover .v2-mini-menu,
+.v2-connection-group.is-sticky .v2-mini-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1) translate(0, 0);
+}
+
+/* Visual feedback that the line is "Selected" */
+.v2-connection-group.is-sticky path:not([stroke="transparent"]) {
+    stroke-width: 5;
+    filter: drop-shadow(0 0 8px #fbbf24);
+}
+
+/* Glow effect when hovering the invisible hit area */
+.v2-connection-group:hover path:not([stroke="transparent"]) {
+    stroke-width: 4;
+}
