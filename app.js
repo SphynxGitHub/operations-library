@@ -9120,15 +9120,19 @@ function renderV2Nodes(isVault) {
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
-        // 🚀 1. THE SCOPED BADGE (Top Left)
-        const scopeBadge = node.scope ? `
+        const isInScope = !!OL.isResourceInScope(node.id);
+
+        const scopeBadge = isInScope ? `
             <div class="v2-scope-badge" 
-                onclick="event.stopPropagation(); OL.loadInspector('${node.id}')"
-                title="Open in Inspector">
-                ${esc(node.scope)}
+                onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
+                title="View in Scoping"
+                style="position: absolute; top: -10px; left: 12px; background: #10b981; color: white; 
+                        font-size: 9px; font-weight: 800; padding: 2.25px 8px; border-radius: 10px; 
+                        cursor: pointer; z-index: 999; text-transform: uppercase; border: 1px solid white;">
+                SCOPED
             </div>
         ` : '';
-
+        
         // 🚀 Dynamic Badge for standard resources
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
