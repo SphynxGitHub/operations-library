@@ -11816,13 +11816,33 @@ OL.loadInspector = function(targetId, parentId = null) {
     html += `
         <div class="card-section" style="margin-top:25px; border-top: 2px solid var(--accent); padding-top:15px; background: rgba(56, 189, 248, 0.03);">
             <label class="modal-section-label">🎯 ${levelLabel.toUpperCase()} EXIT LOGIC</label>
+            
             <div id="step-outcomes-list" style="margin-top:8px;">
                 ${renderStepOutcomes(targetId, data)} 
             </div>
+
+            <div class="reorder-logic-wrap" style="margin-top:15px;">
+                ${(data.outcomes || []).map((oc, idx) => {
+                    const targetNode = OL.getResourceById(oc.targetId || oc.toId || oc.action?.replace('jump_res_', ''));
+                    return `
+                        <div class="reorder-item" style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.05); padding:6px 10px; margin-bottom:4px; border-radius:4px; border: 1px solid rgba(255,255,255,0.1);">
+                            <span class="tiny bold accent" style="width:12px;">${idx + 1}</span>
+                            <div style="flex:1; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                ${esc(oc.label || 'Path')} ➔ <span class="muted">${esc(targetNode?.name || 'Unknown')}</span>
+                            </div>
+                            <div style="display:flex; gap:2px;">
+                                <button class="btn tiny soft" onclick="OL.shiftOutcome('${data.id}', ${idx}, -1)" style="padding: 2px 5px; font-size: 8px;">▲</button>
+                                <button class="btn tiny soft" onclick="OL.shiftOutcome('${data.id}', ${idx}, 1)" style="padding: 2px 5px; font-size: 8px;">▼</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+
             <div class="search-map-container" style="margin-top:10px;">
                 <input type="text" class="modal-input tiny outcome-search-input" placeholder="+ Add path from this ${levelLabel}..." 
-                       onfocus="OL.filterOutcomeSearch('${targetId}', '${targetId}', '')"
-                       oninput="OL.filterOutcomeSearch('${targetId}', '${targetId}', this.value)">
+                        onfocus="OL.filterOutcomeSearch('${targetId}', '${targetId}', '')"
+                        oninput="OL.filterOutcomeSearch('${targetId}', '${targetId}', this.value)">
                 <div id="outcome-results" class="search-results-overlay"></div>
             </div>
         </div>`;
