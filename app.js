@@ -8846,6 +8846,8 @@ OL.startNodeDrag = function(e, nodeId) {
     const nodeData = source.find(n => n.id === nodeId);
     if (!nodeData) return;
 
+    state.isSaving = true;
+
     const viewport = document.getElementById('v2-viewport');
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
     
@@ -8877,6 +8879,7 @@ OL.startNodeDrag = function(e, nodeId) {
         if (nodeEl) {
             nodeEl.style.left = `${nodeData.coords.x}px`;
             nodeEl.style.top = `${nodeData.coords.y}px`;
+            nodeEl.style.zIndex = "9999"; // Bring to front while dragging
         }
         
         // Handle Hover Glow for Step Absorption
