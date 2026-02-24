@@ -9174,29 +9174,28 @@ OL.drawV2Connections = function() {
 
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
+    const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     
-    // Clear old lines
     svg.innerHTML = '';
     
-    // Update SVG size to match the infinite canvas scroll
+    // Maintain SVG size
     const canvas = document.getElementById('v2-canvas');
     svg.setAttribute('width', canvas.scrollWidth);
     svg.setAttribute('height', canvas.scrollHeight);
 
-    // Inside OL.drawV2Connections
     source.forEach(node => {
-        if (!node.outcomes) return;
-
+        // 1. 🚀 MOVE THIS UP: Draw Leash even if there are no outcomes
         if (node.parentId) {
             const childEl = document.getElementById(`v2-node-${node.id}`);
             const parentEl = document.getElementById(`v2-node-${node.parentId}`);
 
             if (childEl && parentEl) {
-                // Draw a dashed "Leash" line
                 OL.drawLeashLine(svg, childEl, parentEl, node.id);
             }
         }
+
+        // 2. Now check for outcomes
+        if (!node.outcomes || !Array.isArray(node.outcomes)) return;
 
         node.outcomes.forEach((outcome, idx) => {
             const fromEl = document.getElementById(`v2-node-${node.id}`);
@@ -9209,7 +9208,6 @@ OL.drawV2Connections = function() {
             const toEl = document.getElementById(`v2-node-${tid}`);
 
             if (fromEl && toEl) {
-                // 🚀 PASS THE OUTCOME DATA HERE
                 OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.label, node.id, idx, outcome);
             }
         });
@@ -9447,12 +9445,15 @@ OL.linkStepToParent = async function(stepId, targetResourceId) {
         const node = source.find(n => n.id === stepId);
         
         if (node) {
-            node.parentId = targetResourceId; // 🎯 Save it
+            node.parentId = targetResourceId; 
+            console.log(`✅ Data Locked: ${node.name} -> ${targetResourceId}`);
         }
     });
 
-    // 🚀 CRITICAL: You must manually call this to update the lines immediately
-    OL.drawV2Connections(); 
+    // 🚀 THE FIX: Force immediate redraw of all connections
+    if (typeof OL.drawV2Connections === 'function') {
+        OL.drawV2Connections();
+    }
 };
 
 OL.showParentLine = function(childId, parentId) {
