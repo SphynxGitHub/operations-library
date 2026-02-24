@@ -9075,13 +9075,12 @@ function renderV2Nodes(isVault) {
             `;
         }).join('') : '';
 
-        // 🚀 Linker moved to the Left Side for Loose Steps
-        const parentHandle = isLooseStep ? `
-            <div class="v2-parent-linker corner-linker" 
-                id="linker-${node.id}"
-                onmousedown="OL.startParentLinking(event, '${node.id}')">
-                <i class="fas fa-link"></i>
-            </div>
+        // Add 4 tiny invisible/subtle hit-areas for linking
+        const cornerLinkers = isLooseStep ? `
+            <div class="v2-corner-link tl" onmousedown="OL.startParentLinking(event, '${node.id}', 'tl')"></div>
+            <div class="v2-corner-link tr" onmousedown="OL.startParentLinking(event, '${node.id}', 'tr')"></div>
+            <div class="v2-corner-link bl" onmousedown="OL.startParentLinking(event, '${node.id}', 'bl')"></div>
+            <div class="v2-corner-link br" onmousedown="OL.startParentLinking(event, '${node.id}', 'br')"></div>
         ` : '';
 
         // Context Icon update: show active link if parentId exists
@@ -9095,7 +9094,7 @@ function renderV2Nodes(isVault) {
                 style="position: absolute; left: ${x}px; top: ${y}px; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
-                ${parentHandle}
+                ${cornerLinkers}
 
                 <div class="v2-context-corner">${contextIcon}</div>
                 ${stepBadge}
@@ -9334,40 +9333,60 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
-    const childRect = childEl.getBoundingClientRect();
-    const parentRect = parentEl.getBoundingClientRect();
+    const cR = childEl.getBoundingClientRect();
+    const pR = parentEl.getBoundingClientRect();
 
-    // Start: The Top-Left Corner Linker
-    const s = {
-        x: (childRect.left - canvasRect.left) / zoom,
-        y: (childRect.top - canvasRect.top) / zoom
-    };
+    // 🚀 1. Define all 4 corners for Child
+    const childCorners = [
+        { x: cR.left, y: cR.top },     // TL
+        { x: cR.right, y: cR.top },    // TR
+        { x: cR.left, y: cR.bottom },  // BL
+        { x: cR.right, y: cR.bottom }  // BR
+    ];
 
-    // End: The Center of the Parent Resource
-    const e = {
-        x: (parentRect.left - canvasRect.left + parentRect.width / 2) / zoom,
-        y: (parentRect.top - canvasRect.top + parentRect.height / 2) / zoom
-    };
+    // 🚀 2. Define all 4 corners for Parent
+    const parentCorners = [
+        { x: pR.left, y: pR.top },
+        { x: pR.right, y: pR.top },
+        { x: pR.left, y: pR.bottom },
+        { x: pR.right, y: pR.bottom }
+    ];
 
-    // Calculate Curvature (The "Jump")
+    // 🚀 3. Find the closest pair of corners
+    let minDist = Infinity;
+    let s = { x: 0, y: 0 };
+    let e = { x: 0, y: 0 };
+
+    childCorners.forEach(cc => {
+        parentCorners.forEach(pc => {
+            const dist = Math.hypot(cc.x - pc.x, cc.y - pc.y);
+            if (dist < minDist) {
+                minDist = dist;
+                s = { x: (cc.left || cc.x - canvasRect.left) / zoom, y: (cc.top || cc.y - canvasRect.top) / zoom };
+                e = { x: (pc.left || pc.x - canvasRect.left) / zoom, y: (pc.top || pc.y - canvasRect.top) / zoom };
+            }
+        });
+    });
+
+    // 🚀 4. Path Math (Organic Curve)
     const dx = e.x - s.x;
     const dy = e.y - s.y;
-    // Control points to create a smooth "S" or "C" curve
-    const cp1x = s.x + dx * 0.25;
-    const cp1y = s.y + dy * 0.75;
-    const cp2x = s.x + dx * 0.75;
-    const cp2y = s.y + dy * 0.25;
+    
+    // Create a "Jump" by offsetting control points based on distance
+    const cp1x = s.x + (Math.abs(dx) < 50 ? 50 : dx * 0.2);
+    const cp1y = s.y + dy * 0.8;
+    const cp2x = e.x - (Math.abs(dx) < 50 ? 50 : dx * 0.2);
+    const cp2y = e.y - dy * 0.8;
 
     const pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
 
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)"); // Amber/Gold
+    path.setAttribute("stroke", "rgba(251, 191, 36, 0.4)");
     path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-dasharray", "6,4"); // Dashed style
+    path.setAttribute("stroke-dasharray", "6,4");
     path.setAttribute("fill", "none");
-    path.setAttribute("class", "v2-leash-curve");
-
+    
     svg.prepend(path);
 };
 
@@ -9415,8 +9434,23 @@ OL.startParentLinking = function(e, sourceId) {
         const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
         const targetCard = hit?.closest('.v2-node-card.is-resource');
         document.querySelectorAll('.v2-node-card').forEach(c => c.style.boxShadow = '');
-        if (targetCard && targetCard !== sourceEl) {
-            targetCard.style.boxShadow = '0 0 15px #fbbf24';
+        if (targetCard) {
+            const tR = targetCard.getBoundingClientRect();
+            const tCorners = [
+                {x: tR.left, y: tR.top}, {x: tR.right, y: tR.top},
+                {x: tR.left, y: tR.bottom}, {x: tR.right, y: tR.bottom}
+            ];
+            
+            // Find closest corner of target to current mouse pos
+            let bestCorner = tCorners[0];
+            let minD = Infinity;
+            tCorners.forEach(tc => {
+                const d = Math.hypot(tc.x - moveEvent.clientX, tc.y - moveEvent.clientY);
+                if (d < minD) { minD = d; bestCorner = tc; }
+            });
+
+            x2 = (bestCorner.x - canvasRect.left) / zoom;
+            y2 = (bestCorner.y - canvasRect.top) / zoom;
         }
     };
 
