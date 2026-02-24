@@ -4463,22 +4463,42 @@ path[stroke="transparent"] {
     pointer-events: none; /* Let clicks through to canvas */
 }
 
-.v2-toolbar {
-    pointer-events: auto; /* Buttons are clickable */
+.v2-master-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: auto;
 }
 
-/* Inline Toolbar Container */
-.context-toolbar-inline {
+/* Ensure individual toolbars don't have extra margins */
+.v2-toolbar {
     display: flex;
     align-items: center;
     gap: 6px;
-    background: rgba(15, 23, 42, 0.9); /* Opaque dark navy */
-    padding: 2px 8px;
+    padding: 5px 10px;
+    background: rgba(15, 23, 42, 0.85);
     border-radius: 8px;
-    border: 1px solid rgba(251, 191, 36, 0.4);
-    backdrop-filter: blur(4px); /* Sleek glass effect */
-    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    z-index: 10000; /* Ensure it stays above everything */
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    backdrop-filter: blur(8px);
+}
+
+/* Context toolbar specific style to make it look 'attached' */
+.context-toolbar-inline {
+    border-color: #fbbf24; /* Amber to distinguish it */
+    animation: slideInLeft 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Vertical Divider Utility */
+.divider-v {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 5px;
 }
 
 @keyframes popIn {

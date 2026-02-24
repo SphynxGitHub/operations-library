@@ -8779,24 +8779,26 @@ window.renderVisualizerV2 = function(isVault) {
             </div>
 
             <div class="v2-ui-overlay">
-                <div class="v2-toolbar">
-                    <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
-                    <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy Up Grid">🪄 Tidy</button>
-                    
-                    <button class="btn soft" onclick="OL.toggleMasterExpand()" title="${expandTitle}">
-                        ${expandIcon}
-                    </button>
-                    <div id="zoom-buttons">
+                <div class="v2-master-toolbar">
+                    <div class="v2-toolbar">
+                        <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
+                        <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
+                        <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
+                    </div>
+
+                    <div id="v2-context-toolbar" class="v2-toolbar context-toolbar-inline" style="display: none;">
+                        <div class="divider-v"></div>
+                        <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
+                        <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
+                        <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">↻</button>
+                        <button id="ctx-reorder-btn" class="btn soft ctx-reorder" onclick="OL.handleContextAction('reorder')">☰</button>
+                        <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')">×</button>
+                    </div>
+
+                    <div class="v2-toolbar">
+                        <div class="divider-v"></div>
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
-                    </div>
-                    <div id="v2-context-toolbar" class="context-toolbar-inline" style="display: none;">
-                        <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')" title="Logic">λ</button>
-                        <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')" title="Delay">⏱</button>
-                        <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')" title="Loop">↻</button>
-                        <button class="btn soft ctx-reroute" onclick="OL.handleContextAction('reroute')" title="Reroute">⇄</button>
-                        <button id="ctx-reorder-btn" class="btn soft ctx-reorder" onclick="OL.handleContextAction('reorder')" title="Reorder">☰</button>
-                        <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')" title="Delete">×</button>
                     </div>
                 </div>
             </div>
