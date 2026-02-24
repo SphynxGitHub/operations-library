@@ -4071,8 +4071,8 @@ ARROWS
 /* style.css */
 .v2-svg-layer {
     position: absolute;
-    top: -1000;
-    left: -2000;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     pointer-events: none !important; /* 🚀 This allows clicks to pass through to nodes */
