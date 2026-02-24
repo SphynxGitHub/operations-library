@@ -9224,7 +9224,7 @@ function renderV2Nodes(isVault) {
 OL.jumpToScopingItem = function(nodeId) {
     console.log("🚀 Jumping to Scoping for:", nodeId);
 
-    // 1. Save context for the 'Back' button
+    // 1. Save return context
     state.v2.returnTo = {
         viewMode: state.viewMode,
         pan: { ...state.v2.pan },
@@ -9232,22 +9232,21 @@ OL.jumpToScopingItem = function(nodeId) {
         nodeId: nodeId
     };
 
+    // 2. Set internal flags
     state.scopingTargetId = nodeId;
+    state.viewMode = 'scoping';
 
-    // 2. Update the URL Query Parameter (?view=scoping)
-    // This is the "True North" for your app's routing
+    // 3. Update Query Param AND Hash
+    // We'll try #/scoping-sheet as it's a common alias for this framework
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
-    
-    // Clear the hash to prevent the "Unknown client hash" error
-    url.hash = ''; 
-
-    // 3. Push the state so the browser actually navigates
     window.history.pushState({}, '', url.toString());
+    
+    // 🚀 TRY THIS HASH (If this still goes to tasks, change 'scoping-sheet' to 'project')
+    window.location.hash = '/scoping-sheet'; 
 
-    // 4. Trigger the route manually using the state your app likes
+    // 4. Manual trigger
     if (typeof window.handleRoute === 'function') {
-        state.viewMode = 'scoping';
         window.handleRoute('scoping');
     }
 };
