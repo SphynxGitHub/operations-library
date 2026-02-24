@@ -9186,8 +9186,11 @@ OL.drawV2Connections = function() {
     
     // Maintain SVG size
     const canvas = document.getElementById('v2-canvas');
-    svg.setAttribute('width', canvas.scrollWidth);
-    svg.setAttribute('height', canvas.scrollHeight);
+    if (!svg || !canvas) return;
+    svg.setAttribute('width', '5000'); 
+    svg.setAttribute('height', '5000');
+    // Ensure 1 unit in SVG = 1 pixel on Canvas
+    svg.setAttribute('viewBox', '0 0 5000 5000');
 
     source.forEach(node => {
         // 1. 🚀 MOVE THIS UP: Draw Leash even if there are no outcomes
@@ -9313,11 +9316,14 @@ OL.requestReorder = async function(stepId, parentId) {
 };
 
 OL.getRelativePointer = function(e, svg) {
-    const CTM = svg.getScreenCTM();
-    if (!CTM) return { x: 0, y: 0 };
+    const canvas = document.getElementById('v2-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+
+    // 🚀 Calculate position relative to the SCALED canvas
     return {
-        x: (e.clientX - CTM.e) / CTM.a,
-        y: (e.clientY - CTM.f) / CTM.d
+        x: (e.clientX - rect.left) / zoom,
+        y: (e.clientY - rect.top) / zoom
     };
 };
 
@@ -9558,7 +9564,7 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
             }
         }
     };
-    
+
     group.appendChild(hitArea);
 
     // 4. THE MINI-MENU (Pass true for isLeash)
