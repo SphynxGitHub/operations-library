@@ -9428,23 +9428,23 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     hitArea.setAttribute("fill", "none");
     hitArea.style.cursor = "pointer";
 
-    // Toggle sticky menu on click
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        const svgLayer = document.getElementById('v2-connections'); // Reference the SVG
+        const svgLayer = document.getElementById('v2-connections'); 
         const wasSticky = group.classList.contains('is-sticky');
 
-        // 1. Exclusive Select: Clear all other menus
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
 
         if (!wasSticky) {
             group.classList.add('is-sticky');
             
-            // 2. 🚀 POSITION RELATIVE TO CLICK
+            // 🚀 THE COORDINATE SYNC
             const pt = OL.getRelativePointer(e, svgLayer);
             const menuEl = group.querySelector('.v2-mini-menu');
             if (menuEl) {
+                // Force the transform immediately
                 menuEl.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
+                console.log(`📍 Menu snapped to click: ${pt.x}, ${pt.y}`);
             }
         }
     };
@@ -9540,24 +9540,25 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     // Toggle sticky menu on click
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        const svgLayer = document.getElementById('v2-connections');
+        const svgLayer = document.getElementById('v2-connections'); 
         const wasSticky = group.classList.contains('is-sticky');
 
-        // Clear others
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
 
         if (!wasSticky) {
             group.classList.add('is-sticky');
-
-            // 🚀 POSITION RELATIVE TO CLICK
+            
+            // 🚀 THE COORDINATE SYNC
             const pt = OL.getRelativePointer(e, svgLayer);
             const menuEl = group.querySelector('.v2-mini-menu');
             if (menuEl) {
+                // Force the transform immediately
                 menuEl.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
+                console.log(`📍 Menu snapped to click: ${pt.x}, ${pt.y}`);
             }
         }
     };
-
+    
     group.appendChild(hitArea);
 
     // 4. THE MINI-MENU (Pass true for isLeash)
