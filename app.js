@@ -9259,8 +9259,18 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     };
 
     // 4. DRAW THE CURVE (The rest of your path creation logic follows...)
-    let pathData = `M ${s.x} ${s.y} C ${s.x + 50} ${s.y}, ${e.x - 50} ${e.y}, ${e.x} ${e.y}`;
-    
+    let pathData;
+
+    if (useVertical) {
+        // 🚀 THE STRAIGHT LINE FIX: Use a simple Line (L) instead of a Curve (C)
+        // We can also use a "Direct Line" M -> L
+        pathData = `M ${s.x} ${s.y} L ${e.x} ${e.y}`;
+    } else {
+        // Keep the nice S-Curve for horizontal left-to-right flow
+        const cpOffset = Math.min(Math.abs(e.x - s.x) / 2, 150);
+        pathData = `M ${s.x} ${s.y} C ${s.x + (dx > 0 ? cpOffset : -cpOffset)} ${s.y}, ${e.x + (dx > 0 ? -cpOffset : cpOffset)} ${e.y}, ${e.x} ${e.y}`;
+    }
+
     // --- SVG Creation ---
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group");
