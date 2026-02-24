@@ -8885,7 +8885,6 @@ OL.startNodeDrag = function(e, nodeId) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => n.id === targetId);
 
-                // Absorb logic
                 if (targetNode && (targetNode.type || "").toLowerCase() !== 'step') {
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
@@ -8903,8 +8902,15 @@ OL.startNodeDrag = function(e, nodeId) {
             }
         }
 
-        // Standard save if not absorbed
-        OL.saveNodePosition(nodeId, nodeData.coords);
+        // 🚀 THE FIX: Manual save logic instead of a missing function
+        await OL.updateAndSync(() => {
+            const nodeToUpdate = source.find(n => n.id === nodeId);
+            if (nodeToUpdate) {
+                nodeToUpdate.coords = nodeData.coords;
+            }
+        });
+        
+        console.log(`💾 Position saved for ${nodeData.name}`);
     };
 
     document.addEventListener('mousemove', onMouseMove);
