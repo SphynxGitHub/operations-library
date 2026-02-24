@@ -9333,6 +9333,7 @@ OL.toggleStepView = function(nodeId) {
                     style="cursor: pointer; opacity: 0.6; padding: 2px 5px;"
                     onclick="event.stopPropagation(); OL.ejectStep('${nodeId}', ${i})">
                     <i class="fas fa-external-link-alt" style="font-size: 10px;"></i>
+                    🚀
                 </div>
             </div>
         `).join('');
