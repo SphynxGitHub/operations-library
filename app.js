@@ -8815,15 +8815,6 @@ window.renderVisualizerV2 = function(isVault) {
                         <button class="btn soft" onclick="OL.toggleMasterExpand()" title=${expandTitle}>${expandIcon}</button>
                     </div>
 
-                    <div class="v2-toolbar">
-                        <select class="v2-toolbar-select" onchange="state.v2.activeScope = this.value; renderVisualizerV2(${isVault});">
-                            <option value="all">FILTER: ALL</option>
-                            ${uniqueScopes.map(s => 
-                                `<option value="${s}" ${state.v2.activeScope === s ? 'selected' : ''}>${s.toUpperCase()}</option>`
-                            ).join('')}
-                        </select>
-                    </div>
-
                     <div id="v2-context-toolbar" class="v2-toolbar context-toolbar-inline" style="display: none;">
                         <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
                         <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
@@ -9225,34 +9216,29 @@ function renderV2Nodes(isVault) {
 OL.jumpToScopingItem = function(nodeId) {
     console.log("🚀 Jumping to Scoping for:", nodeId);
 
-    // 1. Force the view mode change
-    state.viewMode = 'scoping'; 
-    
-    // 2. Clear any active visualizer filters so you see the item
-    state.v2.activeScope = 'all';
-
-    // 3. Set a 'highlight' target for the scoping sheet to use
+    // 1. Set the target ID so the scoping sheet knows what to highlight
     state.scopingTargetId = nodeId;
 
-    // 4. Update the URL/History if your app uses routing 
-    // This prevents the "backwards jump" on render
-    if (window.history.pushState) {
-        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?view=scoping';
-        window.history.pushState({path:newUrl}, '', newUrl);
+    // 2. Use your existing router to switch views
+    // This handles the state change and the re-render in one go
+    if (typeof handleRoute === 'function') {
+        handleRoute('scoping');
+    } else if (typeof render === 'function') {
+        state.viewMode = 'scoping';
+        render();
     }
 
-    // 5. Re-render the entire application
-    renderApp();
-
-    // 6. Wait for DOM to exist, then scroll and flash
+    // 3. Scroll to the item once the view has rendered
     setTimeout(() => {
+        // Try to find the row by data-id or id
         const element = document.querySelector(`[data-id="${nodeId}"]`) || 
-                        document.querySelector(`#row-${nodeId}`);
+                        document.querySelector(`.scoping-row[id*="${nodeId}"]`);
+        
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
             element.classList.add('row-flash-highlight');
         }
-    }, 300);
+    }, 400); // Slightly longer delay to ensure the scoping sheet is built
 };
 
 OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
