@@ -8869,97 +8869,82 @@ OL.startNodeDrag = function(e, nodeId) {
         const dx = (moveEvent.clientX - startMouseX) / zoom;
         const dy = (moveEvent.clientY - startMouseY) / zoom;
 
+        // 1. Update position in memory
         nodeData.coords = { x: startNodeX + dx, y: startNodeY + dy };
 
+        // 2. Immediate Visual Update (Direct DOM)
         if (nodeEl) {
             nodeEl.style.left = `${nodeData.coords.x}px`;
             nodeEl.style.top = `${nodeData.coords.y}px`;
             nodeEl.style.zIndex = "9999";
-            // 🚀 THE CRITICAL ADDITION:
-            nodeEl.style.pointerEvents = 'none'; 
         }
 
-        // 🎯 THE HIT TEST
-        // We temporarily hide the SVG layer too so it doesn't block the search
+        // 3. 🎯 THE DEEP-SCAN HIT TEST
+        // We ghost the dragged element AND the SVG layer to see what's behind them
+        if (nodeEl) nodeEl.style.pointerEvents = 'none';
         const svgLayer = document.getElementById('v2-connections');
         if (svgLayer) svgLayer.style.pointerEvents = 'none';
 
+        // Get the element at coordinates
         const hitEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        // Standardize: Look for the nearest card parent
         const hoverEl = hitEl?.closest('.v2-node-card');
-        
-        // 🧪 DEBUG LOG: Run this with F12 open. It will tell us what is being hit.
-        // console.log("Current Hit:", hitEl?.className, "Target Card:", hoverEl?.id);
 
-        // Restore pointer events immediately
+        // 🚀 Restore pointer events so the card is still "grabbable"
         if (nodeEl) nodeEl.style.pointerEvents = 'auto';
         if (svgLayer) svgLayer.style.pointerEvents = 'auto';
 
-        // Reset all glows
+        // 4. Clear old glows and apply new one
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-
-        // 🎯 Hover Glow logic
-        if (isStep && nodeEl) {
-            // Hide the card in my hand so the mouse "sees" what's behind it
-            nodeEl.style.pointerEvents = 'none'; 
-            
-            // Find what is exactly at the mouse coordinates
-            const hitEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-            const hoverEl = hitEl?.closest('.v2-node-card');
-            
-            // Bring the card back to life so we don't lose the drag
-            nodeEl.style.pointerEvents = 'auto';
-
-            // Reset all glows
-            document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-            
-            // Apply glow if we are over a DIFFERENT card
-            if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
+        
+        if (isStep && hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
+            // Only glow if it's NOT another loose step
+            if (!hoverEl.classList.contains('is-loose')) {
                 hoverEl.classList.add('drop-hover');
             }
         }
-        OL.drawV2Connections();
+
+        // 🚀 CRITICAL: Don't call OL.persist() or updateAndSync here! 
+        // Only update visual connections.
+        OL.drawV2Connections(); 
     };
 
     const onMouseUp = async () => {
-        state.isSaving = false;
+        state.isSaving = false; // Release the shield
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
         if (viewport) viewport.classList.remove('is-dragging');
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
 
+        // 📥 FINAL CHECK: Did we drop it on a resource?
         if (isStep) {
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
-            // Use lastEvent from onMouseMove to get the drop coordinates
-            const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
-            const dropTargetEl = hit?.closest('.v2-node-card');
+            const finalHit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
+            const dropTargetEl = finalHit?.closest('.v2-node-card');
             if (nodeEl) nodeEl.style.pointerEvents = 'auto';
 
-            if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
+            if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}` && !dropTargetEl.classList.contains('is-loose')) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => String(n.id) === String(targetId));
 
-                // 🎯 ABSORPTION RULE: Only absorb into cards that are NOT loose
-                if (targetNode && !dropTargetEl.classList.contains('is-loose')) {
-                    console.log("📥 Visual Match Found! Absorbing...");
-                    
+                if (targetNode) {
+                    console.log("🎯 Absorption starting...");
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
-                        
                         targetNode.steps.push({
                             text: nodeData.name || nodeData.text || "Ejected Step",
                             id: Date.now()
                         });
-
                         const idx = source.findIndex(n => String(n.id) === String(nodeId));
                         if (idx > -1) source.splice(idx, 1);
                     });
                     renderVisualizerV2(isVault);
-                    return; 
+                    return; // 🛑 EXIT early to prevent coordinate saving for a deleted node
                 }
             }
         }
 
-        // Standard save if not absorbed
+        // 💾 STANDARD SAVE: Only runs if absorption didn't happen
         await OL.updateAndSync(() => {
             const nodeToUpdate = source.find(n => String(n.id) === String(nodeId));
             if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
