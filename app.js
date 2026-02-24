@@ -8845,9 +8845,11 @@ OL.startNodeDrag = function(e, nodeId) {
     const nodeData = source.find(n => String(n.id) === String(nodeId));
     if (!nodeData) return;
 
-    // 🚀 DEFINE SCOPE AT THE TOP: Accessible to Move and Up
-    const nodeType = (nodeData.type || "").toUpperCase();
-    const isStep = nodeType === 'STEP' || nodeType === 'SOP' || nodeType === 'INSTRUCTION';
+    // 🚀 THE NEW CHECK: Detect "Step-ness" by its CSS classes
+    const isStep = nodeEl.classList.contains('is-loose') || 
+                   nodeEl.classList.contains('type-step') || 
+                   nodeEl.classList.contains('type-sop');
+
     const viewport = document.getElementById('v2-viewport');
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
     const zoom = state.v2.zoom || 1;
@@ -8904,51 +8906,44 @@ OL.startNodeDrag = function(e, nodeId) {
         if (viewport) viewport.classList.remove('is-dragging');
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
 
-        // 📥 ABSORPTION LOGIC
         if (isStep) {
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
-            const hitEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
-            const dropTargetEl = hitEl?.closest('.v2-node-card');
+            // Use lastEvent from onMouseMove to get the drop coordinates
+            const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
+            const dropTargetEl = hit?.closest('.v2-node-card');
             if (nodeEl) nodeEl.style.pointerEvents = 'auto';
 
             if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => String(n.id) === String(targetId));
 
-                // 🚀 THE FIX: Check if target is a Resource (not another SOP/Step)
-                const tType = (targetNode?.type || "").toUpperCase();
-                const isTargetAsset = !['SOP', 'STEP', 'INSTRUCTION'].includes(tType);
-
-                if (targetNode && isTargetAsset) {
-                    console.log("🎯 Absorption Target Confirmed:", targetNode.name);
+                // 🎯 ABSORPTION RULE: Only absorb into cards that are NOT loose
+                if (targetNode && !dropTargetEl.classList.contains('is-loose')) {
+                    console.log("📥 Visual Match Found! Absorbing...");
+                    
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
                         
-                        // Add the step data
                         targetNode.steps.push({
-                            text: nodeData.name || nodeData.text || "New Step",
+                            text: nodeData.name || nodeData.text || "Ejected Step",
                             id: Date.now()
                         });
 
-                        // Remove the old loose card
                         const idx = source.findIndex(n => String(n.id) === String(nodeId));
                         if (idx > -1) source.splice(idx, 1);
                     });
-                    
                     renderVisualizerV2(isVault);
-                    return; // Exit so we don't save coords for a deleted node
+                    return; 
                 }
             }
         }
 
-        // Standard coordinate save
+        // Standard save if not absorbed
         await OL.updateAndSync(() => {
             const nodeToUpdate = source.find(n => String(n.id) === String(nodeId));
             if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
         });
-        if (nodeEl) nodeEl.style.zIndex = "";
     };
-
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 };
