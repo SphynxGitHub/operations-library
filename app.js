@@ -9049,6 +9049,7 @@ function renderV2Nodes(isVault) {
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
+        // 🚀 Dynamic Badge for standard resources
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
                 ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
@@ -9056,18 +9057,12 @@ function renderV2Nodes(isVault) {
 
         const stepsHtml = isExpanded ? steps.map((step, i) => {
             const content = step.text || step.name || "Step";
-            // 🚀 Separate IDs for In and Out ports per step
             const portInId = `port-in-${node.id}-step-${i}`;
             const portOutId = `port-out-${node.id}-step-${i}`;
 
             return `
                 <div class="v2-step-item" style="position: relative;">
-                    <div class="v2-port step-port-in" 
-                        id="${portInId}"
-                        title="Target this specific step"
-                        onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})">
-                    </div>
-
+                    <div class="v2-port step-port-in" id="${portInId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})"></div>
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 12px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span class="v2-step-number">${i + 1}</span>
@@ -9075,32 +9070,30 @@ function renderV2Nodes(isVault) {
                         </div>
                         <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
                     </div>
-                    
-                    <div class="v2-port step-port-out" 
-                        id="${portOutId}"
-                        title="Connect from this specific step"
-                        onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})">
-                    </div>
+                    <div class="v2-port step-port-out" id="${portOutId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})"></div>
                 </div>
             `;
         }).join('') : '';
 
-        const contextIcon = isLooseStep
-            ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
-            : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
-        
+        // 🚀 Linker moved to the Left Side for Loose Steps
         const parentHandle = isLooseStep ? `
             <div class="v2-parent-linker" 
                 id="linker-${node.id}"
+                style="position: absolute; left: -12px; top: 50%; transform: translateY(-50%); z-index: 100;"
                 onmousedown="OL.startParentLinking(event, '${node.id}')">
                 <i class="fas fa-link"></i>
             </div>
         ` : '';
 
+        // Context Icon update: show active link if parentId exists
+        const contextIcon = node.parentId 
+            ? `<i class="fas fa-link active-link-icon" title="Leashed to Parent" style="color: #fbbf24;"></i>`
+            : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
+
         return `
             <div class="v2-node-card ${globalClass} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
-                style="position: absolute; left: ${x}px; top: ${y}px;"
+                style="position: absolute; left: ${x}px; top: ${y}px; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
                 ${parentHandle}
@@ -9113,13 +9106,15 @@ function renderV2Nodes(isVault) {
                 <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
                 <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
 
-                <div class="v2-node-header" style="pointer-events: none;">
+                <div class="v2-node-header" style="display: flex; justify-content: ${isLooseStep ? 'flex-end' : 'flex-start'}; align-items: center; gap: 8px; pointer-events: none;">
                     <span>${icon}</span>
                     <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
                 </div>
-                <div class="v2-node-body" style="pointer-events: none;">
+                
+                <div class="v2-node-body" style="text-align: ${isLooseStep ? 'right' : 'left'}; pointer-events: none; padding-right: ${isLooseStep ? '4px' : '0'};">
                     ${esc(node.name || node.text || "Untitled Step")}
                 </div>
+
                 <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
                     ${stepsHtml}
                 </div>
