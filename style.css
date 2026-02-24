@@ -4111,7 +4111,17 @@ ARROWS
     border-radius: 50%;
     top: 50%;
     transform: translateY(-50%);
+    z-index: 110; /* Above the card */
+    transition: all 0.2s ease;
 }
+
+.v2-port:hover {
+    background: #fbbf24;
+    border-color: #fff;
+    transform: translateY(-50%) scale(1.3);
+    cursor: pointer;
+}
+
 .port-in { left: -6px; }
 .port-out { right: -6px; }
 
@@ -4131,4 +4141,9 @@ ARROWS
 .v2-viewport[style*="crosshair"] .v2-node-card:hover {
     border-color: #fbbf24;
     transform: scale(1.02);
+}
+
+.v2-node-card.source-selected .port-out {
+    background: #fbbf24;
+    box-shadow: 0 0 10px #fbbf24;
 }

@@ -8923,43 +8923,6 @@ function renderV2Stages(isVault) {
     `).join('');
 }
 
-function renderV2Nodes(isVault) {
-    const client = getActiveClient();
-    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const nodes = allResources.filter(r => (r.type || "").toLowerCase() !== 'workflow');
-
-    return nodes.map((node, idx) => {
-        // 🚀 THE AUTO-SPREAD: If no coords, stagger them in a grid 
-        // 4 nodes per row, 250px apart
-        const defaultX = 100 + (idx % 4) * 250;
-        const defaultY = 100 + Math.floor(idx / 4) * 150;
-
-        const x = node.coords?.x || defaultX;
-        const y = node.coords?.y || defaultY;
-        const icon = OL.getRegistryIcon(node.type);
-
-        return `
-            <div class="v2-node-card" 
-                id="v2-node-${node.id}"
-                style="position: absolute; left: ${x}px; top: ${y}px;"
-                onmousedown="OL.startNodeDrag(event, '${node.id}')"
-                onclick="OL.handleNodeClick('${node.id}')"
-                ondblclick="OL.loadInspector('${node.id}')">
-                
-                <div class="v2-node-header" style="pointer-events: none;">
-                    <span>${icon}</span>
-                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
-                </div>
-                <div class="v2-node-body" style="pointer-events: none;">${esc(node.name)}</div>
-                
-                <div class="tiny muted" style="margin-top: 8px; font-size: 8px; opacity: 0.5;">
-                    Double-click to Inspect
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
 OL.commitBrainDump = async function() {
     const appVal = document.getElementById('dump-app').value;
     const objVal = document.getElementById('dump-obj').value;
@@ -8986,6 +8949,88 @@ OL.commitBrainDump = async function() {
 
     OL.closeModal();
     window.renderGlobalVisualizer(isVault); // Refresh the graph
+};
+
+function renderV2Nodes(isVault) {
+    const client = getActiveClient();
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const nodes = allResources.filter(r => (r.type || "").toLowerCase() !== 'workflow');
+
+    return nodes.map((node, idx) => {
+        const x = node.coords?.x || (100 + (idx % 4) * 250);
+        const y = node.coords?.y || (100 + Math.floor(idx / 4) * 150);
+        const icon = OL.getRegistryIcon(node.type);
+
+        return `
+            <div class="v2-node-card" 
+                id="v2-node-${node.id}"
+                style="position: absolute; left: ${x}px; top: ${y}px;"
+                onmousedown="OL.startNodeDrag(event, '${node.id}')">
+                
+                <div class="v2-port port-in" 
+                    title="Connect to here"
+                    onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                
+                <div class="v2-port port-out" 
+                    title="Start connection"
+                    onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+
+                <div class="v2-node-header" style="pointer-events: none;">
+                    <span>${icon}</span>
+                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
+                </div>
+                <div class="v2-node-body" style="pointer-events: none;">${esc(node.name)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+OL.handlePortClick = async function(nodeId, direction) {
+    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
+
+    // 1. STARTING A CONNECTION (Must click an OUT port)
+    if (!state.v2.connectionMode.sourceId) {
+        if (direction === 'out') {
+            state.v2.connectionMode.sourceId = nodeId;
+            nodeEl.classList.add('source-selected');
+            console.log("🔌 Connection started from node:", nodeId);
+        } else {
+            console.log("ℹ️ Click an Output port (right side) to start a connection.");
+        }
+        return;
+    }
+
+    // 2. FINISHING A CONNECTION (Must click an IN port)
+    if (direction === 'in') {
+        const sourceId = state.v2.connectionMode.sourceId;
+        if (sourceId === nodeId) return; // Can't link to self
+
+        console.log(`🔗 Wiring ${sourceId} -> ${nodeId}`);
+
+        await OL.updateAndSync(() => {
+            const isVault = window.location.hash.includes('vault');
+            const client = getActiveClient();
+            const source = isVault ? state.master.resources : client.projectData.localResources;
+            const sourceNode = source.find(n => n.id === sourceId);
+            
+            if (sourceNode) {
+                if (!sourceNode.outcomes) sourceNode.outcomes = [];
+                sourceNode.outcomes.push({
+                    id: 'link_' + Date.now(),
+                    action: `jump_res_${nodeId}`,
+                    label: "Connected Path"
+                });
+            }
+        });
+
+        OL.resetWiringState();
+        OL.drawV2Connections();
+    } else {
+        // If they click another 'out' port, we switch the source to that one
+        OL.resetWiringState();
+        state.v2.connectionMode.sourceId = nodeId;
+        nodeEl.classList.add('source-selected');
+    }
 };
 
 OL.drawV2Connections = function() {
