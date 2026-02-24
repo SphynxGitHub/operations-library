@@ -10033,6 +10033,13 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     
     // 2. State & Mode Setup
+
+    // 🚀 NEW: Route to V2 if in graph mode
+    if (state.viewMode === 'graph') {
+        window.renderVisualizerV2(isVaultMode);
+        return;
+    }
+    
     if (!state.viewMode) state.viewMode = 'global';
     const isGlobalMode = state.viewMode === 'global';
     const isZen = state.ui.zenMode;

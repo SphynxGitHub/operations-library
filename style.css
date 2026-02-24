@@ -4014,3 +4014,54 @@ ARROWS
 .wf-global-node:hover .card-delete-btn {
     opacity: 1 !important;
 }
+
+/*============BRAIN DUMP MAP ==============*/
+/* V2 Viewport */
+.v2-viewport {
+    position: relative;
+    width: 100%;
+    height: 85vh; /* Adjust based on your header */
+    overflow: hidden;
+    background-color: #050816;
+    cursor: grab;
+}
+
+.v2-viewport:active { cursor: grabbing; }
+
+/* The Surface */
+.v2-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5000px; /* Large for panning */
+    height: 5000px;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 30px 30px; /* Dot grid spacing */
+    transform-origin: 0 0;
+    transition: transform 0.1s ease-out;
+}
+
+/* Stage Lanes in V2 */
+.v2-stage-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass to nodes */
+}
+
+.v2-lane {
+    width: 400px; /* Width of your stages */
+    border-right: 1px solid rgba(56, 189, 248, 0.1);
+    background: linear-gradient(to bottom, rgba(56, 189, 248, 0.02), transparent);
+}
+
+.v2-lane-label {
+    padding: 20px;
+    color: var(--accent);
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 14px;
+    opacity: 0.5;
+}
