@@ -8967,7 +8967,7 @@ function renderV2Nodes(isVault) {
         const globalClass = node.isGlobal ? 'is-global' : '';
 
         // 🚀 2. Identify Steps (Internal SOP vs Loose Step)
-        const steps = node.sop?.steps || [];
+        const steps = Array.isArray(node.steps) ? node.steps : [];
         const isLooseStep = node.type === 'step' || node.type === 'instruction';
         
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
@@ -9199,27 +9199,30 @@ state.v2.connectionMode = {
 
 OL.toggleStepView = function(nodeId) {
     const container = document.getElementById(`steps-${nodeId}`);
-    const isVisible = container.style.display === 'block';
+    if (!container) return;
+
+    const isVisible = container.offsetParent !== null; // Better check for display:none
     
     if (isVisible) {
         container.style.display = 'none';
     } else {
         const node = OL.getResourceById(nodeId);
-        const steps = node.sop?.steps || [];
+        // Match the data path from your console table
+        const steps = Array.isArray(node.steps) ? node.steps : [];
         
         if (steps.length === 0) return;
 
         container.innerHTML = steps.map((step, i) => `
             <div class="v2-step-item">
                 <span class="v2-step-number">${i + 1}</span>
-                <span class="v2-step-text">${esc(step.text || step.instruction)}</span>
+                <span class="v2-step-text">${esc(step.text || step.instruction || step.name || "Task Item")}</span>
             </div>
         `).join('');
         
         container.style.display = 'block';
     }
     
-    // 🚀 Refresh connections because the card height changed!
+    // Refresh connections because card height changed
     OL.drawV2Connections();
 };
 
