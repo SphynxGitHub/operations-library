@@ -9063,7 +9063,7 @@ OL.drawV2Connections = function() {
             const toEl = document.getElementById(`v2-node-${tid}`);
 
             if (fromEl && toEl) {
-                OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.condition);
+                OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.label, node.id, idx);
             }
         });
     });
@@ -9128,8 +9128,9 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     // Click Logic
     deleteBtnGroup.onclick = (event) => {
         event.stopPropagation();
+        // Use the arguments passed into the parent function
         if(confirm("Disconnect these nodes?")) {
-            OL.removeConnection(sourceId, outcomeIdx);
+            OL.removeConnection(sourceId, outcomeIdx); 
         }
     };
 
@@ -9207,16 +9208,30 @@ OL.resetWiringState = function() {
 };
 
 OL.removeConnection = async function(sourceId, index) {
+    console.log(`🗑️ Attempting to remove outcome at index ${index} for node ${sourceId}`);
+
     await OL.updateAndSync(() => {
         const isVault = window.location.hash.includes('vault');
         const client = getActiveClient();
         const source = isVault ? state.master.resources : client.projectData.localResources;
+        
+        // 1. Find the specific node
         const node = source.find(n => n.id === sourceId);
         
         if (node && node.outcomes) {
+            // 2. Remove the link from the data array
             node.outcomes.splice(index, 1);
+            console.log("✅ Data removed from local state.");
+        } else {
+            console.error("❌ Could not find node or outcomes array.");
         }
     });
+
+    // 3. FORCE RE-RENDER
+    // We refresh the inspector (in case it was open) and the lines
+    if (state.activeInspectorResId === sourceId) {
+        OL.loadInspector(sourceId);
+    }
     OL.drawV2Connections();
 };
 
