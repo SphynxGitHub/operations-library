@@ -9231,7 +9231,7 @@ OL.createMiniMenu = function(midX, midY, isLeash, sourceId, targetId, outcomeIdx
     bridge.setAttribute("fill", "transparent");
     bridge.setAttribute("style", "pointer-events: auto;");
     menuGroup.appendChild(bridge);
-    
+
     // Define our buttons: [Label/Icon, Color, Action]
     const actions = [
         { id: 'logic', icon: 'λ', color: '#8b5cf6', title: 'Add Logic' },
@@ -9306,6 +9306,15 @@ OL.requestReorder = async function(stepId, parentId) {
         // Logic to move the element in the parent.steps array...
         alert(`Moving to index ${targetIdx}`);
     }
+};
+
+OL.getRelativePointer = function(e, svg) {
+    const CTM = svg.getScreenCTM();
+    if (!CTM) return { x: 0, y: 0 };
+    return {
+        x: (e.clientX - CTM.e) / CTM.a,
+        y: (e.clientY - CTM.f) / CTM.d
+    };
 };
 
 OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, outcomeIdx, outcomeData) {
@@ -9418,12 +9427,22 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     // Toggle sticky menu on click
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        const isSticky = group.classList.toggle('is-sticky');
-        
-        // Close any other sticky menus
-        document.querySelectorAll('.v2-connection-group.is-sticky').forEach(el => {
-            if (el !== group) el.classList.remove('is-sticky');
-        });
+        const svgLayer = document.getElementById('v2-connections'); // Reference the SVG
+        const wasSticky = group.classList.contains('is-sticky');
+
+        // 1. Exclusive Select: Clear all other menus
+        document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
+
+        if (!wasSticky) {
+            group.classList.add('is-sticky');
+            
+            // 2. 🚀 POSITION RELATIVE TO CLICK
+            const pt = OL.getRelativePointer(e, svgLayer);
+            const menuEl = group.querySelector('.v2-mini-menu');
+            if (menuEl) {
+                menuEl.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
+            }
+        }
     };
 
     group.appendChild(hitArea);
@@ -9517,18 +9536,21 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     // Toggle sticky menu on click
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        
-        // 1. Check if this specific one is already sticky
+        const svgLayer = document.getElementById('v2-connections');
         const wasSticky = group.classList.contains('is-sticky');
 
-        // 2. 🚀 THE FIX: Remove sticky from EVERY connection group on the canvas
-        document.querySelectorAll('.v2-connection-group').forEach(el => {
-            el.classList.remove('is-sticky');
-        });
+        // Clear others
+        document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
 
-        // 3. If it wasn't sticky before, make it sticky now (Toggle behavior)
         if (!wasSticky) {
             group.classList.add('is-sticky');
+
+            // 🚀 POSITION RELATIVE TO CLICK
+            const pt = OL.getRelativePointer(e, svgLayer);
+            const menuEl = group.querySelector('.v2-mini-menu');
+            if (menuEl) {
+                menuEl.setAttribute("transform", `translate(${pt.x}, ${pt.y})`);
+            }
         }
     };
 
