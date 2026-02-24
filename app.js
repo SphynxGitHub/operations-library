@@ -8703,6 +8703,81 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
     if (window._tmpSearchParams) delete window._tmpSearchParams;
 };
 
+//===========================INFINITE GRID=========================================
+state.v2 = {
+    zoom: 1,
+    pan: { x: 0, y: 0 },
+    looseNodes: [], // For the brain dump
+    dragContext: null
+};
+window.renderVisualizerV2 = function(isVault) {
+    const container = document.getElementById("mainContent");
+    
+    container.innerHTML = `
+        <div class="v2-viewport" id="v2-viewport">
+            <div class="v2-canvas" id="v2-canvas" style="transform: scale(${state.v2.zoom});">
+                
+                <div class="v2-stage-layer">
+                    ${renderV2Stages(isVault)}
+                </div>
+
+                <svg class="v2-svg-layer" id="v2-connections"></svg>
+
+                <div class="v2-node-layer" id="v2-nodes">
+                    ${renderV2Nodes(isVault)}
+                </div>
+
+            </div>
+
+            <div class="v2-ui-overlay">
+                <div class="v2-toolbar">
+                    <button class="btn primary" onclick="OL.openBrainDump()">+ Quick Add (Brain Dump)</button>
+                    <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
+                    <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+OL.openBrainDump = function() {
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">🧠 Brain Dump: New Step</div></div>
+        <div class="modal-body">
+            <div class="dump-flow">
+                <label class="tiny-label">1. SELECT APP</label>
+                <select id="dump-app" class="modal-input" onchange="OL.syncDumpOptions()">
+                    <option value="Manual">Manual (No App)</option>
+                    ${state.master.apps.map(a => `<option value="${a.id}">${a.name}</option>`).join('')}
+                </select>
+
+                <label class="tiny-label">2. SELECT OBJECT</label>
+                <select id="dump-obj" class="modal-input" onchange="OL.syncDumpOptions()">
+                    </select>
+
+                <label class="tiny-label">3. SELECT VERB</label>
+                <select id="dump-verb" class="modal-input">
+                    </select>
+            </div>
+            <button class="btn primary full-width" onclick="OL.commitBrainDump()">Drop on Canvas</button>
+        </div>
+    `;
+    openModal(html);
+    OL.syncDumpOptions(); 
+};
+OL.syncDumpOptions = function() {
+    const appVal = document.getElementById('dump-app').value;
+    const objEl = document.getElementById('dump-obj');
+    const verbEl = document.getElementById('dump-verb');
+
+    // Example logic: In a real app, this pulls from ATOMIC_STEP_LIB 
+    // or the App's 'capabilities' array we built earlier.
+    const availableObjects = ATOMIC_STEP_LIB.Objects; 
+    objEl.innerHTML = availableObjects.map(o => `<option value="${o}">${o}</option>`).join('');
+
+    const availableVerbs = appVal === 'Manual' ? ATOMIC_STEP_LIB.ActionVerbs : ATOMIC_STEP_LIB.TriggerVerbs;
+    verbEl.innerHTML = availableVerbs.map(v => `<option value="${v}">${v}</option>`).join('');
+};
+
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
