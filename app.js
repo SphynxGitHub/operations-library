@@ -8710,6 +8710,7 @@ state.v2 = {
     looseNodes: [], // For the brain dump
     dragContext: null
 };
+
 window.renderVisualizerV2 = function(isVault) {
     const container = document.getElementById("mainContent");
     
@@ -8739,6 +8740,7 @@ window.renderVisualizerV2 = function(isVault) {
         </div>
     `;
 };
+
 OL.openBrainDump = function() {
     const html = `
         <div class="modal-head"><div class="modal-title-text">🧠 Brain Dump: New Step</div></div>
@@ -8764,6 +8766,7 @@ OL.openBrainDump = function() {
     openModal(html);
     OL.syncDumpOptions(); 
 };
+
 OL.syncDumpOptions = function() {
     const appVal = document.getElementById('dump-app').value;
     const objEl = document.getElementById('dump-obj');
@@ -8776,6 +8779,19 @@ OL.syncDumpOptions = function() {
 
     const availableVerbs = appVal === 'Manual' ? ATOMIC_STEP_LIB.ActionVerbs : ATOMIC_STEP_LIB.TriggerVerbs;
     verbEl.innerHTML = availableVerbs.map(v => `<option value="${v}">${v}</option>`).join('');
+};
+
+OL.setVisualizerMode = function(mode, isVault) {
+    state.viewMode = mode;
+    localStorage.setItem('ol_preferred_view_mode', mode);
+    
+    // If switching to Graph, we might want to clear specific focuses to show the whole map
+    if (mode === 'graph') {
+        // state.focusedResourceId = null; // Optional: depending on if you want it auto-focused
+    }
+    
+    // Re-run the visualizer orchestrator
+    window.renderGlobalVisualizer(isVault);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
@@ -10077,15 +10093,22 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                     <div class="breadcrumbs">${breadcrumbHtml}</div>
                     
                     <div class="canvas-actions" style="display:flex; gap:10px;">
-                        <button class="btn tiny ${isGlobalMode ? 'accent' : 'soft'}" 
-                                onclick="OL.toggleGlobalView(${isVaultMode})">
-                            ${isGlobalMode ? '🔍 Focus Mode' : '🌐 Global View'}
+                        <button class="btn tiny ${state.viewMode === 'graph' ? 'accent' : 'soft'}" 
+                                onclick="OL.setVisualizerMode('graph', ${isVaultMode})">
+                            🕸️ Node Map
                         </button>
 
-                        <button id="zen-mode-toggle" class="btn tiny ${isZen ? 'accent' : 'soft'}" onclick="OL.toggleZenMode()">
-                            ${isZen ? 'Show Tools' : 'Full Screen'}
+                        <button class="btn tiny ${state.viewMode === 'global' ? 'accent' : 'soft'}" 
+                                onclick="OL.setVisualizerMode('global', ${isVaultMode})">
+                            🌐 Global View
+                        </button>
+
+                        <button class="btn tiny ${state.viewMode === 'focus' ? 'accent' : 'soft'}" 
+                                onclick="OL.setVisualizerMode('focus', ${isVaultMode})">
+                            🔍 Focus Mode
                         </button>
                     </div>
+
                 </div>
                 <div class="${isGlobalMode ? 'global-scroll-canvas' : 'vertical-stage-canvas'}" id="fs-canvas">
                     ${canvasHtml}
@@ -12579,7 +12602,6 @@ OL.removeStepFromCanvas = function(resId, stepId) {
     console.log(`🗑️ Step ${stepId} removed.`);
 };
 
-
 OL.handleUnifiedDelete = function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -14553,6 +14575,7 @@ OL.removeAccess = function (accessId, ownerId, type) {
 };
 
 // 2. RENDER CREDENTIALS SECTION ON APP CARDS
+
 function renderCredentialRow(clientId, cred, idx, perm) {
   const app = state.master.apps.find((a) => a.id === cred.appId);
   const isFull = perm === "full";
