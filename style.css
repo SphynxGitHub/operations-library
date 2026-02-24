@@ -4255,3 +4255,44 @@ ARROWS
     transform: scale(1.05);
     transition: transform 0.2s ease, background 0.2s ease;
 }
+
+.v2-step-eject {
+    margin-left: auto;
+    cursor: pointer;
+    opacity: 0; /* Hidden by default */
+    color: #94a3b8;
+    transition: all 0.2s;
+}
+
+.v2-step-item:hover .v2-step-eject {
+    opacity: 1; /* Show on hover */
+}
+
+.v2-step-eject:hover {
+    color: #38bdf8;
+    transform: scale(1.2);
+}
+
+.v2-context-corner {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    font-size: 10px;
+    z-index: 10;
+}
+
+.parent-link-icon {
+    color: #38bdf8; /* Blue link */
+    cursor: help;
+}
+
+.muted-icon {
+    color: rgba(255,255,255,0.2);
+    opacity: 0.5;
+}
+
+/* Optional: Pulse the parent card when hovering the link icon */
+.parent-highlight {
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.8) !important;
+    border: 2px solid #38bdf8 !important;
+}
