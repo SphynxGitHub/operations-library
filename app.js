@@ -8897,15 +8897,32 @@ OL.startNodeDrag = function(e, nodeId) {
 
         if (isStep && dropTarget && !dropTarget.classList.contains('is-loose')) {
             const targetId = dropTarget.id.replace('v2-node-', '');
-            // ABSORB LOGIC
+            
             await OL.updateAndSync(() => {
-                const source = window.location.hash.includes('vault') ? state.master.resources : getActiveClient().projectData.localResources;
-                const nodeData = source.find(n => n.id === nodeId);
-                const targetNode = source.find(n => n.id === targetId);
+                const isVault = window.location.hash.includes('vault');
+                const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+                const nodeData = source.find(n => String(n.id) === String(nodeId));
+                const targetNode = source.find(n => String(n.id) === String(targetId));
+
                 if (targetNode && nodeData) {
-                    if (!targetNode.steps) targetNode.steps = [];
-                    targetNode.steps.push({ text: nodeData.name, id: Date.now() });
-                    source.splice(source.indexOf(nodeData), 1);
+                    if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
+                    
+                    // 🚀 THE FIX: Consolidate data structure. 
+                    // Use both 'text' and 'name' to be safe for all renderers.
+                    const newStep = { 
+                        text: nodeData.name || nodeData.text || "Untitled Step", 
+                        name: nodeData.name || nodeData.text || "Untitled Step",
+                        id: Date.now() 
+                    };
+
+                    targetNode.steps.push(newStep);
+                    
+                    // Remove the loose node
+                    const idx = source.indexOf(nodeData);
+                    if (idx > -1) source.splice(idx, 1);
+                    
+                    // 🚀 THE KEY: Auto-expand the target so the user sees the success
+                    state.v2.expandedNodes.add(targetId);
                 }
             });
         } else {
