@@ -8894,14 +8894,21 @@ OL.startNodeDrag = function(e, nodeId) {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
         
-        const finalX = parseFloat(nodeEl.style.left);
-        const finalY = parseFloat(nodeEl.style.top);
+        // 1. Prepare for the "X-Ray" scan
+        if (nodeEl) {
+            nodeEl.style.pointerEvents = 'none'; // 🚀 Make the card a ghost
+        }
 
-        // Check for drop
-        nodeEl.style.pointerEvents = 'none';
-        const dropTarget = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)?.closest('.v2-node-card');
-        nodeEl.style.pointerEvents = 'auto';
+        // 2. Perform the scan (the laser beam passes THROUGH the ghost)
+        const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
+        const dropTarget = hit?.closest('.v2-node-card');
 
+        // 3. Bring the card back to reality immediately
+        if (nodeEl) {
+            nodeEl.style.pointerEvents = 'auto';
+        }
+
+        // 4. Absorption Logic (If we hit a valid target)
         if (isStep && dropTarget && !dropTarget.classList.contains('is-loose')) {
             const targetId = dropTarget.id.replace('v2-node-', '');
             
@@ -8914,23 +8921,22 @@ OL.startNodeDrag = function(e, nodeId) {
                 if (targetNode && nodeData) {
                     if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
                     
-                    // 🚀 DATA ALIGNMENT: Save with both keys just to be bulletproof
                     targetNode.steps.push({ 
                         text: nodeData.name || nodeData.text || "New Step", 
                         name: nodeData.name || nodeData.text || "New Step",
                         id: Date.now() 
                     });
 
-                    // Auto-open the drawer for the user
                     state.v2.expandedNodes.add(targetId);
-
                     const idx = source.indexOf(nodeData);
                     if (idx > -1) source.splice(idx, 1);
                 }
             });
-            // Re-rendering is handled by release of BLOCK_RENDER
         } else {
-            // REGULAR MOVE SAVE
+            // Standard Save (The card didn't land on anything)
+            const finalX = parseFloat(nodeEl.style.left);
+            const finalY = parseFloat(nodeEl.style.top);
+            
             await OL.updateAndSync(() => {
                 const source = window.location.hash.includes('vault') ? state.master.resources : getActiveClient().projectData.localResources;
                 const node = source.find(n => n.id === nodeId);
@@ -8938,7 +8944,7 @@ OL.startNodeDrag = function(e, nodeId) {
             });
         }
 
-        // 🟢 2. RELEASE THE BRAKE
+        // 5. Cleanup UI
         window.BLOCK_RENDER = false;
         state.isSaving = false;
         renderVisualizerV2(window.location.hash.includes('vault'));
