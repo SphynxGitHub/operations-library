@@ -9043,15 +9043,12 @@ function renderV2Nodes(isVault) {
         const icon = OL.getRegistryIcon(node.type);
         const globalClass = node.isGlobal ? 'is-global' : '';
 
-        // 🚀 PERSISTENCE LOGIC
         const steps = Array.isArray(node.steps) ? node.steps : [];
         const isExpanded = state.v2.expandedNodes.has(node.id);
         
-        // 🛠️ CASE INSENSITIVE CHECK + PARENT CHECK
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
-        // Dynamic Badge Icon
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
                 ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
@@ -9059,22 +9056,29 @@ function renderV2Nodes(isVault) {
 
         const stepsHtml = isExpanded ? steps.map((step, i) => {
             const content = step.text || step.name || "Step";
-            // 🚀 Unique ID for the step-level port
-            const stepPortId = `port-${node.id}-step-${i}`;
+            // 🚀 Separate IDs for In and Out ports per step
+            const portInId = `port-in-${node.id}-step-${i}`;
+            const portOutId = `port-out-${node.id}-step-${i}`;
 
             return `
                 <div class="v2-step-item" style="position: relative;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
+                    <div class="v2-port step-port-in" 
+                        id="${portInId}"
+                        title="Target this specific step"
+                        onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})">
+                    </div>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 12px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span class="v2-step-number">${i + 1}</span>
-                            <span class="v2-step-text">${esc(content)}</span>
+                            <span class="v2-step-text" style="font-size: 11px;">${esc(content)}</span>
                         </div>
                         <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
                     </div>
                     
                     <div class="v2-port step-port-out" 
-                        id="${stepPortId}"
-                        title="Connect this specific step"
+                        id="${portOutId}"
+                        title="Connect from this specific step"
                         onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})">
                     </div>
                 </div>
@@ -9085,7 +9089,6 @@ function renderV2Nodes(isVault) {
             ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
             : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
 
-        // 🚀 ADDING 'is-loose' CLASS FOR THE DASHED BORDER
         return `
             <div class="v2-node-card ${globalClass} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"

@@ -4329,3 +4329,22 @@ ARROWS
     background: #fff;
     transform: translateY(-50%) scale(1.4);
 }
+
+.step-port-in {
+    position: absolute;
+    left: -5px; /* Sits on the left edge */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: #38bdf8; /* Blue for inbound steps */
+    border-radius: 50%;
+    border: 1px solid #000;
+    cursor: crosshair;
+    z-index: 20;
+}
+
+.step-port-in:hover {
+    background: #fff;
+    transform: translateY(-50%) scale(1.4);
+}
