@@ -9207,6 +9207,11 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
+    // 🚀 FIX: Define positioning math first so 'useVertical' is available globally
+    const dx = endCard.offsetLeft - startCard.offsetLeft;
+    const dy = endCard.offsetTop - startCard.offsetTop;
+    const useVertical = Math.abs(dy) > Math.abs(dx);
+
     let outPort, inPort;
 
     // 1. FIND THE STARTING PORT (The "Out")
