@@ -8745,7 +8745,7 @@ window.renderVisualizerV2 = function(isVault) {
             </div>
         </div>
     `;
-    
+
     // At the bottom of renderVisualizerV2
     setTimeout(() => {
         OL.initV2Panning(); // Activates grid movement
@@ -9105,11 +9105,21 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
     // 2. Calculate center points by finding the element's position relative 
     // to the canvas and adding half its size, then adjusting for zoom.
+    /*const s = {
+        x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
+        y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
+    };
     const s = {
         x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
         y: (outRect.top - canvasRect.top + (outRect.height / 2)) / zoom
     };
-    
+    */
+
+    const s = {
+        x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
+        y: (outRect.top - canvasRect.top + (outRect.height / 2)) / zoom
+    };
+
     const e = {
         x: (inRect.left - canvasRect.left + (inRect.width / 2)) / zoom,
         y: (inRect.top - canvasRect.top + (inRect.height / 2)) / zoom
