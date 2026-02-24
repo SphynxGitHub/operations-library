@@ -9138,7 +9138,7 @@ OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
         const sourceId = state.v2.connectionMode.sourceId;
         const sourceStepIdx = state.v2.connectionMode.sourceStepIndex;
         
-        if (sourceId === nodeId) return; 
+        if (sourceId === nodeId && sourceStepIdx === stepIndex) return; 
 
         await OL.updateAndSync(() => {
             const isVault = window.location.hash.includes('vault');
@@ -9148,7 +9148,8 @@ OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
             if (sourceNode) {
                 const newLink = {
                     id: 'link_' + Date.now(),
-                    fromStepIndex: sourceStepIdx, // 🚀 Save the step origin
+                    fromStepIndex: sourceStepIdx, 
+                    toStepIndex: stepIndex, // 🚀 SAVE THE TARGET STEP
                     action: `jump_res_${nodeId}`,
                     label: "Next Step"
                 };
@@ -9211,7 +9212,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     // 🚀 THE STICKY FIX: Check if this outcome specifically belongs to a step
     if (outcomeData && typeof outcomeData.fromStepIndex === 'number') {
         const stepPortId = `port-${sourceId}-step-${outcomeData.fromStepIndex}`;
-        outPort = document.getElementById(stepPortId);
+        outPort = document.getElementById(`port-out-${sourceId}-step-${outcomeData.fromStepIndex}`);
     }
 
     // 1. Determine relative positioning if no step port was found/used
@@ -9220,6 +9221,12 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const useVertical = Math.abs(dy) > Math.abs(dx);
 
     let inPort;
+
+    if (outcomeData && typeof outcomeData.toStepIndex === 'number') {
+        // Find the target node ID from the action string if not explicitly in outcomeData
+        let tid = outcomeData.targetId || outcomeData.action?.replace('jump_res_', '');
+        inPort = document.getElementById(`port-in-${tid}-step-${outcomeData.toStepIndex}`);
+    }
 
     // If we didn't find a specific step port, use the standard card ports
     if (!outPort) {
