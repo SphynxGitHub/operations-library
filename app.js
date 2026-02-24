@@ -9003,7 +9003,16 @@ OL.commitBrainDump = async function() {
 function renderV2Nodes(isVault) {
     const client = getActiveClient();
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const nodes = allResources//.filter(r => (r.type || "").toLowerCase() !== 'workflow');
+    let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    // 🚀 THE FIX: Ensure we aren't filtering out steps just because they're 'new'
+    // We only want to hide 'workflow' types, everything else should show up.
+    nodes = nodes.filter(node => {
+        const type = (node.type || "").toLowerCase();
+        return type !== 'workflow'; 
+    });
+
+    console.log(`✅ Drawing ${nodes.length} nodes on the canvas`);
 
     return nodes.map((node, idx) => {
         const x = node.coords?.x || (100 + (idx % 4) * 250);
