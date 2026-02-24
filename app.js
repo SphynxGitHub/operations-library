@@ -8718,11 +8718,18 @@ state.v2.connectionMode = {
 
 state.v2.expandedNodes = state.v2.expandedNodes || new Set();
 
+// Add this to your global listeners if it's not there
 document.addEventListener('mousedown', (e) => {
-    if (!e.target.closest('.v2-connection-group')) {
+    // If we click the background canvas or a card, hide the connection toolbar
+    if (!e.target.closest('.v2-connection-group') && !e.target.closest('#v2-context-toolbar')) {
+        const ctxBar = document.getElementById('v2-context-toolbar');
+        if (ctxBar) ctxBar.style.display = 'none';
+        
         document.querySelectorAll('.v2-connection-group.is-sticky').forEach(el => {
             el.classList.remove('is-sticky');
         });
+        
+        state.v2.activeConnection = null;
     }
 });
 
