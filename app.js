@@ -9176,13 +9176,13 @@ OL.drawV2Connections = function() {
     svg.setAttribute('width', canvas.scrollWidth);
     svg.setAttribute('height', canvas.scrollHeight);
 
+    // Inside OL.drawV2Connections
     source.forEach(node => {
-        if (!node.outcomes || node.outcomes.length === 0) return;
+        if (!node.outcomes) return;
 
         node.outcomes.forEach((outcome, idx) => {
-            const fromEl = document.getElementById(`v2-node-${node.id}`)
-
-            // Find target ID (handling jump_step_ and jump_res_ prefixes)
+            const fromEl = document.getElementById(`v2-node-${node.id}`);
+            
             let tid = outcome.targetId || outcome.toId;
             if (!tid && outcome.action) {
                 tid = outcome.action.replace('jump_step_', '').replace('jump_res_', '');
@@ -9191,55 +9191,52 @@ OL.drawV2Connections = function() {
             const toEl = document.getElementById(`v2-node-${tid}`);
 
             if (fromEl && toEl) {
-                OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.label, node.id, idx);
+                // 🚀 PASS THE OUTCOME DATA HERE
+                OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.label, node.id, idx, outcome);
             }
         });
     });
 };
 
-OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, outcomeIdx) {
-    // 1. Determine relative positioning
+OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, outcomeIdx, outcomeData) {
+    const canvas = document.getElementById('v2-canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+
+    let outPort;
+
+    // 🚀 THE STICKY FIX: Check if this outcome specifically belongs to a step
+    if (outcomeData && typeof outcomeData.fromStepIndex === 'number') {
+        const stepPortId = `port-${sourceId}-step-${outcomeData.fromStepIndex}`;
+        outPort = document.getElementById(stepPortId);
+    }
+
+    // 1. Determine relative positioning if no step port was found/used
     const dx = endCard.offsetLeft - startCard.offsetLeft;
     const dy = endCard.offsetTop - startCard.offsetTop;
-
-    // Use vertical ports if the cards are more "above/below" than "left/right"
     const useVertical = Math.abs(dy) > Math.abs(dx);
 
-    let outPort, inPort;
+    let inPort;
 
-    if (useVertical) {
-        // Source is above Target -> Bottom to Top
-        // Source is below Target -> Top to Bottom
-        outPort = dy > 0 ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top');
-        inPort = dy > 0 ? endCard.querySelector('.port-top') : endCard.querySelector('.port-bottom');
-    } else {
-        // Source is left of Target -> Right to Left
-        // Source is right of Target -> Left to Right
-        outPort = dx > 0 ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in');
-        inPort = dx > 0 ? endCard.querySelector('.port-in') : endCard.querySelector('.port-out');
+    // If we didn't find a specific step port, use the standard card ports
+    if (!outPort) {
+        if (useVertical) {
+            outPort = dy > 0 ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top');
+        } else {
+            outPort = dx > 0 ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in');
+        }
     }
+
+    // Target always goes to the main 'In' or 'Top' port of the destination card
+    inPort = useVertical 
+        ? (dy > 0 ? endCard.querySelector('.port-top') : endCard.querySelector('.port-bottom'))
+        : (dx > 0 ? endCard.querySelector('.port-in') : endCard.querySelector('.port-out'));
 
     if (!outPort || !inPort) return;
 
-    // 🚀 THE CENTER-POINT FIX: 
-    // Get the center of the ports relative to the canvas
-    const canvas = document.getElementById('v2-canvas');
-    const canvasRect = canvas.getBoundingClientRect();
+    // 2. Calculate center points using BoundingClientRect for accuracy
     const outRect = outPort.getBoundingClientRect();
     const inRect = inPort.getBoundingClientRect();
-    const zoom = state.v2.zoom || 1;
-
-    // 2. Calculate center points by finding the element's position relative 
-    // to the canvas and adding half its size, then adjusting for zoom.
-    /*const s = {
-        x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
-        y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
-    };
-    
-    const e = {
-        x: endCard.offsetLeft + inPort.offsetLeft + (inPort.offsetWidth / 2),
-        y: endCard.offsetTop + inPort.offsetTop + (inPort.offsetHeight / 2)
-    };*/
 
     const s = {
         x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
@@ -9251,7 +9248,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         y: (inRect.top - canvasRect.top + (inRect.height / 2)) / zoom
     };
 
-    // 3. Path Math (Adjust Control Points for Vertical vs Horizontal)
+    // 3. Path Math
     let pathData;
     if (useVertical) {
         const cpOffset = Math.min(Math.abs(e.y - s.y) / 2, 100);
@@ -9261,7 +9258,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         pathData = `M ${s.x} ${s.y} C ${s.x + (dx > 0 ? cpOffset : -cpOffset)} ${s.y}, ${e.x + (dx > 0 ? -cpOffset : cpOffset)} ${e.y}, ${e.x} ${e.y}`;
     }
     
-    // ... (rest of your existing code for creating the group, path, and delete button remains the same) ...
+    // --- SVG Creation ---
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group");
 
@@ -9272,6 +9269,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     path.setAttribute("fill", "none");
     group.appendChild(path);
 
+    // Midpoint for delete button
     const midX = s.x + (e.x - s.x) / 2;
     const midY = s.y + (e.y - s.y) / 2;
     
