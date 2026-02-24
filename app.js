@@ -8794,6 +8794,80 @@ OL.setVisualizerMode = function(mode, isVault) {
     window.renderGlobalVisualizer(isVault);
 };
 
+// --- V2 GRAPH MODE RENDERERS ---
+
+function renderV2Stages(isVault) {
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : (client?.projectData || {});
+    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    if (stages.length === 0) return `<div class="v2-lane"><div class="v2-lane-label">No Stages Defined</div></div>`;
+
+    return stages.map(s => `
+        <div class="v2-lane" id="v2-lane-${s.id}">
+            <div class="v2-lane-label">${esc(s.name)}</div>
+        </div>
+    `).join('');
+}
+
+function renderV2Nodes(isVault) {
+    const client = getActiveClient();
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    // In V2, we are looking for "Steps" that have coordinates.
+    // For now, let's render every technical resource as a node if it's not a Workflow.
+    const nodes = allResources.filter(r => (r.type || "").toLowerCase() !== 'workflow');
+
+    return nodes.map(node => {
+        // Use saved coordinates or default to a cascade
+        const x = node.coords?.x || 100;
+        const y = node.coords?.y || 100;
+        const icon = OL.getRegistryIcon(node.type);
+
+        return `
+            <div class="v2-node-card" 
+                 id="v2-node-${node.id}"
+                 style="left: ${x}px; top: ${y}px;"
+                 onmousedown="OL.startNodeDrag(event, '${node.id}')"
+                 onclick="event.stopPropagation(); OL.loadInspector('${node.id}')">
+                <div class="v2-node-header">
+                    <span>${icon}</span>
+                    <span class="tiny muted uppercase bold">${esc(node.type)}</span>
+                </div>
+                <div class="v2-node-body">${esc(node.name)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+OL.commitBrainDump = async function() {
+    const appVal = document.getElementById('dump-app').value;
+    const objVal = document.getElementById('dump-obj').value;
+    const verbVal = document.getElementById('dump-verb').value;
+    const isVault = window.location.hash.includes('vault');
+    
+    const name = `${verbVal} ${objVal}`;
+    const timestamp = Date.now();
+    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+
+    const newNode = {
+        id: newId,
+        name: name,
+        type: "SOP", // Default type for brain dump
+        coords: { x: 100 + (Math.random() * 50), y: 100 + (Math.random() * 50) }, // Centered-ish drop
+        data: { verb: verbVal, object: objVal, appId: appVal },
+        createdDate: new Date().toISOString()
+    };
+
+    await OL.updateAndSync(() => {
+        const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        targetList.push(newNode);
+    });
+
+    OL.closeModal();
+    window.renderGlobalVisualizer(isVault); // Refresh the graph
+};
+
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
