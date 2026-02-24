@@ -8793,8 +8793,18 @@ window.renderVisualizerV2 = function(isVault) {
                         <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
                     </div>
 
+                    <div class="v2-toolbar">
+                        <select class="v2-toolbar-select" 
+                                onchange="state.v2.activeScope = this.value; renderVisualizerV2(${isVault});"
+                                style="background: transparent; border: none; color: var(--accent); font-size: 11px; font-weight: bold; outline: none; cursor: pointer;">
+                            <option value="all" style="background: #111827;">ALL SCOPES</option>
+                            ${[...new Set(nodes.map(n => n.scope).filter(Boolean))].map(s => 
+                                `<option value="${s}" ${state.v2.activeScope === s ? 'selected' : ''} style="background: #111827;">${s.toUpperCase()}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+
                     <div id="v2-context-toolbar" class="v2-toolbar context-toolbar-inline" style="display: none;">
-                        <div class="divider-v"></div>
                         <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
                         <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
                         <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">↻</button>
@@ -8803,7 +8813,6 @@ window.renderVisualizerV2 = function(isVault) {
                     </div>
 
                     <div class="v2-toolbar">
-                        <div class="divider-v"></div>
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
                     </div>
@@ -9090,6 +9099,11 @@ function renderV2Nodes(isVault) {
     const client = getActiveClient();
     let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
+    // 🚀 THE FILTER: If a scope is selected in state, narrow the list
+    if (state.v2.activeScope && state.v2.activeScope !== 'all') {
+        nodes = nodes.filter(n => n.scope === state.v2.activeScope);
+    }
+
     return nodes.map((node, idx) => {
         const x = (node.coords && typeof node.coords.x === 'number') ? node.coords.x : (100 + (idx % 4) * 250);
         const y = (node.coords && typeof node.coords.y === 'number') ? node.coords.y : (100 + Math.floor(idx / 4) * 200);
@@ -9102,6 +9116,15 @@ function renderV2Nodes(isVault) {
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
+        // 🚀 1. THE SCOPED BADGE (Top Left)
+        const scopeBadge = node.scope ? `
+            <div class="v2-scope-badge" 
+                onclick="event.stopPropagation(); OL.loadInspector('${node.id}')"
+                title="Open in Inspector">
+                ${esc(node.scope)}
+            </div>
+        ` : '';
+
         // 🚀 Dynamic Badge for standard resources
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
@@ -9150,6 +9173,7 @@ function renderV2Nodes(isVault) {
                 ${cornerLinkers}
 
                 <div class="v2-context-corner">${contextIcon}</div>
+                ${scopeBadge}
                 ${stepBadge}
                 
                 <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
