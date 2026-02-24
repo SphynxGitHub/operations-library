@@ -8837,18 +8837,26 @@ OL.zoom = function(delta) {
 };
 
 OL.startNodeDrag = function(e, nodeId) {
-    e.stopPropagation(); // Stop the canvas from trying to pan
+    if (e.target.classList.contains('v2-port')) return;
+    e.preventDefault();
 
-    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    if (!nodeEl) return;
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    const nodeData = source.find(n => n.id === nodeId);
+    if (!nodeData) return;
 
-    let hasMoved = false;
-    const zoom = state.v2.zoom || 1;
-    let startX = e.clientX / zoom - nodeEl.offsetLeft;
-    let startY = e.clientY / zoom - nodeEl.offsetTop;
+    // 🚀 DEFINE THESE EARLY so all sub-functions can see them
+    const isStep = (nodeData.type || "").toLowerCase() === 'step' || (nodeData.type || "").toLowerCase() === 'instruction';
+    const viewport = document.getElementById('v2-viewport');
+    const el = document.getElementById(`v2-node-${nodeId}`);
+    
+    let lastEvent = e;
+    if (viewport) viewport.classList.add('is-dragging');
 
     const onMouseMove = (moveEvent) => {
-        hasMoved = true;
+        lastEvent = moveEvent;
         const newX = moveEvent.clientX / zoom - startX;
         const newY = moveEvent.clientY / zoom - startY;
 
@@ -8857,10 +8865,15 @@ OL.startNodeDrag = function(e, nodeId) {
         
         const hoverEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.v2-node-card');
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-        if (hoverEl && isStep && hoverEl.id !== `v2-node-${nodeId}`) {
-            hoverEl.classList.add('drop-hover');
+        if (isStep) {
+            const hoverEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.v2-node-card');
+            document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+            if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
+                hoverEl.classList.add('drop-hover');
+            }
         }
-        OL.drawV2Connections(); 
+
+        OL.drawV2Connections();
     };
 
     const onMouseUp = async () => {
@@ -8903,7 +8916,7 @@ OL.startNodeDrag = function(e, nodeId) {
         
         console.log(`💾 Position saved for ${nodeData.name}`);
     };
-    
+
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 };
