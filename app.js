@@ -8881,7 +8881,7 @@ OL.startNodeDrag = function(e, nodeId) {
             nodeEl.style.top = `${nodeData.coords.y}px`;
             nodeEl.style.zIndex = "9999"; // Bring to front while dragging
         }
-        
+
         // Handle Hover Glow for Step Absorption
         const type = (nodeData.type || "").toUpperCase();
         const isStep = type === 'STEP' || type === 'SOP' || type === 'INSTRUCTION';
@@ -8902,43 +8902,51 @@ OL.startNodeDrag = function(e, nodeId) {
     };
 
     const onMouseUp = async () => {
-        if (viewport) viewport.classList.remove('is-dragging');
+        state.isSaving = false; // Release the sync shield
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        
+        // Clear hover glows immediately
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-
-        // Handle Absorption logic
-        const type = (nodeData.type || "").toUpperCase();
-        const isStep = type === 'STEP' || type === 'SOP' || type === 'INSTRUCTION';
 
         if (isStep) {
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
-            const dropTargetEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)?.closest('.v2-node-card');
+            const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
+            const dropTargetEl = hit?.closest('.v2-node-card');
             if (nodeEl) nodeEl.style.pointerEvents = 'auto';
 
             if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
+                // 🚀 THE FIX: Standardize the ID extraction
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
-                const targetNode = source.find(n => n.id === targetId);
+                const targetNode = source.find(n => String(n.id) === String(targetId));
 
-                if (targetNode && (targetNode.type || "").toUpperCase() !== 'SOP') {
+                // Only absorb into Resources, not other Steps
+                if (targetNode && !['STEP', 'SOP', 'INSTRUCTION'].includes((targetNode.type || "").toUpperCase())) {
+                    console.log(`📥 Absorbing ${nodeData.name} into ${targetNode.name}`);
+                    
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
-                        const stepsToAdd = Array.isArray(nodeData.steps) && nodeData.steps.length > 0 
-                            ? nodeData.steps 
-                            : [{ text: nodeData.name, id: Date.now() }];
-                        targetNode.steps.push(...stepsToAdd);
-                        const idx = source.findIndex(n => n.id === nodeId);
+                        
+                        // Push the loose step into the resource's array
+                        targetNode.steps.push({
+                            text: nodeData.name || nodeData.text,
+                            id: Date.now()
+                        });
+
+                        // Remove the loose node from the canvas
+                        const idx = source.findIndex(n => String(n.id) === String(nodeId));
                         if (idx > -1) source.splice(idx, 1);
                     });
+
                     renderVisualizerV2(isVault);
-                    return; 
+                    return; // Stop here, don't save coordinates for a deleted node
                 }
             }
         }
 
-        // Standard Save
+        // Standard coordinate save if no absorption happened
         await OL.updateAndSync(() => {
-            const nodeToUpdate = source.find(n => n.id === nodeId);
+            const nodeToUpdate = source.find(n => String(n.id) === String(nodeId));
             if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
         });
     };
@@ -9328,17 +9336,20 @@ OL.toggleStepView = function(nodeId) {
         if (steps.length === 0) return;
 
         container.innerHTML = steps.map((step, i) => `
-            <div class="v2-step-item">
-                <span class="v2-step-number">${i + 1}</span>
-                <span class="v2-step-text">${esc(step.text || "Step")}</span>
+            <div class="v2-step-item" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="v2-step-number" style="opacity: 0.5; font-size: 10px;">${i + 1}</span>
+                    <span class="v2-step-text" style="font-size: 11px;">${esc(step.text || "Unnamed Step")}</span>
+                </div>
                 <div class="v2-step-eject" 
-                    title="Eject to Canvas" 
+                    title="Pop out to canvas" 
+                    style="cursor: pointer; opacity: 0.6; padding: 2px 5px;"
                     onclick="event.stopPropagation(); OL.ejectStep('${nodeId}', ${i})">
-                    <i class="fas fa-external-link-alt"></i>
+                    <i class="fas fa-external-link-alt" style="font-size: 10px;"></i>
                 </div>
             </div>
         `).join('');
-        
+                
         container.style.display = 'block';
     }
     
