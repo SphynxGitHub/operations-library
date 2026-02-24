@@ -8967,13 +8967,11 @@ function renderV2Nodes(isVault) {
                 style="position: absolute; left: ${x}px; top: ${y}px;"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
                 
-                <div class="v2-port port-in" 
-                    title="Connect to here"
-                    onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-in" title="Left Input" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-out" title="Right Output" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
                 
-                <div class="v2-port port-out" 
-                    title="Start connection"
-                    onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                <div class="v2-port port-top" title="Top Input" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-bottom" title="Bottom Output" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
 
                 <div class="v2-node-header" style="pointer-events: none;">
                     <span>${icon}</span>
@@ -9071,10 +9069,30 @@ OL.drawV2Connections = function() {
 };
 
 OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, outcomeIdx) {
-    const outPort = startCard.querySelector('.port-out');
-    const inPort = endCard.querySelector('.port-in');
+    // 1. Determine relative positioning
+    const dx = endCard.offsetLeft - startCard.offsetLeft;
+    const dy = endCard.offsetTop - startCard.offsetTop;
+
+    // Use vertical ports if the cards are more "above/below" than "left/right"
+    const useVertical = Math.abs(dy) > Math.abs(dx);
+
+    let outPort, inPort;
+
+    if (useVertical) {
+        // Source is above Target -> Bottom to Top
+        // Source is below Target -> Top to Bottom
+        outPort = dy > 0 ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top');
+        inPort = dy > 0 ? endCard.querySelector('.port-top') : endCard.querySelector('.port-bottom');
+    } else {
+        // Source is left of Target -> Right to Left
+        // Source is right of Target -> Left to Right
+        outPort = dx > 0 ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in');
+        inPort = dx > 0 ? endCard.querySelector('.port-in') : endCard.querySelector('.port-out');
+    }
+
     if (!outPort || !inPort) return;
 
+    // 2. Calculate coordinates based on the selected ports
     const s = {
         x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
         y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
@@ -9084,23 +9102,27 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         y: endCard.offsetTop + inPort.offsetTop + (inPort.offsetHeight / 2)
     };
 
-    const deltaX = Math.abs(e.x - s.x);
-    const cpOffset = Math.min(deltaX / 2, 150);
-    const pathData = `M ${s.x} ${s.y} C ${s.x + cpOffset} ${s.y}, ${e.x - cpOffset} ${e.y}, ${e.x} ${e.y}`;
+    // 3. Path Math (Adjust Control Points for Vertical vs Horizontal)
+    let pathData;
+    if (useVertical) {
+        const cpOffset = Math.min(Math.abs(e.y - s.y) / 2, 100);
+        pathData = `M ${s.x} ${s.y} C ${s.x} ${s.y + (dy > 0 ? cpOffset : -cpOffset)}, ${e.x} ${e.y + (dy > 0 ? -cpOffset : cpOffset)}, ${e.x} ${e.y}`;
+    } else {
+        const cpOffset = Math.min(Math.abs(e.x - s.x) / 2, 150);
+        pathData = `M ${s.x} ${s.y} C ${s.x + (dx > 0 ? cpOffset : -cpOffset)} ${s.y}, ${e.x + (dx > 0 ? -cpOffset : cpOffset)} ${e.y}, ${e.x} ${e.y}`;
+    }
     
-    // 1. Create the group
+    // ... (rest of your existing code for creating the group, path, and delete button remains the same) ...
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group");
 
-    // 2. The Path (Line)
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
-    path.setAttribute("stroke-width", "3"); // Slightly thicker for easier hovering
+    path.setAttribute("stroke-width", "3");
     path.setAttribute("fill", "none");
     group.appendChild(path);
 
-    // 3. The Interactive Delete Group (The 'X')
     const midX = s.x + (e.x - s.x) / 2;
     const midY = s.y + (e.y - s.y) / 2;
     
@@ -9108,28 +9130,20 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     deleteBtnGroup.setAttribute("class", "v2-line-delete-btn");
     deleteBtnGroup.setAttribute("style", "cursor: pointer; pointer-events: auto;");
     
-    // Background Circle
     const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", midX);
-    circle.setAttribute("cy", midY);
-    circle.setAttribute("r", "10");
-    circle.setAttribute("fill", "#ef4444");
+    circle.setAttribute("cx", midX); circle.setAttribute("cy", midY);
+    circle.setAttribute("r", "10"); circle.setAttribute("fill", "#ef4444");
     deleteBtnGroup.appendChild(circle);
 
-    // The 'X' Text
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", midX);
-    text.setAttribute("y", midY + 4); // Vertical alignment tweak
-    text.setAttribute("text-anchor", "middle");
-    text.setAttribute("fill", "white");
+    text.setAttribute("x", midX); text.setAttribute("y", midY + 4);
+    text.setAttribute("text-anchor", "middle"); text.setAttribute("fill", "white");
     text.setAttribute("style", "font-size: 12px; font-weight: bold; pointer-events: none;");
     text.textContent = "×";
     deleteBtnGroup.appendChild(text);
 
-    // Click Logic
     deleteBtnGroup.onclick = (event) => {
         event.stopPropagation();
-        // Use the arguments passed into the parent function
         if(confirm("Disconnect these nodes?")) {
             OL.removeConnection(sourceId, outcomeIdx); 
         }

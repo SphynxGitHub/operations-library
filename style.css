@@ -4122,8 +4122,16 @@ ARROWS
     cursor: pointer;
 }
 
-.port-in { left: -6px; }
-.port-out { right: -6px; }
+/* Horizontal Ports */
+.port-in { left: -7px; top: 50%; transform: translateY(-50%); }
+.port-out { right: -7px; top: 50%; transform: translateY(-50%); }
+
+/* Vertical Ports */
+.port-top { top: -7px; left: 50%; transform: translateX(-50%); }
+.port-bottom { bottom: -7px; left: 50%; transform: translateX(-50%); }
+
+.port-top:hover, .port-bottom:hover { transform: translateX(-50%) scale(1.4); }
+.port-in:hover, .port-out:hover { transform: translateY(-50%) scale(1.4); }
 
 .v2-node-card.source-selected {
     border-color: #fbbf24 !important;
