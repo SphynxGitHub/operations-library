@@ -4224,7 +4224,7 @@ ARROWS
     border-radius: 10px;
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    z-index: 120;
+    z-index: 999;
 }
 
 .v2-steps-preview {
