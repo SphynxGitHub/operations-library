@@ -9310,9 +9310,15 @@ OL.autoAlignNodes = async function() {
     });
 
     // 🚀 Refresh UI
-    OL.renderGlobalVisualizer(); 
-    // Wait a beat for DOM to settle, then redraw lines
-    setTimeout(() => OL.drawV2Connections(), 100);
+    const isVault = window.location.hash.includes('vault');
+    const canvas = document.getElementById('v2-canvas-nodes');
+    if (canvas) {
+        canvas.innerHTML = renderV2Nodes(isVault); // This updates the HTML nodes
+        console.log("✅ Grid layout applied to UI");
+    }
+
+    // Redraw lines to match new positions
+    setTimeout(() => OL.drawV2Connections(), 50);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
