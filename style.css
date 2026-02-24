@@ -4117,6 +4117,7 @@ ARROWS
     transform: translateY(-50%);
     z-index: 110; /* Above the card */
     transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
 .v2-port:hover {

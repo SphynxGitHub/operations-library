@@ -9092,14 +9092,24 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
     if (!outPort || !inPort) return;
 
-    // 2. Calculate coordinates based on the selected ports
+    // 🚀 THE CENTER-POINT FIX: 
+    // Get the center of the ports relative to the canvas
+    const canvas = document.getElementById('v2-canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    const outRect = outPort.getBoundingClientRect();
+    const inRect = inPort.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+
+    // 2. Calculate center points by finding the element's position relative 
+    // to the canvas and adding half its size, then adjusting for zoom.
     const s = {
-        x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
-        y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
+        x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
+        y: (outRect.top - canvasRect.top + (outRect.height / 2)) / zoom
     };
+    
     const e = {
-        x: endCard.offsetLeft + inPort.offsetLeft + (inPort.offsetWidth / 2),
-        y: endCard.offsetTop + inPort.offsetTop + (inPort.offsetHeight / 2)
+        x: (inRect.left - canvasRect.left + (inRect.width / 2)) / zoom,
+        y: (inRect.top - canvasRect.top + (inRect.height / 2)) / zoom
     };
 
     // 3. Path Math (Adjust Control Points for Vertical vs Horizontal)
