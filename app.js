@@ -9069,38 +9069,57 @@ OL.drawV2Connections = function() {
     });
 };
 
-OL.drawPathBetweenElements = function(svg, startCard, endCard, label) {
-    // 🚀 THE FIX: Target the Ports, not the Card Edges
+OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, outcomeIdx) {
     const outPort = startCard.querySelector('.port-out');
     const inPort = endCard.querySelector('.port-in');
-
     if (!outPort || !inPort) return;
 
-    // We calculate coordinates relative to the v2-canvas
     const s = {
         x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
         y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
     };
-    
     const e = {
         x: endCard.offsetLeft + inPort.offsetLeft + (inPort.offsetWidth / 2),
         y: endCard.offsetTop + inPort.offsetTop + (inPort.offsetHeight / 2)
     };
 
-    // Calculate Bezier control points for a smooth horizontal curve
     const deltaX = Math.abs(e.x - s.x);
-    const cpOffset = Math.min(deltaX / 2, 150); // Cap the curve intensity
-
+    const cpOffset = Math.min(deltaX / 2, 150);
     const pathData = `M ${s.x} ${s.y} C ${s.x + cpOffset} ${s.y}, ${e.x - cpOffset} ${e.y}, ${e.x} ${e.y}`;
     
+    // 1. Create a Group for the line + delete button
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("class", "v2-connection-group");
+
+    // 2. The Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
     path.setAttribute("stroke-width", "2");
     path.setAttribute("fill", "none");
-    path.setAttribute("class", "v2-connection-line");
+    group.appendChild(path);
+
+    // 3. The Interactive "Delete" Trigger (Visible on hover)
+    const midX = s.x + (e.x - s.x) / 2;
+    const midY = s.y + (e.y - s.y) / 2;
     
-    svg.appendChild(path);
+    const btn = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    btn.setAttribute("cx", midX);
+    btn.setAttribute("cy", midY);
+    btn.setAttribute("r", "8");
+    btn.setAttribute("class", "v2-line-delete-trigger");
+    btn.setAttribute("style", "pointer-events: auto; cursor: pointer; fill: #ef4444; opacity: 0;");
+    
+    // Click to delete logic
+    btn.onclick = (event) => {
+        event.stopPropagation();
+        if(confirm("Remove this connection?")) {
+            OL.removeConnection(sourceId, outcomeIdx);
+        }
+    };
+    
+    group.appendChild(btn);
+    svg.appendChild(group);
 };
 
 state.v2.connectionMode = {
@@ -9170,6 +9189,39 @@ OL.handleNodeClick = async function(nodeId) {
 OL.resetWiringState = function() {
     document.querySelectorAll('.source-selected').forEach(el => el.classList.remove('source-selected'));
     state.v2.connectionMode.sourceId = null;
+};
+
+OL.removeConnection = async function(sourceId, index) {
+    await OL.updateAndSync(() => {
+        const isVault = window.location.hash.includes('vault');
+        const client = getActiveClient();
+        const source = isVault ? state.master.resources : client.projectData.localResources;
+        const node = source.find(n => n.id === sourceId);
+        
+        if (node && node.outcomes) {
+            node.outcomes.splice(index, 1);
+        }
+    });
+    OL.drawV2Connections();
+};
+
+OL.shiftOutcome = async function(nodeId, index, direction) {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    const node = source.find(n => n.id === nodeId);
+
+    if (node && node.outcomes) {
+        const newIndex = index + direction;
+        if (newIndex >= 0 && newIndex < node.outcomes.length) {
+            const [movedItem] = node.outcomes.splice(index, 1);
+            node.outcomes.splice(newIndex, 0, movedItem);
+            
+            await OL.persist();
+            OL.loadInspector(nodeId); // Refresh sidebar
+            OL.drawV2Connections();   // Refresh canvas
+        }
+    }
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================

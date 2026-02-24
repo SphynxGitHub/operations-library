@@ -4147,3 +4147,16 @@ ARROWS
     background: #fbbf24;
     box-shadow: 0 0 10px #fbbf24;
 }
+
+.v2-connection-group:hover path {
+    stroke: #ef4444 !important;
+    stroke-width: 3px;
+}
+
+.v2-connection-group:hover .v2-line-delete-trigger {
+    opacity: 1 !important;
+}
+
+.reorder-item:hover {
+    border-color: var(--accent);
+}
