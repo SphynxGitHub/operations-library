@@ -9087,38 +9087,53 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const cpOffset = Math.min(deltaX / 2, 150);
     const pathData = `M ${s.x} ${s.y} C ${s.x + cpOffset} ${s.y}, ${e.x - cpOffset} ${e.y}, ${e.x} ${e.y}`;
     
-    // 1. Create a Group for the line + delete button
+    // 1. Create the group
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group");
 
-    // 2. The Path
+    // 2. The Path (Line)
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
-    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-width", "3"); // Slightly thicker for easier hovering
     path.setAttribute("fill", "none");
     group.appendChild(path);
 
-    // 3. The Interactive "Delete" Trigger (Visible on hover)
+    // 3. The Interactive Delete Group (The 'X')
     const midX = s.x + (e.x - s.x) / 2;
     const midY = s.y + (e.y - s.y) / 2;
     
-    const btn = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    btn.setAttribute("cx", midX);
-    btn.setAttribute("cy", midY);
-    btn.setAttribute("r", "8");
-    btn.setAttribute("class", "v2-line-delete-trigger");
-    btn.setAttribute("style", "pointer-events: auto; cursor: pointer; fill: #ef4444; opacity: 0;");
+    const deleteBtnGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    deleteBtnGroup.setAttribute("class", "v2-line-delete-btn");
+    deleteBtnGroup.setAttribute("style", "cursor: pointer; pointer-events: auto;");
     
-    // Click to delete logic
-    btn.onclick = (event) => {
+    // Background Circle
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", midX);
+    circle.setAttribute("cy", midY);
+    circle.setAttribute("r", "10");
+    circle.setAttribute("fill", "#ef4444");
+    deleteBtnGroup.appendChild(circle);
+
+    // The 'X' Text
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", midX);
+    text.setAttribute("y", midY + 4); // Vertical alignment tweak
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("fill", "white");
+    text.setAttribute("style", "font-size: 12px; font-weight: bold; pointer-events: none;");
+    text.textContent = "×";
+    deleteBtnGroup.appendChild(text);
+
+    // Click Logic
+    deleteBtnGroup.onclick = (event) => {
         event.stopPropagation();
-        if(confirm("Remove this connection?")) {
+        if(confirm("Disconnect these nodes?")) {
             OL.removeConnection(sourceId, outcomeIdx);
         }
     };
-    
-    group.appendChild(btn);
+
+    group.appendChild(deleteBtnGroup);
     svg.appendChild(group);
 };
 
