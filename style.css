@@ -4115,6 +4115,18 @@ ARROWS
 .port-in { left: -6px; }
 .port-out { right: -6px; }
 
+.v2-node-card.source-selected {
+    border-color: #fbbf24 !important;
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+    transform: scale(1.05);
+    z-index: 1000;
+}
+
+/* Change cursor to indicate wiring is active */
+.v2-node-card.source-selected ~ .v2-node-card {
+    cursor: cell;
+}
+
 /* Visual feedback when tool is active */
 .v2-viewport[style*="crosshair"] .v2-node-card:hover {
     border-color: #fbbf24;

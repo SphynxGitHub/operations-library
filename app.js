@@ -8941,17 +8941,20 @@ function renderV2Nodes(isVault) {
         return `
             <div class="v2-node-card" 
                 id="v2-node-${node.id}"
-                style="position: absolute; left: ${x}px; top: ${y}px; z-index: 100; pointer-events: auto;"
-                onmousedown="OL.startNodeDrag(event, '${node.id}')">
+                style="position: absolute; left: ${x}px; top: ${y}px;"
+                onmousedown="OL.startNodeDrag(event, '${node.id}')"
+                onclick="OL.handleNodeClick('${node.id}')"
+                ondblclick="OL.loadInspector('${node.id}')">
                 
-                <div class="v2-port port-in"></div>
-                <div class="v2-port port-out"></div>
-
                 <div class="v2-node-header" style="pointer-events: none;">
                     <span>${icon}</span>
                     <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
                 </div>
                 <div class="v2-node-body" style="pointer-events: none;">${esc(node.name)}</div>
+                
+                <div class="tiny muted" style="margin-top: 8px; font-size: 8px; opacity: 0.5;">
+                    Double-click to Inspect
+                </div>
             </div>
         `;
     }).join('');
@@ -9065,49 +9068,50 @@ OL.toggleConnectTool = function() {
 };
 
 OL.handleNodeClick = async function(nodeId) {
-    // If we aren't in connection mode, just load the inspector as normal
-    if (!state.v2.connectionMode.active) {
-        OL.loadInspector(nodeId);
-        return;
-    }
-
-    // PHASE 1: Selecting the Source
+    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
+    
+    // 1. PHASE 1: Selecting the Source
     if (!state.v2.connectionMode.sourceId) {
         state.v2.connectionMode.sourceId = nodeId;
-        document.getElementById(`v2-node-${nodeId}`).style.borderColor = "#fbbf24";
-        console.log("📍 Source selected:", nodeId);
+        nodeEl.classList.add('source-selected');
+        console.log("📍 Source selected for wiring:", nodeId);
         return;
     }
 
-    // PHASE 2: Selecting the Target (and preventing self-linking)
-    if (state.v2.connectionMode.sourceId === nodeId) return;
-
+    // 2. PHASE 2: Selecting the Target
     const sourceId = state.v2.connectionMode.sourceId;
-    const targetId = nodeId;
+    
+    // If you click the same node twice, we just deselect it
+    if (sourceId === nodeId) {
+        OL.resetWiringState();
+        return;
+    }
 
-    console.log(`🔗 Linking ${sourceId} to ${targetId}`);
+    console.log(`🔗 Linking ${sourceId} to ${nodeId}`);
 
     await OL.updateAndSync(() => {
         const isVault = window.location.hash.includes('vault');
         const client = getActiveClient();
         const source = isVault ? state.master.resources : client.projectData.localResources;
-        
         const sourceNode = source.find(n => n.id === sourceId);
+        
         if (sourceNode) {
             if (!sourceNode.outcomes) sourceNode.outcomes = [];
-            // Create a new outcome link
             sourceNode.outcomes.push({
                 id: 'link_' + Date.now(),
-                action: `jump_res_${targetId}`,
-                label: "Connected Path",
-                condition: ""
+                action: `jump_res_${nodeId}`,
+                label: "Connected Path"
             });
         }
     });
 
-    // Reset Tool
-    OL.toggleConnectTool();
-    OL.drawV2Connections(); // Redraw lines immediately
+    OL.resetWiringState();
+    OL.drawV2Connections(); // Redraw lines
+};
+
+OL.resetWiringState = function() {
+    document.querySelectorAll('.source-selected').forEach(el => el.classList.remove('source-selected'));
+    state.v2.connectionMode.sourceId = null;
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
