@@ -9141,15 +9141,11 @@ function renderV2Nodes(isVault) {
         // 2. Fallback to originProject if that's what you consider the "Scope"
         const displayScope = OL.getInferredScope(node);
 
-        const scopeBadge = (isInScope || displayScope) ? `
+        const scopeBadge = displayScope ? `
             <div class="v2-scope-badge" 
-                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
-                 title="View in Scoping"
-                 style="position: absolute; top: -10px; left: 12px; background: #10b981; color: white; 
-                        font-size: 9px; font-weight: 800; padding: 2.25px 8px; border-radius: 10px; 
-                        cursor: pointer; z-index: 999; text-transform: uppercase; border: 1px solid white;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                ${esc(displayScope || 'Scoped')}
+                onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
+                title="Scope: ${displayScope}">
+                $
             </div>
         ` : '';
 
