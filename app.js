@@ -8761,6 +8761,10 @@ OL.handleContextAction = function(action) {
 
 window.renderVisualizerV2 = function(isVault) {
     const container = document.getElementById("mainContent");
+
+    const client = getActiveClient();
+    const nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
     const expandTitle = isAnyExpanded ? 'Collapse All' : 'Expand All';
@@ -8790,7 +8794,7 @@ window.renderVisualizerV2 = function(isVault) {
                     <div class="v2-toolbar">
                         <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
                         <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
-                        <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
+                        <button class="btn soft" onclick="OL.toggleMasterExpand()" title=${expandTitle}>${expandIcon}</button>
                     </div>
 
                     <div class="v2-toolbar">
