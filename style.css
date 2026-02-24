@@ -4454,3 +4454,48 @@ path[stroke="transparent"] {
     stroke: #fbbf24 !important;
     filter: drop-shadow(0 0 10px #fbbf24);
 }
+
+.v2-ui-overlay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 99999; /* Highest priority */
+    pointer-events: none; /* Let clicks through to canvas */
+}
+
+.v2-toolbar {
+    pointer-events: auto; /* Buttons are clickable */
+}
+
+/* Inline Toolbar Container */
+.context-toolbar-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.9); /* Opaque dark navy */
+    padding: 2px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    backdrop-filter: blur(4px); /* Sleek glass effect */
+    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10000; /* Ensure it stays above everything */
+}
+
+@keyframes popIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* Specific Action Colors */
+.ctx-logic { color: #8b5cf6 !important; }   /* Purple */
+.ctx-delay { color: #06b6d4 !important; }   /* Cyan */
+.ctx-loop  { color: #10b981 !important; }   /* Green */
+.ctx-reroute { color: #f59e0b !important; } /* Amber */
+.ctx-reorder { color: #3b82f6 !important; } /* Blue */
+.ctx-delete  { color: #ef4444 !important; } /* Red */
+
+/* Hover effects for context buttons */
+.context-toolbar-inline .btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+}
