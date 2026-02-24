@@ -8798,12 +8798,10 @@ window.renderVisualizerV2 = function(isVault) {
                     </div>
 
                     <div class="v2-toolbar">
-                        <select class="v2-toolbar-select" 
-                                onchange="state.v2.activeScope = this.value; renderVisualizerV2(${isVault});"
-                                style="background: transparent; border: none; color: var(--accent); font-size: 11px; font-weight: bold; outline: none; cursor: pointer;">
-                            <option value="all" style="background: #111827;">ALL SCOPES</option>
+                        <select class="v2-toolbar-select" onchange="state.v2.activeScope = this.value; renderVisualizerV2(${isVault});">
+                            <option value="all">ALL SCOPES</option>
                             ${[...new Set(nodes.map(n => n.scope).filter(Boolean))].map(s => 
-                                `<option value="${s}" ${state.v2.activeScope === s ? 'selected' : ''} style="background: #111827;">${s.toUpperCase()}</option>`
+                                `<option value="${s}" ${state.v2.activeScope === s ? 'selected' : ''}>${s.toUpperCase()}</option>`
                             ).join('')}
                         </select>
                     </div>
@@ -9120,19 +9118,22 @@ function renderV2Nodes(isVault) {
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
-        const isInScope = !!OL.isResourceInScope(node.id);
+        const isInScopeCheck = typeof OL.isResourceInScope === 'function' ? OL.isResourceInScope(node.id) : false;
+        const hasScopeName = !!node.scope;
 
-        const scopeBadge = isInScope ? `
+        // 🚀 SHOW BADGE if it has a scope name OR is technically "In Scope"
+        const scopeBadge = (hasScopeName || isInScopeCheck) ? `
             <div class="v2-scope-badge" 
                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
                 title="View in Scoping"
                 style="position: absolute; top: -10px; left: 12px; background: #10b981; color: white; 
-                        font-size: 9px; font-weight: 800; padding: 2.25px 8px; border-radius: 10px; 
-                        cursor: pointer; z-index: 999; text-transform: uppercase; border: 1px solid white;">
-                SCOPED
+                        font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 10px; 
+                        cursor: pointer; z-index: 999; text-transform: uppercase; border: 1px solid white;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                ${esc(node.scope || 'Scoped')}
             </div>
         ` : '';
-        
+
         // 🚀 Dynamic Badge for standard resources
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
