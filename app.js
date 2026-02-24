@@ -8848,7 +8848,14 @@ OL.startNodeDrag = function(e, nodeId) {
     // 🚀 Define your constants at the start of the drag
     const viewport = document.getElementById('v2-viewport');
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    const isStep = (nodeData.type || "").toLowerCase() === 'step' || (nodeData.type || "").toLowerCase() === 'instruction';
+    const type = (nodeData.type || "").toUpperCase();
+
+    const isStep = type === 'STEP' || 
+                type === 'SOP' || 
+                type === 'INSTRUCTION';
+
+    console.log(`Dragging node: ${nodeData.name} (Type: ${type}) | isStep: ${isStep}`);
+
     const zoom = state.v2.zoom || 1;
 
     // 🚀 Capture where the drag started
@@ -8897,23 +8904,33 @@ OL.startNodeDrag = function(e, nodeId) {
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
 
         if (isStep) {
-            // 🚀 THE FIX: Hide the current card from the "laser beam"
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
-
-            // Now check what's underneath
             const dropTargetEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)?.closest('.v2-node-card');
-            
-            // Restore pointer events immediately so the card is clickable again
             if (nodeEl) nodeEl.style.pointerEvents = 'auto';
 
             if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => n.id === targetId);
 
-                // Absorption logic...
-                if (targetNode && (targetNode.type || "").toLowerCase() !== 'step') {
-                    // ... (Keep the updateAndSync logic exactly as it was) ...
-                    console.log("Found target! Absorbing...");
+                // 🎯 Ensure we aren't dropping an SOP into another SOP
+                if (targetNode && (targetNode.type || "").toUpperCase() !== 'SOP') {
+                    await OL.updateAndSync(() => {
+                        if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
+
+                        // 🚀 If the dragged node has its own steps, merge them!
+                        const stepsToAdd = Array.isArray(nodeData.steps) && nodeData.steps.length > 0 
+                            ? nodeData.steps 
+                            : [{ text: nodeData.name, id: Date.now() }];
+
+                        targetNode.steps.push(...stepsToAdd);
+
+                        // Delete the original loose SOP node
+                        const idx = source.findIndex(n => n.id === nodeId);
+                        if (idx > -1) source.splice(idx, 1);
+                    });
+
+                    if (typeof renderVisualizerV2 === 'function') renderVisualizerV2(isVault);
+                    return;
                 }
             }
         }
@@ -9009,14 +9026,14 @@ function renderV2Nodes(isVault) {
     // We only want to hide 'workflow' types, everything else should show up.
     nodes = nodes.filter(node => {
         const type = (node.type || "").toLowerCase();
-        return type !== 'workflow'; 
+        return type //!== 'workflow'; 
     });
 
     console.log(`✅ Drawing ${nodes.length} nodes on the canvas`);
 
     return nodes.map((node, idx) => {
-        const x = node.coords?.x || (100 + (idx % 4) * 250);
-        const y = node.coords?.y || (100 + Math.floor(idx / 4) * 150);
+        const x = (node.coords && typeof node.coords.x === 'number') ? node.coords.x : (100 + (idx % 4) * 250);
+        const y = (node.coords && typeof node.coords.y === 'number') ? node.coords.y : (100 + Math.floor(idx / 4) * 200);
         const icon = OL.getRegistryIcon(node.type);
         // 🚀 1. Handle Global Status
         const globalClass = node.isGlobal ? 'is-global' : '';
