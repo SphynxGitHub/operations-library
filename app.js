@@ -9212,6 +9212,87 @@ OL.drawV2Connections = function() {
     });
 };
 
+OL.createMiniMenu = function(midX, midY, isLeash, sourceId, targetId, outcomeIdx) {
+    const menuGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    menuGroup.setAttribute("class", "v2-mini-menu");
+    menuGroup.setAttribute("transform", `translate(${midX}, ${midY})`);
+
+    // Define our buttons: [Label/Icon, Color, Action]
+    const actions = [
+        { id: 'logic', icon: 'λ', color: '#8b5cf6', title: 'Add Logic' },
+        { id: 'delay', icon: '⏱', color: '#06b6d4', title: 'Set Delay' },
+        { id: 'loop', icon: '↻', color: '#10b981', title: 'Looping' },
+        { id: 'delete', icon: '×', color: '#ef4444', title: 'Delete' },
+        { id: 'reroute', icon: '⇄', color: '#f59e0b', title: 'Reroute' }
+    ];
+
+    // Add the "Reorder" button ONLY for leashes
+    if (isLeash) {
+        actions.push({ id: 'reorder', icon: '☰', color: '#3b82f6', title: 'Reorder in Parent' });
+    }
+
+    actions.forEach((btn, i) => {
+        const btnG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        btnG.setAttribute("class", `menu-item btn-${btn.id}`);
+        btnG.setAttribute("style", "cursor: pointer;");
+        
+        // Arrange in a small grid or offset pattern
+        const offsetX = (i % 3 - 1) * 24;
+        const offsetY = (Math.floor(i / 3) - 0.5) * 24;
+
+        btnG.innerHTML = `
+            <circle cx="${offsetX}" cy="${offsetY}" r="10" fill="${btn.color}" stroke="white" stroke-width="1.5" />
+            <text x="${offsetX}" y="${offsetY + 3.5}" text-anchor="middle" font-size="10" fill="white" font-weight="bold" style="pointer-events:none; font-family: Arial;">${btn.icon}</text>
+            <title>${btn.title}</title>
+        `;
+
+        btnG.onclick = (e) => {
+            e.stopPropagation();
+            OL.handleMenuAction(btn.id, sourceId, targetId, outcomeIdx);
+        };
+
+        menuGroup.appendChild(btnG);
+    });
+
+    return menuGroup;
+};
+
+OL.handleMenuAction = function(action, sourceId, targetId, outcomeIdx) {
+    console.log(`Action: ${action} on ${sourceId} -> ${targetId}`);
+    
+    switch(action) {
+        case 'delete':
+            if (outcomeIdx === undefined) OL.unlinkParent(sourceId); // It's a leash
+            else OL.removeConnection(sourceId, outcomeIdx); // It's a flow line
+            break;
+        case 'reorder':
+            // Request the index mapping we discussed earlier
+            OL.requestReorder(sourceId, targetId);
+            break;
+        case 'logic':
+            alert("Logic Builder coming soon!");
+            break;
+        // Add other cases as you build them
+    }
+};
+
+OL.requestReorder = async function(stepId, parentId) {
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const parent = source.find(n => n.id === parentId);
+    
+    if (!parent) return;
+    
+    const currentIdx = (parent.steps || []).findIndex(s => s.id === stepId);
+    const newPos = prompt(`Currently at position ${currentIdx + 1}. Enter new position (1 - ${parent.steps.length}):`);
+    
+    if (newPos) {
+        const targetIdx = parseInt(newPos) - 1;
+        // Logic to move the element in the parent.steps array...
+        alert(`Moving to index ${targetIdx}`);
+    }
+};
+
 OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, outcomeIdx, outcomeData) {
     const canvas = document.getElementById('v2-canvas');
     const canvasRect = canvas.getBoundingClientRect();
@@ -9298,11 +9379,11 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
     }
 
-    // Create a parent group for the entire connection
+    // 1. Create a parent group for the entire connection
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", "v2-connection-group");
+    group.setAttribute("class", "v2-connection-group flow-link");
 
-    // 1. The Path
+    // 2 The Curved Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
@@ -9311,22 +9392,12 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     svg.prepend(path); // Lines go behind
     group.appendChild(path);
 
-    // 🚀 3. DRAW DELETE BUTTON (Bring to Front)
-    const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    deleteBtn.setAttribute("class", "v2-delete-trigger");
-    deleteBtn.style.cursor = "pointer";
-    deleteBtn.onclick = (e) => {
-        e.stopPropagation();
-        if(confirm("Disconnect these cards?")) OL.removeConnection(sourceId, outcomeIdx);
-    };
-    group.appendChild(deleteBtn);
+    // 3. THE MINI-MENU (Pass false for isLeash)
+    const targetId = endCard.id.replace('v2-node-', '');
+    const menu = OL.createMiniMenu(midX, midY, false, sourceId, targetId, outcomeIdx);
+    group.appendChild(menu);
 
-    deleteBtn.innerHTML = `
-        <circle cx="${midX}" cy="${midY}" r="10" fill="#ef4444" stroke="#fff" stroke-width="2" />
-        <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-size="12" fill="white" font-weight="bold" style="pointer-events:none;">×</text>
-    `;
-
-    svg.appendChild(group);
+    svg.appendChild(group); // Flow lines stay on top of leashes
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
@@ -9385,11 +9456,11 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     const midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
     const midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
 
-    // Create a parent group for the entire connection
+    // 1. Create a parent group for the entire connection
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group leash-group");
 
-    // 1. The Path
+    // 2. The Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)");
@@ -9399,23 +9470,12 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     svg.prepend(path); // Lines stay behind cards
     group.appendChild(path);
 
-    // 🚀 DRAW THE BUTTON (Upper Layer)
-    // Use append instead of prepend so it stays on top of the lines
-    const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    deleteBtn.setAttribute("class", "v2-delete-trigger");
-    deleteBtn.setAttribute("style", "cursor: pointer; pointer-events: auto;");
-    deleteBtn.onclick = (event) => {
-        event.stopPropagation();
-        OL.unlinkParent(nodeId);
-    };
-    group.appendChild(deleteBtn);
+    // 3. THE MINI-MENU (Pass true for isLeash)
+    const parentId = parentEl.id.replace('v2-node-', '');
+    const menu = OL.createMiniMenu(midX, midY, true, nodeId, parentId);
+    group.appendChild(menu);
 
-    deleteBtn.innerHTML = `
-        <circle cx="${midX}" cy="${midY}" r="10" fill="#ef4444" stroke="#fff" stroke-width="2" />
-        <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-size="12" fill="white" font-weight="bold" style="pointer-events:none; font-family: Arial;">×</text>
-    `;
-
-    svg.appendChild(group);
+    svg.prepend(group);
 };
 
 OL.startParentLinking = function(e, sourceId) {

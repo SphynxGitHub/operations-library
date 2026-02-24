@@ -4428,19 +4428,6 @@ ARROWS
     pointer-events: auto !important; /* BUT allow clicking the actual buttons */
 }
 
-.v2-line-delete-btn, .v2-leash-delete {
-    pointer-events: auto !important;
-    transition: transform 0.1s ease;
-}
-
-.v2-line-delete-btn:hover, .v2-leash-delete:hover {
-    transform: scale(1.2);
-}
-
-.v2-line-delete-btn circle, .v2-leash-delete circle {
-    filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.4));
-}
-
 /* 1. Hide the delete button by default */
 .v2-delete-trigger {
     opacity: 0;
@@ -4464,4 +4451,29 @@ ARROWS
 .v2-connection-group:hover path {
     stroke-width: 4;
     filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5));
+}
+
+/* Hide menu by default */
+.v2-mini-menu {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transform: scale(0.5) translate(0, 0);
+}
+
+/* Show and scale up on line hover */
+.v2-connection-group:hover .v2-mini-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1) translate(0, 0);
+}
+
+/* Individual button hovers */
+.menu-item:hover circle {
+    filter: brightness(1.2);
+    stroke-width: 2.5;
+}
+
+.menu-item:active {
+    transform: scale(0.9);
 }
