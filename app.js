@@ -9283,57 +9283,53 @@ OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    // 1. Grab all cards and sort them by Y (top to bottom)
     const cardEls = Array.from(document.querySelectorAll('.v2-node-card'))
         .sort((a, b) => a.offsetTop - b.offsetTop);
     
     if (cardEls.length === 0) return;
 
-    const laneThreshold = 200; // How far apart cards can be and still 'count' as a column
+    const laneThreshold = 250; 
     const processedIds = new Set();
-
-    console.log(`🪄 Tidy: Processing ${cardEls.length} cards...`);
 
     await OL.updateAndSync(() => {
         cardEls.forEach(masterEl => {
             const masterId = masterEl.id.replace('v2-node-', '');
             if (processedIds.has(masterId)) return;
 
-            // This is the X coordinate everyone in this 'lane' will snap to
             const targetX = masterEl.offsetLeft;
-            console.log(`📍 Creating lane at X: ${targetX}`);
 
             cardEls.forEach(slaveEl => {
                 const slaveId = slaveEl.id.replace('v2-node-', '');
                 if (processedIds.has(slaveId)) return;
 
-                // If this card is within the lane threshold, snap it
                 if (Math.abs(slaveEl.offsetLeft - targetX) < laneThreshold) {
                     const nodeData = source.find(n => n.id === slaveId);
                     if (nodeData) {
-                        nodeData.coords = {
-                            x: targetX,
-                            y: slaveEl.offsetTop
-                        };
+                        nodeData.coords = { x: targetX, y: slaveEl.offsetTop };
+                        
+                        // 🚀 THE INSTANT UPDATE: Move the physical DOM element
+                        slaveEl.style.transition = "left 0.3s ease-out, top 0.3s ease-out";
+                        slaveEl.style.left = `${targetX}px`;
+                        
                         processedIds.add(slaveId);
-                        console.log(`   -> Snapped ${nodeData.name} to ${targetX}`);
                     }
                 }
             });
         });
     });
 
-    // 2. FORCE the DOM to update positions immediately
-    processedIds.forEach(id => {
-        const el = document.getElementById(`v2-node-${id}`);
-        const nodeData = source.find(n => n.id === id);
-        if (el && nodeData?.coords) {
-            el.style.left = `${nodeData.coords.x}px`;
-        }
-    });
+    // 🚀 Refresh the lines while the cards are sliding
+    let frames = 0;
+    const animateLines = () => {
+        OL.drawV2Connections();
+        if (frames++ < 20) requestAnimationFrame(animateLines);
+    };
+    animateLines();
 
-    console.log("✅ Tidy Complete.");
-    setTimeout(() => OL.drawV2Connections(), 50);
+    // Clean up transitions so dragging feels snappy again
+    setTimeout(() => {
+        cardEls.forEach(el => el.style.transition = "");
+    }, 400);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
