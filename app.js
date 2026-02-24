@@ -9268,6 +9268,7 @@ OL.returnToFlow = function() {
 
     // 2. Clear the return state so the button disappears
     state.v2.returnTo = null;
+    state.v2.lastJumpedNodeId = nodeId;
 
     // 3. Navigate back
     if (typeof handleRoute === 'function') {
@@ -11322,6 +11323,8 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     // 2. State & Mode Setup
 
     // 🚀 NEW: Route to V2 if in graph mode
+    const layoutClass = isVault ? 'v2-layout-vault' : 'v2-layout-project';
+
     if (state.viewMode === 'graph') {
         window.renderVisualizerV2(isVaultMode);
         return;
