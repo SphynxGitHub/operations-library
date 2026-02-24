@@ -9222,8 +9222,9 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🚀 Jumping to Scoping for:", nodeId);
+    console.log("🎯 Targeting Node for Scoping:", nodeId);
 
+    // 1. Save the return path for the "Back to Flow" button
     state.v2.returnTo = {
         viewMode: state.viewMode,
         pan: { ...state.v2.pan },
@@ -9231,29 +9232,21 @@ OL.jumpToScopingItem = function(nodeId) {
         nodeId: nodeId
     };
 
-    // 1. Set the target ID so the scoping sheet knows what to highlight
+    // 2. Set the ID for the scoping sheet to highlight
     state.scopingTargetId = nodeId;
 
-    // 2. Use your existing router to switch views
-    // This handles the state change and the re-render in one go
-    if (typeof handleRoute === 'function') {
-        handleRoute('scoping');
-    } else if (typeof render === 'function') {
-        state.viewMode = 'scoping';
-        render();
-    }
+    // 3. Force the global viewMode state
+    state.viewMode = 'scoping';
 
-    // 3. Scroll to the item once the view has rendered
-    setTimeout(() => {
-        // Try to find the row by data-id or id
-        const element = document.querySelector(`[data-id="${nodeId}"]`) || 
-                        document.querySelector(`.scoping-row[id*="${nodeId}"]`);
-        
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            element.classList.add('row-flash-highlight');
-        }
-    }, 400); // Slightly longer delay to ensure the scoping sheet is built
+    // 4. Trigger navigation
+    if (typeof window.handleRoute === 'function') {
+        // We pass 'scoping' as the route name
+        window.handleRoute('scoping');
+    } else {
+        console.error("❌ handleRoute not found. Manual render required.");
+        // Fallback if the router is missing
+        if (typeof render === 'function') render();
+    }
 };
 
 OL.returnToFlow = function() {
