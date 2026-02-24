@@ -8740,7 +8740,7 @@ window.renderVisualizerV2 = function(isVault) {
             </div>
         </div>
     `;
-    
+
     // At the bottom of renderVisualizerV2
     setTimeout(() => {
         OL.initV2Panning(); // Activates grid movement
@@ -8806,6 +8806,28 @@ OL.initV2Panning = function() {
         isPanning = false;
         viewport.style.cursor = 'grab';
     };
+};
+
+OL.zoom = function(delta) {
+    const canvas = document.getElementById('v2-canvas');
+    if (!canvas) return;
+
+    // 1. Calculate new zoom level
+    let newZoom = (state.v2.zoom || 1) + delta;
+    
+    // 2. Clamp values (0.2x min, 2.0x max)
+    if (newZoom < 0.2) newZoom = 0.2;
+    if (newZoom > 2.0) newZoom = 2.0;
+
+    // 3. Update State
+    state.v2.zoom = newZoom;
+
+    // 4. Apply to DOM immediately for smoothness
+    // Note: We include the pan coordinates so zooming doesn't reset your position
+    const { x, y } = state.v2.pan || { x: 0, y: 0 };
+    canvas.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${newZoom})`;
+    
+    console.log(`🔍 Zoom Level: ${Math.round(newZoom * 100)}%`);
 };
 
 OL.startNodeDrag = function(e, nodeId) {
@@ -8894,18 +8916,35 @@ OL.setVisualizerMode = function(mode, isVault) {
 
 // --- V2 GRAPH MODE RENDERERS ---
 
-function renderV2Stages(isVault) {
+function renderV2Nodes(isVault) {
     const client = getActiveClient();
-    const sourceData = isVault ? state.master : (client?.projectData || {});
-    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const nodes = allResources.filter(r => (r.type || "").toLowerCase() !== 'workflow');
 
-    if (stages.length === 0) return `<div class="v2-lane"><div class="v2-lane-label">No Stages Defined</div></div>`;
+    return nodes.map((node, idx) => {
+        // 🚀 THE AUTO-SPREAD: If no coords, stagger them in a grid 
+        // 4 nodes per row, 250px apart
+        const defaultX = 100 + (idx % 4) * 250;
+        const defaultY = 100 + Math.floor(idx / 4) * 150;
 
-    return stages.map(s => `
-        <div class="v2-lane" id="v2-lane-${s.id}">
-            <div class="v2-lane-label">${esc(s.name)}</div>
-        </div>
-    `).join('');
+        const x = node.coords?.x || defaultX;
+        const y = node.coords?.y || defaultY;
+        const icon = OL.getRegistryIcon(node.type);
+
+        return `
+            <div class="v2-node-card" 
+                 id="v2-node-${node.id}"
+                 style="position: absolute; left: ${x}px; top: ${y}px; z-index: 10;"
+                 onmousedown="OL.startNodeDrag(event, '${node.id}')"
+                 onclick="event.stopPropagation(); OL.loadInspector('${node.id}')">
+                <div class="v2-node-header" style="pointer-events: none;">
+                    <span>${icon}</span>
+                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
+                </div>
+                <div class="v2-node-body" style="pointer-events: none;">${esc(node.name)}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function renderV2Nodes(isVault) {
