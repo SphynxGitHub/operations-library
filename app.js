@@ -11323,6 +11323,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     // 2. State & Mode Setup
 
     // 🚀 NEW: Route to V2 if in graph mode
+    const isVault = typeof isVaultParam !== 'undefined' ? isVaultParam : (state.viewMode === 'vault');
     const layoutClass = isVault ? 'v2-layout-vault' : 'v2-layout-project';
 
     if (state.viewMode === 'graph') {
