@@ -9284,40 +9284,52 @@ OL.autoAlignNodes = async function() {
     const client = getActiveClient();
     const source = isVault ? state.master.resources : client.projectData.localResources;
     
-    // Filter out workflows and ensure we have nodes to move
-    const nodes = source.filter(r => (r.type || "").toLowerCase() !== 'workflow');
-    if (nodes.length === 0) return;
+    // 1. Get all draggable card elements currently on the DOM
+    const cardEls = Array.from(document.querySelectorAll('.v2-node-card'));
+    if (cardEls.length === 0) return;
 
-    // Grid Settings
-    const paddingX = 100; // Left margin
-    const paddingY = 120; // Top margin
-    const gapX = 300;     // Horizontal distance between cards
-    const gapY = 180;     // Vertical distance between cards
-    const columns = 4;    // Cards per row
+    // 2. Threshold for what counts as "in the same vertical line" (e.g., within 150px)
+    const laneThreshold = 150; 
 
-    console.log(`🧹 Tidying up ${nodes.length} nodes...`);
+    console.log("📏 Aligning vertical stacks...");
 
     await OL.updateAndSync(() => {
-        nodes.forEach((node, idx) => {
-            const col = idx % columns;
-            const row = Math.floor(idx / columns);
+        const processedIds = new Set();
 
-            node.coords = {
-                x: paddingX + (col * gapX),
-                y: paddingY + (row * gapY)
-            };
+        cardEls.forEach(el => {
+            const id = el.id.replace('v2-node-', '');
+            if (processedIds.has(id)) return;
+
+            // Find all other cards that are roughly in the same X-lane
+            const currentX = el.offsetLeft;
+            const stack = cardEls.filter(otherEl => {
+                const otherX = otherEl.offsetLeft;
+                return Math.abs(currentX - otherX) < laneThreshold;
+            });
+
+            // Calculate the master X (the average or the first card's X)
+            const masterX = currentX;
+
+            // Snap everyone in this stack to the master X
+            stack.forEach(stackEl => {
+                const stackId = stackEl.id.replace('v2-node-', '');
+                const nodeData = source.find(n => n.id === stackId);
+                
+                if (nodeData) {
+                    nodeData.coords = {
+                        x: masterX,
+                        y: stackEl.offsetTop // Keep their vertical spacing the same
+                    };
+                    processedIds.add(stackId);
+                }
+            });
         });
     });
 
-    // 🚀 Refresh UI
-    const isVault = window.location.hash.includes('vault');
-    const canvas = document.getElementById('v2-canvas-nodes');
-    if (canvas) {
-        canvas.innerHTML = renderV2Nodes(isVault); // This updates the HTML nodes
-        console.log("✅ Grid layout applied to UI");
-    }
-
-    // Redraw lines to match new positions
+    // 🚀 Refresh UI & Redraw straight lines
+    const canvasNodes = document.getElementById('v2-canvas-nodes');
+    if (canvasNodes) canvasNodes.innerHTML = renderV2Nodes(isVault);
+    
     setTimeout(() => OL.drawV2Connections(), 50);
 };
 
