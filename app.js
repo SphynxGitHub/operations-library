@@ -10039,7 +10039,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         window.renderVisualizerV2(isVaultMode);
         return;
     }
-    
+
     if (!state.viewMode) state.viewMode = 'global';
     const isGlobalMode = state.viewMode === 'global';
     const isZen = state.ui.zenMode;
@@ -10051,14 +10051,22 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     let breadcrumbHtml = `<span class="breadcrumb-item" onclick="OL.exitToLifecycle()">🌐 Global Lifecycle</span>`;
 
     // 3. DETERMINISTIC RENDERING LOGIC (Corrected Priority)
-    // We check for FOCUS first, then Global Mode.
+
+    // Branch 1: Node Map (V2 Engine)
+    if (state.viewMode === 'graph') {
+        console.log("🕸️ Node Map Mode Active");
+        breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">Node Map</span>`;
+        // Note: window.renderVisualizerV2 handles its own toolbox and canvas internals
+        window.renderVisualizerV2(isVaultMode);
+        return; // 🚀 ABSOLUTE EXIT: Stop processing Tier 1/2/3 logic
+    }
+
+    // Branch 2: Step Factory (Level 3 Focus)
     if (state.focusedResourceId) {
         console.log("L3!!!");
-        // 🏭 LEVEL 3: STEP FACTORY
         const res = OL.getResourceById(state.focusedResourceId);
         const parentWorkflow = allResources.find(r => (r.steps || []).some(s => s.resourceLinkId === state.focusedResourceId));
         if (parentWorkflow) {
-            // 🚀 MAKE L2 CLICKABLE HERE
             breadcrumbHtml += ` <span class="muted"> > </span> 
                 <span class="breadcrumb-item clickable" onclick="OL.drillDownIntoWorkflow('${parentWorkflow.id}')">${esc(parentWorkflow.name)}</span>`;
         }
@@ -10068,28 +10076,26 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             canvasHtml = renderLevel3Canvas(state.focusedResourceId);
         }
     } 
+    // Branch 3: Workflow Spine (Level 2 Focus)
     else if (state.focusedWorkflowId) {
         console.log("L2!!!");
-        // 🔄 LEVEL 2: WORKFLOW FOCUS
         const focusedRes = OL.getResourceById(state.focusedWorkflowId);
         breadcrumbHtml += ` <span class="muted"> > </span> <span class="breadcrumb-current">${esc(focusedRes?.name)}</span>`;
         toolboxHtml = renderLevel2SidebarContent(allResources);
         canvasHtml = renderLevel2Canvas(state.focusedWorkflowId);
     } 
-    else if (isGlobalMode) {
+    // Branch 4: Macro Map (Level 1 Global)
+    else if (state.viewMode === 'global') {
         console.log("L1!!!");
-        // 🌐 TIER 1: MACRO MAP (The Big Horizontal Map)
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderGlobalCanvas(isVaultMode);
     } 
+    // Branch 5: Focus Mode Fallback (Level 1 Focus)
     else {
-        console.log("FALLBACK!!!");
-        // 📋 TIER 1: FOCUS VIEW (Vertical Lifecycle)
+        console.log("📋 Focus Fallback");
         toolboxHtml = renderLevel1SidebarContent(allResources);
         canvasHtml = renderLevel1Canvas(sourceData, isVaultMode);
     }
-
-    const layoutClass = isGlobalMode ? 'global-macro-layout' : 'vertical-lifecycle-mode';
 
     // 4. INJECT HTML
     container.innerHTML = `
