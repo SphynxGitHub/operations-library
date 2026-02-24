@@ -4040,6 +4040,7 @@ ARROWS
     transform-origin: 0 0;
     transition: transform 0.1s ease-out;
     contain: layout style;
+    overflow: visible;
 }
 
 /* Stage Lanes in V2 */
@@ -4072,10 +4073,11 @@ ARROWS
     position: absolute;
     top: -1000;
     left: -2000;
-    width: 5000px;
-    height: 10000px;
+    width: 100%;
+    height: 100%;
     pointer-events: none !important; /* 🚀 This allows clicks to pass through to nodes */
     z-index: 10;
+    overflow: visible;
 }
 
 .v2-node-layer {
