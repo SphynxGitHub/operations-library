@@ -8841,30 +8841,44 @@ OL.startNodeDrag = function(e, nodeId) {
     e.preventDefault();
 
     const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
-    
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     const nodeData = source.find(n => n.id === nodeId);
     if (!nodeData) return;
 
-    // 🚀 DEFINE THESE EARLY so all sub-functions can see them
-    const isStep = (nodeData.type || "").toLowerCase() === 'step' || (nodeData.type || "").toLowerCase() === 'instruction';
+    // 🚀 Define your constants at the start of the drag
     const viewport = document.getElementById('v2-viewport');
-    const el = document.getElementById(`v2-node-${nodeId}`);
+    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
+    const isStep = (nodeData.type || "").toLowerCase() === 'step' || (nodeData.type || "").toLowerCase() === 'instruction';
+    const zoom = state.v2.zoom || 1;
+
+    // 🚀 Capture where the drag started
+    const startMouseX = e.clientX;
+    const startMouseY = e.clientY;
+    const startNodeX = nodeData.coords?.x || 0;
+    const startNodeY = nodeData.coords?.y || 0;
     
     let lastEvent = e;
     if (viewport) viewport.classList.add('is-dragging');
 
     const onMouseMove = (moveEvent) => {
         lastEvent = moveEvent;
-        const newX = moveEvent.clientX / zoom - startX;
-        const newY = moveEvent.clientY / zoom - startY;
 
-        nodeEl.style.left = `${newX}px`;
-        nodeEl.style.top = `${newY}px`;
+        // 🚀 THE MATH: (New Mouse - Old Mouse) / Zoom + Original Position
+        const dx = (moveEvent.clientX - startMouseX) / zoom;
+        const dy = (moveEvent.clientY - startMouseY) / zoom;
+
+        nodeData.coords = {
+            x: startNodeX + dx,
+            y: startNodeY + dy
+        };
+
+        // Update the visual position instantly
+        if (nodeEl) {
+            nodeEl.style.left = `${nodeData.coords.x}px`;
+            nodeEl.style.top = `${nodeData.coords.y}px`;
+        }
         
-        const hoverEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.v2-node-card');
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+        // Handle Hover Glow
         if (isStep) {
             const hoverEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.v2-node-card');
             document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
@@ -8884,7 +8898,6 @@ OL.startNodeDrag = function(e, nodeId) {
 
         if (isStep) {
             const dropTargetEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)?.closest('.v2-node-card');
-            
             if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => n.id === targetId);
@@ -8906,15 +8919,11 @@ OL.startNodeDrag = function(e, nodeId) {
             }
         }
 
-        // 🚀 THE FIX: Manual save logic instead of a missing function
+        // Save the final position
         await OL.updateAndSync(() => {
             const nodeToUpdate = source.find(n => n.id === nodeId);
-            if (nodeToUpdate) {
-                nodeToUpdate.coords = nodeData.coords;
-            }
+            if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
         });
-        
-        console.log(`💾 Position saved for ${nodeData.name}`);
     };
 
     document.addEventListener('mousemove', onMouseMove);
