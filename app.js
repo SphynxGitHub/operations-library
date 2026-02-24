@@ -9105,17 +9105,17 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
     // 2. Calculate center points by finding the element's position relative 
     // to the canvas and adding half its size, then adjusting for zoom.
-    const s = {
+    /*const s = {
         x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
         y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
     };
+    
+    const e = {
+        x: endCard.offsetLeft + inPort.offsetLeft + (inPort.offsetWidth / 2),
+        y: endCard.offsetTop + inPort.offsetTop + (inPort.offsetHeight / 2)
+    };*/
+
     const s = {
-        x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
-        y: (outRect.top - canvasRect.top + (outRect.height / 2)) / zoom
-    };
-    
-    
-    /*const s = {
         x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
         y: (outRect.top - canvasRect.top + (outRect.height / 2)) / zoom
     };
@@ -9123,7 +9123,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const e = {
         x: (inRect.left - canvasRect.left + (inRect.width / 2)) / zoom,
         y: (inRect.top - canvasRect.top + (inRect.height / 2)) / zoom
-    };*/
+    };
 
     // 3. Path Math (Adjust Control Points for Vertical vs Horizontal)
     let pathData;
