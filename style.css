@@ -4305,3 +4305,27 @@ ARROWS
 .v2-node-card.is-resource {
     border: 2px solid rgba(56, 189, 248, 0.3);
 }
+
+.v2-step-item {
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.step-port-out {
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: #fbbf24; /* Amber for steps */
+    border-radius: 50%;
+    border: 1px solid #000;
+    cursor: crosshair;
+    z-index: 20;
+}
+
+.step-port-out:hover {
+    background: #fff;
+    transform: translateY(-50%) scale(1.4);
+}

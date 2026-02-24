@@ -9057,15 +9057,29 @@ function renderV2Nodes(isVault) {
                 ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
             </div>` : '';
 
-        const stepsHtml = isExpanded ? steps.map((step, i) => `
-            <div class="v2-step-item" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="v2-step-number" style="opacity: 0.5; font-size: 10px;">${i + 1}</span>
-                    <span class="v2-step-text" style="font-size: 11px;">${esc(step.text || step.name || "Step")}</span>
+        const stepsHtml = isExpanded ? steps.map((step, i) => {
+            const content = step.text || step.name || "Step";
+            // 🚀 Unique ID for the step-level port
+            const stepPortId = `port-${node.id}-step-${i}`;
+
+            return `
+                <div class="v2-step-item" style="position: relative;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="v2-step-number">${i + 1}</span>
+                            <span class="v2-step-text">${esc(content)}</span>
+                        </div>
+                        <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
+                    </div>
+                    
+                    <div class="v2-port step-port-out" 
+                        id="${stepPortId}"
+                        title="Connect this specific step"
+                        onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})">
+                    </div>
                 </div>
-                <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
-            </div>
-        `).join('') : '';
+            `;
+        }).join('') : '';
 
         const contextIcon = isLooseStep
             ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
@@ -9102,51 +9116,47 @@ function renderV2Nodes(isVault) {
     }).join('');
 }
 
-OL.handlePortClick = async function(nodeId, direction) {
+OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
 
-    // 1. STARTING A CONNECTION (Must click an OUT port)
+    // 1. STARTING A CONNECTION
     if (!state.v2.connectionMode.sourceId) {
         if (direction === 'out') {
             state.v2.connectionMode.sourceId = nodeId;
+            state.v2.connectionMode.sourceStepIndex = stepIndex; // 🚀 Store which step started this
             nodeEl.classList.add('source-selected');
-            console.log("🔌 Connection started from node:", nodeId);
-        } else {
-            console.log("ℹ️ Click an Output port (right side) to start a connection.");
+            console.log(`🔌 Connection started from Node: ${nodeId}, Step: ${stepIndex ?? 'Main'}`);
         }
         return;
     }
 
-    // 2. FINISHING A CONNECTION (Must click an IN port)
+    // 2. FINISHING A CONNECTION (Always target the Card's 'In' port for now)
     if (direction === 'in') {
         const sourceId = state.v2.connectionMode.sourceId;
-        if (sourceId === nodeId) return; // Can't link to self
-
-        console.log(`🔗 Wiring ${sourceId} -> ${nodeId}`);
+        const sourceStepIdx = state.v2.connectionMode.sourceStepIndex;
+        
+        if (sourceId === nodeId) return; 
 
         await OL.updateAndSync(() => {
             const isVault = window.location.hash.includes('vault');
-            const client = getActiveClient();
-            const source = isVault ? state.master.resources : client.projectData.localResources;
+            const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
             const sourceNode = source.find(n => n.id === sourceId);
             
             if (sourceNode) {
-                if (!sourceNode.outcomes) sourceNode.outcomes = [];
-                sourceNode.outcomes.push({
+                const newLink = {
                     id: 'link_' + Date.now(),
+                    fromStepIndex: sourceStepIdx, // 🚀 Save the step origin
                     action: `jump_res_${nodeId}`,
-                    label: "Connected Path"
-                });
+                    label: "Next Step"
+                };
+
+                if (!sourceNode.outcomes) sourceNode.outcomes = [];
+                sourceNode.outcomes.push(newLink);
             }
         });
 
         OL.resetWiringState();
         OL.drawV2Connections();
-    } else {
-        // If they click another 'out' port, we switch the source to that one
-        OL.resetWiringState();
-        state.v2.connectionMode.sourceId = nodeId;
-        nodeEl.classList.add('source-selected');
     }
 };
 
