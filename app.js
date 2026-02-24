@@ -8745,6 +8745,12 @@ window.renderVisualizerV2 = function(isVault) {
                 <div class="v2-toolbar">
                     <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
                     <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy Up Grid">🪄 Tidy</button>
+                    
+                    <div class="divider-v"></div>
+                    
+                    <button class="btn soft" onclick="OL.toggleAllSteps(true)" title="Expand All">📂</button>
+                    <button class="btn soft" onclick="OL.toggleAllSteps(false)" title="Shrink All">📁</button>
+                    
                     <div class="divider-v"></div>
                     <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                     <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
@@ -9332,6 +9338,25 @@ OL.toggleStepView = function(nodeId) {
     // 🔄 Force a re-render of the Visualizer. 
     // This ensures the badge icon (▴/▾) and connections stay perfectly synced.
     const isVault = window.location.hash.includes('vault');
+    renderVisualizerV2(isVault);
+};
+
+OL.toggleAllSteps = function(forceOpen) {
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    
+    if (forceOpen) {
+        // Add every node ID that has steps to the expanded set
+        source.forEach(node => {
+            if (node.steps && node.steps.length > 0) {
+                state.v2.expandedNodes.add(node.id);
+            }
+        });
+    } else {
+        // Clear the set entirely
+        state.v2.expandedNodes.clear();
+    }
+    
     renderVisualizerV2(isVault);
 };
 
