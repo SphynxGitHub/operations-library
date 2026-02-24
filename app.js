@@ -8733,7 +8733,9 @@ window.renderVisualizerV2 = function(isVault) {
 
             <div class="v2-ui-overlay">
                 <div class="v2-toolbar">
-                    <button class="btn primary" onclick="OL.openBrainDump()">+ Quick Add (Brain Dump)</button>
+                    <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
+                    <button id="connect-tool-btn" class="btn soft" onclick="OL.toggleConnectTool()" title="Connect Nodes">🔌 Connect</button>
+                    <div class="divider-v"></div>
                     <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                     <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
                 </div>
@@ -8946,10 +8948,14 @@ function renderV2Nodes(isVault) {
 
         return `
             <div class="v2-node-card" 
-                 id="v2-node-${node.id}"
-                 style="position: absolute; left: ${x}px; top: ${y}px; z-index: 10;"
-                 onmousedown="OL.startNodeDrag(event, '${node.id}')"
-                 onclick="event.stopPropagation(); OL.loadInspector('${node.id}')">
+                id="v2-node-${node.id}"
+                style="position: absolute; left: ${x}px; top: ${y}px;"
+                onmousedown="OL.startNodeDrag(event, '${node.id}')"
+                onclick="OL.handleNodeClick('${node.id}')">
+                
+                <div class="v2-port port-in"></div>
+                <div class="v2-port port-out"></div>
+
                 <div class="v2-node-header" style="pointer-events: none;">
                     <span>${icon}</span>
                     <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
@@ -9047,6 +9053,70 @@ OL.drawPathBetweenElements = function(svg, startEl, endEl, label) {
     path.style.transition = "all 0.3s ease";
     
     svg.appendChild(path);
+};
+
+state.v2.connectionMode = {
+    active: false,
+    sourceId: null
+};
+
+OL.toggleConnectTool = function() {
+    state.v2.connectionMode.active = !state.v2.connectionMode.active;
+    state.v2.connectionMode.sourceId = null;
+    
+    const btn = document.getElementById('connect-tool-btn');
+    if (btn) btn.classList.toggle('accent', state.v2.connectionMode.active);
+    
+    const viewport = document.getElementById('v2-viewport');
+    if (viewport) viewport.style.cursor = state.v2.connectionMode.active ? 'crosshair' : 'grab';
+    
+    console.log("🔌 Connect Tool:", state.v2.connectionMode.active ? "ON" : "OFF");
+};
+
+OL.handleNodeClick = async function(nodeId) {
+    // If we aren't in connection mode, just load the inspector as normal
+    if (!state.v2.connectionMode.active) {
+        OL.loadInspector(nodeId);
+        return;
+    }
+
+    // PHASE 1: Selecting the Source
+    if (!state.v2.connectionMode.sourceId) {
+        state.v2.connectionMode.sourceId = nodeId;
+        document.getElementById(`v2-node-${nodeId}`).style.borderColor = "#fbbf24";
+        console.log("📍 Source selected:", nodeId);
+        return;
+    }
+
+    // PHASE 2: Selecting the Target (and preventing self-linking)
+    if (state.v2.connectionMode.sourceId === nodeId) return;
+
+    const sourceId = state.v2.connectionMode.sourceId;
+    const targetId = nodeId;
+
+    console.log(`🔗 Linking ${sourceId} to ${targetId}`);
+
+    await OL.updateAndSync(() => {
+        const isVault = window.location.hash.includes('vault');
+        const client = getActiveClient();
+        const source = isVault ? state.master.resources : client.projectData.localResources;
+        
+        const sourceNode = source.find(n => n.id === sourceId);
+        if (sourceNode) {
+            if (!sourceNode.outcomes) sourceNode.outcomes = [];
+            // Create a new outcome link
+            sourceNode.outcomes.push({
+                id: 'link_' + Date.now(),
+                action: `jump_res_${targetId}`,
+                label: "Connected Path",
+                condition: ""
+            });
+        }
+    });
+
+    // Reset Tool
+    OL.toggleConnectTool();
+    OL.drawV2Connections(); // Redraw lines immediately
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
