@@ -8734,7 +8734,7 @@ window.renderVisualizerV2 = function(isVault) {
             <div class="v2-ui-overlay">
                 <div class="v2-toolbar">
                     <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
-                    <button id="connect-tool-btn" class="btn soft" onclick="OL.toggleConnectTool()" title="Connect Nodes">🔌 Connect</button>
+                    <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy Up Grid">🪄 Tidy</button>
                     <div class="divider-v"></div>
                     <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                     <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
@@ -9277,6 +9277,42 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
             OL.drawV2Connections();   // Refresh canvas
         }
     }
+};
+
+OL.autoAlignNodes = async function() {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    // Filter out workflows and ensure we have nodes to move
+    const nodes = source.filter(r => (r.type || "").toLowerCase() !== 'workflow');
+    if (nodes.length === 0) return;
+
+    // Grid Settings
+    const paddingX = 100; // Left margin
+    const paddingY = 120; // Top margin
+    const gapX = 300;     // Horizontal distance between cards
+    const gapY = 180;     // Vertical distance between cards
+    const columns = 4;    // Cards per row
+
+    console.log(`🧹 Tidying up ${nodes.length} nodes...`);
+
+    await OL.updateAndSync(() => {
+        nodes.forEach((node, idx) => {
+            const col = idx % columns;
+            const row = Math.floor(idx / columns);
+
+            node.coords = {
+                x: paddingX + (col * gapX),
+                y: paddingY + (row * gapY)
+            };
+        });
+    });
+
+    // 🚀 Refresh UI
+    OL.renderGlobalVisualizer(); 
+    // Wait a beat for DOM to settle, then redraw lines
+    setTimeout(() => OL.drawV2Connections(), 100);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
