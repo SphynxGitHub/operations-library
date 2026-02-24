@@ -4091,7 +4091,7 @@ ARROWS
 }
 
 .v2-node-card {
-    position: absolute;
+    position: relative;
     overflow: visible;
     box-sizing: border-box;
     display: box;
@@ -4544,11 +4544,4 @@ path[stroke="transparent"] {
     background: #fff;
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(6, 182, 212, 0.4);
-}
-
-/* Ensure the Steps badge matches the hover behavior for consistency */
-.v2-step-badge:hover {
-    background: #fff;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(251, 191, 36, 0.4);
 }
