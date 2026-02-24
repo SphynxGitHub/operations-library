@@ -8875,7 +8875,27 @@ OL.startNodeDrag = function(e, nodeId) {
             nodeEl.style.left = `${nodeData.coords.x}px`;
             nodeEl.style.top = `${nodeData.coords.y}px`;
             nodeEl.style.zIndex = "9999";
+            // 🚀 THE CRITICAL ADDITION:
+            nodeEl.style.pointerEvents = 'none'; 
         }
+
+        // 🎯 THE HIT TEST
+        // We temporarily hide the SVG layer too so it doesn't block the search
+        const svgLayer = document.getElementById('v2-connections');
+        if (svgLayer) svgLayer.style.pointerEvents = 'none';
+
+        const hitEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        const hoverEl = hitEl?.closest('.v2-node-card');
+        
+        // 🧪 DEBUG LOG: Run this with F12 open. It will tell us what is being hit.
+        // console.log("Current Hit:", hitEl?.className, "Target Card:", hoverEl?.id);
+
+        // Restore pointer events immediately
+        if (nodeEl) nodeEl.style.pointerEvents = 'auto';
+        if (svgLayer) svgLayer.style.pointerEvents = 'auto';
+
+        // Reset all glows
+        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
 
         // 🎯 Hover Glow logic
         if (isStep && nodeEl) {
