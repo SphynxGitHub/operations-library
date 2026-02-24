@@ -9058,7 +9058,7 @@ function renderV2Nodes(isVault) {
         `).join('') : '';
 
         const isLoose = !node.parentId;
-        const contextIcon = isLoose 
+        const contextIcon = isLooseStep
             ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
             : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
 
@@ -14930,6 +14930,7 @@ OL.removeTeamMember = function (memberId) {
 };
 
 // 3. OPEN TEAM MEMBER MODAL
+
 OL.openTeamMemberModal = function (memberId, draftObj = null) {
     const client = getActiveClient();
     
