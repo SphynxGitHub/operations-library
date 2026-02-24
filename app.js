@@ -9069,27 +9069,36 @@ OL.drawV2Connections = function() {
     });
 };
 
-OL.drawPathBetweenElements = function(svg, startEl, endEl, label) {
+OL.drawPathBetweenElements = function(svg, startCard, endCard, label) {
+    // 🚀 THE FIX: Target the Ports, not the Card Edges
+    const outPort = startCard.querySelector('.port-out');
+    const inPort = endCard.querySelector('.port-in');
+
+    if (!outPort || !inPort) return;
+
+    // We calculate coordinates relative to the v2-canvas
     const s = {
-        x: startEl.offsetLeft + startEl.offsetWidth,
-        y: startEl.offsetTop + (startEl.offsetHeight / 2)
+        x: startCard.offsetLeft + outPort.offsetLeft + (outPort.offsetWidth / 2),
+        y: startCard.offsetTop + outPort.offsetTop + (outPort.offsetHeight / 2)
     };
+    
     const e = {
-        x: endEl.offsetLeft,
-        y: endEl.offsetTop + (endEl.offsetHeight / 2)
+        x: endCard.offsetLeft + inPort.offsetLeft + (inPort.offsetWidth / 2),
+        y: endCard.offsetTop + inPort.offsetTop + (inPort.offsetHeight / 2)
     };
 
-    const cp1x = s.x + (e.x - s.x) / 2;
-    const cp2x = s.x + (e.x - s.x) / 2;
+    // Calculate Bezier control points for a smooth horizontal curve
+    const deltaX = Math.abs(e.x - s.x);
+    const cpOffset = Math.min(deltaX / 2, 150); // Cap the curve intensity
 
-    const pathData = `M ${s.x} ${s.y} C ${cp1x} ${s.y}, ${cp2x} ${e.y}, ${e.x} ${e.y}`;
+    const pathData = `M ${s.x} ${s.y} C ${s.x + cpOffset} ${s.y}, ${e.x - cpOffset} ${e.y}, ${e.x} ${e.y}`;
     
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.4)");
+    path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
     path.setAttribute("stroke-width", "2");
     path.setAttribute("fill", "none");
-    path.style.transition = "all 0.3s ease";
+    path.setAttribute("class", "v2-connection-line");
     
     svg.appendChild(path);
 };
