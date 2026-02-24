@@ -9379,7 +9379,11 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     const midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
     const midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
 
-    // 🚀 DRAW THE LINE (Lower Layer)
+    // Create a parent group for the entire connection
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("class", "v2-connection-group");
+
+    // 1. The Path
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
     path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)");
@@ -9387,23 +9391,25 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     path.setAttribute("stroke-dasharray", "6,4");
     path.setAttribute("fill", "none");
     svg.prepend(path); // Lines stay behind cards
+    group.appendChild(path);
 
     // 🚀 DRAW THE BUTTON (Upper Layer)
     // Use append instead of prepend so it stays on top of the lines
     const deleteBtn = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    deleteBtn.setAttribute("class", "v2-leash-delete");
+    deleteBtn.setAttribute("class", "v2-delete-trigger");
     deleteBtn.setAttribute("style", "cursor: pointer; pointer-events: auto;");
     deleteBtn.onclick = (event) => {
         event.stopPropagation();
         OL.unlinkParent(nodeId);
     };
+    group.appendChild(deleteBtn);
 
     deleteBtn.innerHTML = `
         <circle cx="${midX}" cy="${midY}" r="10" fill="#ef4444" stroke="#fff" stroke-width="2" />
         <text x="${midX}" y="${midY + 4}" text-anchor="middle" font-size="12" fill="white" font-weight="bold" style="pointer-events:none; font-family: Arial;">×</text>
     `;
 
-    svg.appendChild(deleteBtn); // Buttons stay on top
+    svg.appendChild(group);
 };
 
 OL.startParentLinking = function(e, sourceId) {
