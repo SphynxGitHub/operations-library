@@ -9333,7 +9333,7 @@ OL.toggleStepView = function(nodeId) {
                     style="cursor: pointer; opacity: 0.6; padding: 2px 5px;"
                     onclick="event.stopPropagation(); OL.ejectStep('${nodeId}', ${i})">
                     <i class="fas fa-external-link-alt" style="font-size: 10px;"></i>
-                    🚀
+                    🪂
                 </div>
             </div>
         `).join('');
@@ -9357,15 +9357,16 @@ OL.ejectStep = async function(resourceId, stepIdx) {
     await OL.updateAndSync(() => {
         // 1. Create the new independent node
         const newNode = {
-            id: 'step-' + Date.now(),
+            id: 'sop-' + Date.now(),
             name: stepData.text,
-            type: 'step',
+            type: 'SOP',
             parentId: resourceId, // 🚀 THE LEASH: Keeps track of where it came from
             parentName: parentNode.name,
             coords: {
                 x: (parentNode.coords?.x || 0) + 300, // Spawn it to the right
                 y: (parentNode.coords?.y || 0) + (stepIdx * 50)
-            }
+            },
+            steps: []
         };
 
         source.push(newNode);
@@ -9375,6 +9376,7 @@ OL.ejectStep = async function(resourceId, stepIdx) {
     });
 
     renderVisualizerV2(isVault);
+    console.log("🪂 Step ejected and transformed into loose SOP");
 };
 
 OL.handleNodeClick = async function(nodeId) {
