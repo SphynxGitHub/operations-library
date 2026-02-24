@@ -8841,74 +8841,62 @@ OL.startNodeDrag = function(e, nodeId) {
     e.preventDefault();
 
     const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
-    const nodeData = source.find(n => n.id === nodeId);
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const nodeData = source.find(n => String(n.id) === String(nodeId));
     if (!nodeData) return;
 
-    state.isSaving = true;
-
+    // 🚀 DEFINE SCOPE AT THE TOP: Accessible to Move and Up
+    const nodeType = (nodeData.type || "").toUpperCase();
+    const isStep = nodeType === 'STEP' || nodeType === 'SOP' || nodeType === 'INSTRUCTION';
     const viewport = document.getElementById('v2-viewport');
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    
-    // 🚀 THE FIX: Use the correct zoom path
     const zoom = state.v2.zoom || 1;
 
-    // Capture starting points
     const startMouseX = e.clientX;
     const startMouseY = e.clientY;
     const startNodeX = nodeData.coords?.x || 0;
     const startNodeY = nodeData.coords?.y || 0;
     
     let lastEvent = e;
+    state.isSaving = true; // Lock sync engine
     if (viewport) viewport.classList.add('is-dragging');
 
     const onMouseMove = (moveEvent) => {
         lastEvent = moveEvent;
-
-        // 🚀 THE MATH: Subtract start from current, adjust for zoom, then add to original position
         const dx = (moveEvent.clientX - startMouseX) / zoom;
         const dy = (moveEvent.clientY - startMouseY) / zoom;
 
-        nodeData.coords = {
-            x: startNodeX + dx,
-            y: startNodeY + dy
-        };
+        nodeData.coords = { x: startNodeX + dx, y: startNodeY + dy };
 
-        // 🚀 THE VISUAL: Update the DOM element immediately for smooth 60fps movement
         if (nodeEl) {
             nodeEl.style.left = `${nodeData.coords.x}px`;
             nodeEl.style.top = `${nodeData.coords.y}px`;
-            nodeEl.style.zIndex = "9999"; // Bring to front while dragging
+            nodeEl.style.zIndex = "9999";
         }
 
-        // Handle Hover Glow for Step Absorption
-        const type = (nodeData.type || "").toUpperCase();
-        const isStep = type === 'STEP' || type === 'SOP' || type === 'INSTRUCTION';
-
+        // 🎯 Hover Glow logic
         if (isStep && nodeEl) {
-            nodeEl.style.pointerEvents = 'none'; // Ghost the dragged card
+            nodeEl.style.pointerEvents = 'none';
             const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
             const hoverEl = hit?.closest('.v2-node-card');
-            nodeEl.style.pointerEvents = 'auto'; // Bring it back
+            nodeEl.style.pointerEvents = 'auto';
 
             document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
             if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
                 hoverEl.classList.add('drop-hover');
             }
         }
-
         OL.drawV2Connections();
     };
 
     const onMouseUp = async () => {
-        state.isSaving = false; // Release the sync shield
+        state.isSaving = false;
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-        
-        // Clear hover glows immediately
+        if (viewport) viewport.classList.remove('is-dragging');
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
 
+        // 📥 ABSORPTION LOGIC
         if (isStep) {
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
             const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
@@ -8916,39 +8904,38 @@ OL.startNodeDrag = function(e, nodeId) {
             if (nodeEl) nodeEl.style.pointerEvents = 'auto';
 
             if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
-                // 🚀 THE FIX: Standardize the ID extraction
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => String(n.id) === String(targetId));
 
-                // Only absorb into Resources, not other Steps
-                if (targetNode && !['STEP', 'SOP', 'INSTRUCTION'].includes((targetNode.type || "").toUpperCase())) {
-                    console.log(`📥 Absorbing ${nodeData.name} into ${targetNode.name}`);
-                    
+                // Don't absorb into other loose steps/SOPs
+                const targetType = (targetNode?.type || "").toUpperCase();
+                const isTargetLoose = ['STEP', 'SOP', 'INSTRUCTION'].includes(targetType);
+
+                if (targetNode && !isTargetLoose) {
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
                         
-                        // Push the loose step into the resource's array
-                        targetNode.steps.push({
-                            text: nodeData.name || nodeData.text,
-                            id: Date.now()
-                        });
+                        // Merge steps if the SOP has multiples, otherwise just the name
+                        const newSteps = (nodeData.steps && nodeData.steps.length > 0) 
+                            ? nodeData.steps 
+                            : [{ text: nodeData.name || nodeData.text, id: Date.now() }];
 
-                        // Remove the loose node from the canvas
+                        targetNode.steps.push(...newSteps);
                         const idx = source.findIndex(n => String(n.id) === String(nodeId));
                         if (idx > -1) source.splice(idx, 1);
                     });
-
                     renderVisualizerV2(isVault);
-                    return; // Stop here, don't save coordinates for a deleted node
+                    return; 
                 }
             }
         }
 
-        // Standard coordinate save if no absorption happened
+        // Standard coordinate save
         await OL.updateAndSync(() => {
             const nodeToUpdate = source.find(n => String(n.id) === String(nodeId));
             if (nodeToUpdate) nodeToUpdate.coords = nodeData.coords;
         });
+        if (nodeEl) nodeEl.style.zIndex = "";
     };
 
     document.addEventListener('mousemove', onMouseMove);
