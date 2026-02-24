@@ -4356,8 +4356,15 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 `).join("")}
             </select>
         </div>`;
-    
-        // --- Inside OL.openResourceModal ---
+
+    // Back button to go back to flow map if jumped from scope button
+    const backBtn = state.v2.returnTo ? `
+        <button class="btn-back-to-flow" onclick="OL.returnToFlow()">
+            ⬅ Back to Flow
+        </button>
+    ` : '';
+   
+    // --- Inside OL.openResourceModal ---
     const resType = (res.type || "General").toLowerCase();
         let typeSpecificHtml = "";
 
@@ -4510,6 +4517,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
                     ${originPill}
                     ${typePill}
+                    ${backBtn}
 
                     ${hasHistory ? `
                         <button class="btn tiny soft" style="color: black !important; background: #fff !important; font-weight:bold;" 
@@ -14420,20 +14428,12 @@ function renderScopingRow (item, idx, showUnits) {
     ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
     : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
 
-    // Inside your Scoping Row or Inspector template:
-    const backBtn = state.v2.returnTo ? `
-        <button class="btn-back-to-flow" onclick="OL.returnToFlow()">
-            ⬅ Back to Flow
-        </button>
-    ` : '';
-
     return `
         <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
             <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
                 <span style="font-size: 1.2em; line-height: 1; margin-top: 2px;">${typeIcon}</span>
                 ${esc(res.name || "Manual Item")}
-                ${backBtn}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
             ${unitsHtml}
