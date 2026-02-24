@@ -8876,12 +8876,20 @@ OL.startNodeDrag = function(e, nodeId) {
 
         // 🎯 Hover Glow logic
         if (isStep && nodeEl) {
-            nodeEl.style.pointerEvents = 'none';
-            const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-            const hoverEl = hit?.closest('.v2-node-card');
+            // Hide the card in my hand so the mouse "sees" what's behind it
+            nodeEl.style.pointerEvents = 'none'; 
+            
+            // Find what is exactly at the mouse coordinates
+            const hitEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+            const hoverEl = hitEl?.closest('.v2-node-card');
+            
+            // Bring the card back to life so we don't lose the drag
             nodeEl.style.pointerEvents = 'auto';
 
+            // Reset all glows
             document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+            
+            // Apply glow if we are over a DIFFERENT card
             if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
                 hoverEl.classList.add('drop-hover');
             }
@@ -8899,33 +8907,36 @@ OL.startNodeDrag = function(e, nodeId) {
         // 📥 ABSORPTION LOGIC
         if (isStep) {
             if (nodeEl) nodeEl.style.pointerEvents = 'none';
-            const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
-            const dropTargetEl = hit?.closest('.v2-node-card');
+            const hitEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
+            const dropTargetEl = hitEl?.closest('.v2-node-card');
             if (nodeEl) nodeEl.style.pointerEvents = 'auto';
 
             if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
                 const targetId = dropTargetEl.id.replace('v2-node-', '');
                 const targetNode = source.find(n => String(n.id) === String(targetId));
 
-                // Don't absorb into other loose steps/SOPs
-                const targetType = (targetNode?.type || "").toUpperCase();
-                const isTargetLoose = ['STEP', 'SOP', 'INSTRUCTION'].includes(targetType);
+                // 🚀 THE FIX: Check if target is a Resource (not another SOP/Step)
+                const tType = (targetNode?.type || "").toUpperCase();
+                const isTargetAsset = !['SOP', 'STEP', 'INSTRUCTION'].includes(tType);
 
-                if (targetNode && !isTargetLoose) {
+                if (targetNode && isTargetAsset) {
+                    console.log("🎯 Absorption Target Confirmed:", targetNode.name);
                     await OL.updateAndSync(() => {
                         if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
                         
-                        // Merge steps if the SOP has multiples, otherwise just the name
-                        const newSteps = (nodeData.steps && nodeData.steps.length > 0) 
-                            ? nodeData.steps 
-                            : [{ text: nodeData.name || nodeData.text, id: Date.now() }];
+                        // Add the step data
+                        targetNode.steps.push({
+                            text: nodeData.name || nodeData.text || "New Step",
+                            id: Date.now()
+                        });
 
-                        targetNode.steps.push(...newSteps);
+                        // Remove the old loose card
                         const idx = source.findIndex(n => String(n.id) === String(nodeId));
                         if (idx > -1) source.splice(idx, 1);
                     });
+                    
                     renderVisualizerV2(isVault);
-                    return; 
+                    return; // Exit so we don't save coords for a deleted node
                 }
             }
         }
