@@ -8879,19 +8879,26 @@ OL.startNodeDrag = function(e, nodeId) {
             y: startNodeY + dy
         };
 
-        // Update the visual position instantly
-        if (nodeEl) {
-            nodeEl.style.left = `${nodeData.coords.x}px`;
-            nodeEl.style.top = `${nodeData.coords.y}px`;
-        }
+        // 1. Temporarily make the card we are dragging invisible to the mouse
+        if (nodeEl) nodeEl.style.pointerEvents = 'none';
         
-        // Handle Hover Glow
-        if (isStep) {
-            const hoverEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.v2-node-card');
-            document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-            if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
-                hoverEl.classList.add('drop-hover');
-            }
+        // 2. See what is EXACTLY under the cursor
+        const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        
+        // 3. Find the closest card container (climbing up from icons/text)
+        const hoverEl = hit?.closest('.v2-node-card');
+        
+        // 4. Turn pointer events back on so we can still 'drop' it
+        if (nodeEl) nodeEl.style.pointerEvents = 'auto';
+
+        // 5. Clear all old glows
+        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+        
+        // 6. Apply glow if we found a valid target
+        if (hoverEl && hoverEl.id !== `v2-node-${nodeId}`) {
+            // 🚀 DEBUG: Let's see what we are hitting in the console
+            // console.log("Hovering over:", hoverEl.id); 
+            hoverEl.classList.add('drop-hover');
         }
 
         OL.drawV2Connections();
@@ -9022,12 +9029,10 @@ function renderV2Nodes(isVault) {
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    // 🚀 THE FIX: Ensure we aren't filtering out steps just because they're 'new'
-    // We only want to hide 'workflow' types, everything else should show up.
-    nodes = nodes.filter(node => {
+    /* nodes = nodes.filter(node => {
         const type = (node.type || "").toLowerCase();
-        return type //!== 'workflow'; 
-    });
+        return type !== 'workflow'; 
+    });*/ //filters out workflows
 
     console.log(`✅ Drawing ${nodes.length} nodes on the canvas`);
 
