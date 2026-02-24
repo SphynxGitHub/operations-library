@@ -9207,44 +9207,44 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
-    let outPort;
+    let outPort, inPort;
 
-    // 🚀 THE STICKY FIX: Check if this outcome specifically belongs to a step
+    // 1. FIND THE STARTING PORT (The "Out")
     if (outcomeData && typeof outcomeData.fromStepIndex === 'number') {
-        const stepPortId = `port-${sourceId}-step-${outcomeData.fromStepIndex}`;
+        // Look for the specific step output port
         outPort = document.getElementById(`port-out-${sourceId}-step-${outcomeData.fromStepIndex}`);
     }
 
-    // 1. Determine relative positioning if no step port was found/used
-    const dx = endCard.offsetLeft - startCard.offsetLeft;
-    const dy = endCard.offsetTop - startCard.offsetTop;
-    const useVertical = Math.abs(dy) > Math.abs(dx);
-
-    let inPort;
-
-    if (outcomeData && typeof outcomeData.toStepIndex === 'number') {
-        // Find the target node ID from the action string if not explicitly in outcomeData
-        let tid = outcomeData.targetId || outcomeData.action?.replace('jump_res_', '');
-        inPort = document.getElementById(`port-in-${tid}-step-${outcomeData.toStepIndex}`);
-    }
-
-    // If we didn't find a specific step port, use the standard card ports
+    // Fallback if no step index or element not found
     if (!outPort) {
-        if (useVertical) {
-            outPort = dy > 0 ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top');
-        } else {
-            outPort = dx > 0 ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in');
-        }
+        const dx = endCard.offsetLeft - startCard.offsetLeft;
+        const dy = endCard.offsetTop - startCard.offsetTop;
+        const useVertical = Math.abs(dy) > Math.abs(dx);
+        outPort = useVertical 
+            ? (dy > 0 ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top'))
+            : (dx > 0 ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in'));
     }
 
-    // Target always goes to the main 'In' or 'Top' port of the destination card
-    inPort = useVertical 
-        ? (dy > 0 ? endCard.querySelector('.port-top') : endCard.querySelector('.port-bottom'))
-        : (dx > 0 ? endCard.querySelector('.port-in') : endCard.querySelector('.port-out'));
+    // 2. FIND THE ENDING PORT (The "In")
+    if (outcomeData && typeof outcomeData.toStepIndex === 'number') {
+        // Extract Target ID from action string (e.g., "jump_res_123")
+        const targetId = outcomeData.action?.replace('jump_res_', '');
+        inPort = document.getElementById(`port-in-${targetId}-step-${outcomeData.toStepIndex}`);
+    }
+
+    // Fallback to destination card's main inbound port
+    if (!inPort) {
+        const dx = endCard.offsetLeft - startCard.offsetLeft;
+        const dy = endCard.offsetTop - startCard.offsetTop;
+        const useVertical = Math.abs(dy) > Math.abs(dx);
+        inPort = useVertical 
+            ? (dy > 0 ? endCard.querySelector('.port-top') : endCard.querySelector('.port-bottom'))
+            : (dx > 0 ? endCard.querySelector('.port-in') : endCard.querySelector('.port-out'));
+    }
 
     if (!outPort || !inPort) return;
 
-    // 2. Calculate center points using BoundingClientRect for accuracy
+    // 3. PIXEL-PERFECT COORDINATES
     const outRect = outPort.getBoundingClientRect();
     const inRect = inPort.getBoundingClientRect();
 
@@ -9258,15 +9258,8 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         y: (inRect.top - canvasRect.top + (inRect.height / 2)) / zoom
     };
 
-    // 3. Path Math
-    let pathData;
-    if (useVertical) {
-        const cpOffset = Math.min(Math.abs(e.y - s.y) / 2, 100);
-        pathData = `M ${s.x} ${s.y} C ${s.x} ${s.y + (dy > 0 ? cpOffset : -cpOffset)}, ${e.x} ${e.y + (dy > 0 ? -cpOffset : cpOffset)}, ${e.x} ${e.y}`;
-    } else {
-        const cpOffset = Math.min(Math.abs(e.x - s.x) / 2, 150);
-        pathData = `M ${s.x} ${s.y} C ${s.x + (dx > 0 ? cpOffset : -cpOffset)} ${s.y}, ${e.x + (dx > 0 ? -cpOffset : cpOffset)} ${e.y}, ${e.x} ${e.y}`;
-    }
+    // 4. DRAW THE CURVE (The rest of your path creation logic follows...)
+    let pathData = `M ${s.x} ${s.y} C ${s.x + 50} ${s.y}, ${e.x - 50} ${e.y}, ${e.x} ${e.y}`;
     
     // --- SVG Creation ---
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
