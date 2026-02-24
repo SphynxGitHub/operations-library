@@ -4089,6 +4089,9 @@ ARROWS
 }
 
 .v2-node-card {
+    position: absolute;
+    overflow: visible;
+    box-sizing: border-box;
     width: 220px; /* Wider to accommodate Zap names seen in your screenshot */
     min-height: 60px;
     background: #111827; /* Darker, high-contrast gray */
