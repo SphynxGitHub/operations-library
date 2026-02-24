@@ -9281,55 +9281,58 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    // 1. Get all draggable card elements currently on the DOM
-    const cardEls = Array.from(document.querySelectorAll('.v2-node-card'));
+    // 1. Grab all cards and sort them by Y (top to bottom)
+    const cardEls = Array.from(document.querySelectorAll('.v2-node-card'))
+        .sort((a, b) => a.offsetTop - b.offsetTop);
+    
     if (cardEls.length === 0) return;
 
-    // 2. Threshold for what counts as "in the same vertical line" (e.g., within 150px)
-    const laneThreshold = 150; 
+    const laneThreshold = 200; // How far apart cards can be and still 'count' as a column
+    const processedIds = new Set();
 
-    console.log("📏 Aligning vertical stacks...");
+    console.log(`🪄 Tidy: Processing ${cardEls.length} cards...`);
 
     await OL.updateAndSync(() => {
-        const processedIds = new Set();
+        cardEls.forEach(masterEl => {
+            const masterId = masterEl.id.replace('v2-node-', '');
+            if (processedIds.has(masterId)) return;
 
-        cardEls.forEach(el => {
-            const id = el.id.replace('v2-node-', '');
-            if (processedIds.has(id)) return;
+            // This is the X coordinate everyone in this 'lane' will snap to
+            const targetX = masterEl.offsetLeft;
+            console.log(`📍 Creating lane at X: ${targetX}`);
 
-            // Find all other cards that are roughly in the same X-lane
-            const currentX = el.offsetLeft;
-            const stack = cardEls.filter(otherEl => {
-                const otherX = otherEl.offsetLeft;
-                return Math.abs(currentX - otherX) < laneThreshold;
-            });
+            cardEls.forEach(slaveEl => {
+                const slaveId = slaveEl.id.replace('v2-node-', '');
+                if (processedIds.has(slaveId)) return;
 
-            // Calculate the master X (the average or the first card's X)
-            const masterX = currentX;
-
-            // Snap everyone in this stack to the master X
-            stack.forEach(stackEl => {
-                const stackId = stackEl.id.replace('v2-node-', '');
-                const nodeData = source.find(n => n.id === stackId);
-                
-                if (nodeData) {
-                    nodeData.coords = {
-                        x: masterX,
-                        y: stackEl.offsetTop // Keep their vertical spacing the same
-                    };
-                    processedIds.add(stackId);
+                // If this card is within the lane threshold, snap it
+                if (Math.abs(slaveEl.offsetLeft - targetX) < laneThreshold) {
+                    const nodeData = source.find(n => n.id === slaveId);
+                    if (nodeData) {
+                        nodeData.coords = {
+                            x: targetX,
+                            y: slaveEl.offsetTop
+                        };
+                        processedIds.add(slaveId);
+                        console.log(`   -> Snapped ${nodeData.name} to ${targetX}`);
+                    }
                 }
             });
         });
     });
 
-    // 🚀 Refresh UI & Redraw straight lines
-    const canvasNodes = document.getElementById('v2-canvas-nodes');
-    if (canvasNodes) canvasNodes.innerHTML = renderV2Nodes(isVault);
-    
+    // 2. FORCE the DOM to update positions immediately
+    processedIds.forEach(id => {
+        const el = document.getElementById(`v2-node-${id}`);
+        const nodeData = source.find(n => n.id === id);
+        if (el && nodeData?.coords) {
+            el.style.left = `${nodeData.coords.x}px`;
+        }
+    });
+
+    console.log("✅ Tidy Complete.");
     setTimeout(() => OL.drawV2Connections(), 50);
 };
 
