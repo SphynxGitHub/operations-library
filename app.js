@@ -8716,9 +8716,13 @@ window.renderVisualizerV2 = function(isVault) {
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
-                <div class="v2-canvas" id="v2-canvas" 
-                    style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+            <div class="v2-canvas" id="v2-canvas" 
+                style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
                 
+                <div class="global-shelf-container">
+                    <span class="global-shelf-label">GLOBAL RESOURCES</span>
+                </div>
+
                 <div class="v2-stage-layer">
                     ${renderV2Stages(isVault)}
                 </div>
@@ -8728,7 +8732,6 @@ window.renderVisualizerV2 = function(isVault) {
                 <div class="v2-node-layer" id="v2-nodes">
                     ${renderV2Nodes(isVault)}
                 </div>
-
             </div>
 
             <div class="v2-ui-overlay">
@@ -8742,7 +8745,7 @@ window.renderVisualizerV2 = function(isVault) {
             </div>
         </div>
     `;
-
+    
     // At the bottom of renderVisualizerV2
     setTimeout(() => {
         OL.initV2Panning(); // Activates grid movement

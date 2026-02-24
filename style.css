@@ -4182,3 +4182,28 @@ ARROWS
 .reorder-item:hover {
     border-color: var(--accent);
 }
+
+.global-shelf-container {
+    position: absolute;
+    /* Position it significantly above the start of Stage 1 */
+    top: -350px; 
+    left: -2000px; /* Stretch wide to cover lateral pans */
+    width: 5000px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 2px dashed rgba(56, 189, 248, 0.2);
+    padding: 30px;
+    pointer-events: none; /* Let clicks pass to the canvas background */
+    z-index: 1;
+}
+
+.global-shelf-label {
+    position: sticky;
+    left: 20px;
+    color: #38bdf8;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    opacity: 0.4;
+    text-transform: uppercase;
+}
