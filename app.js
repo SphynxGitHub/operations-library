@@ -8845,13 +8845,14 @@ OL.startNodeDrag = function(e, nodeId) {
     const nodeData = source.find(n => String(n.id) === String(nodeId));
     if (!nodeData) return;
 
+    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
+
     // 🚀 THE NEW CHECK: Detect "Step-ness" by its CSS classes
     const isStep = nodeEl.classList.contains('is-loose') || 
                    nodeEl.classList.contains('type-step') || 
                    nodeEl.classList.contains('type-sop');
 
     const viewport = document.getElementById('v2-viewport');
-    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
     const zoom = state.v2.zoom || 1;
 
     const startMouseX = e.clientX;
