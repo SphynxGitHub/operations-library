@@ -9077,9 +9077,8 @@ function renderV2Nodes(isVault) {
 
         // 🚀 Linker moved to the Left Side for Loose Steps
         const parentHandle = isLooseStep ? `
-            <div class="v2-parent-linker" 
+            <div class="v2-parent-linker corner-linker" 
                 id="linker-${node.id}"
-                style="position: absolute; left: -12px; top: 50%; transform: translateY(-50%); z-index: 100;"
                 onmousedown="OL.startParentLinking(event, '${node.id}')">
                 <i class="fas fa-link"></i>
             </div>
@@ -9335,56 +9334,58 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
-    // Use centers for a simple "leash" look
-    const cRect = childEl.getBoundingClientRect();
-    const pRect = parentEl.getBoundingClientRect();
+    const childRect = childEl.getBoundingClientRect();
+    const parentRect = parentEl.getBoundingClientRect();
 
-    const start = {
-        x: (cRect.left - canvasRect.left + (cRect.width / 2)) / zoom,
-        y: (cRect.top - canvasRect.top + (cRect.height / 2)) / zoom
-    };
-    const end = {
-        x: (pRect.left - canvasRect.left + (pRect.width / 2)) / zoom,
-        y: (pRect.top - canvasRect.top + (pRect.height / 2)) / zoom
+    // Start: The Top-Left Corner Linker
+    const s = {
+        x: (childRect.left - canvasRect.left) / zoom,
+        y: (childRect.top - canvasRect.top) / zoom
     };
 
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    path.setAttribute("x1", start.x);
-    path.setAttribute("y1", start.y);
-    path.setAttribute("x2", end.x);
-    path.setAttribute("y2", end.y);
-    path.setAttribute("stroke", "rgba(255, 255, 255, 0.2)");
+    // End: The Center of the Parent Resource
+    const e = {
+        x: (parentRect.left - canvasRect.left + parentRect.width / 2) / zoom,
+        y: (parentRect.top - canvasRect.top + parentRect.height / 2) / zoom
+    };
+
+    // Calculate Curvature (The "Jump")
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
+    // Control points to create a smooth "S" or "C" curve
+    const cp1x = s.x + dx * 0.25;
+    const cp1y = s.y + dy * 0.75;
+    const cp2x = s.x + dx * 0.75;
+    const cp2y = s.y + dy * 0.25;
+
+    const pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)"); // Amber/Gold
     path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-dasharray", "5,5"); // 🚀 Dashed line look
-    path.setAttribute("class", "v2-parent-leash");
-    
-    svg.prepend(path); // Put it behind the cards
+    path.setAttribute("stroke-dasharray", "6,4"); // Dashed style
+    path.setAttribute("fill", "none");
+    path.setAttribute("class", "v2-leash-curve");
+
+    svg.prepend(path);
 };
 
 OL.startParentLinking = function(e, sourceId) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
 
     const canvas = document.getElementById('v2-canvas');
-    // 🚀 Targeted the ID from your HTML: "v2-connections"
     const svg = document.getElementById('v2-connections');
     const sourceEl = document.getElementById(`v2-node-${sourceId}`);
 
-    if (!svg) {
-        console.error("❌ SVG Layer 'v2-connections' not found!");
-        return;
-    }
-    if (!sourceEl) return;
+    if (!svg || !sourceEl) return;
 
-    // Ensure SVG is configured to show lines outside its box
-    svg.style.overflow = 'visible';
-    svg.style.pointerEvents = 'none';
-
-    // 1. Create the "Ghost Line"
-    const ghostLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    // 1. 🚀 CHANGE: Create a PATH instead of a LINE
+    const ghostLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
     ghostLine.setAttribute("stroke", "#fbbf24");
     ghostLine.setAttribute("stroke-width", "3");
     ghostLine.setAttribute("stroke-dasharray", "5,5");
+    ghostLine.setAttribute("fill", "none"); // Crucial for paths
     svg.appendChild(ghostLine);
 
     const onMouseMove = (moveEvent) => {
@@ -9392,23 +9393,27 @@ OL.startParentLinking = function(e, sourceId) {
         const canvasRect = canvas.getBoundingClientRect();
         const sourceRect = sourceEl.getBoundingClientRect();
 
-        // Calculate start (center of child card)
-        const x1 = (sourceRect.left - canvasRect.left + sourceRect.width / 2) / zoom;
-        const y1 = (sourceRect.top - canvasRect.top + sourceRect.height / 2) / zoom;
+        // 🚀 START AT CORNER: (Top-Left)
+        const x1 = (sourceRect.left - canvasRect.left) / zoom;
+        const y1 = (sourceRect.top - canvasRect.top) / zoom;
 
-        // Calculate end (current mouse position)
+        // END AT MOUSE
         const x2 = (moveEvent.clientX - canvasRect.left) / zoom;
         const y2 = (moveEvent.clientY - canvasRect.top) / zoom;
 
-        ghostLine.setAttribute("x1", x1);
-        ghostLine.setAttribute("y1", y1);
-        ghostLine.setAttribute("x2", x2);
-        ghostLine.setAttribute("y2", y2);
+        // 🚀 BEZIER MATH:
+        // We create two control points to make the line "swing"
+        const cp1x = x1; 
+        const cp1y = y1 + (y2 - y1) * 0.5;
+        const cp2x = x2; 
+        const cp2y = y2 - (y2 - y1) * 0.5;
 
-        // Hover effect for targets
+        const pathData = `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
+        ghostLine.setAttribute("d", pathData);
+
+        // Hover highlighting...
         const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
         const targetCard = hit?.closest('.v2-node-card.is-resource');
-        
         document.querySelectorAll('.v2-node-card').forEach(c => c.style.boxShadow = '');
         if (targetCard && targetCard !== sourceEl) {
             targetCard.style.boxShadow = '0 0 15px #fbbf24';
@@ -9422,15 +9427,11 @@ OL.startParentLinking = function(e, sourceId) {
 
         const hit = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
         const targetCard = hit?.closest('.v2-node-card.is-resource');
-        
         document.querySelectorAll('.v2-node-card').forEach(c => c.style.boxShadow = '');
 
         if (targetCard) {
             const targetId = targetCard.id.replace('v2-node-', '');
-            // Only link if it's not itself
-            if (targetId !== sourceId) {
-                OL.linkStepToParent(sourceId, targetId);
-            }
+            if (targetId !== sourceId) OL.linkStepToParent(sourceId, targetId);
         }
     };
 

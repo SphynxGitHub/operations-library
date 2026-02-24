@@ -4391,3 +4391,20 @@ ARROWS
     pointer-events: none;
     overflow: visible;
 }
+
+.v2-parent-linker.corner-linker {
+    position: absolute;
+    top: -10px;    /* Half-hanging off the top */
+    left: -10px;   /* Half-hanging off the left */
+    width: 22px;
+    height: 22px;
+    background: #fbbf24;
+    border: 2px solid #1a1a1a;
+    border-radius: 6px; /* Slightly rounded square looks better in corners */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: crosshair;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
