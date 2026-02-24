@@ -8720,6 +8720,9 @@ state.v2.expandedNodes = state.v2.expandedNodes || new Set();
 
 window.renderVisualizerV2 = function(isVault) {
     const container = document.getElementById("mainContent");
+    const isAnyExpanded = state.v2.expandedNodes.size > 0;
+    const expandIcon = isAnyExpanded ? '📂' : '📁';
+    const expandTitle = isAnyExpanded ? 'Collapse All' : 'Expand All';
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
@@ -8746,11 +8749,10 @@ window.renderVisualizerV2 = function(isVault) {
                     <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
                     <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy Up Grid">🪄 Tidy</button>
                     
-                    <div class="divider-v"></div>
-                    
-                    <button class="btn soft" onclick="OL.toggleAllSteps(true)" title="Expand All">📂</button>
-                    <button class="btn soft" onclick="OL.toggleAllSteps(false)" title="Shrink All">📁</button>
-                    
+                    <button class="btn soft" onclick="OL.toggleMasterExpand()" title="${expandTitle}">
+                        ${expandIcon}
+                    </button>
+
                     <div class="divider-v"></div>
                     <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                     <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
@@ -9341,20 +9343,23 @@ OL.toggleStepView = function(nodeId) {
     renderVisualizerV2(isVault);
 };
 
-OL.toggleAllSteps = function(forceOpen) {
+OL.toggleMasterExpand = function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    if (forceOpen) {
-        // Add every node ID that has steps to the expanded set
+    // 1. Check if we have anything currently open
+    const hasExpanded = state.v2.expandedNodes.size > 0;
+
+    if (hasExpanded) {
+        // 🚀 ACTION: Close everything
+        state.v2.expandedNodes.clear();
+    } else {
+        // 🚀 ACTION: Open everything that has steps
         source.forEach(node => {
             if (node.steps && node.steps.length > 0) {
                 state.v2.expandedNodes.add(node.id);
             }
         });
-    } else {
-        // Clear the set entirely
-        state.v2.expandedNodes.clear();
     }
     
     renderVisualizerV2(isVault);
