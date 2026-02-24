@@ -8914,24 +8914,21 @@ OL.startNodeDrag = function(e, nodeId) {
                 if (targetNode && nodeData) {
                     if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
                     
-                    // 🚀 THE FIX: Consolidate data structure. 
-                    // Use both 'text' and 'name' to be safe for all renderers.
-                    const newStep = { 
-                        text: nodeData.name || nodeData.text || "Untitled Step", 
-                        name: nodeData.name || nodeData.text || "Untitled Step",
+                    // 🚀 DATA ALIGNMENT: Save with both keys just to be bulletproof
+                    targetNode.steps.push({ 
+                        text: nodeData.name || nodeData.text || "New Step", 
+                        name: nodeData.name || nodeData.text || "New Step",
                         id: Date.now() 
-                    };
+                    });
 
-                    targetNode.steps.push(newStep);
-                    
-                    // Remove the loose node
+                    // Auto-open the drawer for the user
+                    state.v2.expandedNodes.add(targetId);
+
                     const idx = source.indexOf(nodeData);
                     if (idx > -1) source.splice(idx, 1);
-                    
-                    // 🚀 THE KEY: Auto-expand the target so the user sees the success
-                    state.v2.expandedNodes.add(targetId);
                 }
             });
+            // Re-rendering is handled by release of BLOCK_RENDER
         } else {
             // REGULAR MOVE SAVE
             await OL.updateAndSync(() => {
@@ -9024,40 +9021,40 @@ OL.commitBrainDump = async function() {
 
 function renderV2Nodes(isVault) {
     const client = getActiveClient();
-    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-
-    /* nodes = nodes.filter(node => {
-        const type = (node.type || "").toLowerCase();
-        return type !== 'workflow'; 
-    });*/ //filters out workflows
-
-    console.log(`✅ Drawing ${nodes.length} nodes on the canvas`);
 
     return nodes.map((node, idx) => {
         const x = (node.coords && typeof node.coords.x === 'number') ? node.coords.x : (100 + (idx % 4) * 250);
         const y = (node.coords && typeof node.coords.y === 'number') ? node.coords.y : (100 + Math.floor(idx / 4) * 200);
         const icon = OL.getRegistryIcon(node.type);
-
-        // 🚀 1. Handle Global Status
         const globalClass = node.isGlobal ? 'is-global' : '';
 
-        // 🚀 2. Identify Steps (Internal SOP vs Loose Step)
+        // 🚀 PERSISTENCE LOGIC
         const steps = Array.isArray(node.steps) ? node.steps : [];
-        const isLooseStep = node.type ==='sop' || node.type === 'step' || node.type === 'instruction';
+        const isExpanded = state.v2.expandedNodes.has(node.id); // Check our Set
+        const isLooseStep = node.type === 'sop' || node.type === 'step' || node.type === 'instruction';
         
+        // Dynamic Badge Icon
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
-                ${steps.length} Steps
+                ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
             </div>` : '';
+
+        // 🚀 DECLARATIVE HTML: Build steps only if the state says they are open
+        const stepsHtml = isExpanded ? steps.map((step, i) => `
+            <div class="v2-step-item" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="v2-step-number" style="opacity: 0.5; font-size: 10px;">${i + 1}</span>
+                    <span class="v2-step-text" style="font-size: 11px;">${esc(step.text || step.name || "Step")}</span>
+                </div>
+                <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
+            </div>
+        `).join('') : '';
 
         const isLoose = !node.parentId;
         const contextIcon = isLoose 
             ? `<i class="fas fa-ghost muted-icon" title="Loose Step"></i>`
-            : `<i class="fas fa-link parent-link-icon" 
-                title="Belongs to: ${esc(node.parentName || 'Resource')}" 
-                onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" 
-                onmouseleave="OL.hideParentLine()"></i>`;
+            : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
 
         return `
             <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''} ${isLoose ? 'is-loose' : 'has-parent'}" 
@@ -9066,13 +9063,10 @@ function renderV2Nodes(isVault) {
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
                 <div class="v2-context-corner">${contextIcon}</div>
-                
                 ${stepBadge}
                 
-                <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                <div class="v2-port port-out" title="Out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
-                <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                <div class="v2-port port-in" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
 
                 <div class="v2-node-header" style="pointer-events: none;">
                     <span>${icon}</span>
@@ -9082,7 +9076,9 @@ function renderV2Nodes(isVault) {
                     ${esc(node.name || node.text || "Untitled Step")}
                 </div>
 
-                <div class="v2-steps-preview" id="steps-${node.id}"></div>
+                <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
+                    ${stepsHtml}
+                </div>
             </div>
         `;
     }).join('');
@@ -9313,41 +9309,20 @@ OL.hideParentLine = function() {
 };
 
 OL.toggleStepView = function(nodeId) {
-    const container = document.getElementById(`steps-${nodeId}`);
-    if (!container) return;
+    // 🚀 THE FIX: Initialize the Set if it doesn't exist
+    if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
 
-    const isVisible = container.offsetParent !== null; // Better check for display:none
-    
-    if (isVisible) {
-        container.style.display = 'none';
+    // Toggle the ID in the persistence Set
+    if (state.v2.expandedNodes.has(nodeId)) {
+        state.v2.expandedNodes.delete(nodeId);
     } else {
-        const node = OL.getResourceById(nodeId);
-        // Match the data path from your console table
-        const steps = Array.isArray(node.steps) ? node.steps : [];
-        
-        if (steps.length === 0) return;
-
-        container.innerHTML = steps.map((step, i) => `
-            <div class="v2-step-item" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="v2-step-number" style="opacity: 0.5; font-size: 10px;">${i + 1}</span>
-                    <span class="v2-step-text" style="font-size: 11px;">${esc(step.text || "Unnamed Step")}</span>
-                </div>
-                <div class="v2-step-eject" 
-                    title="Pop out to canvas" 
-                    style="cursor: pointer; opacity: 0.6; padding: 2px 5px;"
-                    onclick="event.stopPropagation(); OL.ejectStep('${nodeId}', ${i})">
-                    <i class="fas fa-external-link-alt" style="font-size: 10px;"></i>
-                    🪂
-                </div>
-            </div>
-        `).join('');
-                
-        container.style.display = 'block';
+        state.v2.expandedNodes.add(nodeId);
     }
     
-    // Refresh connections because card height changed
-    OL.drawV2Connections();
+    // 🔄 Force a re-render of the Visualizer. 
+    // This ensures the badge icon (▴/▾) and connections stay perfectly synced.
+    const isVault = window.location.hash.includes('vault');
+    renderVisualizerV2(isVault);
 };
 
 OL.ejectStep = async function(resourceId, stepIdx) {
