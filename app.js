@@ -8963,24 +8963,40 @@ function renderV2Nodes(isVault) {
         const x = node.coords?.x || (100 + (idx % 4) * 250);
         const y = node.coords?.y || (100 + Math.floor(idx / 4) * 150);
         const icon = OL.getRegistryIcon(node.type);
+        // 🚀 1. Handle Global Status
+        const globalClass = node.isGlobal ? 'is-global' : '';
+
+        // 🚀 2. Identify Steps (Internal SOP vs Loose Step)
+        const steps = node.sop?.steps || [];
+        const isLooseStep = node.type === 'step' || node.type === 'instruction';
+        
+        const stepBadge = (steps.length > 0 && !isLooseStep) ? 
+            `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
+                ${steps.length} Steps
+            </div>` : '';
 
         return `
-            <div class="v2-node-card" 
+            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''}" 
                 id="v2-node-${node.id}"
                 style="position: absolute; left: ${x}px; top: ${y}px;"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
                 
-                <div class="v2-port port-in" title="Left Input" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                <div class="v2-port port-out" title="Right Output" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                ${stepBadge}
                 
-                <div class="v2-port port-top" title="Top Input" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                <div class="v2-port port-bottom" title="Bottom Output" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-out" title="Out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
 
                 <div class="v2-node-header" style="pointer-events: none;">
                     <span>${icon}</span>
                     <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
                 </div>
-                <div class="v2-node-body" style="pointer-events: none;">${esc(node.name)}</div>
+                <div class="v2-node-body" style="pointer-events: none;">
+                    ${esc(node.name || node.text || "Untitled Step")}
+                </div>
+
+                <div class="v2-steps-preview" id="steps-${node.id}"></div>
             </div>
         `;
     }).join('');

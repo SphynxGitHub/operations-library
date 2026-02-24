@@ -4209,3 +4209,42 @@ ARROWS
     opacity: 0.4;
     text-transform: uppercase;
 }
+
+/* style.css */
+
+.v2-step-badge {
+    position: absolute;
+    top: -10px;
+    right: 15px;
+    background: var(--accent);
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    z-index: 120;
+}
+
+.v2-steps-preview {
+    margin-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 8px;
+    display: none; /* Hidden by default */
+}
+
+.v2-step-item {
+    font-size: 11px;
+    color: #cbd5e1;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    gap: 8px;
+}
+
+.v2-step-number {
+    color: var(--accent);
+    font-weight: bold;
+    opacity: 0.7;
+}
