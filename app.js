@@ -9224,7 +9224,7 @@ function renderV2Nodes(isVault) {
 OL.jumpToScopingItem = function(nodeId) {
     console.log("🚀 Jumping to Scoping for:", nodeId);
 
-    // 1. Save return context
+    // 1. Save context for the 'Back' button
     state.v2.returnTo = {
         viewMode: state.viewMode,
         pan: { ...state.v2.pan },
@@ -9232,35 +9232,43 @@ OL.jumpToScopingItem = function(nodeId) {
         nodeId: nodeId
     };
 
-    // 2. Set targets
     state.scopingTargetId = nodeId;
-    state.viewMode = 'scoping';
 
-    // 3. 🚀 THE MAGIC LINE: Update the URL hash
-    // This triggers the router's hashchange listener naturally
-    window.location.hash = '/scoping'; 
+    // 2. Update the URL Query Parameter (?view=scoping)
+    // This is the "True North" for your app's routing
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'scoping');
+    
+    // Clear the hash to prevent the "Unknown client hash" error
+    url.hash = ''; 
 
-    // 4. Fallback: If hash change doesn't trigger handleRoute, call it manually
+    // 3. Push the state so the browser actually navigates
+    window.history.pushState({}, '', url.toString());
+
+    // 4. Trigger the route manually using the state your app likes
     if (typeof window.handleRoute === 'function') {
+        state.viewMode = 'scoping';
         window.handleRoute('scoping');
     }
 };
 
 OL.returnToFlow = function() {
     if (!state.v2.returnTo) return;
-
     const { viewMode, pan, zoom } = state.v2.returnTo;
 
-    // Restore coordinates
     state.v2.pan = pan;
     state.v2.zoom = zoom;
     state.v2.returnTo = null;
 
-    // 🚀 Update the hash to go back
-    window.location.hash = (viewMode === 'vault') ? '/vault' : '/visualizer';
+    // Update Query Param back to visualizer
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'visualizer');
+    url.hash = '';
+    window.history.pushState({}, '', url.toString());
 
     if (typeof window.handleRoute === 'function') {
-        window.handleRoute(viewMode);
+        state.viewMode = 'visualizer';
+        window.handleRoute('visualizer');
     }
 };
 
