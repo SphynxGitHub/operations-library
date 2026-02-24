@@ -9052,14 +9052,15 @@ OL.drawV2Connections = function() {
     source.forEach(node => {
         if (!node.outcomes || node.outcomes.length === 0) return;
 
-        node.outcomes.forEach(outcome => {
+        node.outcomes.forEach((outcome, idx) => {
+            const fromEl = document.getElementById(`v2-node-${node.id}`)
+
             // Find target ID (handling jump_step_ and jump_res_ prefixes)
             let tid = outcome.targetId || outcome.toId;
             if (!tid && outcome.action) {
                 tid = outcome.action.replace('jump_step_', '').replace('jump_res_', '');
             }
 
-            const fromEl = document.getElementById(`v2-node-${node.id}`);
             const toEl = document.getElementById(`v2-node-${tid}`);
 
             if (fromEl && toEl) {
