@@ -9091,8 +9091,8 @@ function renderV2Nodes(isVault) {
         
         const parentHandle = isLooseStep ? `
             <div class="v2-parent-linker" 
-                title="Drag to a Resource to link"
-                onmousedown="event.stopPropagation(); OL.startParentLinking(event, '${node.id}')">
+                id="linker-${node.id}"
+                onmousedown="OL.startParentLinking(event, '${node.id}')">
                 <i class="fas fa-link"></i>
             </div>
         ` : '';
@@ -9103,6 +9103,8 @@ function renderV2Nodes(isVault) {
                 style="position: absolute; left: ${x}px; top: ${y}px;"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
+                ${parentHandle}
+                
                 <div class="v2-context-corner">${contextIcon}</div>
                 ${stepBadge}
                 
@@ -9118,7 +9120,6 @@ function renderV2Nodes(isVault) {
                 <div class="v2-node-body" style="pointer-events: none;">
                     ${esc(node.name || node.text || "Untitled Step")}
                 </div>
-                ${parentHandle}
                 <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
                     ${stepsHtml}
                 </div>

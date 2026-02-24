@@ -4349,11 +4349,12 @@ ARROWS
     transform: translateY(-50%) scale(1.4);
 }
 
+/* Move Linker to Left Center */
 .v2-parent-linker {
     position: absolute;
-    top: -12px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: -12px; /* Hangs off the left edge */
+    top: 50%;
+    transform: translateY(-50%);
     width: 24px;
     height: 24px;
     background: #fbbf24;
@@ -4366,12 +4367,18 @@ ARROWS
     color: #000;
     font-size: 10px;
     z-index: 30;
-    transition: all 0.2s;
+    transition: transform 0.2s;
 }
 
 .v2-parent-linker:hover {
-    transform: translateX(-50%) scale(1.2);
+    transform: translateY(-50%) scale(1.2);
     background: #fff;
+}
+
+/* Adjust Card padding to accommodate the left-side button */
+.v2-node-card.is-loose {
+    padding-left: 20px; 
+    border-left: 3px dashed #fbbf24; /* Visual cue that this side is for linking */
 }
 
 #v2-connections {
