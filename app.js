@@ -9372,14 +9372,24 @@ OL.startParentLinking = function(e, sourceId) {
     e.stopPropagation();
 
     const canvas = document.getElementById('v2-canvas');
-    const svg = document.getElementById('v2-svg-layer');
+    // 🚀 Targeted the ID from your HTML: "v2-connections"
+    const svg = document.getElementById('v2-connections');
     const sourceEl = document.getElementById(`v2-node-${sourceId}`);
+
+    if (!svg) {
+        console.error("❌ SVG Layer 'v2-connections' not found!");
+        return;
+    }
     if (!sourceEl) return;
 
-    // 1. Create a "Ghost Line" (Visual Feedback during drag)
+    // Ensure SVG is configured to show lines outside its box
+    svg.style.overflow = 'visible';
+    svg.style.pointerEvents = 'none';
+
+    // 1. Create the "Ghost Line"
     const ghostLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
     ghostLine.setAttribute("stroke", "#fbbf24");
-    ghostLine.setAttribute("stroke-width", "2");
+    ghostLine.setAttribute("stroke-width", "3");
     ghostLine.setAttribute("stroke-dasharray", "5,5");
     svg.appendChild(ghostLine);
 
@@ -9388,35 +9398,45 @@ OL.startParentLinking = function(e, sourceId) {
         const canvasRect = canvas.getBoundingClientRect();
         const sourceRect = sourceEl.getBoundingClientRect();
 
+        // Calculate start (center of child card)
         const x1 = (sourceRect.left - canvasRect.left + sourceRect.width / 2) / zoom;
         const y1 = (sourceRect.top - canvasRect.top + sourceRect.height / 2) / zoom;
+
+        // Calculate end (current mouse position)
         const x2 = (moveEvent.clientX - canvasRect.left) / zoom;
         const y2 = (moveEvent.clientY - canvasRect.top) / zoom;
 
-        ghostLine.setAttribute("x1", x1); ghostLine.setAttribute("y1", y1);
-        ghostLine.setAttribute("x2", x2); ghostLine.setAttribute("y2", y2);
+        ghostLine.setAttribute("x1", x1);
+        ghostLine.setAttribute("y1", y1);
+        ghostLine.setAttribute("x2", x2);
+        ghostLine.setAttribute("y2", y2);
 
-        // Highlight the Resource card we are hovering over
+        // Hover effect for targets
         const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
         const targetCard = hit?.closest('.v2-node-card.is-resource');
         
-        document.querySelectorAll('.v2-node-card').forEach(c => c.style.outline = '');
-        if (targetCard) targetCard.style.outline = '2px solid #fbbf24';
+        document.querySelectorAll('.v2-node-card').forEach(c => c.style.boxShadow = '');
+        if (targetCard && targetCard !== sourceEl) {
+            targetCard.style.boxShadow = '0 0 15px #fbbf24';
+        }
     };
 
     const onMouseUp = (upEvent) => {
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
-        svg.removeChild(ghostLine);
+        if (svg.contains(ghostLine)) svg.removeChild(ghostLine);
 
         const hit = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
         const targetCard = hit?.closest('.v2-node-card.is-resource');
-        document.querySelectorAll('.v2-node-card').forEach(c => c.style.outline = '');
+        
+        document.querySelectorAll('.v2-node-card').forEach(c => c.style.boxShadow = '');
 
         if (targetCard) {
             const targetId = targetCard.id.replace('v2-node-', '');
-            // 🚀 This is where the permanent link happens
-            OL.linkStepToParent(sourceId, targetId);
+            // Only link if it's not itself
+            if (targetId !== sourceId) {
+                OL.linkStepToParent(sourceId, targetId);
+            }
         }
     };
 
