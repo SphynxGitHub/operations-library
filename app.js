@@ -8854,29 +8854,59 @@ OL.startNodeDrag = function(e, nodeId) {
 
         nodeEl.style.left = `${newX}px`;
         nodeEl.style.top = `${newY}px`;
+        
+        const hoverEl = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.v2-node-card');
+        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
+        if (hoverEl && isStep && hoverEl.id !== `v2-node-${nodeId}`) {
+            hoverEl.classList.add('drop-hover');
+        }
         OL.drawV2Connections(); 
     };
 
     const onMouseUp = async () => {
+        viewport.classList.remove('is-dragging');
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
 
-        // 🎯 THE FIX: If the mouse didn't move, treat it as a CLICK
-        if (!hasMoved) {
-            OL.handleNodeClick(nodeId);
-            return;
+        const nodeData = source.find(n => n.id === nodeId);
+        const isStep = nodeData.type === 'step' || nodeData.type === 'instruction';
+
+        if (isStep) {
+            // 🔍 Find if we dropped this over another card
+            const dropTargetEl = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY)
+                                        .closest('.v2-node-card');
+            
+            if (dropTargetEl && dropTargetEl.id !== `v2-node-${nodeId}`) {
+                const targetId = dropTargetEl.id.replace('v2-node-', '');
+                const targetNode = source.find(n => n.id === targetId);
+
+                // Only absorb into non-step resources
+                if (targetNode && targetNode.type !== 'step') {
+                    console.log(`📥 Absorbing ${nodeData.name} into ${targetNode.name}`);
+                    
+                    await OL.updateAndSync(() => {
+                        if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
+                        
+                        // Add the loose step's data to the resource
+                        targetNode.steps.push({
+                            text: nodeData.text || nodeData.name,
+                            id: Date.now() // Give the new step a unique ID
+                        });
+
+                        // Remove the loose step from the main resources list
+                        const idx = source.findIndex(n => n.id === nodeId);
+                        if (idx > -1) source.splice(idx, 1);
+                    });
+
+                    // Refresh the whole UI to show the new badge count
+                    renderVisualizerV2(isVault);
+                    return; // Exit early so we don't try to save the deleted node's coords
+                }
+            }
         }
 
-        // Otherwise, save the new position
-        const finalX = parseInt(nodeEl.style.left);
-        const finalY = parseInt(nodeEl.style.top);
-
-        await OL.updateAndSync(() => {
-            const isVault = window.location.hash.includes('vault');
-            const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-            const nodeData = source.find(n => n.id === nodeId);
-            if (nodeData) nodeData.coords = { x: finalX, y: finalY };
-        });
+        // Existing coordinate saving logic for normal drags...
+        OL.saveNodePosition(nodeId, nodeData.coords);
     };
 
     document.addEventListener('mousemove', onMouseMove);

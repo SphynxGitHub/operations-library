@@ -4248,3 +4248,10 @@ ARROWS
     font-weight: bold;
     opacity: 0.7;
 }
+
+.v2-node-card.drop-hover {
+    border: 2px solid var(--accent) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
+    transform: scale(1.05);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
