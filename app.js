@@ -8829,6 +8829,7 @@ OL.zoom = function(delta) {
     
     console.log(`🔍 Zoom Level: ${Math.round(newZoom * 100)}%`);
 };
+
 OL.startNodeDrag = function(e, nodeId) {
     e.preventDefault();
     e.stopPropagation();
@@ -8854,8 +8855,7 @@ OL.startNodeDrag = function(e, nodeId) {
         // 3. SURGICAL UPDATE: Update DOM directly for 60fps performance
         nodeEl.style.left = `${newX}px`;
         nodeEl.style.top = `${newY}px`;
-        
-        // (Optional) Update connection lines in real-time here if needed
+        OL.drawV2Connections();
     };
 
     const onMouseUp = async () => {
@@ -8986,6 +8986,67 @@ OL.commitBrainDump = async function() {
 
     OL.closeModal();
     window.renderGlobalVisualizer(isVault); // Refresh the graph
+};
+
+OL.drawV2Connections = function() {
+    const svg = document.getElementById('v2-connections');
+    if (!svg) return;
+
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    // Clear old lines
+    svg.innerHTML = '';
+    
+    // Update SVG size to match the infinite canvas scroll
+    const canvas = document.getElementById('v2-canvas');
+    svg.setAttribute('width', canvas.scrollWidth);
+    svg.setAttribute('height', canvas.scrollHeight);
+
+    source.forEach(node => {
+        if (!node.outcomes || node.outcomes.length === 0) return;
+
+        node.outcomes.forEach(outcome => {
+            // Find target ID (handling jump_step_ and jump_res_ prefixes)
+            let tid = outcome.targetId || outcome.toId;
+            if (!tid && outcome.action) {
+                tid = outcome.action.replace('jump_step_', '').replace('jump_res_', '');
+            }
+
+            const fromEl = document.getElementById(`v2-node-${node.id}`);
+            const toEl = document.getElementById(`v2-node-${tid}`);
+
+            if (fromEl && toEl) {
+                OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.condition);
+            }
+        });
+    });
+};
+
+OL.drawPathBetweenElements = function(svg, startEl, endEl, label) {
+    const s = {
+        x: startEl.offsetLeft + startEl.offsetWidth,
+        y: startEl.offsetTop + (startEl.offsetHeight / 2)
+    };
+    const e = {
+        x: endEl.offsetLeft,
+        y: endEl.offsetTop + (endEl.offsetHeight / 2)
+    };
+
+    const cp1x = s.x + (e.x - s.x) / 2;
+    const cp2x = s.x + (e.x - s.x) / 2;
+
+    const pathData = `M ${s.x} ${s.y} C ${cp1x} ${s.y}, ${cp2x} ${e.y}, ${e.x} ${e.y}`;
+    
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.4)");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("fill", "none");
+    path.style.transition = "all 0.3s ease";
+    
+    svg.appendChild(path);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
