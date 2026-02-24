@@ -9510,12 +9510,19 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     // Toggle sticky menu on click
     hitArea.onclick = (e) => {
         e.stopPropagation();
-        const isSticky = group.classList.toggle('is-sticky');
         
-        // Close any other sticky menus
-        document.querySelectorAll('.v2-connection-group.is-sticky').forEach(el => {
-            if (el !== group) el.classList.remove('is-sticky');
+        // 1. Check if this specific one is already sticky
+        const wasSticky = group.classList.contains('is-sticky');
+
+        // 2. 🚀 THE FIX: Remove sticky from EVERY connection group on the canvas
+        document.querySelectorAll('.v2-connection-group').forEach(el => {
+            el.classList.remove('is-sticky');
         });
+
+        // 3. If it wasn't sticky before, make it sticky now (Toggle behavior)
+        if (!wasSticky) {
+            group.classList.add('is-sticky');
+        }
     };
 
     group.appendChild(hitArea);

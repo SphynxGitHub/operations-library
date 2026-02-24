@@ -4483,12 +4483,29 @@ ARROWS
     pointer-events: auto;
 }
 
-/* 🚀 SENSITIVITY FIX: Reveal menu on hover OR if sticky class is present */
+.v2-delete-trigger, .v2-mini-menu {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    visibility: hidden; /* Added to ensure it's truly 'gone' when not active */
+}
+
 .v2-connection-group:hover .v2-mini-menu,
 .v2-connection-group.is-sticky .v2-mini-menu {
     opacity: 1;
     pointer-events: auto;
-    transform: scale(1) translate(0, 0);
+    visibility: visible;
+    transform: scale(1);
+}
+
+/* Ensure the hit area remains the primary mouse target */
+path[stroke="transparent"] {
+    pointer-events: stroke !important;
+}
+
+/* Add this to prevent the menu from flickering when the mouse is between bubbles */
+.v2-mini-menu circle {
+    pointer-events: auto;
 }
 
 /* Visual feedback that the line is "Selected" */
@@ -4500,4 +4517,21 @@ ARROWS
 /* Glow effect when hovering the invisible hit area */
 .v2-connection-group:hover path:not([stroke="transparent"]) {
     stroke-width: 4;
+}
+
+/* Standard Line state */
+.v2-connection-group path:not([stroke="transparent"]) {
+    transition: stroke 0.2s, stroke-width 0.2s;
+}
+
+/* Hover OR Sticky state - unified color */
+.v2-connection-group:hover path:not([stroke="transparent"]),
+.v2-connection-group.is-sticky path:not([stroke="transparent"]) {
+    stroke: #fbbf24 !important; /* Force to Amber/Gold */
+    stroke-width: 4px;
+}
+
+/* Only the delete bubble should be red, not the whole line */
+.menu-item.btn-delete circle {
+    fill: #ef4444;
 }
