@@ -9222,9 +9222,9 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🎯 Targeting Node for Scoping:", nodeId);
+    console.log("🚀 Jumping to Scoping for:", nodeId);
 
-    // 1. Save the return path for the "Back to Flow" button
+    // 1. Save return context
     state.v2.returnTo = {
         viewMode: state.viewMode,
         pan: { ...state.v2.pan },
@@ -9232,49 +9232,36 @@ OL.jumpToScopingItem = function(nodeId) {
         nodeId: nodeId
     };
 
-    // 2. Set the ID for the scoping sheet to highlight
+    // 2. Set targets
     state.scopingTargetId = nodeId;
-
-    // 3. Force the global viewMode state
     state.viewMode = 'scoping';
 
-    // 4. Trigger navigation
+    // 3. 🚀 THE MAGIC LINE: Update the URL hash
+    // This triggers the router's hashchange listener naturally
+    window.location.hash = '/scoping'; 
+
+    // 4. Fallback: If hash change doesn't trigger handleRoute, call it manually
     if (typeof window.handleRoute === 'function') {
-        // We pass 'scoping' as the route name
         window.handleRoute('scoping');
-    } else {
-        console.error("❌ handleRoute not found. Manual render required.");
-        // Fallback if the router is missing
-        if (typeof render === 'function') render();
     }
 };
 
 OL.returnToFlow = function() {
     if (!state.v2.returnTo) return;
 
-    const { viewMode, pan, zoom, nodeId } = state.v2.returnTo;
+    const { viewMode, pan, zoom } = state.v2.returnTo;
 
-    // 1. Restore the state
-    state.viewMode = viewMode;
+    // Restore coordinates
     state.v2.pan = pan;
     state.v2.zoom = zoom;
-
-    // 2. Clear the return state so the button disappears
     state.v2.returnTo = null;
-    state.v2.lastJumpedNodeId = nodeId;
 
-    // 3. Navigate back
-    if (typeof handleRoute === 'function') {
-        handleRoute(viewMode);
+    // 🚀 Update the hash to go back
+    window.location.hash = (viewMode === 'vault') ? '/vault' : '/visualizer';
+
+    if (typeof window.handleRoute === 'function') {
+        window.handleRoute(viewMode);
     }
-
-    // 4. Highlight the node we came from
-    setTimeout(() => {
-        const nodeEl = document.querySelector(`#node-${nodeId}`);
-        if (nodeEl) {
-            nodeEl.classList.add('v2-node-highlight-flash');
-        }
-    }, 500);
 };
 
 OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
