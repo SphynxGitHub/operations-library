@@ -9038,7 +9038,7 @@ function renderV2Nodes(isVault) {
         // 🚀 PERSISTENCE LOGIC
         const steps = Array.isArray(node.steps) ? node.steps : [];
         const isExpanded = state.v2.expandedNodes.has(node.id); // Check our Set
-        const isLooseStep = node.type === 'sop' || node.type === 'step' || node.type === 'instruction';
+        const isLooseStep = node.type === 'SOP' || node.type === 'step' || node.type === 'instruction';
         
         // Dynamic Badge Icon
         const stepBadge = (steps.length > 0 && !isLooseStep) ? 
@@ -9063,32 +9063,32 @@ function renderV2Nodes(isVault) {
             : `<i class="fas fa-link parent-link-icon" onmouseenter="OL.showParentLine('${node.id}', '${node.parentId}')" onmouseleave="OL.hideParentLine()"></i>`;
 
         return `
-    <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''} ${isExpanded ? 'is-expanded' : ''}" 
-        id="v2-node-${node.id}"
-        style="position: absolute; left: ${x}px; top: ${y}px;"
-        onmousedown="OL.startNodeDrag(event, '${node.id}')">
+            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'type-step' : ''} ${isExpanded ? 'is-expanded' : ''}" 
+                id="v2-node-${node.id}"
+                style="position: absolute; left: ${x}px; top: ${y}px;"
+                onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
-        <div class="v2-context-corner">${contextIcon}</div>
-        ${stepBadge}
-        
-        <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-        <div class="v2-port port-out" title="Out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
-        <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-        <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                <div class="v2-context-corner">${contextIcon}</div>
+                ${stepBadge}
+                
+                <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-out" title="Out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
 
-        <div class="v2-node-header" style="pointer-events: none;">
-            <span>${icon}</span>
-            <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
-        </div>
-        <div class="v2-node-body" style="pointer-events: none;">
-            ${esc(node.name || node.text || "Untitled Step")}
-        </div>
+                <div class="v2-node-header" style="pointer-events: none;">
+                    <span>${icon}</span>
+                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
+                </div>
+                <div class="v2-node-body" style="pointer-events: none;">
+                    ${esc(node.name || node.text || "Untitled Step")}
+                </div>
 
-        <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
-            ${stepsHtml}
-        </div>
-    </div>
-`;
+                <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
+                    ${stepsHtml}
+                </div>
+            </div>
+        `;
     }).join('');
 }
 
