@@ -8768,6 +8768,7 @@ window.renderVisualizerV2 = function(isVault) {
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
     const expandTitle = isAnyExpanded ? 'Collapse All' : 'Expand All';
+    const uniqueScopes = [...new Set(nodes.map(n => getInferredScope(n)).filter(Boolean))];
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
@@ -8799,8 +8800,8 @@ window.renderVisualizerV2 = function(isVault) {
 
                     <div class="v2-toolbar">
                         <select class="v2-toolbar-select" onchange="state.v2.activeScope = this.value; renderVisualizerV2(${isVault});">
-                            <option value="all">ALL SCOPES</option>
-                            ${[...new Set(nodes.map(n => n.scope || n.originProject).filter(Boolean))].map(s => 
+                            <option value="all">FILTER: ALL</option>
+                            ${uniqueScopes.map(s => 
                                 `<option value="${s}" ${state.v2.activeScope === s ? 'selected' : ''}>${s.toUpperCase()}</option>`
                             ).join('')}
                         </select>
@@ -9106,6 +9107,16 @@ function renderV2Nodes(isVault) {
         nodes = nodes.filter(n => (n.scope === state.v2.activeScope || n.originProject === state.v2.activeScope));
     }
 
+    const getInferredScope = (node) => {
+        if (node.scope) return node.scope;
+        const text = `${node.name} ${node.description}`.toLowerCase();
+        if (text.includes('wealthbox')) return 'Wealthbox';
+        if (text.includes('zapier')) return 'Zapier';
+        if (text.includes('rightcapital')) return 'RightCapital';
+        if (text.includes('redtail')) return 'Redtail';
+        return null; // No badge if no keyword found
+    };
+
     return nodes.map((node, idx) => {
         const x = (node.coords && typeof node.coords.x === 'number') ? node.coords.x : (100 + (idx % 4) * 250);
         const y = (node.coords && typeof node.coords.y === 'number') ? node.coords.y : (100 + Math.floor(idx / 4) * 200);
@@ -9121,7 +9132,7 @@ function renderV2Nodes(isVault) {
         const isInScope = !!OL.isResourceInScope(node.id);
         
         // 2. Fallback to originProject if that's what you consider the "Scope"
-        const displayScope = node.scope || node.originProject;
+        const displayScope = getInferredScope(node);
 
         const scopeBadge = (isInScope || displayScope) ? `
             <div class="v2-scope-badge" 
