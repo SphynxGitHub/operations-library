@@ -9222,6 +9222,39 @@ function renderV2Nodes(isVault) {
     }).join('');
 }
 
+OL.jumpToScopingItem = function(nodeId) {
+    console.log("🚀 Jumping to Scoping for:", nodeId);
+
+    // 1. Force the view mode change
+    state.viewMode = 'scoping'; 
+    
+    // 2. Clear any active visualizer filters so you see the item
+    state.v2.activeScope = 'all';
+
+    // 3. Set a 'highlight' target for the scoping sheet to use
+    state.scopingTargetId = nodeId;
+
+    // 4. Update the URL/History if your app uses routing 
+    // This prevents the "backwards jump" on render
+    if (window.history.pushState) {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?view=scoping';
+        window.history.pushState({path:newUrl}, '', newUrl);
+    }
+
+    // 5. Re-render the entire application
+    renderApp();
+
+    // 6. Wait for DOM to exist, then scroll and flash
+    setTimeout(() => {
+        const element = document.querySelector(`[data-id="${nodeId}"]`) || 
+                        document.querySelector(`#row-${nodeId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('row-flash-highlight');
+        }
+    }, 300);
+};
+
 OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
     const nodeEl = document.getElementById(`v2-node-${nodeId}`);
 
@@ -11228,13 +11261,6 @@ OL.isResourceInScope = function(resId) {
     const lineItems = client?.projectData?.scopingSheets?.[0]?.lineItems || [];
     // Check if any line item points to this resource
     return lineItems.find(item => String(item.resourceId) === String(resId));
-};
-
-OL.jumpToScopingItem = function(resId) {
-    // 1. Set a temporary filter or focus state so the scoping sheet highlights it
-    state.scopingSearch = OL.getResourceById(resId)?.name || "";
-    // 2. Switch tabs
-    location.hash = "#/scoping-sheet";
 };
 
 OL.toggleGlobalView = function(isVaultMode) {
