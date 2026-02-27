@@ -7705,13 +7705,17 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
         </div>
     `).join('');
 
-    // 4. Create New Logic
+    // 4. Create New Logic (Safe for rapid typing)
     if (q && !uniqueMatches.some(m => m.name.toLowerCase() === q)) {
         html += `
             <div class="search-result-item create-action" onmousedown="
+                event.preventDefault(); // Stop focus from leaving Name input
                 document.getElementById('${targetElementId}').style.display='none';
                 const catInp = document.getElementById('feat-cat-input');
-                if(catInp) setTimeout(() => catInp.focus(), 10);
+                if(catInp) {
+                    // Only move focus if the user intentionally clicks this 'New' button
+                    catInp.focus();
+                }
             ">
                 <span class="pill tiny accent">+ New</span> Create Feature "${esc(query)}"
             </div>`;
@@ -8366,30 +8370,54 @@ OL.finalizeFeatureAddition = async function(anlyId, featName, category, isMaster
 
     if (!anly) return console.error("Analysis not found");
 
+    const cleanName = featName.trim();
+    const cleanCat = category.trim() || "General";
+
     // 🛡️ DUPLICATE CHECK
     const isDuplicate = (anly.features || []).some(f => 
-        f.name.toLowerCase() === featName.toLowerCase() && 
-        (f.category || "General").toLowerCase() === category.toLowerCase()
+        f.name.toLowerCase() === cleanName.toLowerCase() && 
+        (f.category || "General").toLowerCase() === cleanCat.toLowerCase()
     );
 
     if (isDuplicate) {
-        alert(`🚫 "${featName}" is already in the "${category}" category.`);
+        alert(`🚫 "${cleanName}" is already in the "${cleanCat}" category.`);
         return;
     }
 
+    // 🚀 THE SHIELD: Save the data
     await OL.updateAndSync(() => {
         if (!anly.features) anly.features = [];
         anly.features.push({
             id: "feat-" + Date.now() + Math.random().toString(36).substr(2, 5),
-            name: featName.trim(),
-            category: category.trim() || "General",
+            name: cleanName,
+            category: cleanCat,
             weight: 10,
             description: "" 
         });
     });
 
-    OL.closeModal();
+    // 🔄 RAPID ENTRY RESET
+    // 1. Clear the results overlay
+    const resultsList = document.getElementById('feat-search-results');
+    if (resultsList) {
+        resultsList.innerHTML = '';
+        resultsList.style.display = 'none';
+    }
+
+    // 2. Clear Name input and re-focus it for the next item
+    const nameInput = document.getElementById('feat-name-input');
+    if (nameInput) {
+        nameInput.value = '';
+        nameInput.focus(); 
+    }
+
+    // 3. Keep the category the same (usually users add multiple features to one category)
+    // We don't clear the category input unless the user wants to.
+
+    // 4. Update the background matrix without closing the modal
     OL.openAnalysisMatrix(anlyId, isMaster);
+    
+    console.log("✅ Feature added. Ready for next entry.");
 };
 
 // 2. THE UI FLOW (The "Single Modal")
