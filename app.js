@@ -7729,10 +7729,8 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster, excludeNames=[]) {
     // 1. Run Feature Search
     OL.universalFeatureSearch(query, anlyId, isMaster, 'feat-search-results', excludeNames);
 
-    // 2. Setup the Finalizer Button logic safely
+    // 🚀 STABILITY FIX: Use optional chaining and check for existence
     const finalizeBtn = document.getElementById('finalize-btn');
-    
-    // 🚀 THE FIX: Only attach if the button is found
     if (finalizeBtn) {
         finalizeBtn.onclick = () => {
             const featName = document.getElementById('feat-name-input')?.value.trim();
@@ -7742,16 +7740,10 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster, excludeNames=[]) {
             OL.finalizeFeatureAddition(anlyId, featName, catName, isMaster);
         };
     }
-
-    // ⌨️ Keyboard Shortcut for the category box
-    const catInput = document.getElementById('feat-cat-input');
-    if (catInput) {
-        catInput.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-                const featName = document.getElementById('feat-name-input')?.value.trim();
-                if (featName) OL.finalizeFeatureAddition(anlyId, featName, catInput.value, isMaster);
-            }
-        };
+    
+    // Auto-focus the category input if the feature name is already filled via search selection
+    if (q && document.getElementById('feat-name-input')?.value) {
+        document.getElementById('feat-cat-input')?.focus();
     }
 };
 
@@ -7782,29 +7774,24 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
     }
 
     // 🎯 ROUTE 4: The Unified "Add Feature" UI (Pre-filling the category field)
-    else if (type === 'local-ui-only' || type === 'assign-to-feature') {
-        const catInput = document.getElementById('feat-cat-input') || document.getElementById('new-feat-cat-input');
-        if (catInput) catInput.value = catName;
-        
-        // Close whichever results div is open
-        const res1 = document.getElementById('feat-cat-results');
-        const res2 = document.getElementById('new-feat-cat-results');
-        if (res1) res1.style.display = 'none';
-        if (res2) res2.style.display = 'none';
-    }
-
-    else if (type === 'local-ui-only' || type === 'assign-to-feature') {
-        // 🚀 Check for both potential ID names to be safe
-        const catInput = document.getElementById('feat-cat-input') || document.getElementById('new-feat-cat-input');
+        else if (type === 'local-ui-only' || type === 'assign-to-feature') {
+        // 🚀 THE FIX: Check for both potential ID names to be safe
+        const catInput = document.getElementById('feat-cat-input') || 
+                        document.getElementById('new-feat-cat-input') ||
+                        document.getElementById('cat-focus-target'); // From the Step 2 modal
         
         if (catInput) {
             catInput.value = catName;
-        } else {
-            console.warn("⚠️ Could not find category input field in DOM.");
+            // If it's the standalone category modal, trigger the final save automatically
+            if (catInput.id === 'cat-focus-target') {
+                OL.finalizeFeatureAddition(params.anlyId, params.featName, catName, params.isMaster);
+                OL.closeModal();
+            }
         }
         
-        // Hide any open results overlays
-        const res = document.getElementById('feat-cat-results') || document.getElementById('new-feat-cat-results');
+        const res = document.getElementById('feat-cat-results') || 
+                    document.getElementById('new-feat-cat-results') || 
+                    document.getElementById('feat-cat-assign-results');
         if (res) res.style.display = 'none';
     }
 };
@@ -8100,11 +8087,10 @@ OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
             anly.features[anly.features.length - 1].weight = 
                 parseFloat((anly.features[anly.features.length - 1].weight + difference).toFixed(2));
         }
-    });
-
         OL.persist();
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
+    });
+    OL.openAnalysisMatrix(anlyId, isMaster);
+    console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
 };
 
 //======================= CONSOLIDATED FEATURES MANAGEMENT =======================//
