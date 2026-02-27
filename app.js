@@ -7695,10 +7695,17 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
     // 3. Build HTML
     html += uniqueMatches.map(feat => `        
         <div class="search-result-item" onmousedown="
+            // 🚀 THE FIX: Stop the click from reaching the modal backdrop
+            event.preventDefault(); 
+            event.stopPropagation();
+
             const nameInp = document.getElementById('feat-name-input');
             const catInp = document.getElementById('feat-cat-input');
+            
             if (nameInp) nameInp.value = '${esc(feat.name)}';
             if (catInp) catInp.value = '${esc(feat.category || "General")}';
+            
+            // Hide the results
             this.parentElement.style.display = 'none';
         ">
             ✨ ${esc(feat.name)} <span class="tiny muted">(${esc(feat.category || "General")})</span>
@@ -7709,11 +7716,13 @@ OL.universalFeatureSearch = function(query, anlyId, isMaster, targetElementId, e
     if (q && !uniqueMatches.some(m => m.name.toLowerCase() === q)) {
         html += `
             <div class="search-result-item create-action" onmousedown="
-                event.preventDefault(); // Stop focus from leaving Name input
-                document.getElementById('${targetElementId}').style.display='none';
+                // 🚀 THE FIX: Stop the click from reaching the modal backdrop
+                event.preventDefault(); 
+                event.stopPropagation();
+                
+                document.getElementById('${targetElementId}').style.display = 'none';
                 const catInp = document.getElementById('feat-cat-input');
                 if(catInp) {
-                    // Only move focus if the user intentionally clicks this 'New' button
                     catInp.focus();
                 }
             ">
@@ -8658,7 +8667,7 @@ OL.universalCategorySearch = function(query, type, targetElementId, extraParams 
 
         return `
             <div class="search-result-item" style="display:flex; justify-content:space-between; align-items:center;">
-                <div onmousedown="OL.handleCategorySelection('${esc(cat)}', '${type}', window._tmpSearchParams)" style="flex:1;">
+                <div onmousedown="event.stopPropagation(); OL.handleCategorySelection('${esc(cat)}', '${type}', window._tmpSearchParams)" style="flex:1;">
                     <span>${isFunction ? '⚙️' : '📁'} ${esc(cat)}</span>
                 </div>
             </div>`;
