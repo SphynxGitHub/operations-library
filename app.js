@@ -11289,24 +11289,20 @@ OL.promptInsertAtomicStep = function(resId, order, isVault) {
 
 OL.isResourceInScope = function(targetResId) {
     const client = getActiveClient();
-    
-    // 1. If no client or project data, it's definitely NOT in scope
-    if (!client || !client.projectData) return false;
+    const sheets = client?.projectData?.scopingSheets || [];
+    const lineItems = sheets[0]?.lineItems || [];
 
-    // 2. Access the scoping sheets (safely)
-    const sheets = client.projectData.scopingSheets || [];
-    if (sheets.length === 0) return false;
+    const found = lineItems.some(item => String(item.resourceId) === String(targetResId));
 
-    // 3. Check ONLY the lineItems of the first sheet
-    const lineItems = sheets[0].lineItems || [];
+    // 🕵️ DEBUG LOG: Find out who is causing the phantoms
+    if (found) {
+        console.log(`✅ MATCH FOUND for ${targetResId} in sheet with ${lineItems.length} items`);
+    } else {
+        // If you still see the icon but see this log, the renderer is ignoring this function!
+        // console.log(`❌ NO MATCH for ${targetResId}`);
+    }
 
-    // 4. THE LOGICAL TRUTH: Match the Map ID to the Scoping resourceId
-    // We use String() comparison to avoid type mismatches
-    const foundMatch = lineItems.some(item => 
-        String(item.resourceId) === String(targetResId)
-    );
-
-    return foundMatch;
+    return found;
 };
 
 OL.toggleGlobalView = function(isVaultMode) {
