@@ -93,12 +93,16 @@ OL.persist = async function() {
 };
 
 // 3. REAL-TIME SYNC ENGINE
+// 3. REAL-TIME SYNC ENGINE
 OL.sync = function() {
     console.log("📡 Initializing Iron-Clad Sync...");
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         const now = Date.now();
+        
         // 1. 🛡️ THE SHIELD
+        // Prevent refresh if document doesn't exist, we are currently saving, 
+        // or a local render just happened (prevents feedback loops).
         if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
             return; 
         }
@@ -106,7 +110,7 @@ OL.sync = function() {
         const cloudData = doc.data();
 
         // 2. 🧠 SMART EQUALITY CHECK
-        // If state.master is undefined/null, this is our FIRST load. We MUST proceed.
+        // Determine if anything meaningful actually changed before triggering DOM work.
         const isFirstLoad = !state.master || Object.keys(state.master).length === 0;
         const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
         const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
@@ -116,35 +120,32 @@ OL.sync = function() {
 
         console.log("🔄 Valid Cloud Change Detected. Updating State...");
 
-        // 3. Update State
+        // 3. Update Global State
         state.master = cloudData.master || {};
         state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
         state.viewMode = cloudData.viewMode || 'global';
 
-        // 4. 🚀 THE NUDGE (Move this UP)
-        // If the screen is empty or loading, trigger the router immediately
+        // 4. 🚀 THE NUDGE
+        // If the screen is currently empty or showing a spinner, boot the router.
         const main = document.getElementById('mainContent');
         if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
             console.log("📡 Data arrived. Nudging router to draw the current page...");
             window.handleRoute();
-            return; // Exit early because handleRoute will trigger the necessary render
+            return; 
         }
 
-        // 5. 🎨 DEBOUNCED VISUALIZER REFRESH
-        // Only do this if we are actually ON a visualizer page AND NOT in Scoping Mode
+        // 5. 🎨 CONTEXTUAL REFRESH
+        // If we are on the visualizer, use the debounced engine for performance.
         if (window.location.hash.includes('visualizer')) {
-            // 🚀 THE FIX: If state says we are scoping, do NOT trigger the visualizer
-            if (state.viewMode === 'scoping' || state.scopingFilterActive) {
-                console.log("🛡️ Sync blocked visualizer refresh: Scoping is active.");
-                window.renderScopingSheet(); // Refresh the sheet instead
-                return;
-            }
-
             clearTimeout(window.syncDebounce);
             window.syncDebounce = setTimeout(() => {
                 window.renderGlobalVisualizer(window.location.hash.includes('vault'));
             }, 300); 
+        } 
+        // For all other views (Scoping, Tasks, Apps, etc.), run handleRoute to redraw.
+        else {
+            window.handleRoute();
         }
     });
 };
