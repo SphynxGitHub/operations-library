@@ -560,7 +560,22 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
-    const viewParam = urlParams.get('view');
+    const targetId = urlParams.get('target');
+
+    // 1. If we are going to scoping, check for a target ID
+    if (hash.includes('scoping-sheet')) {
+        state.viewMode = 'scoping';
+        if (targetId) {
+            state.scopingTargetId = targetId;
+            state.scopingFilterActive = true;
+        } else {
+            state.scopingFilterActive = false;
+            state.scopingTargetId = null;
+        }
+        renderScopingSheet();
+        return; // 🛑 HARD STOP: Do not let Visualizer code run
+        console.log("🛑 HARD STOP: Do not let Visualizer code run")
+    }
 
     // --- 🚦 ROUTE DEBUG ---
     console.group("🚦 ROUTE DEBUG");
@@ -9155,9 +9170,8 @@ function renderV2Nodes(isVault) {
 
        // Change it to a simple link that clears the filter flags
         const scopeBadge = isInScope ? `
-            <a href="#/scoping-sheet" 
+            <a href="#/scoping-sheet?target=${node.id}" 
             class="v2-scope-badge" 
-            onclick="state.scopingTargetId = '${node.id}'; state.scopingFilterActive = true;"
             title="View in Scoping">
                 $
             </a>
