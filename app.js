@@ -9239,26 +9239,23 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🎯 Filtering Scoping Sheet for:", nodeId);
+    console.log("🚀 Jumping to Scoping for:", nodeId);
 
-    state.v2.returnTo = {
-        viewMode: state.viewMode,
-        pan: { ...state.v2.pan },
-        zoom: state.v2.zoom,
-        nodeId: nodeId
-    };
-
-    // 🚀 THE FILTER KEY: Store the ID and turn on filter mode
+    // 1. Set the filters
     state.scopingTargetId = nodeId;
-    state.scopingFilterActive = true; 
+    state.scopingFilterActive = true;
+    state.viewMode = 'scoping'; // 👈 Force this state
 
+    // 2. Update the URL
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
     window.history.pushState({}, '', url.toString());
 
+    // 3. 🚀 THE TRIGGER: Call handleRoute explicitly
     if (typeof window.handleRoute === 'function') {
-        state.viewMode = 'scoping';
         window.handleRoute('scoping');
+    } else if (typeof window.renderScopingSheet === 'function') {
+        window.renderScopingSheet();
     }
 };
 
