@@ -9150,15 +9150,17 @@ function renderV2Nodes(isVault) {
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
         
+        // 1. Check the DNA (Is it in the actual scoping sheet line items?)
         const isInScope = !!OL.isResourceInScope(node.id);
-        
-        // 2. Fallback to originProject if that's what you consider the "Scope"
+
+        // 2. Get the name of the provider/scope for the hover tooltip
         const displayScope = OL.getInferredScope(node);
 
-        const scopeBadge = displayScope ? `
+        // 🚀 THE FIX: Only render if isInScope is TRUE
+        const scopeBadge = isInScope ? `
             <div class="v2-scope-badge" 
                 onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
-                title="Scope: ${displayScope}">
+                title="Scope: ${displayScope || 'Active Item'}">
                 $
             </div>
         ` : '';
