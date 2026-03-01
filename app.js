@@ -9157,9 +9157,15 @@ function renderV2Nodes(isVault) {
         const scopeBadge = isInScope ? `
             <a href="#/scoping-sheet" 
             class="v2-scope-badge" 
-            onclick="state.scopingTargetId = '${node.id}'; state.scopingFilterActive = true;"
+            onclick="
+                state.scopingTargetId = '${node.id}'; 
+                state.scopingFilterActive = true; 
+                state.viewMode = 'scoping';
+                // 🚀 THE FIX: Update the sync registry so it refreshes the Sheet, not the Map
+                if(typeof OL.registerView === 'function') OL.registerView(() => renderScopingSheet());
+            "
             title="View in Scoping">
-            $
+                $
             </a>
         ` : '';
 
