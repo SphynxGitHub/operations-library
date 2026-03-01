@@ -9237,9 +9237,9 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🎯 Targeting Scoping Row for:", nodeId);
+    console.log("🚀 Jumping to Scoping for:", nodeId);
 
-    // 1. Save the return path for the "Back to Flow" button
+    // 1. Save return context
     state.v2.returnTo = {
         viewMode: state.viewMode,
         pan: { ...state.v2.pan },
@@ -9247,74 +9247,43 @@ OL.jumpToScopingItem = function(nodeId) {
         nodeId: nodeId
     };
 
-    // 2. Set the ID for the scoping sheet to highlight
+    // 2. Set internal flags
     state.scopingTargetId = nodeId;
+    state.viewMode = 'scoping';
 
-    // 3. Switch the URL/View
+    // 3. Update Query Param AND Hash
+    // We'll try #/scoping-sheet as it's a common alias for this framework
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
-    url.hash = '/scoping'; 
     window.history.pushState({}, '', url.toString());
+    
+    // 🚀 TRY THIS HASH (If this still goes to tasks, change 'scoping-sheet' to 'project')
+    window.location.hash = '/scoping-sheet'; 
 
+    // 4. Manual trigger
     if (typeof window.handleRoute === 'function') {
-        state.viewMode = 'scoping';
         window.handleRoute('scoping');
     }
-
-    // 4. 🚀 THE STICKY LANDING: Poll for the element
-    let attempts = 0;
-    const scrollInterval = setInterval(() => {
-        // Try finding by data-id (preferred) or by a contains search in ID
-        const row = document.querySelector(`[data-id="${nodeId}"]`) || 
-                    document.querySelector(`tr[id*="${nodeId}"]`) ||
-                    document.querySelector(`.scoping-row-${nodeId}`);
-
-        if (row) {
-            clearInterval(scrollInterval);
-            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Add a visual flash so the user sees which one it is
-            row.classList.add('row-highlight-flash');
-            setTimeout(() => row.classList.remove('row-highlight-flash'), 3000);
-        }
-
-        if (attempts++ > 20) clearInterval(scrollInterval); // Stop after 2 seconds
-    }, 100);
 };
 
 OL.returnToFlow = function() {
     if (!state.v2.returnTo) return;
-    const { viewMode, pan, zoom, nodeId } = state.v2.returnTo;
+    const { viewMode, pan, zoom } = state.v2.returnTo;
 
-    // 1. Restore Coordinates
     state.v2.pan = pan;
     state.v2.zoom = zoom;
     state.v2.returnTo = null;
 
-    // 2. Navigate back
+    // Update Query Param back to visualizer
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'visualizer');
-    url.hash = '/visualizer';
+    url.hash = '';
     window.history.pushState({}, '', url.toString());
 
     if (typeof window.handleRoute === 'function') {
         state.viewMode = 'visualizer';
         window.handleRoute('visualizer');
     }
-
-    // 3. 🚀 Highlight the original node on the flow map
-    setTimeout(() => {
-        const node = document.getElementById(`l3-node-${nodeId}`) || document.getElementById(`l2-node-${nodeId}`);
-        if (node) {
-            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            node.style.outline = "4px solid #38bdf8";
-            node.style.boxShadow = "0 0 20px #38bdf8";
-            setTimeout(() => {
-                node.style.outline = "";
-                node.style.boxShadow = "";
-            }, 2000);
-        }
-    }, 500);
 };
 
 OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
