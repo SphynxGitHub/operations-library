@@ -590,23 +590,19 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 🚀 4. // 🚀 THE BLOCKER: If we are in Scoping Mode, DO NOT PROCEED to other checks
-    if (viewParam === 'scoping' || hash.includes("scoping-sheet")) {
-        // Only clear if the user clicked a DIFFERENT tab (like Functions/Resources)
-        if (viewParam === 'scoping' && hash !== "#/scoping-sheet" && hash !== "#/scoping") {
-            const url = new URL(window.location.href);
-            url.searchParams.delete('view');
-            window.history.replaceState({}, '', url.toString());
-            state.scopingFilterActive = false;
-        } else {
-            state.viewMode = 'scoping';
-            renderScopingSheet();
-            return; // 🛑 HARD STOP. Do not pass Go. Do not render Visualizer.
-        }
+    // 🚀 4. THE RESET & MODE LOCK
+    if (!hash.includes('scoping-sheet')) {
+        // If we are NOT going to scoping, kill the surgical filters
+        state.scopingFilterActive = false;
+        state.scopingTargetId = null;
+    } else {
+        // If we ARE going to scoping, lock the mode so Visualizer stays asleep
+        state.viewMode = 'scoping';
     }
-
+    
     // 5. VISUALIZER ROUTE 🕸️
     if (hash.includes('visualizer')) {
+        state.viewMode = 'graph'; // Reset mode to graph when entering map
         // Recovery: Ensure state is synced
         if (!state.focusedResourceId) {
             state.focusedResourceId = sessionStorage.getItem('active_resource_id');
@@ -9158,16 +9154,13 @@ function renderV2Nodes(isVault) {
         // 1. Check the DNA (Is it in the actual scoping sheet line items?)
         const isInScope = !!OL.isResourceInScope(node.id);
 
-        // 2. Get the name of the provider/scope for the hover tooltip
-        const displayScope = OL.getInferredScope(node);
-
-        // 🚀 THE FIX: Only render if isInScope is TRUE
         const scopeBadge = isInScope ? `
-            <div class="v2-scope-badge" 
-                onclick="event.stopPropagation(); OL.jumpToScopingItem('${node.id}')"
-                title="Scope: ${displayScope || 'Active Item'}">
-                $
-            </div>
+            <a href="#/scoping-sheet" 
+            class="v2-scope-badge" 
+            onclick="state.scopingTargetId = '${node.id}'; state.scopingFilterActive = true;"
+            title="View in Scoping">
+            $
+            </a>
         ` : '';
 
         // 🚀 Dynamic Badge for standard resources
@@ -14157,7 +14150,7 @@ window.renderScopingSheet = function () {
 
     // 2. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
-        // 🚀 THE SURGICAL SHIELD: If jumping from Flow Map, only show the target
+        // 🎯 The Only Logic That Matters:
         if (state.scopingFilterActive && state.scopingTargetId) {
             return String(item.resourceId) === String(state.scopingTargetId);
         }
@@ -14170,7 +14163,7 @@ window.renderScopingSheet = function () {
         const matchesStatus = statusF === "All" || item.status === statusF;
         const matchesParty = partyF === "All" || item.responsibleParty === partyF;
 
-        return matchesSearch && matchesType && matchesStatus && matchesParty;
+        return matchesSearch && matchesType;
     });
 
     // 3. DATA FOR DROPDOWNS (Pulled from full list so you can always see options)
@@ -14207,6 +14200,17 @@ window.renderScopingSheet = function () {
             ` : ''}
         </div>
     </div>
+
+    ${state.scopingFilterActive ? `
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <button class="btn primary" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; renderScopingSheet();">
+                ⬅ Show Full Scoping Sheet
+            </button>
+            <button class="btn soft" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/visualizer';">
+                🌐 Back to Flow Map
+            </button>
+        </div>
+    ` : ''}
 
     ${wfContext ? `
         <div class="workflow-context-widget" 
