@@ -93,7 +93,6 @@ OL.persist = async function() {
 };
 
 // 3. REAL-TIME SYNC ENGINE
-// 3. REAL-TIME SYNC ENGINE
 OL.sync = function() {
     console.log("📡 Initializing Iron-Clad Sync...");
     
@@ -9158,7 +9157,8 @@ function renderV2Nodes(isVault) {
         const scopeBadge = isInScope ? `
             <a href="#/scoping-sheet" 
             class="v2-scope-badge" 
-            onclick="state.scopingFilterActive = false; state.scopingTargetId = null;">
+            onclick="state.scopingTargetId = '${node.id}'; state.scopingFilterActive = true; state.viewMode = 'scoping';"
+            title="View in Scoping">
                 $
             </a>
         ` : '';
