@@ -101,20 +101,14 @@ OL.sync = function() {
 
         const cloudData = doc.data();
         
-        // 1. Update Data
+        // Update State
         state.master = cloudData.master || {};
         state.clients = cloudData.clients || {};
-        
-        // 2. 🛑 STOP: Only auto-refresh if we HAVE a registered view
-        // If we are on Scoping, and Scoping hasn't registered itself yet,
-        // we let handleRoute do the work.
-        if (typeof OL.currentRenderer === 'function') {
-            console.log("🔄 Sync: Refreshing registered view...");
-            OL.currentRenderer();
-        } else {
-            console.log("🚦 Sync: No view registered, using Router...");
-            window.handleRoute();
-        }
+        state.focusedResourceId = cloudData.focusedResourceId;
+
+        // 🚀 THE STABLE REFRESH:
+        // Let handleRoute decide what to draw based on the current URL.
+        window.handleRoute();
     });
 };
 
@@ -529,13 +523,7 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     
-    // 1. Initial State Cleanup
-    if (!hash.includes('scoping-sheet')) {
-        state.scopingFilterActive = false;
-        state.scopingTargetId = null;
-    }
-
-    // 2. Identify and Build Layout
+    // 1. Build the Skeleton
     if (typeof window.buildLayout === 'function') window.buildLayout(); 
     const main = document.getElementById("mainContent");
     if (!main) return; 
@@ -543,12 +531,20 @@ window.handleRoute = function () {
     const client = getActiveClient();
     const isVault = hash.includes('vault');
 
-    // 3. Routing Logic
-    if (!hash.includes('visualizer')) {
-        OL.currentRenderer = null; // Kill the memory link
+    // 2. THE ROUTER ENGINE
+    if (hash.includes('visualizer')) {
+        // Prepare state
+        state.viewMode = 'graph';
+        document.body.classList.add('is-visualizer', 'fs-mode-active');
+        
+        // 🚀 THE FIX: Only call if the function exists
+        if (typeof window.renderGlobalVisualizer === 'function') {
+            window.renderGlobalVisualizer(isVault);
+        }
+        return; 
     }
 
-    // Cleanup for standard views
+    // Standard Cleanup for non-visualizer views
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
     if (isVault) {
@@ -567,7 +563,6 @@ window.handleRoute = function () {
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
-        // 🚀 THE FIX: Only call if defined
         else if (hash.includes("scoping-sheet")) {
             state.viewMode = 'scoping';
             if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
@@ -11227,14 +11222,16 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const currentHash = window.location.hash;
     
     // 🚀 ENFORCED BLOCK: If we are in scoping mode, suicide the visualizer render
-    if (currentHash.includes('scoping-sheet') || state.viewMode === 'scoping') {
-        console.warn("🛡️ Visualizer Blocked: Redirecting to Scoping sovereignty.");
-        // Ensure the registry is updated
-        OL.registerView(renderScopingSheet);
-        window.renderScopingSheet();
+    if (window.location.hash.includes('scoping-sheet')) {
+        if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
         return; 
     }
-
+    
+    // Register itself for the sync engine's legacy references
+    if (typeof OL.registerView === 'function') {
+        OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+    }
+    
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
