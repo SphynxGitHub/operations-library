@@ -97,55 +97,19 @@ OL.sync = function() {
     console.log("📡 Initializing Iron-Clad Sync...");
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        const now = Date.now();
-        
-        // 1. 🛡️ THE SHIELD
-        // Prevent refresh if document doesn't exist, we are currently saving, 
-        // or a local render just happened (prevents feedback loops).
-        if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
-            return; 
-        }
+        if (!doc.exists || state.isSaving) return; 
 
         const cloudData = doc.data();
-
-        // 2. 🧠 SMART EQUALITY CHECK
-        // Determine if anything meaningful actually changed before triggering DOM work.
-        const isFirstLoad = !state.master || Object.keys(state.master).length === 0;
-        const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
-        const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
-        const hasClientsChanged = JSON.stringify(cloudData.clients) !== JSON.stringify(state.clients);
-
-        if (!isFirstLoad && !hasFocusChanged && !hasDataChanged && !hasClientsChanged) return; 
-
-        console.log("🔄 Valid Cloud Change Detected. Updating State...");
-
-        // 3. Update Global State
+        
+        // Update State
         state.master = cloudData.master || {};
         state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
-        state.viewMode = cloudData.viewMode || 'global';
 
-        // 4. 🚀 THE NUDGE
-        // If the screen is currently empty or showing a spinner, boot the router.
-        const main = document.getElementById('mainContent');
-        if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-            console.log("📡 Data arrived. Nudging router to draw the current page...");
-            window.handleRoute();
-            return; 
-        }
-
-        // 5. 🎨 CONTEXTUAL REFRESH
-        // If we are on the visualizer, use the debounced engine for performance.
-        if (window.location.hash.includes('visualizer')) {
-            clearTimeout(window.syncDebounce);
-            window.syncDebounce = setTimeout(() => {
-                window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-            }, 300); 
-        } 
-        // For all other views (Scoping, Tasks, Apps, etc.), run handleRoute to redraw.
-        else {
-            window.handleRoute();
-        }
+        // 🚀 THE PASSIVE REFRESH:
+        // Instead of trying to guess which function to call, 
+        // just run handleRoute() once to redraw whatever is in the URL hash.
+        window.handleRoute();
     });
 };
 
@@ -559,90 +523,34 @@ window.buildLayout = function () {
 
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetId = urlParams.get('target');
-
-    // 🚀 Inside your handleRoute function, update the Scoping check:
-    if (hash.includes('scoping-sheet')) {
-        state.viewMode = 'scoping';
-        
-        // Check for target ID in URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const targetId = urlParams.get('target');
-        if (targetId) {
-            state.scopingTargetId = targetId;
-            state.scopingFilterActive = true;
-        }
-
-        // 🛡️ THE SAFETY CHECK:
-        if (typeof window.renderScopingSheet === 'function') {
-            window.renderScopingSheet();
-        } else {
-            console.warn("⏳ Scoping function not ready. Retrying...");
-            setTimeout(window.handleRoute, 50); // Try again in 50ms
-        }
-        return; 
+    
+    // 1. Initial State Cleanup
+    if (!hash.includes('scoping-sheet')) {
+        state.scopingFilterActive = false;
+        state.scopingTargetId = null;
     }
 
-    // --- 🚦 ROUTE DEBUG ---
-    console.group("🚦 ROUTE DEBUG");
-    console.log("Current Hash:", window.location.hash);
-    console.log("Focus Before Route:", state.focusedResourceId);
-    console.groupEnd();
-
-    // 🚀 RESET SURGICAL FILTERS
-    // We clear these so standard navigation is always clean/unfiltered
-    state.scopingFilterActive = false;
-    state.scopingTargetId = null;
-
-    // 1. Force the Skeleton 🏗️
-    window.buildLayout(); 
-
+    // 2. Identify and Build Layout
+    if (typeof window.buildLayout === 'function') window.buildLayout(); 
     const main = document.getElementById("mainContent");
     if (!main) return; 
 
-    // 2. Identify Context 🔍
     const client = getActiveClient();
-    if (client) {
-        console.log("✅ Verified Client Access:", client.meta.name);
-    } else {
-        console.warn("❌ Access Token invalid or Data not loaded yet.");
-    }
-
     const isVault = hash.includes('vault');
 
-    // 3. The "Loading" Safety Net 🛡️
-    if (!isVault && hash !== "#/" && !client) {
-        main.innerHTML = `
-            <div style="padding:100px; text-align:center; opacity:0.5;">
-                <div class="spinner">⏳</div>
-                <h3>Synchronizing Project Data...</h3>
-                <p class="tiny">If this persists, please return to the Dashboard.</p>
-            </div>`;
-        return; 
-    }
-
-    // 4. VISUALIZER ROUTE 🕸️
+    // 3. Routing Logic
     if (hash.includes('visualizer')) {
-        state.viewMode = 'graph'; 
-        
-        // Sync state with session storage for recovery
-        if (!state.focusedResourceId) {
-            state.focusedResourceId = sessionStorage.getItem('active_resource_id');
-        }
-        if (!state.focusedWorkflowId) {
-            state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-        }
-
+        state.viewMode = 'graph';
         document.body.classList.add('is-visualizer', 'fs-mode-active');
-        window.renderGlobalVisualizer(isVault);
+        if (typeof window.renderGlobalVisualizer === 'function') {
+            window.renderGlobalVisualizer(isVault);
+        }
         return; 
     }
 
-    // 5. Standard Routes Cleanup
+    // Cleanup for standard views
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
-    // 6. DATA RENDERING
     if (isVault) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -655,26 +563,19 @@ window.handleRoute = function () {
     } else if (hash === "#/" || hash === "#/clients") {
         renderClientDashboard();
     } else if (client) {
-        console.log("🟢 Routing to Client Module:", hash);
-        
         if (hash.includes("client-tasks")) renderChecklistModule();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
+        // 🚀 THE FIX: Only call if defined
         else if (hash.includes("scoping-sheet")) {
             state.viewMode = 'scoping';
-            renderScopingSheet();
+            if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
         }
         else if (hash.includes("analyze")) renderAnalysisModule();
         else if (hash.includes("team")) renderTeamManager();
         else if (hash.includes("how-to")) renderHowToLibrary();
-        else {
-            console.warn("❓ Unknown client hash, defaulting to Tasks");
-            renderChecklistModule();
-        }
-    } else {
-        console.error("🔴 No client found for hash:", hash);
-        renderClientDashboard();
+        else renderChecklistModule();
     }
 };
 
@@ -9175,11 +9076,10 @@ function renderV2Nodes(isVault) {
         // 1. Check the DNA (Is it in the actual scoping sheet line items?)
         const isInScope = !!OL.isResourceInScope(node.id);
 
-       // Change it to a simple link that clears the filter flags
-        const scopeBadge = isInScope ? `
-            <a href="#/scoping-sheet?target=${node.id}" 
+       const scopeBadge = isInScope ? `
+            <a href="#/scoping-sheet" 
             class="v2-scope-badge" 
-            title="View in Scoping">
+            onclick="state.scopingFilterActive = false; state.scopingTargetId = null;">
                 $
             </a>
         ` : '';
