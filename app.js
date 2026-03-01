@@ -11323,11 +11323,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const isVault = typeof isVaultParam !== 'undefined' ? isVaultParam : (state.viewMode === 'vault');
     const layoutClass = isVault ? 'v2-layout-vault' : 'v2-layout-project';
 
-    if (state.viewMode === 'graph') {
-        window.renderVisualizerV2(isVaultMode);
-        return;
-    }
-
     if (!state.viewMode) state.viewMode = 'global';
     const isGlobalMode = state.viewMode === 'global';
     const isZen = state.ui.zenMode;
