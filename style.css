@@ -4578,3 +4578,14 @@ path[stroke="transparent"] {
 .v2-node-highlight-flash {
     animation: nodeHighlight 2s ease-out;
 }
+
+@keyframes highlightFlash {
+    0% { background-color: rgba(16, 185, 129, 0.4); outline: 2px solid #10b981; }
+    100% { background-color: transparent; outline: 2px solid transparent; }
+}
+
+.row-highlight-flash {
+    animation: highlightFlash 3s ease-out;
+    position: relative;
+    z-index: 10;
+}
