@@ -11289,15 +11289,24 @@ OL.promptInsertAtomicStep = function(resId, order, isVault) {
 
 OL.isResourceInScope = function(targetResId) {
     const client = getActiveClient();
-    if (!client?.projectData?.scopingSheets) return false;
+    
+    // 1. If no client or project data, it's definitely NOT in scope
+    if (!client || !client.projectData) return false;
 
-    // We look through all sheets for a lineItem that specifically 
-    // references the resourceId we are currently drawing on the map.
-    return client.projectData.scopingSheets.some(sheet => 
-        (sheet.lineItems || []).some(item => 
-            String(item.resourceId) === String(targetResId)
-        )
+    // 2. Access the scoping sheets (safely)
+    const sheets = client.projectData.scopingSheets || [];
+    if (sheets.length === 0) return false;
+
+    // 3. Check ONLY the lineItems of the first sheet
+    const lineItems = sheets[0].lineItems || [];
+
+    // 4. THE LOGICAL TRUTH: Match the Map ID to the Scoping resourceId
+    // We use String() comparison to avoid type mismatches
+    const foundMatch = lineItems.some(item => 
+        String(item.resourceId) === String(targetResId)
     );
+
+    return foundMatch;
 };
 
 OL.toggleGlobalView = function(isVaultMode) {
