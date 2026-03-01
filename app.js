@@ -562,19 +562,26 @@ window.handleRoute = function () {
     const urlParams = new URLSearchParams(window.location.search);
     const targetId = urlParams.get('target');
 
-    // 1. If we are going to scoping, check for a target ID
+    // 🚀 Inside your handleRoute function, update the Scoping check:
     if (hash.includes('scoping-sheet')) {
         state.viewMode = 'scoping';
+        
+        // Check for target ID in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetId = urlParams.get('target');
         if (targetId) {
             state.scopingTargetId = targetId;
             state.scopingFilterActive = true;
-        } else {
-            state.scopingFilterActive = false;
-            state.scopingTargetId = null;
         }
-        renderScopingSheet();
-        return; // 🛑 HARD STOP: Do not let Visualizer code run
-        console.log("🛑 HARD STOP: Do not let Visualizer code run")
+
+        // 🛡️ THE SAFETY CHECK:
+        if (typeof window.renderScopingSheet === 'function') {
+            window.renderScopingSheet();
+        } else {
+            console.warn("⏳ Scoping function not ready. Retrying...");
+            setTimeout(window.handleRoute, 50); // Try again in 50ms
+        }
+        return; 
     }
 
     // --- 🚦 ROUTE DEBUG ---
