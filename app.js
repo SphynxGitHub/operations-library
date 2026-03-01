@@ -590,21 +590,18 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 🚀 4. THE SURGICAL SHIELD: Scoping Priority
-    // If we are jumping from a flow map icon, we lock the view here.
+    // 🚀 4. // 🚀 THE BLOCKER: If we are in Scoping Mode, DO NOT PROCEED to other checks
     if (viewParam === 'scoping' || hash.includes("scoping-sheet")) {
-        // Clear sticky params ONLY if the user clicked a different tab manually
-        if (viewParam === 'scoping' && !hash.includes("scoping-sheet") && hash !== "#/scoping") {
+        // Only clear if the user clicked a DIFFERENT tab (like Functions/Resources)
+        if (viewParam === 'scoping' && hash !== "#/scoping-sheet" && hash !== "#/scoping") {
             const url = new URL(window.location.href);
             url.searchParams.delete('view');
             window.history.replaceState({}, '', url.toString());
             state.scopingFilterActive = false;
-            state.scopingTargetId = null;
         } else {
-            // Otherwise, render Scoping and EXIT to prevent visualizer hijacking
             state.viewMode = 'scoping';
             renderScopingSheet();
-            return; 
+            return; // 🛑 HARD STOP. Do not pass Go. Do not render Visualizer.
         }
     }
 
@@ -9247,33 +9244,26 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🎯 Executing Surgical Jump for Resource ID:", nodeId);
+    console.log("🧨 KILLING VISUALIZER CONTEXT for:", nodeId);
 
-    // 1. Prepare State for the Scoping Sheet's Filter Logic
-    state.scopingTargetId = nodeId;
-    state.scopingFilterActive = true;
+    // 1. Wipe the state that triggers the visualizer branches
     state.viewMode = 'scoping';
-
-    // 2. Clear Visualizer Context to prevent "Elastic" snap-back
     state.focusedResourceId = null;
     state.focusedWorkflowId = null;
+    state.scopingTargetId = nodeId;
+    state.scopingFilterActive = true;
 
-    // 3. Update the URL Registry
-    // We set the query param for the priority shield and the hash for the sidebar highlight
+    // 2. 🛑 THE KILL SWITCH: Overwrite the view registry immediately
+    // This stops any background sync from calling renderGlobalVisualizer
+    OL.registerView(() => renderScopingSheet());
+
+    // 3. Update the URL
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
     url.hash = "#/scoping-sheet"; 
-    
-    // 4. Update History without a full page reload
-    window.history.pushState({ nodeId: nodeId }, '', url.toString());
+    window.history.pushState({}, '', url.toString());
 
-    // 5. 🚀 THE HANDSHAKE: 
-    // We explicitly register the Scoping Sheet as the active view for the Sync Engine
-    if (typeof OL.registerView === 'function') {
-        OL.registerView(() => renderScopingSheet());
-    }
-
-    // 6. Direct Render Call to beat background sync races
+    // 4. Force Render
     window.renderScopingSheet();
 };
 
