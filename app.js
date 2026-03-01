@@ -592,12 +592,15 @@ window.handleRoute = function () {
 
     // 🚀 4. THE RESET & MODE LOCK
     if (!hash.includes('scoping-sheet')) {
-        // If we are NOT going to scoping, kill the surgical filters
         state.scopingFilterActive = false;
         state.scopingTargetId = null;
+        // If we are moving to visualizer, reset mode to graph
+        if (hash.includes('visualizer')) state.viewMode = 'graph';
     } else {
-        // If we ARE going to scoping, lock the mode so Visualizer stays asleep
+        // 🔒 LOCK SCOPING MODE: Bypasses the Visualizer logic entirely
         state.viewMode = 'scoping';
+        // Explicitly register the view here too for extra safety
+        OL.registerView(renderScopingSheet);
     }
     
     // 5. VISUALIZER ROUTE 🕸️
@@ -11306,9 +11309,13 @@ state.currentDropIndex = null;
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
     const currentHash = window.location.hash;
+    
+    // 🚀 ENFORCED BLOCK: If we are in scoping mode, suicide the visualizer render
     if (currentHash.includes('scoping-sheet') || state.viewMode === 'scoping') {
-        console.warn("🛡️ Visualizer attempted to hijack Scoping. Redirecting...");
-        renderScopingSheet();
+        console.warn("🛡️ Visualizer Blocked: Redirecting to Scoping sovereignty.");
+        // Ensure the registry is updated
+        OL.registerView(renderScopingSheet);
+        window.renderScopingSheet();
         return; 
     }
 
@@ -14131,6 +14138,9 @@ window.renderScopingSheet = function () {
     if (typeof OL.registerView === 'function') {
         OL.registerView(() => renderScopingSheet());
     }
+
+    OL.registerView(renderScopingSheet); // Set the legacy reference too
+
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const isAdmin = state.adminMode === true;
