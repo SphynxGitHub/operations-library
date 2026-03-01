@@ -565,20 +565,13 @@ window.handleRoute = function () {
     // --- 🚦 ROUTE DEBUG ---
     console.group("🚦 ROUTE DEBUG");
     console.log("Current Hash:", window.location.hash);
-    console.log("View Param:", viewParam);
     console.log("Focus Before Route:", state.focusedResourceId);
     console.groupEnd();
 
-    // 🚀 PRIORITY ZERO: If we are in the middle of a surgical jump, STOP EVERYTHING.
-    if (state.scopingFilterActive && state.scopingTargetId) {
-        console.log("🛡️ Surgical Lock detected in Router. Staying on Scoping.");
-        state.viewMode = 'scoping';
-        // Ensure the sidebar highlight matches
-        if (hash !== "#/scoping-sheet") window.location.hash = "#/scoping-sheet";
-        
-        window.renderScopingSheet();
-        return; // 🛑 ABSOLUTE EXIT. Do not build layout, do not check visualizer.
-    }
+    // 🚀 RESET SURGICAL FILTERS
+    // We clear these so standard navigation is always clean/unfiltered
+    state.scopingFilterActive = false;
+    state.scopingTargetId = null;
 
     // 1. Force the Skeleton 🏗️
     window.buildLayout(); 
@@ -588,7 +581,6 @@ window.handleRoute = function () {
 
     // 2. Identify Context 🔍
     const client = getActiveClient();
-
     if (client) {
         console.log("✅ Verified Client Access:", client.meta.name);
     } else {
@@ -608,23 +600,11 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 🚀 4. THE RESET & MODE LOCK
-    if (!hash.includes('scoping-sheet')) {
-        state.scopingFilterActive = false;
-        state.scopingTargetId = null;
-        // If we are moving to visualizer, reset mode to graph
-        if (hash.includes('visualizer')) state.viewMode = 'graph';
-    } else {
-        // 🔒 LOCK SCOPING MODE: Bypasses the Visualizer logic entirely
-        state.viewMode = 'scoping';
-        // Explicitly register the view here too for extra safety
-        OL.registerView(renderScopingSheet);
-    }
-    
-    // 5. VISUALIZER ROUTE 🕸️
+    // 4. VISUALIZER ROUTE 🕸️
     if (hash.includes('visualizer')) {
-        state.viewMode = 'graph'; // Reset mode to graph when entering map
-        // Recovery: Ensure state is synced
+        state.viewMode = 'graph'; 
+        
+        // Sync state with session storage for recovery
         if (!state.focusedResourceId) {
             state.focusedResourceId = sessionStorage.getItem('active_resource_id');
         }
@@ -632,20 +612,15 @@ window.handleRoute = function () {
             state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
         }
 
-        console.log("🕸️ Visualizer Context:", { 
-            L3: state.focusedResourceId, 
-            L2: state.focusedWorkflowId 
-        });
-
         document.body.classList.add('is-visualizer', 'fs-mode-active');
         window.renderGlobalVisualizer(isVault);
         return; 
     }
 
-    // 6. Standard Routes Cleanup
+    // 5. Standard Routes Cleanup
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
-    // 7. DATA RENDERING
+    // 6. DATA RENDERING
     if (isVault) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -664,7 +639,10 @@ window.handleRoute = function () {
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
-        else if (hash.includes("scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("scoping-sheet")) {
+            state.viewMode = 'scoping';
+            renderScopingSheet();
+        }
         else if (hash.includes("analyze")) renderAnalysisModule();
         else if (hash.includes("team")) renderTeamManager();
         else if (hash.includes("how-to")) renderHowToLibrary();
@@ -9175,11 +9153,13 @@ function renderV2Nodes(isVault) {
         // 1. Check the DNA (Is it in the actual scoping sheet line items?)
         const isInScope = !!OL.isResourceInScope(node.id);
 
+       // Change it to a simple link that clears the filter flags
         const scopeBadge = isInScope ? `
-            <div class="v2-scope-badge" 
-                onclick="event.preventDefault(); event.stopPropagation(); OL.jumpToScopingItem('${node.id}')">
+            <a href="#/scoping-sheet" 
+            class="v2-scope-badge" 
+            onclick="state.scopingFilterActive = false; state.scopingTargetId = null;">
                 $
-            </div>
+            </a>
         ` : '';
 
         // 🚀 Dynamic Badge for standard resources
