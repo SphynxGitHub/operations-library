@@ -9239,9 +9239,8 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🚀 Jumping to Scoping for:", nodeId);
+    console.log("🎯 Filtering Scoping Sheet for:", nodeId);
 
-    // 1. Save return context
     state.v2.returnTo = {
         viewMode: state.viewMode,
         pan: { ...state.v2.pan },
@@ -9249,21 +9248,16 @@ OL.jumpToScopingItem = function(nodeId) {
         nodeId: nodeId
     };
 
-    // 2. Set internal flags
+    // 🚀 THE FILTER KEY: Store the ID and turn on filter mode
     state.scopingTargetId = nodeId;
-    state.viewMode = 'scoping';
+    state.scopingFilterActive = true; 
 
-    // 3. Update Query Param AND Hash
-    // We'll try #/scoping-sheet as it's a common alias for this framework
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
     window.history.pushState({}, '', url.toString());
-    
-    // 🚀 TRY THIS HASH (If this still goes to tasks, change 'scoping-sheet' to 'project')
-    window.location.hash = '/scoping-sheet'; 
 
-    // 4. Manual trigger
     if (typeof window.handleRoute === 'function') {
+        state.viewMode = 'scoping';
         window.handleRoute('scoping');
     }
 };
@@ -14173,6 +14167,11 @@ window.renderScopingSheet = function () {
 
     // 2. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
+        // 🚀 THE SURGICAL SHIELD: If jumping from Flow Map, only show the target
+        if (state.scopingFilterActive && state.scopingTargetId) {
+            return String(item.resourceId) === String(state.scopingTargetId);
+        }
+
         const res = OL.getResourceById(item.resourceId);
         if (!res) return false;
 
@@ -14229,6 +14228,20 @@ window.renderScopingSheet = function () {
                 <div class="tiny muted">${wfContext.summary}</div>
             </div>
             <button class="btn tiny primary" onclick="location.hash='#/visualizer'">View Map ➔</button>
+        </div>
+    ` : ''}
+
+    ${state.scopingFilterActive ? `
+        <div class="filter-banner" 
+             style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <span class="tiny accent bold uppercase" style="display:block; font-size:9px;">Surgical View Active</span>
+                <span style="color: white; font-weight: bold;">📍 Showing scoped details for linked resource</span>
+            </div>
+            <button class="btn tiny primary" 
+                    onclick="state.scopingFilterActive = false; state.scopingTargetId = null; renderScopingSheet()">
+                Show Full Sheet
+            </button>
         </div>
     ` : ''}
     
