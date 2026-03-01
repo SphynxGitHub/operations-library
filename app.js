@@ -555,20 +555,13 @@ window.handleRoute = function () {
     const urlParams = new URLSearchParams(window.location.search);
     const viewParam = urlParams.get('view');
 
-    /*const originalHandleRoute = window.handleRoute;
-        window.handleRoute = function() {*/
+    // --- 🚦 ROUTE DEBUG ---
+    console.group("🚦 ROUTE DEBUG");
+    console.log("Current Hash:", window.location.hash);
+    console.log("View Param:", viewParam);
+    console.log("Focus Before Route:", state.focusedResourceId);
+    console.groupEnd();
 
-        console.group("🚦 ROUTE DEBUG");
-        console.log("Current Hash:", window.location.hash);
-        console.log("Focus Before Route:", state.focusedResourceId);
-        
-        // Run the original logic
-       // originalHandleRoute.apply(this, arguments);
-        
-        //console.log("Focus After Route:", state.focusedResourceId);
-        console.groupEnd();
-   // };
-    
     // 1. Force the Skeleton 🏗️
     window.buildLayout(); 
 
@@ -580,7 +573,6 @@ window.handleRoute = function () {
 
     if (client) {
         console.log("✅ Verified Client Access:", client.meta.name);
-        // Render your modules here
     } else {
         console.warn("❌ Access Token invalid or Data not loaded yet.");
     }
@@ -588,7 +580,6 @@ window.handleRoute = function () {
     const isVault = hash.includes('vault');
 
     // 3. The "Loading" Safety Net 🛡️
-    // If we aren't in the Vault and don't have a client yet, show loading
     if (!isVault && hash !== "#/" && !client) {
         main.innerHTML = `
             <div style="padding:100px; text-align:center; opacity:0.5;">
@@ -599,34 +590,49 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 1. CLEAR STICKY PARAMS: If user clicked a different tab manually
-    if (viewParam === 'scoping' && hash !== "#/scoping-sheet" && hash !== "#/scoping") {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('view');
-        window.history.replaceState({}, '', url.toString());
-        state.scopingFilterActive = false;
-    }
-
-    // 2. PRIORITY ROUTE: Scoping
+    // 🚀 4. THE SURGICAL SHIELD: Scoping Priority
+    // If we are jumping from a flow map icon, we lock the view here.
     if (viewParam === 'scoping' || hash.includes("scoping-sheet")) {
-        state.viewMode = 'scoping'; // Lock the state
-        renderScopingSheet();
-        return; // Stop here!
+        // Clear sticky params ONLY if the user clicked a different tab manually
+        if (viewParam === 'scoping' && !hash.includes("scoping-sheet") && hash !== "#/scoping") {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('view');
+            window.history.replaceState({}, '', url.toString());
+            state.scopingFilterActive = false;
+            state.scopingTargetId = null;
+        } else {
+            // Otherwise, render Scoping and EXIT to prevent visualizer hijacking
+            state.viewMode = 'scoping';
+            renderScopingSheet();
+            return; 
+        }
     }
 
-    // 3. VISUALIZER ROUTE
+    // 5. VISUALIZER ROUTE 🕸️
     if (hash.includes('visualizer')) {
-        state.viewMode = 'visualizer';
-        window.renderGlobalVisualizer(hash.includes('vault'));
-        return;
+        // Recovery: Ensure state is synced
+        if (!state.focusedResourceId) {
+            state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+        }
+        if (!state.focusedWorkflowId) {
+            state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+        }
+
+        console.log("🕸️ Visualizer Context:", { 
+            L3: state.focusedResourceId, 
+            L2: state.focusedWorkflowId 
+        });
+
+        document.body.classList.add('is-visualizer', 'fs-mode-active');
+        window.renderGlobalVisualizer(isVault);
+        return; 
     }
 
-   // 4. Standard Routes
-   document.body.classList.remove('is-visualizer', 'fs-mode-active');
+    // 6. Standard Routes Cleanup
+    document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
-    // 5. DATA RENDERING
+    // 7. DATA RENDERING
     if (isVault) {
-        // Vault logic is fine...
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
@@ -640,7 +646,6 @@ window.handleRoute = function () {
     } else if (client) {
         console.log("🟢 Routing to Client Module:", hash);
         
-        // Use simplified includes that match your clientTabs hrefs
         if (hash.includes("client-tasks")) renderChecklistModule();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
@@ -655,7 +660,7 @@ window.handleRoute = function () {
         }
     } else {
         console.error("🔴 No client found for hash:", hash);
-        renderClientDashboard(); // Fallback if lost
+        renderClientDashboard();
     }
 };
 
@@ -9242,21 +9247,33 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🎯 Surgical Jump to Resource:", nodeId);
+    console.log("🎯 Executing Surgical Jump for Resource ID:", nodeId);
 
+    // 1. Prepare State for the Scoping Sheet's Filter Logic
     state.scopingTargetId = nodeId;
     state.scopingFilterActive = true;
     state.viewMode = 'scoping';
 
-    // Instead of forcing location.hash immediately, use the URL object
+    // 2. Clear Visualizer Context to prevent "Elastic" snap-back
+    state.focusedResourceId = null;
+    state.focusedWorkflowId = null;
+
+    // 3. Update the URL Registry
+    // We set the query param for the priority shield and the hash for the sidebar highlight
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
     url.hash = "#/scoping-sheet"; 
     
-    // Push the state once
-    window.history.pushState({ nodeId }, '', url.toString());
-    
-    // Manually trigger the route to ensure it happens before any sync-refresh
+    // 4. Update History without a full page reload
+    window.history.pushState({ nodeId: nodeId }, '', url.toString());
+
+    // 5. 🚀 THE HANDSHAKE: 
+    // We explicitly register the Scoping Sheet as the active view for the Sync Engine
+    if (typeof OL.registerView === 'function') {
+        OL.registerView(() => renderScopingSheet());
+    }
+
+    // 6. Direct Render Call to beat background sync races
     window.renderScopingSheet();
 };
 
