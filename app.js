@@ -97,18 +97,28 @@ OL.sync = function() {
     console.log("📡 Initializing Iron-Clad Sync...");
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        if (!doc.exists || state.isSaving) return; 
+        const now = Date.now();
+        if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
+            return; 
+        }
 
         const cloudData = doc.data();
         
-        // Update State
+        // 1. UPDATE DATA ONLY (No rendering calls here!)
         state.master = cloudData.master || {};
         state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
+        state.viewMode = cloudData.viewMode || 'global';
 
-        // 🚀 THE STABLE REFRESH:
-        // Let handleRoute decide what to draw based on the current URL.
-        window.handleRoute();
+        // 2. THE ONLY PERMITTED RENDER:
+        // Only trigger a redraw if the page is currently a white screen/spinner.
+        const main = document.getElementById('mainContent');
+        if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
+             window.handleRoute();
+        }
+        
+        // 🛑 WE REMOVED THE DEBOUNCED VISUALIZER REFRESH. 
+        // This stops the "Auto-Jump" because the sync engine no longer calls the map.
     });
 };
 
@@ -11231,7 +11241,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     if (typeof OL.registerView === 'function') {
         OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     }
-    
+
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
