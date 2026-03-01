@@ -541,16 +541,16 @@ window.handleRoute = function () {
     const client = getActiveClient();
     const isVault = hash.includes('vault');
 
-    // 2. THE ROUTER ENGINE
+    // 5. VISUALIZER ROUTE (Consolidated)
     if (hash.includes('visualizer')) {
-        // Prepare state
-        state.viewMode = 'graph';
+        state.viewMode = 'graph'; // Force V2 Engine
         document.body.classList.add('is-visualizer', 'fs-mode-active');
         
-        // 🚀 THE FIX: Only call if the function exists
-        if (typeof window.renderGlobalVisualizer === 'function') {
-            window.renderGlobalVisualizer(isVault);
-        }
+        // 🚀 THE TRAY INJECTION
+        const paneDrawer = document.getElementById('pane-drawer');
+        if (paneDrawer) paneDrawer.innerHTML = window.renderTrayContent(isVault);
+        
+        window.renderVisualizerV2(isVault);
         return; 
     }
 
@@ -11226,6 +11226,68 @@ OL.toggleGlobalView = function(isVaultMode) {
 };
 
 state.currentDropIndex = null;
+
+window.renderTrayContent = function(isVault) {
+    const client = getActiveClient();
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    // 🔍 Only show items that DON'T have canvas coordinates
+    const trayItems = allResources.filter(res => !res.coords);
+
+    return `
+        <div class="tray-header">
+            <h3 class="accent">📥 Resource Tray</h3>
+            <p class="tiny muted">Drag items onto the grid to map them</p>
+        </div>
+        <div class="tray-list">
+            ${trayItems.map(res => `
+                <div class="draggable-tray-item" 
+                     draggable="true" 
+                     ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
+                    <span>${OL.getRegistryIcon(res.type)}</span>
+                    <span class="name">${esc(res.name)}</span>
+                </div>
+            `).join('')}
+            ${trayItems.length === 0 ? '<div class="tiny muted p-20">Tray is empty. All items are on canvas.</div>' : ''}
+        </div>
+    `;
+};
+
+OL.handleTrayDragStart = function(e, resId) {
+    e.dataTransfer.setData("moveId", resId);
+    e.dataTransfer.setData("itemType", "tray-resource");
+};
+
+// Add this logic inside your existing canvas drop listener (or V2 viewport)
+OL.handleCanvasDrop = async function(e) {
+    const resId = e.dataTransfer.getData("moveId");
+    const itemType = e.dataTransfer.getData("itemType");
+
+    if (itemType === "tray-resource") {
+        const coords = OL.getRelativePointer(e); // Get mouse pos relative to zoom/pan
+        
+        await OL.updateAndSync(() => {
+            const isVault = window.location.hash.includes('vault');
+            const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+            const res = source.find(r => r.id === resId);
+            if (res) {
+                res.coords = coords; // 🚀 Adding coords "activates" it on canvas
+            }
+        });
+        
+        const isVault = window.location.hash.includes('vault');
+        window.renderVisualizerV2(isVault);
+    }
+};
+
+OL.returnToTray = async function(resId) {
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(resId);
+        if (res) delete res.coords; // 🚀 Removing coords sends it back to Tray
+    });
+    const isVault = window.location.hash.includes('vault');
+    window.renderVisualizerV2(isVault);
+};
 
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
