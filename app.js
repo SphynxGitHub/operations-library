@@ -551,20 +551,23 @@ window.buildLayout = function () {
 };
 
 window.handleRoute = function () {
-    const originalHandleRoute = window.handleRoute;
-        window.handleRoute = function() {
+    const hash = window.location.hash || "#/";
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewParam = urlParams.get('view');
+
+    /*const originalHandleRoute = window.handleRoute;
+        window.handleRoute = function() {*/
+
         console.group("🚦 ROUTE DEBUG");
         console.log("Current Hash:", window.location.hash);
         console.log("Focus Before Route:", state.focusedResourceId);
         
         // Run the original logic
-        originalHandleRoute.apply(this, arguments);
+       // originalHandleRoute.apply(this, arguments);
         
-        console.log("Focus After Route:", state.focusedResourceId);
+        //console.log("Focus After Route:", state.focusedResourceId);
         console.groupEnd();
-    };
-
-    const hash = window.location.hash || "#/";
+   // };
     
     // 1. Force the Skeleton 🏗️
     window.buildLayout(); 
@@ -594,6 +597,15 @@ window.handleRoute = function () {
                 <p class="tiny">If this persists, please return to the Dashboard.</p>
             </div>`;
         return; 
+    }
+
+    // If the URL says 'view=scoping' OR the hash contains scoping, go there immediately.
+    if (viewParam === 'scoping' || hash.includes("scoping-sheet") || hash.includes("scoping")) {
+        state.viewMode = 'scoping';
+        if (typeof window.renderScopingSheet === 'function') {
+            window.renderScopingSheet();
+            return; // 🛑 EXIT to prevent visualizer fallback
+        }
     }
 
     // 3. 🎯 THE ROUTER
@@ -9239,24 +9251,21 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🚀 Jumping to Scoping for:", nodeId);
+    console.log("🎯 Surgical Jump to Resource:", nodeId);
 
     // 1. Set the filters
     state.scopingTargetId = nodeId;
     state.scopingFilterActive = true;
-    state.viewMode = 'scoping'; // 👈 Force this state
+    state.viewMode = 'scoping';
 
-    // 2. Update the URL
+    // 2. Update the URL 
+    // We set BOTH the query param and the Hash to be safe
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
     window.history.pushState({}, '', url.toString());
-
-    // 3. 🚀 THE TRIGGER: Call handleRoute explicitly
-    if (typeof window.handleRoute === 'function') {
-        window.handleRoute('scoping');
-    } else if (typeof window.renderScopingSheet === 'function') {
-        window.renderScopingSheet();
-    }
+    
+    // Set the hash so the 'hashchange' listener picks it up
+    window.location.hash = "#/scoping-sheet"; 
 };
 
 OL.returnToFlow = function() {
