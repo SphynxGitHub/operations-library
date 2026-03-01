@@ -101,15 +101,20 @@ OL.sync = function() {
 
         const cloudData = doc.data();
         
-        // Update State
+        // 1. Update Data
         state.master = cloudData.master || {};
         state.clients = cloudData.clients || {};
-        state.focusedResourceId = cloudData.focusedResourceId;
-
-        // 🚀 THE PASSIVE REFRESH:
-        // Instead of trying to guess which function to call, 
-        // just run handleRoute() once to redraw whatever is in the URL hash.
-        window.handleRoute();
+        
+        // 2. 🛑 STOP: Only auto-refresh if we HAVE a registered view
+        // If we are on Scoping, and Scoping hasn't registered itself yet,
+        // we let handleRoute do the work.
+        if (typeof OL.currentRenderer === 'function') {
+            console.log("🔄 Sync: Refreshing registered view...");
+            OL.currentRenderer();
+        } else {
+            console.log("🚦 Sync: No view registered, using Router...");
+            window.handleRoute();
+        }
     });
 };
 
@@ -539,13 +544,8 @@ window.handleRoute = function () {
     const isVault = hash.includes('vault');
 
     // 3. Routing Logic
-    if (hash.includes('visualizer')) {
-        state.viewMode = 'graph';
-        document.body.classList.add('is-visualizer', 'fs-mode-active');
-        if (typeof window.renderGlobalVisualizer === 'function') {
-            window.renderGlobalVisualizer(isVault);
-        }
-        return; 
+    if (!hash.includes('visualizer')) {
+        OL.currentRenderer = null; // Kill the memory link
     }
 
     // Cleanup for standard views
@@ -9079,7 +9079,11 @@ function renderV2Nodes(isVault) {
        const scopeBadge = isInScope ? `
             <a href="#/scoping-sheet" 
             class="v2-scope-badge" 
-            onclick="state.scopingFilterActive = false; state.scopingTargetId = null;">
+            onclick="
+                state.scopingFilterActive = false; 
+                state.scopingTargetId = null; 
+                OL.currentRenderer = null; 
+            ">
                 $
             </a>
         ` : '';
