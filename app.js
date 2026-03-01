@@ -11305,12 +11305,10 @@ state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
-    // If the URL or State says we are scoping, stop the visualizer from rendering!
-    const urlParams = new URLSearchParams(window.location.search);
-    if (state.viewMode === 'scoping' || urlParams.get('view') === 'scoping') {
-        console.log("🚫 Visualizer Render Blocked: Scoping View is Active");
-        // Optional: ensure scoping is rendered if the DOM was wiped
-        if (!document.querySelector('.scoping-grid')) renderScopingSheet();
+    const currentHash = window.location.hash;
+    if (currentHash.includes('scoping-sheet') || state.viewMode === 'scoping') {
+        console.warn("🛡️ Visualizer attempted to hijack Scoping. Redirecting...");
+        renderScopingSheet();
         return; 
     }
 
@@ -14129,7 +14127,10 @@ OL.getScopingWorkflowContext = function() {
 
 // 1. RENDER SCOPING SHEET TABLE
 window.renderScopingSheet = function () {
-    OL.registerView(renderScopingSheet);
+    // 🚩 CLAIM THE ENGINE: Tell Sync that Scoping is the ONLY active view
+    if (typeof OL.registerView === 'function') {
+        OL.registerView(() => renderScopingSheet());
+    }
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const isAdmin = state.adminMode === true;
