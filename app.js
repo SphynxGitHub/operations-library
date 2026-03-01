@@ -132,8 +132,15 @@ OL.sync = function() {
         }
 
         // 5. 🎨 DEBOUNCED VISUALIZER REFRESH
-        // Only do this if we are actually ON a visualizer page
+        // Only do this if we are actually ON a visualizer page AND NOT in Scoping Mode
         if (window.location.hash.includes('visualizer')) {
+            // 🚀 THE FIX: If state says we are scoping, do NOT trigger the visualizer
+            if (state.viewMode === 'scoping' || state.scopingFilterActive) {
+                console.log("🛡️ Sync blocked visualizer refresh: Scoping is active.");
+                window.renderScopingSheet(); // Refresh the sheet instead
+                return;
+            }
+
             clearTimeout(window.syncDebounce);
             window.syncDebounce = setTimeout(() => {
                 window.renderGlobalVisualizer(window.location.hash.includes('vault'));
