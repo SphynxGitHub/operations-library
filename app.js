@@ -11287,11 +11287,17 @@ OL.promptInsertAtomicStep = function(resId, order, isVault) {
     }
 };
 
-OL.isResourceInScope = function(resId) {
+OL.isResourceInScope = function(targetResId) {
     const client = getActiveClient();
-    const lineItems = client?.projectData?.scopingSheets?.[0]?.lineItems || [];
-    // Check if any line item points to this resource
-    return lineItems.find(item => String(item.resourceId) === String(resId));
+    if (!client?.projectData?.scopingSheets) return false;
+
+    // We look through all sheets for a lineItem that specifically 
+    // references the resourceId we are currently drawing on the map.
+    return client.projectData.scopingSheets.some(sheet => 
+        (sheet.lineItems || []).some(item => 
+            String(item.resourceId) === String(targetResId)
+        )
+    );
 };
 
 OL.toggleGlobalView = function(isVaultMode) {
