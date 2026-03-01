@@ -314,7 +314,6 @@ OL.initTheme = function() {
     }
 };
 
-
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
   if (!root) {
@@ -532,31 +531,29 @@ window.buildLayout = function () {
 
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
-    
-    // 1. Build the Skeleton
-    if (typeof window.buildLayout === 'function') window.buildLayout(); 
-    const main = document.getElementById("mainContent");
-    if (!main) return; 
-
-    const client = getActiveClient();
     const isVault = hash.includes('vault');
+    const main = document.getElementById("mainContent");
 
-    // 5. VISUALIZER ROUTE (Consolidated)
+    // 🚀 THE VISUALIZER OVERRIDE
     if (hash.includes('visualizer')) {
-        state.viewMode = 'graph'; // Force V2 Engine
+        state.viewMode = 'graph';
         document.body.classList.add('is-visualizer', 'fs-mode-active');
         
-        // 🚀 THE TRAY INJECTION
-        const paneDrawer = document.getElementById('pane-drawer');
-        if (paneDrawer) paneDrawer.innerHTML = window.renderTrayContent(isVault);
-        
-        window.renderVisualizerV2(isVault);
-        return; 
+        // 1. We bypass the standard buildLayout and call our Workbench orchestrator
+        window.renderGlobalVisualizer(isVault);
+        return; // 🛑 Stop here. Do not let standard layout logic run.
     }
 
-    // Standard Cleanup for non-visualizer views
+    // --- STANDARD NAVIGATION (Everything Else) ---
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
+    
+    // 2. Build the standard Sidebar/Header for all other pages
+    if (typeof window.buildLayout === 'function') window.buildLayout(); 
+    
+    if (!main) return; 
+    const client = getActiveClient();
 
+    // 3. Routing for standard views...
     if (isVault) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -11227,6 +11224,8 @@ OL.toggleGlobalView = function(isVaultMode) {
 
 state.currentDropIndex = null;
 
+// WORKFLOW TRAY
+
 window.renderTrayContent = function(isVault) {
     const client = getActiveClient();
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
@@ -11288,6 +11287,8 @@ OL.returnToTray = async function(resId) {
     const isVault = window.location.hash.includes('vault');
     window.renderVisualizerV2(isVault);
 };
+
+//===================================================
 
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
