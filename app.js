@@ -599,47 +599,26 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 🚀 THE FIX: If the user clicked a link (hash) that ISN'T scoping, 
-    // but the URL still has ?view=scoping, we must clear the param.
-    if (viewParam === 'scoping' && !hash.includes('scoping')) {
+    // 1. CLEAR STICKY PARAMS: If user clicked a different tab manually
+    if (viewParam === 'scoping' && hash !== "#/scoping-sheet" && hash !== "#/scoping") {
         const url = new URL(window.location.href);
         url.searchParams.delete('view');
         window.history.replaceState({}, '', url.toString());
-        // Reset the state flag too
         state.scopingFilterActive = false;
-        state.scopingTargetId = null;
     }
 
-    // Now re-grab the viewParam after potential deletion
-    const activeView = new URLSearchParams(window.location.search).get('view');
-
-    // ... continue with routing ...
-    if (activeView === 'scoping' || hash.includes("scoping-sheet")) {
-        state.viewMode = 'scoping';
+    // 2. PRIORITY ROUTE: Scoping
+    if (viewParam === 'scoping' || hash.includes("scoping-sheet")) {
+        state.viewMode = 'scoping'; // Lock the state
         renderScopingSheet();
-        return;
+        return; // Stop here!
     }
 
-    // 3. 🎯 THE ROUTER
+    // 3. VISUALIZER ROUTE
     if (hash.includes('visualizer')) {
-        // 🚀 RECOVERY: Ensure state is synced with sessionStorage BEFORE rendering
-        if (!state.focusedResourceId) {
-            state.focusedResourceId = sessionStorage.getItem('active_resource_id');
-        }
-        if (!state.focusedWorkflowId) {
-            state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-        }
-
-        console.log("🕸️ Visualizer Context:", { 
-            L3: state.focusedResourceId, 
-            L2: state.focusedWorkflowId 
-        });
-
-        document.body.classList.add('is-visualizer', 'fs-mode-active');
-        
-        const isVault = hash.includes('vault');
-        window.renderGlobalVisualizer(isVault);
-        return; 
+        state.viewMode = 'visualizer';
+        window.renderGlobalVisualizer(hash.includes('vault'));
+        return;
     }
 
    // 4. Standard Routes
@@ -9263,37 +9242,22 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
+    console.log("🎯 Surgical Jump to Resource:", nodeId);
+
     state.scopingTargetId = nodeId;
     state.scopingFilterActive = true;
     state.viewMode = 'scoping';
 
-    // Update URL with the param
+    // Instead of forcing location.hash immediately, use the URL object
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
-    window.history.pushState({}, '', url.toString());
+    url.hash = "#/scoping-sheet"; 
     
-    // Trigger the actual view change via hash
-    window.location.hash = "#/scoping-sheet"; 
-};
-
-OL.returnToFlow = function() {
-    if (!state.v2.returnTo) return;
-    const { viewMode, pan, zoom } = state.v2.returnTo;
-
-    state.v2.pan = pan;
-    state.v2.zoom = zoom;
-    state.v2.returnTo = null;
-
-    // Update Query Param back to visualizer
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', 'visualizer');
-    url.hash = '';
-    window.history.pushState({}, '', url.toString());
-
-    if (typeof window.handleRoute === 'function') {
-        state.viewMode = 'visualizer';
-        window.handleRoute('visualizer');
-    }
+    // Push the state once
+    window.history.pushState({ nodeId }, '', url.toString());
+    
+    // Manually trigger the route to ensure it happens before any sync-refresh
+    window.renderScopingSheet();
 };
 
 OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
@@ -11334,6 +11298,16 @@ OL.toggleGlobalView = function(isVaultMode) {
 state.currentDropIndex = null;
 
 window.renderGlobalVisualizer = function(isVaultMode) {
+    // 🛡️ THE GATEKEEPER
+    // If the URL or State says we are scoping, stop the visualizer from rendering!
+    const urlParams = new URLSearchParams(window.location.search);
+    if (state.viewMode === 'scoping' || urlParams.get('view') === 'scoping') {
+        console.log("🚫 Visualizer Render Blocked: Scoping View is Active");
+        // Optional: ensure scoping is rendered if the DOM was wiped
+        if (!document.querySelector('.scoping-grid')) renderScopingSheet();
+        return; 
+    }
+
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
