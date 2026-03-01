@@ -599,13 +599,25 @@ window.handleRoute = function () {
         return; 
     }
 
-    // If the URL says 'view=scoping' OR the hash contains scoping, go there immediately.
-    if (viewParam === 'scoping' || hash.includes("scoping-sheet") || hash.includes("scoping")) {
+    // 🚀 THE FIX: If the user clicked a link (hash) that ISN'T scoping, 
+    // but the URL still has ?view=scoping, we must clear the param.
+    if (viewParam === 'scoping' && !hash.includes('scoping')) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('view');
+        window.history.replaceState({}, '', url.toString());
+        // Reset the state flag too
+        state.scopingFilterActive = false;
+        state.scopingTargetId = null;
+    }
+
+    // Now re-grab the viewParam after potential deletion
+    const activeView = new URLSearchParams(window.location.search).get('view');
+
+    // ... continue with routing ...
+    if (activeView === 'scoping' || hash.includes("scoping-sheet")) {
         state.viewMode = 'scoping';
-        if (typeof window.renderScopingSheet === 'function') {
-            window.renderScopingSheet();
-            return; // 🛑 EXIT to prevent visualizer fallback
-        }
+        renderScopingSheet();
+        return;
     }
 
     // 3. 🎯 THE ROUTER
@@ -9251,20 +9263,16 @@ function renderV2Nodes(isVault) {
 }
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🎯 Surgical Jump to Resource:", nodeId);
-
-    // 1. Set the filters
     state.scopingTargetId = nodeId;
     state.scopingFilterActive = true;
     state.viewMode = 'scoping';
 
-    // 2. Update the URL 
-    // We set BOTH the query param and the Hash to be safe
+    // Update URL with the param
     const url = new URL(window.location.href);
     url.searchParams.set('view', 'scoping');
     window.history.pushState({}, '', url.toString());
     
-    // Set the hash so the 'hashchange' listener picks it up
+    // Trigger the actual view change via hash
     window.location.hash = "#/scoping-sheet"; 
 };
 
