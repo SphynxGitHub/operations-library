@@ -569,6 +569,17 @@ window.handleRoute = function () {
     console.log("Focus Before Route:", state.focusedResourceId);
     console.groupEnd();
 
+    // 🚀 PRIORITY ZERO: If we are in the middle of a surgical jump, STOP EVERYTHING.
+    if (state.scopingFilterActive && state.scopingTargetId) {
+        console.log("🛡️ Surgical Lock detected in Router. Staying on Scoping.");
+        state.viewMode = 'scoping';
+        // Ensure the sidebar highlight matches
+        if (hash !== "#/scoping-sheet") window.location.hash = "#/scoping-sheet";
+        
+        window.renderScopingSheet();
+        return; // 🛑 ABSOLUTE EXIT. Do not build layout, do not check visualizer.
+    }
+
     // 1. Force the Skeleton 🏗️
     window.buildLayout(); 
 
@@ -9165,18 +9176,10 @@ function renderV2Nodes(isVault) {
         const isInScope = !!OL.isResourceInScope(node.id);
 
         const scopeBadge = isInScope ? `
-            <a href="#/scoping-sheet" 
-            class="v2-scope-badge" 
-            onclick="
-                state.scopingTargetId = '${node.id}'; 
-                state.scopingFilterActive = true; 
-                state.viewMode = 'scoping';
-                // 🚀 THE FIX: Update the sync registry so it refreshes the Sheet, not the Map
-                if(typeof OL.registerView === 'function') OL.registerView(() => renderScopingSheet());
-            "
-            title="View in Scoping">
+            <div class="v2-scope-badge" 
+                onclick="event.preventDefault(); event.stopPropagation(); OL.jumpToScopingItem('${node.id}')">
                 $
-            </a>
+            </div>
         ` : '';
 
         // 🚀 Dynamic Badge for standard resources
