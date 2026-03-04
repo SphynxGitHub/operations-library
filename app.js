@@ -9842,42 +9842,134 @@ OL.unlinkParent = async function(nodeId) {
 };
 
 OL.toggleStepView = function(nodeId) {
-    // 🚀 THE FIX: Initialize the Set if it doesn't exist
     if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
+    
+    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
+    const wasExpanded = state.v2.expandedNodes.has(nodeId);
+    
+    // 📏 Estimate the height change
+    // If expanding, we add height (e.g., 30px per step). If collapsing, we subtract it.
+    const res = OL.getResourceById(nodeId);
+    const stepCount = res?.steps?.length || 0;
+    const estimatedHeight = stepCount * 32; // Adjust based on your CSS row height
+    const shift = wasExpanded ? -estimatedHeight : estimatedHeight;
 
-    // Toggle the ID in the persistence Set
-    if (state.v2.expandedNodes.has(nodeId)) {
+    if (wasExpanded) {
         state.v2.expandedNodes.delete(nodeId);
     } else {
         state.v2.expandedNodes.add(nodeId);
     }
     
-    // 🔄 Force a re-render of the Visualizer. 
-    // This ensures the badge icon (▴/▾) and connections stay perfectly synced.
+    // 1. Run the visual nudge
+    OL.nudgeNodesBelow(nodeId, shift);
+
+    // 2. Re-render the internal content of the card
     const isVault = window.location.hash.includes('vault');
     renderVisualizerV2(isVault);
 };
 
 OL.toggleMasterExpand = function() {
     const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
     
-    // 1. Check if we have anything currently open
     const hasExpanded = state.v2.expandedNodes.size > 0;
+    const stepHeight = 32; // The height of a single step row in pixels
+
+    // 1. Sort nodes by Y position so we process top-to-bottom
+    const sortedNodes = [...source]
+        .filter(n => n.coords)
+        .sort((a, b) => a.coords.y - b.coords.y);
 
     if (hasExpanded) {
-        // 🚀 ACTION: Close everything
+        // 🚀 ACTION: COLLAPSE ALL
+        // We need to move nodes UP to fill the gaps
+        let totalRetraction = 0;
+        
+        sortedNodes.forEach(node => {
+            // Apply current retraction to this node's position
+            node.coords.y -= totalRetraction;
+
+            // If this node WAS expanded, calculate how much space it will give back
+            if (state.v2.expandedNodes.has(node.id)) {
+                const heightSaved = (node.steps?.length || 0) * stepHeight;
+                totalRetraction += heightSaved;
+            }
+        });
         state.v2.expandedNodes.clear();
+
     } else {
-        // 🚀 ACTION: Open everything that has steps
-        source.forEach(node => {
+        // 🚀 ACTION: EXPAND ALL
+        // We need to move nodes DOWN to make room
+        let totalExpansion = 0;
+
+        sortedNodes.forEach(node => {
+            // Apply current expansion to this node's position
+            node.coords.y += totalExpansion;
+
+            // If this node HAS steps, calculate how much space it will take
             if (node.steps && node.steps.length > 0) {
+                const heightNeeded = node.steps.length * stepHeight;
+                totalExpansion += heightNeeded;
                 state.v2.expandedNodes.add(node.id);
             }
         });
     }
-    
+
+    // 2. Persist positions and re-render
+    OL.persist();
     renderVisualizerV2(isVault);
+
+    // 3. 🔄 Redraw connections after the DOM updates
+    setTimeout(() => OL.drawV2Connections(), 100);
+};
+
+OL.nudgeNodesBelow = function(sourceNodeId, shiftAmount) {
+    const isVault = window.location.hash.includes('vault');
+    const sourceEl = document.getElementById(`v2-node-${sourceNodeId}`);
+    if (!sourceEl) return;
+
+    const sourceBottom = sourceEl.offsetTop + sourceEl.offsetHeight;
+    const sourceLeft = sourceEl.offsetLeft;
+    const buffer = 100; // Only nudge nodes roughly in the same "column" (horizontal range)
+
+    // 🚀 THE SHIELD: Block sync while calculating to prevent jitter
+    state.isSaving = true;
+
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master.resources : client.projectData.localResources;
+
+    sourceData.forEach(node => {
+        // Skip the node that is actually expanding
+        if (String(node.id) === String(sourceNodeId)) return;
+
+        // Check if node exists and has coordinates
+        const nodeEl = document.getElementById(`v2-node-${node.id}`);
+        if (node && node.coords && nodeEl) {
+            
+            // 🎯 LOGIC: Is this node physically below the source?
+            // And is it within a reasonable horizontal "lane" (e.g., +/- 150px)?
+            const isBelow = node.coords.y > sourceEl.offsetTop;
+            const isInLane = Math.abs(node.coords.x - sourceLeft) < 150;
+
+            if (isBelow && isInLane) {
+                // Apply visual transition for smoothness
+                nodeEl.style.transition = "top 0.3s ease-in-out";
+                node.coords.y += shiftAmount;
+                nodeEl.style.top = `${node.coords.y}px`;
+            }
+        }
+    });
+
+    // Cleanup and Persist
+    setTimeout(() => {
+        OL.persist();
+        state.isSaving = false;
+        // Redraw lines to match new positions
+        OL.drawV2Connections();
+        // Remove transitions so manual dragging stays snappy
+        document.querySelectorAll('.v2-node-card').forEach(el => el.style.transition = "");
+    }, 350);
 };
 
 OL.ejectStep = async function(resourceId, stepIdx) {
