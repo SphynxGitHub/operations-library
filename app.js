@@ -11633,34 +11633,45 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const container = document.getElementById("mainContent");
     if (!container) return;
 
-    // 1. Sync & State
-    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
-    state.viewMode = 'global'; // Force back to your Stage-based view
+    // 1. 🛡️ Force state to Global Canvas (Stages)
+    state.viewMode = 'global'; 
+    state.focusedResourceId = null;
+    state.focusedWorkflowId = null;
 
-    // 2. Build the Layout Shell
-    // We wrap your EXACT renderGlobalCanvas inside this flex container
+    // 2. Register for Sync
+    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+
+    // 3. Render the Split-Screen Layout
     container.innerHTML = `
-        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden;">
+        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: var(--bg-dark);">
             
-            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; border-right: 1px solid var(--line); background: var(--panel-dark); display: flex; flex-direction: column;">
+            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid var(--line); background: var(--panel-dark); display: flex; flex-direction: column;">
                 ${window.renderTrayContent(isVaultMode)}
             </aside>
 
-            <main class="pane-canvas-wrap" style="flex: 1; overflow-x: auto; overflow-y: auto; background: var(--bg-dark);">
-                <div class="canvas-header" style="padding: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--line);">
-                    <div class="breadcrumbs"><span class="accent">🌐 Global Lifecycle</span> > <span class="white">Workbench</span></div>
-                </div>
+            <main class="pane-canvas-wrap" style="flex: 1; overflow-x: auto; overflow-y: auto; position: relative;">
                 
-                <div id="global-canvas-container">
+                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--line); sticky; top: 0; z-index: 10;">
+                    <div class="breadcrumbs">
+                        <span class="tiny accent bold uppercase">Lifecycle Workbench</span>
+                        <h2 style="margin:0; font-size: 18px;">🌐 Global Canvas</h2>
+                    </div>
+                    <div class="canvas-actions">
+                         <button class="btn tiny accent" onclick="OL.applyStandardLifecycleTemplate(${isVaultMode})">⚡ Template</button>
+                    </div>
+                </div>
+
+                <div id="canvas-scroll-area">
                     ${window.renderGlobalCanvas(isVaultMode)}
                 </div>
-            </main>
 
+            </main>
         </div>
     `;
 
-    // 3. Post-Render: Ensure Drag/Drop works for the stages
+    // 4. Post-Render cleanup
     setTimeout(() => {
+        // We do NOT call V2 panning/connections here because we are in Stage Mode
         if (typeof OL.initSideResizers === 'function') OL.initSideResizers();
     }, 50);
 };
