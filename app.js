@@ -9948,54 +9948,6 @@ OL.toggleMasterExpand = function() {
     setTimeout(() => OL.drawV2Connections(), 150);
 };
 
-OL.nudgeNodesBelow = function(sourceNodeId, shiftAmount) {
-    const isVault = window.location.hash.includes('vault');
-    const sourceEl = document.getElementById(`v2-node-${sourceNodeId}`);
-    if (!sourceEl) return;
-
-    const sourceBottom = sourceEl.offsetTop + sourceEl.offsetHeight;
-    const sourceLeft = sourceEl.offsetLeft;
-    const buffer = 100; // Only nudge nodes roughly in the same "column" (horizontal range)
-
-    // 🚀 THE SHIELD: Block sync while calculating to prevent jitter
-    state.isSaving = true;
-
-    const client = getActiveClient();
-    const sourceData = isVault ? state.master.resources : client.projectData.localResources;
-
-    sourceData.forEach(node => {
-        // Skip the node that is actually expanding
-        if (String(node.id) === String(sourceNodeId)) return;
-
-        // Check if node exists and has coordinates
-        const nodeEl = document.getElementById(`v2-node-${node.id}`);
-        if (node && node.coords && nodeEl) {
-            
-            // 🎯 LOGIC: Is this node physically below the source?
-            // And is it within a reasonable horizontal "lane" (e.g., +/- 150px)?
-            const isBelow = node.coords.y > sourceEl.offsetTop;
-            const isInLane = Math.abs(node.coords.x - sourceLeft) < 150;
-
-            if (isBelow && isInLane) {
-                // Apply visual transition for smoothness
-                nodeEl.style.transition = "top 0.3s ease-in-out";
-                node.coords.y += shiftAmount;
-                nodeEl.style.top = `${node.coords.y}px`;
-            }
-        }
-    });
-
-    // Cleanup and Persist
-    setTimeout(() => {
-        OL.persist();
-        state.isSaving = false;
-        // Redraw lines to match new positions
-        OL.drawV2Connections();
-        // Remove transitions so manual dragging stays snappy
-        document.querySelectorAll('.v2-node-card').forEach(el => el.style.transition = "");
-    }, 350);
-};
-
 OL.ejectStep = async function(resourceId, stepIdx) {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
@@ -10183,7 +10135,7 @@ OL.autoAlignNodes = async function() {
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
-window.renderGlobalCanvas = function(isVaultMode) {
+/*window.renderGlobalCanvas = function(isVaultMode) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -10269,6 +10221,69 @@ window.renderGlobalCanvas = function(isVaultMode) {
                 </div>`;
             }).join('')}
         </div>`;
+};
+*/
+
+window.renderGlobalCanvas = function(isVaultMode) {
+    const client = getActiveClient();
+    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
+    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    // 🎯 FILTER: Only show items that have been "Mapped" (have saved coordinates)
+    const mappedNodes = allResources.filter(res => res.coords);
+
+    return `
+        <div class="v2-viewport" id="v2-viewport" 
+             ondragover="event.preventDefault()" 
+             ondrop="OL.handleCanvasDrop(event)">
+             
+            <div class="v2-canvas" id="v2-canvas" 
+                 style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+                
+                <div class="canvas-grid-pattern"></div>
+
+                <svg class="v2-svg-layer" id="v2-connections"></svg>
+
+                <div class="v2-node-layer" id="v2-nodes">
+                    ${mappedNodes.map((node) => {
+                        const isInspecting = String(state.activeInspectorResId) === String(node.id);
+                        const isExpanded = state.v2.expandedNodes?.has(node.id);
+                        
+                        return `
+                        <div class="v2-node-card ${isInspecting ? 'is-inspecting' : ''}" 
+                             id="v2-node-${node.id}"
+                             style="position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;"
+                             onmousedown="OL.startNodeDrag(event, '${node.id}')">
+                            
+                            <div class="v2-node-header">
+                                <span>${OL.getRegistryIcon(node.type)}</span>
+                                <span class="tiny muted bold uppercase">${esc(node.type)}</span>
+                                <div class="spacer"></div>
+                                <button class="node-eject-btn" onclick="event.stopPropagation(); OL.returnToTray('${node.id}')" title="Return to Tray">📥</button>
+                            </div>
+
+                            <div class="v2-node-body">
+                                ${esc(node.name)}
+                            </div>
+
+                            ${isExpanded ? `<div class="v2-node-steps">${renderV2InternalSteps(node)}</div>` : ''}
+
+                            <div class="v2-port port-in" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
+                            <div class="v2-port port-out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="v2-ui-overlay">
+                <div class="v2-toolbar">
+                    <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
+                    <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
+                    <button class="btn primary" onclick="OL.autoAlignNodes()">🪄 Tidy</button>
+                </div>
+            </div>
+        </div>
+    `;
 };
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
@@ -10399,6 +10414,80 @@ OL.focusToolbox = function(targetStageId = null) {
         const el = document.getElementById(id);
         if (el) el.focus();
     }, 100);
+};
+
+window.renderTrayContent = function(isVault, query = "") {
+    const client = getActiveClient();
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const q = query.toLowerCase().trim();
+
+    // 🎯 LOGIC: Show items that have NO coords AND match the search query
+    const trayItems = allResources.filter(res => {
+        const hasNoCoords = !res.coords;
+        const matchesSearch = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
+        return hasNoCoords && matchesSearch;
+    });
+
+    if (trayItems.length === 0) {
+        return `<div class="p-20 tiny muted italic text-center">No unmapped resources found.</div>`;
+    }
+
+    return trayItems.map(res => `
+        <div class="draggable-tray-item" 
+             draggable="true" 
+             style="cursor: grab;"
+             ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
+            <span class="icon">${OL.getRegistryIcon(res.type)}</span>
+            <div class="details">
+                <div class="name">${esc(res.name)}</div>
+                <div class="type tiny muted">${esc(res.type)}</div>
+            </div>
+        </div>
+    `).join('');
+};
+
+// 🔍 Real-time search handler
+OL.filterTray = function(query, isVault) {
+    const container = document.getElementById('tray-list-container');
+    if (container) {
+        container.innerHTML = window.renderTrayContent(isVault, query);
+    }
+};
+
+OL.handleCanvasDrop = async function(e) {
+    const resId = e.dataTransfer.getData("moveId");
+    const itemType = e.dataTransfer.getData("itemType");
+
+    if (itemType === "tray-resource") {
+        // Calculate coordinates relative to canvas zoom/pan
+        const canvas = document.getElementById('v2-canvas');
+        const rect = canvas.getBoundingClientRect();
+        const zoom = state.v2.zoom || 1;
+
+        const x = (e.clientX - rect.left) / zoom;
+        const y = (e.clientY - rect.top) / zoom;
+
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(resId);
+            if (res) {
+                res.coords = { x, y };
+            }
+        });
+        
+        // Full refresh of visualizer to sync Tray and Canvas
+        window.handleRoute();
+    }
+};
+
+OL.returnToTray = async function(resId) {
+    if (!confirm("Remove from canvas? Linkages will be preserved but visual position will be lost.")) return;
+    
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(resId);
+        if (res) delete res.coords; 
+    });
+    
+    window.handleRoute();
 };
 
 // 🗑️ Handle Stage Deletion & Unmapping
