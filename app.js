@@ -9844,28 +9844,44 @@ OL.unlinkParent = async function(nodeId) {
 OL.toggleStepView = function(nodeId) {
     if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
     
-    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    const wasExpanded = state.v2.expandedNodes.has(nodeId);
-    
-    // 📏 Estimate the height change
-    // If expanding, we add height (e.g., 30px per step). If collapsing, we subtract it.
-    const res = OL.getResourceById(nodeId);
-    const stepCount = res?.steps?.length || 0;
-    const estimatedHeight = stepCount * 32; // Adjust based on your CSS row height
-    const shift = wasExpanded ? -estimatedHeight : estimatedHeight;
-
-    if (wasExpanded) {
-        state.v2.expandedNodes.delete(nodeId);
-    } else {
-        state.v2.expandedNodes.add(nodeId);
-    }
-    
-    // 1. Run the visual nudge
-    OL.nudgeNodesBelow(nodeId, shift);
-
-    // 2. Re-render the internal content of the card
     const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    const node = source.find(n => n.id === nodeId);
+    if (!node || !node.coords) return;
+
+    const wasExpanded = state.v2.expandedNodes.has(nodeId);
+    const stepHeight = 32;
+    const laneBuffer = 150;
+    const shiftAmount = (node.steps?.length || 0) * stepHeight;
+
+    // 1. Update State
+    if (wasExpanded) state.v2.expandedNodes.delete(nodeId);
+    else state.v2.expandedNodes.add(nodeId);
+
+    // 2. Nudge nodes in the same lane
+    source.forEach(otherNode => {
+        if (otherNode.id === nodeId || !otherNode.coords) return;
+
+        // Logic: Is it in the same lane AND below the toggled node?
+        const isInLane = Math.abs(otherNode.coords.x - node.coords.x) < laneBuffer;
+        const isBelow = otherNode.coords.y > node.coords.y;
+
+        if (isInLane && isBelow) {
+            if (wasExpanded) {
+                otherNode.coords.y -= shiftAmount; // Pull up
+            } else {
+                otherNode.coords.y += shiftAmount; // Push down
+            }
+        }
+    });
+
+    // 3. Persist and Paint
+    OL.persist();
     renderVisualizerV2(isVault);
+    
+    setTimeout(() => OL.drawV2Connections(), 150);
 };
 
 OL.toggleMasterExpand = function() {
@@ -9874,54 +9890,62 @@ OL.toggleMasterExpand = function() {
     const source = isVault ? state.master.resources : client.projectData.localResources;
     
     const hasExpanded = state.v2.expandedNodes.size > 0;
-    const stepHeight = 32; // The height of a single step row in pixels
+    const stepHeight = 32; 
+    const laneBuffer = 150; // Nodes within 150px horizontally are considered in the same "lane"
 
-    // 1. Sort nodes by Y position so we process top-to-bottom
-    const sortedNodes = [...source]
-        .filter(n => n.coords)
-        .sort((a, b) => a.coords.y - b.coords.y);
+    // 1. Get all nodes currently on the canvas
+    const activeNodes = [...source].filter(n => n.coords);
+    const padding = 20;
 
-    if (hasExpanded) {
-        // 🚀 ACTION: COLLAPSE ALL
-        // We need to move nodes UP to fill the gaps
-        let totalRetraction = 0;
-        
-        sortedNodes.forEach(node => {
-            // Apply current retraction to this node's position
-            node.coords.y -= totalRetraction;
+    // 2. Identify unique vertical lanes
+    const lanes = [];
+    activeNodes.forEach(node => {
+        let foundLane = lanes.find(l => Math.abs(l.x - node.coords.x) < laneBuffer);
+        if (foundLane) {
+            foundLane.nodes.push(node);
+        } else {
+            lanes.push({ x: node.coords.x, nodes: [node] });
+        }
+    });
 
-            // If this node WAS expanded, calculate how much space it will give back
-            if (state.v2.expandedNodes.has(node.id)) {
-                const heightSaved = (node.steps?.length || 0) * stepHeight;
-                totalRetraction += heightSaved;
+    // 3. Process each lane independently
+    lanes.forEach(lane => {
+        // Sort nodes in THIS lane top-to-bottom
+        lane.nodes.sort((a, b) => a.coords.y - b.coords.y);
+
+        let runningOffset = 0;
+
+        lane.nodes.forEach(node => {
+            if (hasExpanded) {
+                // 🚀 COLLAPSE LOGIC (Pull up)
+                node.coords.y -= runningOffset;
+                if (state.v2.expandedNodes.has(node.id)) {
+                    runningOffset += (node.steps?.length || 0) * stepHeight + padding;
+                }
+            } else {
+                // 🚀 EXPAND LOGIC (Push down)
+                node.coords.y += runningOffset;
+                if (node.steps && node.steps.length > 0) {
+                    runningOffset += node.steps.length * stepHeight + padding;
+                }
             }
         });
+    });
+
+    // 4. Update the expanded state set
+    if (hasExpanded) {
         state.v2.expandedNodes.clear();
-
     } else {
-        // 🚀 ACTION: EXPAND ALL
-        // We need to move nodes DOWN to make room
-        let totalExpansion = 0;
-
-        sortedNodes.forEach(node => {
-            // Apply current expansion to this node's position
-            node.coords.y += totalExpansion;
-
-            // If this node HAS steps, calculate how much space it will take
-            if (node.steps && node.steps.length > 0) {
-                const heightNeeded = node.steps.length * stepHeight;
-                totalExpansion += heightNeeded;
-                state.v2.expandedNodes.add(node.id);
-            }
+        activeNodes.forEach(n => {
+            if (n.steps?.length > 0) state.v2.expandedNodes.add(n.id);
         });
     }
 
-    // 2. Persist positions and re-render
+    // 5. Persist and Paint
     OL.persist();
     renderVisualizerV2(isVault);
 
-    // 3. 🔄 Redraw connections after the DOM updates
-    setTimeout(() => OL.drawV2Connections(), 100);
+    setTimeout(() => OL.drawV2Connections(), 150);
 };
 
 OL.nudgeNodesBelow = function(sourceNodeId, shiftAmount) {
