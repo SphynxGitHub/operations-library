@@ -11644,26 +11644,40 @@ OL.handleCanvasDrop = async function(e) {
 };
 
 OL.handleUnmapDrop = async function(e) {
-    e.preventDefault(); // 🛑 CRITICAL: Stops the page refresh
-    if (e.stopPropagation) e.stopPropagation(); // Stops bubbling
-    
-    const resId = e.dataTransfer.getData("moveId");
-    const unmapZone = document.getElementById('unmap-zone');
-    if (unmapZone) unmapZone.classList.remove('active');
+    // 🛡️ FIRST LINE DEFENSE: Stop the browser immediately
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
 
-    if (resId) {
-        console.log("♻️ Unmapping resource:", resId);
+    const resId = e.dataTransfer.getData("moveId");
+    console.log("📥 Drop detected in Unmap Zone for ID:", resId);
+
+    // Visual Cleanup
+    const zone = document.getElementById('unmap-zone');
+    if (zone) zone.classList.remove('active');
+
+    if (!resId) {
+        console.warn("⚠️ Drop received but no moveId found in dataTransfer.");
+        return false;
+    }
+
+    try {
         await OL.updateAndSync(() => {
             const res = OL.getResourceById(resId);
             if (res) {
+                console.log("♻️ Removing coordinates for:", res.name);
                 delete res.coords; 
             }
         });
         
-        // Use your router instead of a hard location.reload()
-        window.handleRoute(); 
+        // Use a safe refresh that doesn't trigger a full browser reload
+        const isVault = window.location.hash.includes('vault');
+        window.renderGlobalVisualizer(isVault);
+
+    } catch (err) {
+        console.error("❌ Unmap Error:", err);
     }
-    return false; // 🛑 DOUBLE CRITICAL: Extra insurance against refresh
+
+    return false; // Final block against refresh
 };
 
 OL.filterTray = function(val, isVault) {
@@ -17105,3 +17119,12 @@ if (document.readyState === "complete" || document.readyState === "interactive")
 
 // 🔄 Handle every click thereafter
 window.addEventListener("hashchange", window.handleRoute);
+
+// 🛑 GLOBAL REFRESH SHIELD
+// This stops the browser from navigating if a drop fails or is mishandled
+['dragover', 'drop'].forEach(eventName => {
+    window.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
