@@ -8811,7 +8811,9 @@ window.renderVisualizerV2 = function(isVault, targetId="mainContent") {
     const uniqueScopes = [...new Set(nodes.map(n => OL.getInferredScope(n)).filter(Boolean))];
     
     container.innerHTML = `
-        <div class="v2-viewport" id="v2-viewport">
+        <div class="v2-viewport" id="v2-viewport"
+            ondragover="event.preventDefault();" 
+            ondrop="OL.handleCanvasDrop(event)">
 
             <div class="v2-canvas" id="v2-canvas" 
                 style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
@@ -11579,23 +11581,35 @@ document.addEventListener('dragend', (e) => {
 });
 
 OL.handleCanvasDrop = async function(e) {
-    const resId = e.dataTransfer.getData("moveId");
-    if (!resId) return;
-
-    // Calculate drop position relative to canvas pan/zoom
-    const canvas = document.getElementById('v2-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const zoom = state.v2.zoom || 1;
-
-    const x = (e.clientX - rect.left) / zoom;
-    const y = (e.clientY - rect.top) / zoom;
-
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(resId);
-        if (res) res.coords = { x, y };
-    });
+    e.preventDefault(); // 🛡️ Stop browser from opening a link/file
     
-    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    const resId = e.dataTransfer.getData("moveId");
+    const itemType = e.dataTransfer.getData("itemType");
+
+    if (itemType === "tray-resource" && resId) {
+        console.log("🎯 Successful Drop! Mapping:", resId);
+
+        // 📏 Calculate Coordinates relative to Pan and Zoom
+        const canvas = document.getElementById('v2-canvas');
+        const rect = canvas.getBoundingClientRect();
+        
+        // We divide by zoom so the node stays under the mouse even if zoomed out
+        const zoom = state.v2.zoom || 1;
+        const x = (e.clientX - rect.left) / zoom;
+        const y = (e.clientY - rect.top) / zoom;
+
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(resId);
+            if (res) {
+                res.coords = { x: Math.round(x), y: Math.round(y) };
+                // Optional: Force type to ensure it renders on the map
+                if (!res.type) res.type = 'SOP'; 
+            }
+        });
+
+        // 🔄 Refresh the whole Workbench
+        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    }
 };
 
 OL.filterTray = function(val, isVault) {
