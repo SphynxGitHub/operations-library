@@ -10353,44 +10353,6 @@ OL.focusToolbox = function(targetStageId = null) {
     }, 100);
 };
 
-window.renderTrayContent = function(isVault, query = "") {
-    const client = getActiveClient();
-    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    const q = query.toLowerCase().trim();
-
-    // 🎯 LOGIC: Show items that have NO coords AND match the search query
-    const trayItems = allResources.filter(res => {
-        const hasNoCoords = !res.coords;
-        const matchesSearch = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
-        return hasNoCoords && matchesSearch;
-    });
-
-    if (trayItems.length === 0) {
-        return `<div class="p-20 tiny muted italic text-center">No unmapped resources found.</div>`;
-    }
-
-    return trayItems.map(res => `
-        <div class="draggable-tray-item" 
-             draggable="true" 
-             style="cursor: grab;"
-             ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
-            <span class="icon">${OL.getRegistryIcon(res.type)}</span>
-            <div class="details">
-                <div class="name">${esc(res.name)}</div>
-                <div class="type tiny muted">${esc(res.type)}</div>
-            </div>
-        </div>
-    `).join('');
-};
-
-// 🔍 Real-time search handler
-OL.filterTray = function(query, isVault) {
-    const container = document.getElementById('tray-list-container');
-    if (container) {
-        container.innerHTML = window.renderTrayContent(isVault, query);
-    }
-};
-
 // 🗑️ Handle Stage Deletion & Unmapping
 OL.handleStageDelete = async function(stageId, isVault) {
     const resCount = (isVault ? state.master.resources : getActiveClient().projectData.localResources)
