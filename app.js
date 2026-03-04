@@ -10223,68 +10223,6 @@ window.renderGlobalCanvas = function(isVaultMode) {
         </div>`;
 };
 
-/*window.renderGlobalCanvas = function(isVaultMode) {
-    const client = getActiveClient();
-    const sourceData = isVaultMode ? state.master : (client?.projectData || {});
-    const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-
-    // 🎯 FILTER: Only show items that have been "Mapped" (have saved coordinates)
-    const mappedNodes = allResources.filter(res => res.coords);
-
-    return `
-        <div class="v2-viewport" id="v2-viewport" 
-             ondragover="event.preventDefault()" 
-             ondrop="OL.handleCanvasDrop(event)">
-             
-            <div class="v2-canvas" id="v2-canvas" 
-                 style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
-                
-                <div class="canvas-grid-pattern"></div>
-
-                <svg class="v2-svg-layer" id="v2-connections"></svg>
-
-                <div class="v2-node-layer" id="v2-nodes">
-                    ${mappedNodes.map((node) => {
-                        const isInspecting = String(state.activeInspectorResId) === String(node.id);
-                        const isExpanded = state.v2.expandedNodes?.has(node.id);
-                        
-                        return `
-                        <div class="v2-node-card ${isInspecting ? 'is-inspecting' : ''}" 
-                             id="v2-node-${node.id}"
-                             style="position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;"
-                             onmousedown="OL.startNodeDrag(event, '${node.id}')">
-                            
-                            <div class="v2-node-header">
-                                <span>${OL.getRegistryIcon(node.type)}</span>
-                                <span class="tiny muted bold uppercase">${esc(node.type)}</span>
-                                <div class="spacer"></div>
-                                <button class="node-eject-btn" onclick="event.stopPropagation(); OL.returnToTray('${node.id}')" title="Return to Tray">📥</button>
-                            </div>
-
-                            <div class="v2-node-body">
-                                ${esc(node.name)}
-                            </div>
-
-                            ${isExpanded ? `<div class="v2-node-steps">${renderV2InternalSteps(node)}</div>` : ''}
-
-                            <div class="v2-port port-in" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                            <div class="v2-port port-out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
-                        </div>`;
-                    }).join('')}
-                </div>
-            </div>
-
-            <div class="v2-ui-overlay">
-                <div class="v2-toolbar">
-                    <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
-                    <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
-                    <button class="btn primary" onclick="OL.autoAlignNodes()">🪄 Tidy</button>
-                </div>
-            </div>
-        </div>
-    `;
-};*/
-
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
     const confirmMsg = "This will add 5 standard stages: Cold Lead, Warm Lead, Onboarding, New Client, Ongoing Client. Proceed?";
     if (!confirm(confirmMsg)) return;
@@ -10451,42 +10389,6 @@ OL.filterTray = function(query, isVault) {
     if (container) {
         container.innerHTML = window.renderTrayContent(isVault, query);
     }
-};
-
-OL.handleCanvasDrop = async function(e) {
-    const resId = e.dataTransfer.getData("moveId");
-    const itemType = e.dataTransfer.getData("itemType");
-
-    if (itemType === "tray-resource") {
-        // Calculate coordinates relative to canvas zoom/pan
-        const canvas = document.getElementById('v2-canvas');
-        const rect = canvas.getBoundingClientRect();
-        const zoom = state.v2.zoom || 1;
-
-        const x = (e.clientX - rect.left) / zoom;
-        const y = (e.clientY - rect.top) / zoom;
-
-        await OL.updateAndSync(() => {
-            const res = OL.getResourceById(resId);
-            if (res) {
-                res.coords = { x, y };
-            }
-        });
-        
-        // Full refresh of visualizer to sync Tray and Canvas
-        window.handleRoute();
-    }
-};
-
-OL.returnToTray = async function(resId) {
-    if (!confirm("Remove from canvas? Linkages will be preserved but visual position will be lost.")) return;
-    
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(resId);
-        if (res) delete res.coords; 
-    });
-    
-    window.handleRoute();
 };
 
 // 🗑️ Handle Stage Deletion & Unmapping
@@ -11500,7 +11402,7 @@ OL.toggleGlobalView = function(isVaultMode) {
 };
 
 state.currentDropIndex = null;
-/*
+
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
     const currentHash = window.location.hash;
@@ -11625,54 +11527,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         OL.initSideResizers();
         if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
         if (state.focusedWorkflowId) OL.drawLevel2LogicLines(state.focusedWorkflowId);
-    }, 50);
-};
-*/
-
-window.renderGlobalVisualizer = function(isVaultMode) {
-    const container = document.getElementById("mainContent");
-    if (!container) return;
-
-    // 1. 🛡️ Force state to Global Canvas (Stages)
-    state.viewMode = 'global'; 
-    state.focusedResourceId = null;
-    state.focusedWorkflowId = null;
-
-    // 2. Register for Sync
-    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
-
-    // 3. Render the Split-Screen Layout
-    container.innerHTML = `
-        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: var(--bg-dark);">
-            
-            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid var(--line); background: var(--panel-dark); display: flex; flex-direction: column;">
-                ${window.renderTrayContent(isVaultMode)}
-            </aside>
-
-            <main class="pane-canvas-wrap" style="flex: 1; overflow-x: auto; overflow-y: auto; position: relative;">
-                
-                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--line); sticky; top: 0; z-index: 10;">
-                    <div class="breadcrumbs">
-                        <span class="tiny accent bold uppercase">Lifecycle Workbench</span>
-                        <h2 style="margin:0; font-size: 18px;">🌐 Global Canvas</h2>
-                    </div>
-                    <div class="canvas-actions">
-                         <button class="btn tiny accent" onclick="OL.applyStandardLifecycleTemplate(${isVaultMode})">⚡ Template</button>
-                    </div>
-                </div>
-
-                <div id="canvas-scroll-area">
-                    ${window.renderGlobalCanvas(isVaultMode)}
-                </div>
-
-            </main>
-        </div>
-    `;
-
-    // 4. Post-Render cleanup
-    setTimeout(() => {
-        // We do NOT call V2 panning/connections here because we are in Stage Mode
-        if (typeof OL.initSideResizers === 'function') OL.initSideResizers();
     }, 50);
 };
 
