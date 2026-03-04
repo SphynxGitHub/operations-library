@@ -11496,20 +11496,24 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    // 1. Force the engine into the Infinite Canvas state
-    state.viewMode = 'graph';
+    // 🛡️ 1. GESTALT LOCK: Force everything to the Workbench state
+    state.viewMode = 'graph'; 
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
 
-    // 2. Build the Shell: Searchable Tray + Infinite Grid
+    // 🏗️ 2. THE SHELL (Tray + Canvas)
+    // We remove the Breadcrumbs/Tiers and just give you the Workbench
     main.innerHTML = `
         <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
             
             <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid rgba(255,255,255,0.1); background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
                 <div class="tray-header" style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <h3 class="accent" style="margin: 0 0 10px 0; font-size: 14px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <h3 class="accent" style="margin: 0; font-size: 12px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
+                        <button class="btn tiny soft" onclick="OL.autoAlignNodes()">🪄 Tidy</button>
+                    </div>
                     <input type="text" id="tray-search" class="modal-input tiny" 
-                           placeholder="Search unmapped..." 
-                           style="width: 100%;"
+                           placeholder="Filter unmapped items..." 
+                           style="width: 100%; background: rgba(0,0,0,0.2);"
                            oninput="OL.filterTray(this.value, ${isVaultMode})">
                 </div>
                 <div id="tray-list-container" style="flex: 1; overflow-y: auto;">
@@ -11524,7 +11528,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    // 3. Boot the V2 Physics & Interaction
+    // ⚡ 3. BOOT V2 SYSTEMS
     setTimeout(() => {
         if (typeof OL.initV2Panning === 'function') OL.initV2Panning();
         if (typeof OL.drawV2Connections === 'function') OL.drawV2Connections();
