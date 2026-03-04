@@ -10135,7 +10135,7 @@ OL.autoAlignNodes = async function() {
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
-/*window.renderGlobalCanvas = function(isVaultMode) {
+window.renderGlobalCanvas = function(isVaultMode) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -10222,9 +10222,8 @@ OL.autoAlignNodes = async function() {
             }).join('')}
         </div>`;
 };
-*/
 
-window.renderGlobalCanvas = function(isVaultMode) {
+/*window.renderGlobalCanvas = function(isVaultMode) {
     const client = getActiveClient();
     const sourceData = isVaultMode ? state.master : (client?.projectData || {});
     const allResources = isVaultMode ? (state.master.resources || []) : (client?.projectData?.localResources || []);
@@ -10284,7 +10283,7 @@ window.renderGlobalCanvas = function(isVaultMode) {
             </div>
         </div>
     `;
-};
+};*/
 
 OL.applyStandardLifecycleTemplate = async function(isVaultMode) {
     const confirmMsg = "This will add 5 standard stages: Cold Lead, Warm Lead, Onboarding, New Client, Ongoing Client. Proceed?";
