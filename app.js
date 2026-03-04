@@ -11644,19 +11644,26 @@ OL.handleCanvasDrop = async function(e) {
 };
 
 OL.handleUnmapDrop = async function(e) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("moveId");
+    e.preventDefault(); // 🛑 CRITICAL: Stops the page refresh
+    if (e.stopPropagation) e.stopPropagation(); // Stops bubbling
     
+    const resId = e.dataTransfer.getData("moveId");
+    const unmapZone = document.getElementById('unmap-zone');
+    if (unmapZone) unmapZone.classList.remove('active');
+
     if (resId) {
         console.log("♻️ Unmapping resource:", resId);
         await OL.updateAndSync(() => {
             const res = OL.getResourceById(resId);
-            if (res) delete res.coords; // 🚀 Removing coords puts it back in the tray
+            if (res) {
+                delete res.coords; 
+            }
         });
         
-        // Refresh the whole workbench
-        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+        // Use your router instead of a hard location.reload()
+        window.handleRoute(); 
     }
+    return false; // 🛑 DOUBLE CRITICAL: Extra insurance against refresh
 };
 
 OL.filterTray = function(val, isVault) {

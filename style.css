@@ -4656,3 +4656,20 @@ path[stroke="transparent"] {
 .v2-viewport {
     z-index: 5; /* Keep the canvas below the sidebar */
 }
+
+/* Ensure the dragging ghost is always on top of everything else */
+.v2-node-card.is-dragging {
+    z-index: 99999 !important;
+    opacity: 0.8;
+    pointer-events: none; /* Let the mouse "see through" the node to the tray */
+}
+
+/* Ensure the tray is above the viewport but below the active drag */
+.v2-tray-sidebar {
+    z-index: 1000;
+    position: relative;
+}
+
+.v2-viewport {
+    z-index: 1;
+}
