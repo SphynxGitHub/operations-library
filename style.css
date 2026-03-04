@@ -4634,3 +4634,25 @@ path[stroke="transparent"] {
 }
 
 .node-eject-btn:hover { color: var(--accent); }
+
+/* 🛠️ WORKBENCH Z-INDEX FIX */
+.v2-workbench-shell {
+    position: relative;
+    z-index: 1;
+}
+
+.v2-tray-sidebar {
+    position: relative;
+    z-index: 9999 !important; /* Force it above the canvas overlay */
+    background: #0f172a;
+    pointer-events: all !important;
+}
+
+.unmap-drop-zone {
+    pointer-events: all !important;
+    z-index: 10000;
+}
+
+.v2-viewport {
+    z-index: 5; /* Keep the canvas below the sidebar */
+}
