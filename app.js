@@ -8806,8 +8806,11 @@ window.renderVisualizerV2 = function(isVault, targetId="mainContent") {
     const nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
+    const isToggled = state.ui.sidebarOpen;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
-    const expandTitle = isAnyExpanded ? 'Collapse All' : 'Expand All';
+    const expandTitle = isAnyExpanded ? 'Collapse Steps' : 'Expand Steps';
+    const toggleIcon = isToggled ? '🔳' : '⬜';
+    const toggleTitle = isToggled ? 'Collapse Sidebar' : 'Open Sidebar';
     const uniqueScopes = [...new Set(nodes.map(n => OL.getInferredScope(n)).filter(Boolean))];
     
     container.innerHTML = `
@@ -8838,6 +8841,7 @@ window.renderVisualizerV2 = function(isVault, targetId="mainContent") {
                     <div class="v2-toolbar">
                         <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
                         <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
+                        <button class="btn soft" onclick="OL.toggleWorkbenchTray()" title=${toggleTitle}>${toggleIcon}</button>
                         <button class="btn soft" onclick="OL.toggleMasterExpand()" title=${expandTitle}>${expandIcon}</button>
                     </div>
 
@@ -9949,6 +9953,18 @@ OL.toggleMasterExpand = function() {
     renderVisualizerV2(isVault);
 
     setTimeout(() => OL.drawV2Connections(), 150);
+};
+
+OL.toggleWorkbenchTray = function() {
+    // 1. Flip the state
+    state.ui.sidebarOpen = !state.ui.sidebarOpen;
+    
+    // 2. Persist the preference
+    localStorage.setItem('ol_tray_open', state.ui.sidebarOpen);
+
+    // 3. Refresh the shell
+    const isVault = window.location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVault);
 };
 
 OL.ejectStep = async function(resourceId, stepIdx) {
@@ -11504,25 +11520,23 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
 
     // 🏗️ 2. THE SHELL (Tray + V2 Canvas Area)
+    const trayOpen = state.ui.sidebarOpen;
+
     main.innerHTML = `
         <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
             
-            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid rgba(255,255,255,0.1); background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
-                <div class="tray-header" style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <h3 class="accent" style="margin: 0 0 10px 0; font-size: 12px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
-                    <input type="text" id="tray-search" class="modal-input tiny" 
-                           placeholder="Search unmapped items..." 
-                           style="width: 100%; background: rgba(0,0,0,0.2);"
-                           oninput="OL.filterTray(this.value, ${isVaultMode})">
-                </div>
-                <div id="tray-list-container" style="flex: 1; overflow-y: auto;">
-                    ${window.renderTrayContent(isVaultMode)}
-                </div>
+            <aside id="pane-drawer" class="v2-tray-sidebar" 
+                style="width: ${trayOpen ? '320px' : '0px'}; 
+                        min-width: ${trayOpen ? '320px' : '0px'}; 
+                        overflow: hidden;
+                        transition: width 0.3s ease, min-width 0.3s ease;
+                        border-right: ${trayOpen ? '1px solid rgba(255,255,255,0.1)' : 'none'}; 
+                        background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
+                ${trayOpen ? window.renderTrayContent(isVaultMode) : ''}
             </aside>
 
             <section id="v2-workbench-target" style="flex: 1; position: relative; overflow: hidden;">
                 </section>
-
         </div>
     `;
 
