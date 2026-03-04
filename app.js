@@ -11555,6 +11555,29 @@ window.renderTrayContent = function(isVault, query = "") {
     `;
 };
 
+// 🏗️ Define the Tray Drag Handler
+OL.handleTrayDragStart = function(e, resId) {
+    console.log("🚚 Dragging from Tray:", resId);
+    
+    // 1. Identify what is being moved
+    e.dataTransfer.setData("moveId", resId);
+    e.dataTransfer.setData("itemType", "tray-resource");
+
+    // 2. Visual feedback (optional but recommended)
+    e.dataTransfer.effectAllowed = "move";
+    
+    // 3. Add a temporary class for styling during drag
+    const el = e.target.closest('.draggable-tray-item');
+    if (el) el.style.opacity = "0.4";
+};
+
+// 🏁 Ensure we clean up the opacity if the drag ends
+document.addEventListener('dragend', (e) => {
+    if (e.target.classList.contains('draggable-tray-item')) {
+        e.target.style.opacity = "1";
+    }
+});
+
 OL.handleCanvasDrop = async function(e) {
     const resId = e.dataTransfer.getData("moveId");
     if (!resId) return;
