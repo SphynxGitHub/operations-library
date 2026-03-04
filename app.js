@@ -11630,24 +11630,71 @@ window.renderGlobalVisualizer = function(isVaultMode) {
 */
 
 window.renderGlobalVisualizer = function(isVaultMode) {
-    const main = document.getElementById("mainContent");
-    
-    // 🏗️ Step 1: Create the "Shell" (The split-screen container)
-    main.innerHTML = `
-        <div class="v2-workbench-shell" style="display: flex; height: 100vh;">
-            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; border-right: 1px solid #333;">
+    const container = document.getElementById("mainContent");
+    if (!container) return;
+
+    // 🛡️ 1. THE GATEKEEPER
+    const currentHash = window.location.hash;
+    if (currentHash.includes('scoping-sheet') || state.viewMode === 'scoping') {
+        console.warn("🛡️ Visualizer Blocked: Scoping sovereignty active.");
+        if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
+        return; 
+    }
+
+    // 2. Register for Sync
+    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+
+    // 3. Resolve Mode & Layout
+    // We are forcing 'graph' mode for the workbench experience
+    state.viewMode = 'graph'; 
+    const isVault = isVaultMode || (state.viewMode === 'vault');
+    const layoutClass = isVault ? 'v2-layout-vault' : 'v2-layout-project';
+
+    // 4. Build Header / Breadcrumbs
+    let breadcrumbHtml = `
+        <span class="breadcrumb-item clickable" onclick="state.focusedResourceId=null; state.focusedWorkflowId=null; window.handleRoute();">🌐 Global Workbench</span>
+        <span class="muted"> > </span> 
+        <span class="breadcrumb-current">Node Map</span>
+    `;
+
+    // 🏗️ 5. INJECT CONSOLIDATED SHELL
+    // This combines the Tray Sidebar with the Canvas Area
+    container.innerHTML = `
+        <div class="three-pane-layout ${layoutClass} toolbox-focused v2-workbench-shell">
+            
+            <aside id="pane-drawer" class="pane-drawer v2-tray-sidebar">
                 ${window.renderTrayContent(isVaultMode)}
             </aside>
-            <section id="canvas-target" class="v2-canvas-area" style="flex: 1; position: relative;">
-                ${window.renderGlobalCanvas(isVaultMode)}
-            </section>
+
+            <main class="pane-canvas-wrap">
+                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: var(--panel-dark); border-bottom: 1px solid var(--line);">
+                    <div class="breadcrumbs">${breadcrumbHtml}</div>
+                    
+                    <div class="canvas-actions" style="display:flex; gap:10px;">
+                        <button class="btn tiny accent">🕸️ Workbench Mode</button>
+                        <button class="btn tiny soft" onclick="OL.autoAlignNodes()">🪄 Tidy Grid</button>
+                    </div>
+                </div>
+
+                <div id="fs-canvas" class="v2-viewport-container" style="height: calc(100vh - 50px); position: relative;">
+                    ${window.renderGlobalCanvas(isVaultMode)}
+                </div>
+            </main>
+
+            <aside id="inspector-panel" class="pane-inspector">
+                <div class="empty-inspector tiny muted p-20">Select a node to inspect</div>
+            </aside>
         </div>
     `;
 
-    // ⚡ Step 2: Boot the Canvas Engine
+    // ⚡ 6. POST-RENDER BOOT
     setTimeout(() => {
-        OL.initV2Panning(); 
-        OL.drawV2Connections();
+        // Initialize V2 specific systems
+        if (typeof OL.initV2Panning === 'function') OL.initV2Panning();
+        if (typeof OL.drawV2Connections === 'function') OL.drawV2Connections();
+        
+        // Initialize standard UI systems
+        if (typeof OL.initSideResizers === 'function') OL.initSideResizers();
     }, 50);
 };
 
