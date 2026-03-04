@@ -8813,22 +8813,6 @@ window.renderVisualizerV2 = function(isVault) {
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
         
-            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid rgba(255,255,255,0.1); background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
-                    <div class="tray-header" style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            <h3 class="accent" style="margin: 0; font-size: 12px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
-                            <button class="btn tiny soft" onclick="OL.autoAlignNodes()">🪄 Tidy</button>
-                        </div>
-                        <input type="text" id="tray-search" class="modal-input tiny" 
-                            placeholder="Filter unmapped items..." 
-                            style="width: 100%; background: rgba(0,0,0,0.2);"
-                            oninput="OL.filterTray(this.value, ${isVaultMode})">
-                    </div>
-                    <div id="tray-list-container" style="flex: 1; overflow-y: auto;">
-                        ${window.renderTrayContent(isVaultMode)}
-                    </div>
-            </aside>
-
             <div class="v2-canvas" id="v2-canvas" 
                 style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
                 
