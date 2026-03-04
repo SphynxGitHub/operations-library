@@ -11501,7 +11501,7 @@ OL.toggleGlobalView = function(isVaultMode) {
 };
 
 state.currentDropIndex = null;
-
+/*
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
     const currentHash = window.location.hash;
@@ -11626,6 +11626,29 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         OL.initSideResizers();
         if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
         if (state.focusedWorkflowId) OL.drawLevel2LogicLines(state.focusedWorkflowId);
+    }, 50);
+};
+*/
+
+window.renderGlobalVisualizer = function(isVaultMode) {
+    const main = document.getElementById("mainContent");
+    
+    // 🏗️ Step 1: Create the "Shell" (The split-screen container)
+    main.innerHTML = `
+        <div class="v2-workbench-shell" style="display: flex; height: 100vh;">
+            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; border-right: 1px solid #333;">
+                ${window.renderTrayContent(isVaultMode)}
+            </aside>
+            <section id="canvas-target" class="v2-canvas-area" style="flex: 1; position: relative;">
+                ${window.renderGlobalCanvas(isVaultMode)}
+            </section>
+        </div>
+    `;
+
+    // ⚡ Step 2: Boot the Canvas Engine
+    setTimeout(() => {
+        OL.initV2Panning(); 
+        OL.drawV2Connections();
     }, 50);
 };
 
