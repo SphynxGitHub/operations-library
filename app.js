@@ -98,27 +98,54 @@ OL.sync = function() {
     
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         const now = Date.now();
+        
+        // 1. 🛡️ THE SHIELD
+        // Prevent refresh if document doesn't exist, we are currently saving, 
+        // or a local render just happened (prevents feedback loops).
         if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
             return; 
         }
 
         const cloudData = doc.data();
-        
-        // 1. UPDATE DATA ONLY (No rendering calls here!)
+
+        // 2. 🧠 SMART EQUALITY CHECK
+        // Determine if anything meaningful actually changed before triggering DOM work.
+        const isFirstLoad = !state.master || Object.keys(state.master).length === 0;
+        const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
+        const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
+        const hasClientsChanged = JSON.stringify(cloudData.clients) !== JSON.stringify(state.clients);
+
+        if (!isFirstLoad && !hasFocusChanged && !hasDataChanged && !hasClientsChanged) return; 
+
+        console.log("🔄 Valid Cloud Change Detected. Updating State...");
+
+        // 3. Update Global State
         state.master = cloudData.master || {};
         state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
         state.viewMode = cloudData.viewMode || 'global';
 
-        // 2. THE ONLY PERMITTED RENDER:
-        // Only trigger a redraw if the page is currently a white screen/spinner.
+        // 4. 🚀 THE NUDGE
+        // If the screen is currently empty or showing a spinner, boot the router.
         const main = document.getElementById('mainContent');
         if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-             window.handleRoute();
+            console.log("📡 Data arrived. Nudging router to draw the current page...");
+            window.handleRoute();
+            return; 
         }
-        
-        // 🛑 WE REMOVED THE DEBOUNCED VISUALIZER REFRESH. 
-        // This stops the "Auto-Jump" because the sync engine no longer calls the map.
+
+        // 5. 🎨 CONTEXTUAL REFRESH
+        // If we are on the visualizer, use the debounced engine for performance.
+        if (window.location.hash.includes('visualizer')) {
+            clearTimeout(window.syncDebounce);
+            window.syncDebounce = setTimeout(() => {
+                window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+            }, 300); 
+        } 
+        // For all other views (Scoping, Tasks, Apps, etc.), run handleRoute to redraw.
+        else {
+            window.handleRoute();
+        }
     });
 };
 
@@ -313,6 +340,7 @@ OL.initTheme = function() {
         document.body.classList.add('light-mode');
     }
 };
+
 
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
@@ -531,29 +559,68 @@ window.buildLayout = function () {
 
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
-    const isVault = hash.includes('vault');
-    const main = document.getElementById("mainContent");
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewParam = urlParams.get('view');
 
-    // 🚀 THE VISUALIZER OVERRIDE
-    if (hash.includes('visualizer')) {
-        state.viewMode = 'graph';
-        document.body.classList.add('is-visualizer', 'fs-mode-active');
-        
-        // 1. We bypass the standard buildLayout and call our Workbench orchestrator
-        window.renderGlobalVisualizer(isVault);
-        return; // 🛑 Stop here. Do not let standard layout logic run.
+    // --- 🚦 ROUTE DEBUG ---
+    console.group("🚦 ROUTE DEBUG");
+    console.log("Current Hash:", window.location.hash);
+    console.log("Focus Before Route:", state.focusedResourceId);
+    console.groupEnd();
+
+    // 🚀 RESET SURGICAL FILTERS
+    // We clear these so standard navigation is always clean/unfiltered
+    state.scopingFilterActive = false;
+    state.scopingTargetId = null;
+
+    // 1. Force the Skeleton 🏗️
+    window.buildLayout(); 
+
+    const main = document.getElementById("mainContent");
+    if (!main) return; 
+
+    // 2. Identify Context 🔍
+    const client = getActiveClient();
+    if (client) {
+        console.log("✅ Verified Client Access:", client.meta.name);
+    } else {
+        console.warn("❌ Access Token invalid or Data not loaded yet.");
     }
 
-    // --- STANDARD NAVIGATION (Everything Else) ---
-    document.body.classList.remove('is-visualizer', 'fs-mode-active');
-    
-    // 2. Build the standard Sidebar/Header for all other pages
-    if (typeof window.buildLayout === 'function') window.buildLayout(); 
-    
-    if (!main) return; 
-    const client = getActiveClient();
+    const isVault = hash.includes('vault');
 
-    // 3. Routing for standard views...
+    // 3. The "Loading" Safety Net 🛡️
+    if (!isVault && hash !== "#/" && !client) {
+        main.innerHTML = `
+            <div style="padding:100px; text-align:center; opacity:0.5;">
+                <div class="spinner">⏳</div>
+                <h3>Synchronizing Project Data...</h3>
+                <p class="tiny">If this persists, please return to the Dashboard.</p>
+            </div>`;
+        return; 
+    }
+
+    // 4. VISUALIZER ROUTE 🕸️
+    if (hash.includes('visualizer')) {
+        state.viewMode = 'graph'; 
+        
+        // Sync state with session storage for recovery
+        if (!state.focusedResourceId) {
+            state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+        }
+        if (!state.focusedWorkflowId) {
+            state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+        }
+
+        document.body.classList.add('is-visualizer', 'fs-mode-active');
+        window.renderGlobalVisualizer(isVault);
+        return; 
+    }
+
+    // 5. Standard Routes Cleanup
+    document.body.classList.remove('is-visualizer', 'fs-mode-active');
+
+    // 6. DATA RENDERING
     if (isVault) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
@@ -566,18 +633,26 @@ window.handleRoute = function () {
     } else if (hash === "#/" || hash === "#/clients") {
         renderClientDashboard();
     } else if (client) {
+        console.log("🟢 Routing to Client Module:", hash);
+        
         if (hash.includes("client-tasks")) renderChecklistModule();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
         else if (hash.includes("functions")) renderFunctionsGrid();
         else if (hash.includes("scoping-sheet")) {
             state.viewMode = 'scoping';
-            if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
+            renderScopingSheet();
         }
         else if (hash.includes("analyze")) renderAnalysisModule();
         else if (hash.includes("team")) renderTeamManager();
         else if (hash.includes("how-to")) renderHowToLibrary();
-        else renderChecklistModule();
+        else {
+            console.warn("❓ Unknown client hash, defaulting to Tasks");
+            renderChecklistModule();
+        }
+    } else {
+        console.error("🔴 No client found for hash:", hash);
+        renderClientDashboard();
     }
 };
 
@@ -9078,14 +9153,12 @@ function renderV2Nodes(isVault) {
         // 1. Check the DNA (Is it in the actual scoping sheet line items?)
         const isInScope = !!OL.isResourceInScope(node.id);
 
-       const scopeBadge = isInScope ? `
+       // Change it to a simple link that clears the filter flags
+        const scopeBadge = isInScope ? `
             <a href="#/scoping-sheet" 
             class="v2-scope-badge" 
-            onclick="
-                state.scopingFilterActive = false; 
-                state.scopingTargetId = null; 
-                OL.currentRenderer = null; 
-            ">
+            onclick="state.scopingTargetId = '${node.id}'; state.scopingFilterActive = true; state.viewMode = 'scoping';"
+            title="View in Scoping">
                 $
             </a>
         ` : '';
@@ -11224,85 +11297,17 @@ OL.toggleGlobalView = function(isVaultMode) {
 
 state.currentDropIndex = null;
 
-// WORKFLOW TRAY
-
-window.renderTrayContent = function(isVault) {
-    const client = getActiveClient();
-    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-    
-    // 🔍 Only show items that DON'T have canvas coordinates
-    const trayItems = allResources.filter(res => !res.coords);
-
-    return `
-        <div class="tray-header">
-            <h3 class="accent">📥 Resource Tray</h3>
-            <p class="tiny muted">Drag items onto the grid to map them</p>
-        </div>
-        <div class="tray-list">
-            ${trayItems.map(res => `
-                <div class="draggable-tray-item" 
-                     draggable="true" 
-                     ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
-                    <span>${OL.getRegistryIcon(res.type)}</span>
-                    <span class="name">${esc(res.name)}</span>
-                </div>
-            `).join('')}
-            ${trayItems.length === 0 ? '<div class="tiny muted p-20">Tray is empty. All items are on canvas.</div>' : ''}
-        </div>
-    `;
-};
-
-OL.handleTrayDragStart = function(e, resId) {
-    e.dataTransfer.setData("moveId", resId);
-    e.dataTransfer.setData("itemType", "tray-resource");
-};
-
-// Add this logic inside your existing canvas drop listener (or V2 viewport)
-OL.handleCanvasDrop = async function(e) {
-    const resId = e.dataTransfer.getData("moveId");
-    const itemType = e.dataTransfer.getData("itemType");
-
-    if (itemType === "tray-resource") {
-        const coords = OL.getRelativePointer(e); // Get mouse pos relative to zoom/pan
-        
-        await OL.updateAndSync(() => {
-            const isVault = window.location.hash.includes('vault');
-            const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-            const res = source.find(r => r.id === resId);
-            if (res) {
-                res.coords = coords; // 🚀 Adding coords "activates" it on canvas
-            }
-        });
-        
-        const isVault = window.location.hash.includes('vault');
-        window.renderVisualizerV2(isVault);
-    }
-};
-
-OL.returnToTray = async function(resId) {
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(resId);
-        if (res) delete res.coords; // 🚀 Removing coords sends it back to Tray
-    });
-    const isVault = window.location.hash.includes('vault');
-    window.renderVisualizerV2(isVault);
-};
-
-//===================================================
-
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
     const currentHash = window.location.hash;
     
     // 🚀 ENFORCED BLOCK: If we are in scoping mode, suicide the visualizer render
-    if (window.location.hash.includes('scoping-sheet')) {
-        if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
+    if (currentHash.includes('scoping-sheet') || state.viewMode === 'scoping') {
+        console.warn("🛡️ Visualizer Blocked: Redirecting to Scoping sovereignty.");
+        // Ensure the registry is updated
+        OL.registerView(renderScopingSheet);
+        window.renderScopingSheet();
         return; 
-    }
-    
-    // Register itself for the sync engine's legacy references
-    if (typeof OL.registerView === 'function') {
-        OL.registerView(() => renderGlobalVisualizer(isVaultMode));
     }
 
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
