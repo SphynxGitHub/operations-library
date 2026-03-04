@@ -11550,7 +11550,7 @@ window.renderTrayContent = function(isVault, query = "") {
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const q = query.toLowerCase().trim();
 
-    // Only show resources NOT on the canvas that match search
+    // 🎯 Filter Logic: Unmapped items matching search
     const trayItems = allResources.filter(res => {
         const isUnmapped = !res.coords;
         const matches = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
@@ -11558,15 +11558,32 @@ window.renderTrayContent = function(isVault, query = "") {
     });
 
     return `
-        <div class="tray-list" style="padding: 10px;">
-            ${trayItems.map(res => `
-                <div class="draggable-tray-item" draggable="true" 
-                     style="padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 8px; cursor: grab;"
-                     ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
-                    <div style="font-size: 12px; font-weight: 600;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
-                    <div class="tiny muted uppercase" style="font-size: 9px; margin-top: 4px;">${esc(res.type)}</div>
-                </div>
-            `).join('')}
+        <div class="tray-inner" style="display: flex; flex-direction: column; height: 100%;">
+            <div class="tray-search-header" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <input type="text" id="tray-search-input" class="modal-input tiny" 
+                       placeholder="Filter library..." 
+                       value="${query}"
+                       style="width: 100%; background: rgba(0,0,0,0.3); color: white;"
+                       oninput="OL.filterTray(this.value, ${isVault})">
+            </div>
+
+            <div id="unmap-zone" class="unmap-drop-zone"
+                 ondragover="event.preventDefault(); this.classList.add('active');"
+                 ondragleave="this.classList.remove('active');"
+                 ondrop="OL.handleUnmapDrop(event)">
+                <span>📥 Drop here to Unmap</span>
+            </div>
+
+            <div class="tray-scroll-list" style="flex: 1; overflow-y: auto; padding: 10px;">
+                ${trayItems.map(res => `
+                    <div class="draggable-tray-item" draggable="true" 
+                         ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
+                        <div style="font-size: 11px; font-weight: 600;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
+                        <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 2px;">${esc(res.type)}</div>
+                    </div>
+                `).join('')}
+                ${trayItems.length === 0 ? '<div class="p-20 tiny muted italic center">No unmapped items.</div>' : ''}
+            </div>
         </div>
     `;
 };
@@ -11626,9 +11643,33 @@ OL.handleCanvasDrop = async function(e) {
     }
 };
 
+OL.handleUnmapDrop = async function(e) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("moveId");
+    
+    if (resId) {
+        console.log("♻️ Unmapping resource:", resId);
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(resId);
+            if (res) delete res.coords; // 🚀 Removing coords puts it back in the tray
+        });
+        
+        // Refresh the whole workbench
+        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    }
+};
+
 OL.filterTray = function(val, isVault) {
-    const list = document.getElementById('tray-list-container');
-    if (list) list.innerHTML = window.renderTrayContent(isVault, val);
+    const list = document.getElementById('pane-drawer');
+    if (list) {
+        list.innerHTML = window.renderTrayContent(isVault, val);
+        // Keep focus on search input
+        const input = document.getElementById('tray-search-input');
+        if (input) {
+            input.focus();
+            input.setSelectionRange(val.length, val.length);
+        }
+    }
 };
 
 OL.handleCanvasBackgroundClick = function(e) {
