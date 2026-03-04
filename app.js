@@ -8812,6 +8812,23 @@ window.renderVisualizerV2 = function(isVault) {
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
+        
+            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid rgba(255,255,255,0.1); background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
+                    <div class="tray-header" style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <h3 class="accent" style="margin: 0; font-size: 12px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
+                            <button class="btn tiny soft" onclick="OL.autoAlignNodes()">🪄 Tidy</button>
+                        </div>
+                        <input type="text" id="tray-search" class="modal-input tiny" 
+                            placeholder="Filter unmapped items..." 
+                            style="width: 100%; background: rgba(0,0,0,0.2);"
+                            oninput="OL.filterTray(this.value, ${isVaultMode})">
+                    </div>
+                    <div id="tray-list-container" style="flex: 1; overflow-y: auto;">
+                        ${window.renderTrayContent(isVaultMode)}
+                    </div>
+            </aside>
+
             <div class="v2-canvas" id="v2-canvas" 
                 style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
                 
@@ -11364,7 +11381,7 @@ OL.toggleGlobalView = function(isVaultMode) {
 };
 
 state.currentDropIndex = null;
-/*
+
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
     const currentHash = window.location.hash;
@@ -11489,49 +11506,6 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         OL.initSideResizers();
         if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
         if (state.focusedWorkflowId) OL.drawLevel2LogicLines(state.focusedWorkflowId);
-    }, 50);
-};*/
-
-window.renderGlobalVisualizer = function(isVaultMode) {
-    const main = document.getElementById("mainContent");
-    if (!main) return;
-
-    // 🛡️ 1. GESTALT LOCK: Force everything to the Workbench state
-    state.viewMode = 'graph'; 
-    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
-
-    // 🏗️ 2. THE SHELL (Tray + Canvas)
-    // We remove the Breadcrumbs/Tiers and just give you the Workbench
-    main.innerHTML = `
-        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
-            
-            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid rgba(255,255,255,0.1); background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
-                <div class="tray-header" style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <h3 class="accent" style="margin: 0; font-size: 12px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
-                        <button class="btn tiny soft" onclick="OL.autoAlignNodes()">🪄 Tidy</button>
-                    </div>
-                    <input type="text" id="tray-search" class="modal-input tiny" 
-                           placeholder="Filter unmapped items..." 
-                           style="width: 100%; background: rgba(0,0,0,0.2);"
-                           oninput="OL.filterTray(this.value, ${isVaultMode})">
-                </div>
-                <div id="tray-list-container" style="flex: 1; overflow-y: auto;">
-                    ${window.renderTrayContent(isVaultMode)}
-                </div>
-            </aside>
-
-            <section class="v2-canvas-area" style="flex: 1; position: relative; overflow: hidden;">
-                ${window.renderGlobalCanvas(isVaultMode)}
-            </section>
-
-        </div>
-    `;
-
-    // ⚡ 3. BOOT V2 SYSTEMS
-    setTimeout(() => {
-        if (typeof OL.initV2Panning === 'function') OL.initV2Panning();
-        if (typeof OL.drawV2Connections === 'function') OL.drawV2Connections();
     }, 50);
 };
 
