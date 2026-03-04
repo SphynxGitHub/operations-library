@@ -11633,67 +11633,34 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const container = document.getElementById("mainContent");
     if (!container) return;
 
-    // 🛡️ 1. THE GATEKEEPER
-    const currentHash = window.location.hash;
-    if (currentHash.includes('scoping-sheet') || state.viewMode === 'scoping') {
-        console.warn("🛡️ Visualizer Blocked: Scoping sovereignty active.");
-        if (typeof window.renderScopingSheet === 'function') window.renderScopingSheet();
-        return; 
-    }
-
-    // 2. Register for Sync
+    // 1. Sync & State
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+    state.viewMode = 'global'; // Force back to your Stage-based view
 
-    // 3. Resolve Mode & Layout
-    // We are forcing 'graph' mode for the workbench experience
-    state.viewMode = 'graph'; 
-    const isVault = isVaultMode || (state.viewMode === 'vault');
-    const layoutClass = isVault ? 'v2-layout-vault' : 'v2-layout-project';
-
-    // 4. Build Header / Breadcrumbs
-    let breadcrumbHtml = `
-        <span class="breadcrumb-item clickable" onclick="state.focusedResourceId=null; state.focusedWorkflowId=null; window.handleRoute();">🌐 Global Workbench</span>
-        <span class="muted"> > </span> 
-        <span class="breadcrumb-current">Node Map</span>
-    `;
-
-    // 🏗️ 5. INJECT CONSOLIDATED SHELL
-    // This combines the Tray Sidebar with the Canvas Area
+    // 2. Build the Layout Shell
+    // We wrap your EXACT renderGlobalCanvas inside this flex container
     container.innerHTML = `
-        <div class="three-pane-layout ${layoutClass} toolbox-focused v2-workbench-shell">
+        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden;">
             
-            <aside id="pane-drawer" class="pane-drawer v2-tray-sidebar">
+            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; border-right: 1px solid var(--line); background: var(--panel-dark); display: flex; flex-direction: column;">
                 ${window.renderTrayContent(isVaultMode)}
             </aside>
 
-            <main class="pane-canvas-wrap">
-                <div class="canvas-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: var(--panel-dark); border-bottom: 1px solid var(--line);">
-                    <div class="breadcrumbs">${breadcrumbHtml}</div>
-                    
-                    <div class="canvas-actions" style="display:flex; gap:10px;">
-                        <button class="btn tiny accent">🕸️ Workbench Mode</button>
-                        <button class="btn tiny soft" onclick="OL.autoAlignNodes()">🪄 Tidy Grid</button>
-                    </div>
+            <main class="pane-canvas-wrap" style="flex: 1; overflow-x: auto; overflow-y: auto; background: var(--bg-dark);">
+                <div class="canvas-header" style="padding: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--line);">
+                    <div class="breadcrumbs"><span class="accent">🌐 Global Lifecycle</span> > <span class="white">Workbench</span></div>
                 </div>
-
-                <div id="fs-canvas" class="v2-viewport-container" style="height: calc(100vh - 50px); position: relative;">
+                
+                <div id="global-canvas-container">
                     ${window.renderGlobalCanvas(isVaultMode)}
                 </div>
             </main>
 
-            <aside id="inspector-panel" class="pane-inspector">
-                <div class="empty-inspector tiny muted p-20">Select a node to inspect</div>
-            </aside>
         </div>
     `;
 
-    // ⚡ 6. POST-RENDER BOOT
+    // 3. Post-Render: Ensure Drag/Drop works for the stages
     setTimeout(() => {
-        // Initialize V2 specific systems
-        if (typeof OL.initV2Panning === 'function') OL.initV2Panning();
-        if (typeof OL.drawV2Connections === 'function') OL.drawV2Connections();
-        
-        // Initialize standard UI systems
         if (typeof OL.initSideResizers === 'function') OL.initSideResizers();
     }, 50);
 };
