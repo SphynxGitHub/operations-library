@@ -11364,7 +11364,7 @@ OL.toggleGlobalView = function(isVaultMode) {
 };
 
 state.currentDropIndex = null;
-
+/*
 window.renderGlobalVisualizer = function(isVaultMode) {
     // 🛡️ THE GATEKEEPER
     const currentHash = window.location.hash;
@@ -11490,6 +11490,96 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         if (state.focusedResourceId) OL.drawVerticalLogicLines(state.focusedResourceId);
         if (state.focusedWorkflowId) OL.drawLevel2LogicLines(state.focusedWorkflowId);
     }, 50);
+};*/
+
+window.renderGlobalVisualizer = function(isVaultMode) {
+    const main = document.getElementById("mainContent");
+    if (!main) return;
+
+    // 1. Force the engine into the Infinite Canvas state
+    state.viewMode = 'graph';
+    OL.registerView(() => renderGlobalVisualizer(isVaultMode));
+
+    // 2. Build the Shell: Searchable Tray + Infinite Grid
+    main.innerHTML = `
+        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
+            
+            <aside id="pane-drawer" class="v2-tray-sidebar" style="width: 320px; min-width: 320px; border-right: 1px solid rgba(255,255,255,0.1); background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
+                <div class="tray-header" style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <h3 class="accent" style="margin: 0 0 10px 0; font-size: 14px; letter-spacing: 1px;">📥 RESOURCE TRAY</h3>
+                    <input type="text" id="tray-search" class="modal-input tiny" 
+                           placeholder="Search unmapped..." 
+                           style="width: 100%;"
+                           oninput="OL.filterTray(this.value, ${isVaultMode})">
+                </div>
+                <div id="tray-list-container" style="flex: 1; overflow-y: auto;">
+                    ${window.renderTrayContent(isVaultMode)}
+                </div>
+            </aside>
+
+            <section class="v2-canvas-area" style="flex: 1; position: relative; overflow: hidden;">
+                ${window.renderGlobalCanvas(isVaultMode)}
+            </section>
+
+        </div>
+    `;
+
+    // 3. Boot the V2 Physics & Interaction
+    setTimeout(() => {
+        if (typeof OL.initV2Panning === 'function') OL.initV2Panning();
+        if (typeof OL.drawV2Connections === 'function') OL.drawV2Connections();
+    }, 50);
+};
+
+window.renderTrayContent = function(isVault, query = "") {
+    const client = getActiveClient();
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const q = query.toLowerCase().trim();
+
+    // Only show resources NOT on the canvas that match search
+    const trayItems = allResources.filter(res => {
+        const isUnmapped = !res.coords;
+        const matches = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
+        return isUnmapped && matches;
+    });
+
+    return `
+        <div class="tray-list" style="padding: 10px;">
+            ${trayItems.map(res => `
+                <div class="draggable-tray-item" draggable="true" 
+                     style="padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 8px; cursor: grab;"
+                     ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
+                    <div style="font-size: 12px; font-weight: 600;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
+                    <div class="tiny muted uppercase" style="font-size: 9px; margin-top: 4px;">${esc(res.type)}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+OL.handleCanvasDrop = async function(e) {
+    const resId = e.dataTransfer.getData("moveId");
+    if (!resId) return;
+
+    // Calculate drop position relative to canvas pan/zoom
+    const canvas = document.getElementById('v2-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(resId);
+        if (res) res.coords = { x, y };
+    });
+    
+    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+};
+
+OL.filterTray = function(val, isVault) {
+    const list = document.getElementById('tray-list-container');
+    if (list) list.innerHTML = window.renderTrayContent(isVault, val);
 };
 
 OL.handleCanvasBackgroundClick = function(e) {
