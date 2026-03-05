@@ -8828,8 +8828,11 @@ window.renderVisualizerV2 = function(isVault, targetId="mainContent") {
             <div class="v2-canvas" id="v2-canvas" 
                 style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
                 
-                <div class="global-shelf-container">
-                    <span class="global-shelf-label">GLOBAL RESOURCES</span>
+                <div id="global-shelf" class="global-shelf-container"
+                    ondragover="event.preventDefault(); this.classList.add('drag-over');"
+                    ondragleave="this.classList.remove('drag-over');"
+                    ondrop="OL.handleShelfDrop(event)">
+                    <span class="global-shelf-label">Global Resources</span>
                 </div>
 
                 <div class="v2-stage-layer">
@@ -9144,30 +9147,29 @@ function renderV2Nodes(isVault) {
     const client = getActiveClient();
     let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-    const mappedNodes = nodes.filter(node => node.coords && typeof node.coords.x === 'number');
+    // 1. Filter by Scope if active
+    const visibleNodes = nodes.filter(node => (node.coords && typeof node.coords.x === 'number') || node.isGlobal);
 
-    // Filter by Scope if active
-    let filteredNodes = mappedNodes;
+    // 2. Filter by Scope if active
+    let filteredNodes = visibleNodes;
     if (state.v2.activeScope && state.v2.activeScope !== 'all') {
-        filteredNodes = mappedNodes.filter(n => 
+        filteredNodes = visibleNodes.filter(n => 
             (n.scope === state.v2.activeScope || n.originProject === state.v2.activeScope)
         );
     }
 
     return filteredNodes.map((node, idx) => {
-        const x = node.coords.x;
-        const y = node.coords.y;
+        const isGlobal = !!node.isGlobal;
         const icon = OL.getRegistryIcon(node.type);
-        const globalClass = node.isGlobal ? 'is-global' : '';
-
         const steps = Array.isArray(node.steps) ? node.steps : [];
         const isExpanded = state.v2.expandedNodes.has(node.id);
-        
         const typeClean = (node.type || "").toUpperCase();
         const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
-        
-        // 1. Check the DNA (Is it in the actual scoping sheet line items?)
         const isInScope = !!OL.isResourceInScope(node.id);
+
+        const positionStyle = isGlobal 
+            ? `position: relative; transform: none; margin: 0;` 
+            : `position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;`;
 
        // Change it to a simple link that clears the filter flags
         const scopeBadge = isInScope ? `
@@ -9219,9 +9221,9 @@ function renderV2Nodes(isVault) {
             : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
 
         return `
-            <div class="v2-node-card ${globalClass} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
+            <div class="v2-node-card ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
-                style="position: absolute; left: ${x}px; top: ${y}px; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
+                style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="OL.startNodeDrag(event, '${node.id}')">
 
                 ${cornerLinkers}
@@ -11721,6 +11723,26 @@ OL.handleCanvasDrop = async function(e) {
         });
 
         // 🔄 Refresh the whole Workbench
+        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    }
+};
+
+OL.handleShelfDrop = async function(e) {
+    e.preventDefault();
+    const resId = e.dataTransfer.getData("moveId");
+    const itemType = e.dataTransfer.getData("itemType");
+    
+    document.getElementById('global-shelf').classList.remove('drag-over');
+
+    if (resId) {
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(resId);
+            if (res) {
+                res.isGlobal = true; // 🚀 Locks it into the shelf
+                delete res.coords;   // Removes free-floating coordinates
+            }
+        });
+        
         window.renderGlobalVisualizer(window.location.hash.includes('vault'));
     }
 };

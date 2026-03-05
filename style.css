@@ -4703,3 +4703,39 @@ path[stroke="transparent"] {
     border-color: rgba(56, 189, 248, 0.3) !important;
     background: rgba(255,255,255,0.05) !important;
 }
+
+/* 🏗️ THE GLOBAL SHELF CONTAINER */
+.global-shelf-container {
+    position: absolute;
+    top: 50px; /* Fixed distance from top */
+    left: 50px;
+    width: calc(100% - 100px); /* Stretches across canvas */
+    min-height: 120px; /* Minimum height when empty */
+    background: rgba(56, 189, 248, 0.03);
+    border: 2px dashed rgba(56, 189, 248, 0.1);
+    border-radius: 12px;
+    padding: 40px 20px 20px 20px; /* Top padding leaves room for the label */
+    display: flex;
+    flex-wrap: wrap; /* 🚀 This makes it expand vertically as items are added */
+    gap: 15px;
+    pointer-events: all;
+    z-index: 1; /* Sits behind the nodes but stays visible */
+    transition: background 0.3s ease;
+}
+
+.global-shelf-container.drag-over {
+    background: rgba(56, 189, 248, 0.08);
+    border-color: var(--accent);
+}
+
+.global-shelf-label {
+    position: absolute;
+    top: 15px;
+    left: 20px;
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    pointer-events: none;
+}
