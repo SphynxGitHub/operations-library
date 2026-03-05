@@ -9107,14 +9107,19 @@ function renderV2Nodes(isVault) {
     const client = getActiveClient();
     let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-   // 🚀 Update the Scope Filter to use 'archetype' or 'originProject' if 'scope' is missing
+    const mappedNodes = nodes.filter(node => node.coords && typeof node.coords.x === 'number');
+
+    // Filter by Scope if active
+    let filteredNodes = mappedNodes;
     if (state.v2.activeScope && state.v2.activeScope !== 'all') {
-        nodes = nodes.filter(n => (n.scope === state.v2.activeScope || n.originProject === state.v2.activeScope));
+        filteredNodes = mappedNodes.filter(n => 
+            (n.scope === state.v2.activeScope || n.originProject === state.v2.activeScope)
+        );
     }
 
-    return nodes.map((node, idx) => {
-        const x = (node.coords && typeof node.coords.x === 'number') ? node.coords.x : (100 + (idx % 4) * 250);
-        const y = (node.coords && typeof node.coords.y === 'number') ? node.coords.y : (100 + Math.floor(idx / 4) * 200);
+    return filteredNodes.map((node, idx) => {
+        const x = node.coords.x;
+        const y = node.coords.y;
         const icon = OL.getRegistryIcon(node.type);
         const globalClass = node.isGlobal ? 'is-global' : '';
 
