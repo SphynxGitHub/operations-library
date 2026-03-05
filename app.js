@@ -8744,6 +8744,8 @@ state.v2.connectionMode = {
 
 state.v2.expandedNodes = state.v2.expandedNodes || new Set();
 
+state.v2.trayTypeFilter = state.v2.trayTypeFilter || 'All';
+
 // Add this to your global listeners if it's not there
 document.addEventListener('mousedown', (e) => {
     // If we click the background canvas or a card, hide the connection toolbar
@@ -11551,10 +11553,15 @@ window.renderTrayContent = function(isVault, query = "") {
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const q = query.toLowerCase().trim();
 
+    // 🏷️ Get Unique Types for the dropdown
+    const availableTypes = [...new Set(allResources.map(r => r.type))].filter(Boolean).sort();
+
+    // 🎯 Filter Logic: Unmapped + Search Text + Type Selection
     const trayItems = allResources.filter(res => {
         const isUnmapped = !res.coords;
-        const matches = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
-        return isUnmapped && matches;
+        const matchesText = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
+        const matchesType = typeFilter === "All" || res.type === typeFilter;
+        return isUnmapped && matchesText && matchesType;
     });
 
     return `
@@ -11566,6 +11573,13 @@ window.renderTrayContent = function(isVault, query = "") {
                        value="${query}"
                        style="width: 100%; background: rgba(0,0,0,0.3); color: white;"
                        oninput="OL.filterTray(this.value, ${isVault})">
+
+                <select class="modal-input tiny" 
+                        style="width: 100%; background: rgba(0,0,0,0.3); color: #94a3b8; font-size: 10px;"
+                        onchange="OL.setTrayTypeFilter(this.value, ${isVault})">
+                    <option value="All">All Types</option>
+                    ${availableTypes.map(t => `<option value="${t}" ${typeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+                </select>
             </div>
 
             <div id="unmap-zone" class="unmap-drop-zone"
@@ -11690,16 +11704,26 @@ OL.handleUnmapDrop = async function(e) {
 };
 
 OL.filterTray = function(val, isVault) {
+    // 1. Capture the search text (if null, use current input value)
+    const searchVal = val !== undefined ? val : (document.getElementById('tray-search-input')?.value || "");
+    
+    // 2. Refresh the tray content with both params
     const list = document.getElementById('pane-drawer');
     if (list) {
-        list.innerHTML = window.renderTrayContent(isVault, val);
-        // Keep focus on search input
+        list.innerHTML = window.renderTrayContent(isVault, searchVal, state.v2.trayTypeFilter);
+        
+        // 3. Maintain focus on the search bar
         const input = document.getElementById('tray-search-input');
-        if (input) {
+        if (input && val !== undefined) {
             input.focus();
             input.setSelectionRange(val.length, val.length);
         }
     }
+};
+
+OL.setTrayTypeFilter = function(type, isVault) {
+    state.v2.trayTypeFilter = type;
+    OL.filterTray(undefined, isVault);
 };
 
 OL.handleCanvasBackgroundClick = function(e) {
