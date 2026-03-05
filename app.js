@@ -8730,6 +8730,9 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
 state.v2 = {
     zoom: 1,
     pan: { x: 0, y: 0 },
+    activeDragId: null, // 🚀 NEW: Tracks current node moving
+    isFromTray: false,   // 🚀 NEW: Distinguishes between mapping and moving
+    expandedNodes: state.v2?.expandedNodes || new Set(),
     looseNodes: [], // For the brain dump
     dragContext: null
 };
@@ -8954,115 +8957,79 @@ OL.zoom = function(delta) {
     console.log(`🔍 Zoom Level: ${Math.round(newZoom * 100)}%`);
 };
 
+// 🚚 Dragging from Tray (MouseDown)
+OL.handleTrayDrag = function(e, resId) {
+    e.preventDefault();
+    state.v2.activeDragId = resId;
+    state.v2.isFromTray = true;
+    OL.initWBMotion(e, resId);
+};
+
+// 🖱️ Dragging on Canvas (MouseDown)
 OL.startNodeDrag = function(e, nodeId) {
-    if (e.target.classList.contains('v2-port') || e.target.classList.contains('v2-step-eject')) return;
-    
-    // 🛑 1. THE EMERGENCY BRAKE
-    window.BLOCK_RENDER = true; 
-    state.isSaving = true; 
+    if (e.target.classList.contains('v2-port')) return;
+    e.preventDefault();
+    state.v2.activeDragId = nodeId;
+    state.v2.isFromTray = false;
+    OL.initWBMotion(e, nodeId);
+};
 
-    const nodeEl = document.getElementById(`v2-node-${nodeId}`);
-    if (!nodeEl) return;
-
-    const isStep = nodeEl.classList.contains('is-loose') || 
-                   nodeEl.classList.contains('type-step') || 
-                   nodeEl.classList.contains('type-sop');
-
-    const viewport = document.getElementById('v2-viewport');
+// ⚙️ THE PHYSICS CORE
+OL.initWBMotion = function(e, id) {
+    const isVault = window.location.hash.includes('vault');
+    const zone = document.getElementById('unmap-zone');
+    const canvas = document.getElementById('v2-canvas');
+    const rect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
-    const startMouseX = e.clientX;
-    const startMouseY = e.clientY;
-    const startNodeX = parseFloat(nodeEl.style.left);
-    const startNodeY = parseFloat(nodeEl.style.top);
-    
-    let lastEvent = e;
 
-    const onMouseMove = (moveEvent) => {
-        lastEvent = moveEvent;
-        const dx = (moveEvent.clientX - startMouseX) / zoom;
-        const dy = (moveEvent.clientY - startMouseY) / zoom;
+    const onMove = (mE) => {
+        const target = document.elementFromPoint(mE.clientX, mE.clientY);
+        const isOverUnmap = !!target?.closest('#unmap-zone');
+        if (zone) zone.classList.toggle('active', isOverUnmap);
 
-        // Visual only update - NO SAVING HERE
-        nodeEl.style.left = `${startNodeX + dx}px`;
-        nodeEl.style.top = `${startNodeY + dy}px`;
-        nodeEl.style.zIndex = "9999";
-
-        if (isStep) {
-            nodeEl.style.pointerEvents = 'none';
-            const hit = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-            const hoverEl = hit?.closest('.v2-node-card');
-            nodeEl.style.pointerEvents = 'auto';
-
-            document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-hover'));
-            if (hoverEl && hoverEl.id !== `v2-node-${nodeId}` && !hoverEl.classList.contains('is-loose')) {
-                hoverEl.classList.add('drop-hover');
+        // 👻 Handle Ghost Preview
+        let ghost = document.getElementById('drag-ghost');
+        if (!isOverUnmap && target?.closest('#v2-workbench-target')) {
+            if (!ghost) {
+                ghost = document.createElement('div');
+                ghost.id = 'drag-ghost';
+                ghost.className = 'v2-node-card ghost'; // Uses your V2 styles
+                canvas.appendChild(ghost);
             }
-        }
-        OL.drawV2Connections();
+            const res = OL.getResourceById(id);
+            ghost.innerHTML = `<b style="color:var(--accent)">${res?.name || 'Mapping...'}</b>`;
+            ghost.style.left = `${(mE.clientX - rect.left) / zoom}px`;
+            ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
+        } else if (ghost) ghost.remove();
     };
 
-    const onMouseUp = async () => {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+    const onUp = async (uE) => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
         
-        // 1. Prepare for the "X-Ray" scan
-        if (nodeEl) {
-            nodeEl.style.pointerEvents = 'none'; // 🚀 Make the card a ghost
-        }
+        const target = document.elementFromPoint(uE.clientX, uE.clientY);
+        const ghost = document.getElementById('drag-ghost');
+        if (ghost) ghost.remove();
+        if (zone) zone.classList.remove('active');
 
-        // 2. Perform the scan (the laser beam passes THROUGH the ghost)
-        const hit = document.elementFromPoint(lastEvent.clientX, lastEvent.clientY);
-        const dropTarget = hit?.closest('.v2-node-card');
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(id);
+            if (target?.closest('#unmap-zone')) {
+                delete res.coords;
+            } else if (target?.closest('#v2-workbench-target')) {
+                res.coords = {
+                    x: Math.round((uE.clientX - rect.left) / zoom),
+                    y: Math.round((uE.clientY - rect.top) / zoom)
+                };
+            }
+        });
 
-        // 3. Bring the card back to reality immediately
-        if (nodeEl) {
-            nodeEl.style.pointerEvents = 'auto';
-        }
-
-        // 4. Absorption Logic (If we hit a valid target)
-        if (isStep && dropTarget && !dropTarget.classList.contains('is-loose')) {
-            const targetId = dropTarget.id.replace('v2-node-', '');
-            
-            await OL.updateAndSync(() => {
-                const isVault = window.location.hash.includes('vault');
-                const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-                const nodeData = source.find(n => String(n.id) === String(nodeId));
-                const targetNode = source.find(n => String(n.id) === String(targetId));
-
-                if (targetNode && nodeData) {
-                    if (!Array.isArray(targetNode.steps)) targetNode.steps = [];
-                    
-                    targetNode.steps.push({ 
-                        text: nodeData.name || nodeData.text || "New Step", 
-                        name: nodeData.name || nodeData.text || "New Step",
-                        id: Date.now() 
-                    });
-
-                    state.v2.expandedNodes.add(targetId);
-                    const idx = source.indexOf(nodeData);
-                    if (idx > -1) source.splice(idx, 1);
-                }
-            });
-        } else {
-            // Standard Save (The card didn't land on anything)
-            const finalX = parseFloat(nodeEl.style.left);
-            const finalY = parseFloat(nodeEl.style.top);
-            
-            await OL.updateAndSync(() => {
-                const source = window.location.hash.includes('vault') ? state.master.resources : getActiveClient().projectData.localResources;
-                const node = source.find(n => n.id === nodeId);
-                if (node) node.coords = { x: finalX, y: finalY };
-            });
-        }
-
-        // 5. Cleanup UI
-        window.BLOCK_RENDER = false;
-        state.isSaving = false;
-        renderVisualizerV2(window.location.hash.includes('vault'));
+        state.v2.activeDragId = null;
+        window.renderGlobalVisualizer(isVault);
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
 };
 
 OL.syncDumpOptions = function() {
@@ -11515,24 +11482,35 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    // 🛡️ 1. GESTALT LOCK: Force everything to the V2 Workbench state
+    // 🛡️ 1. GESTALT LOCK
     state.viewMode = 'graph'; 
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
 
-    // 🏗️ 2. THE SHELL (Tray + V2 Canvas Area)
+    // 🏗️ 2. THE SHELL (Tray + Canvas Target)
     const trayOpen = state.ui.sidebarOpen;
 
     main.innerHTML = `
-        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
+        <div class="wb-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
             
-            <aside id="pane-drawer" class="v2-tray-sidebar" 
-                style="width: ${trayOpen ? '320px' : '0px'}; 
-                        min-width: ${trayOpen ? '320px' : '0px'}; 
-                        overflow: hidden;
-                        transition: width 0.3s ease, min-width 0.3s ease;
-                        border-right: ${trayOpen ? '1px solid rgba(255,255,255,0.1)' : 'none'}; 
-                        background: #0f172a; display: flex; flex-direction: column; z-index: 100;">
-                ${trayOpen ? window.renderTrayContent(isVaultMode) : ''}
+            <aside id="pane-drawer" class="wb-tray" 
+                style="width: ${trayOpen ? '320px' : '0px'}; min-width: ${trayOpen ? '320px' : '0px'}; 
+                       overflow: hidden; transition: width 0.3s ease; background: #0f172a; 
+                       display: flex; flex-direction: column; z-index: 100; border-right: 1px solid rgba(255,255,255,0.1);">
+                
+                <div class="wb-tray-search" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <input type="text" id="tray-search" class="modal-input tiny" 
+                           placeholder="Filter unmapped items..." 
+                           style="width: 100%; background: rgba(0,0,0,0.2);"
+                           oninput="OL.filterTray(this.value, ${isVaultMode})">
+                </div>
+
+                <div id="unmap-zone" class="wb-unmap-zone">
+                    📥 DROP HERE TO UNMAP
+                </div>
+
+                <div id="wb-tray-list" style="flex: 1; overflow-y: auto; padding: 10px;">
+                    ${window.renderTrayContent(isVaultMode)}
+                </div>
             </aside>
 
             <section id="v2-workbench-target" style="flex: 1; position: relative; overflow: hidden;">
@@ -11540,8 +11518,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    // 🚀 3. BOOT YOUR V2 ENGINE
-    // We tell your V2 function to render inside our new target
+    // 🚀 3. BOOT V2 ENGINE
     window.renderVisualizerV2(isVaultMode, "v2-workbench-target");
 };
 
@@ -11577,7 +11554,8 @@ window.renderTrayContent = function(isVault, query = "") {
             <div class="tray-scroll-list" style="flex: 1; overflow-y: auto; padding: 10px;">
                 ${trayItems.map(res => `
                     <div class="draggable-tray-item" draggable="true" 
-                         ondragstart="OL.handleTrayDragStart(event, '${res.id}')">
+                         style="cursor: grab;"
+                         onmousedown="OL.handleTrayDrag(event, '${res.id}')">
                         <div style="font-size: 11px; font-weight: 600;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
                         <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 2px;">${esc(res.type)}</div>
                     </div>
