@@ -9963,13 +9963,12 @@ OL.toggleMasterExpand = function() {
 };
 
 OL.toggleWorkbenchTray = function() {
-    // 1. Flip the state
     state.ui.sidebarOpen = !state.ui.sidebarOpen;
-    
-    // 2. Persist the preference
     localStorage.setItem('ol_tray_open', state.ui.sidebarOpen);
 
-    // 3. Refresh the shell
+    // 🚀 THE FIX: Ensure the filter variable is initialized in state
+    if (!state.v2.trayTypeFilter) state.v2.trayTypeFilter = 'All';
+
     const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault);
 };
@@ -11526,6 +11525,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
 
     const trayOpen = state.ui.sidebarOpen;
+    const activeTypeFilter = state.v2.trayTypeFilter || 'All';
 
     main.innerHTML = `
         <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
@@ -11548,7 +11548,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     window.renderVisualizerV2(isVaultMode, "v2-workbench-target");
 };
 
-window.renderTrayContent = function(isVault, query = "") {
+window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
     const client = getActiveClient();
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const q = query.toLowerCase().trim();
