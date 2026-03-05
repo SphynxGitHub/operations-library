@@ -11576,12 +11576,20 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
     // 🏷️ Get Unique Types for the dropdown
     const availableTypes = [...new Set(allResources.map(r => r.type))].filter(Boolean).sort();
 
-    // 🎯 Filter Logic: Unmapped + Search Text + Type Selection
+    // 🎯 DEEP SEARCH FILTER
     const trayItems = allResources.filter(res => {
         const isUnmapped = !res.coords;
-        const matchesText = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
         const matchesType = typeFilter === "All" || res.type === typeFilter;
-        return isUnmapped && matchesText && matchesType;
+        
+        // 🔍 Check Resource Name
+        const nameMatch = res.name.toLowerCase().includes(q);
+        
+        // 🔍 Check Internal Steps (Deep Search)
+        const stepMatch = (res.steps || []).some(s => 
+            (s.name || s.text || "").toLowerCase().includes(q)
+        );
+
+        return isUnmapped && matchesType && (nameMatch || stepMatch);
     });
 
     return `
@@ -11589,7 +11597,7 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
             <div class="tray-search-header" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                 <h3 class="tiny accent bold uppercase" style="margin-bottom:10px; letter-spacing:1px;">Resource Library</h3>
                 <input type="text" id="tray-search-input" class="modal-input tiny" 
-                       placeholder="Filter unmapped..." 
+                       placeholder="Search resources or steps..." 
                        value="${query}"
                        style="width: 100%; background: rgba(0,0,0,0.3); color: white;"
                        oninput="OL.filterTray(this.value, ${isVault})">
@@ -11602,24 +11610,16 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
                 </select>
             </div>
 
-            <div id="unmap-zone" class="unmap-drop-zone"
-                 style="margin: 15px; padding: 20px 15px; border: 2px dashed rgba(255,255,255,0.15); 
-                        border-radius: 10px; text-align: center; transition: all 0.2s ease;
-                        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;"
-                 ondragover="event.preventDefault(); this.style.borderColor='#ef4444'; this.style.background='rgba(239,68,68,0.1)';"
-                 ondragleave="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='transparent';"
-                 ondrop="OL.handleUnmapDrop(event)">
-                <span style="font-size: 18px;">📥</span>
-                <span style="font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px;">
-                    Drop to Unmap
-                </span>
-            </div>
+            <div id="unmap-zone" class="unmap-drop-zone" ...>
+                </div>
 
             <div class="tray-scroll-list" style="flex: 1; overflow-y: auto; padding: 0 10px 10px 10px;">
                 ${trayItems.map(res => {
-                    // Check expansion state
-                    const isExpanded = state.v2.trayExpandedNodes?.has(res.id);
                     const steps = res.steps || [];
+                    
+                    // 💡 AUTO-EXPAND: If the user is searching and a step matches, show it!
+                    const hasStepMatch = q.length > 0 && steps.some(s => (s.name || s.text || "").toLowerCase().includes(q));
+                    const isExpanded = state.v2.trayExpandedNodes?.has(res.id) || hasStepMatch;
 
                     return `
                     <div class="draggable-tray-item" 
@@ -11639,9 +11639,7 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
                             
                             ${steps.length > 0 ? `
                                 <div onclick="OL.toggleTrayNodeExpand(event, '${res.id}', ${isVault})" 
-                                     style="padding: 4px; cursor: pointer; opacity: 0.5; font-size: 10px; transition: 0.2s;" 
-                                     onmouseover="this.style.opacity='1'" 
-                                     onmouseout="this.style.opacity='0.5'">
+                                     style="padding: 4px; cursor: pointer; opacity: 0.5; font-size: 10px;">
                                     ${isExpanded ? '▼' : '▶'}
                                 </div>
                             ` : ''}
@@ -11649,17 +11647,24 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
 
                         ${isExpanded && steps.length > 0 ? `
                             <div class="tray-steps-preview" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
-                                ${steps.map((s, i) => `
-                                    <div style="font-size: 9px; color: #94a3b8; padding: 2px 0; display: flex; gap: 6px;">
+                                ${steps.map((s, i) => {
+                                    const stepText = s.name || s.text || "";
+                                    const isMatch = q.length > 0 && stepText.toLowerCase().includes(q);
+                                    
+                                    return `
+                                    <div style="font-size: 9px; color: ${isMatch ? 'var(--accent)' : '#94a3b8'}; 
+                                                padding: 2px 0; display: flex; gap: 6px; 
+                                                font-weight: ${isMatch ? 'bold' : 'normal'};">
                                         <span style="opacity: 0.4;">${i + 1}</span>
-                                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(s.name || s.text)}</span>
-                                    </div>
-                                `).join('')}
+                                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            ${isMatch ? '🎯 ' : ''}${esc(stepText)}
+                                        </span>
+                                    </div>`;
+                                }).join('')}
                             </div>
                         ` : ''}
                     </div>
                 `}).join('')}
-                ${trayItems.length === 0 ? '<div class="p-20 tiny muted italic center">No unmapped items found.</div>' : ''}
             </div>
         </div>
     `;
