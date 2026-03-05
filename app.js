@@ -8806,43 +8806,59 @@ OL.getInferredScope = (node) => {
     return null;
 };
 
-window.renderVisualizerV2 = function(isVault, targetId="mainContent") {
+window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const container = document.getElementById(targetId);
+    if (!container) return;
 
     const client = getActiveClient();
     const nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
+    // Get stage data to render sticky headers
+    const sourceData = isVault ? state.master : (client?.projectData || {});
+    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
     const isToggled = state.ui.sidebarOpen;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
-    const expandTitle = isAnyExpanded ? 'Collapse Steps' : 'Expand Steps';
     const toggleIcon = isToggled ? '🔳' : '⬜';
-    const toggleTitle = isToggled ? 'Collapse Sidebar' : 'Open Sidebar';
-    const uniqueScopes = [...new Set(nodes.map(n => OL.getInferredScope(n)).filter(Boolean))];
     
     container.innerHTML = `
-        <div class="v2-viewport" id="v2-viewport"
-            ondragover="event.preventDefault();" 
-            ondrop="OL.handleCanvasDrop(event)">
-
-            <div class="v2-canvas" id="v2-canvas" 
-                style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+        <div class="v2-viewport" id="v2-viewport">
+            
+            <div class="v2-canvas-header-area" style="position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; background: #0b0f1a; border-bottom: 1px solid rgba(255,255,255,0.05);">
                 
+                <div id="v2-sticky-stage-headers" style="display: flex; padding: 15px 0 10px 0; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: top left; pointer-events: none;">
+                    ${stages.map(s => `
+                        <div class="v2-lane-label" style="min-width: 300px; padding: 0 20px; font-size: 10px; font-weight: 900; color: var(--accent); text-transform: uppercase; letter-spacing: 2px;">
+                            ${esc(s.name)}
+                        </div>
+                    `).join('')}
+                </div>
+
                 <div id="global-shelf" class="global-shelf-container"
+                    style="position: relative; margin: 10px 20px 20px 20px; min-height: 80px; display: flex; flex-wrap: wrap; gap: 10px; padding: 30px 15px 15px 15px; background: rgba(56, 189, 248, 0.03); border: 2px dashed rgba(56, 189, 248, 0.1); border-radius: 8px; pointer-events: all;"
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
                     ondragleave="this.classList.remove('drag-over');"
                     ondrop="OL.handleShelfDrop(event)">
-                    <span class="global-shelf-label">Global Resources</span>
+                    <span class="global-shelf-label" style="position: absolute; top: 8px; left: 12px; font-size: 8px; font-weight: 900; color: var(--accent); text-transform: uppercase; opacity: 0.6;">Global Resources</span>
                 </div>
+            </div>
 
-                <div class="v2-stage-layer">
-                    ${renderV2Stages(isVault)}
-                </div>
+            <div class="v2-canvas-wrap" style="flex: 1; position: relative; overflow: hidden;"
+                ondragover="event.preventDefault();" 
+                ondrop="OL.handleCanvasDrop(event)">
 
-                <svg class="v2-svg-layer" id="v2-connections"></svg>
+                <div class="v2-canvas" id="v2-canvas" 
+                    style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+                    
+                    <div class="v2-stage-layer">
+                        ${renderV2Stages(isVault)}
+                    </div>
 
-                <div class="v2-node-layer" id="v2-nodes">
-                    ${renderV2Nodes(isVault)}
+                    <svg class="v2-svg-layer" id="v2-connections"></svg>
+
+                    <div class="v2-node-layer" id="v2-nodes">
+                        </div>
                 </div>
             </div>
 
@@ -8851,34 +8867,36 @@ window.renderVisualizerV2 = function(isVault, targetId="mainContent") {
                     <div class="v2-toolbar">
                         <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
                         <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
-                        <button class="btn soft" onclick="OL.toggleWorkbenchTray()" title=${toggleTitle}>${toggleIcon}</button>
-                        <button class="btn soft" onclick="OL.toggleMasterExpand()" title=${expandTitle}>${expandIcon}</button>
+                        <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
+                        <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
                     </div>
-
-                    <div id="v2-context-toolbar" class="v2-toolbar context-toolbar-inline" style="display: none;">
-                        <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
-                        <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
-                        <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">↻</button>
-                        <button id="ctx-reorder-btn" class="btn soft ctx-reorder" onclick="OL.handleContextAction('reorder')">☰</button>
-                        <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')">×</button>
                     </div>
-
-                    <div class="v2-toolbar">
-                        <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
-                        <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
-                    </div>
-                </div>
             </div>
         </div>
     `;
 
-    // <div class="divider-v"></div>
+    // 🚀 POST-RENDER NODE SORTING
+    // We need to physically move Global nodes into the shelf
+    const allNodesHTML = renderV2Nodes(isVault);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = allNodesHTML;
 
-    // At the bottom of renderVisualizerV2
+    const shelf = document.getElementById('global-shelf');
+    const nodesLayer = document.getElementById('v2-nodes');
+
+    // Filter and Append
+    const nodesArray = Array.from(tempDiv.children);
+    nodesArray.forEach(nodeEl => {
+        if (nodeEl.classList.contains('on-shelf')) {
+            shelf.appendChild(nodeEl);
+        } else {
+            nodesLayer.appendChild(nodeEl);
+        }
+    });
+
     setTimeout(() => {
-        OL.initV2Panning(); // Activates grid movement
+        OL.initV2Panning();
         OL.drawV2Connections();
-        console.log("🎮 Graph Engine Initialized");
     }, 100);
 };
 
@@ -8911,35 +8929,33 @@ OL.openBrainDump = function() {
 OL.initV2Panning = function() {
     const viewport = document.getElementById('v2-viewport');
     const canvas = document.getElementById('v2-canvas');
+    const headers = document.getElementById('v2-sticky-stage-headers'); // 🚀 Added
     if (!viewport || !canvas) return;
 
     let isPanning = false;
     let startX, startY;
 
     viewport.onmousedown = (e) => {
-        // Only pan if clicking the background, not a card
-        if (e.target !== viewport && e.target !== canvas) return;
-        
+        if (e.target.closest('.v2-node-card') || e.target.closest('.btn')) return;
         isPanning = true;
         startX = e.clientX - state.v2.pan.x;
         startY = e.clientY - state.v2.pan.y;
-        viewport.style.cursor = 'grabbing';
     };
 
     window.onmousemove = (e) => {
         if (!isPanning) return;
-        
         state.v2.pan.x = e.clientX - startX;
         state.v2.pan.y = e.clientY - startY;
 
-        // 🚀 THE GPU FIX: Use translate3d to avoid layout thrashing
         canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
+        
+        // 🚀 Sync headers X-axis and Scale only
+        if (headers) {
+            headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
+        }
     };
 
-    window.onmouseup = () => {
-        isPanning = false;
-        viewport.style.cursor = 'grab';
-    };
+    window.onmouseup = () => { isPanning = false; };
 };
 
 OL.zoom = function(delta) {
