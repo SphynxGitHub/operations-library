@@ -11487,35 +11487,21 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const main = document.getElementById("mainContent");
     if (!main) return;
 
-    // 🛡️ 1. GESTALT LOCK
     state.viewMode = 'graph'; 
     OL.registerView(() => renderGlobalVisualizer(isVaultMode));
 
-    // 🏗️ 2. THE SHELL (Tray + Canvas Target)
     const trayOpen = state.ui.sidebarOpen;
 
     main.innerHTML = `
-        <div class="wb-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
+        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
             
-            <aside id="pane-drawer" class="wb-tray" 
-                style="width: ${trayOpen ? '320px' : '0px'}; min-width: ${trayOpen ? '320px' : '0px'}; 
+            <aside id="pane-drawer" class="v2-tray-sidebar" 
+                style="width: ${trayOpen ? '320px' : '0px'}; 
+                       min-width: ${trayOpen ? '320px' : '0px'}; 
                        overflow: hidden; transition: width 0.3s ease; background: #0f172a; 
                        display: flex; flex-direction: column; z-index: 100; border-right: 1px solid rgba(255,255,255,0.1);">
                 
-                <div class="wb-tray-search" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <input type="text" id="tray-search" class="modal-input tiny" 
-                           placeholder="Filter unmapped items..." 
-                           style="width: 100%; background: rgba(0,0,0,0.2);"
-                           oninput="OL.filterTray(this.value, ${isVaultMode})">
-                </div>
-
-                <div id="unmap-zone" class="wb-unmap-zone">
-                    📥 DROP HERE TO UNMAP
-                </div>
-
-                <div id="wb-tray-list" style="flex: 1; overflow-y: auto; padding: 10px;">
-                    ${window.renderTrayContent(isVaultMode)}
-                </div>
+                ${trayOpen ? window.renderTrayContent(isVaultMode) : ''}
             </aside>
 
             <section id="v2-workbench-target" style="flex: 1; position: relative; overflow: hidden;">
@@ -11523,7 +11509,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
         </div>
     `;
 
-    // 🚀 3. BOOT V2 ENGINE
+    // 🚀 Boot the engine into the target pane
     window.renderVisualizerV2(isVaultMode, "v2-workbench-target");
 };
 
@@ -11532,7 +11518,6 @@ window.renderTrayContent = function(isVault, query = "") {
     const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
     const q = query.toLowerCase().trim();
 
-    // 🎯 Filter Logic: Unmapped items matching search
     const trayItems = allResources.filter(res => {
         const isUnmapped = !res.coords;
         const matches = res.name.toLowerCase().includes(q) || (res.type || "").toLowerCase().includes(q);
@@ -11541,31 +11526,39 @@ window.renderTrayContent = function(isVault, query = "") {
 
     return `
         <div class="tray-inner" style="display: flex; flex-direction: column; height: 100%;">
-            <div class="tray-search-header" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div class="tray-search-header" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                <h3 class="tiny accent bold uppercase" style="margin-bottom:10px; letter-spacing:1px;">Resource Library</h3>
                 <input type="text" id="tray-search-input" class="modal-input tiny" 
-                       placeholder="Filter library..." 
+                       placeholder="Filter unmapped..." 
                        value="${query}"
                        style="width: 100%; background: rgba(0,0,0,0.3); color: white;"
                        oninput="OL.filterTray(this.value, ${isVault})">
             </div>
 
             <div id="unmap-zone" class="unmap-drop-zone"
-                 ondragover="event.preventDefault(); this.classList.add('active');"
-                 ondragleave="this.classList.remove('active');"
+                 style="margin: 15px; padding: 30px 15px; border: 2px dashed rgba(255,255,255,0.15); 
+                        border-radius: 10px; text-align: center; transition: all 0.2s ease;
+                        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;"
+                 ondragover="event.preventDefault(); this.style.borderColor='#ef4444'; this.style.background='rgba(239,68,68,0.1)';"
+                 ondragleave="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='transparent';"
                  ondrop="OL.handleUnmapDrop(event)">
-                <span>📥 Drop here to Unmap</span>
+                <span style="font-size: 20px;">📥</span>
+                <span style="font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px;">
+                    Drop here to Unmap
+                </span>
             </div>
 
-            <div class="tray-scroll-list" style="flex: 1; overflow-y: auto; padding: 10px;">
+            <div class="tray-scroll-list" style="flex: 1; overflow-y: auto; padding: 0 10px 10px 10px;">
                 ${trayItems.map(res => `
-                    <div class="draggable-tray-item" draggable="true" 
-                         style="cursor: grab;"
+                    <div class="draggable-tray-item" 
+                         style="padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); 
+                                border-radius: 8px; margin-bottom: 8px; cursor: grab;"
                          onmousedown="OL.handleTrayDrag(event, '${res.id}')">
-                        <div style="font-size: 11px; font-weight: 600;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
-                        <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 2px;">${esc(res.type)}</div>
+                        <div style="font-size: 11px; font-weight: 600; color: #eee;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
+                        <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 4px; opacity: 0.5;">${esc(res.type)}</div>
                     </div>
                 `).join('')}
-                ${trayItems.length === 0 ? '<div class="p-20 tiny muted italic center">No unmapped items.</div>' : ''}
+                ${trayItems.length === 0 ? '<div class="p-20 tiny muted italic center">No unmapped items found.</div>' : ''}
             </div>
         </div>
     `;
