@@ -4024,6 +4024,8 @@ ARROWS
     overflow: hidden;
     background-color: #050816;
     cursor: grab;
+    display: flex;
+    flex-direction: column; /* Stack header area over canvas area */
 }
 
 .v2-viewport:active { cursor: grabbing; }
@@ -4043,6 +4045,15 @@ ARROWS
     overflow: visible;
 }
 
+/* 📌 THE STICKY HEADER WRAPPER */
+.v2-canvas-header-area {
+    position: sticky;
+    top: 0;
+    z-index: 1000; /* High z-index to stay above nodes */
+    background: #0b0f1a; /* Match your background to hide nodes sliding under */
+    pointer-events: none; /* Let clicks pass through to canvas unless hitting a button */
+}
+
 /* Stage Lanes in V2 */
 .v2-stage-layer {
     position: absolute;
@@ -4051,6 +4062,14 @@ ARROWS
     display: flex;
     height: 100%;
     pointer-events: none; /* Let clicks pass to nodes */
+}
+
+/* 📁 STAGE HEADERS (Pinned) */
+.v2-stage-header-row {
+    display: flex;
+    padding: 20px 50px 10px 50px;
+    background: #0b0f1a;
+    pointer-events: all;
 }
 
 .v2-lane {
@@ -4066,6 +4085,7 @@ ARROWS
     text-transform: uppercase;
     font-size: 14px;
     opacity: 0.5;
+    min-width: 300px;
 }
 
 /* style.css */
@@ -4168,28 +4188,29 @@ ARROWS
 }
 
 .global-shelf-container {
-    position: absolute;
-    /* Position it significantly above the start of Stage 1 */
-    top: -350px; 
-    left: -2000px; /* Stretch wide to cover lateral pans */
-    width: 5000px;
-    height: 300px;
-    background: rgba(255, 255, 255, 0.02);
-    border-bottom: 2px dashed rgba(56, 189, 248, 0.2);
-    padding: 30px;
-    pointer-events: none; /* Let clicks pass to the canvas background */
-    z-index: 1;
+    position: relative; /* Changed from absolute to flow with header area */
+    margin: 0 50px 20px 50px;
+    width: auto;
+    min-height: 100px;
+    background: rgba(56, 189, 248, 0.05);
+    border: 2px dashed rgba(56, 189, 248, 0.2);
+    border-radius: 12px;
+    padding: 40px 20px 20px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    pointer-events: all;
 }
 
 .global-shelf-label {
     position: sticky;
     left: 20px;
     color: #38bdf8;
-    font-size: 10px;
-    font-weight: 900;
     letter-spacing: 3px;
     opacity: 0.4;
     text-transform: uppercase;
+    font-weight: 800;
+    font-size: 14px;
 }
 
 .v2-step-badge {
