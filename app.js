@@ -8746,6 +8746,8 @@ state.v2.expandedNodes = state.v2.expandedNodes || new Set();
 
 state.v2.trayTypeFilter = state.v2.trayTypeFilter || 'All';
 
+state.v2.trayExpandedNodes = state.v2.trayExpandedNodes || new Set();
+
 // Add this to your global listeners if it's not there
 document.addEventListener('mousedown', (e) => {
     // If we click the background canvas or a card, hide the connection toolbar
@@ -9971,6 +9973,24 @@ OL.toggleWorkbenchTray = function() {
 
     const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault);
+};
+
+OL.toggleTrayNodeExpand = function(e, resId, isVault) {
+    e.stopPropagation(); // Prevents starting a drag by accident
+    
+    if (state.v2.trayExpandedNodes.has(resId)) {
+        state.v2.trayExpandedNodes.delete(resId);
+    } else {
+        state.v2.trayExpandedNodes.add(resId);
+    }
+    
+    // Refresh the tray only
+    const searchVal = document.getElementById('tray-search-input')?.value || "";
+    const typeFilter = state.v2.trayTypeFilter || "All";
+    const list = document.getElementById('pane-drawer');
+    if (list) {
+        list.innerHTML = window.renderTrayContent(isVault, searchVal, typeFilter);
+    }
 };
 
 OL.ejectStep = async function(resourceId, stepIdx) {
@@ -11575,7 +11595,7 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
                        oninput="OL.filterTray(this.value, ${isVault})">
 
                 <select class="modal-input tiny" 
-                        style="width: 100%; background: rgba(0,0,0,0.3); color: #94a3b8; font-size: 10px;"
+                        style="width: 100%; background: rgba(0,0,0,0.3); color: #94a3b8; font-size: 10px; margin-top: 8px;"
                         onchange="OL.setTrayTypeFilter(this.value, ${isVault})">
                     <option value="All">All Types</option>
                     ${availableTypes.map(t => `<option value="${t}" ${typeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
@@ -11583,28 +11603,62 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
             </div>
 
             <div id="unmap-zone" class="unmap-drop-zone"
-                 style="margin: 15px; padding: 30px 15px; border: 2px dashed rgba(255,255,255,0.15); 
+                 style="margin: 15px; padding: 20px 15px; border: 2px dashed rgba(255,255,255,0.15); 
                         border-radius: 10px; text-align: center; transition: all 0.2s ease;
                         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;"
                  ondragover="event.preventDefault(); this.style.borderColor='#ef4444'; this.style.background='rgba(239,68,68,0.1)';"
                  ondragleave="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='transparent';"
                  ondrop="OL.handleUnmapDrop(event)">
-                <span style="font-size: 20px;">📥</span>
-                <span style="font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px;">
-                    Drop here to Unmap
+                <span style="font-size: 18px;">📥</span>
+                <span style="font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px;">
+                    Drop to Unmap
                 </span>
             </div>
 
             <div class="tray-scroll-list" style="flex: 1; overflow-y: auto; padding: 0 10px 10px 10px;">
-                ${trayItems.map(res => `
+                ${trayItems.map(res => {
+                    // Check expansion state
+                    const isExpanded = state.v2.trayExpandedNodes?.has(res.id);
+                    const steps = res.steps || [];
+
+                    return `
                     <div class="draggable-tray-item" 
                          style="padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); 
-                                border-radius: 8px; margin-bottom: 8px; cursor: grab;"
+                                border-radius: 8px; margin-bottom: 8px; cursor: grab; position: relative;"
                          onmousedown="OL.handleTrayDrag(event, '${res.id}')">
-                        <div style="font-size: 11px; font-weight: 600; color: #eee;">${OL.getRegistryIcon(res.type)} ${esc(res.name)}</div>
-                        <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 4px; opacity: 0.5;">${esc(res.type)}</div>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 11px; font-weight: 600; color: #eee;">
+                                    ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
+                                </div>
+                                <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 2px; opacity: 0.5;">
+                                    ${esc(res.type)}
+                                </div>
+                            </div>
+                            
+                            ${steps.length > 0 ? `
+                                <div onclick="OL.toggleTrayNodeExpand(event, '${res.id}', ${isVault})" 
+                                     style="padding: 4px; cursor: pointer; opacity: 0.5; font-size: 10px; transition: 0.2s;" 
+                                     onmouseover="this.style.opacity='1'" 
+                                     onmouseout="this.style.opacity='0.5'">
+                                    ${isExpanded ? '▼' : '▶'}
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        ${isExpanded && steps.length > 0 ? `
+                            <div class="tray-steps-preview" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+                                ${steps.map((s, i) => `
+                                    <div style="font-size: 9px; color: #94a3b8; padding: 2px 0; display: flex; gap: 6px;">
+                                        <span style="opacity: 0.4;">${i + 1}</span>
+                                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(s.name || s.text)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     </div>
-                `).join('')}
+                `}).join('')}
                 ${trayItems.length === 0 ? '<div class="p-20 tiny muted italic center">No unmapped items found.</div>' : ''}
             </div>
         </div>
