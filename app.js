@@ -9024,18 +9024,32 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         
-        // 🧼 CLEANUP UI IMMEDIATELY
+        // 1. 🎯 RE-CAPTURE TARGET AT RELEASE POINT
+        const target = document.elementFromPoint(uE.clientX, uE.clientY);
+        
+        // 🧼 UI Cleanup
         const zone = document.getElementById('unmap-zone');
         if (zone) zone.classList.remove('is-hovered');
         
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
 
+        // 2. 🚀 SECURE SYNC
         await OL.updateAndSync(() => {
             const res = OL.getResourceById(id);
+            if (!res) return;
+
+            // Check if we dropped on the Unmap zone
             if (target?.closest('#unmap-zone')) {
+                console.log("♻️ Unmapping:", res.name);
                 delete res.coords;
-            } else if (target?.closest('#v2-workbench-target')) {
+            } 
+            // Check if we dropped on the Canvas
+            else if (target?.closest('#v2-workbench-target')) {
+                const canvas = document.getElementById('v2-canvas');
+                const rect = canvas.getBoundingClientRect();
+                const zoom = state.v2.zoom || 1;
+
                 res.coords = {
                     x: Math.round((uE.clientX - rect.left) / zoom),
                     y: Math.round((uE.clientY - rect.top) / zoom)
