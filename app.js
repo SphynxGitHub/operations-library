@@ -8983,34 +8983,53 @@ OL.initWBMotion = function(e, id) {
     const zoom = state.v2.zoom || 1;
 
     const onMove = (mE) => {
+        const zone = document.getElementById('unmap-zone');
+        const viewport = document.getElementById('v2-workbench-target');
+        const canvas = document.getElementById('v2-canvas');
+        const rect = canvas.getBoundingClientRect();
+        const zoom = state.v2.zoom || 1;
+
+        // 1. 🎯 DETECT HOVER TARGET
         const target = document.elementFromPoint(mE.clientX, mE.clientY);
         const isOverUnmap = !!target?.closest('#unmap-zone');
-        if (zone) zone.classList.toggle('active', isOverUnmap);
 
-        // 👻 Handle Ghost Preview
+        // 2. 🔴 TOGGLE RED GLOW
+        if (zone) {
+            if (isOverUnmap) {
+                zone.classList.add('is-hovered');
+            } else {
+                zone.classList.remove('is-hovered');
+            }
+        }
+
+        // 3. 👻 HANDLE GHOST (Existing logic)
         let ghost = document.getElementById('drag-ghost');
         if (!isOverUnmap && target?.closest('#v2-workbench-target')) {
             if (!ghost) {
                 ghost = document.createElement('div');
                 ghost.id = 'drag-ghost';
-                ghost.className = 'v2-node-card ghost'; // Uses your V2 styles
+                ghost.className = 'v2-node-card ghost';
                 canvas.appendChild(ghost);
             }
             const res = OL.getResourceById(id);
             ghost.innerHTML = `<b style="color:var(--accent)">${res?.name || 'Mapping...'}</b>`;
             ghost.style.left = `${(mE.clientX - rect.left) / zoom}px`;
             ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
-        } else if (ghost) ghost.remove();
+        } else if (ghost) {
+            ghost.remove();
+        }
     };
 
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         
-        const target = document.elementFromPoint(uE.clientX, uE.clientY);
+        // 🧼 CLEANUP UI IMMEDIATELY
+        const zone = document.getElementById('unmap-zone');
+        if (zone) zone.classList.remove('is-hovered');
+        
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
-        if (zone) zone.classList.remove('active');
 
         await OL.updateAndSync(() => {
             const res = OL.getResourceById(id);

@@ -4660,3 +4660,17 @@ path[stroke="transparent"] {
     z-index: 10001 !important;
     pointer-events: all !important;
 }
+
+/* 🚨 THE DANGER ZONE */
+.unmap-drop-zone.is-hovered {
+    background: rgba(239, 68, 68, 0.15) !important;
+    border-color: #ef4444 !important;
+    border-style: solid !important; /* Switch from dashed to solid on hover */
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    transform: scale(1.02);
+}
+
+.unmap-drop-zone.is-hovered span {
+    color: #ef4444 !important;
+    opacity: 1 !important;
+}
