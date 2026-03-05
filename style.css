@@ -4195,7 +4195,7 @@ ARROWS
 
 .global-shelf-container {
     position: relative; /* Changed from absolute to flow with header area */
-    margin: 0 50px 20px 50px;
+    margin: 65px 50px 20px 50px;
     width: auto;
     min-height: 100px;
     background: rgba(56, 189, 248, 0.05);
