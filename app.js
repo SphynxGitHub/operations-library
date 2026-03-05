@@ -9044,34 +9044,45 @@ OL.initWBMotion = function(e, id) {
     };
 
     const onUp = async (uE) => {
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    
-    const target = document.elementFromPoint(uE.clientX, uE.clientY);
-    const isShelfDrop = !!target?.closest('#global-shelf'); // 🚀 NEW CHECK
-    
-    // ... existing cleanup code ...
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        
+        // 1. 🎯 RE-CAPTURE TARGET AT RELEASE POINT
+        const target = document.elementFromPoint(uE.clientX, uE.clientY);
+        const isShelfDrop = !!target?.closest('#global-shelf');
+        
+        // 🧼 UI Cleanup
+        const zone = document.getElementById('unmap-zone');
+        if (zone) zone.classList.remove('is-hovered');
+        
+        const ghost = document.getElementById('drag-ghost');
+        if (ghost) ghost.remove();
 
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(id);
-        if (!res) return;
+        // 2. 🚀 SECURE SYNC
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(id);
+            if (!res) return;
 
-        if (target?.closest('#unmap-zone')) {
-            delete res.coords;
-            res.isGlobal = false;
-        } 
-        else if (isShelfDrop) { // 🚀 HANDLE SHELF
-            res.isGlobal = true;
-            delete res.coords;
-        }
-        else if (target?.closest('#v2-workbench-target')) {
-            // ... existing grid coordinate logic ...
-            res.isGlobal = false; // Ensure it's removed from shelf if moved to grid
-        }
-    });
+            if (target?.closest('#unmap-zone')) {
+                delete res.coords;
+                res.isGlobal = false;
+            } 
+            else if (isShelfDrop) { // 🚀 HANDLE SHELF
+                res.isGlobal = true;
+                delete res.coords;
+            }
+            else if (target?.closest('#v2-workbench-target')) {
+                // ... existing grid coordinate logic ...
+                res.isGlobal = false; // Ensure it's removed from shelf if moved to grid
+            }
+        });
 
-    state.v2.activeDragId = null;
-    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+        state.v2.activeDragId = null;
+        window.renderGlobalVisualizer(isVault);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
 };
 
 OL.syncDumpOptions = function() {
