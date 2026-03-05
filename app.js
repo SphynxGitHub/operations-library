@@ -8836,7 +8836,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
 
                 <div id="global-shelf" class="global-shelf-container"
-                    style="pointer-events: all !important; position: relative; margin: 10px 20px 20px 20px; min-height: 80px; display: flex; flex-wrap: wrap; gap: 10px; padding: 30px 15px 15px 15px; background: rgba(56, 189, 248, 0.03); border: 2px dashed rgba(56, 189, 248, 0.1); border-radius: 8px; pointer-events: all;"
+                    style="pointer-events: all !important;"
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
                     ondragleave="this.classList.remove('drag-over');"
                     ondrop="OL.handleShelfDrop(event)">
