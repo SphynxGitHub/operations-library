@@ -8869,6 +8869,8 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
                         <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
+                        <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
+                        <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
                     </div>
                     </div>
             </div>
@@ -9050,6 +9052,7 @@ OL.initWBMotion = function(e, id) {
         // 1. 🎯 RE-CAPTURE TARGET AT RELEASE POINT
         const target = document.elementFromPoint(uE.clientX, uE.clientY);
         const isShelfDrop = !!target?.closest('#global-shelf');
+        const isTrayDrop = !!target?.closest('#unmap-zone');
         
         // 🧼 UI Cleanup
         const zone = document.getElementById('unmap-zone');
@@ -9063,17 +9066,21 @@ OL.initWBMotion = function(e, id) {
             const res = OL.getResourceById(id);
             if (!res) return;
 
-            if (target?.closest('#unmap-zone')) {
+            if (isTrayDrop) {
                 delete res.coords;
                 res.isGlobal = false;
-            } 
-            else if (isShelfDrop) { // 🚀 HANDLE SHELF
+            } else if (isShelfDrop) {
                 res.isGlobal = true;
                 delete res.coords;
-            }
-            else if (target?.closest('#v2-workbench-target')) {
-                // ... existing grid coordinate logic ...
-                res.isGlobal = false; // Ensure it's removed from shelf if moved to grid
+            } else {
+                // It landed on the pannable grid
+                const canvas = document.getElementById('v2-canvas');
+                const rect = canvas.getBoundingClientRect();
+                res.isGlobal = false;
+                res.coords = {
+                    x: (uE.clientX - rect.left) / state.v2.zoom,
+                    y: (uE.clientY - rect.top) / state.v2.zoom
+                };
             }
         });
 
@@ -11593,18 +11600,22 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
 
     // 🎯 DEEP SEARCH FILTER
     const trayItems = allResources.filter(res => {
-        const isUnmapped = !res.coords;
+        // 🚀 THE FIX: A resource is only "Unmapped" if it has NO coords AND is NOT Global
+        const isMappedOnGrid = res.coords && typeof res.coords.x === 'number';
+        const isMappedOnShelf = !!res.isGlobal;
+        const isActuallyUnmapped = !isMappedOnGrid && !isMappedOnShelf;
+
         const matchesType = typeFilter === "All" || res.type === typeFilter;
         
         // 🔍 Check Resource Name
-        const nameMatch = res.name.toLowerCase().includes(q);
+        const nameMatch = (res.name || "").toLowerCase().includes(q);
         
         // 🔍 Check Internal Steps (Deep Search)
         const stepMatch = (res.steps || []).some(s => 
             (s.name || s.text || "").toLowerCase().includes(q)
         );
 
-        return isUnmapped && matchesType && (nameMatch || stepMatch);
+        return isActuallyUnmapped && matchesType && (nameMatch || stepMatch);
     });
 
     return `

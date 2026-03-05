@@ -4078,6 +4078,12 @@ ARROWS
     background: linear-gradient(to bottom, rgba(56, 189, 248, 0.02), transparent);
 }
 
+.v2-lane-guide {
+    width: 300px; /* Match node width + gap */
+    border-right: 1px solid rgba(56, 189, 248, 0.05); /* Very subtle blue line */
+    height: 100%;
+}
+
 .v2-lane-label {
     padding: 20px;
     color: var(--accent);
