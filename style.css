@@ -4262,6 +4262,11 @@ ARROWS
     transition: transform 0.2s ease, background 0.2s ease;
 }
 
+.v2-node-card.ghost {
+    pointer-events: none !important; /* 🚀 This is the #1 cause of drop failures */
+    z-index: 10001;
+}
+
 .v2-step-eject {
     margin-left: auto;
     cursor: pointer;

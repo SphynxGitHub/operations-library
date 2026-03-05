@@ -8825,7 +8825,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             
-            <div class="v2-canvas-header-area" style="position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; background: #0b0f1a; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; background: #0b0f1a; border-bottom: 1px solid rgba(255,255,255,0.05);">
                 
                 <div id="v2-sticky-stage-headers" style="display: flex; padding: 15px 0 10px 0; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: top left; pointer-events: none;">
                     ${stages.map(s => `
@@ -8836,7 +8836,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
 
                 <div id="global-shelf" class="global-shelf-container"
-                    style="position: relative; margin: 10px 20px 20px 20px; min-height: 80px; display: flex; flex-wrap: wrap; gap: 10px; padding: 30px 15px 15px 15px; background: rgba(56, 189, 248, 0.03); border: 2px dashed rgba(56, 189, 248, 0.1); border-radius: 8px; pointer-events: all;"
+                    style="pointer-events: all !important; position: relative; margin: 10px 20px 20px 20px; min-height: 80px; display: flex; flex-wrap: wrap; gap: 10px; padding: 30px 15px 15px 15px; background: rgba(56, 189, 248, 0.03); border: 2px dashed rgba(56, 189, 248, 0.1); border-radius: 8px; pointer-events: all;"
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
                     ondragleave="this.classList.remove('drag-over');"
                     ondrop="OL.handleShelfDrop(event)">
@@ -9044,48 +9044,34 @@ OL.initWBMotion = function(e, id) {
     };
 
     const onUp = async (uE) => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        
-        // 1. 🎯 RE-CAPTURE TARGET AT RELEASE POINT
-        const target = document.elementFromPoint(uE.clientX, uE.clientY);
-        
-        // 🧼 UI Cleanup
-        const zone = document.getElementById('unmap-zone');
-        if (zone) zone.classList.remove('is-hovered');
-        
-        const ghost = document.getElementById('drag-ghost');
-        if (ghost) ghost.remove();
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    
+    const target = document.elementFromPoint(uE.clientX, uE.clientY);
+    const isShelfDrop = !!target?.closest('#global-shelf'); // 🚀 NEW CHECK
+    
+    // ... existing cleanup code ...
 
-        // 2. 🚀 SECURE SYNC
-        await OL.updateAndSync(() => {
-            const res = OL.getResourceById(id);
-            if (!res) return;
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(id);
+        if (!res) return;
 
-            // Check if we dropped on the Unmap zone
-            if (target?.closest('#unmap-zone')) {
-                console.log("♻️ Unmapping:", res.name);
-                delete res.coords;
-            } 
-            // Check if we dropped on the Canvas
-            else if (target?.closest('#v2-workbench-target')) {
-                const canvas = document.getElementById('v2-canvas');
-                const rect = canvas.getBoundingClientRect();
-                const zoom = state.v2.zoom || 1;
+        if (target?.closest('#unmap-zone')) {
+            delete res.coords;
+            res.isGlobal = false;
+        } 
+        else if (isShelfDrop) { // 🚀 HANDLE SHELF
+            res.isGlobal = true;
+            delete res.coords;
+        }
+        else if (target?.closest('#v2-workbench-target')) {
+            // ... existing grid coordinate logic ...
+            res.isGlobal = false; // Ensure it's removed from shelf if moved to grid
+        }
+    });
 
-                res.coords = {
-                    x: Math.round((uE.clientX - rect.left) / zoom),
-                    y: Math.round((uE.clientY - rect.top) / zoom)
-                };
-            }
-        });
-
-        state.v2.activeDragId = null;
-        window.renderGlobalVisualizer(isVault);
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    state.v2.activeDragId = null;
+    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
 OL.syncDumpOptions = function() {
@@ -11744,23 +11730,37 @@ OL.handleCanvasDrop = async function(e) {
 };
 
 OL.handleShelfDrop = async function(e) {
-    e.preventDefault();
-    const resId = e.dataTransfer.getData("moveId");
-    const itemType = e.dataTransfer.getData("itemType");
+    // 🛡️ STOP the browser from refreshing
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
     
-    document.getElementById('global-shelf').classList.remove('drag-over');
+    // 1. Identify the resource being dropped
+    // We check both dataTransfer (for tray items) and activeDragId (for grid items)
+    const resId = e.dataTransfer.getData("moveId") || state.v2.activeDragId;
+    
+    console.log("📥 Attempting Shelf Drop for ID:", resId);
+    
+    const shelf = document.getElementById('global-shelf');
+    if (shelf) shelf.classList.remove('drag-over');
 
     if (resId) {
         await OL.updateAndSync(() => {
             const res = OL.getResourceById(resId);
             if (res) {
-                res.isGlobal = true; // 🚀 Locks it into the shelf
-                delete res.coords;   // Removes free-floating coordinates
+                console.log(`⭐ Promoting ${res.name} to Global Shelf`);
+                res.isGlobal = true; 
+                delete res.coords; // Remove X/Y so it follows flex flow
+                res.stageId = null; // Unlink from any specific vertical lane
             }
         });
         
+        // Full refresh to move the DOM element into the shelf container
         window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    } else {
+        console.warn("⚠️ Shelf drop failed: No resource ID found in event.");
     }
+    
+    return false;
 };
 
 OL.handleUnmapDrop = async function(e) {
