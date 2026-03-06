@@ -8893,28 +8893,28 @@ OL.saveLogic = function(sourceId, outcomeIdx) {
     const operatorSelect = document.querySelector('.logic-operator-select');
     const valueInput = document.getElementById('logic-value');
 
-    // 🛡️ Safety Check: If the element is missing, use a fallback
     const logicData = {
         field: fieldInput ? fieldInput.value : '',
         operator: operatorSelect ? operatorSelect.value : 'contains',
         value: valueInput ? valueInput.value : '' 
     };
 
-    console.log("💾 Saving Logic:", logicData);
-
-    // Get the resource and update the specific outcome
     const res = OL.getResourceById(sourceId);
     if (res && res.outcomes && res.outcomes[outcomeIdx]) {
+        // 1. Update the local data
         res.outcomes[outcomeIdx].logic = logicData;
         
-        // Save to DB (Assuming your standard save call)
-        OL.saveProjectData(); 
+        // 2. 💾 PERSIST MANUALLY (To avoid popping open the Resource Modal)
+        // This is the core logic from your updateResourceMeta without the UI refresh
+        OL.persist();
         
-        // Close modal
+        console.log(`✅ Path Logic Saved for ${sourceId} outcome ${outcomeIdx}`);
+
+        // 3. UI Cleanup
         const modal = document.getElementById('logic-modal');
         if (modal) modal.remove();
         
-        // Refresh visuals to show the "Logic" icon on the line
+        // 4. Redraw lines so the λ icon appears
         OL.drawV2Connections();
     }
 };
