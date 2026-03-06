@@ -8825,7 +8825,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             
-            <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; background: #0b0f1a; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="v2-canvas-header-area">
 
                 <div id="global-shelf" class="global-shelf-container"
                     style="pointer-events: all !important;"
@@ -8835,7 +8835,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     <span class="global-shelf-label">Global Resources</span>
                 </div>
 
-                <div id="v2-sticky-stage-headers" style="display: flex; padding: 15px 0 10px 0; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: top left; pointer-events: none;">
+                <div id="v2-sticky-stage-headers" style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
                     ${stages.map(s => `
                         <div class="v2-lane-label">
                             ${esc(s.name)}
@@ -8844,21 +8844,16 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
             </div>
 
-            <div class="v2-canvas-wrap" style="flex: 1; position: relative; overflow: hidden;"
+            <div id="v2-canvas-scroll-wrap"  class="v2-canvas-scroll-wrap"
+                onmousedown="OL.initV2Panning(event)"
                 ondragover="event.preventDefault();" 
                 ondrop="OL.handleCanvasDrop(event)">
 
                 <div class="v2-canvas" id="v2-canvas" 
                     style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
-                    
-                    <div class="v2-stage-layer">
-                        ${renderV2Stages(isVault)}
-                    </div>
 
                     <svg class="v2-svg-layer" id="v2-connections"></svg>
-
-                    <div class="v2-node-layer" id="v2-nodes">
-                        </div>
+                    <div class="v2-node-layer" id="v2-nodes"></div>
                 </div>
             </div>
 
@@ -8949,12 +8944,23 @@ OL.initV2Panning = function() {
         state.v2.pan.x = e.clientX - startX;
         state.v2.pan.y = e.clientY - startY;
 
+        const canvas = document.getElementById('v2-canvas');
+        const wrap = document.getElementById('v2-canvas-scroll-wrap');
+        const viewport = document.getElementById('v2-viewport');
+        const headers = document.getElementById('v2-sticky-stage-headers');
+
+        // 1. Move the cards
         canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
         
-        // 🚀 Sync headers X-axis and Scale only
+        // 2. Sync the sticky labels
         if (headers) {
             headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
         }
+
+        // 🚀 3. SYNC THE BACKGROUND (Dots and Lines)
+        // We update the background position to match the pan exactly
+        viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
+        wrap.style.backgroundPosition = `${state.v2.pan.x}px 0px`;
     };
 
     window.onmouseup = () => { isPanning = false; };

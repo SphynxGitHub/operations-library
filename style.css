@@ -4023,6 +4023,9 @@ ARROWS
     height: 100vh; /* Adjust based on your header */
     overflow: hidden;
     background-color: #050816;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-attachment: local;
     cursor: grab;
     display: flex;
     flex-direction: column; /* Stack header area over canvas area */
@@ -4045,6 +4048,19 @@ ARROWS
     overflow: visible;
 }
 
+.v2-canvas-scroll-wrap {
+    /* 🚀 THE LINES: Linear gradient create a 1px line every 300px (matching lane width) */
+    background-image: linear-gradient(to right, rgba(56, 189, 248, 0.1) 1px, transparent 1px);
+    background-size: 300px 100%;
+    background-repeat: repeat-x;
+    background-attachment: local; /* Syncs lines with panning */
+}
+
+/* 🧹 REMOVE THE OLD STAGE LAYER */
+.v2-stage-layer, .v2-lane-guide {
+    display: none !important;
+}
+
 /* 📌 THE STICKY HEADER WRAPPER */
 .v2-canvas-header-area {
     position: absolute;
@@ -4061,16 +4077,6 @@ ARROWS
     flex: 1; position: relative; overflow: hidden;
 }
 
-/* Stage Lanes in V2 */
-.v2-stage-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    display: flex;
-    height: 100%;
-    pointer-events: none; /* Let clicks pass to nodes */
-}
-
 /* 📁 STAGE HEADERS (Pinned) */
 .v2-stage-header-row {
     display: flex;
@@ -4083,12 +4089,6 @@ ARROWS
     width: 400px; /* Width of your stages */
     border-right: 1px solid rgba(56, 189, 248, 0.1);
     background: linear-gradient(to bottom, rgba(56, 189, 248, 0.02), transparent);
-}
-
-.v2-lane-guide {
-    width: 300px; /* Match node width + gap */
-    border-right: 1px solid rgba(56, 189, 248, 0.05); /* Very subtle blue line */
-    height: 100%;
 }
 
 .v2-lane-label {
@@ -4232,7 +4232,7 @@ ARROWS
     font-size: 10px;
 }
 
-.v2-sticky-stage-headers {
+#v2-sticky-stage-headers {
     display: flex; 
     padding: 15px 0 10px 0; 
     transform-origin: top left; 
