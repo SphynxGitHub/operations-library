@@ -9001,7 +9001,8 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
     // Get stage data to render sticky headers
     const sourceData = isVault ? state.master : (client?.projectData || {});
-    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+    // ✅ Always pull the live, global stages from the master state
+    const stages = (state.master.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
 
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
     const isToggled = state.ui.sidebarOpen;
@@ -9009,7 +9010,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const toggleIcon = isToggled ? '🔳' : '⬜';
     
     const totalWidth = (stages.length + 1) * 300;
-    
+
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             
