@@ -9046,17 +9046,16 @@ OL.saveLoop = async function(sourceId, outcomeIdx) {
         const res = OL.getResourceById(sourceId);
         if (!res) return;
 
-        // Check if we are in a leash context (activeConnection)
         const conn = state.v2.activeConnection;
 
         if (conn && conn.isLeash) {
-            // 🚀 LEASH: Save to root
-            res.isLoop = true;
+            // 🚀 THE FIX: Set both the object and the boolean flag
             res.loop = loopData;
-            console.log("🔄 Loop saved to Leash Child Root");
+            res.isLoop = true; 
+            console.log("🔄 Loop saved to Leash Root");
         } else if (res.outcomes && res.outcomes[outcomeIdx]) {
-            // ⚡ FLOW PATH: Save to outcome
             res.outcomes[outcomeIdx].loop = loopData;
+            res.outcomes[outcomeIdx].isLoop = true;
         }
     });
 
