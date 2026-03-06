@@ -8923,19 +8923,21 @@ OL.saveLogic = function(targetId, outcomeIdx) {
 };
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
+    // 🎯 Determine the correct target ID BEFORE the sync block
+    // If it's a leash, we save to the CHILD (targetId)
+    const targetId = conn.isLeash ? conn.sourceId : conn.sourceId; 
+    // Wait—look at your Loop Builder log: 
+    // sourceId is 'sop-1772837917778' (The Child).
+    // So for leashes, we use sourceId directly as the target.
+
     await OL.updateAndSync(() => {
-        // 🎯 1. Identify the correct target
-        // For leashes, we save to the CHILD (targetId).
-        // For outcomes, we save to the PARENT (sourceId).
-        const targetId = conn.isLeash ? conn.targetId : conn.sourceId;
-        const res = OL.getResourceById(targetId);
-        
+        const res = OL.getResourceById(conn.sourceId);
         if (!res) return;
 
         if (conn.isLeash || conn.outcomeIdx === null || conn.outcomeIdx === undefined) {
-            // 🚀 LEASH: Save directly to the resource root
+            // 🚀 LEASH FIX: Save directly to the resource root
             res.delay = delayValue;
-            console.log(`✅ Leash Delay of ${delayValue} saved to Child: ${targetId}`);
+            console.log(`✅ Leash Delay saved to Child (${res.id}): ${delayValue}`);
         } else {
             // ⚡ FLOW PATH: Save to the specific outcome
             if (res.outcomes && res.outcomes[conn.outcomeIdx]) {
@@ -9040,31 +9042,25 @@ OL.saveLoop = async function(sourceId, outcomeIdx) {
     const value = document.getElementById('loop-value').value;
     const loopData = { type, value };
 
-    // 🎯 Identify the connection context
-    const conn = state.v2.activeConnection;
-
     await OL.updateAndSync(() => {
-        // 1. Determine the correct target ID
-        // If it's a leash, we save to the CHILD (targetId)
-        const targetId = (conn && conn.isLeash) ? conn.targetId : sourceId;
-        const res = OL.getResourceById(targetId);
-        
+        const res = OL.getResourceById(sourceId);
         if (!res) return;
 
+        // Check if we are in a leash context (activeConnection)
+        const conn = state.v2.activeConnection;
+
         if (conn && conn.isLeash) {
-            // 🚀 LEASH: Save to child root (so the loop can find it)
-            res.isLoop = true; // Flag for our boolean check
-            res.loop = loopData; 
-            console.log(`🔄 Loop saved to Leash Child: ${targetId}`);
+            // 🚀 LEASH: Save to root
+            res.isLoop = true;
+            res.loop = loopData;
+            console.log("🔄 Loop saved to Leash Child Root");
         } else if (res.outcomes && res.outcomes[outcomeIdx]) {
             // ⚡ FLOW PATH: Save to outcome
             res.outcomes[outcomeIdx].loop = loopData;
         }
     });
 
-    const modal = document.getElementById('loop-modal');
-    if (modal) modal.remove();
-    
+    document.getElementById('loop-modal')?.remove();
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
