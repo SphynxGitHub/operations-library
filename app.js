@@ -9024,9 +9024,15 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 <div id="v2-sticky-stage-headers" style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
                     ${stages.map(s => `
                         <div class="v2-lane-label">
-                            ${esc(s.name)}
+                            <span class="stage-name-text" onclick="OL.editStageName(event, ${i})">
+                                ${esc(s.name)}
+                            </span>
                         </div>
                     `).join('')}
+
+                    <div class="v2-lane-label add-stage-zone" style="min-width: 300px;">
+                        <button class="btn soft tiny" onclick="OL.addNewStage()">+ Add Stage</button>
+                    </div>
                 </div>
             </div>
 
@@ -9095,6 +9101,50 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         OL.initV2Panning();
         OL.drawV2Connections();
     }, 100);
+};
+
+OL.editStageName = function(event, index) {
+    const span = event.target;
+    const currentName = span.innerText;
+    
+    // Create an input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'stage-name-input';
+    
+    // Handle saving on Enter or Blur
+    const save = async () => {
+        const newName = input.value.trim() || 'Unnamed Stage';
+        await OL.updateAndSync(() => {
+            if (state.master.stages[index]) {
+                state.master.stages[index].name = newName;
+            }
+        });
+        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    };
+
+    input.onkeydown = (e) => { if (e.key === 'Enter') save(); };
+    input.onblur = save;
+
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+};
+
+OL.addNewStage = async function() {
+    const newStageName = prompt("Enter new stage name:", "New Stage");
+    if (!newStageName) return;
+
+    await OL.updateAndSync(() => {
+        if (!state.master.stages) state.master.stages = [];
+        state.master.stages.push({
+            name: newStageName,
+            id: 'stage-' + Date.now()
+        });
+    });
+    
+    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
 OL.openBrainDump = function() {
