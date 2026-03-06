@@ -9694,7 +9694,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     if (hasLogic || hasDelay) {
         const badge = document.createElementNS("http://www.w3.org/2000/svg", "text");
         badge.setAttribute("x", midX);
-        badge.setAttribute("y", midY + 15);
+        badge.setAttribute("y", midY + 25);
         badge.setAttribute("text-anchor", "start");
         badge.setAttribute("fill", hasLogic ? "#a855f7" : "#fbbf24");
         badge.setAttribute("style", "font-size: 10px; font-weight: bold; pointer-events: none;");
