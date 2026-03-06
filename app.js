@@ -10006,36 +10006,50 @@ OL.drawV2Connections = function() {
 
         // ⚡ 2. ACTION-AWARE FLOW PATHS
         if (node.outcomes && node.coords) {
-            node.outcomes.forEach(outcome => {
-                // 🔍 Extract ID from 'action' string if 'targetId' is missing
+            node.outcomes.forEach((outcome, outcomeIdx) => {
                 let tid = outcome.targetId || outcome.toId;
-                
                 if (!tid && outcome.action) {
-                    // Strips 'jump_res_' or 'jump_step_' to reveal the raw ID
                     tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
                 }
 
                 const target = source.find(n => String(n.id) === String(tid));
                 
                 if (target && target.coords) {
-                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    
+                    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    group.setAttribute("class", "v2-connection-group flow-link");
+
                     const sX = node.coords.x + 200, sY = node.coords.y + 40;
                     const eX = target.coords.x, eY = target.coords.y + 40;
-                    
-                    const deltaX = Math.abs(eX - sX);
-                    const cp1x = sX + (deltaX / 2);
-                    const cp2x = eX - (deltaX / 2);
+                    const cp = Math.abs(eX - sX) / 2;
+                    const pathData = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
 
-                    path.setAttribute("d", `M ${sX} ${sY} C ${cp1x} ${sY}, ${cp2x} ${eY}, ${eX} ${eY}`);
-                    path.setAttribute("stroke", "#38bdf8"); // Cyan Blue
-                    path.setAttribute("stroke-width", "3");
-                    path.setAttribute("fill", "none");
-                    path.setAttribute("marker-end", "url(#arrowhead-v2)");
-                    
-                    svg.appendChild(path);
-                } else {
-                    console.warn(`⚠️ Target Not Found: Outcome action "${outcome.action}" resolved to ID "${tid}" but no matching card exists.`);
+                    // 🖱️ THE HIT AREA (Invisible but fat)
+                    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    hitArea.setAttribute("d", pathData);
+                    hitArea.setAttribute("stroke", "transparent");
+                    hitArea.setAttribute("stroke-width", "25"); // Massive 25px wide click zone
+                    hitArea.setAttribute("fill", "none");
+                    hitArea.style.cursor = "pointer";
+
+                    // 🎯 CLICK HANDLER
+                    hitArea.onclick = (e) => {
+                        e.stopPropagation();
+                        // Open your context menu logic here
+                        OL.openConnectionMenu(e, node.id, outcomeIdx); 
+                    };
+
+                    // ✨ THE VISUAL LINE (Thin/Gold)
+                    const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    visualPath.setAttribute("d", pathData);
+                    visualPath.setAttribute("stroke", "#fbbf24");
+                    visualPath.setAttribute("stroke-width", "2");
+                    visualPath.setAttribute("fill", "none");
+                    visualPath.setAttribute("marker-end", "url(#arrowhead-v2)");
+                    visualPath.style.pointerEvents = "none"; // Let clicks pass through to the hitArea
+
+                    group.appendChild(hitArea);
+                    group.appendChild(visualPath);
+                    svg.appendChild(group);
                 }
             });
         }
