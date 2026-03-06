@@ -9234,49 +9234,32 @@ OL.openBrainDump = function() {
 };
 
 // 2. Fetch Verb/Object from DB when App is selected
-OL.syncZapLogic = function(appInput) {
-    const row = appInput.closest('.bd-draft-item');
-    const appName = appInput.value.trim();
+OL.syncZapLogic = function(selectEl) {
+    const row = selectEl.closest('.bd-draft-item');
+    const appName = selectEl.value;
     const eventSelect = row.querySelector('.bd-verb');
     
-    // 1. 🛑 IMMEDIATE RESET: Clear the dropdown every time the user types
+    // Clear the verbs immediately
     eventSelect.innerHTML = `<option value="">Select Event...</option>`;
 
-    // 2. Fetch the Library
     const library = state.master.automationLibrary || {};
+    const appData = library[appName];
     
-    // 3. 🧠 SMART MATCH: Find the app regardless of capitalization
-    const actualKey = Object.keys(library).find(k => k.toLowerCase() === appName.toLowerCase());
-    const appData = library[actualKey];
-    
-    if (!appData) {
-        // If no match yet, don't fill the dropdown
-        return;
-    }
+    if (!appData) return;
 
     let html = `<option value="">Select Event...</option>`;
     
-    const opt = (entry) => `
-        <option value="${entry.full}" data-verb="${entry.verb}" data-obj="${entry.object}">
-            ${entry.verb} [${entry.object}]
-        </option>`;
+    // Build the triggers and actions list
+    const format = (entry) => `<option value="${entry.full}" data-verb="${entry.verb}" data-obj="${entry.object}">${entry.verb} [${entry.object}]</option>`;
 
-    // 4. Populate Triggers
-    if (appData.triggers && appData.triggers.length > 0) {
-        html += `<optgroup label="⚡ Triggers">`;
-        html += appData.triggers.map(opt).join('');
-        html += `</optgroup>`;
+    if (appData.triggers?.length) {
+        html += `<optgroup label="⚡ Triggers">${appData.triggers.map(format).join('')}</optgroup>`;
     }
-
-    // 5. Populate Actions
-    if (appData.actions && appData.actions.length > 0) {
-        html += `<optgroup label="🛠️ Actions">`;
-        html += appData.actions.map(opt).join('');
-        html += `</optgroup>`;
+    if (appData.actions?.length) {
+        html += `<optgroup label="🛠️ Actions">${appData.actions.map(format).join('')}</optgroup>`;
     }
 
     eventSelect.innerHTML = html;
-    console.log(`✨ Dropdown synced for: ${actualKey}`);
 };
 
 OL.initV2Panning = function() {
@@ -9510,7 +9493,13 @@ OL.parseBrainDump = function() {
         return;
     }
 
-    // Generate rows with Library Sync capability
+    // 1. Get the Apps from your library
+    const library = state.master.automationLibrary || {};
+    const appOptions = Object.keys(library).sort().map(app => 
+        `<option value="${app}">${app}</option>`
+    ).join('');
+
+    // 2. Generate rows using a <select> for the App
     listContainer.innerHTML = lines.map((line, i) => `
         <div class="bd-draft-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155;">
             <div style="display: flex; gap: 8px; align-items: center;">
@@ -9518,18 +9507,17 @@ OL.parseBrainDump = function() {
                 <button class="card-delete-btn" onclick="this.parentElement.parentElement.remove(); OL.updateBDCount();" style="position: static;">×</button>
             </div>
             <div style="display: flex; gap: 5px;">
-                <input type="text" class="modal-input tiny bd-app" list="app-list" placeholder="App Name..." oninput="OL.syncZapLogic(this)">
+                <select class="modal-input tiny bd-app" onchange="OL.syncZapLogic(this)" style="flex: 1;">
+                    <option value="">Select App...</option>
+                    ${appOptions}
+                </select>
+                
                 <select class="modal-input tiny bd-verb" style="flex: 1.2;">
                     <option value="">Select Event...</option>
                 </select>
             </div>
         </div>
     `).join('');
-
-    // Inject App Autocomplete from DB
-    const library = state.master.automationLibrary || {};
-    const appOptions = Object.keys(library).sort().map(app => `<option value="${app}">`).join('');
-    listContainer.insertAdjacentHTML('beforeend', `<datalist id="app-list">${appOptions}</datalist>`);
 
     OL.updateBDCount();
 };
