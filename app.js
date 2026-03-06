@@ -10826,53 +10826,42 @@ OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    const cardEls = Array.from(document.querySelectorAll('.v2-node-card'))
+    const cardEls = Array.from(document.querySelectorAll('.v2-node-card:not(.on-shelf)'))
         .sort((a, b) => a.offsetTop - b.offsetTop);
     
     if (cardEls.length === 0) return;
 
-    const laneThreshold = 250; 
-    const processedIds = new Set();
+    const laneWidth = 300; // Matches your v2-lane CSS
+    const cardWidth = 200; // Matches your .v2-node-card width
+    const horizontalPadding = (laneWidth - cardWidth) / 2; // The magic offset to center
 
     await OL.updateAndSync(() => {
-        cardEls.forEach(masterEl => {
-            const masterId = masterEl.id.replace('v2-node-', '');
-            if (processedIds.has(masterId)) return;
+        cardEls.forEach(el => {
+            const id = el.id.replace('v2-node-', '');
+            const nodeData = source.find(n => n.id === id);
+            
+            if (nodeData && nodeData.coords) {
+                // 1. Determine which lane the card is currently in
+                const currentLaneIndex = Math.floor(nodeData.coords.x / laneWidth);
+                
+                // 2. Calculate the "Centered X" for that specific lane
+                const centeredX = (currentLaneIndex * laneWidth) + horizontalPadding;
 
-            const targetX = masterEl.offsetLeft;
-
-            cardEls.forEach(slaveEl => {
-                const slaveId = slaveEl.id.replace('v2-node-', '');
-                if (processedIds.has(slaveId)) return;
-
-                if (Math.abs(slaveEl.offsetLeft - targetX) < laneThreshold) {
-                    const nodeData = source.find(n => n.id === slaveId);
-                    if (nodeData) {
-                        nodeData.coords = { x: targetX, y: slaveEl.offsetTop };
-                        
-                        // 🚀 THE INSTANT UPDATE: Move the physical DOM element
-                        slaveEl.style.transition = "left 0.3s ease-out, top 0.3s ease-out";
-                        slaveEl.style.left = `${targetX}px`;
-                        
-                        processedIds.add(slaveId);
-                    }
-                }
-            });
+                // 3. Apply the coordinates
+                nodeData.coords.x = centeredX;
+                
+                // 🚀 INSTANT UI FEEDBACK
+                el.style.transition = "left 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"; // "Pop" effect
+                el.style.left = `${centeredX}px`;
+            }
         });
     });
 
-    // 🚀 Refresh the lines while the cards are sliding
-    let frames = 0;
-    const animateLines = () => {
-        OL.drawV2Connections();
-        if (frames++ < 20) requestAnimationFrame(animateLines);
-    };
-    animateLines();
-
-    // Clean up transitions so dragging feels snappy again
+    // Redraw lines after the animation finishes
     setTimeout(() => {
+        OL.drawV2Connections();
         cardEls.forEach(el => el.style.transition = "");
-    }, 400);
+    }, 450);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
