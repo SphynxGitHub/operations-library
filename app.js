@@ -8867,7 +8867,13 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
                     </div>
+
+                    <div id="v2-context-toolbar" class="v2-toolbar-group" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
+                        <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
+                        <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
+                        <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')" style="color: #ef4444;">×</button>
                     </div>
+                </div>
             </div>
         </div>
     `;
@@ -9573,16 +9579,21 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         const targetId = endCard.id.replace('v2-node-', '');
         state.v2.activeConnection = { sourceId, targetId, outcomeIdx, isLeash: false };
 
+        // Visual feedback for selection
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
         group.classList.add('is-sticky');
 
         const ctxBar = document.getElementById('v2-context-toolbar');
         if (ctxBar) {
+            // 🚀 RESET STYLES: Remove fixed positioning so it docks to the toolbar
             ctxBar.style.display = 'flex';
-            ctxBar.style.position = 'fixed'; // 🚀 FIXED position to escape header z-index
-            ctxBar.style.left = `${clickEvt.clientX}px`;
-            ctxBar.style.top = `${clickEvt.clientY}px`;
-            ctxBar.style.zIndex = "10000"; // 🚀 Ensure it's on top of EVERYTHING
+            ctxBar.style.position = 'static'; 
+            ctxBar.style.left = 'auto';
+            ctxBar.style.top = 'auto';
+            
+            // Hide reorder button for lines (usually only for nodes)
+            const reorderBtn = document.getElementById('ctx-reorder-btn');
+            if (reorderBtn) reorderBtn.style.display = 'none';
         }
     };
 

@@ -4530,6 +4530,21 @@ path[stroke="transparent"] {
     pointer-events: auto;
 }
 
+#v2-context-toolbar {
+    animation: slideInDock 0.2s ease-out;
+}
+
+@keyframes slideInDock {
+    from { 
+        opacity: 0; 
+        transform: translateX(-10px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateX(0); 
+    }
+}
+
 /* Ensure individual toolbars don't have extra margins */
 .v2-toolbar {
     display: flex;
