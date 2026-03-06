@@ -9467,79 +9467,73 @@ OL.initWBMotion = function(e, id) {
     };
     
     const onUp = async (uE) => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        
-        // 1. 🎯 DETECT COLLISION
-        const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
-        
-        // Find a card that is NOT the one we are currently dragging
-        const targetCardEl = elementsAtPoint.find(el => 
-            el.classList.contains('v2-node-card') && 
-            el.id !== `v2-node-${id}`
-        );
-
-        const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
-        const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
-        
-        // 🧼 UI Cleanup
-        const zone = document.getElementById('unmap-zone');
-        if (zone) zone.classList.remove('is-hovered');
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
-        
-        const ghost = document.getElementById('drag-ghost');
-        if (ghost) ghost.remove();
-
-        // 2. 🚀 SECURE SYNC
-        await OL.updateAndSync(() => {
-            const movingRes = OL.getResourceById(id);
-            if (!movingRes) return;
-
-            if (targetCardEl) {
-                // 🔗 SCENARIO A: ABSORPTION (Dropped onto another card)
-                const targetId = targetCardEl.id.replace('v2-node-', '');
-                const parentRes = OL.getResourceById(targetId);
-
-                if (parentRes) {
-                    if (!parentRes.steps) parentRes.steps = [];
-                    
-                    // Add reference to the parent's internal procedure
-                    parentRes.steps.push({
-                        id: 'link_' + Date.now(),
-                        name: movingRes.name,
-                        resourceLinkId: movingRes.id
-                    });
-
-                    // Remove from the loose canvas
-                    delete movingRes.coords;
-                    movingRes.isGlobal = false;
-                    console.log(`📥 ${movingRes.name} moved inside ${parentRes.name}`);
-                }
-            } else if (isTrayDrop) {
-                // ♻️ SCENARIO B: UNMAP
-                delete movingRes.coords;
-                movingRes.isGlobal = false;
-            } else if (isShelfDrop) {
-                // ⭐ SCENARIO C: SHELF
-                movingRes.isGlobal = true;
-                delete movingRes.coords;
-            } else {
-                // 📍 SCENARIO D: GRID POSITION
-                const canvas = document.getElementById('v2-canvas');
-                const rect = canvas.getBoundingClientRect();
-                movingRes.isGlobal = false;
-                movingRes.coords = {
-                    x: (uE.clientX - rect.left) / state.v2.zoom,
-                    y: (uE.clientY - rect.top) / state.v2.zoom
-                };
-            }
-        });
-
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    
+    // 🛑 1. THE CLICK PROTECTION
+    // If the mouse didn't move more than 3px, treat this as a select/click.
+    // We exit early and DO NOT touch the database or trigger a re-render.
+    if (!hasMovedSignificantAmount) {
         state.v2.activeDragId = null;
-        window.renderGlobalVisualizer(isVault);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+        console.log("🖱️ Single click: Movement ignored.");
+        return; 
+    }
+
+    // --- Everything below only runs if the card was actually DRAGGED ---
+
+    const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+    const targetCardEl = elementsAtPoint.find(el => 
+        el.classList.contains('v2-node-card') && el.id !== `v2-node-${id}`
+    );
+
+    const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
+    const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
+    
+    // 🧼 UI Cleanup
+    const zone = document.getElementById('unmap-zone');
+    if (zone) zone.classList.remove('is-hovered');
+    document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
+    
+    const ghost = document.getElementById('drag-ghost');
+    if (ghost) ghost.remove();
+
+    // 🚀 2. SECURE SYNC (Only happens on real drag)
+    await OL.updateAndSync(() => {
+        const movingRes = OL.getResourceById(id);
+        if (!movingRes) return;
+
+        if (targetCardEl) {
+            const targetId = targetCardEl.id.replace('v2-node-', '');
+            const parentRes = OL.getResourceById(targetId);
+            if (parentRes) {
+                if (!parentRes.steps) parentRes.steps = [];
+                parentRes.steps.push({
+                    id: 'link_' + Date.now(),
+                    name: movingRes.name,
+                    resourceLinkId: movingRes.id
+                });
+                delete movingRes.coords;
+                movingRes.isGlobal = false;
+            }
+        } else if (isTrayDrop) {
+            delete movingRes.coords;
+            movingRes.isGlobal = false;
+        } else if (isShelfDrop) {
+            movingRes.isGlobal = true;
+            delete movingRes.coords;
+        } else {
+            const canvas = document.getElementById('v2-canvas');
+            const rect = canvas.getBoundingClientRect();
+            movingRes.isGlobal = false;
+            movingRes.coords = {
+                x: (uE.clientX - rect.left) / state.v2.zoom,
+                y: (uE.clientY - rect.top) / state.v2.zoom
+            };
+        }
+    });
+
+    state.v2.activeDragId = null;
+    window.renderGlobalVisualizer(isVault);
 };
 
 OL.syncDumpOptions = function() {
