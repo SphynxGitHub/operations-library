@@ -10107,9 +10107,9 @@ OL.drawV2Connections = function() {
                     }
 
                     // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
-                    const isLooping = outcome.isLoop || outcome.allowLoop || (outcome.action && outcome.action.includes('loop'));
+                    const isLooping = outcome.isLoop || outcome.allowLoop || outcome.loop || (outcome.action && outcome.action.includes('loop'));
                     if (isLooping) {
-                        const text = drawIcon(sX + iconOffset, sY - 15, "⟳", "Connection allows looping");
+                        const text = drawIcon(sX + iconOffset, sY - 20, "⟳", "Repeats");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
@@ -10119,9 +10119,9 @@ OL.drawV2Connections = function() {
                         text.setAttribute("x", x);
                         text.setAttribute("y", y);
                         text.setAttribute("fill", "#fbbf24");
-                        text.setAttribute("font-family", "serif");
+                        text.setAttribute("font-size", "14px");
                         text.setAttribute("font-weight", "bold");
-                        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 3px rgba(0,0,0,0.8);");
+                        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,0.9);");
                         text.textContent = char;
 
                         const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
