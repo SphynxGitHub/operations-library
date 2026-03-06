@@ -9221,10 +9221,16 @@ OL.openBrainDump = function() {
                     ${appKeys.map(app => `<option value="${app}">${app}</option>`).join('')}
                 </select>
 
-                <label class="tiny-label">2. SELECT OBJECT</label>
-                <select id="dump-obj" class="modal-input"></select>
+                <label class="tiny-label">2. ENTRY TYPE</label>
+                <select id="dump-type" class="modal-input" onchange="OL.syncDumpOptions()">
+                    <option value="actions">🛠️ Action (Step)</option>
+                    <option value="triggers">⚡ Trigger (Start)</option>
+                </select>
 
-                <label class="tiny-label">3. SELECT VERB</label>
+                <label class="tiny-label">3. SELECT OBJECT</label>
+                <select id="dump-obj" class="modal-input" onchange="OL.syncDumpVerbs()"></select>
+
+                <label class="tiny-label">4. SELECT VERB</label>
                 <select id="dump-verb" class="modal-input"></select>
             </div>
             <button class="btn primary full-width" onclick="OL.commitBrainDump()">Drop on Canvas</button>
@@ -9439,42 +9445,51 @@ OL.initWBMotion = function(e, id) {
 
 OL.syncDumpOptions = function() {
     const appVal = document.getElementById('dump-app').value;
+    const typeVal = document.getElementById('dump-type').value; // 'triggers' or 'actions'
     const objEl = document.getElementById('dump-obj');
-    const verbEl = document.getElementById('dump-verb');
-    
-    // 1. Get the Library from Database
     const library = state.master.automationLibrary || {};
     const appData = library[appVal];
 
-    // 2. Handle "Manual" or Missing Data
     if (appVal === 'Manual' || !appData) {
-        // Fallback to basic defaults if no library entry exists
         objEl.innerHTML = `<option value="Task">Task</option><option value="Note">Note</option>`;
+        OL.syncDumpVerbs();
+        return;
+    }
+
+    // 1. Get events filtered by the selected Type (Trigger vs Action)
+    const events = appData[typeVal] || [];
+    
+    // 2. Extract Unique Objects for this specific App + Type
+    const uniqueObjects = [...new Set(events.map(e => e.object))].sort();
+
+    // 3. Update Object Dropdown
+    objEl.innerHTML = uniqueObjects.map(o => `<option value="${o}">${o}</option>`).join('');
+
+    // 4. Cascade to update Verbs
+    OL.syncDumpVerbs();
+};
+
+OL.syncDumpVerbs = function() {
+    const appVal = document.getElementById('dump-app').value;
+    const typeVal = document.getElementById('dump-type').value;
+    const objVal = document.getElementById('dump-obj').value;
+    const verbEl = document.getElementById('dump-verb');
+    
+    const library = state.master.automationLibrary || {};
+    const appData = library[appVal];
+
+    if (appVal === 'Manual' || !appData) {
         verbEl.innerHTML = `<option value="Create">Create</option><option value="Update">Update</option>`;
         return;
     }
 
-    // 3. Extract Objects and Verbs from the relational data
-    // We filter for unique objects across all triggers and actions
-    const allEvents = [...(appData.triggers || []), ...(appData.actions || [])];
-    const uniqueObjects = [...new Set(allEvents.map(e => e.object))].sort();
-
-    // 4. Update Object Dropdown
-    objEl.innerHTML = uniqueObjects.map(o => `<option value="${o}">${o}</option>`).join('');
-
-    // 5. Update Verb Dropdown based on the selected Object
-    const syncVerbs = () => {
-        const selectedObj = objEl.value;
-        const availableVerbs = allEvents
-            .filter(e => e.object === selectedObj)
-            .map(e => e.verb);
-        
-        verbEl.innerHTML = [...new Set(availableVerbs)].map(v => `<option value="${v}">${v}</option>`).join('');
-    };
-
-    // Link them so changing object updates verbs
-    objEl.onchange = syncVerbs;
-    syncVerbs(); // Run once for initial load
+    // Filter events by both Type AND the selected Object
+    const events = appData[typeVal] || [];
+    const availableVerbs = events
+        .filter(e => e.object === objVal)
+        .map(e => e.verb);
+    
+    verbEl.innerHTML = [...new Set(availableVerbs)].map(v => `<option value="${v}">${v}</option>`).join('');
 };
 
 OL.setVisualizerMode = function(mode, isVault) {
