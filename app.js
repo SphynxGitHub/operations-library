@@ -9038,15 +9038,33 @@ OL.toggleLoopInputs = function(type) {
 OL.saveLoop = async function(sourceId, outcomeIdx) {
     const type = document.getElementById('loop-type').value;
     const value = document.getElementById('loop-value').value;
+    const loopData = { type, value };
+
+    // 🎯 Identify the connection context
+    const conn = state.v2.activeConnection;
 
     await OL.updateAndSync(() => {
-        const res = OL.getResourceById(sourceId);
-        if (res?.outcomes?.[outcomeIdx]) {
-            res.outcomes[outcomeIdx].loop = { type, value };
+        // 1. Determine the correct target ID
+        // If it's a leash, we save to the CHILD (targetId)
+        const targetId = (conn && conn.isLeash) ? conn.targetId : sourceId;
+        const res = OL.getResourceById(targetId);
+        
+        if (!res) return;
+
+        if (conn && conn.isLeash) {
+            // 🚀 LEASH: Save to child root (so the loop can find it)
+            res.isLoop = true; // Flag for our boolean check
+            res.loop = loopData; 
+            console.log(`🔄 Loop saved to Leash Child: ${targetId}`);
+        } else if (res.outcomes && res.outcomes[outcomeIdx]) {
+            // ⚡ FLOW PATH: Save to outcome
+            res.outcomes[outcomeIdx].loop = loopData;
         }
     });
 
-    document.getElementById('loop-modal').remove();
+    const modal = document.getElementById('loop-modal');
+    if (modal) modal.remove();
+    
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
