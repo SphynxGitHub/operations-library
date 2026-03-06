@@ -4040,7 +4040,7 @@ ARROWS
 
 /* The Surface */
 .v2-canvas {
-    position: absolute;
+    position: relative;
     top: 0;
     left: 0;
     width: 5000px; /* Large for panning */
@@ -4051,6 +4051,22 @@ ARROWS
     transition: transform 0.1s ease-out;
     contain: layout style;
     overflow: visible;
+}
+
+#v2-connections {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 5000px; /* Match your canvas width */
+    min-height: 5000px;
+    pointer-events: none;
+    z-index: 1; 
+    overflow: visible !important;
+    display: block !important;
+    transform: none;
+    pointer-events: none;
 }
 
 .v2-canvas-scroll-wrap {
