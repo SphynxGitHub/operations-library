@@ -9966,36 +9966,28 @@ OL.drawV2Connections = function() {
 
     source.forEach(node => {
         // 🐕 1. REFINED LEASH LINES (Parent -> Child)
-        if (node.parentId && node.coords) {
+        if (node.parentId) {
             const parent = source.find(n => n.id === node.parentId);
-            if (parent && parent.coords) {
-                // Define 4 corners for both (Assuming 200x80 card size)
-                const getCorners = (c) => [
-                    { x: c.x, y: c.y },           // Top Left
-                    { x: c.x + 200, y: c.y },     // Top Right
-                    { x: c.x, y: c.y + 80 },      // Bottom Left
-                    { x: c.x + 200, y: c.y + 80 }  // Bottom Right
-                ];
+            const sEl = document.getElementById(`v2-node-${parent?.id}`);
+            const tEl = document.getElementById(`v2-node-${node.id}`);
 
-                const cCorners = getCorners(node.coords);
-                const pCorners = getCorners(parent.coords);
+            if (sEl && tEl) {
+                const cRect = svg.getBoundingClientRect();
+                const sRect = sEl.getBoundingClientRect();
+                const tRect = tEl.getBoundingClientRect();
 
-                // Find the closest pair of corners
-                let minDist = Infinity;
-                let s = cCorners[0], e = pCorners[0];
+                // 🎯 SNAP POINTS (Bottom of Parent -> Top of Child)
+                const sX = (sRect.left + sRect.width / 2) - cRect.left;
+                const sY = sRect.bottom - cRect.top;
+                const eX = (tRect.left + tRect.width / 2) - cRect.left;
+                const eY = tRect.top - cRect.top;
 
-                cCorners.forEach(cc => {
-                    pCorners.forEach(pc => {
-                        const d = Math.hypot(cc.x - pc.x, cc.y - pc.y);
-                        if (d < minDist) { minDist = d; s = cc; e = pc; }
-                    });
-                });
+                // Quadratic Bezier for the "rope sag"
+                const midX = (sX + eX) / 2;
+                const midY = (sY + eY) / 2 + 30; // 30px gravity dip
+                const pathData = `M ${sX} ${sY} Q ${midX} ${midY} ${eX} ${eY}`;
 
-                // Quadratic Bezier for a natural "rope sag"
-                const midX = (s.x + e.x) / 2;
-                const midY = (s.y + e.y) / 2 + 20; // 20px gravity dip
-                const pathData = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
-
+                // 1. Create the Path
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", pathData);
                 path.setAttribute("stroke", "#fbbf24");
@@ -10003,7 +9995,30 @@ OL.drawV2Connections = function() {
                 path.setAttribute("stroke-dasharray", "6,4");
                 path.setAttribute("fill", "none");
                 path.setAttribute("opacity", "0.6");
+                path.style.pointerEvents = "none"; // Let clicks pass through the rope
+                
                 svg.appendChild(path);
+
+                // 🚀 2. ADD ICONS TO LEASH (Positioned near the start of the rope)
+                let iconOffset = 10;
+                
+                // Logic Icon
+                if (node.logic && (node.logic.field || node.logic.operator)) {
+                    svg.appendChild(drawIcon(sX + iconOffset, sY + 15, "λ", "Leash Logic"));
+                    iconOffset += 20;
+                }
+                
+                // Delay Icon
+                if (node.delay && node.delay !== "0") {
+                    svg.appendChild(drawIcon(sX + iconOffset, sY + 15, "🕒", `Leash Delay: ${node.delay}`));
+                    iconOffset += 20;
+                }
+                
+                // Loop Icon (Broad Check)
+                const isLooping = node.isLoop || node.allowLoop || node.loop || (node.action && node.action.includes('loop'));
+                if (isLooping) {
+                    svg.appendChild(drawIcon(sX + iconOffset, sY + 15, "⟳", "Looping enabled"));
+                }
             }
         }
 
