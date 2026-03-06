@@ -8879,44 +8879,45 @@ OL.openLoopBuilder = function(conn) {
     const currentLoop = outcome.loop || { type: 'times', value: '3' };
 
     const modalHtml = `
-        <div id="loop-modal" class="modal-backdrop" onclick="this.remove()">
-            <div class="modal-content" style="width: 420px;" onclick="event.stopPropagation()">
+        <div id="loop-modal" class="modal-backdrop" style="z-index: 99999; display: flex;" onclick="this.remove()">
+            <div class="modal-content" style="width: 400px; background: #1e293b; border: 1px solid var(--accent);" onclick="event.stopPropagation()">
                 <div class="modal-header">
-                    <h3 class="tiny accent uppercase bold">Loop Configuration</h3>
-                    <div class="tiny muted">Repeating path for: ${sourceRes.name}</div>
+                    <h3 class="tiny accent uppercase bold">∞ Loop Config</h3>
+                    <div class="tiny muted">Source: ${sourceRes.name}</div>
                 </div>
                 
                 <div class="modal-body" style="padding: 20px 0;">
-                    <div style="display: flex; flex-direction: column; gap: 15px;">
-                        
-                        <div class="logic-row" style="display: flex; align-items: center; gap: 10px;">
-                            <span class="tiny bold" style="min-width: 80px;">Repeat...</span>
-                            <select id="loop-type" class="modal-input tiny" style="flex: 1;" onchange="OL.toggleLoopInputs(this.value)">
-                                <option value="times" ${currentLoop.type === 'times' ? 'selected' : ''}>A fixed number of times</option>
-                                <option value="collection" ${currentLoop.type === 'collection' ? 'selected' : ''}>For every item in a list</option>
-                                <option value="until" ${currentLoop.type === 'until' ? 'selected' : ''}>Until a condition is met</option>
-                            </select>
-                        </div>
+                    <div style="margin-bottom: 15px;">
+                        <label class="tiny uppercase bold muted">Repeat Pattern</label>
+                        <select id="loop-type" class="modal-input tiny" onchange="OL.updateLoopLabel(this.value)">
+                            <option value="times" ${currentLoop.type === 'times' ? 'selected' : ''}>Fixed Iterations</option>
+                            <option value="collection" ${currentLoop.type === 'collection' ? 'selected' : ''}>For Every Item in List</option>
+                            <option value="until" ${currentLoop.type === 'until' ? 'selected' : ''}>Until Condition is Met</option>
+                        </select>
+                    </div>
 
-                        <div id="loop-value-container">
-                            <label id="loop-label" class="tiny uppercase bold muted" style="display:block; margin-bottom:5px;">
-                                ${currentLoop.type === 'times' ? 'Number of Iterations' : currentLoop.type === 'collection' ? 'Variable/List Name' : 'Condition String'}
-                            </label>
-                            <input type="text" id="loop-value" class="modal-input tiny" style="width: 100%;" 
-                                   placeholder="e.g. 5, users_list, status == 'done'" 
-                                   value="${currentLoop.value || ''}">
-                        </div>
+                    <div>
+                        <label id="loop-val-label" class="tiny uppercase bold muted">Number of Times</label>
+                        <input type="text" id="loop-value" class="modal-input tiny" placeholder="e.g. 5" value="${currentLoop.value || ''}">
                     </div>
                 </div>
 
                 <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
                     <button class="btn soft tiny" onclick="document.getElementById('loop-modal').remove()">Cancel</button>
-                    <button class="btn primary tiny" onclick="OL.saveLoop('${conn.sourceId}', ${conn.outcomeIdx})">Set Loop</button>
+                    <button class="btn primary tiny" onclick="OL.saveLoop('${conn.sourceId}', ${conn.outcomeIdx})">Apply Loop</button>
                 </div>
             </div>
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+// Helper to keep the UI reactive
+OL.updateLoopLabel = function(val) {
+    const lbl = document.getElementById('loop-val-label');
+    if (val === 'times') lbl.innerText = "Number of Times";
+    else if (val === 'collection') lbl.innerText = "List/Variable Name";
+    else lbl.innerText = "Condition Logic";
 };
 
 // Helper to update labels when the dropdown changes
