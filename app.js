@@ -10076,6 +10076,49 @@ OL.drawV2Connections = function() {
 
                     group.appendChild(hitArea);
                     group.appendChild(visualPath);
+
+                    // 🛠️ INDICATOR CONFIG
+                    let iconOffset = 12; // Starting X-offset from the source card
+
+                    // 🚀 1. RENDER LOGIC INDICATOR (λ)
+                    if (outcome.logic && outcome.logic.field) {
+                        const text = drawIcon(sX + iconOffset, sY - 8, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
+                        group.appendChild(text);
+                        iconOffset += 18; // Shift next icon right
+                    }
+
+                    // ⏱️ 2. RENDER DELAY INDICATOR (🕒)
+                    if (outcome.delay && outcome.delay !== "0") {
+                        const text = drawIcon(sX + iconOffset, sY - 8, "🕒", `Delay: ${outcome.delay}`);
+                        text.setAttribute("font-size", "12px"); // Emojis are naturally chunkier
+                        group.appendChild(text);
+                        iconOffset += 18;
+                    }
+
+                    // 🔄 3. RENDER LOOP INDICATOR (⟳)
+                    if (outcome.isLoop || outcome.allowLoop) {
+                        const text = drawIcon(sX + iconOffset, sY - 8, "⟳", "Connection allows looping");
+                        text.setAttribute("font-size", "14px");
+                        group.appendChild(text);
+                    }
+
+                    // Helper to keep the main loop clean
+                    function drawIcon(x, y, char, tooltip) {
+                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                        text.setAttribute("x", x);
+                        text.setAttribute("y", y);
+                        text.setAttribute("fill", "#fbbf24");
+                        text.setAttribute("font-family", "serif");
+                        text.setAttribute("font-weight", "bold");
+                        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 3px rgba(0,0,0,0.8);");
+                        text.textContent = char;
+
+                        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+                        title.textContent = tooltip;
+                        text.appendChild(title);
+                        return text;
+                    }
+
                     svg.appendChild(group);
                 }
             });
