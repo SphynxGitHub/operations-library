@@ -9013,10 +9013,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             
             <div class="v2-canvas-header-area">
 
-                <div class="global-shelf-fixed-bg">
-                    <span class="global-shelf-label">Global Resources</span>
-                </div>
-
                 <div id="global-shelf" class="global-shelf-container"
                     style="pointer-events: all !important; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});""
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
@@ -9151,17 +9147,13 @@ OL.initV2Panning = function() {
         const canvas = document.getElementById('v2-canvas');
         const viewport = document.getElementById('v2-viewport');
         const headers = document.getElementById('v2-sticky-stage-headers');
-        const shelfContent = document.getElementById('global-shelf');
-
-        const transformStr = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
-        const headerTransform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
 
         // 1. Move the Canvas (Cards + Lines zoom/pan together now)
-        canvas.style.transform = transformStr;
+        canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
         
         // 2. Sync the sticky labels (Still needs manual sync since they are fixed)
         if (headers) {
-            headers.style.transform = headerTransform;
+            headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
         }
 
         // 3. Sync only the infinite dots
