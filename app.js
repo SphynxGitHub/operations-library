@@ -9026,11 +9026,13 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 <div id="v2-sticky-stage-headers" style="width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
                     ${stages.map((s,i) => `
                         <div class="v2-lane-label">
-                            <span class="stage-name-text" onclick="OL.editStageName(event, ${i})">
+                            <span class="stage-name-text" 
+                            style="pointer-events: all' cursor: text;"
+                            onclick="event.stopPropagation(); OL.editStageName(event, ${i})">
                                 ${esc(s.name)}
                             </span>
                             <button class="card-delete-btn" 
-                                onclick="OL.removeStage(${i})" 
+                                onclick="event.stopPropagation(); OL.removeStage(${i})" 
                                 style="pointer-events: all; display: block; visibility: visible;" 
                                 title="Remove Stage">×</button>
                         </div>
