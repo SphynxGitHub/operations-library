@@ -9965,6 +9965,23 @@ OL.drawV2Connections = function() {
     svg.innerHTML = ''; 
     svg.setAttribute('viewBox', '0 0 5000 5000');
 
+    // Helper to keep the main loop clean
+    function drawIcon(x, y, char, tooltip) {
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", x);
+        text.setAttribute("y", y);
+        text.setAttribute("fill", "#fbbf24");
+        text.setAttribute("font-size", "14px");
+        text.setAttribute("font-weight", "bold");
+        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,0.9);");
+        text.textContent = char;
+
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = tooltip;
+        text.appendChild(title);
+        return text;
+    }
+
     source.forEach(node => {
         // 🐕 1. REFINED LEASH LINES (Parent -> Child)
         if (node.parentId) {
@@ -10040,24 +10057,30 @@ OL.drawV2Connections = function() {
                 // --- ICONS (Using s.x and s.y for correct anchoring) ---
                 let iconOffset = 15;
 
-                // 🚀 Logic (λ)
-                if (node.logic && node.logic.field) {
+                // 🔍 DEBUG: See what the child node actually contains
+                console.log(`Checking icons for Child (${node.id}):`, { logic: node.logic, delay: node.delay, loop: node.isLoop });
+
+                // 🚀 1. Lambda (Logic)
+                // Check for the object AND the field to ensure it's not just an empty {}
+                if (node.logic && (node.logic.field || node.logic.operator)) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${node.logic.field}`));
                     iconOffset += 22;
                 }
 
-                // 🕒 Delay (Check both string and number)
-                if (node.delay && node.delay !== "0" && node.delay !== 0) {
+                // 🕒 2. Clock (Delay)
+                // Some systems save this as a string "0", others as a number 0. We check both.
+                if (node.delay && node.delay != "0" && node.delay != 0) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${node.delay}`));
                     iconOffset += 22;
                 }
 
-                // ⟳ Loop (Checking all possible boolean/string flags)
-                const isLooping = node.isLoop === true || node.allowLoop === true || (node.action && node.action.includes('loop'));
-                if (isLooping) {
+                // ⟳ 3. Loop
+                const hasLoop = node.isLoop === true || node.allowLoop === true || (node.action && node.action.includes('loop'));
+                if (hasLoop) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping enabled"));
                 }
 
+                // IMPORTANT: Ensure the group is appended to the SVG last so it stays on top
                 svg.appendChild(group);
             }
         }
@@ -10168,23 +10191,7 @@ OL.drawV2Connections = function() {
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
-                    // Helper to keep the main loop clean
-                    function drawIcon(x, y, char, tooltip) {
-                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                        text.setAttribute("x", x);
-                        text.setAttribute("y", y);
-                        text.setAttribute("fill", "#fbbf24");
-                        text.setAttribute("font-size", "14px");
-                        text.setAttribute("font-weight", "bold");
-                        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,0.9);");
-                        text.textContent = char;
-
-                        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-                        title.textContent = tooltip;
-                        text.appendChild(title);
-                        return text;
-                    }
-
+                    
                     svg.appendChild(group);
                 }
             });
