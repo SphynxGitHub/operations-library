@@ -10096,14 +10096,14 @@ OL.drawV2Connections = function() {
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
-                        const text = drawIcon(sX + iconOffset, sY - 12, "λ", `Logic: ${liveChild.logic.field} ${liveChild.logic.operator}`);
+                        const text = drawIcon(s.x + iconOffset, sY - 12, "λ", `Logic: ${liveChild.logic.field} ${liveChild.logic.operator}`);
                         group.appendChild(text);
                         iconOffset += 22; 
                     }
 
                     // ⏱️ 2. RENDER DELAY
                     if (liveChild.delay && liveChild.delay !== "0") {
-                        const text = drawIcon(sX + iconOffset, sY - 15, "⏱", `Delay: ${liveChild.delay}`);
+                        const text = drawIcon(s.x + iconOffset, s.y - 15, "⏱", `Delay: ${liveChild.delay}`);
                         text.setAttribute("font-size", "12px");
                         group.appendChild(text);
                         iconOffset += 22;
@@ -10112,7 +10112,7 @@ OL.drawV2Connections = function() {
                     // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
                     const isLooping = liveChild.isLoop || liveChild.allowLoop || liveChild.loop || (liveChild.action && liveChild.action.includes('loop'));
                     if (isLooping) {
-                        const text = drawIcon(sX + iconOffset, sY - 20, "⟳", "Repeats");
+                        const text = drawIcon(s.x + iconOffset, s.y - 20, "⟳", "Repeats");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
