@@ -10078,18 +10078,18 @@ OL.drawV2Connections = function() {
                     group.appendChild(visualPath);
 
                     // 🛠️ INDICATOR CONFIG
-                    let iconOffset = 12;
+                    let iconOffset = 15;
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
-                        const text = drawIcon(sX + iconOffset, sY - 8, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
+                        const text = drawIcon(sX + iconOffset, sY - 10, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
                         group.appendChild(text);
                         iconOffset += 22; 
                     }
 
                     // ⏱️ 2. RENDER DELAY
                     if (outcome.delay && outcome.delay !== "0") {
-                        const text = drawIcon(sX + iconOffset, sY - 8, "🕒", `Delay: ${outcome.delay}`);
+                        const text = drawIcon(sX + iconOffset, sY - 10, "🕒", `Delay: ${outcome.delay}`);
                         text.setAttribute("font-size", "12px");
                         group.appendChild(text);
                         iconOffset += 22;
@@ -10098,7 +10098,7 @@ OL.drawV2Connections = function() {
                     // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
                     const isLooping = outcome.isLoop || outcome.allowLoop || (outcome.action && outcome.action.includes('loop'));
                     if (isLooping) {
-                        const text = drawIcon(sX + iconOffset, sY - 8, "⟳", "Connection allows looping");
+                        const text = drawIcon(sX + iconOffset, sY - 10, "⟳", "Connection allows looping");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
