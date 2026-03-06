@@ -10063,22 +10063,24 @@ OL.drawV2Connections = function() {
                 group.appendChild(hitArea);
                 group.appendChild(path);
 
-                /// --- ICONS (Inside the if (s && e) block of your leash loop) ---
-                // 🎯 THE FIX: Fetch the 'Live' child to ensure logic/delay are visible
-                const liveChild = OL.getResourceById(node.id);
-                let iconOffset = 15;
+                // --- ICONS (Leash Logic) ---
+                // 🎯 THE FIX: Fetch the 'Live' child to ensure logic/delay are visible after sync
+                const liveChild = OL.getResourceById(node.id); 
+                let iconOffset = 20;
 
                 if (liveChild) {
+                    console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay });
+
                     // 🚀 1. Lambda (Logic)
                     if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
                         group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${liveChild.logic.field}`));
-                        iconOffset += 22;
+                        iconOffset += 25;
                     }
 
                     // 🕒 2. Clock (Delay)
                     if (liveChild.delay && liveChild.delay != "0") {
                         group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${liveChild.delay}`));
-                        iconOffset += 22;
+                        iconOffset += 25;
                     }
 
                     // ⟳ 3. Loop
