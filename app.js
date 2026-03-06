@@ -9843,20 +9843,24 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
             svg.appendChild(logicBadge);
         }
 
-        // --- ∞ LOOP (Positioned to the left of the main stack) ---
+        // --- ∞ THE LOOP (Positioned BELOW Delay) ---
         if (hasLoop) {
             const loopBadge = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            loopBadge.setAttribute("x", midX - 15); // Offset to the LEFT
-            loopBadge.setAttribute("y", midY + 4);
-            loopBadge.setAttribute("text-anchor", "end");
-            loopBadge.setAttribute("fill", "#10b981"); // Emerald Green for loops
-            loopBadge.setAttribute("style", "font-size: 14px; font-weight: bold; cursor: help;");
+            loopBadge.setAttribute("x", badgeX);
             
+            // logic is at -8, delay is at +4, so loop goes to +16 (creates even spacing)
+            let loopY = midY + 4;
+            if (hasDelay) loopY = midY + 16;
+            else if (hasLogic) loopY = midY + 16; // Maintain gap even if delay is missing
+
+            loopBadge.setAttribute("y", loopY);
+            loopBadge.setAttribute("fill", "#10b981");
+            loopBadge.setAttribute("style", "font-size: 14px; font-weight: bold; pointer-events: auto; cursor: help;");
+
             const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-            title.textContent = `Loop: Repeat ${outcome.loop.type === 'times' ? outcome.loop.value + ' times' : outcome.loop.type === 'collection' ? 'for each ' + outcome.loop.value : 'until ' + outcome.loop.value}`;
+            title.textContent = `Loop: Repeat ${outcome.loop.type} (${outcome.loop.value})`;
             loopBadge.appendChild(title);
-            
-            loopBadge.textContent = "∞";
+            loopBadge.append("∞");
             svg.appendChild(loopBadge);
         }
     }
