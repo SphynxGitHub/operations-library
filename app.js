@@ -8888,20 +8888,35 @@ OL.toggleLogicValueField = function(selectEl) {
     }
 };
 
-OL.saveLogic = async function(sourceId, outcomeIdx) {
-    const field = document.getElementById('logic-field').value;
-    const operator = document.getElementById('logic-operator').value;
-    const value = document.getElementById('logic-value').value;
+OL.saveLogic = function(sourceId, outcomeIdx) {
+    const fieldInput = document.getElementById('logic-field');
+    const operatorSelect = document.querySelector('.logic-operator-select');
+    const valueInput = document.getElementById('logic-value');
 
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(sourceId);
-        if (res && res.outcomes && res.outcomes[outcomeIdx]) {
-            res.outcomes[outcomeIdx].logic = { field, operator, value };
-        }
-    });
+    // 🛡️ Safety Check: If the element is missing, use a fallback
+    const logicData = {
+        field: fieldInput ? fieldInput.value : '',
+        operator: operatorSelect ? operatorSelect.value : 'contains',
+        value: valueInput ? valueInput.value : '' 
+    };
 
-    document.getElementById('logic-modal').remove();
-    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    console.log("💾 Saving Logic:", logicData);
+
+    // Get the resource and update the specific outcome
+    const res = OL.getResourceById(sourceId);
+    if (res && res.outcomes && res.outcomes[outcomeIdx]) {
+        res.outcomes[outcomeIdx].logic = logicData;
+        
+        // Save to DB (Assuming your standard save call)
+        OL.saveProjectData(); 
+        
+        // Close modal
+        const modal = document.getElementById('logic-modal');
+        if (modal) modal.remove();
+        
+        // Refresh visuals to show the "Logic" icon on the line
+        OL.drawV2Connections();
+    }
 };
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
