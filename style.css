@@ -4021,10 +4021,17 @@ ARROWS
     position: relative;
     width: 100%;
     height: 100vh; /* Adjust based on your header */
-    overflow: hidden;
     background-color: #050816;
-    background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-    background-size: 40px 40px;
+    background-image: 
+        /* 1. The Vertical Lines (Drawn every 300px) */
+        linear-gradient(to right, rgba(56, 189, 248, 0.15) 1px, transparent 1px),
+        /* 2. The Dotted Grid (Drawn every 40px) */
+        radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    
+    /* 📏 Size: 1st val is Stage Width, 2nd is Dot Spacing */
+    background-size: 300px 100%, 40px 40px;
+    background-repeat: repeat-x, repeat;
+    overflow: hidden;
     background-attachment: local;
     cursor: grab;
     display: flex;
