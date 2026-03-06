@@ -9207,39 +9207,6 @@ OL.addNewStage = async function() {
     window.renderVisualizerV2(isVault);
 };
 
-/*OL.openBrainDump = function() {
-    const library = state.master.automationLibrary || {};
-    const appKeys = Object.keys(library).sort();
-
-    const html = `
-        <div class="modal-head"><div class="modal-title-text">🧠 Brain Dump: New Step</div></div>
-        <div class="modal-body">
-            <div class="dump-flow">
-                <label class="tiny-label">1. SELECT APP</label>
-                <select id="dump-app" class="modal-input" onchange="OL.syncDumpOptions()">
-                    <option value="Manual">Manual (No App)</option>
-                    ${appKeys.map(app => `<option value="${app}">${app}</option>`).join('')}
-                </select>
-
-                <label class="tiny-label">2. ENTRY TYPE</label>
-                <select id="dump-type" class="modal-input" onchange="OL.syncDumpOptions()">
-                    <option value="actions">🛠️ Action (Step)</option>
-                    <option value="triggers">⚡ Trigger (Start)</option>
-                </select>
-
-                <label class="tiny-label">3. SELECT OBJECT</label>
-                <select id="dump-obj" class="modal-input" onchange="OL.syncDumpVerbs()"></select>
-
-                <label class="tiny-label">4. SELECT VERB</label>
-                <select id="dump-verb" class="modal-input"></select>
-            </div>
-            <button class="btn primary full-width" onclick="OL.commitBrainDump()">Drop on Canvas</button>
-        </div>
-    `;
-    openModal(html);
-    OL.syncDumpOptions(); 
-};*/
-
 OL.openBrainDump = function() {
     const html = `
         <div class="modal-head"><div class="modal-title-text">🧠 Smart Brain Dump</div></div>
@@ -9442,43 +9409,46 @@ OL.startNodeDrag = function(e, nodeId) {
 // ⚙️ THE PHYSICS CORE
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
-    const startX = e.clientX;
-    const startY = e.clientY;
-    let hasMovedSignificantAmount = false; // 🛡️ The Trigger Flag
+    const zone = document.getElementById('unmap-zone');
+    const canvas = document.getElementById('v2-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
 
     const onMove = (mE) => {
-        // 1. 📏 CHECK THRESHOLD: Only start "dragging" if mouse moved > 3px
-        if (!hasMovedSignificantAmount) {
-            const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
-            if (dist < 3) return; 
-            hasMovedSignificantAmount = true;
-        }
-
         const zone = document.getElementById('unmap-zone');
+        const viewport = document.getElementById('v2-workbench-target');
         const canvas = document.getElementById('v2-canvas');
         const rect = canvas.getBoundingClientRect();
         const zoom = state.v2.zoom || 1;
 
+        // 1. 🎯 DETECT HOVER TARGET
         const target = document.elementFromPoint(mE.clientX, mE.clientY);
         const isOverUnmap = !!target?.closest('#unmap-zone');
 
+        // 🚀 NEW: TARGET HIGHLIGHTING
+        // First, clear any existing highlights from all cards
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
+
+        // Check if we are hovering over a valid "Container" card (Resource, SOP, or Workflow)
         const targetCardEl = target?.closest('.v2-node-card');
         
+        // Only highlight if it's NOT the card we are currently dragging
         if (targetCardEl && targetCardEl.id !== `v2-node-${id}`) {
             targetCardEl.classList.add('drop-target-highlight');
         }
 
+        // 2. 🔴 TOGGLE RED GLOW (Unmap Zone)
         if (zone) {
             if (isOverUnmap) {
                 zone.classList.add('is-hovered');
+                // Remove card highlights if we are over the trash/unmap zone
                 targetCardEl?.classList.remove('drop-target-highlight');
             } else {
                 zone.classList.remove('is-hovered');
             }
         }
 
-        // 👻 GHOST LOGIC: Only show if we've actually moved
+        // 3. 👻 HANDLE GHOST
         let ghost = document.getElementById('drag-ghost');
         if (!isOverUnmap && target?.closest('#v2-workbench-target')) {
             if (!ghost) {
@@ -9500,13 +9470,10 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         
-        // 🛑 EXIT EARLY: If they just clicked, don't update any coordinates
-        if (!hasMovedSignificantAmount) {
-            state.v2.activeDragId = null;
-            return;
-        }
-
+        // 1. 🎯 DETECT COLLISION
         const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+        
+        // Find a card that is NOT the one we are currently dragging
         const targetCardEl = elementsAtPoint.find(el => 
             el.classList.contains('v2-node-card') && 
             el.id !== `v2-node-${id}`
@@ -9515,6 +9482,7 @@ OL.initWBMotion = function(e, id) {
         const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
         const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
         
+        // 🧼 UI Cleanup
         const zone = document.getElementById('unmap-zone');
         if (zone) zone.classList.remove('is-hovered');
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
@@ -9522,30 +9490,41 @@ OL.initWBMotion = function(e, id) {
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
 
+        // 2. 🚀 SECURE SYNC
         await OL.updateAndSync(() => {
             const movingRes = OL.getResourceById(id);
             if (!movingRes) return;
 
             if (targetCardEl) {
+                // 🔗 SCENARIO A: ABSORPTION (Dropped onto another card)
                 const targetId = targetCardEl.id.replace('v2-node-', '');
                 const parentRes = OL.getResourceById(targetId);
+
                 if (parentRes) {
                     if (!parentRes.steps) parentRes.steps = [];
+                    
+                    // Add reference to the parent's internal procedure
                     parentRes.steps.push({
                         id: 'link_' + Date.now(),
                         name: movingRes.name,
                         resourceLinkId: movingRes.id
                     });
+
+                    // Remove from the loose canvas
                     delete movingRes.coords;
                     movingRes.isGlobal = false;
+                    console.log(`📥 ${movingRes.name} moved inside ${parentRes.name}`);
                 }
             } else if (isTrayDrop) {
+                // ♻️ SCENARIO B: UNMAP
                 delete movingRes.coords;
                 movingRes.isGlobal = false;
             } else if (isShelfDrop) {
+                // ⭐ SCENARIO C: SHELF
                 movingRes.isGlobal = true;
                 delete movingRes.coords;
             } else {
+                // 📍 SCENARIO D: GRID POSITION
                 const canvas = document.getElementById('v2-canvas');
                 const rect = canvas.getBoundingClientRect();
                 movingRes.isGlobal = false;
@@ -9559,7 +9538,6 @@ OL.initWBMotion = function(e, id) {
         state.v2.activeDragId = null;
         window.renderGlobalVisualizer(isVault);
     };
-
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
@@ -10822,12 +10800,12 @@ OL.autoAlignNodes = async function() {
 
     const columnWidth = 300; 
     const cardWidth = 200;   
-    const centeringOffset = (columnWidth - cardWidth) / 2 - 110; // Keeping your working offset
-    const verticalGap = 150; // ↕️ Distance between the top of one card and the next
-    const startY = 100;      // 🏔️ Starting height for the first card in each lane
+    const centeringOffset = (columnWidth - cardWidth) / 2 - 110; 
+    const verticalMargin = 40; // ↕️ The fixed space BETWEEN cards
+    const startY = 100;      
 
     await OL.updateAndSync(() => {
-        // 1. Group cards by their lanes first
+        // 1. Group cards by their lanes
         const lanes = {};
 
         cardEls.forEach(el => {
@@ -10840,45 +10818,50 @@ OL.autoAlignNodes = async function() {
             }
         });
 
-        // 2. Iterate through each lane and distribute vertically
+        // 2. Distribute vertically based on ACTUAL element height
         Object.keys(lanes).forEach(laneIdx => {
             const currentLane = lanes[laneIdx];
             
-            // Sort cards in this specific lane by their current Y position
+            // Sort by current Y to preserve user order
             currentLane.sort((a, b) => a.data.coords.y - b.data.coords.y);
 
-            currentLane.forEach((item, orderInLane) => {
+            // 🚀 THE FIX: Track a running Y position for this specific lane
+            let nextAvailableY = startY;
+
+            currentLane.forEach((item) => {
                 const targetX = (laneIdx * columnWidth) + centeringOffset;
-                const targetY = startY + (orderInLane * verticalGap);
+                const targetY = nextAvailableY;
 
                 // Update Database
                 item.data.coords.x = targetX;
                 item.data.coords.y = targetY;
 
-                // 🚀 Update UI
+                // Update UI
                 item.el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
                 item.el.style.setProperty('left', `${targetX}px`, 'important');
                 item.el.style.setProperty('top', `${targetY}px`, 'important');
+
+                // 📏 CALCULATE OFFSET FOR NEXT CARD
+                // We take the current card's height and add our margin
+                const currentCardHeight = item.el.offsetHeight;
+                nextAvailableY += currentCardHeight + verticalMargin;
             });
         });
     });
-    OL.drawV2Connections();
 
-    // 2. Continuous redraw during the transition (for smoothness)
-    let startTime = Date.now();
-    const animateLines = () => {
+    // 🔄 Redraw connections with the heartbeat loop
+    let frames = 0;
+    const heartbeat = () => {
         OL.drawV2Connections();
-        if (Date.now() - startTime < 600) { // Match the 0.5s transition + buffer
-            requestAnimationFrame(animateLines);
-        }
+        frames++;
+        if (frames < 30) requestAnimationFrame(heartbeat);
     };
-    requestAnimationFrame(animateLines);
+    requestAnimationFrame(heartbeat);
 
-    // 3. Final snap redraw to ensure pixel-perfection
     setTimeout(() => {
         OL.drawV2Connections();
         cardEls.forEach(el => el.style.transition = "");
-    }, 650);
+    }, 600);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
