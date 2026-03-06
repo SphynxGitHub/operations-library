@@ -9958,31 +9958,53 @@ OL.drawV2Connections = function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? (state.master.resources || []) : (getActiveClient()?.projectData?.localResources || []);
     
-    console.log(`📡 Drawing connections for ${source.length} nodes...`);
     svg.innerHTML = ''; 
-    
-    // Standardize the coordinate space
     svg.setAttribute('viewBox', '0 0 5000 5000');
 
     source.forEach(node => {
-        // 🐕 LEASH LINES (Parent -> Child)
+        // 🐕 1. REFINED LEASH LINES (Parent -> Child)
         if (node.parentId && node.coords) {
             const parent = source.find(n => n.id === node.parentId);
             if (parent && parent.coords) {
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                const sX = node.coords.x + 100, sY = node.coords.y + 40;
-                const pX = parent.coords.x + 100, pY = parent.coords.y + 40;
+                // Define 4 corners for both (Assuming 200x80 card size)
+                const getCorners = (c) => [
+                    { x: c.x, y: c.y },           // Top Left
+                    { x: c.x + 200, y: c.y },     // Top Right
+                    { x: c.x, y: c.y + 80 },      // Bottom Left
+                    { x: c.x + 200, y: c.y + 80 }  // Bottom Right
+                ];
 
-                path.setAttribute("d", `M ${sX} ${sY} L ${pX} ${pY}`);
+                const cCorners = getCorners(node.coords);
+                const pCorners = getCorners(parent.coords);
+
+                // Find the closest pair of corners
+                let minDist = Infinity;
+                let s = cCorners[0], e = pCorners[0];
+
+                cCorners.forEach(cc => {
+                    pCorners.forEach(pc => {
+                        const d = Math.hypot(cc.x - pc.x, cc.y - pc.y);
+                        if (d < minDist) { minDist = d; s = cc; e = pc; }
+                    });
+                });
+
+                // Quadratic Bezier for a natural "rope sag"
+                const midX = (s.x + e.x) / 2;
+                const midY = (s.y + e.y) / 2 + 20; // 20px gravity dip
+                const pathData = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", pathData);
                 path.setAttribute("stroke", "#fbbf24");
                 path.setAttribute("stroke-width", "2");
                 path.setAttribute("stroke-dasharray", "6,4");
                 path.setAttribute("fill", "none");
+                path.setAttribute("opacity", "0.6");
                 svg.appendChild(path);
             }
         }
 
-        // ⚡ FLOW PATHS (Outcomes)
+        // ⚡ 2. REFINED FLOW PATHS (Outcomes)
         if (node.outcomes && node.coords) {
             node.outcomes.forEach(outcome => {
                 const targetId = outcome.targetId || outcome.toId;
@@ -9990,11 +10012,16 @@ OL.drawV2Connections = function() {
                 
                 if (target && target.coords) {
                     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    
+                    // Standard Port-to-Port: Right Center to Left Center
                     const sX = node.coords.x + 200, sY = node.coords.y + 40;
                     const eX = target.coords.x, eY = target.coords.y + 40;
-                    const cp = Math.abs(eX - sX) / 2;
+                    
+                    // S-Curve Control Points
+                    const cp1x = sX + Math.abs(eX - sX) / 2;
+                    const cp2x = eX - Math.abs(eX - sX) / 2;
 
-                    path.setAttribute("d", `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`);
+                    path.setAttribute("d", `M ${sX} ${sY} C ${cp1x} ${sY}, ${cp2x} ${eY}, ${eX} ${eY}`);
                     path.setAttribute("stroke", "#fbbf24");
                     path.setAttribute("stroke-width", "2");
                     path.setAttribute("fill", "none");
@@ -10291,54 +10318,52 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
-    if (!svg || !childEl || !parentEl) return;
+    const res = OL.getResourceById(nodeId);
+    const parent = OL.getResourceById(res?.parentId);
 
-    // 1. Create an SVG point object for transformation
-    const pt = svg.createSVGPoint();
+    if (!res?.coords || !parent?.coords) return;
+
+    // 1. Define all 4 corners for both (using 200x80 card dimensions)
+    const getCorners = (c) => [
+        { x: c.x, y: c.y },           // Top Left
+        { x: c.x + 200, y: c.y },     // Top Right
+        { x: c.x, y: c.y + 80 },      // Bottom Left
+        { x: c.x + 200, y: c.y + 80 }  // Bottom Right
+    ];
+
+    const cCorners = getCorners(res.coords);
+    const pCorners = getCorners(parent.coords);
+
+    // 2. Find the closest pair of corners
+    let minDist = Infinity;
+    let s = cCorners[0], e = pCorners[0];
+
+    cCorners.forEach(cc => {
+        pCorners.forEach(pc => {
+            const dist = Math.hypot(cc.x - pc.x, cc.y - pc.y);
+            if (dist < minDist) {
+                minDist = dist;
+                s = cc;
+                e = pc;
+            }
+        });
+    });
+
+    // 3. 🚀 THE CURVE MATH: Create an organic "sag"
+    // We use a mid-point with a slight Y-offset to make it look like a real leash
+    const midX = (s.x + e.x) / 2;
+    const midY = (s.y + e.y) / 2 + 20; // Adds 20px "gravity"
+    const d = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    path.setAttribute("stroke", "#fbbf24");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-dasharray", "6,4");
+    path.setAttribute("fill", "none");
+    path.setAttribute("opacity", "0.6");
     
-    const getSvgCoords = (el) => {
-        const rect = el.getBoundingClientRect();
-        // Target the center of the element in screen pixels
-        pt.x = rect.left + (rect.width / 2);
-        pt.y = rect.top + (rect.height / 2);
-        
-        // 🚀 THE MAGIC: Convert Screen Pixels -> SVG local coordinates
-        // This accounts for zoom, sidebar width, panning, and offsets.
-        const transformed = pt.matrixTransform(svg.getScreenCTM().inverse());
-        return transformed;
-    };
-
-    try {
-        const s = getSvgCoords(childEl);
-        const e = getSvgCoords(parentEl);
-
-        // 2. Build the Path Data (Curved)
-        const dx = e.x - s.x;
-        const dy = e.y - s.y;
-        const cp1x = s.x + (dx * 0.1);
-        const cp1y = s.y + (dy * 0.9);
-        const cp2x = e.x - (dx * 0.1);
-        const cp2y = e.y - (dy * 0.9);
-
-        const d = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
-
-        // 3. Create SVG Elements
-        const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        group.setAttribute("class", "v2-connection-group leash-group");
-
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", d);
-        path.setAttribute("stroke", "#fbbf24");
-        path.setAttribute("stroke-width", "2");
-        path.setAttribute("stroke-dasharray", "6,4");
-        path.setAttribute("fill", "none");
-        path.setAttribute("opacity", "0.6");
-
-        group.appendChild(path);
-        svg.appendChild(group);
-    } catch (err) {
-        console.error("Matrix transform failed:", err);
-    }
+    svg.appendChild(path);
 };
 
 OL.startParentLinking = function(e, sourceId) {
