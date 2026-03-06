@@ -10084,25 +10084,24 @@ OL.drawV2Connections = function() {
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
                         const text = drawIcon(sX + iconOffset, sY - 8, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
                         group.appendChild(text);
-                        iconOffset += 20; 
+                        iconOffset += 22; 
                     }
 
-                    // ⏱️ 2. RENDER DELAY (You said you see this, so it stays as is)
+                    // ⏱️ 2. RENDER DELAY
                     if (outcome.delay && outcome.delay !== "0") {
                         const text = drawIcon(sX + iconOffset, sY - 8, "🕒", `Delay: ${outcome.delay}`);
                         text.setAttribute("font-size", "12px");
                         group.appendChild(text);
-                        iconOffset += 20;
+                        iconOffset += 22;
                     }
 
-                    // 🔄 3. RENDER LOOP (Checking for multiple loop key variations)
-                    const isLooping = outcome.isLoop || outcome.allowLoop || outcome.loop === true || outcome.action?.includes('loop');
+                    // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
+                    const isLooping = outcome.isLoop || outcome.allowLoop || (outcome.action && outcome.action.includes('loop'));
                     if (isLooping) {
                         const text = drawIcon(sX + iconOffset, sY - 8, "⟳", "Connection allows looping");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
-
                     // Helper to keep the main loop clean
                     function drawIcon(x, y, char, tooltip) {
                         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
