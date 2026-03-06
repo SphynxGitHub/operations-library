@@ -9014,7 +9014,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             <div class="v2-canvas-header-area">
 
                 <div id="global-shelf" class="global-shelf-container"
-                    style="pointer-events: all !important;"
+                    style="pointer-events: all !important; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});""
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
                     ondragleave="this.classList.remove('drag-over');"
                     ondrop="OL.handleShelfDrop(event)">
