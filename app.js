@@ -9484,6 +9484,61 @@ function renderV2Stages(isVault) {
     `).join('');
 }
 
+OL.parseBrainDump = function() {
+    const rawInput = document.getElementById('bd-raw-input').value;
+    const lines = rawInput.split('\n').filter(line => line.trim().length > 0);
+    const listContainer = document.getElementById('bd-draft-list');
+    
+    // 1. Clear current list and stats
+    listContainer.innerHTML = '';
+    
+    if (lines.length === 0) {
+        listContainer.innerHTML = '<div class="tiny muted italic text-center" style="margin-top: 50px;">No items parsed yet...</div>';
+        OL.updateBDCount();
+        return;
+    }
+
+    // 2. Generate rows for each line
+    listContainer.innerHTML = lines.map((line, i) => `
+        <div class="bd-draft-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" class="modal-input tiny bd-main-name" value="${esc(line)}" style="flex: 1; font-weight: bold;" placeholder="Friendly Name">
+                <button class="card-delete-btn" onclick="this.parentElement.parentElement.remove(); OL.updateBDCount();" style="position: static;">×</button>
+            </div>
+            
+            <div style="display: flex; gap: 5px;">
+                <input type="text" 
+                       class="modal-input tiny bd-app" 
+                       list="app-list" 
+                       placeholder="Search App..." 
+                       oninput="OL.syncZapLogic(this)">
+                
+                <select class="modal-input tiny bd-verb" style="flex: 1.2;">
+                    <option value="">Select Event...</option>
+                </select>
+            </div>
+        </div>
+    `).join('');
+
+    // 3. Inject the App Datalist from your NEW Library
+    const library = state.master.automationLibrary || {};
+    const appOptions = Object.keys(library).sort().map(app => `<option value="${app}">`).join('');
+    const appDatalist = `<datalist id="app-list">${appOptions}</datalist>`;
+    listContainer.insertAdjacentHTML('beforeend', appDatalist);
+
+    // 4. Update the UI state
+    OL.updateBDCount();
+};
+
+OL.updateBDCount = function() {
+    const count = document.querySelectorAll('.bd-draft-item').length;
+    const statsEl = document.getElementById('bd-stats');
+    const commitBtn = document.getElementById('bd-commit-btn');
+    
+    if (statsEl) statsEl.innerText = `${count} items drafted`;
+    if (commitBtn) commitBtn.disabled = count === 0;
+};
+
 OL.commitBrainDump = async function() {
     const items = document.querySelectorAll('.bd-draft-item');
     if (items.length === 0) return alert("No items to commit!");
