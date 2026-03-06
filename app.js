@@ -10826,14 +10826,16 @@ OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    const cardEls = Array.from(document.querySelectorAll('.v2-node-card:not(.on-shelf)'))
+    // Select all cards on the infinite grid
+    const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'))
         .sort((a, b) => a.offsetTop - b.offsetTop);
     
     if (cardEls.length === 0) return;
 
-    const laneWidth = 300; // Matches your v2-lane CSS
-    const cardWidth = 200; // Matches your .v2-node-card width
-    const horizontalPadding = (laneWidth - cardWidth) / 2; // The magic offset to center
+    // 📏 CONFIG: Ensure these match your CSS exactly
+    const columnWidth = 300; 
+    const cardWidth = 200;   
+    const centeringOffset = (columnWidth - cardWidth) / 2; // = 50px if using 300/200
 
     await OL.updateAndSync(() => {
         cardEls.forEach(el => {
@@ -10841,25 +10843,27 @@ OL.autoAlignNodes = async function() {
             const nodeData = source.find(n => n.id === id);
             
             if (nodeData && nodeData.coords) {
-                // 1. Determine which lane the card is currently in
-                const currentLaneIndex = Math.floor(nodeData.coords.x / laneWidth);
+                // 1. Find the nearest Column Slot (0, 1, 2...)
+                // We use Math.round so that if a card is dragged mostly into the next lane, it snaps there.
+                const nearestLane = Math.round(nodeData.coords.x / columnWidth);
                 
-                // 2. Calculate the "Centered X" for that specific lane
-                const centeredX = (currentLaneIndex * laneWidth) + horizontalPadding;
+                // 2. Calculate the exact center X
+                const centeredX = (nearestLane * columnWidth) + centeringOffset;
 
-                // 3. Apply the coordinates
+                // 3. Update Database
                 nodeData.coords.x = centeredX;
                 
-                // 🚀 INSTANT UI FEEDBACK
-                el.style.transition = "left 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"; // "Pop" effect
+                // 🚀 ANIMATION: Apply transition for smooth movement
+                el.style.transition = "left 0.4s cubic-bezier(0.2, 1, 0.3, 1)";
                 el.style.left = `${centeredX}px`;
             }
         });
     });
 
-    // Redraw lines after the animation finishes
+    // 🔄 REDRAW LINES: After cards finish sliding
     setTimeout(() => {
         OL.drawV2Connections();
+        // Remove transitions so dragging doesn't feel "laggy" later
         cardEls.forEach(el => el.style.transition = "");
     }, 450);
 };
