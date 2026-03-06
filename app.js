@@ -9512,117 +9512,66 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
-    // 🚀 FIX: Define positioning math first so 'useVertical' is available globally
-    const dx = endCard.offsetLeft - startCard.offsetLeft;
-    const dy = endCard.offsetTop - startCard.offsetTop;
-    const useVertical = Math.abs(dy) > Math.abs(dx);
-
+    // 🚀 NEW: Detect if the connection starts from the Global Shelf
+    const isFromShelf = !!startCard.closest('#global-shelf');
+    
     let outPort, inPort;
 
-    // 1. FIND THE STARTING PORT (The "Out")
+    // 1. RESOLVE PORTS
     if (outcomeData && typeof outcomeData.fromStepIndex === 'number') {
-        // Look for the specific step output port
         outPort = document.getElementById(`port-out-${sourceId}-step-${outcomeData.fromStepIndex}`);
     }
-
-    // Fallback if no step index or element not found
     if (!outPort) {
-        const dx = endCard.offsetLeft - startCard.offsetLeft;
-        const dy = endCard.offsetTop - startCard.offsetTop;
-        const useVertical = Math.abs(dy) > Math.abs(dx);
-        outPort = useVertical 
-            ? (dy > 0 ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top'))
-            : (dx > 0 ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in'));
+        // Shelf items always exit from bottom, Grid items use dynamic logic
+        outPort = isFromShelf ? startCard.querySelector('.port-bottom') : (
+            Math.abs(endCard.offsetTop - startCard.offsetTop) > Math.abs(endCard.offsetLeft - startCard.offsetLeft)
+            ? (endCard.offsetTop > startCard.offsetTop ? startCard.querySelector('.port-bottom') : startCard.querySelector('.port-top'))
+            : (endCard.offsetLeft > startCard.offsetLeft ? startCard.querySelector('.port-out') : startCard.querySelector('.port-in'))
+        );
     }
 
-    // 2. FIND THE ENDING PORT (The "In")
-    if (outcomeData && typeof outcomeData.toStepIndex === 'number') {
-        // Extract Target ID from action string (e.g., "jump_res_123")
-        const targetId = outcomeData.action?.replace('jump_res_', '');
-        inPort = document.getElementById(`port-in-${targetId}-step-${outcomeData.toStepIndex}`);
-    }
-
-    // Fallback to destination card's main inbound port
-    if (!inPort) {
-        const dx = endCard.offsetLeft - startCard.offsetLeft;
-        const dy = endCard.offsetTop - startCard.offsetTop;
-        const useVertical = Math.abs(dy) > Math.abs(dx);
-        inPort = useVertical 
-            ? (dy > 0 ? endCard.querySelector('.port-top') : endCard.querySelector('.port-bottom'))
-            : (dx > 0 ? endCard.querySelector('.port-in') : endCard.querySelector('.port-out'));
-    }
+    inPort = endCard.querySelector('.port-top') || endCard.querySelector('.port-in');
 
     if (!outPort || !inPort) return;
 
-    // 3. PIXEL-PERFECT COORDINATES
-    const outRect = outPort.getBoundingClientRect();
-    const inRect = inPort.getBoundingClientRect();
+    // 2. PIXEL-PERFECT COORDINATE NORMALIZATION
+    // We calculate everything relative to the canvasRect so the line "starts" correctly in SVG space
+    const oR = outPort.getBoundingClientRect();
+    const iR = inPort.getBoundingClientRect();
 
     const s = {
-        x: (outRect.left - canvasRect.left + (outRect.width / 2)) / zoom,
-        y: (outRect.top - canvasRect.top + (outRect.height / 2)) / zoom
+        x: (oR.left - canvasRect.left + (oR.width / 2)) / zoom,
+        y: (oR.top - canvasRect.top + (oR.height / 2)) / zoom
     };
 
     const e = {
-        x: (inRect.left - canvasRect.left + (inRect.width / 2)) / zoom,
-        y: (inRect.top - canvasRect.top + (inRect.height / 2)) / zoom
+        x: (iR.left - canvasRect.left + (iR.width / 2)) / zoom,
+        y: (iR.top - canvasRect.top + (iR.height / 2)) / zoom
     };
 
-    // 4. DRAW THE CURVE (The rest of your path creation logic follows...)
+    // 3. THE "S-CURVE" BRIDGE MATH
     let pathData;
-    let midX, midY;
-
-    if (Math.abs(e.y - s.y) > Math.abs(e.x - s.x)) {
-        // Straight line for vertical
-        pathData = `M ${s.x} ${s.y} L ${e.x} ${e.y}`;
-        midX = (s.x + e.x) / 2;
-        midY = (s.y + e.y) / 2;
+    if (isFromShelf || Math.abs(e.y - s.y) > Math.abs(e.x - s.x)) {
+        // Vertical S-Curve for Shelf -> Grid or Top -> Bottom
+        const cpOffset = isFromShelf ? 100 : Math.min(Math.abs(e.y - s.y) / 2, 150);
+        pathData = `M ${s.x} ${s.y} C ${s.x} ${s.y + cpOffset}, ${e.x} ${e.y - cpOffset}, ${e.x} ${e.y}`;
     } else {
-        // Curve for horizontal
+        // Horizontal Curve for Left -> Right
         const cpOffset = Math.min(Math.abs(e.x - s.x) / 2, 150);
-        const cp1x = s.x + cpOffset;
-        const cp1y = s.y;
-        const cp2x = e.x - cpOffset;
-        const cp2y = e.y;
-        
-        pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
-        
-        // 🚀 Midpoint for Curve (t=0.5)
-        const t = 0.5;
-        midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
-        midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
+        pathData = `M ${s.x} ${s.y} C ${s.x + cpOffset} ${s.y}, ${e.x - cpOffset} ${e.y}, ${e.x} ${e.y}`;
     }
 
-    // 1. Create a parent group
+    // 4. CREATE SVG GROUP & ATTACH MENU LOGIC
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group flow-link");
 
-    // 2. The Visual Path
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", pathData);
-    path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
-    path.setAttribute("stroke-width", "3");
-    path.setAttribute("fill", "none");
-    group.appendChild(path);
-
-    // 3. The Hit Area (Sensitivity Boost)
-    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    hitArea.setAttribute("d", pathData);
-    hitArea.setAttribute("stroke", "transparent");
-    hitArea.setAttribute("stroke-width", "30");
-    hitArea.setAttribute("fill", "none");
-    hitArea.style.cursor = "pointer";
-
-    hitArea.onclick = (e) => {
-        e.stopPropagation();
-        const targetId = endCard.id.replace('v2-node-', '');
+    // 🖱️ THE MENU FIX: Attach logic to the whole group and use clientX/Y for positioning
+    group.onmousedown = (clickEvt) => {
+        clickEvt.stopPropagation();
+        clickEvt.preventDefault();
         
-        state.v2.activeConnection = {
-            sourceId: sourceId,
-            targetId: targetId,
-            outcomeIdx: outcomeIdx,
-            isLeash: false
-        };
+        const targetId = endCard.id.replace('v2-node-', '');
+        state.v2.activeConnection = { sourceId, targetId, outcomeIdx, isLeash: false };
 
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
         group.classList.add('is-sticky');
@@ -9630,10 +9579,28 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         const ctxBar = document.getElementById('v2-context-toolbar');
         if (ctxBar) {
             ctxBar.style.display = 'flex';
-            document.getElementById('ctx-reorder-btn').style.display = 'none';
+            ctxBar.style.position = 'fixed'; // 🚀 FIXED position to escape header z-index
+            ctxBar.style.left = `${clickEvt.clientX}px`;
+            ctxBar.style.top = `${clickEvt.clientY}px`;
+            ctxBar.style.zIndex = "10000"; // 🚀 Ensure it's on top of EVERYTHING
         }
     };
 
+    // 5. APPEND PATHS
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
+    path.setAttribute("stroke-width", "3");
+    path.setAttribute("fill", "none");
+
+    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    hitArea.setAttribute("d", pathData);
+    hitArea.setAttribute("stroke", "transparent");
+    hitArea.setAttribute("stroke-width", "25");
+    hitArea.setAttribute("fill", "none");
+    hitArea.style.cursor = "pointer";
+
+    group.appendChild(path);
     group.appendChild(hitArea);
     svg.appendChild(group);
 };
