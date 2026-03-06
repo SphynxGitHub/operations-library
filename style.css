@@ -4183,6 +4183,13 @@ ARROWS
     pointer-events: auto !important; /* 🚀 But the cards themselves are clickable */
 }
 
+.v2-node-card.drop-target-highlight {
+    border: 2px solid var(--accent) !important;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    transform: scale(1.02);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
 .v2-port {
     position: absolute;
     width: 10px;
