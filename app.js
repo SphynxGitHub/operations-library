@@ -8826,21 +8826,21 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         <div class="v2-viewport" id="v2-viewport">
             
             <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; background: #0b0f1a; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                
-                <div id="v2-sticky-stage-headers" style="display: flex; padding: 15px 0 10px 0; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: top left; pointer-events: none;">
-                    ${stages.map(s => `
-                        <div class="v2-lane-label" style="min-width: 300px; padding: 0 20px; font-size: 10px; font-weight: 900; color: var(--accent); text-transform: uppercase; letter-spacing: 2px;">
-                            ${esc(s.name)}
-                        </div>
-                    `).join('')}
-                </div>
 
                 <div id="global-shelf" class="global-shelf-container"
                     style="pointer-events: all !important;"
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
                     ondragleave="this.classList.remove('drag-over');"
                     ondrop="OL.handleShelfDrop(event)">
-                    <span class="global-shelf-label" style="position: absolute; top: 8px; left: 12px; font-size: 8px; font-weight: 900; color: var(--accent); text-transform: uppercase; opacity: 0.6;">Global Resources</span>
+                    <span class="global-shelf-label">Global Resources</span>
+                </div>
+
+                <div id="v2-sticky-stage-headers" style="display: flex; padding: 15px 0 10px 0; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: top left; pointer-events: none;">
+                    ${stages.map(s => `
+                        <div class="v2-lane-label" style="min-width: 300px; padding: 0 20px; font-size: 10px; font-weight: 900; color: var(--accent); text-transform: uppercase; letter-spacing: 2px;">
+                            ${esc(s.name)}
+                        </div>
+                    `).join('')}
                 </div>
             </div>
 

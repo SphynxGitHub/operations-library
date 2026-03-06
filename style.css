@@ -4216,7 +4216,7 @@ ARROWS
 .global-shelf-label {
     position: sticky;
     left: 20px;
-    color: #38bdf8;
+    color: var(--accent);
     letter-spacing: 3px;
     opacity: 0.4;
     text-transform: uppercase;
