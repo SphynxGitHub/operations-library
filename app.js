@@ -9022,7 +9022,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
 
                 <div id="v2-sticky-stage-headers" style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
-                    ${stages.map(s => `
+                    ${stages.map((s,i) => `
                         <div class="v2-lane-label">
                             <span class="stage-name-text" onclick="OL.editStageName(event, ${i})">
                                 ${esc(s.name)}
