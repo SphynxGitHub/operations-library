@@ -9467,73 +9467,76 @@ OL.initWBMotion = function(e, id) {
     };
     
     const onUp = async (uE) => {
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    
-    // 🛑 1. THE CLICK PROTECTION
-    // If the mouse didn't move more than 3px, treat this as a select/click.
-    // We exit early and DO NOT touch the database or trigger a re-render.
-    if (!hasMovedSignificantAmount) {
-        state.v2.activeDragId = null;
-        console.log("🖱️ Single click: Movement ignored.");
-        return; 
-    }
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        
+        // 🛑 1. THE CLICK PROTECTION
+        // If the mouse didn't move more than 3px, treat this as a select/click.
+        // We exit early and DO NOT touch the database or trigger a re-render.
+        if (!hasMovedSignificantAmount) {
+            state.v2.activeDragId = null;
+            console.log("🖱️ Single click: Movement ignored.");
+            return; 
+        }
 
-    // --- Everything below only runs if the card was actually DRAGGED ---
+        // --- Everything below only runs if the card was actually DRAGGED ---
 
-    const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
-    const targetCardEl = elementsAtPoint.find(el => 
-        el.classList.contains('v2-node-card') && el.id !== `v2-node-${id}`
-    );
+        const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+        const targetCardEl = elementsAtPoint.find(el => 
+            el.classList.contains('v2-node-card') && el.id !== `v2-node-${id}`
+        );
 
-    const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
-    const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
-    
-    // 🧼 UI Cleanup
-    const zone = document.getElementById('unmap-zone');
-    if (zone) zone.classList.remove('is-hovered');
-    document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
-    
-    const ghost = document.getElementById('drag-ghost');
-    if (ghost) ghost.remove();
+        const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
+        const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
+        
+        // 🧼 UI Cleanup
+        const zone = document.getElementById('unmap-zone');
+        if (zone) zone.classList.remove('is-hovered');
+        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
+        
+        const ghost = document.getElementById('drag-ghost');
+        if (ghost) ghost.remove();
 
-    // 🚀 2. SECURE SYNC (Only happens on real drag)
-    await OL.updateAndSync(() => {
-        const movingRes = OL.getResourceById(id);
-        if (!movingRes) return;
+        // 🚀 2. SECURE SYNC (Only happens on real drag)
+        await OL.updateAndSync(() => {
+            const movingRes = OL.getResourceById(id);
+            if (!movingRes) return;
 
-        if (targetCardEl) {
-            const targetId = targetCardEl.id.replace('v2-node-', '');
-            const parentRes = OL.getResourceById(targetId);
-            if (parentRes) {
-                if (!parentRes.steps) parentRes.steps = [];
-                parentRes.steps.push({
-                    id: 'link_' + Date.now(),
-                    name: movingRes.name,
-                    resourceLinkId: movingRes.id
-                });
+            if (targetCardEl) {
+                const targetId = targetCardEl.id.replace('v2-node-', '');
+                const parentRes = OL.getResourceById(targetId);
+                if (parentRes) {
+                    if (!parentRes.steps) parentRes.steps = [];
+                    parentRes.steps.push({
+                        id: 'link_' + Date.now(),
+                        name: movingRes.name,
+                        resourceLinkId: movingRes.id
+                    });
+                    delete movingRes.coords;
+                    movingRes.isGlobal = false;
+                }
+            } else if (isTrayDrop) {
                 delete movingRes.coords;
                 movingRes.isGlobal = false;
+            } else if (isShelfDrop) {
+                movingRes.isGlobal = true;
+                delete movingRes.coords;
+            } else {
+                const canvas = document.getElementById('v2-canvas');
+                const rect = canvas.getBoundingClientRect();
+                movingRes.isGlobal = false;
+                movingRes.coords = {
+                    x: (uE.clientX - rect.left) / state.v2.zoom,
+                    y: (uE.clientY - rect.top) / state.v2.zoom
+                };
             }
-        } else if (isTrayDrop) {
-            delete movingRes.coords;
-            movingRes.isGlobal = false;
-        } else if (isShelfDrop) {
-            movingRes.isGlobal = true;
-            delete movingRes.coords;
-        } else {
-            const canvas = document.getElementById('v2-canvas');
-            const rect = canvas.getBoundingClientRect();
-            movingRes.isGlobal = false;
-            movingRes.coords = {
-                x: (uE.clientX - rect.left) / state.v2.zoom,
-                y: (uE.clientY - rect.top) / state.v2.zoom
-            };
-        }
-    });
+        });
 
-    state.v2.activeDragId = null;
-    window.renderGlobalVisualizer(isVault);
+        state.v2.activeDragId = null;
+        window.renderGlobalVisualizer(isVault);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
 };
 
 OL.syncDumpOptions = function() {
