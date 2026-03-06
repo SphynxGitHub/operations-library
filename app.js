@@ -9981,13 +9981,15 @@ OL.drawV2Connections = function() {
     // Maintain SVG size
     const canvas = document.getElementById('v2-canvas');
     if (!svg || !canvas) return;
-    svg.setAttribute('width', '5000'); 
-    svg.setAttribute('height', '5000');
-    // Ensure 1 unit in SVG = 1 pixel on Canvas
-    svg.setAttribute('viewBox', '0 0 5000 5000');
+    
+    const scrollW = canvas.scrollWidth || 5000;
+    const scrollH = canvas.scrollHeight || 5000;
+    svg.setAttribute('width', scrollW); 
+    svg.setAttribute('height', scrollH);
+    svg.setAttribute('viewBox', `0 0 ${scrollW} ${scrollH}`);
 
     source.forEach(node => {
-        // 1. 🚀 MOVE THIS UP: Draw Leash even if there are no outcomes
+        // 1. 🐕 Draw Leash even if there are no outcomes
         if (node.parentId) {
             const childEl = document.getElementById(`v2-node-${node.id}`);
             const parentEl = document.getElementById(`v2-node-${node.parentId}`);
@@ -10304,26 +10306,24 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     const canvas = document.getElementById('v2-canvas');
+    if (!canvas || !childEl || !parentEl) return;
+
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
+    // 1. Get live bounding boxes (handles the CSS transition movement)
     const cR = childEl.getBoundingClientRect();
     const pR = parentEl.getBoundingClientRect();
 
-    // 🚀 1. Define all 4 corners for Child
+    // 🚀 2. Define all 4 corners for Child & Parent
     const childCorners = [
-        { x: cR.left, y: cR.top },     // TL
-        { x: cR.right, y: cR.top },    // TR
-        { x: cR.left, y: cR.bottom },  // BL
-        { x: cR.right, y: cR.bottom }  // BR
+        { x: cR.left, y: cR.top }, { x: cR.right, y: cR.top },
+        { x: cR.left, y: cR.bottom }, { x: cR.right, y: cR.bottom }
     ];
 
-    // 🚀 2. Define all 4 corners for Parent
     const parentCorners = [
-        { x: pR.left, y: pR.top },
-        { x: pR.right, y: pR.top },
-        { x: pR.left, y: pR.bottom },
-        { x: pR.right, y: pR.bottom }
+        { x: pR.left, y: pR.top }, { x: pR.right, y: pR.top },
+        { x: pR.left, y: pR.bottom }, { x: pR.right, y: pR.bottom }
     ];
 
     // 🚀 3. Find the closest pair of corners
@@ -10336,69 +10336,58 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
             const dist = Math.hypot(cc.x - pc.x, cc.y - pc.y);
             if (dist < minDist) {
                 minDist = dist;
-                s = { x: (cc.left || cc.x - canvasRect.left) / zoom, y: (cc.top || cc.y - canvasRect.top) / zoom };
-                e = { x: (pc.left || pc.x - canvasRect.left) / zoom, y: (pc.top || pc.y - canvasRect.top) / zoom };
+                // Normalize relative to canvas scroll/pan
+                s = { x: (cc.x - canvasRect.left) / zoom, y: (cc.y - canvasRect.top) / zoom };
+                e = { x: (pc.x - canvasRect.left) / zoom, y: (pc.y - canvasRect.top) / zoom };
             }
         });
     });
 
-    // 🚀 4. Path Math (Organic Curve)
+    // 🚀 4. Path Math (Subtle Organic S-Curve)
     const dx = e.x - s.x;
     const dy = e.y - s.y;
-    const cp1x = s.x + (dx * 0.1);
-    const cp1y = s.y + (dy * 0.9);
-    const cp2x = e.x - (dx * 0.1);
-    const cp2y = e.y - (dy * 0.9);
+    // We adjust control points to make the line "sag" or curve naturally
+    const cp1x = s.x + (dx * 0.2);
+    const cp1y = s.y + (dy * 0.8);
+    const cp2x = e.x - (dx * 0.2);
+    const cp2y = e.y - (dy * 0.8);
 
     const pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
 
-    // 🚀 CALCULATE ACTUAL BEZIER MIDPOINT (t=0.5)
-    // Formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
-    const t = 0.5;
-    const midX = Math.pow(1-t, 3) * s.x + 3 * Math.pow(1-t, 2) * t * cp1x + 3 * (1-t) * Math.pow(t, 2) * cp2x + Math.pow(t, 3) * e.x;
-    const midY = Math.pow(1-t, 3) * s.y + 3 * Math.pow(1-t, 2) * t * cp1y + 3 * (1-t) * Math.pow(t, 2) * cp2y + Math.pow(t, 3) * e.y;
-
+    // 🏗️ 5. Create SVG Elements
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group leash-group");
+    group.setAttribute("data-child-id", nodeId); // Useful for debugging
 
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    path.setAttribute("stroke", "rgba(251, 191, 36, 0.5)");
+    path.setAttribute("stroke", "rgba(251, 191, 36, 0.4)"); // Warmer gold, slightly transparent
     path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-dasharray", "6,4");
+    path.setAttribute("stroke-dasharray", "5,5"); // Balanced dashes
     path.setAttribute("fill", "none");
-    group.appendChild(path);
 
     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitArea.setAttribute("d", pathData);
     hitArea.setAttribute("stroke", "transparent");
-    hitArea.setAttribute("stroke-width", "30");
+    hitArea.setAttribute("stroke-width", "20"); // Easier to click
     hitArea.setAttribute("fill", "none");
     hitArea.style.cursor = "pointer";
 
-    hitArea.onclick = (e) => {
-        e.stopPropagation();
+    hitArea.onclick = (event) => {
+        event.stopPropagation();
         const parentId = parentEl.id.replace('v2-node-', '');
-
-        state.v2.activeConnection = {
-            sourceId: nodeId,
-            targetId: parentId,
-            outcomeIdx: undefined,
-            isLeash: true
-        };
-
+        state.v2.activeConnection = { sourceId: nodeId, targetId: parentId, isLeash: true };
+        
         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
         group.classList.add('is-sticky');
 
         const ctxBar = document.getElementById('v2-context-toolbar');
-        if (ctxBar) {
-            ctxBar.style.display = 'flex';
-            document.getElementById('ctx-reorder-btn').style.display = 'block';
-        }
+        if (ctxBar) ctxBar.style.display = 'flex';
     };
 
+    group.appendChild(path);
     group.appendChild(hitArea);
-    svg.prepend(group); // Leashes stay behind cards
+    svg.appendChild(group); // Use append instead of prepend for reliable rendering
 };
 
 OL.startParentLinking = function(e, sourceId) {
@@ -10871,12 +10860,23 @@ OL.autoAlignNodes = async function() {
             });
         });
     });
+    OL.drawV2Connections();
 
-    // 🔄 Redraw connections once the cards have finished sliding
+    // 2. Continuous redraw during the transition (for smoothness)
+    let startTime = Date.now();
+    const animateLines = () => {
+        OL.drawV2Connections();
+        if (Date.now() - startTime < 600) { // Match the 0.5s transition + buffer
+            requestAnimationFrame(animateLines);
+        }
+    };
+    requestAnimationFrame(animateLines);
+
+    // 3. Final snap redraw to ensure pixel-perfection
     setTimeout(() => {
         OL.drawV2Connections();
         cardEls.forEach(el => el.style.transition = "");
-    }, 550);
+    }, 650);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
