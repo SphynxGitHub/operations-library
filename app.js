@@ -8846,9 +8846,9 @@ OL.openLogicBuilder = function(conn) {
                                 <option value="not_exists" ${currentLogic.operator === 'not_exists' ? 'selected' : ''}>is empty / does not exist</option>
                             </select>
                         </div>
-                        <div style="flex: 1;">
+                        <div style="flex: 1; transition: opacity 0.2s; opacity: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? '0' : '1'}">
                             <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Value</label>
-                            <input type="text" id="logic-value" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px;" value="${currentLogic.value || ''}">
+                            <input type="text" id="logic-value" ... >
                         </div>
                     </div>
                 </div>
@@ -8864,19 +8864,24 @@ OL.openLogicBuilder = function(conn) {
 };
 
 OL.toggleLogicValueField = function(selectEl) {
-    // Find the value input field (usually the next sibling or in the same row)
-    const row = selectEl.closest('.logic-row');
-    const valueInput = row.querySelector('.logic-value-input');
+    const modal = selectEl.closest('.modal-content');
+    // 🔍 Find the Value container (the parent of our input)
+    const valueInput = document.getElementById('logic-value');
+    const valueWrapper = valueInput ? valueInput.parentElement : null;
     
     const unaryOperators = ['exists', 'not_exists'];
-    
-    if (unaryOperators.includes(selectEl.value)) {
-        // 🙈 Hide it
-        valueInput.style.display = 'none';
-        valueInput.value = ''; // Clear value since it's irrelevant
-    } else {
-        // 👁️ Show it
-        valueInput.style.display = 'inline-block';
+    const isUnary = unaryOperators.includes(selectEl.value);
+
+    if (valueWrapper) {
+        if (isUnary) {
+            // 👻 Hide it without breaking the flexbox layout
+            valueWrapper.style.opacity = '0';
+            valueWrapper.style.pointerEvents = 'none';
+            valueInput.value = ''; // Clear value
+        } else {
+            valueWrapper.style.opacity = '1';
+            valueWrapper.style.pointerEvents = 'auto';
+        }
     }
 };
 
