@@ -10072,7 +10072,7 @@ OL.drawV2Connections = function() {
                 // --- ICONS (Leash Logic) ---
                 // 🎯 THE FIX: Fetch the 'Live' child to ensure logic/delay are visible after sync
                 const liveChild = OL.getResourceById(node.id); 
-                let iconOffset = 20;
+                let iconOffset = 10;
 
                 if (liveChild) {
                     console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay });
@@ -10080,13 +10080,13 @@ OL.drawV2Connections = function() {
                     // 🚀 1. Lambda (Logic)
                     if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
                         group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${liveChild.logic.field}`));
-                        iconOffset += 25;
+                        iconOffset += 22;
                     }
 
                     // 🕒 2. Clock (Delay)
                     if (liveChild.delay && liveChild.delay != "0") {
                         group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${liveChild.delay}`));
-                        iconOffset += 25;
+                        iconOffset += 22;
                     }
 
                     // ⟳ 3. Loop
