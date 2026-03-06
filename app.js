@@ -8808,6 +8808,11 @@ OL.handleContextAction = function(action) {
 };
 
 OL.openLogicBuilder = function(conn) {
+    // Inside your Logic Builder opening function:
+    document.querySelectorAll('.logic-operator-select').forEach(select => {
+        OL.toggleLogicValueField(select);
+    });
+    
     const sourceRes = OL.getResourceById(conn.sourceId);
     const targetRes = OL.getResourceById(conn.targetId);
     
@@ -8832,10 +8837,13 @@ OL.openLogicBuilder = function(conn) {
                     <div style="display: flex; gap: 10px;">
                         <div style="flex: 1;">
                             <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Operator</label>
-                            <select id="logic-operator" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px;">
-                                <option value="==" ${currentLogic.operator === '==' ? 'selected' : ''}>is</option>
-                                <option value="!=" ${currentLogic.operator === '!=' ? 'selected' : ''}>is not</option>
+                            <select class="logic-operator-select" onchange="OL.toggleLogicValueField(this)">
                                 <option value="contains" ${currentLogic.operator === 'contains' ? 'selected' : ''}>contains</option>
+                                <option value="not_contains" ${currentLogic.operator === 'not_contains' ? 'selected' : ''}>does not contain</option>
+                                <option value="equals" ${currentLogic.operator === 'equals' ? 'selected' : ''}>is exactly</option>
+                                
+                                <option value="exists" ${currentLogic.operator === 'exists' ? 'selected' : ''}>exists / has value</option>
+                                <option value="not_exists" ${currentLogic.operator === 'not_exists' ? 'selected' : ''}>is empty / does not exist</option>
                             </select>
                         </div>
                         <div style="flex: 1;">
@@ -8853,6 +8861,23 @@ OL.openLogicBuilder = function(conn) {
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+OL.toggleLogicValueField = function(selectEl) {
+    // Find the value input field (usually the next sibling or in the same row)
+    const row = selectEl.closest('.logic-row');
+    const valueInput = row.querySelector('.logic-value-input');
+    
+    const unaryOperators = ['exists', 'not_exists'];
+    
+    if (unaryOperators.includes(selectEl.value)) {
+        // 🙈 Hide it
+        valueInput.style.display = 'none';
+        valueInput.value = ''; // Clear value since it's irrelevant
+    } else {
+        // 👁️ Show it
+        valueInput.style.display = 'inline-block';
+    }
 };
 
 OL.saveLogic = async function(sourceId, outcomeIdx) {
