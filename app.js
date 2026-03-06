@@ -8808,23 +8808,30 @@ OL.handleContextAction = function(action) {
 };
 
 OL.openLogicBuilder = function(conn) {
-    // Inside your Logic Builder opening function:
-    document.querySelectorAll('.logic-operator-select').forEach(select => {
-        OL.toggleLogicValueField(select);
-    });
-    
     const sourceRes = OL.getResourceById(conn.sourceId);
     const targetRes = OL.getResourceById(conn.targetId);
     
-    // Find existing logic on this outcome index
-    const outcome = sourceRes.outcomes?.[conn.outcomeIdx] || {};
-    const currentLogic = outcome.logic || { field: '', operator: '==', value: '' };
+    if (!sourceRes || !targetRes) return;
+
+    // 🎯 DATA LOOKUP LOGIC
+    let currentLogic;
+    
+    if (conn.isLeash || conn.outcomeIdx === null || conn.outcomeIdx === undefined) {
+        // It's a Leash: Data is on the sourceRes (which we ensured is the Child)
+        currentLogic = sourceRes.logic || { field: '', operator: 'contains', value: '' };
+        console.log("🔍 Loading Logic from Leash Root:", sourceRes.id);
+    } else {
+        // It's a Flow Path: Data is in the outcome array
+        const outcome = sourceRes.outcomes?.[conn.outcomeIdx] || {};
+        currentLogic = outcome.logic || { field: '', operator: 'contains', value: '' };
+        console.log("🔍 Loading Logic from Outcome Index:", conn.outcomeIdx);
+    }
 
     const modalHtml = `
         <div id="logic-modal" class="modal-backdrop" style="z-index: 10000; position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center;">
             <div class="modal-content" style="background: #1e293b; padding: 25px; border-radius: 12px; border: 1px solid var(--accent); width: 400px; color: white;">
                 <div class="modal-header" style="margin-bottom: 20px;">
-                    <h3 class="tiny accent uppercase bold" style="color: var(--accent); margin: 0;">Path Logic</h3>
+                    <h3 class="tiny accent uppercase bold" style="color: var(--accent); margin: 0;">${conn.isLeash ? 'Leash Logic' : 'Path Logic'}</h3>
                     <div style="font-size: 11px; opacity: 0.6;">${sourceRes.name} ➔ ${targetRes.name}</div>
                 </div>
                 
@@ -8848,7 +8855,7 @@ OL.openLogicBuilder = function(conn) {
                             </select>
                         </div>
 
-                        <div id="logic-value-wrapper" style="flex: 1; transition: all 0.2s ease; opacity: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? '0' : '1'}; pointer-events: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? 'none' : 'auto'};">
+                        <div id="logic-value-wrapper" style="flex: 1; transition: all 0.2s ease; opacity: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? '0' : '1'};">
                             <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Value</label>
                             <input type="text" id="logic-value" 
                                 class="modal-input" 
@@ -8861,7 +8868,7 @@ OL.openLogicBuilder = function(conn) {
 
                 <div class="modal-footer" style="margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px;">
                     <button class="btn soft tiny" onclick="document.getElementById('logic-modal').remove()">Cancel</button>
-                    <button class="btn primary tiny" onclick="OL.saveLogic('${conn.sourceId}', ${conn.outcomeIdx})">Save Logic</button>
+                    <button class="btn primary tiny" onclick="OL.saveLogic('${conn.sourceId}', ${conn.outcomeIdx !== undefined ? conn.outcomeIdx : 'null'})">Save Logic</button>
                 </div>
             </div>
         </div>
@@ -8888,48 +8895,35 @@ OL.toggleLogicValueField = function(selectEl) {
     }
 };
 
-OL.saveLogic = function(sourceId, outcomeIdx) {
-    const fieldInput = document.getElementById('logic-field');
-    const operatorSelect = document.querySelector('.logic-operator-select');
-    const valueInput = document.getElementById('logic-value');
-
+OL.saveLogic = function(childId, outcomeIdx) {
     const logicData = {
-        field: fieldInput ? fieldInput.value : '',
-        operator: operatorSelect ? operatorSelect.value : 'contains',
-        value: valueInput ? valueInput.value : '' 
+        field: document.getElementById('logic-field')?.value || '',
+        operator: document.querySelector('.logic-operator-select')?.value || 'contains',
+        value: document.getElementById('logic-value')?.value || '' 
     };
 
-    // 1. Get the resource
-    const res = OL.getResourceById(sourceId);
-    if (!res) return;
+    const res = OL.getResourceById(childId);
+    if (!res) {
+        console.error("❌ Could not find resource with ID:", childId);
+        return;
+    }
 
-    // 2. Decide WHERE to save (Outcome vs. Root)
-    // If outcomeIdx is null or 'null', it's a Leash
     if (outcomeIdx !== null && outcomeIdx !== undefined && outcomeIdx !== 'null') {
+        // Standard Flow Path
         if (!res.outcomes) res.outcomes = [];
-        if (res.outcomes[outcomeIdx]) {
-            res.outcomes[outcomeIdx].logic = logicData;
-            console.log("✅ Saved Logic to Outcome", outcomeIdx);
-        }
+        if (res.outcomes[outcomeIdx]) res.outcomes[outcomeIdx].logic = logicData;
     } else {
-        // 🎯 LEASH FIX: Save directly to the resource (the Child)
+        // 🚀 LEASH FIX: Save directly to the Child Resource
         res.logic = logicData;
-        console.log("✅ Saved Logic to Leash (Resource Root)");
+        console.log(`✅ Logic saved to Child Node: ${childId}`);
     }
 
-    // 3. Sync and Persist
-    // Use your specific meta updater if available, otherwise manual persist
-    if (typeof OL.updateResourceMetadata === 'function') {
-        OL.updateResourceMetadata(sourceId, 'logic', logicData);
-    } else {
-        OL.persist();
-    }
-
-    // 4. UI Cleanup
+    // Persist to DB
+    OL.persist();
+    
+    // Close & Redraw
     const modal = document.getElementById('logic-modal');
     if (modal) modal.remove();
-    
-    // 5. Redraw
     OL.drawV2Connections();
 };
 
