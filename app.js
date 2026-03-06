@@ -9021,7 +9021,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     <span class="global-shelf-label">Global Resources</span>
                 </div>
 
-                <div id="v2-sticky-stage-headers" style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
+                <div id="v2-sticky-stage-headers" style="width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
                     ${stages.map((s,i) => `
                         <div class="v2-lane-label">
                             <span class="stage-name-text" onclick="OL.editStageName(event, ${i})">
@@ -9043,7 +9043,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 ondrop="OL.handleCanvasDrop(event)">
 
                 <div class="v2-canvas" id="v2-canvas" 
-                    style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+                    style="width: ${totalWidth}px; transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
                     
                     <div class="v2-stage-layer" id="v2-stage-layer">
                         ${stages.map((s, i) => `
@@ -9052,8 +9052,8 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <div class="v2-lane-guide" style="left: ${stages.length * 300}px;"></div>
                     </div>
 
-                    <svg class="v2-svg-layer" id="v2-connections"></svg>
-                    <div class="v2-node-layer" id="v2-nodes">     </div>
+                    <svg class="v2-svg-layer" id="v2-connections" style="width: ${totalWidth}px" ></svg>
+                    <div class="v2-node-layer" id="v2-nodes" style="width: ${totalWidth}px">     </div>
                 </div>
             </div>
 
