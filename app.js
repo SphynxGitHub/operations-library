@@ -9236,14 +9236,21 @@ OL.openBrainDump = function() {
 // 2. Fetch Verb/Object from DB when App is selected
 OL.syncZapLogic = function(appInput) {
     const row = appInput.closest('.bd-draft-item');
-    const appName = appInput.value;
+    const appName = appInput.value.trim();
     const eventSelect = row.querySelector('.bd-verb');
     
+    // 1. 🛑 IMMEDIATE RESET: Clear the dropdown every time the user types
+    eventSelect.innerHTML = `<option value="">Select Event...</option>`;
+
+    // 2. Fetch the Library
     const library = state.master.automationLibrary || {};
-    const appData = library[appName];
+    
+    // 3. 🧠 SMART MATCH: Find the app regardless of capitalization
+    const actualKey = Object.keys(library).find(k => k.toLowerCase() === appName.toLowerCase());
+    const appData = library[actualKey];
     
     if (!appData) {
-        eventSelect.innerHTML = `<option value="">Custom Event...</option>`;
+        // If no match yet, don't fill the dropdown
         return;
     }
 
@@ -9254,14 +9261,22 @@ OL.syncZapLogic = function(appInput) {
             ${entry.verb} [${entry.object}]
         </option>`;
 
-    if (appData.triggers.length > 0) {
-        html += `<optgroup label="⚡ Triggers">${appData.triggers.map(opt).join('')}</optgroup>`;
+    // 4. Populate Triggers
+    if (appData.triggers && appData.triggers.length > 0) {
+        html += `<optgroup label="⚡ Triggers">`;
+        html += appData.triggers.map(opt).join('');
+        html += `</optgroup>`;
     }
-    if (appData.actions.length > 0) {
-        html += `<optgroup label="🛠️ Actions">${appData.actions.map(opt).join('')}</optgroup>`;
+
+    // 5. Populate Actions
+    if (appData.actions && appData.actions.length > 0) {
+        html += `<optgroup label="🛠️ Actions">`;
+        html += appData.actions.map(opt).join('');
+        html += `</optgroup>`;
     }
 
     eventSelect.innerHTML = html;
+    console.log(`✨ Dropdown synced for: ${actualKey}`);
 };
 
 OL.initV2Panning = function() {
