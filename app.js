@@ -10301,60 +10301,23 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
-    if (!svg || !childEl || !parentEl) return;
+    if (!svg) return;
 
-    const zoom = state.v2.zoom || 1;
-    const svgRect = svg.getBoundingClientRect();
+    const childRes = OL.getResourceById(nodeId);
+    const parentRes = OL.getResourceById(childRes?.parentId);
 
-    // 1. Get exact box positions on the screen
-    const cR = childEl.getBoundingClientRect();
-    const pR = parentEl.getBoundingClientRect();
+    if (!childRes?.coords || !parentRes?.coords) return;
 
-    // 🚀 2. Define all 4 corners for Child & Parent (Screen Space)
-    const childCorners = [
-        { x: cR.left, y: cR.top }, { x: cR.right, y: cR.top },
-        { x: cR.left, y: cR.bottom }, { x: cR.right, y: cR.bottom }
-    ];
+    // 🚀 THE FIX: Use raw coords directly. 
+    // We add 100 to X to hit the center of the 200px card.
+    const s = { x: childRes.coords.x + 100, y: childRes.coords.y + 40 };
+    const e = { x: parentRes.coords.x + 100, y: parentRes.coords.y + 40 };
 
-    const parentCorners = [
-        { x: pR.left, y: pR.top }, { x: pR.right, y: pR.top },
-        { x: pR.left, y: pR.bottom }, { x: pR.right, y: pR.bottom }
-    ];
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
+    // Cubic bezier for a nice "leash" curve
+    const pathData = `M ${s.x} ${s.y} C ${s.x + dx*0.2} ${s.y + dy*0.8}, ${e.x - dx*0.2} ${e.y - dy*0.8}, ${e.x} ${e.y}`;
 
-    // 🚀 3. Find the closest pair of corners
-    let minDist = Infinity;
-    let startPoint = { x: 0, y: 0 };
-    let endPoint = { x: 0, y: 0 };
-
-    childCorners.forEach(cc => {
-        parentCorners.forEach(pc => {
-            const dist = Math.hypot(cc.x - pc.x, cc.y - pc.y);
-            if (dist < minDist) {
-                minDist = dist;
-                // Convert Screen X/Y to SVG X/Y
-                startPoint = { 
-                    x: (cc.x - svgRect.left) / zoom, 
-                    y: (cc.y - svgRect.top) / zoom 
-                };
-                endPoint = { 
-                    x: (pc.x - svgRect.left) / zoom, 
-                    y: (pc.y - svgRect.top) / zoom 
-                };
-            }
-        });
-    });
-
-    // 🚀 4. Path Math (Curved Line)
-    const dx = endPoint.x - startPoint.x;
-    const dy = endPoint.y - startPoint.y;
-    const cp1x = startPoint.x + (dx * 0.1);
-    const cp1y = startPoint.y + (dy * 0.9);
-    const cp2x = endPoint.x - (dx * 0.1);
-    const cp2y = endPoint.y - (dy * 0.9);
-
-    const pathData = `M ${startPoint.x} ${startPoint.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endPoint.x} ${endPoint.y}`;
-
-    // 🏗️ 5. SVG Construction
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group leash-group");
 
