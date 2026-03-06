@@ -8900,23 +8900,24 @@ OL.saveLogic = function(sourceId, outcomeIdx) {
     };
 
     const res = OL.getResourceById(sourceId);
-    if (res && res.outcomes && res.outcomes[outcomeIdx]) {
-        // 1. Update the local data
-        res.outcomes[outcomeIdx].logic = logicData;
-        
-        // 2. 💾 PERSIST MANUALLY (To avoid popping open the Resource Modal)
-        // This is the core logic from your updateResourceMeta without the UI refresh
-        OL.persist();
-        
-        console.log(`✅ Path Logic Saved for ${sourceId} outcome ${outcomeIdx}`);
+    if (!res) return;
 
-        // 3. UI Cleanup
-        const modal = document.getElementById('logic-modal');
-        if (modal) modal.remove();
-        
-        // 4. Redraw lines so the λ icon appears
-        OL.drawV2Connections();
+    // 🎯 THE FIX: Handle both Flow Paths and Leashes
+    if (outcomeIdx !== null && outcomeIdx !== undefined && res.outcomes && res.outcomes[outcomeIdx]) {
+        // Flow Path (Outcome)
+        res.outcomes[outcomeIdx].logic = logicData;
+    } else {
+        // Leash (Directly on the Child Resource)
+        // Note: For leashes, sourceId is usually the CHILD because the child 'owns' the parentId
+        res.logic = logicData;
     }
+    
+    OL.persist();
+    
+    const modal = document.getElementById('logic-modal');
+    if (modal) modal.remove();
+    
+    OL.drawV2Connections();
 };
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
@@ -10038,21 +10039,21 @@ OL.drawV2Connections = function() {
 
                 // --- ICONS (Using s.x and s.y for correct anchoring) ---
                 let iconOffset = 15;
-                
-                // 🚀 Lambda
-                if (node.logic && (node.logic.field || node.logic.operator)) {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", "Leash Logic"));
+
+                // 🚀 Logic (λ)
+                if (node.logic && node.logic.field) {
+                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${node.logic.field}`));
                     iconOffset += 22;
                 }
-                
-                // 🕒 Delay
-                if (node.delay && node.delay !== "0") {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Leash Delay: ${node.delay}`));
+
+                // 🕒 Delay (Check both string and number)
+                if (node.delay && node.delay !== "0" && node.delay !== 0) {
+                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${node.delay}`));
                     iconOffset += 22;
                 }
-                
-                // ⟳ Loop
-                const isLooping = node.isLoop || node.allowLoop || node.loop || (node.action && node.action.includes('loop'));
+
+                // ⟳ Loop (Checking all possible boolean/string flags)
+                const isLooping = node.isLoop === true || node.allowLoop === true || (node.action && node.action.includes('loop'));
                 if (isLooping) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping enabled"));
                 }
