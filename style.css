@@ -4242,6 +4242,8 @@ ARROWS
     flex-wrap: wrap;
     gap: 15px;
     pointer-events: all;
+    top: 10px;
+    z-index: 100;
 }
 
 .global-shelf-container.drag-over {

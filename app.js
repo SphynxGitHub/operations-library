@@ -9031,7 +9031,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); transform-origin: left top;">
                     
                     <div id="global-shelf" class="global-shelf-container"
-                        style="pointer-events: all !important; margin: 20px; width: fit-content; min-width: calc(100% - 40px);"
                         ondragover="event.preventDefault(); this.classList.add('drag-over');"
                         ondragleave="this.classList.remove('drag-over');"
                         ondrop="OL.handleShelfDrop(event)">
@@ -9090,6 +9089,25 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             nodesLayer.appendChild(nodeEl);
         }
     });
+
+    const syncLayout = () => {
+        const headers = document.getElementById('v2-sticky-stage-headers');
+        const viewport = document.getElementById('v2-viewport');
+        
+        if (headers) {
+            headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
+            headers.style.transformOrigin = "left top";
+        }
+        if (viewport) {
+            viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
+        }
+    };
+
+    // Run once immediately
+    syncLayout();
+
+    // Re-draw connections after sync
+    OL.drawV2Connections();
 
     setTimeout(() => {
         OL.initV2Panning();
