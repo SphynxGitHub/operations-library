@@ -8763,30 +8763,99 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
-OL.handleContextAction = function(action) {
+OL.handleContextAction = function(actionType) {
     const conn = state.v2.activeConnection;
     if (!conn) return;
 
-    console.log(`🚀 Global Action: ${action} on`, conn);
-
-    switch(action) {
-        case 'delete':
-            if (conn.isLeash) OL.unlinkParent(conn.sourceId);
-            else OL.removeConnection(conn.sourceId, conn.outcomeIdx);
-            // Hide bar after delete
-            document.getElementById('v2-context-toolbar').style.display = 'none';
-            break;
-            
-        case 'reorder':
-            OL.requestReorder(conn.sourceId, conn.targetId);
-            break;
-
+    switch(actionType) {
         case 'logic':
-            alert("Logic Builder for " + conn.sourceId);
+            OL.closeContextToolbar(); // Hide the mini-menu
+            OL.openLogicBuilder();    // Open the real tool
             break;
             
-        // ... other cases ...
+        case 'delete':
+            if (confirm("Delete this connection?")) {
+                OL.deleteConnection(conn.sourceId, conn.targetId, conn.outcomeIdx);
+            }
+            break;
+            
+        case 'delay':
+            const delay = prompt("Enter delay (e.g., 24h, 2d):", "1h");
+            if (delay) OL.saveConnectionDelay(conn, delay);
+            break;
     }
+};
+
+OL.openLogicBuilder = function(conn) {
+    const sourceRes = OL.getResourceById(conn.sourceId);
+    const targetRes = OL.getResourceById(conn.targetId);
+    
+    // Find the specific outcome data
+    const outcome = sourceRes.outcomes?.[conn.outcomeIdx] || {};
+    const currentLogic = outcome.logic || { field: '', operator: '==', value: '' };
+
+    const modalHtml = `
+        <div id="logic-modal" class="modal-backdrop" style="z-index: 10000;" onclick="this.remove()">
+            <div class="modal-content" style="width: 400px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="tiny accent uppercase bold">Path Logic</h3>
+                    <div class="tiny muted">${sourceRes.name} ➔ ${targetRes.name}</div>
+                </div>
+                
+                <div class="modal-body" style="padding: 20px 0;">
+                    <p class="tiny muted" style="margin-bottom:15px;">Define the condition required to follow this path:</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div>
+                            <label class="tiny uppercase bold muted">Attribute / Field</label>
+                            <input type="text" id="logic-field" class="modal-input tiny" placeholder="e.g. user_role, total_value" value="${currentLogic.field || ''}">
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px;">
+                            <div style="flex: 1;">
+                                <label class="tiny uppercase bold muted">Operator</label>
+                                <select id="logic-operator" class="modal-input tiny">
+                                    <option value="==" ${currentLogic.operator === '==' ? 'selected' : ''}>Equals</option>
+                                    <option value="!=" ${currentLogic.operator === '!=' ? 'selected' : ''}>Not Equals</option>
+                                    <option value=">" ${currentLogic.operator === '>' ? 'selected' : ''}>Greater Than</option>
+                                    <option value="<" ${currentLogic.operator === '<' ? 'selected' : ''}>Less Than</option>
+                                    <option value="contains" ${currentLogic.operator === 'contains' ? 'selected' : ''}>Contains</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1;">
+                                <label class="tiny uppercase bold muted">Value</label>
+                                <input type="text" id="logic-value" class="modal-input tiny" placeholder="Value..." value="${currentLogic.value || ''}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                    <button class="btn soft tiny" onclick="document.getElementById('logic-modal').remove()">Cancel</button>
+                    <button class="btn primary tiny" onclick="OL.saveLogic('${conn.sourceId}', ${conn.outcomeIdx})">Save Condition</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+OL.saveLogic = async function(sourceId, outcomeIdx) {
+    const field = document.getElementById('logic-field').value;
+    const operator = document.getElementById('logic-operator').value;
+    const value = document.getElementById('logic-value').value;
+
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(sourceId);
+        if (res && res.outcomes && res.outcomes[outcomeIdx]) {
+            // Attach the logic directly to the outcome path
+            res.outcomes[outcomeIdx].logic = { field, operator, value };
+        }
+    });
+
+    document.getElementById('logic-modal').remove();
+    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    console.log("✅ Logic Saved to Outcome", outcomeIdx);
 };
 
 OL.getInferredScope = (node) => {
@@ -9598,11 +9667,13 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         }
     };
 
+    const hasLogic = outcomeData && outcomeData.logic && outcomeData.logic.field;
+
     // 5. APPEND PATHS
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    path.setAttribute("stroke", label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)");
-    path.setAttribute("stroke-width", "3");
+    path.setAttribute("stroke", hasLogic ? "#a855f7" : (label ? "#fbbf24" : "rgba(56, 189, 248, 0.5)"));
+    path.setAttribute("stroke-width", "2");
     path.setAttribute("fill", "none");
 
     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
