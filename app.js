@@ -9207,7 +9207,7 @@ OL.addNewStage = async function() {
     window.renderVisualizerV2(isVault);
 };
 
-OL.openBrainDump = function() {
+/*OL.openBrainDump = function() {
     const library = state.master.automationLibrary || {};
     const appKeys = Object.keys(library).sort();
 
@@ -9238,6 +9238,92 @@ OL.openBrainDump = function() {
     `;
     openModal(html);
     OL.syncDumpOptions(); 
+};*/
+
+OL.openBrainDump = function() {
+    const html = `
+        <div class="modal-head"><div class="modal-title-text">🧠 Smart Brain Dump</div></div>
+        <div class="modal-body">
+            <div class="smart-dump-container" style="display:flex; flex-direction:column; gap:15px;">
+                <label class="tiny-label">WHAT DO YOU WANT TO AUTOMATE?</label>
+                <input type="text" id="smart-dump-input" class="modal-input" 
+                       placeholder="e.g. Stripe create customer or New HubSpot contact"
+                       oninput="OL.updateSmartPreview(this.value)"
+                       style="font-size: 16px; padding: 15px;">
+
+                <div id="smart-preview-zone" class="smart-preview-card" 
+                     style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); padding: 15px; border-radius: 8px; display:none;">
+                    </div>
+            </div>
+            <button class="btn primary full-width" id="smart-commit-btn" disabled onclick="OL.commitBrainDump()">Drop on Canvas</button>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.updateSmartPreview = function(val) {
+    const previewZone = document.getElementById('smart-preview-zone');
+    const commitBtn = document.getElementById('smart-commit-btn');
+    
+    if (!val || val.length < 3) {
+        previewZone.style.display = 'none';
+        commitBtn.disabled = true;
+        return;
+    }
+
+    const data = OL.parseSmartInput(val);
+    previewZone.style.display = 'block';
+    
+    // Store data on the element for the commit function to grab
+    previewZone.dataset.parsed = JSON.stringify(data);
+
+    previewZone.innerHTML = `
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div><label class="tiny muted bold">APP</label><div class="accent">${data.app}</div></div>
+            <div><label class="tiny muted bold">TYPE</label><div style="color: ${data.type === 'triggers' ? '#ffbf00' : '#38bdf8'}">${data.type.toUpperCase()}</div></div>
+            <div><label class="tiny muted bold">VERB</label><div>${data.verb || '---'}</div></div>
+            <div><label class="tiny muted bold">OBJECT</label><div>${data.object || '---'}</div></div>
+        </div>
+        ${!data.verb ? '<div class="tiny muted italic" style="margin-top:10px; color:#ef4444;">No exact event match found... checking keywords.</div>' : ''}
+    `;
+
+    commitBtn.disabled = false;
+};
+
+OL.parseSmartInput = function(rawText) {
+    const lib = state.master.automationLibrary || {};
+    const text = rawText.toLowerCase().trim();
+    
+    let result = { app: 'Manual', type: 'actions', verb: '', object: '', matched: false };
+
+    // 1. Identify the App
+    const appNames = Object.keys(lib);
+    const matchedApp = appNames.find(a => text.includes(a.toLowerCase()));
+    
+    if (matchedApp) {
+        result.app = matchedApp;
+        result.matched = true;
+        const appData = lib[matchedApp];
+
+        // 2. Identify Type (Trigger vs Action)
+        // We scan the actual event names in the library to see if they are present in the text
+        const allEvents = [
+            ...appData.triggers.map(t => ({...t, group: 'triggers'})),
+            ...appData.actions.map(a => ({...a, group: 'actions'}))
+        ];
+
+        // Sort by length descending so "New Invoice Item" matches before "New Invoice"
+        allEvents.sort((a, b) => b.full.length - a.full.length);
+
+        const matchedEvent = allEvents.find(e => text.includes(e.full.toLowerCase()));
+
+        if (matchedEvent) {
+            result.type = matchedEvent.group;
+            result.verb = matchedEvent.verb;
+            result.object = matchedEvent.object;
+        }
+    }
+    return result;
 };
 
 // 2. Fetch Verb/Object from DB when App is selected
@@ -9616,7 +9702,7 @@ OL.updateBDCount = function() {
     if (commitBtn) commitBtn.disabled = count === 0;
 };
 
-OL.commitBrainDump = async function() {
+/*OL.commitBrainDump = async function() {
     // 1. Grab values from your specific UI IDs
     const appVal = document.getElementById('dump-app').value;
     const typeVal = document.getElementById('dump-type').value; // 'triggers' or 'actions'
@@ -9659,6 +9745,30 @@ OL.commitBrainDump = async function() {
     else if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
     
     console.log(`✅ Dropped ${name} onto canvas.`);
+};*/
+
+OL.commitBrainDump = async function() {
+    const previewZone = document.getElementById('smart-preview-zone');
+    const data = JSON.parse(previewZone.dataset.parsed);
+    const rawInput = document.getElementById('smart-dump-input').value;
+    const isVault = window.location.hash.includes('vault');
+
+    const newNode = {
+        id: isVault ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
+        name: data.verb ? `${data.verb} ${data.object}` : rawInput,
+        type: data.type === 'triggers' ? "Trigger" : "Action",
+        coords: { x: 150, y: 150 },
+        integration: data,
+        createdDate: new Date().toISOString()
+    };
+
+    await OL.updateAndSync(() => {
+        const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        targetList.push(newNode);
+    });
+
+    OL.closeModal();
+    renderGlobalVisualizer(isVault);
 };
 
 function renderV2Nodes(isVault) {
