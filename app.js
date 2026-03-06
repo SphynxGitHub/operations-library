@@ -10060,27 +10060,24 @@ OL.drawV2Connections = function() {
                 // 🔍 DEBUG: See what the child node actually contains
                 console.log(`Checking icons for Child (${node.id}):`, { logic: node.logic, delay: node.delay, loop: node.isLoop });
 
-                // 🚀 1. Lambda (Logic)
-                // Check for the object AND the field to ensure it's not just an empty {}
+                // 1. Lambda (Logic) - Checking the CHILD node metadata
                 if (node.logic && (node.logic.field || node.logic.operator)) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${node.logic.field}`));
                     iconOffset += 22;
                 }
 
-                // 🕒 2. Clock (Delay)
-                // Some systems save this as a string "0", others as a number 0. We check both.
+                // 2. Clock (Delay) - Using s.x and s.y instead of sX/sY
                 if (node.delay && node.delay != "0" && node.delay != 0) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${node.delay}`));
                     iconOffset += 22;
                 }
 
-                // ⟳ 3. Loop
-                const hasLoop = node.isLoop === true || node.allowLoop === true || (node.action && node.action.includes('loop'));
-                if (hasLoop) {
+                // 3. Loop (⟳)
+                const isLooping = node.isLoop === true || node.allowLoop === true || (node.action && node.action.includes('loop'));
+                if (isLooping) {
                     group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping enabled"));
                 }
 
-                // IMPORTANT: Ensure the group is appended to the SVG last so it stays on top
                 svg.appendChild(group);
             }
         }
