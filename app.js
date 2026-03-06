@@ -9008,6 +9008,8 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const expandIcon = isAnyExpanded ? '📂' : '📁';
     const toggleIcon = isToggled ? '🔳' : '⬜';
     
+    const totalWidth = (stages.length + 1) * 300;
+    
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             
