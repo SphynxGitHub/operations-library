@@ -4166,7 +4166,7 @@ ARROWS
 }
 
 .v2-node-card {
-    position: relative;
+    position: absolute;
     overflow: visible;
     box-sizing: border-box;
     display: box;
@@ -4181,6 +4181,7 @@ ARROWS
     will-change: left, top; /* 🚀 Critical for performance */
     transition: border-color 0.2s, box-shadow 0.2s, transform 0.1s;
     pointer-events: auto !important; /* 🚀 But the cards themselves are clickable */
+    margin: 0;
 }
 
 .v2-node-card.drop-target-highlight {

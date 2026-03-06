@@ -9814,7 +9814,7 @@ function renderV2Nodes(isVault) {
 
         const positionStyle = isGlobal 
             ? `position: relative; transform: none; margin: 0;` 
-            : `position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;`;
+            : `position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;`
 
        // Change it to a simple link that clears the filter flags
         const scopeBadge = isInScope ? `
@@ -9965,6 +9965,17 @@ OL.handlePortClick = async function(nodeId, direction, stepIndex = null) {
 
         OL.resetWiringState();
         OL.drawV2Connections();
+    }
+};
+
+// Add this to your event listeners or onclick in the HTML
+OL.jumpToParent = function(parentId) {
+    const parentEl = document.getElementById(`v2-node-${parentId}`);
+    if (parentEl) {
+        parentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Optional: Trigger a brief glow on the parent
+        parentEl.classList.add('drop-target-highlight');
+        setTimeout(() => parentEl.classList.remove('drop-target-highlight'), 1000);
     }
 };
 
@@ -10305,17 +10316,16 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
-    const canvas = document.getElementById('v2-canvas');
-    if (!canvas || !childEl || !parentEl) return;
+    if (!svg || !childEl || !parentEl) return;
 
-    const canvasRect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
+    const svgRect = svg.getBoundingClientRect();
 
-    // 1. Get live bounding boxes (handles the CSS transition movement)
+    // 1. Get exact box positions on the screen
     const cR = childEl.getBoundingClientRect();
     const pR = parentEl.getBoundingClientRect();
 
-    // 🚀 2. Define all 4 corners for Child & Parent
+    // 🚀 2. Define all 4 corners for Child & Parent (Screen Space)
     const childCorners = [
         { x: cR.left, y: cR.top }, { x: cR.right, y: cR.top },
         { x: cR.left, y: cR.bottom }, { x: cR.right, y: cR.bottom }
@@ -10328,66 +10338,51 @@ OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
 
     // 🚀 3. Find the closest pair of corners
     let minDist = Infinity;
-    let s = { x: 0, y: 0 };
-    let e = { x: 0, y: 0 };
+    let startPoint = { x: 0, y: 0 };
+    let endPoint = { x: 0, y: 0 };
 
     childCorners.forEach(cc => {
         parentCorners.forEach(pc => {
             const dist = Math.hypot(cc.x - pc.x, cc.y - pc.y);
             if (dist < minDist) {
                 minDist = dist;
-                // Normalize relative to canvas scroll/pan
-                s = { x: (cc.x - canvasRect.left) / zoom, y: (cc.y - canvasRect.top) / zoom };
-                e = { x: (pc.x - canvasRect.left) / zoom, y: (pc.y - canvasRect.top) / zoom };
+                // Convert Screen X/Y to SVG X/Y
+                startPoint = { 
+                    x: (cc.x - svgRect.left) / zoom, 
+                    y: (cc.y - svgRect.top) / zoom 
+                };
+                endPoint = { 
+                    x: (pc.x - svgRect.left) / zoom, 
+                    y: (pc.y - svgRect.top) / zoom 
+                };
             }
         });
     });
 
-    // 🚀 4. Path Math (Subtle Organic S-Curve)
-    const dx = e.x - s.x;
-    const dy = e.y - s.y;
-    // We adjust control points to make the line "sag" or curve naturally
-    const cp1x = s.x + (dx * 0.2);
-    const cp1y = s.y + (dy * 0.8);
-    const cp2x = e.x - (dx * 0.2);
-    const cp2y = e.y - (dy * 0.8);
+    // 🚀 4. Path Math (Curved Line)
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const cp1x = startPoint.x + (dx * 0.1);
+    const cp1y = startPoint.y + (dy * 0.9);
+    const cp2x = endPoint.x - (dx * 0.1);
+    const cp2y = endPoint.y - (dy * 0.9);
 
-    const pathData = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
+    const pathData = `M ${startPoint.x} ${startPoint.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endPoint.x} ${endPoint.y}`;
 
-    // 🏗️ 5. Create SVG Elements
+    // 🏗️ 5. SVG Construction
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("class", "v2-connection-group leash-group");
-    group.setAttribute("data-child-id", nodeId); // Useful for debugging
 
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    path.setAttribute("stroke", "rgba(251, 191, 36, 0.4)"); // Warmer gold, slightly transparent
+    path.setAttribute("stroke", "#fbbf24");
     path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-dasharray", "5,5"); // Balanced dashes
+    path.setAttribute("stroke-dasharray", "6,4");
     path.setAttribute("fill", "none");
-
-    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    hitArea.setAttribute("d", pathData);
-    hitArea.setAttribute("stroke", "transparent");
-    hitArea.setAttribute("stroke-width", "20"); // Easier to click
-    hitArea.setAttribute("fill", "none");
-    hitArea.style.cursor = "pointer";
-
-    hitArea.onclick = (event) => {
-        event.stopPropagation();
-        const parentId = parentEl.id.replace('v2-node-', '');
-        state.v2.activeConnection = { sourceId: nodeId, targetId: parentId, isLeash: true };
-        
-        document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
-        group.classList.add('is-sticky');
-
-        const ctxBar = document.getElementById('v2-context-toolbar');
-        if (ctxBar) ctxBar.style.display = 'flex';
-    };
+    path.setAttribute("opacity", "0.6");
 
     group.appendChild(path);
-    group.appendChild(hitArea);
-    svg.appendChild(group); // Use append instead of prepend for reliable rendering
+    svg.appendChild(group);
 };
 
 OL.startParentLinking = function(e, sourceId) {
