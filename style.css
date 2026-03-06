@@ -4061,6 +4061,7 @@ ARROWS
     background-size: 300px 100%;
     background-repeat: repeat-x;
     background-attachment: local; /* Syncs lines with panning */
+    overflow: visible;
 }
 
 /* 🧹 REMOVE THE OLD STAGE LAYER */
@@ -4543,6 +4544,7 @@ path[stroke="transparent"] {
 
 /* Context toolbar specific style to make it look 'attached' */
 .context-toolbar-inline {
+    z-index: 5000 !important;
     border-color: #fbbf24; /* Amber to distinguish it */
     animation: slideInLeft 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
 }
