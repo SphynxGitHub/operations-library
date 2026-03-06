@@ -8902,32 +8902,40 @@ OL.saveLogic = function(childId, outcomeIdx) {
         value: document.getElementById('logic-value')?.value || '' 
     };
 
-    // 🎯 1. FIND THE ACTUAL OBJECT IN THE MASTER STATE
-    // We search the projectData directly to ensure we aren't editing a clone
+    // 🎯 1. FIND THE MASTER RESOURCE (The source of truth)
     const client = getActiveClient();
     const masterList = client?.projectData?.localResources || [];
-    const res = masterList.find(r => r.id === childId);
+    const res = masterList.find(r => String(r.id) === String(childId));
 
     if (!res) {
-        console.error("❌ Resource not found in master list:", childId);
+        console.error("❌ MASTER RESOURCE NOT FOUND:", childId);
         return;
     }
 
+    // 🎯 2. INJECT DATA
     if (outcomeIdx !== null && outcomeIdx !== undefined && outcomeIdx !== 'null') {
-        // Flow Path (Outcome)
         if (!res.outcomes) res.outcomes = [];
-        if (res.outcomes[outcomeIdx]) res.outcomes[outcomeIdx].logic = logicData;
+        if (res.outcomes[outcomeIdx]) {
+            res.outcomes[outcomeIdx].logic = logicData;
+        }
     } else {
-        // 🚀 LEASH FIX: Save directly to the Master Resource object
-        res.logic = logicData; 
-        // Also ensure delay is preserved if it exists
-        console.log(`✅ Logic injected into Master Object: ${childId}`, res.logic);
+        // LEASH: Force it onto the object
+        res.logic = logicData;
+        // Ensure it survives the next sync by marking the client as dirty
+        client.isDirty = true; 
     }
 
-    // 2. Persist & Redraw
-    OL.persist(); 
+    console.log("🔥 DATA INJECTED INTO MASTER:", res);
+
+    // 🎯 3. PERSIST & FORCE DRAW
+    // If your persist() is async, we draw first, then save
+    OL.drawV2Connections(); 
+    
+    if (typeof OL.persist === 'function') {
+        OL.persist();
+    }
+
     document.getElementById('logic-modal')?.remove();
-    OL.drawV2Connections();
 };
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
