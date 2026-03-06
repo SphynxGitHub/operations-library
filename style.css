@@ -4047,8 +4047,9 @@ ARROWS
 
 /* 📌 THE STICKY HEADER WRAPPER */
 .v2-canvas-header-area {
-    position: sticky;
+    position: absolute;
     top: 0;
+    left: 0;
     width: 100%;
     z-index: 1000; /* High z-index to stay above nodes */
     background: #0b0f1a; /* Match your background to hide nodes sliding under */

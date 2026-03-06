@@ -8825,7 +8825,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             
-            <div class="v2-canvas-header-area">
+            <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; background: #0b0f1a; border-bottom: 1px solid rgba(255,255,255,0.05);">
 
                 <div id="global-shelf" class="global-shelf-container"
                     style="pointer-events: all !important;"
@@ -8844,7 +8844,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
             </div>
 
-            <div class="v2-canvas-wrap"
+            <div class="v2-canvas-wrap" style="flex: 1; position: relative; overflow: hidden;"
                 ondragover="event.preventDefault();" 
                 ondrop="OL.handleCanvasDrop(event)">
 
