@@ -9012,16 +9012,8 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         <div class="v2-viewport" id="v2-viewport">
             
             <div class="v2-canvas-header-area">
-
-                <div id="global-shelf" class="global-shelf-container"
-                    style="pointer-events: all !important;"
-                    ondragover="event.preventDefault(); this.classList.add('drag-over');"
-                    ondragleave="this.classList.remove('drag-over');"
-                    ondrop="OL.handleShelfDrop(event)">
-                    <span class="global-shelf-label">Global Resources</span>
-                </div>
-
-                <div id="v2-sticky-stage-headers" style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
+                <div id="v2-sticky-stage-headers" 
+                    style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: left top;">
                     ${stages.map(s => `
                         <div class="v2-lane-label">
                             ${esc(s.name)}
@@ -9030,14 +9022,22 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
             </div>
 
-            <div id="v2-canvas-scroll-wrap"  class="v2-canvas-scroll-wrap"
+            <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap"
                 onmousedown="OL.initV2Panning(event)"
                 ondragover="event.preventDefault();" 
                 ondrop="OL.handleCanvasDrop(event)">
 
                 <div class="v2-canvas" id="v2-canvas" 
-                    style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+                    style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); transform-origin: left top;">
                     
+                    <div id="global-shelf" class="global-shelf-container"
+                        style="pointer-events: all !important; margin: 20px; width: fit-content; min-width: calc(100% - 40px);"
+                        ondragover="event.preventDefault(); this.classList.add('drag-over');"
+                        ondragleave="this.classList.remove('drag-over');"
+                        ondrop="OL.handleShelfDrop(event)">
+                        <span class="global-shelf-label">Global Resources</span>
+                    </div>
+
                     <div class="v2-stage-layer" id="v2-stage-layer">
                         ${stages.map((s, i) => `
                             <div class="v2-lane-guide" style="left: ${i * 300}px;"></div>
@@ -9046,7 +9046,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     </div>
 
                     <svg class="v2-svg-layer" id="v2-connections"></svg>
-                    <div class="v2-node-layer" id="v2-nodes">     </div>
+                    <div class="v2-node-layer" id="v2-nodes"></div>
                 </div>
             </div>
 
@@ -9145,21 +9145,21 @@ OL.initV2Panning = function() {
         state.v2.pan.y = e.clientY - startY;
 
         const canvas = document.getElementById('v2-canvas');
-        const viewport = document.getElementById('v2-viewport');
         const headers = document.getElementById('v2-sticky-stage-headers');
+        const viewport = document.getElementById('v2-viewport');
 
-        // 1. Move the Canvas (Cards + Lines zoom/pan together now)
+        // 1. Zoom/Pan everything (Canvas + Shelf + Nodes + Lines)
         canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
         
-        // 2. Sync the sticky labels (Still needs manual sync since they are fixed)
+        // 2. Sync Stage Headers
+        // Note: We multiply by zoom so the text labels stay centered over the shrinking columns
         if (headers) {
             headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
+            headers.style.transformOrigin = "left top";
         }
 
-        // 3. Sync only the infinite dots
-        if (viewport) {
-            viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
-        }
+        // 3. Sync Background Dots
+        viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
     };
 
     window.onmouseup = () => { isPanning = false; };
@@ -9862,7 +9862,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
             svg.appendChild(loopBadge);
         }
     }
-    
+
     // 5. APPEND PATHS
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
