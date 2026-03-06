@@ -9956,21 +9956,24 @@ OL.drawV2Connections = function() {
     if (!svg) return;
 
     const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const source = isVault ? (state.master.resources || []) : (getActiveClient()?.projectData?.localResources || []);
     
+    console.log(`📡 Drawing connections for ${source.length} nodes...`);
     svg.innerHTML = ''; 
-    // Match the coordinate space of the canvas
+    
+    // Standardize the coordinate space
     svg.setAttribute('viewBox', '0 0 5000 5000');
 
     source.forEach(node => {
-        // 🐕 LEASH LINES
+        // 🐕 LEASH LINES (Parent -> Child)
         if (node.parentId && node.coords) {
             const parent = source.find(n => n.id === node.parentId);
             if (parent && parent.coords) {
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                // Start center of child, end center of parent
-                const d = `M ${node.coords.x + 100} ${node.coords.y + 40} L ${parent.coords.x + 100} ${parent.coords.y + 40}`;
-                path.setAttribute("d", d);
+                const sX = node.coords.x + 100, sY = node.coords.y + 40;
+                const pX = parent.coords.x + 100, pY = parent.coords.y + 40;
+
+                path.setAttribute("d", `M ${sX} ${sY} L ${pX} ${pY}`);
                 path.setAttribute("stroke", "#fbbf24");
                 path.setAttribute("stroke-width", "2");
                 path.setAttribute("stroke-dasharray", "6,4");
@@ -9979,16 +9982,18 @@ OL.drawV2Connections = function() {
             }
         }
 
-        // ⚡ FLOW LINES
-        if (node.outcomes) {
+        // ⚡ FLOW PATHS (Outcomes)
+        if (node.outcomes && node.coords) {
             node.outcomes.forEach(outcome => {
                 const targetId = outcome.targetId || outcome.toId;
                 const target = source.find(n => n.id === targetId);
-                if (node.coords && target && target.coords) {
+                
+                if (target && target.coords) {
                     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                     const sX = node.coords.x + 200, sY = node.coords.y + 40;
                     const eX = target.coords.x, eY = target.coords.y + 40;
                     const cp = Math.abs(eX - sX) / 2;
+
                     path.setAttribute("d", `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`);
                     path.setAttribute("stroke", "#fbbf24");
                     path.setAttribute("stroke-width", "2");
