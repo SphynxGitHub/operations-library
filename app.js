@@ -10096,7 +10096,7 @@ OL.drawV2Connections = function() {
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
-                        const text = drawIcon(s.x + iconOffset, sY - 12, "λ", `Logic: ${liveChild.logic.field} ${liveChild.logic.operator}`);
+                        const text = drawIcon(s.x + iconOffset, s.y - 12, "λ", `Logic: ${liveChild.logic.field} ${liveChild.logic.operator}`);
                         group.appendChild(text);
                         iconOffset += 22; 
                     }
