@@ -10826,16 +10826,14 @@ OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    // Select all cards on the infinite grid
-    const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'))
-        .sort((a, b) => a.offsetTop - b.offsetTop);
+    // Select only cards in the grid (skip shelf)
+    const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'));
     
-    if (cardEls.length === 0) return;
+    if (cardEls.length === 0) return console.warn("No cards found to align.");
 
-    // 📏 CONFIG: Ensure these match your CSS exactly
     const columnWidth = 300; 
     const cardWidth = 200;   
-    const centeringOffset = (columnWidth - cardWidth) / 2; // = 50px if using 300/200
+    const centeringOffset = (columnWidth - cardWidth) / 2; 
 
     await OL.updateAndSync(() => {
         cardEls.forEach(el => {
@@ -10843,29 +10841,24 @@ OL.autoAlignNodes = async function() {
             const nodeData = source.find(n => n.id === id);
             
             if (nodeData && nodeData.coords) {
-                // 1. Find the nearest Column Slot (0, 1, 2...)
-                // We use Math.round so that if a card is dragged mostly into the next lane, it snaps there.
-                const nearestLane = Math.round(nodeData.coords.x / columnWidth);
-                
-                // 2. Calculate the exact center X
+                // 🕵️ Debug the current position
+                const currentX = nodeData.coords.x;
+                const nearestLane = Math.round(currentX / columnWidth);
                 const centeredX = (nearestLane * columnWidth) + centeringOffset;
 
-                // 3. Update Database
+                console.log(`Node: ${nodeData.name} | Current X: ${currentX} | Target X: ${centeredX}`);
+
+                // Update Data
                 nodeData.coords.x = centeredX;
                 
-                // 🚀 ANIMATION: Apply transition for smooth movement
-                el.style.transition = "left 0.4s cubic-bezier(0.2, 1, 0.3, 1)";
-                el.style.left = `${centeredX}px`;
+                // 🚀 Force UI via Style
+                el.style.setProperty('left', `${centeredX}px`, 'important');
+                el.style.transition = "left 0.4s ease";
             }
         });
     });
 
-    // 🔄 REDRAW LINES: After cards finish sliding
-    setTimeout(() => {
-        OL.drawV2Connections();
-        // Remove transitions so dragging doesn't feel "laggy" later
-        cardEls.forEach(el => el.style.transition = "");
-    }, 450);
+    setTimeout(() => OL.drawV2Connections(), 450);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
