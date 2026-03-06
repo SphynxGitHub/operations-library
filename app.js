@@ -8945,22 +8945,27 @@ OL.initV2Panning = function() {
         state.v2.pan.y = e.clientY - startY;
 
         const canvas = document.getElementById('v2-canvas');
-        const wrap = document.getElementById('v2-canvas-scroll-wrap');
         const viewport = document.getElementById('v2-viewport');
         const headers = document.getElementById('v2-sticky-stage-headers');
 
-        // 1. Move the cards
+        // 1. Physically move the cards (Grid)
         canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
         
-        // 2. Sync the sticky labels
+        // 2. Sync the sticky labels (X-axis + Zoom)
         if (headers) {
             headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
         }
 
-        // 🚀 3. SYNC THE BACKGROUND (Dots and Lines)
-        // We update the background position to match the pan exactly
-        viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
-        wrap.style.backgroundPosition = `${state.v2.pan.x}px 0px`;
+        // 🚀 3. SYNC THE BACKGROUND (Lines and Dots)
+        // We update the background position to match the pan.
+        // The first value (300px) matches the stage lines. 
+        // The second value (40px) matches the dots.
+        if (viewport) {
+            viewport.style.backgroundPosition = `
+                ${state.v2.pan.x}px 0px, 
+                ${state.v2.pan.x}px ${state.v2.pan.y}px
+            `;
+        }
     };
 
     window.onmouseup = () => { isPanning = false; };
