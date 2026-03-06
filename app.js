@@ -10072,7 +10072,7 @@ OL.drawV2Connections = function() {
                 // --- ICONS (Leash Logic) ---
                 // 🎯 THE FIX: Fetch the 'Live' child to ensure logic/delay are visible after sync
                 const liveChild = OL.getResourceById(node.id); 
-                let iconOffset = 10;
+                let iconOffset = 20;
 
                 if (liveChild) {
                     console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay });
