@@ -9692,39 +9692,45 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const hasDelay = !!outcome.delay;
 
     if (hasLogic || hasDelay) {
-        // --- ⏱ THE DELAY ---
+        // --- ⏱ THE DELAY (Center Anchor) ---
         if (hasDelay) {
             const delayBadge = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            delayBadge.setAttribute("x", midX + 12);
-            delayBadge.setAttribute("y", midY + 5);
+            delayBadge.setAttribute("x", midX + 10);
+            delayBadge.setAttribute("y", midY + 4); // Centered vertically
+            delayBadge.setAttribute("text-anchor", "start");
             delayBadge.setAttribute("fill", "#fbbf24");
             delayBadge.setAttribute("style", "font-size: 10px; font-weight: bold; pointer-events: auto; cursor: help;");
             
+            // Add hover description
             const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-            title.textContent = `Wait Duration: ${outcome.delay}`;
-            delayBadge.appendChild(title); // Title must be first child
+            title.textContent = `Wait for ${outcome.delay} before proceeding`;
+            delayBadge.appendChild(title);
             
-            delayBadge.append(`⏱ ${outcome.delay}`); // Use .append for text content after title
+            delayBadge.textContent = `⏱ ${outcome.delay}`;
             svg.appendChild(delayBadge);
         }
 
-        // --- λ THE LOGIC ---
+        // --- λ THE LOGIC (Positioned Above with 2px gap) ---
         if (hasLogic) {
             const logicBadge = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            logicBadge.setAttribute("x", midX + 12);
-            const logicY = hasDelay ? (midY - 7) : midY + 5;
+            logicBadge.setAttribute("x", midX + 10);
+            
+            // If delay exists, move logic above it with 2px gap. 
+            // 10px font height + 2px gap = -12 offset
+            const logicY = hasDelay ? (midY - 8) : midY + 4; 
             
             logicBadge.setAttribute("y", logicY);
+            logicBadge.setAttribute("text-anchor", "start");
             logicBadge.setAttribute("fill", "#a855f7");
-            logicBadge.setAttribute("style", "font-size: 12px; font-weight: 900; pointer-events: auto; cursor: help;");
+            logicBadge.setAttribute("style", "font-size: 11px; font-weight: 900; pointer-events: auto; cursor: help;");
 
+            // Add hover description of the rule
             const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-            // 🚀 THE FIX: Clearer string construction
-            const logicText = `Condition: If [${logic.field}] ${logic.operator} "${logic.value}"`;
-            title.textContent = logicText;
+            const rule = outcome.logic;
+            title.textContent = `Rule: If ${rule.field} ${rule.operator} "${rule.value}"`;
             logicBadge.appendChild(title);
 
-            logicBadge.append("λ");
+            logicBadge.textContent = "λ";
             svg.appendChild(logicBadge);
         }
     }
