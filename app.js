@@ -10104,7 +10104,7 @@ OL.drawV2Connections = function() {
                 let iconOffset = 20;
 
                 if (liveChild) {
-                    console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay });
+                    console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay, loop: liveChild.loop });
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
