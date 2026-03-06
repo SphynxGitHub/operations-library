@@ -9113,16 +9113,19 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 };
 
 OL.editStageName = function(event, index) {
-    const span = event.target;
+    const span = event.currentTarget;
     const currentName = span.innerText;
     const isVault = window.location.hash.includes('vault');
 
+    // Create the input
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentName;
     input.className = 'stage-name-input';
+    input.style.width = "100%";
 
-    const save = async () => {
+    // Function to handle the actual save
+    const performSave = async () => {
         const newName = input.value.trim();
         if (newName && newName !== currentName) {
             await OL.updateAndSync(() => {
@@ -9133,13 +9136,18 @@ OL.editStageName = function(event, index) {
             });
             window.renderVisualizerV2(isVault);
         } else {
-            input.replaceWith(span); // Cancel if empty or same
+            input.replaceWith(span);
         }
     };
 
-    input.onkeydown = (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') input.replaceWith(span); };
-    input.onblur = save;
+    // Events
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); performSave(); }
+        if (e.key === 'Escape') input.replaceWith(span);
+    };
+    input.onblur = performSave;
 
+    // Swap and Focus
     span.replaceWith(input);
     input.focus();
     input.select();
