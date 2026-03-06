@@ -10064,28 +10064,28 @@ OL.drawV2Connections = function() {
                 group.appendChild(path);
 
                 /// --- ICONS (Inside the if (s && e) block of your leash loop) ---
-                let iconOffset = 15; // Push further away from the card edge
+                // 🎯 THE FIX: Fetch the 'Live' child to ensure logic/delay are visible
+                const liveChild = OL.getResourceById(node.id);
+                let iconOffset = 15;
 
-                // 1. Logic (Check node.logic)
-                // We use !! to force a boolean check
-                if (node.logic && (node.logic.field || node.logic.operator)) {
-                    console.log(`✨ Rendering Leash λ for ${node.id}`);
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${node.logic.field}`));
-                    iconOffset += 22;
+                if (liveChild) {
+                    // 🚀 1. Lambda (Logic)
+                    if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
+                        group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${liveChild.logic.field}`));
+                        iconOffset += 22;
+                    }
+
+                    // 🕒 2. Clock (Delay)
+                    if (liveChild.delay && liveChild.delay != "0") {
+                        group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${liveChild.delay}`));
+                        iconOffset += 22;
+                    }
+
+                    // ⟳ 3. Loop
+                    if (liveChild.isLoop || liveChild.allowLoop || liveChild.loop) {
+                        group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping"));
+                    }
                 }
-
-                // 2. Delay
-                if (node.delay && node.delay != "0") {
-                    console.log(`✨ Rendering Leash 🕒 for ${node.id}`);
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${node.delay}`));
-                    iconOffset += 22;
-                }
-
-                // 3. Loop
-                if (node.isLoop || node.allowLoop || node.loop) {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping"));
-                }
-
                 // Append the group to SVG *after* icons are added to it
                 svg.appendChild(group);
             }
