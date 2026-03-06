@@ -10293,36 +10293,43 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 };
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
-    if (!svg) return;
+    if (!svg || !childEl || !parentEl) return;
 
-    const childRes = OL.getResourceById(nodeId);
-    const parentRes = OL.getResourceById(childRes?.parentId);
+    // 1. Create a helper to convert Screen pixels to SVG points
+    const pt = svg.createSVGPoint();
+    
+    const getSvgPoint = (el) => {
+        const rect = el.getBoundingClientRect();
+        // Target the center of the card in screen pixels
+        pt.x = rect.left + (rect.width / 2);
+        pt.y = rect.top + (rect.height / 2);
+        
+        // 🚀 THE MAGIC: Use the Current Transformation Matrix (CTM)
+        // This converts screen (18, 619) to exactly where it needs to be in the SVG
+        const cursorPoint = pt.matrixTransform(svg.getScreenCTM().inverse());
+        return cursorPoint;
+    };
 
-    if (!childRes?.coords || !parentRes?.coords) return;
+    try {
+        const s = getSvgPoint(childEl);
+        const e = getSvgPoint(parentEl);
 
-    // 🚀 THE FIX: Use raw coords directly. 
-    // We add 100 to X to hit the center of the 200px card.
-    const s = { x: childRes.coords.x + 100, y: childRes.coords.y + 40 };
-    const e = { x: parentRes.coords.x + 100, y: parentRes.coords.y + 40 };
+        // 2. Build the Path
+        const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        group.setAttribute("class", "v2-connection-group leash-group");
 
-    const dx = e.x - s.x;
-    const dy = e.y - s.y;
-    // Cubic bezier for a nice "leash" curve
-    const pathData = `M ${s.x} ${s.y} C ${s.x + dx*0.2} ${s.y + dy*0.8}, ${e.x - dx*0.2} ${e.y - dy*0.8}, ${e.x} ${e.y}`;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${s.x} ${s.y} L ${e.x} ${e.y}`);
+        path.setAttribute("stroke", "#fbbf24");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke-dasharray", "6,4");
+        path.setAttribute("fill", "none");
 
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", "v2-connection-group leash-group");
-
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", pathData);
-    path.setAttribute("stroke", "#fbbf24");
-    path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-dasharray", "6,4");
-    path.setAttribute("fill", "none");
-    path.setAttribute("opacity", "0.6");
-
-    group.appendChild(path);
-    svg.appendChild(group);
+        group.appendChild(path);
+        svg.appendChild(group);
+    } catch (err) {
+        console.warn("Matrix transform failed. Ensure SVG is in DOM.");
+    }
 };
 
 OL.startParentLinking = function(e, sourceId) {
