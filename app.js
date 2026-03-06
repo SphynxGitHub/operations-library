@@ -10018,15 +10018,23 @@ OL.drawV2Connections = function() {
                 const target = source.find(n => String(n.id) === String(tid));
                 
                 if (target && target.coords) {
-                    // 🎯 SMART ANCHORS: Exit Right-Center of Source -> Enter Left-Center of Target
-                    const sX = node.coords.x + 200; // Right edge
-                    const sY = node.coords.y + 40;  // Vertical center
-                    const eX = target.coords.x;      // Left edge
-                    const eY = target.coords.y + 40; // Vertical center
+                    // 🎯 THE FIX: Ensure we are using the card's actual width (standard is 200)
+                    const cardWidth = 200;
+                    const cardHeight = 80;
+
+                    // Source Port: Right Center
+                    const sX = Number(node.coords.x) + cardWidth; 
+                    const sY = Number(node.coords.y) + (cardHeight / 2);
+
+                    // Target Port: Left Center
+                    const eX = Number(target.coords.x);
+                    const eY = Number(target.coords.y) + (cardHeight / 2);
 
                     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
                     group.setAttribute("class", "v2-connection-group flow-link");
-
+                    // 🚀 IMPORTANT: Ensure the group is "above" the cards in the DOM 
+                    // OR ensure the SVG element itself has z-index: 5 and pointer-events: none
+                    
                     const cp = Math.abs(eX - sX) / 2;
                     const pathData = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
 
@@ -10085,14 +10093,14 @@ OL.drawV2Connections = function() {
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
-                        const text = drawIcon(sX + iconOffset, sY - 10, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
+                        const text = drawIcon(sX + iconOffset, sY - 15, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
                         group.appendChild(text);
                         iconOffset += 22; 
                     }
 
                     // ⏱️ 2. RENDER DELAY
                     if (outcome.delay && outcome.delay !== "0") {
-                        const text = drawIcon(sX + iconOffset, sY - 10, "🕒", `Delay: ${outcome.delay}`);
+                        const text = drawIcon(sX + iconOffset, sY - 15, "🕒", `Delay: ${outcome.delay}`);
                         text.setAttribute("font-size", "12px");
                         group.appendChild(text);
                         iconOffset += 22;
@@ -10101,7 +10109,7 @@ OL.drawV2Connections = function() {
                     // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
                     const isLooping = outcome.isLoop || outcome.allowLoop || (outcome.action && outcome.action.includes('loop'));
                     if (isLooping) {
-                        const text = drawIcon(sX + iconOffset, sY - 10, "⟳", "Connection allows looping");
+                        const text = drawIcon(sX + iconOffset, sY - 15, "⟳", "Connection allows looping");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
