@@ -4282,6 +4282,17 @@ ARROWS
     z-index: 999;
 }
 
+.v2-logic-badge {
+    background: var(--accent);
+    color: white;
+    font-size: 9px;
+    font-weight: 900;
+    padding: 2px 6px;
+    border-radius: 4px;
+    pointer-events: none;
+    text-transform: uppercase;
+}
+
 .v2-steps-preview {
     margin-top: 10px;
     border-top: 1px solid rgba(255,255,255,0.1);
