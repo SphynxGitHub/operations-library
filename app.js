@@ -9960,21 +9960,21 @@ OL.drawV2Connections = function() {
     
     svg.innerHTML = ''; 
     
-    // 📏 Set a standard ViewBox that matches the canvas start
-    // No more -5000 offsets. Just 0 to 5000.
+    // 📏 RESET VIEWBOX: 1 SVG unit = 1 CSS pixel
+    // We set a large viewBox but start it at 0,0
     svg.setAttribute('viewBox', '0 0 5000 5000');
-    svg.style.left = "0px";
-    svg.style.top = "0px";
 
     source.forEach(node => {
-        // 🐕 DRAW LEASH
+        // 🐕 DRAW LEASH (Dashed gold line)
         if (node.parentId && node.coords) {
             const parent = source.find(n => n.id === node.parentId);
             if (parent && parent.coords) {
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                // Center-to-Center
-                const d = `M ${node.coords.x + 100} ${node.coords.y + 40} L ${parent.coords.x + 100} ${parent.coords.y + 40}`;
-                path.setAttribute("d", d);
+                // Calculate centers: Card is 200px wide, ~80px tall
+                const sX = node.coords.x + 100, sY = node.coords.y + 40;
+                const pX = parent.coords.x + 100, pY = parent.coords.y + 40;
+
+                path.setAttribute("d", `M ${sX} ${sY} L ${pX} ${pY}`);
                 path.setAttribute("stroke", "#fbbf24");
                 path.setAttribute("stroke-width", "2");
                 path.setAttribute("stroke-dasharray", "6,4");
@@ -9983,18 +9983,20 @@ OL.drawV2Connections = function() {
             }
         }
 
-        // ⚡ DRAW FLOW PATHS
+        // ⚡ DRAW FLOW PATHS (Solid gold curves)
         if (node.outcomes) {
             node.outcomes.forEach(outcome => {
                 const targetId = outcome.targetId || outcome.toId;
                 const target = source.find(n => n.id === targetId);
+                
                 if (node.coords && target && target.coords) {
                     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    // From right-side of source to left-side of target
                     const sX = node.coords.x + 200, sY = node.coords.y + 40;
                     const eX = target.coords.x, eY = target.coords.y + 40;
                     const cp = Math.abs(eX - sX) / 2;
-                    const d = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
-                    path.setAttribute("d", d);
+
+                    path.setAttribute("d", `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`);
                     path.setAttribute("stroke", "#fbbf24");
                     path.setAttribute("stroke-width", "2");
                     path.setAttribute("fill", "none");
