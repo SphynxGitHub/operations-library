@@ -9574,66 +9574,48 @@ OL.updateBDCount = function() {
 };
 
 OL.commitBrainDump = async function() {
-    const items = document.querySelectorAll('.bd-draft-item');
-    if (items.length === 0) return alert("No items to commit!");
-
-    const isVault = window.location.hash.includes('vault');
-    const timestamp = Date.now();
-    const newResources = [];
-
-    // 1. Loop through every row in the draft list
-    items.forEach((item, index) => {
-        const nameInput = item.querySelector('.bd-main-name').value.trim();
-        const appVal = item.querySelector('.bd-app').value;
-        const eventSelect = item.querySelector('.bd-verb');
-        const selectedOpt = eventSelect.options[eventSelect.selectedIndex];
-
-        // Use the friendly name from the input, or fallback to Verb + Object
-        const finalName = nameInput || `${selectedOpt?.dataset.verb || ''} ${selectedOpt?.dataset.obj || ''}`.trim();
-
-        if (finalName) {
-            newResources.push({
-                id: isVault ? `res-vlt-${timestamp}-${index}` : `local-prj-${timestamp}-${index}`,
-                name: finalName,
-                type: "Automation", // Consistent labeling
-                archetype: "Integration",
-                coords: { x: 100 + (Math.random() * 100), y: 100 + (Math.random() * 100) },
-                // 🚀 ATOMIZED DATA SAVED HERE
-                integration: {
-                    app: appVal,
-                    verb: selectedOpt?.dataset.verb || '',
-                    object: selectedOpt?.dataset.obj || '',
-                    fullEvent: eventSelect.value
-                },
-                createdDate: new Date().toISOString()
-            });
-        }
-    });
-
-    // 2. Save the batch to the database
-    await OL.updateAndSync(() => {
-        if (isVault) {
-            if (!state.master.resources) state.master.resources = [];
-            state.master.resources = [...state.master.resources, ...newResources];
-        } else {
-            const client = getActiveClient();
-            if (!client.projectData.localResources) client.projectData.localResources = [];
-            client.projectData.localResources = [...client.projectData.localResources, ...newResources];
-        }
-    });
-
-    // 3. Cleanup and Refresh
-    const modal = document.getElementById('brain-dump-modal');
-    if (modal) modal.remove();
+    // 1. Grab values from your specific UI IDs
+    const appVal = document.getElementById('dump-app').value;
+    const typeVal = document.getElementById('dump-type').value; // 'triggers' or 'actions'
+    const objVal = document.getElementById('dump-obj').value;
+    const verbVal = document.getElementById('dump-verb').value;
     
-    // Use your refresh function (v2 or Global depending on your setup)
-    if (window.renderVisualizerV2) {
-        window.renderVisualizerV2(isVault);
-    } else {
-        window.renderGlobalVisualizer(isVault);
-    }
+    const isVault = window.location.hash.includes('vault');
+    
+    // 2. Generate a clean name (e.g., "Create Contact")
+    const name = `${verbVal} ${objVal}`;
+    const timestamp = Date.now();
+    
+    // 3. Build the Node
+    const newNode = {
+        id: isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`,
+        name: name,
+        // Set type based on the Trigger/Action selection
+        type: typeVal === 'triggers' ? "Trigger" : "Action", 
+        coords: { x: 150, y: 150 }, // Default drop position
+        integration: {
+            app: appVal,
+            verb: verbVal,
+            object: objVal,
+            type: typeVal
+        },
+        createdDate: new Date().toISOString()
+    };
 
-    console.log(`✅ Success: ${newResources.length} items added to ${isVault ? 'Vault' : 'Project'}.`);
+    // 4. Save to Database
+    await OL.updateAndSync(() => {
+        const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+        targetList.push(newNode);
+    });
+
+    // 5. Cleanup
+    OL.closeModal();
+    
+    // Use your specific renderer
+    if (window.renderVisualizerV2) window.renderVisualizerV2(isVault);
+    else if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
+    
+    console.log(`✅ Dropped ${name} onto canvas.`);
 };
 
 function renderV2Nodes(isVault) {
