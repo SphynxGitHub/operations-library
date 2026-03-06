@@ -8834,21 +8834,27 @@ OL.openLogicBuilder = function(conn) {
                         <input type="text" id="logic-field" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px;" placeholder="e.g. user_role" value="${currentLogic.field || ''}">
                     </div>
                     
-                    <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; gap: 10px; align-items: flex-end;">
                         <div style="flex: 1;">
                             <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Operator</label>
-                            <select class="logic-operator-select" onchange="OL.toggleLogicValueField(this)">
+                            <select class="logic-operator-select" 
+                                    onchange="OL.toggleLogicValueField(this)"
+                                    style="width: 100%; height: 35px; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 0 8px; border-radius: 4px; font-size: 12px; appearance: none; cursor: pointer;">
                                 <option value="contains" ${currentLogic.operator === 'contains' ? 'selected' : ''}>contains</option>
                                 <option value="not_contains" ${currentLogic.operator === 'not_contains' ? 'selected' : ''}>does not contain</option>
                                 <option value="equals" ${currentLogic.operator === 'equals' ? 'selected' : ''}>is exactly</option>
-                                
                                 <option value="exists" ${currentLogic.operator === 'exists' ? 'selected' : ''}>exists / has value</option>
-                                <option value="not_exists" ${currentLogic.operator === 'not_exists' ? 'selected' : ''}>is empty / does not exist</option>
+                                <option value="not_exists" ${currentLogic.operator === 'not_exists' ? 'selected' : ''}>is empty</option>
                             </select>
                         </div>
-                        <div style="flex: 1; transition: opacity 0.2s; opacity: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? '0' : '1'}">
+
+                        <div id="logic-value-wrapper" style="flex: 1; transition: all 0.2s ease; opacity: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? '0' : '1'}; pointer-events: ${(currentLogic.operator === 'exists' || currentLogic.operator === 'not_exists') ? 'none' : 'auto'};">
                             <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Value</label>
-                            <input type="text" id="logic-value" ... >
+                            <input type="text" id="logic-value" 
+                                class="modal-input" 
+                                style="width: 100%; height: 35px; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 0 8px; border-radius: 4px; font-size: 12px;" 
+                                placeholder="Value..."
+                                value="${currentLogic.value || ''}">
                         </div>
                     </div>
                 </div>
@@ -8864,23 +8870,20 @@ OL.openLogicBuilder = function(conn) {
 };
 
 OL.toggleLogicValueField = function(selectEl) {
-    const modal = selectEl.closest('.modal-content');
-    // 🔍 Find the Value container (the parent of our input)
-    const valueInput = document.getElementById('logic-value');
-    const valueWrapper = valueInput ? valueInput.parentElement : null;
+    const wrapper = document.getElementById('logic-value-wrapper');
+    const input = document.getElementById('logic-value');
     
     const unaryOperators = ['exists', 'not_exists'];
     const isUnary = unaryOperators.includes(selectEl.value);
 
-    if (valueWrapper) {
+    if (wrapper && input) {
         if (isUnary) {
-            // 👻 Hide it without breaking the flexbox layout
-            valueWrapper.style.opacity = '0';
-            valueWrapper.style.pointerEvents = 'none';
-            valueInput.value = ''; // Clear value
+            wrapper.style.opacity = '0';
+            wrapper.style.pointerEvents = 'none';
+            input.value = ''; // Reset data for clean save
         } else {
-            valueWrapper.style.opacity = '1';
-            valueWrapper.style.pointerEvents = 'auto';
+            wrapper.style.opacity = '1';
+            wrapper.style.pointerEvents = 'auto';
         }
     }
 };
