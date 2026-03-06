@@ -9134,18 +9134,22 @@ OL.editStageName = function(event, index) {
 };
 
 OL.addNewStage = async function() {
-    const newStageName = prompt("Enter new stage name:", "New Stage");
-    if (!newStageName) return;
+    const name = prompt("Name this new stage:", "New Stage");
+    if (!name) return;
 
     await OL.updateAndSync(() => {
         if (!state.master.stages) state.master.stages = [];
         state.master.stages.push({
-            name: newStageName,
+            name: name,
             id: 'stage-' + Date.now()
         });
     });
-    
+
+    // 🚀 Force the UI to rebuild with the new width
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    
+    // Refresh connections after the DOM stabilizes
+    setTimeout(() => OL.drawV2Connections(), 50);
 };
 
 OL.openBrainDump = function() {
