@@ -9061,7 +9061,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
                     </div>
 
-                    <div id="v2-context-toolbar" class="v2-toolbar-group" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
+                    <div id="v2-context-toolbar" class="v2-toolbar" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
                         <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
                         <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
                         <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">∞</button>
