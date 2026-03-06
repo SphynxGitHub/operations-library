@@ -8899,24 +8899,37 @@ OL.saveLogic = function(sourceId, outcomeIdx) {
         value: valueInput ? valueInput.value : '' 
     };
 
+    // 1. Get the resource
     const res = OL.getResourceById(sourceId);
     if (!res) return;
 
-    // 🎯 THE FIX: Handle both Flow Paths and Leashes
-    if (outcomeIdx !== null && outcomeIdx !== undefined && res.outcomes && res.outcomes[outcomeIdx]) {
-        // Flow Path (Outcome)
-        res.outcomes[outcomeIdx].logic = logicData;
+    // 2. Decide WHERE to save (Outcome vs. Root)
+    // If outcomeIdx is null or 'null', it's a Leash
+    if (outcomeIdx !== null && outcomeIdx !== undefined && outcomeIdx !== 'null') {
+        if (!res.outcomes) res.outcomes = [];
+        if (res.outcomes[outcomeIdx]) {
+            res.outcomes[outcomeIdx].logic = logicData;
+            console.log("✅ Saved Logic to Outcome", outcomeIdx);
+        }
     } else {
-        // Leash (Directly on the Child Resource)
-        // Note: For leashes, sourceId is usually the CHILD because the child 'owns' the parentId
+        // 🎯 LEASH FIX: Save directly to the resource (the Child)
         res.logic = logicData;
+        console.log("✅ Saved Logic to Leash (Resource Root)");
     }
-    
-    OL.persist();
-    
+
+    // 3. Sync and Persist
+    // Use your specific meta updater if available, otherwise manual persist
+    if (typeof OL.updateResourceMetadata === 'function') {
+        OL.updateResourceMetadata(sourceId, 'logic', logicData);
+    } else {
+        OL.persist();
+    }
+
+    // 4. UI Cleanup
     const modal = document.getElementById('logic-modal');
     if (modal) modal.remove();
     
+    // 5. Redraw
     OL.drawV2Connections();
 };
 
