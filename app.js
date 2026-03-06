@@ -8902,28 +8902,31 @@ OL.saveLogic = function(childId, outcomeIdx) {
         value: document.getElementById('logic-value')?.value || '' 
     };
 
-    const res = OL.getResourceById(childId);
+    // 🎯 1. FIND THE ACTUAL OBJECT IN THE MASTER STATE
+    // We search the projectData directly to ensure we aren't editing a clone
+    const client = getActiveClient();
+    const masterList = client?.projectData?.localResources || [];
+    const res = masterList.find(r => r.id === childId);
+
     if (!res) {
-        console.error("❌ Could not find resource with ID:", childId);
+        console.error("❌ Resource not found in master list:", childId);
         return;
     }
 
     if (outcomeIdx !== null && outcomeIdx !== undefined && outcomeIdx !== 'null') {
-        // Standard Flow Path
+        // Flow Path (Outcome)
         if (!res.outcomes) res.outcomes = [];
         if (res.outcomes[outcomeIdx]) res.outcomes[outcomeIdx].logic = logicData;
     } else {
-        // 🚀 LEASH FIX: Save directly to the Child Resource
-        res.logic = logicData;
-        console.log(`✅ Logic saved to Child Node: ${childId}`);
+        // 🚀 LEASH FIX: Save directly to the Master Resource object
+        res.logic = logicData; 
+        // Also ensure delay is preserved if it exists
+        console.log(`✅ Logic injected into Master Object: ${childId}`, res.logic);
     }
 
-    // Persist to DB
-    OL.persist();
-    
-    // Close & Redraw
-    const modal = document.getElementById('logic-modal');
-    if (modal) modal.remove();
+    // 2. Persist & Redraw
+    OL.persist(); 
+    document.getElementById('logic-modal')?.remove();
     OL.drawV2Connections();
 };
 
