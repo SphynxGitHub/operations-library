@@ -9993,11 +9993,29 @@ OL.drawV2Connections = function() {
     const canvas = document.getElementById('v2-canvas');
     if (!svg || !canvas) return;
     
-    const scrollW = canvas.scrollWidth || 5000;
-    const scrollH = canvas.scrollHeight || 5000;
-    svg.setAttribute('width', scrollW); 
-    svg.setAttribute('height', scrollH);
-    svg.setAttribute('viewBox', `0 0 ${scrollW} ${scrollH}`);
+    const size = 10000; 
+    const offset = size / 2; // 5000
+    
+    svg.setAttribute('width', size); 
+    svg.setAttribute('height', size);
+    
+    // We set the viewBox to start at -5000, -5000
+    // Now a card at top: -58px is actually at SVG coordinate 4942 (well within bounds)
+    svg.setAttribute('viewBox', `${-offset} ${-offset} ${size} ${size}`);
+    
+    // Ensure the SVG is positioned correctly relative to the canvas origin
+    svg.style.left = `-${offset}px`;
+    svg.style.top = `-${offset}px`;
+
+    // Add arrowhead defs back in
+    svg.innerHTML = `
+        <defs>
+            <marker id="arrowhead-v2" viewBox="0 0 10 10" refX="8" refY="5" 
+                markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(56, 189, 248, 0.5)" />
+            </marker>
+        </defs>
+    `;
 
     source.forEach(node => {
         // 1. 🐕 Draw Leash even if there are no outcomes
@@ -10314,6 +10332,7 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     group.appendChild(hitArea);
     svg.appendChild(group);
 };
+
 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     if (!svg || !childEl || !parentEl) return;
