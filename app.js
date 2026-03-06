@@ -9038,34 +9038,31 @@ OL.toggleLoopInputs = function(type) {
 };
 
 OL.saveLoop = async function(sourceId, outcomeIdx) {
-    // 🔍 Check multiple possible IDs for the inputs
-    const typeEl = document.getElementById('loop-type') || document.getElementById('loop-logic');
-    const valueEl = document.getElementById('loop-value') || document.getElementById('loop-interval');
+    const type = document.getElementById('loop-type')?.value || 'count';
+    const value = document.getElementById('loop-value')?.value || '1';
     
-    const type = typeEl ? typeEl.value : 'count';
-    const value = valueEl ? valueEl.value : '1';
-    const loopData = { type, value };
-
     await OL.updateAndSync(() => {
         const res = OL.getResourceById(sourceId);
         if (!res) return;
 
-        const conn = state.v2.activeConnection;
-
-        // 🚀 FORCE save to the Child Root for leashes
-        if (conn && conn.isLeash) {
-            res.loop = loopData;
-            res.isLoop = true; // Set the flag explicitly
-            console.log(`✅ Loop Data saved to Root for ${sourceId}:`, loopData);
-        } else if (res.outcomes && res.outcomes[outcomeIdx]) {
-            res.outcomes[outcomeIdx].loop = loopData;
-            res.outcomes[outcomeIdx].isLoop = true;
+        // 🎯 THE LEASH CHECK
+        if (outcomeIdx === null || outcomeIdx === undefined || outcomeIdx === 'null') {
+            // Save to the root of the SOP resource
+            res.loop = { type, value };
+            res.isLoop = true; // Set a simple flag for easy checking
+            console.log(`✅ Loop data saved to Resource Root: ${sourceId}`);
+        } else {
+            // Save to the specific outcome path
+            if (!res.outcomes) res.outcomes = [];
+            if (res.outcomes[outcomeIdx]) {
+                res.outcomes[outcomeIdx].loop = { type, value };
+                res.outcomes[outcomeIdx].isLoop = true;
+            }
         }
     });
 
     document.getElementById('loop-modal')?.remove();
-    // Force a full re-render
-    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    OL.drawV2Connections();
 };
 
 OL.getInferredScope = (node) => {
