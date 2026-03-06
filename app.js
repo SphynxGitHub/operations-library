@@ -8874,42 +8874,66 @@ OL.saveConnectionDelay = async function(conn, delayValue) {
 };
 
 OL.openLoopBuilder = function(conn) {
+    console.log("🛠️ Attempting to open Loop Builder for:", conn);
+    
     const sourceRes = OL.getResourceById(conn.sourceId);
+    if (!sourceRes) {
+        console.error("❌ Could not find source resource for ID:", conn.sourceId);
+        return;
+    }
+
     const outcome = sourceRes.outcomes?.[conn.outcomeIdx] || {};
     const currentLoop = outcome.loop || { type: 'times', value: '3' };
 
+    // Remove any existing loop modal first to prevent duplicates
+    const existing = document.getElementById('loop-modal');
+    if (existing) existing.remove();
+
     const modalHtml = `
-        <div id="loop-modal" class="modal-backdrop" style="z-index: 99999; display: flex;" onclick="this.remove()">
-            <div class="modal-content" style="width: 400px; background: #1e293b; border: 1px solid var(--accent);" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h3 class="tiny accent uppercase bold">∞ Loop Config</h3>
-                    <div class="tiny muted">Source: ${sourceRes.name}</div>
+        <div id="loop-modal" class="modal-backdrop" style="z-index: 100000; position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center;" onclick="this.remove()">
+            <div class="modal-content" style="background: #1e293b; padding: 24px; border-radius: 12px; border: 1px solid var(--accent); width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
+                <div class="modal-header" style="margin-bottom: 20px;">
+                    <h3 class="tiny accent uppercase bold" style="color: var(--accent); margin: 0;">∞ Loop Configuration</h3>
+                    <div style="font-size: 11px; opacity: 0.6; margin-top: 4px;">Pattern for: ${sourceRes.name}</div>
                 </div>
                 
-                <div class="modal-body" style="padding: 20px 0;">
-                    <div style="margin-bottom: 15px;">
-                        <label class="tiny uppercase bold muted">Repeat Pattern</label>
-                        <select id="loop-type" class="modal-input tiny" onchange="OL.updateLoopLabel(this.value)">
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+                    <div>
+                        <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 6px; font-size: 9px; letter-spacing: 1px;">Repeat Logic</label>
+                        <select id="loop-type" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px;" onchange="OL.toggleLoopLabels(this.value)">
                             <option value="times" ${currentLoop.type === 'times' ? 'selected' : ''}>Fixed Iterations</option>
-                            <option value="collection" ${currentLoop.type === 'collection' ? 'selected' : ''}>For Every Item in List</option>
+                            <option value="collection" ${currentLoop.type === 'collection' ? 'selected' : ''}>For Each Item in List</option>
                             <option value="until" ${currentLoop.type === 'until' ? 'selected' : ''}>Until Condition is Met</option>
                         </select>
                     </div>
-
+                    
                     <div>
-                        <label id="loop-val-label" class="tiny uppercase bold muted">Number of Times</label>
-                        <input type="text" id="loop-value" class="modal-input tiny" placeholder="e.g. 5" value="${currentLoop.value || ''}">
+                        <label id="loop-value-label" class="tiny uppercase bold muted" style="display: block; margin-bottom: 6px; font-size: 9px; letter-spacing: 1px;">
+                            ${currentLoop.type === 'collection' ? 'Variable Name' : currentLoop.type === 'until' ? 'Condition' : 'Number of Times'}
+                        </label>
+                        <input type="text" id="loop-value" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px;" placeholder="e.g. 5" value="${currentLoop.value || ''}">
                     </div>
                 </div>
 
-                <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <div class="modal-footer" style="margin-top: 30px; display: flex; justify-content: flex-end; gap: 12px;">
                     <button class="btn soft tiny" onclick="document.getElementById('loop-modal').remove()">Cancel</button>
-                    <button class="btn primary tiny" onclick="OL.saveLoop('${conn.sourceId}', ${conn.outcomeIdx})">Apply Loop</button>
+                    <button class="btn primary tiny" onclick="OL.saveLoop('${conn.sourceId}', ${conn.outcomeIdx})">Set Loop</button>
                 </div>
             </div>
         </div>
     `;
+
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+    console.log("✅ Loop Modal Injected into DOM");
+};
+
+// Toggle helper for labels
+OL.toggleLoopLabels = function(val) {
+    const lbl = document.getElementById('loop-value-label');
+    const inp = document.getElementById('loop-value');
+    if (val === 'times') { lbl.innerText = "Number of Times"; inp.placeholder = "e.g. 5"; }
+    else if (val === 'collection') { lbl.innerText = "Variable Name"; inp.placeholder = "e.g. users_list"; }
+    else { lbl.innerText = "Condition"; inp.placeholder = "e.g. status == 'done'"; }
 };
 
 // Helper to keep the UI reactive
@@ -9040,7 +9064,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     <div id="v2-context-toolbar" class="v2-toolbar-group" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
                         <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
                         <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
-                        <button class="btn soft ctx-loop" title="Loop/Repeat" onclick="OL.handleContextAction('loop')">♾</button>
+                        <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">∞</button>
                         <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')" style="color: #ef4444;">×</button>
                     </div>
                 </div>
