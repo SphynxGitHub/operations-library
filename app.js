@@ -8924,11 +8924,26 @@ OL.saveLogic = function(targetId, outcomeIdx) {
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
     await OL.updateAndSync(() => {
-        const res = OL.getResourceById(conn.sourceId);
-        if (res && res.outcomes && res.outcomes[conn.outcomeIdx]) {
-            res.outcomes[conn.outcomeIdx].delay = delayValue;
+        // 🎯 1. Identify the correct target
+        // For leashes, we save to the CHILD (targetId).
+        // For outcomes, we save to the PARENT (sourceId).
+        const targetId = conn.isLeash ? conn.targetId : conn.sourceId;
+        const res = OL.getResourceById(targetId);
+        
+        if (!res) return;
+
+        if (conn.isLeash || conn.outcomeIdx === null || conn.outcomeIdx === undefined) {
+            // 🚀 LEASH: Save directly to the resource root
+            res.delay = delayValue;
+            console.log(`✅ Leash Delay of ${delayValue} saved to Child: ${targetId}`);
+        } else {
+            // ⚡ FLOW PATH: Save to the specific outcome
+            if (res.outcomes && res.outcomes[conn.outcomeIdx]) {
+                res.outcomes[conn.outcomeIdx].delay = delayValue;
+            }
         }
     });
+
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
     console.log(`⏱ Delay of ${delayValue} added to path.`);
 };
@@ -10076,23 +10091,6 @@ OL.drawV2Connections = function() {
 
                 if (liveChild) {
                     console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay });
-
-                    /*// 🚀 1. Lambda (Logic)
-                    if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
-                        group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${liveChild.logic.field}`));
-                        iconOffset += 22;
-                    }
-
-                    // 🕒 2. Clock (Delay)
-                    if (liveChild.delay && liveChild.delay != "0" && liveChild.delay != 0) {
-                        group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${liveChild.delay}`));
-                        iconOffset += 22;
-                    }
-
-                    // ⟳ 3. Loop
-                    if (liveChild.isLoop || liveChild.allowLoop || liveChild.loop) {
-                        group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping"));
-                    }*/
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
