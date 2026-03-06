@@ -9027,7 +9027,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     ${stages.map((s,i) => `
                         <div class="v2-lane-label">
                             <span class="stage-name-text" 
-                            style="pointer-events: all' cursor: text;"
+                            style="pointer-events: all; cursor: text;"
                             onclick="event.stopPropagation(); OL.editStageName(event, ${i})">
                                 ${esc(s.name)}
                             </span>
