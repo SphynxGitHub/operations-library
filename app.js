@@ -10119,7 +10119,7 @@ OL.drawV2Connections = function() {
 
                     // ⏱️ 2. RENDER DELAY
                     if (liveChild.delay && liveChild.delay !== "0") {
-                        const text = drawIcon(s.x + iconOffset, s.y - 15, "⏱", `Delay: ${liveChild.delay}`);
+                        const text = drawIcon(s.x + iconOffset, s.y - 12, "⏱", `Delay: ${liveChild.delay}`);
                         text.setAttribute("font-size", "12px");
                         group.appendChild(text);
                         iconOffset += 22;
@@ -10128,7 +10128,7 @@ OL.drawV2Connections = function() {
                     // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
                     const isLooping = liveChild.isLoop || liveChild.allowLoop || liveChild.loop || (liveChild.action && liveChild.action.includes('loop'));
                     if (isLooping) {
-                        const text = drawIcon(s.x + iconOffset, s.y - 20, "⟳", "Repeats");
+                        const text = drawIcon(s.x + iconOffset, s.y - 12, "⟳", "Repeats");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
@@ -10231,7 +10231,7 @@ OL.drawV2Connections = function() {
 
                     // ⏱️ 2. RENDER DELAY
                     if (outcome.delay && outcome.delay !== "0") {
-                        const text = drawIcon(sX + iconOffset, sY - 15, "⏱", `Delay: ${outcome.delay}`);
+                        const text = drawIcon(sX + iconOffset, sY - 12, "⏱", `Delay: ${outcome.delay}`);
                         text.setAttribute("font-size", "12px");
                         group.appendChild(text);
                         iconOffset += 22;
@@ -10240,7 +10240,7 @@ OL.drawV2Connections = function() {
                     // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
                     const isLooping = outcome.isLoop || outcome.allowLoop || outcome.loop || (outcome.action && outcome.action.includes('loop'));
                     if (isLooping) {
-                        const text = drawIcon(sX + iconOffset, sY - 20, "⟳", "Repeats");
+                        const text = drawIcon(sX + iconOffset, sY - 12, "⟳", "Repeats");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
                     }
