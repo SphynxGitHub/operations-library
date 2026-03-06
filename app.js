@@ -8895,47 +8895,42 @@ OL.toggleLogicValueField = function(selectEl) {
     }
 };
 
-OL.saveLogic = function(childId, outcomeIdx) {
+OL.saveLogic = function(originalSourceId, outcomeIdx) {
     const logicData = {
         field: document.getElementById('logic-field')?.value || '',
         operator: document.querySelector('.logic-operator-select')?.value || 'contains',
         value: document.getElementById('logic-value')?.value || '' 
     };
 
-    // 🎯 1. FIND THE MASTER RESOURCE (The source of truth)
+    // 🎯 THE FIX: Determine if we are saving to a Leash or a Path
+    const conn = state.v2.activeConnection;
+    
+    // If it's a leash, the data belongs on the CHILD (targetId)
+    // If it's a path, the data belongs on the PARENT (sourceId)
+    const targetNodeId = (conn && conn.isLeash) ? conn.targetId : originalSourceId;
+
     const client = getActiveClient();
     const masterList = client?.projectData?.localResources || [];
-    const res = masterList.find(r => String(r.id) === String(childId));
+    const res = masterList.find(r => String(r.id) === String(targetNodeId));
 
     if (!res) {
-        console.error("❌ MASTER RESOURCE NOT FOUND:", childId);
+        console.error("❌ Target Resource not found:", targetNodeId);
         return;
     }
 
-    // 🎯 2. INJECT DATA
     if (outcomeIdx !== null && outcomeIdx !== undefined && outcomeIdx !== 'null') {
+        // FLOW PATH (Logic stays on Parent/Outcome)
         if (!res.outcomes) res.outcomes = [];
-        if (res.outcomes[outcomeIdx]) {
-            res.outcomes[outcomeIdx].logic = logicData;
-        }
+        if (res.outcomes[outcomeIdx]) res.outcomes[outcomeIdx].logic = logicData;
     } else {
-        // LEASH: Force it onto the object
+        // 🚀 LEASH: Save directly to the CHILD Resource
         res.logic = logicData;
-        // Ensure it survives the next sync by marking the client as dirty
-        client.isDirty = true; 
+        console.log(`✅ Logic SAVED TO CHILD: ${res.id}`, logicData);
     }
 
-    console.log("🔥 DATA INJECTED INTO MASTER:", res);
-
-    // 🎯 3. PERSIST & FORCE DRAW
-    // If your persist() is async, we draw first, then save
-    OL.drawV2Connections(); 
-    
-    if (typeof OL.persist === 'function') {
-        OL.persist();
-    }
-
+    OL.persist();
     document.getElementById('logic-modal')?.remove();
+    OL.drawV2Connections();
 };
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
