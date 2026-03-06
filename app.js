@@ -8835,7 +8835,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     <span class="global-shelf-label">Global Resources</span>
                 </div>
 
-                <div id="v2-sticky-stage-headers" style="transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
+                <div id="v2-sticky-stage-headers" style="display: flex; padding: 15px 0 10px 0; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin: top left; pointer-events: none;">
                     ${stages.map(s => `
                         <div class="v2-lane-label">
                             ${esc(s.name)}
