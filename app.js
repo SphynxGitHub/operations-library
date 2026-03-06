@@ -10004,28 +10004,38 @@ OL.drawV2Connections = function() {
             }
         }
 
-        // ⚡ 2. REFINED FLOW PATHS (Outcomes)
+        // ⚡ 2. ACTION-AWARE FLOW PATHS
         if (node.outcomes && node.coords) {
             node.outcomes.forEach(outcome => {
-                const targetId = outcome.targetId || outcome.toId;
-                const target = source.find(n => n.id === targetId);
+                // 🔍 Extract ID from 'action' string if 'targetId' is missing
+                let tid = outcome.targetId || outcome.toId;
+                
+                if (!tid && outcome.action) {
+                    // Strips 'jump_res_' or 'jump_step_' to reveal the raw ID
+                    tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
+                }
+
+                const target = source.find(n => String(n.id) === String(tid));
                 
                 if (target && target.coords) {
                     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                     
-                    // Standard Port-to-Port: Right Center to Left Center
                     const sX = node.coords.x + 200, sY = node.coords.y + 40;
                     const eX = target.coords.x, eY = target.coords.y + 40;
                     
-                    // S-Curve Control Points
-                    const cp1x = sX + Math.abs(eX - sX) / 2;
-                    const cp2x = eX - Math.abs(eX - sX) / 2;
+                    const deltaX = Math.abs(eX - sX);
+                    const cp1x = sX + (deltaX / 2);
+                    const cp2x = eX - (deltaX / 2);
 
                     path.setAttribute("d", `M ${sX} ${sY} C ${cp1x} ${sY}, ${cp2x} ${eY}, ${eX} ${eY}`);
-                    path.setAttribute("stroke", "#fbbf24");
-                    path.setAttribute("stroke-width", "2");
+                    path.setAttribute("stroke", "#38bdf8"); // Cyan Blue
+                    path.setAttribute("stroke-width", "3");
                     path.setAttribute("fill", "none");
+                    path.setAttribute("marker-end", "url(#arrowhead-v2)");
+                    
                     svg.appendChild(path);
+                } else {
+                    console.warn(`⚠️ Target Not Found: Outcome action "${outcome.action}" resolved to ID "${tid}" but no matching card exists.`);
                 }
             });
         }
