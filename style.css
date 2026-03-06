@@ -4049,9 +4049,15 @@ ARROWS
 .v2-canvas-header-area {
     position: sticky;
     top: 0;
+    width: 100%;
     z-index: 1000; /* High z-index to stay above nodes */
     background: #0b0f1a; /* Match your background to hide nodes sliding under */
     pointer-events: none; /* Let clicks pass through to canvas unless hitting a button */
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.v2-canvas-wrap {
+    flex: 1; position: relative; overflow: hidden;
 }
 
 /* Stage Lanes in V2 */
@@ -4089,9 +4095,10 @@ ARROWS
     color: var(--accent);
     font-weight: 800;
     text-transform: uppercase;
-    font-size: 14px;
+    font-size: 10px;
     opacity: 0.5;
     min-width: 300px;
+    letter-spacing: 2px;
 }
 
 /* style.css */
@@ -4221,8 +4228,15 @@ ARROWS
     opacity: 0.4;
     text-transform: uppercase;
     font-weight: 800;
-    font-size: 14px;
+    font-size: 10px;
 }
+
+.v2-sticky-stage-headers {
+    display: flex; 
+    padding: 15px 0 10px 0; 
+    transform-origin: top left; 
+    pointer-events: none;
+}    
 
 .v2-step-badge {
     position: absolute;
