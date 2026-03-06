@@ -10008,33 +10008,33 @@ OL.drawV2Connections = function() {
         }
 
         // ⚡ 2. FLOW PATHS (Outcomes)
-        if (node.outcomes && node.coords) {
+        if (node.outcomes) {
             node.outcomes.forEach((outcome, outcomeIdx) => {
                 let tid = outcome.targetId || outcome.toId;
                 if (!tid && outcome.action) {
                     tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
                 }
 
-                const target = source.find(n => String(n.id) === String(tid));
+                // 🔍 Find the actual DOM elements for the cards
+                const sourceEl = document.getElementById(`v2-node-${node.id}`);
+                const targetEl = document.getElementById(`v2-node-${tid}`);
                 
-                if (target && target.coords) {
-                    // 🎯 THE FIX: Ensure we are using the card's actual width (standard is 200)
-                    const cardWidth = 200;
-                    const cardHeight = 80;
+                if (sourceEl && targetEl) {
+                    const canvasRect = svg.getBoundingClientRect();
+                    const sRect = sourceEl.getBoundingClientRect();
+                    const tRect = targetEl.getBoundingClientRect();
 
-                    // Source Port: Right Center
-                    const sX = Math.floor(node.coords.x) + cardWidth; 
-                    const sY = Math.floor(node.coords.y) + (cardHeight / 2);
+                    // 🎯 CALCULATE SNAP POINTS
+                    // Subtracting canvasRect ensures coordinates are relative to the SVG top-left
+                    const sX = (sRect.right - canvasRect.left);
+                    const sY = (sRect.top - canvasRect.top) + (sRect.height / 2);
 
-                    // 🎯 TARGET (Entry Port): Left Edge, Vertical Center
-                    const eX = Math.floor(target.coords.x);
-                    const eY = Math.floor(target.coords.y) + (cardHeight / 2);
+                    const eX = (tRect.left - canvasRect.left);
+                    const eY = (tRect.top - canvasRect.top) + (tRect.height / 2);
 
                     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
                     group.setAttribute("class", "v2-connection-group flow-link");
-                    // 🚀 IMPORTANT: Ensure the group is "above" the cards in the DOM 
-                    // OR ensure the SVG element itself has z-index: 5 and pointer-events: none
-                    
+
                     const cp = Math.abs(eX - sX) / 2;
                     const pathData = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
 
@@ -10093,7 +10093,7 @@ OL.drawV2Connections = function() {
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
-                        const text = drawIcon(sX + iconOffset, sY - 15, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
+                        const text = drawIcon(sX + iconOffset, sY - 12, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
                         group.appendChild(text);
                         iconOffset += 22; 
                     }
