@@ -9029,6 +9029,10 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                             <span class="stage-name-text" onclick="OL.editStageName(event, ${i})">
                                 ${esc(s.name)}
                             </span>
+                            <button class="card-delete-btn" 
+                                onclick="OL.removeStage(${i})" 
+                                style="pointer-events: all; display: block; visibility: visible;" 
+                                title="Remove Stage">×</button>
                         </div>
                     `).join('')}
 
@@ -9109,30 +9113,50 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 OL.editStageName = function(event, index) {
     const span = event.target;
     const currentName = span.innerText;
-    
-    // Create an input element
+    const isVault = window.location.hash.includes('vault');
+
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentName;
     input.className = 'stage-name-input';
-    
-    // Handle saving on Enter or Blur
+
     const save = async () => {
-        const newName = input.value.trim() || 'Unnamed Stage';
-        await OL.updateAndSync(() => {
-            if (state.master.stages[index]) {
-                state.master.stages[index].name = newName;
-            }
-        });
-        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+        const newName = input.value.trim();
+        if (newName && newName !== currentName) {
+            await OL.updateAndSync(() => {
+                const target = isVault ? state.master : getActiveClient()?.projectData;
+                if (target?.stages?.[index]) {
+                    target.stages[index].name = newName;
+                }
+            });
+            window.renderVisualizerV2(isVault);
+        } else {
+            input.replaceWith(span); // Cancel if empty or same
+        }
     };
 
-    input.onkeydown = (e) => { if (e.key === 'Enter') save(); };
+    input.onkeydown = (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') input.replaceWith(span); };
     input.onblur = save;
 
     span.replaceWith(input);
     input.focus();
     input.select();
+};
+
+OL.removeStage = async function(index) {
+    const isVault = window.location.hash.includes('vault');
+    const target = isVault ? state.master : getActiveClient()?.projectData;
+    const stageName = target.stages[index].name;
+
+    if (!confirm(`Are you sure you want to remove the "${stageName}" stage?`)) return;
+
+    await OL.updateAndSync(() => {
+        target.stages.splice(index, 1);
+        // Re-order remaining stages
+        target.stages.forEach((s, i) => s.order = i);
+    });
+
+    window.renderVisualizerV2(isVault);
 };
 
 OL.addNewStage = async function() {
