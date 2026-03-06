@@ -9409,14 +9409,22 @@ OL.startNodeDrag = function(e, nodeId) {
 // ⚙️ THE PHYSICS CORE
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
-    const zone = document.getElementById('unmap-zone');
-    const canvas = document.getElementById('v2-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const zoom = state.v2.zoom || 1;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    
+    // 🚀 MOVE THIS HERE: Now both onMove and onUp can see it
+    let hasMovedSignificantAmount = false;
+   
 
     const onMove = (mE) => {
+        // 1. 📏 CHECK THRESHOLD
+        if (!hasMovedSignificantAmount) {
+            const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
+            if (dist < 5) return; // Increased to 5px for safer "click" detection
+            hasMovedSignificantAmount = true;
+        }
+
         const zone = document.getElementById('unmap-zone');
-        const viewport = document.getElementById('v2-workbench-target');
         const canvas = document.getElementById('v2-canvas');
         const rect = canvas.getBoundingClientRect();
         const zoom = state.v2.zoom || 1;
@@ -9450,7 +9458,7 @@ OL.initWBMotion = function(e, id) {
 
         // 3. 👻 HANDLE GHOST
         let ghost = document.getElementById('drag-ghost');
-        if (!isOverUnmap && target?.closest('#v2-workbench-target')) {
+        if (target?.closest('#v2-workbench-target')) {
             if (!ghost) {
                 ghost = document.createElement('div');
                 ghost.id = 'drag-ghost';
@@ -9461,8 +9469,6 @@ OL.initWBMotion = function(e, id) {
             ghost.innerHTML = `<b style="color:var(--accent)">${res?.name || 'Mapping...'}</b>`;
             ghost.style.left = `${(mE.clientX - rect.left) / zoom}px`;
             ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
-        } else if (ghost) {
-            ghost.remove();
         }
     };
     
@@ -9476,6 +9482,8 @@ OL.initWBMotion = function(e, id) {
         if (!hasMovedSignificantAmount) {
             state.v2.activeDragId = null;
             console.log("🖱️ Single click: Movement ignored.");
+            const ghost = document.getElementById('drag-ghost');
+            if (ghost) ghost.remove();
             return; 
         }
 
