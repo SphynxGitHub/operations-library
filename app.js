@@ -12663,19 +12663,24 @@ OL.handleShelfDrop = async function(e) {
 };
 
 OL.handleUnmapDrop = async function(e) {
-    // 🛡️ FIRST LINE DEFENSE: Stop the browser immediately
     if (e.preventDefault) e.preventDefault();
     if (e.stopPropagation) e.stopPropagation();
 
-    const resId = e.dataTransfer.getData("moveId");
-    console.log("📥 Drop detected in Unmap Zone for ID:", resId);
+    // 🕵️ Try to grab the ID from multiple possible keys
+    let resId = e.dataTransfer.getData("moveId") || e.dataTransfer.getData("resId") || e.dataTransfer.getData("text");
+    
+    // 🚨 FALLBACK: If drag-and-drop data failed, check the global dragging state
+    if (!resId && state.v2.draggingNodeId) {
+        resId = state.v2.draggingNodeId;
+    }
 
-    // Visual Cleanup
+    console.log("📥 Drop detected. Attempting to unmap ID:", resId);
+
     const zone = document.getElementById('unmap-zone');
     if (zone) zone.classList.remove('active');
 
     if (!resId) {
-        console.warn("⚠️ Drop received but no moveId found in dataTransfer.");
+        console.error("❌ Unmap failed: No ID found in event or state.");
         return false;
     }
 
@@ -12683,20 +12688,35 @@ OL.handleUnmapDrop = async function(e) {
         await OL.updateAndSync(() => {
             const res = OL.getResourceById(resId);
             if (res) {
-                console.log("♻️ Removing coordinates for:", res.name);
+                console.log("♻️ Fully scrubbing node from canvas:", res.name);
+                
+                // 1. Remove visual position
                 delete res.coords; 
+
+                // 2. Sever all connections
+                res.parentId = null; 
+                
+                // 3. Clear leash metadata
+                delete res.logic;
+                delete res.delay;
+                delete res.isLoop;
+                delete res.loop;
+                
+                // 4. (Optional) If it's a parent, you may want to clear its outcomes too
+                // res.outcomes = []; 
             }
         });
         
-        // Use a safe refresh that doesn't trigger a full browser reload
+        // Ensure visualizer and sidebar refresh
         const isVault = window.location.hash.includes('vault');
         window.renderGlobalVisualizer(isVault);
+        if (window.renderResourceList) window.renderResourceList();
 
     } catch (err) {
         console.error("❌ Unmap Error:", err);
     }
 
-    return false; // Final block against refresh
+    return false;
 };
 
 OL.filterTray = function(val, isVault) {
