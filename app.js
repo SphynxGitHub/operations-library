@@ -9038,8 +9038,12 @@ OL.toggleLoopInputs = function(type) {
 };
 
 OL.saveLoop = async function(sourceId, outcomeIdx) {
-    const type = document.getElementById('loop-type').value;
-    const value = document.getElementById('loop-value').value;
+    // 🔍 Check multiple possible IDs for the inputs
+    const typeEl = document.getElementById('loop-type') || document.getElementById('loop-logic');
+    const valueEl = document.getElementById('loop-value') || document.getElementById('loop-interval');
+    
+    const type = typeEl ? typeEl.value : 'count';
+    const value = valueEl ? valueEl.value : '1';
     const loopData = { type, value };
 
     await OL.updateAndSync(() => {
@@ -9048,11 +9052,11 @@ OL.saveLoop = async function(sourceId, outcomeIdx) {
 
         const conn = state.v2.activeConnection;
 
+        // 🚀 FORCE save to the Child Root for leashes
         if (conn && conn.isLeash) {
-            // 🚀 THE FIX: Set both the object and the boolean flag
             res.loop = loopData;
-            res.isLoop = true; 
-            console.log("🔄 Loop saved to Leash Root");
+            res.isLoop = true; // Set the flag explicitly
+            console.log(`✅ Loop Data saved to Root for ${sourceId}:`, loopData);
         } else if (res.outcomes && res.outcomes[outcomeIdx]) {
             res.outcomes[outcomeIdx].loop = loopData;
             res.outcomes[outcomeIdx].isLoop = true;
@@ -9060,6 +9064,7 @@ OL.saveLoop = async function(sourceId, outcomeIdx) {
     });
 
     document.getElementById('loop-modal')?.remove();
+    // Force a full re-render
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
