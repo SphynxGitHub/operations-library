@@ -9233,6 +9233,7 @@ OL.openBrainDump = function() {
     OL.syncDumpOptions(); 
 };
 
+// 2. Fetch Verb/Object from DB when App is selected
 OL.syncZapLogic = function(appInput) {
     const row = appInput.closest('.bd-draft-item');
     const appName = appInput.value;
@@ -9241,27 +9242,23 @@ OL.syncZapLogic = function(appInput) {
     const library = state.master.automationLibrary || {};
     const appData = library[appName];
     
-    if (!appData) return;
+    if (!appData) {
+        eventSelect.innerHTML = `<option value="">Custom Event...</option>`;
+        return;
+    }
 
     let html = `<option value="">Select Event...</option>`;
     
-    const formatEntry = (entry) => {
-        // Displays as "Create [Contact]" or "New [Deal]"
-        return `<option value="${entry.full}" data-verb="${entry.verb}" data-obj="${entry.object}">
+    const opt = (entry) => `
+        <option value="${entry.full}" data-verb="${entry.verb}" data-obj="${entry.object}">
             ${entry.verb} [${entry.object}]
         </option>`;
-    };
 
     if (appData.triggers.length > 0) {
-        html += `<optgroup label="⚡ Triggers">`;
-        html += appData.triggers.map(formatEntry).join('');
-        html += `</optgroup>`;
+        html += `<optgroup label="⚡ Triggers">${appData.triggers.map(opt).join('')}</optgroup>`;
     }
-
     if (appData.actions.length > 0) {
-        html += `<optgroup label="🛠️ Actions">`;
-        html += appData.actions.map(formatEntry).join('');
-        html += `</optgroup>`;
+        html += `<optgroup label="🛠️ Actions">${appData.actions.map(opt).join('')}</optgroup>`;
     }
 
     eventSelect.innerHTML = html;
@@ -9484,12 +9481,12 @@ function renderV2Stages(isVault) {
     `).join('');
 }
 
+// 1. Convert Raw Text to Draft Rows
 OL.parseBrainDump = function() {
     const rawInput = document.getElementById('bd-raw-input').value;
     const lines = rawInput.split('\n').filter(line => line.trim().length > 0);
     const listContainer = document.getElementById('bd-draft-list');
     
-    // 1. Clear current list and stats
     listContainer.innerHTML = '';
     
     if (lines.length === 0) {
@@ -9498,21 +9495,15 @@ OL.parseBrainDump = function() {
         return;
     }
 
-    // 2. Generate rows for each line
+    // Generate rows with Library Sync capability
     listContainer.innerHTML = lines.map((line, i) => `
         <div class="bd-draft-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155;">
             <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" class="modal-input tiny bd-main-name" value="${esc(line)}" style="flex: 1; font-weight: bold;" placeholder="Friendly Name">
+                <input type="text" class="modal-input tiny bd-main-name" value="${esc(line)}" style="flex: 1; font-weight: bold;">
                 <button class="card-delete-btn" onclick="this.parentElement.parentElement.remove(); OL.updateBDCount();" style="position: static;">×</button>
             </div>
-            
             <div style="display: flex; gap: 5px;">
-                <input type="text" 
-                       class="modal-input tiny bd-app" 
-                       list="app-list" 
-                       placeholder="Search App..." 
-                       oninput="OL.syncZapLogic(this)">
-                
+                <input type="text" class="modal-input tiny bd-app" list="app-list" placeholder="App Name..." oninput="OL.syncZapLogic(this)">
                 <select class="modal-input tiny bd-verb" style="flex: 1.2;">
                     <option value="">Select Event...</option>
                 </select>
@@ -9520,13 +9511,11 @@ OL.parseBrainDump = function() {
         </div>
     `).join('');
 
-    // 3. Inject the App Datalist from your NEW Library
+    // Inject App Autocomplete from DB
     const library = state.master.automationLibrary || {};
     const appOptions = Object.keys(library).sort().map(app => `<option value="${app}">`).join('');
-    const appDatalist = `<datalist id="app-list">${appOptions}</datalist>`;
-    listContainer.insertAdjacentHTML('beforeend', appDatalist);
+    listContainer.insertAdjacentHTML('beforeend', `<datalist id="app-list">${appOptions}</datalist>`);
 
-    // 4. Update the UI state
     OL.updateBDCount();
 };
 
