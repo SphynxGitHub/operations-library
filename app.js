@@ -9971,50 +9971,48 @@ OL.drawV2Connections = function() {
             const sEl = document.getElementById(`v2-node-${parent?.id}`);
             const tEl = document.getElementById(`v2-node-${node.id}`);
 
+            const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            group.setAttribute("class", "v2-connection-group leash-link");
+
+            let s, e;
+
             if (sEl && tEl) {
                 const cRect = svg.getBoundingClientRect();
                 const sR = sEl.getBoundingClientRect();
                 const tR = tEl.getBoundingClientRect();
 
-                // 📐 Function to get the 4 visual corners of a card relative to the SVG
                 const getCorners = (r) => [
-                    { x: r.left - cRect.left, y: r.top - cRect.top },            // Top Left
-                    { x: r.right - cRect.left, y: r.top - cRect.top },           // Top Right
-                    { x: r.left - cRect.left, y: r.bottom - cRect.top },         // Bottom Left
-                    { x: r.right - cRect.left, y: r.bottom - cRect.top }         // Bottom Right
+                    { x: r.left - cRect.left, y: r.top - cRect.top },
+                    { x: r.right - cRect.left, y: r.top - cRect.top },
+                    { x: r.left - cRect.left, y: r.bottom - cRect.top },
+                    { x: r.right - cRect.left, y: r.bottom - cRect.top }
                 ];
 
-                const pCorners = getCorners(sR);
-                const cCorners = getCorners(tR);
-
-                // 🔍 Find the closest pair of corners
+                const pC = getCorners(sR);
+                const cC = getCorners(tR);
                 let minDist = Infinity;
-                let s = pCorners[0], e = cCorners[0];
+                s = pC[0]; e = cC[0];
 
-                pCorners.forEach(pc => {
-                    cCorners.forEach(cc => {
+                pC.forEach(pc => {
+                    cC.forEach(cc => {
                         const d = Math.hypot(pc.x - cc.x, pc.y - cc.y);
-                        if (d < minDist) { 
-                            minDist = d; 
-                            s = pc; 
-                            e = cc; 
-                        }
+                        if (d < minDist) { minDist = d; s = pc; e = cc; }
                     });
                 });
+            } else if (parent && parent.coords && node.coords) {
+                s = { x: parent.coords.x + 100, y: parent.coords.y + 80 };
+                e = { x: node.coords.x + 100, y: node.coords.y };
+            }
 
-                // 🏗️ CREATE GROUP & PATHS
-                const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                group.setAttribute("class", "v2-connection-group leash-link");
-
+            if (s && e) {
                 const midX = (s.x + e.x) / 2;
-                const midY = (s.y + e.y) / 2 + 30; // Gravity dip
+                const midY = (s.y + e.y) / 2 + 30;
                 const pathData = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
 
-                // (Previous hitArea and visualPath logic remains same...)
                 const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 hitArea.setAttribute("d", pathData);
                 hitArea.setAttribute("stroke", "transparent");
-                hitArea.setAttribute("stroke-width", "20");
+                hitArea.setAttribute("stroke-width", "25");
                 hitArea.setAttribute("fill", "none");
                 hitArea.style.cursor = "pointer";
 
@@ -10026,27 +10024,40 @@ OL.drawV2Connections = function() {
                 path.setAttribute("fill", "none");
                 path.setAttribute("opacity", "0.6");
 
+                group.onmousedown = (evt) => {
+                    evt.stopPropagation();
+                    state.v2.activeConnection = { sourceId: parent.id, targetId: node.id, isLeash: true };
+                    document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
+                    group.classList.add('is-sticky');
+                    const bar = document.getElementById('v2-context-toolbar');
+                    if (bar) bar.style.display = 'flex';
+                };
+
                 group.appendChild(hitArea);
                 group.appendChild(path);
 
-                // 🚀 INDICATORS: Positioned near the Parent corner (s)
-                let iconOffset = 10;
-                if (node.logic) {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 10, "λ", "Leash Logic"));
-                    iconOffset += 20;
+                // --- ICONS (Using s.x and s.y for correct anchoring) ---
+                let iconOffset = 15;
+                
+                // 🚀 Lambda
+                if (node.logic && (node.logic.field || node.logic.operator)) {
+                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", "Leash Logic"));
+                    iconOffset += 22;
                 }
                 
-                // Delay Icon
+                // 🕒 Delay
                 if (node.delay && node.delay !== "0") {
-                    svg.appendChild(drawIcon(sX + iconOffset, sY + 15, "🕒", `Leash Delay: ${node.delay}`));
-                    iconOffset += 20;
+                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Leash Delay: ${node.delay}`));
+                    iconOffset += 22;
                 }
                 
-                // Loop Icon (Broad Check)
+                // ⟳ Loop
                 const isLooping = node.isLoop || node.allowLoop || node.loop || (node.action && node.action.includes('loop'));
                 if (isLooping) {
-                    svg.appendChild(drawIcon(sX + iconOffset, sY + 15, "⟳", "Looping enabled"));
+                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping enabled"));
                 }
+
+                svg.appendChild(group);
             }
         }
 
