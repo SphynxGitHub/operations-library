@@ -4245,6 +4245,27 @@ ARROWS
     top: 10px;
     z-index: 100;
 }
+.global-shelf-fixed-bg {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    right: 15px;
+    height: 120px; /* Adjust based on your preferred shelf height */
+    background: rgba(30, 41, 59, 0.7); /* Slate with transparency */
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 12px;
+    z-index: -1; /* Sits behind the cards */
+}
+
+.global-shelf-content-container {
+    padding: 30px 30px;
+    min-height: 120px;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    overflow: visible;
+}
 
 .global-shelf-container.drag-over {
     background: rgba(56, 189, 248, 0.08);
@@ -4252,8 +4273,9 @@ ARROWS
 }
 
 .global-shelf-label {
-    position: sticky;
-    left: 20px;
+    position: absolute;
+    top: 8px;
+    left: 15px;
     color: var(--accent);
     letter-spacing: 3px;
     opacity: 0.4;
