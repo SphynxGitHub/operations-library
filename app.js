@@ -9965,15 +9965,17 @@ OL.drawV2Connections = function() {
     svg.innerHTML = ''; 
     svg.setAttribute('viewBox', '0 0 5000 5000');
 
-    // Helper to keep the main loop clean
+    // Ensure this is globally accessible or at the top of OL.drawV2Connections
     function drawIcon(x, y, char, tooltip) {
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", x);
-        text.setAttribute("y", y);
+        // We use numerical attributes to avoid string concatenation errors
+        text.setAttribute("x", parseFloat(x));
+        text.setAttribute("y", parseFloat(y));
         text.setAttribute("fill", "#fbbf24");
-        text.setAttribute("font-size", "14px");
+        text.setAttribute("font-size", "16px"); // Slightly larger to be sure
+        text.setAttribute("font-family", "Arial, sans-serif");
         text.setAttribute("font-weight", "bold");
-        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,0.9);");
+        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,1);");
         text.textContent = char;
 
         const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
@@ -10054,30 +10056,30 @@ OL.drawV2Connections = function() {
                 group.appendChild(hitArea);
                 group.appendChild(path);
 
-                // --- ICONS (Using s.x and s.y for correct anchoring) ---
-                let iconOffset = 15;
+                /// --- ICONS (Inside the if (s && e) block of your leash loop) ---
+                let iconOffset = 25; // Push further away from the card edge
 
-                // 🔍 DEBUG: See what the child node actually contains
-                console.log(`Checking icons for Child (${node.id}):`, { logic: node.logic, delay: node.delay, loop: node.isLoop });
-
-                // 1. Lambda (Logic) - Checking the CHILD node metadata
+                // 🚀 Logic (λ)
                 if (node.logic && (node.logic.field || node.logic.operator)) {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "λ", `Logic: ${node.logic.field}`));
-                    iconOffset += 22;
+                    const λ = drawIcon(s.x + iconOffset, s.y + 20, "λ", `Logic: ${node.logic.field}`);
+                    group.appendChild(λ);
+                    iconOffset += 25;
                 }
 
-                // 2. Clock (Delay) - Using s.x and s.y instead of sX/sY
-                if (node.delay && node.delay != "0" && node.delay != 0) {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "🕒", `Delay: ${node.delay}`));
-                    iconOffset += 22;
+                // 🕒 Delay
+                if (node.delay && node.delay != "0") {
+                    const clock = drawIcon(s.x + iconOffset, s.y + 20, "🕒", `Delay: ${node.delay}`);
+                    group.appendChild(clock);
+                    iconOffset += 25;
                 }
 
-                // 3. Loop (⟳)
-                const isLooping = node.isLoop === true || node.allowLoop === true || (node.action && node.action.includes('loop'));
-                if (isLooping) {
-                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 15, "⟳", "Looping enabled"));
+                // ⟳ Loop
+                if (node.isLoop || node.allowLoop) {
+                    const loopIcon = drawIcon(s.x + iconOffset, s.y + 20, "⟳", "Looping enabled");
+                    group.appendChild(loopIcon);
                 }
 
+                // Append the group to SVG *after* icons are added to it
                 svg.appendChild(group);
             }
         }
