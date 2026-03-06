@@ -9208,6 +9208,9 @@ OL.addNewStage = async function() {
 };
 
 OL.openBrainDump = function() {
+    const library = state.master.automationLibrary || {};
+    const appKeys = Object.keys(library).sort();
+
     const html = `
         <div class="modal-head"><div class="modal-title-text">🧠 Brain Dump: New Step</div></div>
         <div class="modal-body">
@@ -9215,16 +9218,14 @@ OL.openBrainDump = function() {
                 <label class="tiny-label">1. SELECT APP</label>
                 <select id="dump-app" class="modal-input" onchange="OL.syncDumpOptions()">
                     <option value="Manual">Manual (No App)</option>
-                    ${state.master.apps.map(a => `<option value="${a.id}">${a.name}</option>`).join('')}
+                    ${appKeys.map(app => `<option value="${app}">${app}</option>`).join('')}
                 </select>
 
                 <label class="tiny-label">2. SELECT OBJECT</label>
-                <select id="dump-obj" class="modal-input" onchange="OL.syncDumpOptions()">
-                    </select>
+                <select id="dump-obj" class="modal-input"></select>
 
                 <label class="tiny-label">3. SELECT VERB</label>
-                <select id="dump-verb" class="modal-input">
-                    </select>
+                <select id="dump-verb" class="modal-input"></select>
             </div>
             <button class="btn primary full-width" onclick="OL.commitBrainDump()">Drop on Canvas</button>
         </div>
@@ -9440,14 +9441,40 @@ OL.syncDumpOptions = function() {
     const appVal = document.getElementById('dump-app').value;
     const objEl = document.getElementById('dump-obj');
     const verbEl = document.getElementById('dump-verb');
+    
+    // 1. Get the Library from Database
+    const library = state.master.automationLibrary || {};
+    const appData = library[appVal];
 
-    // Example logic: In a real app, this pulls from ATOMIC_STEP_LIB 
-    // or the App's 'capabilities' array we built earlier.
-    const availableObjects = ATOMIC_STEP_LIB.Objects; 
-    objEl.innerHTML = availableObjects.map(o => `<option value="${o}">${o}</option>`).join('');
+    // 2. Handle "Manual" or Missing Data
+    if (appVal === 'Manual' || !appData) {
+        // Fallback to basic defaults if no library entry exists
+        objEl.innerHTML = `<option value="Task">Task</option><option value="Note">Note</option>`;
+        verbEl.innerHTML = `<option value="Create">Create</option><option value="Update">Update</option>`;
+        return;
+    }
 
-    const availableVerbs = appVal === 'Manual' ? ATOMIC_STEP_LIB.ActionVerbs : ATOMIC_STEP_LIB.TriggerVerbs;
-    verbEl.innerHTML = availableVerbs.map(v => `<option value="${v}">${v}</option>`).join('');
+    // 3. Extract Objects and Verbs from the relational data
+    // We filter for unique objects across all triggers and actions
+    const allEvents = [...(appData.triggers || []), ...(appData.actions || [])];
+    const uniqueObjects = [...new Set(allEvents.map(e => e.object))].sort();
+
+    // 4. Update Object Dropdown
+    objEl.innerHTML = uniqueObjects.map(o => `<option value="${o}">${o}</option>`).join('');
+
+    // 5. Update Verb Dropdown based on the selected Object
+    const syncVerbs = () => {
+        const selectedObj = objEl.value;
+        const availableVerbs = allEvents
+            .filter(e => e.object === selectedObj)
+            .map(e => e.verb);
+        
+        verbEl.innerHTML = [...new Set(availableVerbs)].map(v => `<option value="${v}">${v}</option>`).join('');
+    };
+
+    // Link them so changing object updates verbs
+    objEl.onchange = syncVerbs;
+    syncVerbs(); // Run once for initial load
 };
 
 OL.setVisualizerMode = function(mode, isVault) {
