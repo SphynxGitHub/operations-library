@@ -9677,51 +9677,6 @@ OL.updateBDCount = function() {
     if (commitBtn) commitBtn.disabled = count === 0;
 };
 
-/*OL.commitBrainDump = async function() {
-    // 1. Grab values from your specific UI IDs
-    const appVal = document.getElementById('dump-app').value;
-    const typeVal = document.getElementById('dump-type').value; // 'triggers' or 'actions'
-    const objVal = document.getElementById('dump-obj').value;
-    const verbVal = document.getElementById('dump-verb').value;
-    
-    const isVault = window.location.hash.includes('vault');
-    
-    // 2. Generate a clean name (e.g., "Create Contact")
-    const name = `${verbVal} ${objVal}`;
-    const timestamp = Date.now();
-    
-    // 3. Build the Node
-    const newNode = {
-        id: isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`,
-        name: name,
-        // Set type based on the Trigger/Action selection
-        type: typeVal === 'triggers' ? "Trigger" : "Action", 
-        coords: { x: 150, y: 150 }, // Default drop position
-        integration: {
-            app: appVal,
-            verb: verbVal,
-            object: objVal,
-            type: typeVal
-        },
-        createdDate: new Date().toISOString()
-    };
-
-    // 4. Save to Database
-    await OL.updateAndSync(() => {
-        const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-        targetList.push(newNode);
-    });
-
-    // 5. Cleanup
-    OL.closeModal();
-    
-    // Use your specific renderer
-    if (window.renderVisualizerV2) window.renderVisualizerV2(isVault);
-    else if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
-    
-    console.log(`✅ Dropped ${name} onto canvas.`);
-};*/
-
 OL.commitBrainDump = async function() {
     const previewZone = document.getElementById('smart-preview-zone');
     const data = JSON.parse(previewZone.dataset.parsed);
@@ -10004,9 +9959,10 @@ OL.drawV2Connections = function() {
             }
         }
 
-        // ⚡ 2. ACTION-AWARE FLOW PATHS
+        // ⚡ 2. FLOW PATHS (Outcomes)
         if (node.outcomes && node.coords) {
             node.outcomes.forEach((outcome, outcomeIdx) => {
+                // Parse Target ID from the 'action' string
                 let tid = outcome.targetId || outcome.toId;
                 if (!tid && outcome.action) {
                     tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
@@ -10023,29 +9979,52 @@ OL.drawV2Connections = function() {
                     const cp = Math.abs(eX - sX) / 2;
                     const pathData = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
 
-                    // 🖱️ THE HIT AREA (Invisible but fat)
+                    // 🖱️ THE DOCKING LOGIC
+                    group.onmousedown = (clickEvt) => {
+                        clickEvt.stopPropagation();
+                        clickEvt.preventDefault();
+                        
+                        // Set the active connection state
+                        state.v2.activeConnection = { 
+                            sourceId: node.id, 
+                            targetId: tid, 
+                            outcomeIdx: outcomeIdx, 
+                            isLeash: false 
+                        };
+
+                        // Visual highlight for the selected line
+                        document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
+                        group.classList.add('is-sticky');
+
+                        const ctxBar = document.getElementById('v2-context-toolbar');
+                        if (ctxBar) {
+                            ctxBar.style.display = 'flex';
+                            // ⚓ DOCKING: Resets fixed/absolute positioning
+                            ctxBar.style.position = 'static'; 
+                            ctxBar.style.left = 'auto';
+                            ctxBar.style.top = 'auto';
+                            ctxBar.style.transform = 'none';
+
+                            // UI Cleanup
+                            const reorderBtn = document.getElementById('ctx-reorder-btn');
+                            if (reorderBtn) reorderBtn.style.display = 'none';
+                        }
+                    };
+
+                    // Path elements (Hit Area + Visual Line)
                     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
                     hitArea.setAttribute("d", pathData);
                     hitArea.setAttribute("stroke", "transparent");
-                    hitArea.setAttribute("stroke-width", "25"); // Massive 25px wide click zone
+                    hitArea.setAttribute("stroke-width", "20");
                     hitArea.setAttribute("fill", "none");
                     hitArea.style.cursor = "pointer";
 
-                    // 🎯 CLICK HANDLER
-                    hitArea.onclick = (e) => {
-                        e.stopPropagation();
-                        // Open your context menu logic here
-                        OL.openConnectionMenu(e, node.id, outcomeIdx); 
-                    };
-
-                    // ✨ THE VISUAL LINE (Thin/Gold)
                     const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
                     visualPath.setAttribute("d", pathData);
                     visualPath.setAttribute("stroke", "#fbbf24");
                     visualPath.setAttribute("stroke-width", "2");
                     visualPath.setAttribute("fill", "none");
                     visualPath.setAttribute("marker-end", "url(#arrowhead-v2)");
-                    visualPath.style.pointerEvents = "none"; // Let clicks pass through to the hitArea
 
                     group.appendChild(hitArea);
                     group.appendChild(visualPath);
