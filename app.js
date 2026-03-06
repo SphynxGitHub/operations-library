@@ -10010,7 +10010,6 @@ OL.drawV2Connections = function() {
         // ⚡ 2. FLOW PATHS (Outcomes)
         if (node.outcomes && node.coords) {
             node.outcomes.forEach((outcome, outcomeIdx) => {
-                // Parse Target ID from the 'action' string
                 let tid = outcome.targetId || outcome.toId;
                 if (!tid && outcome.action) {
                     tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
@@ -10019,11 +10018,15 @@ OL.drawV2Connections = function() {
                 const target = source.find(n => String(n.id) === String(tid));
                 
                 if (target && target.coords) {
+                    // 🎯 SMART ANCHORS: Exit Right-Center of Source -> Enter Left-Center of Target
+                    const sX = node.coords.x + 200; // Right edge
+                    const sY = node.coords.y + 40;  // Vertical center
+                    const eX = target.coords.x;      // Left edge
+                    const eY = target.coords.y + 40; // Vertical center
+
                     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
                     group.setAttribute("class", "v2-connection-group flow-link");
 
-                    const sX = node.coords.x + 200, sY = node.coords.y + 40;
-                    const eX = target.coords.x, eY = target.coords.y + 40;
                     const cp = Math.abs(eX - sX) / 2;
                     const pathData = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
 
