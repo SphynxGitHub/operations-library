@@ -10844,7 +10844,7 @@ OL.autoAlignNodes = async function() {
                 // 🕵️ Debug the current position
                 const currentX = nodeData.coords.x;
                 const nearestLane = Math.round(currentX / columnWidth);
-                const centeredX = (nearestLane * columnWidth) + centeringOffset;
+                const centeredX = (nearestLane * columnWidth) + centeringOffset -110;
 
                 console.log(`Node: ${nodeData.name} | Current X: ${currentX} | Target X: ${centeredX}`);
 
