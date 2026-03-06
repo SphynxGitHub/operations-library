@@ -10295,40 +10295,51 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
     if (!svg || !childEl || !parentEl) return;
 
-    // 1. Create a helper to convert Screen pixels to SVG points
+    // 1. Create an SVG point object for transformation
     const pt = svg.createSVGPoint();
     
-    const getSvgPoint = (el) => {
+    const getSvgCoords = (el) => {
         const rect = el.getBoundingClientRect();
-        // Target the center of the card in screen pixels
+        // Target the center of the element in screen pixels
         pt.x = rect.left + (rect.width / 2);
         pt.y = rect.top + (rect.height / 2);
         
-        // 🚀 THE MAGIC: Use the Current Transformation Matrix (CTM)
-        // This converts screen (18, 619) to exactly where it needs to be in the SVG
-        const cursorPoint = pt.matrixTransform(svg.getScreenCTM().inverse());
-        return cursorPoint;
+        // 🚀 THE MAGIC: Convert Screen Pixels -> SVG local coordinates
+        // This accounts for zoom, sidebar width, panning, and offsets.
+        const transformed = pt.matrixTransform(svg.getScreenCTM().inverse());
+        return transformed;
     };
 
     try {
-        const s = getSvgPoint(childEl);
-        const e = getSvgPoint(parentEl);
+        const s = getSvgCoords(childEl);
+        const e = getSvgCoords(parentEl);
 
-        // 2. Build the Path
+        // 2. Build the Path Data (Curved)
+        const dx = e.x - s.x;
+        const dy = e.y - s.y;
+        const cp1x = s.x + (dx * 0.1);
+        const cp1y = s.y + (dy * 0.9);
+        const cp2x = e.x - (dx * 0.1);
+        const cp2y = e.y - (dy * 0.9);
+
+        const d = `M ${s.x} ${s.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${e.x} ${e.y}`;
+
+        // 3. Create SVG Elements
         const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
         group.setAttribute("class", "v2-connection-group leash-group");
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", `M ${s.x} ${s.y} L ${e.x} ${e.y}`);
+        path.setAttribute("d", d);
         path.setAttribute("stroke", "#fbbf24");
         path.setAttribute("stroke-width", "2");
         path.setAttribute("stroke-dasharray", "6,4");
         path.setAttribute("fill", "none");
+        path.setAttribute("opacity", "0.6");
 
         group.appendChild(path);
         svg.appendChild(group);
     } catch (err) {
-        console.warn("Matrix transform failed. Ensure SVG is in DOM.");
+        console.error("Matrix transform failed:", err);
     }
 };
 
