@@ -10078,25 +10078,26 @@ OL.drawV2Connections = function() {
                     group.appendChild(visualPath);
 
                     // 🛠️ INDICATOR CONFIG
-                    let iconOffset = 12; // Starting X-offset from the source card
+                    let iconOffset = 12;
 
-                    // 🚀 1. RENDER LOGIC INDICATOR (λ)
-                    if (outcome.logic && outcome.logic.field) {
+                    // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
+                    if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
                         const text = drawIcon(sX + iconOffset, sY - 8, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
                         group.appendChild(text);
-                        iconOffset += 18; // Shift next icon right
+                        iconOffset += 20; 
                     }
 
-                    // ⏱️ 2. RENDER DELAY INDICATOR (🕒)
+                    // ⏱️ 2. RENDER DELAY (You said you see this, so it stays as is)
                     if (outcome.delay && outcome.delay !== "0") {
                         const text = drawIcon(sX + iconOffset, sY - 8, "🕒", `Delay: ${outcome.delay}`);
-                        text.setAttribute("font-size", "12px"); // Emojis are naturally chunkier
+                        text.setAttribute("font-size", "12px");
                         group.appendChild(text);
-                        iconOffset += 18;
+                        iconOffset += 20;
                     }
 
-                    // 🔄 3. RENDER LOOP INDICATOR (⟳)
-                    if (outcome.isLoop || outcome.allowLoop) {
+                    // 🔄 3. RENDER LOOP (Checking for multiple loop key variations)
+                    const isLooping = outcome.isLoop || outcome.allowLoop || outcome.loop === true || outcome.action?.includes('loop');
+                    if (isLooping) {
                         const text = drawIcon(sX + iconOffset, sY - 8, "⟳", "Connection allows looping");
                         text.setAttribute("font-size", "14px");
                         group.appendChild(text);
