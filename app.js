@@ -9973,21 +9973,51 @@ OL.drawV2Connections = function() {
 
             if (sEl && tEl) {
                 const cRect = svg.getBoundingClientRect();
-                const sRect = sEl.getBoundingClientRect();
-                const tRect = tEl.getBoundingClientRect();
+                const sR = sEl.getBoundingClientRect();
+                const tR = tEl.getBoundingClientRect();
 
-                // 🎯 SNAP POINTS (Bottom of Parent -> Top of Child)
-                const sX = (sRect.left + sRect.width / 2) - cRect.left;
-                const sY = sRect.bottom - cRect.top;
-                const eX = (tRect.left + tRect.width / 2) - cRect.left;
-                const eY = tRect.top - cRect.top;
+                // 📐 Function to get the 4 visual corners of a card relative to the SVG
+                const getCorners = (r) => [
+                    { x: r.left - cRect.left, y: r.top - cRect.top },            // Top Left
+                    { x: r.right - cRect.left, y: r.top - cRect.top },           // Top Right
+                    { x: r.left - cRect.left, y: r.bottom - cRect.top },         // Bottom Left
+                    { x: r.right - cRect.left, y: r.bottom - cRect.top }         // Bottom Right
+                ];
 
-                // Quadratic Bezier for the "rope sag"
-                const midX = (sX + eX) / 2;
-                const midY = (sY + eY) / 2 + 30; // 30px gravity dip
-                const pathData = `M ${sX} ${sY} Q ${midX} ${midY} ${eX} ${eY}`;
+                const pCorners = getCorners(sR);
+                const cCorners = getCorners(tR);
 
-                // 1. Create the Path
+                // 🔍 Find the closest pair of corners
+                let minDist = Infinity;
+                let s = pCorners[0], e = cCorners[0];
+
+                pCorners.forEach(pc => {
+                    cCorners.forEach(cc => {
+                        const d = Math.hypot(pc.x - cc.x, pc.y - cc.y);
+                        if (d < minDist) { 
+                            minDist = d; 
+                            s = pc; 
+                            e = cc; 
+                        }
+                    });
+                });
+
+                // 🏗️ CREATE GROUP & PATHS
+                const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                group.setAttribute("class", "v2-connection-group leash-link");
+
+                const midX = (s.x + e.x) / 2;
+                const midY = (s.y + e.y) / 2 + 30; // Gravity dip
+                const pathData = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
+
+                // (Previous hitArea and visualPath logic remains same...)
+                const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                hitArea.setAttribute("d", pathData);
+                hitArea.setAttribute("stroke", "transparent");
+                hitArea.setAttribute("stroke-width", "20");
+                hitArea.setAttribute("fill", "none");
+                hitArea.style.cursor = "pointer";
+
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", pathData);
                 path.setAttribute("stroke", "#fbbf24");
@@ -9995,16 +10025,14 @@ OL.drawV2Connections = function() {
                 path.setAttribute("stroke-dasharray", "6,4");
                 path.setAttribute("fill", "none");
                 path.setAttribute("opacity", "0.6");
-                path.style.pointerEvents = "none"; // Let clicks pass through the rope
-                
-                svg.appendChild(path);
 
-                // 🚀 2. ADD ICONS TO LEASH (Positioned near the start of the rope)
+                group.appendChild(hitArea);
+                group.appendChild(path);
+
+                // 🚀 INDICATORS: Positioned near the Parent corner (s)
                 let iconOffset = 10;
-                
-                // Logic Icon
-                if (node.logic && (node.logic.field || node.logic.operator)) {
-                    svg.appendChild(drawIcon(sX + iconOffset, sY + 15, "λ", "Leash Logic"));
+                if (node.logic) {
+                    group.appendChild(drawIcon(s.x + iconOffset, s.y + 10, "λ", "Leash Logic"));
                     iconOffset += 20;
                 }
                 
