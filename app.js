@@ -8851,15 +8851,16 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
                 <div class="v2-canvas" id="v2-canvas" 
                     style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
-        
-                    <div class="v2-stage-layer" style="position: absolute; top: 0; left: 0; display: flex;">
+                    
+                    <div class="v2-stage-layer" id="v2-stage-layer">
                         ${stages.map((s, i) => `
                             <div class="v2-lane-guide" style="left: ${i * 300}px;"></div>
                         `).join('')}
+                        <div class="v2-lane-guide" style="left: ${stages.length * 300}px;"></div>
                     </div>
 
                     <svg class="v2-svg-layer" id="v2-connections"></svg>
-                    <div class="v2-node-layer" id="v2-nodes"></div>
+                    <div class="v2-node-layer" id="v2-nodes">     </div>
                 </div>
             </div>
 
@@ -8973,7 +8974,7 @@ OL.initV2Panning = function() {
             viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
         }
     };
-    
+
     window.onmouseup = () => { isPanning = false; };
 };
 

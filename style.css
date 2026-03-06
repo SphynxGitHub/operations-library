@@ -4062,9 +4062,21 @@ ARROWS
     overflow: visible;
 }
 
-/* 🧹 REMOVE THE OLD STAGE LAYER */
 .v2-stage-layer {
-    display: none !important;
+    position: absolute;
+    top: -10000px;
+    left: -10000px;
+    width: 20000px;
+    height: 20000px;
+    /* Draws a line every 300px infinitely */
+    background-image: repeating-linear-gradient(
+        to right,
+        rgba(56, 189, 248, 0.15),
+        rgba(56, 189, 248, 0.15) 1px,
+        transparent 1px,
+        transparent 300px
+    );
+    z-index: 1;
 }
 
 /* 📌 THE STICKY HEADER WRAPPER */
@@ -4112,7 +4124,7 @@ ARROWS
 .v2-lane-guide {
     position: absolute;
     top: 0;
-    width: 300px;
+    width: 1px;
     height: 10000px; /* Or a very large number */
     border-right: 1px solid rgba(56, 189, 248, 0.1);
     pointer-events: none;
