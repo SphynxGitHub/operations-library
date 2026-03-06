@@ -10826,39 +10826,57 @@ OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    // Select only cards in the grid (skip shelf)
     const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'));
-    
-    if (cardEls.length === 0) return console.warn("No cards found to align.");
+    if (cardEls.length === 0) return;
 
     const columnWidth = 300; 
     const cardWidth = 200;   
-    const centeringOffset = (columnWidth - cardWidth) / 2; 
+    const centeringOffset = (columnWidth - cardWidth) / 2 - 110; // Keeping your working offset
+    const verticalGap = 150; // ↕️ Distance between the top of one card and the next
+    const startY = 100;      // 🏔️ Starting height for the first card in each lane
 
     await OL.updateAndSync(() => {
+        // 1. Group cards by their lanes first
+        const lanes = {};
+
         cardEls.forEach(el => {
             const id = el.id.replace('v2-node-', '');
             const nodeData = source.find(n => n.id === id);
-            
             if (nodeData && nodeData.coords) {
-                // 🕵️ Debug the current position
-                const currentX = nodeData.coords.x;
-                const nearestLane = Math.round(currentX / columnWidth);
-                const centeredX = (nearestLane * columnWidth) + centeringOffset -110;
-
-                console.log(`Node: ${nodeData.name} | Current X: ${currentX} | Target X: ${centeredX}`);
-
-                // Update Data
-                nodeData.coords.x = centeredX;
-                
-                // 🚀 Force UI via Style
-                el.style.setProperty('left', `${centeredX}px`, 'important');
-                el.style.transition = "left 0.4s ease";
+                const laneIndex = Math.round(nodeData.coords.x / columnWidth);
+                if (!lanes[laneIndex]) lanes[laneIndex] = [];
+                lanes[laneIndex].push({ el, data: nodeData });
             }
+        });
+
+        // 2. Iterate through each lane and distribute vertically
+        Object.keys(lanes).forEach(laneIdx => {
+            const currentLane = lanes[laneIdx];
+            
+            // Sort cards in this specific lane by their current Y position
+            currentLane.sort((a, b) => a.data.coords.y - b.data.coords.y);
+
+            currentLane.forEach((item, orderInLane) => {
+                const targetX = (laneIdx * columnWidth) + centeringOffset;
+                const targetY = startY + (orderInLane * verticalGap);
+
+                // Update Database
+                item.data.coords.x = targetX;
+                item.data.coords.y = targetY;
+
+                // 🚀 Update UI
+                item.el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
+                item.el.style.setProperty('left', `${targetX}px`, 'important');
+                item.el.style.setProperty('top', `${targetY}px`, 'important');
+            });
         });
     });
 
-    setTimeout(() => OL.drawV2Connections(), 450);
+    // 🔄 Redraw connections once the cards have finished sliding
+    setTimeout(() => {
+        OL.drawV2Connections();
+        cardEls.forEach(el => el.style.transition = "");
+    }, 550);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
