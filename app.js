@@ -9956,67 +9956,52 @@ OL.drawV2Connections = function() {
     if (!svg) return;
 
     const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    svg.innerHTML = '';
+    svg.innerHTML = ''; 
     
-    // Maintain SVG size
-    const canvas = document.getElementById('v2-canvas');
-    if (!svg || !canvas) return;
-    
-    const size = 10000; 
-    const offset = size / 2; // 5000
-    
-    svg.setAttribute('width', size); 
-    svg.setAttribute('height', size);
-    
-    // We set the viewBox to start at -5000, -5000
-    // Now a card at top: -58px is actually at SVG coordinate 4942 (well within bounds)
-    svg.setAttribute('viewBox', `${-offset} ${-offset} ${size} ${size}`);
-    
-    // Ensure the SVG is positioned correctly relative to the canvas origin
-    svg.style.left = `-${offset}px`;
-    svg.style.top = `-${offset}px`;
-
-    // Add arrowhead defs back in
-    svg.innerHTML = `
-        <defs>
-            <marker id="arrowhead-v2" viewBox="0 0 10 10" refX="8" refY="5" 
-                markerWidth="6" markerHeight="6" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(56, 189, 248, 0.5)" />
-            </marker>
-        </defs>
-    `;
+    // 📏 Set a standard ViewBox that matches the canvas start
+    // No more -5000 offsets. Just 0 to 5000.
+    svg.setAttribute('viewBox', '0 0 5000 5000');
+    svg.style.left = "0px";
+    svg.style.top = "0px";
 
     source.forEach(node => {
-        // 1. 🐕 Draw Leash even if there are no outcomes
-        if (node.parentId) {
-            const childEl = document.getElementById(`v2-node-${node.id}`);
-            const parentEl = document.getElementById(`v2-node-${node.parentId}`);
-
-            if (childEl && parentEl) {
-                OL.drawLeashLine(svg, childEl, parentEl, node.id);
+        // 🐕 DRAW LEASH
+        if (node.parentId && node.coords) {
+            const parent = source.find(n => n.id === node.parentId);
+            if (parent && parent.coords) {
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                // Center-to-Center
+                const d = `M ${node.coords.x + 100} ${node.coords.y + 40} L ${parent.coords.x + 100} ${parent.coords.y + 40}`;
+                path.setAttribute("d", d);
+                path.setAttribute("stroke", "#fbbf24");
+                path.setAttribute("stroke-width", "2");
+                path.setAttribute("stroke-dasharray", "6,4");
+                path.setAttribute("fill", "none");
+                svg.appendChild(path);
             }
         }
 
-        // 2. Now check for outcomes
-        if (!node.outcomes || !Array.isArray(node.outcomes)) return;
-
-        node.outcomes.forEach((outcome, idx) => {
-            const fromEl = document.getElementById(`v2-node-${node.id}`);
-            
-            let tid = outcome.targetId || outcome.toId;
-            if (!tid && outcome.action) {
-                tid = outcome.action.replace('jump_step_', '').replace('jump_res_', '');
-            }
-
-            const toEl = document.getElementById(`v2-node-${tid}`);
-
-            if (fromEl && toEl) {
-                OL.drawPathBetweenElements(svg, fromEl, toEl, outcome.label, node.id, idx, outcome);
-            }
-        });
+        // ⚡ DRAW FLOW PATHS
+        if (node.outcomes) {
+            node.outcomes.forEach(outcome => {
+                const targetId = outcome.targetId || outcome.toId;
+                const target = source.find(n => n.id === targetId);
+                if (node.coords && target && target.coords) {
+                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    const sX = node.coords.x + 200, sY = node.coords.y + 40;
+                    const eX = target.coords.x, eY = target.coords.y + 40;
+                    const cp = Math.abs(eX - sX) / 2;
+                    const d = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
+                    path.setAttribute("d", d);
+                    path.setAttribute("stroke", "#fbbf24");
+                    path.setAttribute("stroke-width", "2");
+                    path.setAttribute("fill", "none");
+                    svg.appendChild(path);
+                }
+            });
+        }
     });
 };
 
