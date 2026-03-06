@@ -8851,6 +8851,12 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
                 <div class="v2-canvas" id="v2-canvas" 
                     style="transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom});">
+        
+                    <div class="v2-stage-layer" style="position: absolute; top: 0; left: 0; display: flex;">
+                        ${stages.map((s, i) => `
+                            <div class="v2-lane-guide" style="left: ${i * 300}px;"></div>
+                        `).join('')}
+                    </div>
 
                     <svg class="v2-svg-layer" id="v2-connections"></svg>
                     <div class="v2-node-layer" id="v2-nodes"></div>
@@ -8954,26 +8960,20 @@ OL.initV2Panning = function() {
         const viewport = document.getElementById('v2-viewport');
         const headers = document.getElementById('v2-sticky-stage-headers');
 
-        // 1. Physically move the cards (Grid)
+        // 1. Move the Canvas (Cards + Lines zoom/pan together now)
         canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
         
-        // 2. Sync the sticky labels (X-axis + Zoom)
+        // 2. Sync the sticky labels (Still needs manual sync since they are fixed)
         if (headers) {
             headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
         }
 
-        // 🚀 3. SYNC THE BACKGROUND (Lines and Dots)
-        // We update the background position to match the pan.
-        // The first value (300px) matches the stage lines. 
-        // The second value (40px) matches the dots.
+        // 3. Sync only the infinite dots
         if (viewport) {
-            viewport.style.backgroundPosition = `
-                ${state.v2.pan.x}px 0px, 
-                ${state.v2.pan.x}px ${state.v2.pan.y}px
-            `;
+            viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
         }
     };
-
+    
     window.onmouseup = () => { isPanning = false; };
 };
 

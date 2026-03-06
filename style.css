@@ -4023,9 +4023,7 @@ ARROWS
     height: 100vh; /* Adjust based on your header */
     background-color: #050816;
     background-image: 
-        /* 1. The Vertical Lines (Drawn every 300px) */
-        linear-gradient(to right, rgba(56, 189, 248, 0.15) 1px, transparent 1px),
-        /* 2. The Dotted Grid (Drawn every 40px) */
+        /*The Dotted Grid (Drawn every 40px) */
         radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
     
     /* 📏 Size: 1st val is Stage Width, 2nd is Dot Spacing */
@@ -4065,7 +4063,7 @@ ARROWS
 }
 
 /* 🧹 REMOVE THE OLD STAGE LAYER */
-.v2-stage-layer, .v2-lane-guide {
+.v2-stage-layer {
     display: none !important;
 }
 
@@ -4108,6 +4106,16 @@ ARROWS
     opacity: 0.5;
     min-width: 300px;
     letter-spacing: 2px;
+}
+
+/* 📏 New Lane Guide Style */
+.v2-lane-guide {
+    position: absolute;
+    top: 0;
+    width: 300px;
+    height: 10000px; /* Or a very large number */
+    border-right: 1px solid rgba(56, 189, 248, 0.1);
+    pointer-events: none;
 }
 
 /* style.css */
