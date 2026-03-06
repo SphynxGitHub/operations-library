@@ -4200,7 +4200,7 @@ OL.handleModalSave = async function(id, nameOrContext) {
 };
 
 // 3b. COMMIT THE RESOURCE
-OL.commitDraftToSystem = async function (tempId, finalName, context) {
+OL.commitDraftToSystem = async function (tempId, finalName, context, integrationData = null) {
     if (window._savingLock === tempId) return;
     window._savingLock = tempId;
 
@@ -4208,18 +4208,28 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
     const timestamp = Date.now();
     const newResId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
+    // 🏗️ Build the Resource with atomized metadata
     const newRes = { 
         id: newResId, 
         name: finalName, 
-        type: "General", 
-        archetype: "Base", 
+        type: integrationData ? "Automation" : "General", // Categorize automatically
+        archetype: integrationData ? "Integration" : "Base", 
+        
+        // 🚀 THE ATOMIZED DATA
+        integration: integrationData ? {
+            app: integrationData.app,       // e.g., "Stripe"
+            verb: integrationData.verb,     // e.g., "Create"
+            object: integrationData.object, // e.g., "Customer"
+            fullEvent: integrationData.fullEvent
+        } : null,
+
         data: {}, 
         steps: [],
         triggers: [],
         createdDate: new Date().toISOString() 
     };
 
-    // Push to State
+    // Push to State (Your existing logic)
     if (isVault) {
         if (!state.master.resources) state.master.resources = [];
         state.master.resources.push(newRes);
@@ -4231,15 +4241,14 @@ OL.commitDraftToSystem = async function (tempId, finalName, context) {
         }
     }
 
-    await OL.persist();
+    await OL.persist(); // Or OL.updateAndSync()
     
     // UI Cleanup
     window._savingLock = null;
     OL.closeModal();
-    renderResourceManager();
     
-    // Optional: Re-open with permanent ID
-    setTimeout(() => OL.openResourceModal(newResId), 100);
+    // Force a re-render of the visualizer to show the new card
+    if (window.renderVisualizerV2) window.renderVisualizerV2(isVault);
 };
 
 OL.getDraftById = function(id) {
@@ -9224,6 +9233,40 @@ OL.openBrainDump = function() {
     OL.syncDumpOptions(); 
 };
 
+OL.syncZapLogic = function(appInput) {
+    const row = appInput.closest('.bd-draft-item');
+    const appName = appInput.value;
+    const eventSelect = row.querySelector('.bd-verb');
+    
+    const library = state.master.automationLibrary || {};
+    const appData = library[appName];
+    
+    if (!appData) return;
+
+    let html = `<option value="">Select Event...</option>`;
+    
+    const formatEntry = (entry) => {
+        // Displays as "Create [Contact]" or "New [Deal]"
+        return `<option value="${entry.full}" data-verb="${entry.verb}" data-obj="${entry.object}">
+            ${entry.verb} [${entry.object}]
+        </option>`;
+    };
+
+    if (appData.triggers.length > 0) {
+        html += `<optgroup label="⚡ Triggers">`;
+        html += appData.triggers.map(formatEntry).join('');
+        html += `</optgroup>`;
+    }
+
+    if (appData.actions.length > 0) {
+        html += `<optgroup label="🛠️ Actions">`;
+        html += appData.actions.map(formatEntry).join('');
+        html += `</optgroup>`;
+    }
+
+    eventSelect.innerHTML = html;
+};
+
 OL.initV2Panning = function() {
     const viewport = document.getElementById('v2-viewport');
     const canvas = document.getElementById('v2-canvas');
@@ -9442,31 +9485,66 @@ function renderV2Stages(isVault) {
 }
 
 OL.commitBrainDump = async function() {
-    const appVal = document.getElementById('dump-app').value;
-    const objVal = document.getElementById('dump-obj').value;
-    const verbVal = document.getElementById('dump-verb').value;
+    const items = document.querySelectorAll('.bd-draft-item');
+    if (items.length === 0) return alert("No items to commit!");
+
     const isVault = window.location.hash.includes('vault');
-    
-    const name = `${verbVal} ${objVal}`;
     const timestamp = Date.now();
-    const newId = isVault ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
+    const newResources = [];
 
-    const newNode = {
-        id: newId,
-        name: name,
-        type: "SOP", // Default type for brain dump
-        coords: { x: 100 + (Math.random() * 50), y: 100 + (Math.random() * 50) }, // Centered-ish drop
-        data: { verb: verbVal, object: objVal, appId: appVal },
-        createdDate: new Date().toISOString()
-    };
+    // 1. Loop through every row in the draft list
+    items.forEach((item, index) => {
+        const nameInput = item.querySelector('.bd-main-name').value.trim();
+        const appVal = item.querySelector('.bd-app').value;
+        const eventSelect = item.querySelector('.bd-verb');
+        const selectedOpt = eventSelect.options[eventSelect.selectedIndex];
 
-    await OL.updateAndSync(() => {
-        const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-        targetList.push(newNode);
+        // Use the friendly name from the input, or fallback to Verb + Object
+        const finalName = nameInput || `${selectedOpt?.dataset.verb || ''} ${selectedOpt?.dataset.obj || ''}`.trim();
+
+        if (finalName) {
+            newResources.push({
+                id: isVault ? `res-vlt-${timestamp}-${index}` : `local-prj-${timestamp}-${index}`,
+                name: finalName,
+                type: "Automation", // Consistent labeling
+                archetype: "Integration",
+                coords: { x: 100 + (Math.random() * 100), y: 100 + (Math.random() * 100) },
+                // 🚀 ATOMIZED DATA SAVED HERE
+                integration: {
+                    app: appVal,
+                    verb: selectedOpt?.dataset.verb || '',
+                    object: selectedOpt?.dataset.obj || '',
+                    fullEvent: eventSelect.value
+                },
+                createdDate: new Date().toISOString()
+            });
+        }
     });
 
-    OL.closeModal();
-    window.renderGlobalVisualizer(isVault); // Refresh the graph
+    // 2. Save the batch to the database
+    await OL.updateAndSync(() => {
+        if (isVault) {
+            if (!state.master.resources) state.master.resources = [];
+            state.master.resources = [...state.master.resources, ...newResources];
+        } else {
+            const client = getActiveClient();
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources = [...client.projectData.localResources, ...newResources];
+        }
+    });
+
+    // 3. Cleanup and Refresh
+    const modal = document.getElementById('brain-dump-modal');
+    if (modal) modal.remove();
+    
+    // Use your refresh function (v2 or Global depending on your setup)
+    if (window.renderVisualizerV2) {
+        window.renderVisualizerV2(isVault);
+    } else {
+        window.renderGlobalVisualizer(isVault);
+    }
+
+    console.log(`✅ Success: ${newResources.length} items added to ${isVault ? 'Vault' : 'Project'}.`);
 };
 
 function renderV2Nodes(isVault) {
