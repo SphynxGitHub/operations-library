@@ -8797,49 +8797,43 @@ OL.openLogicBuilder = function(conn) {
     const sourceRes = OL.getResourceById(conn.sourceId);
     const targetRes = OL.getResourceById(conn.targetId);
     
-    // Find the specific outcome data
+    // Find existing logic on this outcome index
     const outcome = sourceRes.outcomes?.[conn.outcomeIdx] || {};
     const currentLogic = outcome.logic || { field: '', operator: '==', value: '' };
 
     const modalHtml = `
-        <div id="logic-modal" class="modal-backdrop" style="z-index: 10000;" onclick="this.remove()">
-            <div class="modal-content" style="width: 400px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h3 class="tiny accent uppercase bold">Path Logic</h3>
-                    <div class="tiny muted">${sourceRes.name} ➔ ${targetRes.name}</div>
+        <div id="logic-modal" class="modal-backdrop" style="z-index: 10000; position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center;">
+            <div class="modal-content" style="background: #1e293b; padding: 25px; border-radius: 12px; border: 1px solid var(--accent); width: 400px; color: white;">
+                <div class="modal-header" style="margin-bottom: 20px;">
+                    <h3 class="tiny accent uppercase bold" style="color: var(--accent); margin: 0;">Path Logic</h3>
+                    <div style="font-size: 11px; opacity: 0.6;">${sourceRes.name} ➔ ${targetRes.name}</div>
                 </div>
                 
-                <div class="modal-body" style="padding: 20px 0;">
-                    <p class="tiny muted" style="margin-bottom:15px;">Define the condition required to follow this path:</p>
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
+                    <div>
+                        <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Field / Property</label>
+                        <input type="text" id="logic-field" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px;" placeholder="e.g. user_role" value="${currentLogic.field || ''}">
+                    </div>
                     
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <div>
-                            <label class="tiny uppercase bold muted">Attribute / Field</label>
-                            <input type="text" id="logic-field" class="modal-input tiny" placeholder="e.g. user_role, total_value" value="${currentLogic.field || ''}">
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Operator</label>
+                            <select id="logic-operator" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px;">
+                                <option value="==" ${currentLogic.operator === '==' ? 'selected' : ''}>is</option>
+                                <option value="!=" ${currentLogic.operator === '!=' ? 'selected' : ''}>is not</option>
+                                <option value="contains" ${currentLogic.operator === 'contains' ? 'selected' : ''}>contains</option>
+                            </select>
                         </div>
-                        
-                        <div style="display: flex; gap: 10px;">
-                            <div style="flex: 1;">
-                                <label class="tiny uppercase bold muted">Operator</label>
-                                <select id="logic-operator" class="modal-input tiny">
-                                    <option value="==" ${currentLogic.operator === '==' ? 'selected' : ''}>Equals</option>
-                                    <option value="!=" ${currentLogic.operator === '!=' ? 'selected' : ''}>Not Equals</option>
-                                    <option value=">" ${currentLogic.operator === '>' ? 'selected' : ''}>Greater Than</option>
-                                    <option value="<" ${currentLogic.operator === '<' ? 'selected' : ''}>Less Than</option>
-                                    <option value="contains" ${currentLogic.operator === 'contains' ? 'selected' : ''}>Contains</option>
-                                </select>
-                            </div>
-                            <div style="flex: 1;">
-                                <label class="tiny uppercase bold muted">Value</label>
-                                <input type="text" id="logic-value" class="modal-input tiny" placeholder="Value..." value="${currentLogic.value || ''}">
-                            </div>
+                        <div style="flex: 1;">
+                            <label class="tiny uppercase bold muted" style="display: block; margin-bottom: 5px; font-size: 9px;">Value</label>
+                            <input type="text" id="logic-value" class="modal-input" style="width: 100%; background: #0b0f1a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px;" value="${currentLogic.value || ''}">
                         </div>
                     </div>
                 </div>
 
-                <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                <div class="modal-footer" style="margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px;">
                     <button class="btn soft tiny" onclick="document.getElementById('logic-modal').remove()">Cancel</button>
-                    <button class="btn primary tiny" onclick="OL.saveLogic('${conn.sourceId}', ${conn.outcomeIdx})">Save Condition</button>
+                    <button class="btn primary tiny" onclick="OL.saveLogic('${conn.sourceId}', ${conn.outcomeIdx})">Save Logic</button>
                 </div>
             </div>
         </div>
@@ -8855,14 +8849,12 @@ OL.saveLogic = async function(sourceId, outcomeIdx) {
     await OL.updateAndSync(() => {
         const res = OL.getResourceById(sourceId);
         if (res && res.outcomes && res.outcomes[outcomeIdx]) {
-            // Attach the logic directly to the outcome path
             res.outcomes[outcomeIdx].logic = { field, operator, value };
         }
     });
 
     document.getElementById('logic-modal').remove();
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-    console.log("✅ Logic Saved to Outcome", outcomeIdx);
 };
 
 OL.saveConnectionDelay = async function(conn, delayValue) {
@@ -9702,8 +9694,8 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     if (hasLogic || hasDelay) {
         const badge = document.createElementNS("http://www.w3.org/2000/svg", "text");
         badge.setAttribute("x", midX);
-        badge.setAttribute("y", midY - 10);
-        badge.setAttribute("text-anchor", "middle");
+        badge.setAttribute("y", midY + 15);
+        badge.setAttribute("text-anchor", "start");
         badge.setAttribute("fill", hasLogic ? "#a855f7" : "#fbbf24");
         badge.setAttribute("style", "font-size: 10px; font-weight: bold; pointer-events: none;");
         badge.textContent = (hasLogic ? "λ " : "") + (hasDelay ? `⏱ ${outcome.delay}` : "");
