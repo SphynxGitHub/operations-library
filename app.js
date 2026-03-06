@@ -9296,7 +9296,7 @@ OL.parseSmartInput = function(rawText) {
     
     let result = { app: 'Manual', type: 'actions', verb: '', object: '', matched: false };
 
-    // 1. Identify the App
+    // 1. Identify the App first
     const appNames = Object.keys(lib);
     const matchedApp = appNames.find(a => text.includes(a.toLowerCase()));
     
@@ -9305,20 +9305,23 @@ OL.parseSmartInput = function(rawText) {
         result.matched = true;
         const appData = lib[matchedApp];
 
-        // 2. Identify Type (Trigger vs Action)
-        // We scan the actual event names in the library to see if they are present in the text
+        // 2. Identify the specific Event within that App
         const allEvents = [
             ...appData.triggers.map(t => ({...t, group: 'triggers'})),
             ...appData.actions.map(a => ({...a, group: 'actions'}))
         ];
 
-        // Sort by length descending so "New Invoice Item" matches before "New Invoice"
+        // Sort by length to catch specific matches first
         allEvents.sort((a, b) => b.full.length - a.full.length);
 
         const matchedEvent = allEvents.find(e => text.includes(e.full.toLowerCase()));
 
         if (matchedEvent) {
             result.type = matchedEvent.group;
+            
+            // 🚀 THE LOGIC FIX: 
+            // We use the pre-split verb/object from our database loader
+            // which already handled the "Invitee Created" vs "Create Invitee" logic.
             result.verb = matchedEvent.verb;
             result.object = matchedEvent.object;
         }
@@ -9750,14 +9753,28 @@ OL.updateBDCount = function() {
 OL.commitBrainDump = async function() {
     const previewZone = document.getElementById('smart-preview-zone');
     const data = JSON.parse(previewZone.dataset.parsed);
-    const rawInput = document.getElementById('smart-dump-input').value;
     const isVault = window.location.hash.includes('vault');
+
+    // 🚀 THE NAMING ENGINE
+    let finalName;
+    if (data.type === 'triggers') {
+        // Triggers: "Invitee Created" (Object then Verb)
+        finalName = `${data.object} ${data.verb}`.trim();
+    } else {
+        // Actions: "Create Invitee" (Verb then Object)
+        finalName = `${data.verb} ${data.object}`.trim();
+    }
+
+    // Fallback if parsing failed
+    if (!data.verb || !data.object) {
+        finalName = document.getElementById('smart-dump-input').value;
+    }
 
     const newNode = {
         id: isVault ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
-        name: data.verb ? `${data.verb} ${data.object}` : rawInput,
+        name: finalName,
         type: data.type === 'triggers' ? "Trigger" : "Action",
-        coords: { x: 150, y: 150 },
+        coords: { x: 200, y: 200 },
         integration: data,
         createdDate: new Date().toISOString()
     };
