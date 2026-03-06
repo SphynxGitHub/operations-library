@@ -9001,8 +9001,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
     // Get stage data to render sticky headers
     const sourceData = isVault ? state.master : (client?.projectData || {});
-    // ✅ Always pull the live, global stages from the master state
-    const stages = (state.master.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
 
     const isAnyExpanded = state.v2.expandedNodes.size > 0;
     const isToggled = state.ui.sidebarOpen;
@@ -9010,7 +9009,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const toggleIcon = isToggled ? '🔳' : '⬜';
     
     const totalWidth = (stages.length + 1) * 300;
-
+    
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             
@@ -9137,22 +9136,32 @@ OL.editStageName = function(event, index) {
 };
 
 OL.addNewStage = async function() {
-    const name = prompt("Name this new stage:", "New Stage");
+    const isVault = window.location.hash.includes('vault');
+    const name = prompt("New Stage Name:");
     if (!name) return;
 
     await OL.updateAndSync(() => {
-        if (!state.master.stages) state.master.stages = [];
-        state.master.stages.push({
+        // 1. Identify where to push the data
+        let target;
+        if (isVault) {
+            target = state.master; // Global vault stages
+        } else {
+            const client = getActiveClient();
+            if (!client.projectData) client.projectData = {};
+            target = client.projectData; // Client-specific project stages
+        }
+
+        // 2. Push the new stage
+        if (!target.stages) target.stages = [];
+        target.stages.push({
             name: name,
-            id: 'stage-' + Date.now()
+            id: 'stage-' + Date.now(),
+            order: target.stages.length
         });
     });
 
-    // 🚀 Force the UI to rebuild with the new width
-    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-    
-    // Refresh connections after the DOM stabilizes
-    setTimeout(() => OL.drawV2Connections(), 50);
+    // 3. 🚀 THE TRIGGER: Re-run the visualizer
+    window.renderVisualizerV2(isVault);
 };
 
 OL.openBrainDump = function() {
