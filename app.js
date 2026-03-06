@@ -10023,12 +10023,12 @@ OL.drawV2Connections = function() {
                     const cardHeight = 80;
 
                     // Source Port: Right Center
-                    const sX = Number(node.coords.x) + cardWidth; 
-                    const sY = Number(node.coords.y) + (cardHeight / 2);
+                    const sX = Math.floor(node.coords.x) + cardWidth; 
+                    const sY = Math.floor(node.coords.y) + (cardHeight / 2);
 
-                    // Target Port: Left Center
-                    const eX = Number(target.coords.x);
-                    const eY = Number(target.coords.y) + (cardHeight / 2);
+                    // 🎯 TARGET (Entry Port): Left Edge, Vertical Center
+                    const eX = Math.floor(target.coords.x);
+                    const eY = Math.floor(target.coords.y) + (cardHeight / 2);
 
                     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
                     group.setAttribute("class", "v2-connection-group flow-link");
@@ -10089,7 +10089,7 @@ OL.drawV2Connections = function() {
                     group.appendChild(visualPath);
 
                     // 🛠️ INDICATOR CONFIG
-                    let iconOffset = 15;
+                    let iconOffset = 10;
 
                     // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
