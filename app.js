@@ -8790,6 +8790,11 @@ OL.handleContextAction = function(action) {
             const delay = prompt("Enter delay (e.g., 24h, 2d):", "1h");
             if (delay) OL.saveConnectionDelay(conn, delay);
             break;
+        
+        case 'loop':
+            if (ctxBar) ctxBar.style.display = 'none';
+            OL.openLoopBuilder(conn);
+            break;
     }
 };
 
@@ -8866,6 +8871,83 @@ OL.saveConnectionDelay = async function(conn, delayValue) {
     });
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
     console.log(`⏱ Delay of ${delayValue} added to path.`);
+};
+
+OL.openLoopBuilder = function(conn) {
+    const sourceRes = OL.getResourceById(conn.sourceId);
+    const outcome = sourceRes.outcomes?.[conn.outcomeIdx] || {};
+    const currentLoop = outcome.loop || { type: 'times', value: '3' };
+
+    const modalHtml = `
+        <div id="loop-modal" class="modal-backdrop" onclick="this.remove()">
+            <div class="modal-content" style="width: 420px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="tiny accent uppercase bold">Loop Configuration</h3>
+                    <div class="tiny muted">Repeating path for: ${sourceRes.name}</div>
+                </div>
+                
+                <div class="modal-body" style="padding: 20px 0;">
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        
+                        <div class="logic-row" style="display: flex; align-items: center; gap: 10px;">
+                            <span class="tiny bold" style="min-width: 80px;">Repeat...</span>
+                            <select id="loop-type" class="modal-input tiny" style="flex: 1;" onchange="OL.toggleLoopInputs(this.value)">
+                                <option value="times" ${currentLoop.type === 'times' ? 'selected' : ''}>A fixed number of times</option>
+                                <option value="collection" ${currentLoop.type === 'collection' ? 'selected' : ''}>For every item in a list</option>
+                                <option value="until" ${currentLoop.type === 'until' ? 'selected' : ''}>Until a condition is met</option>
+                            </select>
+                        </div>
+
+                        <div id="loop-value-container">
+                            <label id="loop-label" class="tiny uppercase bold muted" style="display:block; margin-bottom:5px;">
+                                ${currentLoop.type === 'times' ? 'Number of Iterations' : currentLoop.type === 'collection' ? 'Variable/List Name' : 'Condition String'}
+                            </label>
+                            <input type="text" id="loop-value" class="modal-input tiny" style="width: 100%;" 
+                                   placeholder="e.g. 5, users_list, status == 'done'" 
+                                   value="${currentLoop.value || ''}">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button class="btn soft tiny" onclick="document.getElementById('loop-modal').remove()">Cancel</button>
+                    <button class="btn primary tiny" onclick="OL.saveLoop('${conn.sourceId}', ${conn.outcomeIdx})">Set Loop</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+// Helper to update labels when the dropdown changes
+OL.toggleLoopInputs = function(type) {
+    const label = document.getElementById('loop-label');
+    const input = document.getElementById('loop-value');
+    if (type === 'times') {
+        label.innerText = "Number of Iterations";
+        input.placeholder = "e.g. 3";
+    } else if (type === 'collection') {
+        label.innerText = "Variable / List Name";
+        input.placeholder = "e.g. line_items";
+    } else {
+        label.innerText = "Stop Condition";
+        input.placeholder = "e.g. status == 'success'";
+    }
+};
+
+OL.saveLoop = async function(sourceId, outcomeIdx) {
+    const type = document.getElementById('loop-type').value;
+    const value = document.getElementById('loop-value').value;
+
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(sourceId);
+        if (res?.outcomes?.[outcomeIdx]) {
+            res.outcomes[outcomeIdx].loop = { type, value };
+        }
+    });
+
+    document.getElementById('loop-modal').remove();
+    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
 };
 
 OL.getInferredScope = (node) => {
@@ -8957,6 +9039,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     <div id="v2-context-toolbar" class="v2-toolbar-group" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
                         <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
                         <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
+                        <button class="btn soft ctx-loop" title="Loop/Repeat" onclick="OL.handleContextAction('loop')">♾</button>
                         <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')" style="color: #ef4444;">×</button>
                     </div>
                 </div>
@@ -9690,8 +9773,9 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
     const outcome = outcomeData || {};
     const hasLogic = outcomeData && outcomeData.logic && outcomeData.logic.field;
     const hasDelay = !!outcome.delay;
+    const hasLoop = !!outcome.loop;
 
-    if (hasLogic || hasDelay) {
+    if (hasLogic || hasDelay || hasLoop) {
         // --- ⏱ THE DELAY (Center Anchor) ---
         if (hasDelay) {
             const delayBadge = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -9732,6 +9816,23 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
             logicBadge.textContent = "λ";
             svg.appendChild(logicBadge);
+        }
+
+        // --- ∞ LOOP (Positioned to the left of the main stack) ---
+        if (hasLoop) {
+            const loopBadge = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            loopBadge.setAttribute("x", midX - 15); // Offset to the LEFT
+            loopBadge.setAttribute("y", midY + 4);
+            loopBadge.setAttribute("text-anchor", "end");
+            loopBadge.setAttribute("fill", "#10b981"); // Emerald Green for loops
+            loopBadge.setAttribute("style", "font-size: 14px; font-weight: bold; cursor: help;");
+            
+            const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+            title.textContent = `Loop: Repeat ${outcome.loop.type === 'times' ? outcome.loop.value + ' times' : outcome.loop.type === 'collection' ? 'for each ' + outcome.loop.value : 'until ' + outcome.loop.value}`;
+            loopBadge.appendChild(title);
+            
+            loopBadge.textContent = "∞";
+            svg.appendChild(loopBadge);
         }
     }
 
