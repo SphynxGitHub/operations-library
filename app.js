@@ -8895,37 +8895,26 @@ OL.toggleLogicValueField = function(selectEl) {
     }
 };
 
-OL.saveLogic = function(originalSourceId, outcomeIdx) {
+OL.saveLogic = function(targetId, outcomeIdx) {
     const logicData = {
         field: document.getElementById('logic-field')?.value || '',
         operator: document.querySelector('.logic-operator-select')?.value || 'contains',
         value: document.getElementById('logic-value')?.value || '' 
     };
 
-    // 🎯 THE FIX: Determine if we are saving to a Leash or a Path
-    const conn = state.v2.activeConnection;
-    
-    // If it's a leash, the data belongs on the CHILD (targetId)
-    // If it's a path, the data belongs on the PARENT (sourceId)
-    const targetNodeId = (conn && conn.isLeash) ? conn.targetId : originalSourceId;
-
     const client = getActiveClient();
-    const masterList = client?.projectData?.localResources || [];
-    const res = masterList.find(r => String(r.id) === String(targetNodeId));
+    const res = client?.projectData?.localResources.find(r => String(r.id) === String(targetId));
 
-    if (!res) {
-        console.error("❌ Target Resource not found:", targetNodeId);
-        return;
-    }
+    if (!res) return;
 
     if (outcomeIdx !== null && outcomeIdx !== undefined && outcomeIdx !== 'null') {
-        // FLOW PATH (Logic stays on Parent/Outcome)
+        // Flow Path (Parent Outcome)
         if (!res.outcomes) res.outcomes = [];
         if (res.outcomes[outcomeIdx]) res.outcomes[outcomeIdx].logic = logicData;
     } else {
-        // 🚀 LEASH: Save directly to the CHILD Resource
+        // 🚀 LEASH: Saved to the Resource Root (The Child/SOP)
         res.logic = logicData;
-        console.log(`✅ Logic SAVED TO CHILD: ${res.id}`, logicData);
+        console.log(`🔥 SUCCESS: Logic saved to ID ${targetId} (Child)`);
     }
 
     OL.persist();
@@ -10059,9 +10048,20 @@ OL.drawV2Connections = function() {
 
                 group.onmousedown = (evt) => {
                     evt.stopPropagation();
-                    state.v2.activeConnection = { sourceId: parent.id, targetId: node.id, isLeash: true };
+                    
+                    // 🎯 TARGETING THE CHILD:
+                    // In this loop, 'node' is the child that possesses the leash.
+                    // We want the logic to be saved to THIS node.
+                    state.v2.activeConnection = { 
+                        sourceId: node.id,    // <--- This must be the CHILD ID (the SOP)
+                        targetId: parent.id,  // This is the Zap
+                        outcomeIdx: null,
+                        isLeash: true 
+                    };
+
                     document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
                     group.classList.add('is-sticky');
+                    
                     const bar = document.getElementById('v2-context-toolbar');
                     if (bar) bar.style.display = 'flex';
                 };
