@@ -8763,22 +8763,29 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
-OL.handleContextAction = function(actionType) {
+OL.handleContextAction = function(action) {
     const conn = state.v2.activeConnection;
     if (!conn) return;
 
-    switch(actionType) {
+    // 🚀 THE FIX: Use the actual DOM ID to hide the bar
+    const ctxBar = document.getElementById('v2-context-toolbar');
+    
+    switch(action) {
         case 'logic':
-            OL.closeContextToolbar(); // Hide the mini-menu
-            OL.openLogicBuilder();    // Open the real tool
+            if (ctxBar) ctxBar.style.display = 'none'; // Replaces the missing function
+            OL.openLogicBuilder(conn);
             break;
-            
+
         case 'delete':
-            if (confirm("Delete this connection?")) {
-                OL.deleteConnection(conn.sourceId, conn.targetId, conn.outcomeIdx);
-            }
+            if (conn.isLeash) OL.unlinkParent(conn.sourceId);
+            else OL.removeConnection(conn.sourceId, conn.outcomeIdx);
+            if (ctxBar) ctxBar.style.display = 'none';
             break;
             
+        case 'reorder':
+            OL.requestReorder(conn.sourceId, conn.targetId);
+            break;
+
         case 'delay':
             const delay = prompt("Enter delay (e.g., 24h, 2d):", "1h");
             if (delay) OL.saveConnectionDelay(conn, delay);
@@ -8856,6 +8863,17 @@ OL.saveLogic = async function(sourceId, outcomeIdx) {
     document.getElementById('logic-modal').remove();
     window.renderGlobalVisualizer(window.location.hash.includes('vault'));
     console.log("✅ Logic Saved to Outcome", outcomeIdx);
+};
+
+OL.saveConnectionDelay = async function(conn, delayValue) {
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(conn.sourceId);
+        if (res && res.outcomes && res.outcomes[conn.outcomeIdx]) {
+            res.outcomes[conn.outcomeIdx].delay = delayValue;
+        }
+    });
+    window.renderGlobalVisualizer(window.location.hash.includes('vault'));
+    console.log(`⏱ Delay of ${delayValue} added to path.`);
 };
 
 OL.getInferredScope = (node) => {
@@ -9627,14 +9645,24 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
 
     // 3. THE "S-CURVE" BRIDGE MATH
     let pathData;
+    let midX, midY; // 🚀 Define these here
+
     if (isFromShelf || Math.abs(e.y - s.y) > Math.abs(e.x - s.x)) {
-        // Vertical S-Curve for Shelf -> Grid or Top -> Bottom
+        // Vertical S-Curve
         const cpOffset = isFromShelf ? 100 : Math.min(Math.abs(e.y - s.y) / 2, 150);
         pathData = `M ${s.x} ${s.y} C ${s.x} ${s.y + cpOffset}, ${e.x} ${e.y - cpOffset}, ${e.x} ${e.y}`;
+        
+        // 🚀 Midpoint calculation for Vertical Cubic Bezier (t=0.5)
+        midX = 0.125 * s.x + 0.375 * s.x + 0.375 * e.x + 0.125 * e.x; // Simplifies to (s.x + e.x) / 2
+        midY = 0.125 * s.y + 0.375 * (s.y + cpOffset) + 0.375 * (e.y - cpOffset) + 0.125 * e.y;
     } else {
-        // Horizontal Curve for Left -> Right
+        // Horizontal Curve
         const cpOffset = Math.min(Math.abs(e.x - s.x) / 2, 150);
         pathData = `M ${s.x} ${s.y} C ${s.x + cpOffset} ${s.y}, ${e.x - cpOffset} ${e.y}, ${e.x} ${e.y}`;
+        
+        // 🚀 Midpoint calculation for Horizontal Cubic Bezier (t=0.5)
+        midX = 0.125 * s.x + 0.375 * (s.x + cpOffset) + 0.375 * (e.x - cpOffset) + 0.125 * e.x;
+        midY = 0.125 * s.y + 0.375 * s.y + 0.375 * e.y + 0.125 * e.y;
     }
 
     // 4. CREATE SVG GROUP & ATTACH MENU LOGIC
@@ -9667,7 +9695,20 @@ OL.drawPathBetweenElements = function(svg, startCard, endCard, label, sourceId, 
         }
     };
 
+    const outcome = outcomeData || {};
     const hasLogic = outcomeData && outcomeData.logic && outcomeData.logic.field;
+    const hasDelay = !!outcome.delay;
+
+    if (hasLogic || hasDelay) {
+        const badge = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        badge.setAttribute("x", midX);
+        badge.setAttribute("y", midY - 10);
+        badge.setAttribute("text-anchor", "middle");
+        badge.setAttribute("fill", hasLogic ? "#a855f7" : "#fbbf24");
+        badge.setAttribute("style", "font-size: 10px; font-weight: bold; pointer-events: none;");
+        badge.textContent = (hasLogic ? "λ " : "") + (hasDelay ? `⏱ ${outcome.delay}` : "");
+        svg.appendChild(badge);
+    }
 
     // 5. APPEND PATHS
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
