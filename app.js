@@ -9190,7 +9190,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
                         
-                        <div id="v2-context-toolbar">
+                        <div id="v2-context-toolbar" style="display:none;">
                             <div class="divider-v"></div>
                             <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
                             <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
