@@ -12483,8 +12483,14 @@ window.renderGlobalVisualizer = function(isVaultMode) {
                 ${trayOpen ? window.renderTrayContent(isVaultMode) : ''}
             </aside>
 
-            <section id="v2-workbench-target" style="flex: 1; position: relative; overflow: hidden;">
-                </section>
+            <section id="v2-workbench-target" style="flex: 1; position: relative; overflow: hidden;"></section>
+
+            <div id="unmap-zone">
+                <div class="unmap-content">
+                    <i class="fas fa-trash"></i>
+                    <span>Drop here to Unmap</span>
+                </div>
+            </div>
         </div>
     `;
 
