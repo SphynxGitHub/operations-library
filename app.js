@@ -9087,7 +9087,17 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     if (!container) return;
 
     const client = getActiveClient();
-    const nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    const allResources = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    // 🏷️ Extract Unique Values for Dropdowns
+    const types = [...new Set(allResources.map(r => r.type))].filter(Boolean).sort();
+    const apps = [...new Set(allResources.map(r => r.integration?.app))].filter(Boolean).sort();
+    const objects = [...new Set(allResources.map(r => r.integration?.object))].filter(Boolean).sort();
+    const verbs = [...new Set(allResources.map(r => r.integration?.verb))].filter(Boolean).sort();
+    const assignees = [...new Set([
+        ...allResources.map(r => r.assigneeName),
+        ...allResources.flatMap(r => (r.steps || []).map(s => s.assigneeName))
+    ])].filter(Boolean).sort();
 
     // Get stage data to render sticky headers
     const sourceData = isVault ? state.master : (client?.projectData || {});
@@ -9157,6 +9167,60 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
             <div class="v2-ui-overlay">
                 <div class="v2-master-toolbar">
+                    <div class="v2-toolbar filter-bar" style="flex-wrap: wrap; gap: 6px;">
+                        <input type="text" id="canvas-filter-input" placeholder="Search..." oninput="OL.runCanvasFilters()">
+
+                        <div class="divider-v"></div>
+
+                        <select id="filter-type" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">All Types</option>
+                            ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
+                        </select>
+
+                        <select id="filter-app" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">All Apps</option>
+                            ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
+                        </select>
+
+                        <select id="filter-object" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">All Objects</option>
+                            ${objects.map(o => `<option value="${o}">${o}</option>`).join('')}
+                        </select>
+
+                        <select id="filter-verb" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">All Verbs</option>
+                            ${verbs.map(v => `<option value="${v}">${v}</option>`).join('')}
+                        </select>
+
+                        <div class="divider-v"></div>
+
+                        <select id="filter-assignee" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">All Owners</option>
+                            ${assignees.map(a => `<option value="${a}">${a}</option>`).join('')}
+                        </select>
+
+                        <select id="filter-logic" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">Any Logic</option>
+                            <option value="has">With λ Logic</option>
+                            <option value="none">Standard Path</option>
+                        </select>
+
+                        <select id="filter-delay" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">Any Timing</option>
+                            <option value="has">With ⏱ Delay</option>
+                        </select>
+
+                        <select id="filter-loop" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">Any Repeat</option>
+                            <option value="has">With ⟳ Loop</option>
+                        </select>
+
+                        <select id="filter-scoped" class="canvas-select" onchange="OL.runCanvasFilters()">
+                            <option value="">All Status</option>
+                            <option value="priced">Scoped ($)</option>
+                            <option value="unpriced">Unscoped</option>
+                        </select>
+                    </div>
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap" style="display: flex; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; margin-right: 4px;">
                             <span style="font-size: 12px; opacity: 0.5;">🔍</span>
@@ -9243,6 +9307,71 @@ OL.filterCanvasNodes = function(query) {
     connections.forEach(line => {
         line.style.opacity = "0.1";
     });
+};
+
+OL.runCanvasFilters = function() {
+    const query = document.getElementById('canvas-filter-input')?.value.toLowerCase().trim();
+    const typeF = document.getElementById('filter-type')?.value;
+    const appF = document.getElementById('filter-app')?.value;
+    const objF = document.getElementById('filter-object')?.value;
+    const verbF = document.getElementById('filter-verb')?.value;
+    const assigneeF = document.getElementById('filter-assignee')?.value;
+    const logicF = document.getElementById('filter-logic')?.value;
+    const delayF = document.getElementById('filter-delay')?.value;
+    const loopF = document.getElementById('filter-loop')?.value;
+    const scopedF = document.getElementById('filter-scoped')?.value;
+
+    const cards = document.querySelectorAll('.v2-node-card');
+    const connections = document.querySelectorAll('.v2-connection-group');
+
+    cards.forEach(card => {
+        const id = card.id.replace('v2-node-', '');
+        const res = OL.getResourceById(id);
+        if (!res) return;
+
+        // 🔍 1. Metadata Checks
+        const matchesSearch = !query || 
+            (res.name || "").toLowerCase().includes(query) || 
+            (res.steps || []).some(s => (s.name || s.text || "").toLowerCase().includes(query));
+        
+        const matchesType = !typeF || res.type === typeF;
+        const matchesApp = !appF || res.integration?.app === appF;
+        const matchesObj = !objF || res.integration?.object === objF;
+        const matchesVerb = !verbF || res.integration?.verb === verbF;
+        
+        // 🔍 2. Assignee (Check root or any sub-step)
+        const matchesAssignee = !assigneeF || 
+            res.assigneeName === assigneeF || 
+            (res.steps || []).some(s => s.assigneeName === assigneeF);
+
+        // 🔍 3. Conditional Presence (Check Leash root OR Outcomes array)
+        const hasLogic = !!(res.logic || (res.outcomes || []).some(o => o.logic));
+        const matchesLogic = !logicF || (logicF === 'has' ? hasLogic : !hasLogic);
+
+        const hasDelay = !!(res.delay || (res.outcomes || []).some(o => o.delay));
+        const matchesDelay = !delayF || (delayF === 'has' ? hasDelay : !hasDelay);
+
+        const hasLoop = !!(res.isLoop || res.loop || (res.outcomes || []).some(o => o.isLoop || o.loop));
+        const matchesLoop = !loopF || (loopF === 'has' ? hasLoop : !hasLoop);
+
+        // 🔍 4. Scoped Status
+        const isScoped = OL.isResourceInScope(res.id);
+        const matchesScoped = !scopedF || (scopedF === 'priced' ? isScoped : !isScoped);
+
+        // 🏁 Result
+        if (matchesSearch && matchesType && matchesApp && matchesObj && matchesVerb && 
+            matchesAssignee && matchesLogic && matchesDelay && matchesLoop && matchesScoped) {
+            card.classList.remove('node-dimmed');
+            card.classList.add('node-matched');
+        } else {
+            card.classList.add('node-dimmed');
+            card.classList.remove('node-matched');
+        }
+    });
+
+    // Dim connections if any filter is active
+    const isFiltered = query || typeF || appF || objF || verbF || assigneeF || logicF || delayF || loopF || scopedF;
+    connections.forEach(l => l.style.opacity = isFiltered ? "0.1" : "1");
 };
 
 OL.editStageName = function(event, index) {
