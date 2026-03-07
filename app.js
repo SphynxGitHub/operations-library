@@ -9167,7 +9167,27 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
             <div class="v2-ui-overlay">
                 <div class="v2-master-toolbar">
-                    <div class="v2-toolbar filter-bar" style="flex-wrap: wrap; gap: 6px;">
+                    <div class="v2-toolbar">
+                        <div class="canvas-search-wrap" 
+                            style="display: flex; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; margin-right: 4px;">
+                            <span style="font-size: 12px; opacity: 0.5;">🔍</span>
+                            <input type="text" id="canvas-filter-input" 
+                                placeholder="Search canvas..." 
+                                oninput="OL.filterCanvasNodes(this.value)"
+                                style="background: transparent; border: none; color: white; font-size: 11px; width: 150px; outline: none;">
+                        </div>
+                        <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
+                        <button id="filter-menu-btn" class="btn soft" onclick="OL.toggleFilterMenu(event)">
+                            🔍 Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
+                        </button>
+                        <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
+                        <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
+                        <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
+                        <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
+                        <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
+                    </div>
+                    
+                    <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none;">
                         <input type="text" id="canvas-filter-input" placeholder="Search..." oninput="OL.runCanvasFilters()">
 
                         <div class="divider-v"></div>
@@ -9221,21 +9241,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                             <option value="unpriced">Unscoped</option>
                         </select>
                     </div>
-                    <div class="v2-toolbar">
-                        <div class="canvas-search-wrap" style="display: flex; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; margin-right: 4px;">
-                            <span style="font-size: 12px; opacity: 0.5;">🔍</span>
-                            <input type="text" id="canvas-filter-input" 
-                                placeholder="Search canvas..." 
-                                oninput="OL.filterCanvasNodes(this.value)"
-                                style="background: transparent; border: none; color: white; font-size: 11px; width: 150px; outline: none;">
-                        </div>
-                        <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
-                        <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
-                        <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
-                        <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
-                        <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
-                        <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
-                    </div>
 
                     <div id="v2-context-toolbar" class="v2-toolbar" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
                         <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
@@ -9271,6 +9276,33 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         OL.initV2Panning();
         OL.drawV2Connections();
     }, 100);
+};
+
+OL.toggleFilterMenu = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('v2-filter-submenu');
+    const btn = document.getElementById('filter-menu-btn');
+    
+    const isShowing = menu.style.display === 'flex';
+    
+    // Hide context menu if open
+    document.getElementById('v2-context-toolbar').style.display = 'none';
+    
+    menu.style.display = isShowing ? 'none' : 'flex';
+    btn.classList.toggle('active', !isShowing);
+};
+
+// Reset function to clear the highlights
+OL.clearAllCanvasFilters = function() {
+    const filters = ['canvas-filter-input', 'filter-type', 'filter-app', 'filter-assignee', 'filter-logic'];
+    filters.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
+    
+    OL.runCanvasFilters(); // Run once more to reset the visual dimming
+    document.getElementById('v2-filter-submenu').style.display = 'none';
+    document.getElementById('filter-menu-btn').classList.remove('active');
 };
 
 OL.filterCanvasNodes = function(query) {
