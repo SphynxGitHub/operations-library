@@ -10178,19 +10178,48 @@ OL.drawV2Connections = function() {
                     const sRect = sourceEl.getBoundingClientRect();
                     const tRect = targetEl.getBoundingClientRect();
 
-                    // 🎯 CALCULATE SNAP POINTS
-                    // Subtracting canvasRect ensures coordinates are relative to the SVG top-left
-                    const sX = (sRect.right - canvasRect.left);
-                    const sY = (sRect.top - canvasRect.top) + (sRect.height / 2);
+                    // 🎯 DYNAMIC SNAP PORTS
+                    const getAnchors = (r) => [
+                        { x: r.left + r.width/2 - canvasRect.left, y: r.top - canvasRect.top, dir: 'top' },
+                        { x: r.left + r.width/2 - canvasRect.left, y: r.bottom - canvasRect.top, dir: 'bottom' },
+                        { x: r.left - canvasRect.left, y: r.top + r.height/2 - canvasRect.top, dir: 'left' },
+                        { x: r.right - canvasRect.left, y: r.top + r.height/2 - canvasRect.top, dir: 'right' }
+                    ];
 
-                    const eX = (tRect.left - canvasRect.left);
-                    const eY = (tRect.top - canvasRect.top) + (tRect.height / 2);
+                    const pAnchors = getAnchors(sRect);
+                    const cAnchors = getAnchors(tRect);
 
-                    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                    group.setAttribute("class", "v2-connection-group flow-link");
+                    let minDist = Infinity;
+                    let sAnchor = pAnchors[3]; // Default Right
+                    let eAnchor = cAnchors[2]; // Default Left
 
-                    const cp = Math.abs(eX - sX) / 2;
-                    const pathData = `M ${sX} ${sY} C ${sX + cp} ${sY}, ${eX - cp} ${eY}, ${eX} ${eY}`;
+                    pAnchors.forEach(pa => {
+                        cAnchors.forEach(ca => {
+                            const d = Math.hypot(pa.x - ca.x, pa.y - ca.y);
+                            if (d < minDist) {
+                                minDist = d;
+                                sAnchor = pa;
+                                eAnchor = ca;
+                            }
+                        });
+                    });
+
+                    const sX = sAnchor.x;
+                    const sY = sAnchor.y;
+                    const eX = eAnchor.x;
+                    const eY = eAnchor.y;
+
+                    // 📐 CURVATURE LOGIC based on direction
+                    let pathData;
+                    if (sAnchor.dir === 'top' || sAnchor.dir === 'bottom') {
+                        // Vertical S-Curve
+                        const cpY = (sY + eY) / 2;
+                        pathData = `M ${sX} ${sY} C ${sX} ${cpY}, ${eX} ${cpY}, ${eX} ${eY}`;
+                    } else {
+                        // Horizontal S-Curve
+                        const cpX = (sX + eX) / 2;
+                        pathData = `M ${sX} ${sY} C ${cpX} ${sY}, ${cpX} ${eY}, ${eX} ${eY}`;
+                    }
 
                     // 🖱️ THE DOCKING LOGIC
                     group.onmousedown = (clickEvt) => {
