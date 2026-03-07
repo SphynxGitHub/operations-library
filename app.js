@@ -553,6 +553,10 @@ window.buildLayout = function () {
       root.innerHTML = `
           <aside class="sidebar">${sidebarContent}</aside>
           <main id="mainContent"></main>
+          <aside id="inspector-panel" class="pane-inspector">
+            <div class="sidebar-resizer right-side-handle"></div>
+            <div class="inspector-scroll-content"></div>
+          </aside>
       `;
   }
 };
@@ -13924,12 +13928,17 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     // 🚀 THE LAYOUT FORCE: Ensure the container isn't in Zen Mode
     const panel = document.getElementById('inspector-panel');
-    const layout = document.querySelector('.three-pane-layout');
-    if (!panel) return;
+    if (!panel) {
+        console.error("❌ Panel missing from DOM. Re-building layout...");
+        window.buildLayout();
+        return OL.loadInspector(targetId, parentId); // Retry
+    }
 
+    // 🚀 SHOW THE PANEL
+    panel.style.display = 'block'; // Ensure it's not display:none
+    const layout = document.querySelector('.three-pane-layout');
     if (layout) {
         layout.classList.remove('zen-mode-active');
-        layout.classList.add('inspector-open'); // Add this to your CSS if not present
     }
 
     // 🏗️ THE SKELETON: Ensure the scroll container exists
