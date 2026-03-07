@@ -6608,23 +6608,27 @@ OL.updateSopStep = function (resId, stepId, field, value) {
   }
 };
 
-OL.updateAtomicStep = function(resId, stepId, field, value) {
-    const activeResId = resId || state.activeInspectorParentId;
-    const res = OL.getResourceById(activeResId);
+OL.updateAtomicStep = async function(parentId, stepId, field, value) {
+    const res = OL.getResourceById(parentId);
     if (!res) return;
 
-    const step = res.steps?.find(s => String(s.id) === String(stepId));
-    if (step) {
-        step[field] = value;
-        OL.persist();
-    }
+    await OL.updateAndSync(() => {
+        const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+        if (step) {
+            // Save the value (Date string or Member ID)
+            step[field] = value;
+            
+            // 🚀 SYNC NAMES: If assigning a member, fetch the name for the UI
+            if (field === 'assigneeId') {
+                const client = getActiveClient();
+                const member = client?.projectData?.teamMembers?.find(m => m.id === value);
+                step.assigneeName = member ? member.name : "Unassigned";
+            }
+        }
+    });
 
-    // 1. Refresh Canvas
-    const canvas = document.getElementById('l3-canvas-wrapper');
-    if (canvas) canvas.parentElement.innerHTML = renderLevel3Canvas(activeResId);
-
-    // 2. 🚀 LOCK THE VIEW: Pass BOTH IDs to keep Scenario A active
-    OL.loadInspector(stepId, activeResId);
+    // 🔄 REFRESH: Repaint Inspector and Canvas highlights
+    OL.loadInspector(stepId, parentId);
 };
 
 OL.removeSopStep = function (resId, stepId) {
@@ -9681,16 +9685,18 @@ OL.handleTrayDrag = function(e, resId) {
 
 // 🖱️ Dragging on Canvas (MouseDown)
 OL.startNodeDrag = function(e, nodeId) {
+    // 🛡️ 1. Port Shield: Don't drag if we are clicking a wiring port
     if (e.target.classList.contains('v2-port')) return;
+    
+    // 🛡️ 2. Step Shield: If clicking an internal step row, 
+    // let the Step's own click/inspector logic handle it.
+    if (e.target.closest('.v2-step-item')) return;
+
     e.preventDefault();
     state.v2.activeDragId = nodeId;
     state.v2.isFromTray = false;
     
-    // 🔥 WAKE UP THE ZONE
-    const zone = document.getElementById('unmap-zone');
-    if (zone) zone.classList.add('visible'); 
-    console.log("🚨 Unmap Zone Activated");
-
+    // Initialize the motion tracker (the code you just sent me)
     OL.initWBMotion(e, nodeId);
 };
 
@@ -9710,9 +9716,15 @@ OL.initWBMotion = function(e, id) {
             const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
             if (dist < 5) return; // Increased to 5px for safer "click" detection
             hasMovedSignificantAmount = true;
+
+            // 🔥 NOW wake up the zone and add the dragging class
+            const zone = document.getElementById('unmap-zone');
+            if (zone) zone.classList.add('visible');
+            
+            const card = document.getElementById(`v2-node-${id}`);
+            if (card) card.classList.add('is-dragging')
         }
 
-        const zone = document.getElementById('unmap-zone');
         const canvas = document.getElementById('v2-canvas');
         const rect = canvas.getBoundingClientRect();
         const zoom = state.v2.zoom || 1;
