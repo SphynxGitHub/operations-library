@@ -13902,10 +13902,24 @@ const getAllIncomingLinks = (targetId, allResources) => {
 };
 
 OL.loadInspector = function(targetId, parentId = null) {
-    const cleanId = String(targetId).replace(/^(empty-|step-|link-)/, '');   
     const isVaultMode = location.hash.includes('vault');
     const client = getActiveClient();
-    const data = OL.getResourceById(cleanId); // Use cleaned ID
+    let cleanId = String(targetId).replace(/^(empty-|step-)/, '');
+    let finalDataId = cleanId;
+
+    if (cleanId.startsWith('link_')) {
+        const parent = OL.getResourceById(parentId);
+        const linkStep = parent?.steps?.find(s => s.id === cleanId);
+        
+        // 🚀 THE REDIRECT: If this link points to a resource, inspect THAT.
+        // If it doesn't, it's a loose step, so inspect the link object itself.
+        if (linkStep?.resourceLinkId) {
+            finalDataId = linkStep.resourceLinkId;
+            console.log("🔗 Following link to resource:", finalDataId);
+        }
+    }
+
+    const data = OL.getResourceById(finalDataId);
     
     if (!data) {
         console.error("❌ Inspector Error: No data found for", cleanId);
