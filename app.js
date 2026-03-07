@@ -9166,7 +9166,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             </div>
 
             <div class="v2-ui-overlay">
-                <div class="v2-master-toolbar" style="display: flex; flex-direction: column;">
+                <div class="v2-master-toolbar" style="display: flex; flex-direction: column; align-items: flex-start;">
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap" 
                             style="display: flex; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; margin-right: 4px;">
@@ -9185,6 +9185,13 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft" onclick="OL.zoom(-0.1)">-</button>
+                        
+                        <div id="v2-context-toolbar" class="v2-toolbar" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
+                            <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
+                            <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
+                            <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">⟳</button>
+                            <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')" style="color: #ef4444;">×</button>
+                        </div>
                     </div>
                     
                     <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none;">
@@ -9236,13 +9243,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                             <option value="priced">Scoped ($)</option>
                             <option value="unpriced">Unscoped</option>
                         </select>
-                    </div>
-
-                    <div id="v2-context-toolbar" class="v2-toolbar" style="display: none; align-items: center; gap: 8px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 12px; margin-left: 4px;">
-                        <button class="btn soft ctx-logic" onclick="OL.handleContextAction('logic')">λ</button>
-                        <button class="btn soft ctx-delay" onclick="OL.handleContextAction('delay')">⏱</button>
-                        <button class="btn soft ctx-loop" onclick="OL.handleContextAction('loop')">⟳</button>
-                        <button class="btn soft ctx-delete" onclick="OL.handleContextAction('delete')" style="color: #ef4444;">×</button>
                     </div>
                 </div>
             </div>
