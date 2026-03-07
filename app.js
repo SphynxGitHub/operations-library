@@ -9484,6 +9484,11 @@ OL.startNodeDrag = function(e, nodeId) {
     e.preventDefault();
     state.v2.activeDragId = nodeId;
     state.v2.isFromTray = false;
+    
+    // 🔥 WAKE UP THE ZONE
+    const zone = document.getElementById('unmap-zone');
+    if (zone) zone.classList.add('visible'); 
+
     OL.initWBMotion(e, nodeId);
 };
 
@@ -9578,11 +9583,31 @@ OL.initWBMotion = function(e, id) {
         const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
         const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
         
+        // 🔍 Check if we are releasing over the unmap zone
+        const dropTarget = document.elementFromPoint(uE.clientX, uE.clientY);
+        const isUnmapDrop = !!dropTarget?.closest('#unmap-zone');
+
         // 🧼 UI Cleanup
         const zone = document.getElementById('unmap-zone');
-        if (zone) zone.classList.remove('is-hovered');
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
-        
+        if (zone) {
+            zone.classList.remove('active');
+            zone.classList.remove('visible');
+        }
+
+        if (isUnmapDrop) {
+            await OL.updateAndSync(() => {
+                const res = OL.getResourceById(id);
+                if (res) {
+                    console.log("♻️ Unmapping resource:", res.name);
+                    delete res.coords; 
+                    res.parentId = null;
+                    res.isGlobal = false;
+                }
+            });
+            window.renderGlobalVisualizer(isVault);
+            return; // Exit early, don't trigger grid drop
+        }
+            
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
 

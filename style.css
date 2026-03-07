@@ -4823,6 +4823,31 @@ path[stroke="transparent"] {
     pointer-events: none !important; 
 }
 
+/* 🚨 THE UNMAP ZONE RECOVERY */
+#unmap-zone {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 320px; /* Sidebar width */
+    height: 100vh;
+    z-index: 10001 !important; /* Must be higher than everything */
+    pointer-events: none; /* Default to passthrough */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+#unmap-zone.active {
+    pointer-events: auto !important; /* Wakes up when a card is over it */
+    background: rgba(239, 68, 68, 0.1) !important;
+}
+
+#unmap-zone.active .unmap-content {
+    opacity: 1 !important;
+    border: 2px dashed #ef4444;
+}
+
 /* 3. The Unmap Zone needs to be the top-most target */
 .unmap-drop-zone {
     z-index: 10001 !important;
