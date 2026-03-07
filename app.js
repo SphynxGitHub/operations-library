@@ -13982,6 +13982,13 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
     state.activeInspectorResId = targetId;
 
+    const dynamicTypes = Object.values(state.master.rates?.variables || {}).map(v => v.applyTo);
+    
+    // 🛡️ THE FIX: Define these variables clearly
+    const isRecognizedType = dynamicTypes.some(t => 
+        t?.toLowerCase() === (data.type || "").toLowerCase()
+    );
+
     // 5. Data Identification (Identity logic remains the same)
     const isStage = cleanId.startsWith('stage-');
     const isWorkflow = data.type === 'Workflow';
