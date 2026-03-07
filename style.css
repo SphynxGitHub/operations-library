@@ -3860,6 +3860,14 @@ ARROWS
     overflow-y: auto;
 }
 
+#inspector-panel {
+    width: 350px;
+    background: #0f172a;
+    border-left: 1px solid var(--panel-border);
+    transition: transform 0.3s ease, margin-right 0.3s ease;
+    display: block !important; /* Always in DOM */
+}
+
 #inspector-panel.pane-inspector {
     position: relative;
     display: flex;
