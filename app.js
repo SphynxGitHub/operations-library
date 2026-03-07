@@ -9166,7 +9166,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             </div>
 
             <div class="v2-ui-overlay">
-                <div class="v2-master-toolbar">
+                <div class="v2-master-toolbar" style="display: flex; flex-direction: column;">
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap" 
                             style="display: flex; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; margin-right: 4px;">
@@ -9188,10 +9188,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     </div>
                     
                     <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none;">
-                        <input type="text" id="canvas-filter-input" placeholder="Search..." oninput="OL.runCanvasFilters()">
-
-                        <div class="divider-v"></div>
-
                         <select id="filter-type" class="canvas-select" onchange="OL.runCanvasFilters()">
                             <option value="">All Types</option>
                             ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
