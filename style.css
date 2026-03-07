@@ -4830,7 +4830,7 @@ path[stroke="transparent"] {
     width: 320px; /* Sidebar width */
     height: 100vh;
     z-index: 10001 !important; /* Must be higher than everything */
-    pointer-events: auto; /* Default to passthrough */
+    pointer-events: none; /* Default to passthrough */
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
