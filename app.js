@@ -10169,21 +10169,22 @@ OL.drawV2Connections = function() {
                     tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
                 }
 
-                // 🔍 Find the actual DOM elements for the cards
                 const sourceEl = document.getElementById(`v2-node-${node.id}`);
                 const targetEl = document.getElementById(`v2-node-${tid}`);
                 
                 if (sourceEl && targetEl) {
-                    const canvasRect = svg.getBoundingClientRect();
+                    const canvas = document.getElementById('v2-canvas');
+                    const canvasRect = canvas.getBoundingClientRect();
                     const sRect = sourceEl.getBoundingClientRect();
                     const tRect = targetEl.getBoundingClientRect();
+                    const zoom = state.v2.zoom || 1;
 
-                    // 🎯 DYNAMIC SNAP PORTS
+                    // 🎯 DYNAMIC SNAP PORTS (Calculated relative to the zoomed/panned canvas)
                     const getAnchors = (r) => [
-                        { x: r.left + r.width/2 - canvasRect.left, y: r.top - canvasRect.top, dir: 'top' },
-                        { x: r.left + r.width/2 - canvasRect.left, y: r.bottom - canvasRect.top, dir: 'bottom' },
-                        { x: r.left - canvasRect.left, y: r.top + r.height/2 - canvasRect.top, dir: 'left' },
-                        { x: r.right - canvasRect.left, y: r.top + r.height/2 - canvasRect.top, dir: 'right' }
+                        { x: (r.left + r.width/2 - canvasRect.left) / zoom, y: (r.top - canvasRect.top) / zoom, dir: 'top' },
+                        { x: (r.left + r.width/2 - canvasRect.left) / zoom, y: (r.bottom - canvasRect.top) / zoom, dir: 'bottom' },
+                        { x: (r.left - canvasRect.left) / zoom, y: (r.top + r.height/2 - canvasRect.top) / zoom, dir: 'left' },
+                        { x: (r.right - canvasRect.left) / zoom, y: (r.top + r.height/2 - canvasRect.top) / zoom, dir: 'right' }
                     ];
 
                     const pAnchors = getAnchors(sRect);
@@ -10209,57 +10210,29 @@ OL.drawV2Connections = function() {
                     const eX = eAnchor.x;
                     const eY = eAnchor.y;
 
-                    // 📐 CURVATURE LOGIC based on direction
+                    // 📐 CURVATURE LOGIC
                     let pathData;
                     if (sAnchor.dir === 'top' || sAnchor.dir === 'bottom') {
-                        // Vertical S-Curve
                         const cpY = (sY + eY) / 2;
                         pathData = `M ${sX} ${sY} C ${sX} ${cpY}, ${eX} ${cpY}, ${eX} ${eY}`;
                     } else {
-                        // Horizontal S-Curve
                         const cpX = (sX + eX) / 2;
                         pathData = `M ${sX} ${sY} C ${cpX} ${sY}, ${cpX} ${eY}, ${eX} ${eY}`;
                     }
 
-                    // 🖱️ THE DOCKING LOGIC
+                    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    group.setAttribute("class", "v2-connection-group flow-link");
+
+                    // 🖱️ THE DOCKING LOGIC (Group Click)
                     group.onmousedown = (clickEvt) => {
                         clickEvt.stopPropagation();
                         clickEvt.preventDefault();
-                        
-                        // Set the active connection state
-                        state.v2.activeConnection = { 
-                            sourceId: node.id, 
-                            targetId: tid, 
-                            outcomeIdx: outcomeIdx, 
-                            isLeash: false 
-                        };
-
-                        // Visual highlight for the selected line
+                        state.v2.activeConnection = { sourceId: node.id, targetId: tid, outcomeIdx: outcomeIdx, isLeash: false };
                         document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
                         group.classList.add('is-sticky');
-
                         const ctxBar = document.getElementById('v2-context-toolbar');
-                        if (ctxBar) {
-                            ctxBar.style.display = 'flex';
-                            // ⚓ DOCKING: Resets fixed/absolute positioning
-                            ctxBar.style.position = 'static'; 
-                            ctxBar.style.left = 'auto';
-                            ctxBar.style.top = 'auto';
-                            ctxBar.style.transform = 'none';
-
-                            // UI Cleanup
-                            const reorderBtn = document.getElementById('ctx-reorder-btn');
-                            if (reorderBtn) reorderBtn.style.display = 'none';
-                        }
+                        if (ctxBar) ctxBar.style.display = 'flex';
                     };
-
-                    // Path elements (Hit Area + Visual Line)
-                    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    hitArea.setAttribute("d", pathData);
-                    hitArea.setAttribute("stroke", "transparent");
-                    hitArea.setAttribute("stroke-width", "20");
-                    hitArea.setAttribute("fill", "none");
-                    hitArea.style.cursor = "pointer";
 
                     const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
                     visualPath.setAttribute("d", pathData);
@@ -10268,35 +10241,30 @@ OL.drawV2Connections = function() {
                     visualPath.setAttribute("fill", "none");
                     visualPath.setAttribute("marker-end", "url(#arrowhead-v2)");
 
+                    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    hitArea.setAttribute("d", pathData);
+                    hitArea.setAttribute("stroke", "transparent");
+                    hitArea.setAttribute("stroke-width", "20");
+                    hitArea.setAttribute("fill", "none");
+                    hitArea.style.cursor = "pointer";
+
                     group.appendChild(hitArea);
                     group.appendChild(visualPath);
 
-                    // 🛠️ INDICATOR CONFIG
-                    let iconOffset = 10;
-
-                    // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
+                    // 🛠️ INDICATOR PLACEMENT (λ, ⏱, ⟳)
+                    let iconOffset = 15;
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
-                        const text = drawIcon(sX + iconOffset, sY - 12, "λ", `Logic: ${outcome.logic.field} ${outcome.logic.operator}`);
-                        group.appendChild(text);
-                        iconOffset += 22; 
+                        group.appendChild(drawIcon(sX + iconOffset, sY - 10, "λ", "Logic Attached"));
+                        iconOffset += 20;
                     }
-
-                    // ⏱️ 2. RENDER DELAY
                     if (outcome.delay && outcome.delay !== "0") {
-                        const text = drawIcon(sX + iconOffset, sY - 12, "⏱", `Delay: ${outcome.delay}`);
-                        text.setAttribute("font-size", "12px");
-                        group.appendChild(text);
-                        iconOffset += 22;
+                        group.appendChild(drawIcon(sX + iconOffset, sY - 10, "⏱", `Delay: ${outcome.delay}`));
+                        iconOffset += 20;
+                    }
+                    if (outcome.isLoop || outcome.loop) {
+                        group.appendChild(drawIcon(sX + iconOffset, sY - 10, "⟳", "Looping"));
                     }
 
-                    // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
-                    const isLooping = outcome.isLoop || outcome.allowLoop || outcome.loop || (outcome.action && outcome.action.includes('loop'));
-                    if (isLooping) {
-                        const text = drawIcon(sX + iconOffset, sY - 12, "⟳", "Repeats");
-                        text.setAttribute("font-size", "14px");
-                        group.appendChild(text);
-                    }
-                    
                     svg.appendChild(group);
                 }
             });
