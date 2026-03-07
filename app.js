@@ -14329,7 +14329,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     html += `</div>`;
    
     // 7. 🎯 THE FINAL PUSH: Inject the completed string into the DOM
-    contentWrapper.innerHTML = htmlContent;
+    contentWrapper.innerHTML = html;
 
     // 8. Visual Updates
     setTimeout(() => OL.scrollToCanvasNode(targetId), 50);
