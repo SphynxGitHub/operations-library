@@ -9158,6 +9158,13 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             <div class="v2-ui-overlay">
                 <div class="v2-master-toolbar">
                     <div class="v2-toolbar">
+                        <div class="canvas-search-wrap" style="display: flex; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 10px; margin-right: 4px;">
+                            <span style="font-size: 12px; opacity: 0.5;">🔍</span>
+                            <input type="text" id="canvas-filter-input" 
+                                placeholder="Search canvas..." 
+                                oninput="OL.filterCanvasNodes(this.value)"
+                                style="background: transparent; border: none; color: white; font-size: 11px; width: 150px; outline: none;">
+                        </div>
                         <button class="btn primary" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
                         <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
                         <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
@@ -9200,6 +9207,42 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         OL.initV2Panning();
         OL.drawV2Connections();
     }, 100);
+};
+
+OL.filterCanvasNodes = function(query) {
+    const q = query.toLowerCase().trim();
+    const cards = document.querySelectorAll('.v2-node-card');
+    const connections = document.querySelectorAll('.v2-connection-group');
+
+    if (!q) {
+        // Reset everything if search is empty
+        cards.forEach(c => c.classList.remove('node-dimmed', 'node-matched'));
+        connections.forEach(l => l.style.opacity = "1");
+        return;
+    }
+
+    cards.forEach(card => {
+        const id = card.id.replace('v2-node-', '');
+        const res = OL.getResourceById(id);
+        if (!res) return;
+
+        // 🔍 Deep Search: Check name OR internal steps
+        const nameMatch = (res.name || "").toLowerCase().includes(q);
+        const stepMatch = (res.steps || []).some(s => (s.name || s.text || "").toLowerCase().includes(q));
+
+        if (nameMatch || stepMatch) {
+            card.classList.remove('node-dimmed');
+            card.classList.add('node-matched');
+        } else {
+            card.classList.add('node-dimmed');
+            card.classList.remove('node-matched');
+        }
+    });
+
+    // 🕸️ Optional: Dim connections that don't lead to a match
+    connections.forEach(line => {
+        line.style.opacity = "0.1";
+    });
 };
 
 OL.editStageName = function(event, index) {
