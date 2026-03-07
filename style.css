@@ -4368,6 +4368,10 @@ ARROWS
     border-bottom: 1px solid rgba(255,255,255,0.05);
     display: flex;
     gap: 8px;
+    pointer-events: auto;
+    cursor: pointer;
+    position: relative;
+    Z-index: 10;
 }
 
 .v2-step-number {
@@ -4398,6 +4402,7 @@ ARROWS
 
 .v2-step-item:hover .v2-step-eject {
     opacity: 1; /* Show on hover */
+    background: rgba(56, 189, 248, 0.15)
 }
 
 .v2-step-eject:hover {
@@ -4436,11 +4441,6 @@ ARROWS
 
 .v2-node-card.is-resource {
     border: 2px solid rgba(56, 189, 248, 0.3);
-}
-
-.v2-step-item {
-    position: relative;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .step-port-out {

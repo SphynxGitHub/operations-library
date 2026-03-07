@@ -9690,7 +9690,10 @@ OL.startNodeDrag = function(e, nodeId) {
     
     // 🛡️ 2. Step Shield: If clicking an internal step row, 
     // let the Step's own click/inspector logic handle it.
-    if (e.target.closest('.v2-step-item')) return;
+    if (e.target.closest('.v2-step-item')) {
+        console.log("👆 Step clicked, skipping card drag.");
+        return; 
+    }
 
     e.preventDefault();
     state.v2.activeDragId = nodeId;
@@ -10085,7 +10088,8 @@ function renderV2Nodes(isVault) {
             const portOutId = `port-out-${node.id}-step-${i}`;
 
             return `
-                <div class="v2-step-item" style="position: relative;"
+                <div class="v2-step-item"
+                    onmousedown="event.stopPropagation();"
                     onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${node.id}')">
                     <div class="v2-port step-port-in" id="${portInId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})"></div>
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 12px;">
