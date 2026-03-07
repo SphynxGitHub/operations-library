@@ -9488,6 +9488,7 @@ OL.startNodeDrag = function(e, nodeId) {
     // 🔥 WAKE UP THE ZONE
     const zone = document.getElementById('unmap-zone');
     if (zone) zone.classList.add('visible'); 
+    console.log("🚨 Unmap Zone Activated");
 
     OL.initWBMotion(e, nodeId);
 };
@@ -12544,7 +12545,7 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
                 </select>
             </div>
 
-            <div id="unmap-zone" 
+            <div id="unmap-zone2" 
                 ondragover="event.preventDefault(); this.classList.add('active');" 
                 ondragleave="this.classList.remove('active');" 
                 ondrop="OL.handleUnmapDrop(event)"
