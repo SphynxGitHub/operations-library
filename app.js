@@ -9669,7 +9669,28 @@ OL.initV2Panning = function() {
     let startX, startY;
 
     viewport.onmousedown = (e) => {
-        if (e.target.closest('.v2-node-card') || e.target.closest('.btn')) return;
+        // 1. 🛡️ Check if we hit a node or UI element
+        if (e.target.closest('.v2-node-card') || e.target.closest('.btn') || e.target.closest('.v2-toolbar')) {
+            return;
+        }
+
+        // 2. 🚀 THE CLOSE LOGIC (Triggered on background click)
+        const isBackground = e.target.id === 'v2-viewport' || 
+                             e.target.id === 'v2-canvas' || 
+                             e.target.id === 'v2-canvas-scroll-wrap' ||
+                             e.target.classList.contains('v2-viewport');
+
+        if (isBackground) {
+            console.log("🌊 Background hit: Closing Inspector");
+            const layout = document.querySelector('.three-pane-layout');
+            if (layout) {
+                layout.classList.add('zen-mode-active');
+                state.activeInspectorResId = null;
+                OL.syncCanvasHighlights(); 
+            }
+        }
+
+        // 3. START PANNING ENGINE
         isPanning = true;
         startX = e.clientX - state.v2.pan.x;
         startY = e.clientY - state.v2.pan.y;
@@ -10169,7 +10190,8 @@ function renderV2Nodes(isVault) {
             <div class="v2-node-card ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
-                onmousedown="OL.startNodeDrag(event, '${node.id}')">
+                onclick="event.stopPropagation(); OL.loadInspector('${node.id})"
+                onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')">
 
                 ${cornerLinkers}
 
