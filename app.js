@@ -9281,6 +9281,26 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             </div>
         </div>
     `;
+    // 🌊 THE AUTO-CLOSE LISTENER
+    const viewport = container.querySelector('#v2-viewport');
+    if (viewport) {
+        viewport.addEventListener('mousedown', (e) => {
+            // Only trigger if clicking the empty grid or the scroll wrap
+            const isBackground = e.target.id === 'v2-viewport' || 
+                                 e.target.id === 'v2-canvas' || 
+                                 e.target.id === 'v2-canvas-scroll-wrap';
+            
+            if (isBackground) {
+                console.log("🌊 Canvas background clicked: Closing Inspector");
+                const layout = document.querySelector('.three-pane-layout');
+                if (layout) {
+                    layout.classList.add('zen-mode-active');
+                    state.activeInspectorResId = null;
+                    OL.syncCanvasHighlights(); // Clear the yellow/blue glowing borders
+                }
+            }
+        });
+    }
 
     // 🚀 POST-RENDER NODE SORTING
     // We need to physically move Global nodes into the shelf
@@ -14386,6 +14406,9 @@ OL.ensureInspectorSkeleton = function() {
 };
 
 OL.initSideResizers = function() {
+    const layout = document.querySelector('.three-pane-layout');
+    if (!layout) return;
+
     const resizablePanes = [
         { id: 'pane-drawer', side: 'left', storageKey: 'ol_toolbox_width' },
         { id: 'inspector-panel', side: 'right', storageKey: 'ol_inspector_width' }
@@ -14395,49 +14418,51 @@ OL.initSideResizers = function() {
         const pane = document.getElementById(config.id);
         if (!pane) return;
 
-        // 🚀 THE FIX: If resizer already exists, don't delete/re-add it
-        if (pane.querySelector('.sidebar-resizer')) return;
+        // Ensure we find or create the correct resizer handle
+        let resizer = pane.querySelector('.sidebar-resizer');
+        if (!resizer) {
+            resizer = document.createElement('div');
+            // 'right-side-handle' helps our CSS identify the inspector handle specifically
+            resizer.className = `sidebar-resizer ${config.side === 'right' ? 'right-side-handle' : ''}`;
+            pane.prepend(resizer);
+        }
 
-        const resizer = document.createElement('div');
-        resizer.className = 'sidebar-resizer';
-        // We use prepend so it stays at the top of the DOM inside the sidebar
-        pane.prepend(resizer); 
-
-        let startX, startWidth;
-
-        resizer.addEventListener('mousedown', (e) => {
-            startX = e.clientX;
-            // Get current computed width
-            startWidth = pane.offsetWidth;
+        resizer.onmousedown = (e) => {
+            e.preventDefault();
+            document.body.classList.add('resizing-active');
             
-            resizer.classList.add('is-dragging');
-            document.body.classList.add('resizing-active'); // For cursor locking
+            // Get current grid state
+            const style = window.getComputedStyle(layout);
+            let gridCols = style.gridTemplateColumns.split(' '); 
+            // gridCols is now ['240px', '850px', '380px']
 
-            const doDrag = (e) => {
-                let newWidth = config.side === 'left' 
-                    ? startWidth + (e.clientX - startX)
-                    : startWidth + (startX - e.clientX);
-                
-                if (newWidth > 250 && newWidth < (window.innerWidth * 0.7)) {
-                    // 🚀 THE FIX: Set BOTH width and flex-basis
-                    const widthStr = `${newWidth}px`;
-                    pane.style.width = widthStr;
-                    pane.style.minWidth = widthStr;
-                    pane.style.flex = `0 0 ${widthStr}`;
+            const doDrag = (mE) => {
+                const sidebarWidth = config.side === 'left' ? mE.clientX : parseInt(gridCols[0]);
+                const inspectorWidth = config.side === 'right' ? window.innerWidth - mE.clientX : parseInt(gridCols[2]);
+
+                // Enforce Min/Max constraints
+                const safeSidebar = Math.max(200, Math.min(sidebarWidth, 450));
+                const safeInspector = Math.max(250, Math.min(inspectorWidth, 600));
+
+                // 🚀 THE GRID PUNCH: Update the parent tracks
+                if (config.side === 'left') {
+                    layout.style.gridTemplateColumns = `${safeSidebar}px 1fr ${gridCols[2]}`;
+                } else {
+                    layout.style.gridTemplateColumns = `${gridCols[0]} 1fr ${safeInspector}px`;
                 }
             };
 
             const stopDrag = () => {
-                resizer.classList.remove('is-dragging');
                 document.body.classList.remove('resizing-active');
-                document.removeEventListener('mousemove', doDrag);
-                document.removeEventListener('mouseup', stopDrag);
-                localStorage.setItem(config.storageKey, pane.style.width);
+                window.removeEventListener('mousemove', doDrag);
+                window.removeEventListener('mouseup', stopDrag);
+                // Save the final calculated grid state
+                localStorage.setItem(config.storageKey, layout.style.gridTemplateColumns);
             };
 
-            document.addEventListener('mousemove', doDrag);
-            document.addEventListener('mouseup', stopDrag);
-        });
+            window.addEventListener('mousemove', doDrag);
+            window.addEventListener('mouseup', stopDrag);
+        };
     });
 };
 

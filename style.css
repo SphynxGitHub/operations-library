@@ -2775,7 +2775,14 @@ body.is-visualizer #mainContent {
 
 /* Handle for the RIGHT inspector (on its left edge) */
 #inspector-panel .sidebar-resizer {
-    left: -5px;
+    position: absolute;
+    left: -4px; /* Hang 4px into the canvas area */
+    top: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10001; /* Higher than canvas icons */
+    background: transparent;
 }
 
 /* 3. VISUAL GRABBER (The "Line") */
