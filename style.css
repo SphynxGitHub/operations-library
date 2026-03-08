@@ -126,7 +126,6 @@ body {
 }
 
 #mainContent {
-    flex: 1;
     margin-left: 240px; 
     padding: 40px;
     height: auto;
@@ -2701,6 +2700,7 @@ body.is-visualizer #mainContent {
 
 /* 🎨 THE CANVAS AREA (Slot 2) */
 #mainContent, .v2-workbench-shell, .pane-canvas-wrap {
+    flex: 1;
     grid-column: 2;
     position: relative;
     width: 100%;
