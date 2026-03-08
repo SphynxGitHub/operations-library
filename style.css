@@ -248,6 +248,16 @@ body {
     transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 🎨 THE CANVAS AREA */
+#mainContent, .v2-workbench-shell {
+    position: absolute;
+    top: 0;
+    left: 280px; /* Sidebar width */
+    right: 0;
+    bottom: 0;
+    transition: right 0.3s ease; /* Slide when inspector opens */
+}
+
 body:has(.sidebar.collapsed) #mainContent {
     margin-left: 65px;
 }
@@ -2695,28 +2705,28 @@ body.is-visualizer #mainContent {
 }
 
 .three-pane-layout {
-    display: grid;
-    grid-template-columns: var(--sidebar-width, 280px) 1fr 0px; /* Hidden by default */
+    display: block;
+    position: relative;
     width: 100vw;
     height: calc(100vh); /* Adjust based on your top nav height */
     overflow: hidden;
     transition: grid-template-columns 0.3s ease;
 }
 
-/* When no sidebar is present, let the canvas take the full starting width */
-.three-pane-layout.no-sidebar .pane-canvas-wrap {
-    padding-left: 0;
-    margin-left: 0;
+/* 🌙 When Closed (Zen Mode) */
+.three-pane-layout.zen-mode-active #inspector-panel {
+    transform: translateX(100%); /* Slide off-screen to the right */
 }
 
-.three-pane-layout:not(.zen-mode-active) {
-    display: grid;
-    grid-template-columns: var(--sidebar-width, 280px) 1fr 380px; /* 380px width for inspector */
+/* ☀️ When Open (Non-Zen Mode) */
+.three-pane-layout:not(.zen-mode-active) #inspector-panel {
+    transform: translateX(0);
 }
 
-/* 🌙 When in Zen Mode (Inspector Closed) */
-.three-pane-layout.zen-mode-active {
-    grid-template-columns: var(--sidebar-width, 280px) 1fr 0px;
+/* 📏 Shrink the canvas when inspector is open so they don't overlap */
+.three-pane-layout:not(.zen-mode-active) #mainContent,
+.three-pane-layout:not(.zen-mode-active) .v2-workbench-shell {
+    right: 380px;
 }
 
 /* Hide the Toolbox divider line if it exists in global mode */
@@ -3239,14 +3249,6 @@ body.is-visualizer #mainContent {
 .stage-workflow-stream.drag-over {
     background: rgba(56, 189, 248, 0.05) !important;
     border-color: var(--accent) !important;
-}
-
-#v2-workbench-target, #fs-canvas {
-    grid-column: 2; /* Middle column */
-    width: 100%;
-    height: 100%;
-    position: relative;
-    overflow: hidden; /* Canvas handles its own panning */
 }
 
 /* 🚀 THE INTERNAL SCROLL WINDOW */
@@ -3878,16 +3880,20 @@ ARROWS
     overflow-y: auto;
 }
 
+/* 🕵️ THE INSPECTOR: Pinned to the Right */
 #inspector-panel {
-    grid-column: 3; /* Force to the 3rd column */
-    width: 100%;    /* Fill the 380px slot */
-    height: 100%;
+    position: absolute;
+    top: 0;
+    right: 0; /* 📌 PIN TO RIGHT */
+    width: 380px;
+    height: 100vh;
     background: #0f172a;
     border-left: 1px solid rgba(255,255,255,0.1);
-    display: flex !important; 
+    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+    z-index: 10000; /* Above the canvas */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex !important;
     flex-direction: column;
-    overflow: hidden;
-    z-index: 1000;
 }
 
 #inspector-panel.pane-inspector {
