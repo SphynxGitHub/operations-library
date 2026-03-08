@@ -81,13 +81,6 @@ body.light-mode {
 
 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-size: 11px;}
 
-/* Ensure transition is smooth */
-body {
-    transition: background-color 0.3s, color 0.3s;
-    background-color: var(--bg);
-    color: var(--text);
-}
-
 html {
     background-color: var(--bg); /* Set once at the highest level */
 }
@@ -2699,7 +2692,7 @@ body.is-visualizer #mainContent {
 
 /* 🌙 When Sidebar is Collapsed */
 .three-pane-layout:has(.sidebar.collapsed) {
-    grid-template-columns: 65px 1fr 0px;
+    grid-template-columns: 0px 1fr 0px;
 }
 
 .three-pane-layout:has(.sidebar.collapsed):not(.zen-mode-active) {
