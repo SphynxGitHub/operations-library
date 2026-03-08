@@ -2679,7 +2679,7 @@ body.fs-mode-active {
 }
 
 body.is-visualizer #mainContent {
-    padding: 10px 10px 40px 10px !important;
+    padding: 10px 10px 40px 0 !important;
 }
 
 .three-pane-layout {
@@ -2692,9 +2692,18 @@ body.is-visualizer #mainContent {
     transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ☀️ When Open (Non-Zen Mode) */
+/* ☀️ When Inspector is Open */
 .three-pane-layout:not(.zen-mode-active) {
     grid-template-columns: 240px 1fr 380px;
+}
+
+/* 🌙 When Sidebar is Collapsed */
+.three-pane-layout:has(.sidebar.collapsed) {
+    grid-template-columns: 65px 1fr 0px;
+}
+
+.three-pane-layout:has(.sidebar.collapsed):not(.zen-mode-active) {
+    grid-template-columns: 65px 1fr 380px;
 }
 
 /* 🎨 THE CANVAS AREA (Slot 2) */
