@@ -249,13 +249,12 @@ body {
 }
 
 /* 🎨 THE CANVAS AREA */
-#mainContent, .v2-workbench-shell {
-    position: absolute;
-    top: 0;
-    left: 280px; /* Sidebar width */
-    right: 0;
-    bottom: 0;
-    transition: right 0.3s ease; /* Slide when inspector opens */
+/* Ensure the central canvas fills the middle slot */
+#mainContent, .v2-workbench-shell, .pane-canvas-wrap {
+    grid-column: 2;
+    position: relative;
+    width: 100%;
+    height: 100%;
 }
 
 body:has(.sidebar.collapsed) #mainContent {
@@ -2705,12 +2704,13 @@ body.is-visualizer #mainContent {
 }
 
 .three-pane-layout {
-    display: block;
-    position: relative;
+    display: grid !important;
+    /* [Sidebar] [Central Canvas] [Inspector] */
+    grid-template-columns: 240px 1fr 0px; 
     width: 100vw;
-    height: calc(100vh); /* Adjust based on your top nav height */
+    height: 100vh;
     overflow: hidden;
-    transition: grid-template-columns 0.3s ease;
+    transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 🌙 When Closed (Zen Mode) */
@@ -2719,8 +2719,8 @@ body.is-visualizer #mainContent {
 }
 
 /* ☀️ When Open (Non-Zen Mode) */
-.three-pane-layout:not(.zen-mode-active) #inspector-panel {
-    transform: translateX(0);
+.three-pane-layout:not(.zen-mode-active) {
+    grid-template-columns: 240px 1fr 380px;
 }
 
 /* 📏 Shrink the canvas when inspector is open so they don't overlap */
@@ -3880,20 +3880,16 @@ ARROWS
     overflow-y: auto;
 }
 
-/* 🕵️ THE INSPECTOR: Pinned to the Right */
+/* 🕵️ THE INSPECTOR PANEL */
 #inspector-panel {
-    position: absolute;
-    top: 0;
-    right: 0; /* 📌 PIN TO RIGHT */
-    width: 380px;
+    grid-column: 3; /* Always stay in the 3rd slot */
     height: 100vh;
-    background: #0f172a;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
-    z-index: 10000; /* Above the canvas */
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--panel);
+    border-left: 1px solid var(--panel-border);
     display: flex !important;
     flex-direction: column;
+    overflow: hidden;
+    z-index: 1000;
 }
 
 #inspector-panel.pane-inspector {
