@@ -9281,22 +9281,35 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             </div>
         </div>
     `;
-    // 🌊 THE AUTO-CLOSE LISTENER
+    // 🌊 THE AUTO-CLOSE LISTENER (Optimized for Grid)
     const viewport = container.querySelector('#v2-viewport');
     if (viewport) {
         viewport.addEventListener('mousedown', (e) => {
-            // Only trigger if clicking the empty grid or the scroll wrap
-            const isBackground = e.target.id === 'v2-viewport' || 
-                                 e.target.id === 'v2-canvas' || 
-                                 e.target.id === 'v2-canvas-scroll-wrap';
-            
-            if (isBackground) {
+            // 1. 🛡️ Check if we hit a card, a button, or a port
+            if (e.target.closest('.v2-node-card') || e.target.closest('.btn') || e.target.closest('.v2-port')) {
+                return; // Let those elements handle their own clicks
+            }
+
+            // 2. 🚀 ACTIVATE ZEN MODE (Close Inspector)
+            // If the click was on the background of the viewport or canvas...
+            const isCanvasBackground = e.target.classList.contains('v2-viewport') || 
+                                       e.target.id === 'v2-canvas' || 
+                                       e.target.id === 'v2-canvas-scroll-wrap';
+
+            if (isCanvasBackground) {
                 console.log("🌊 Canvas background clicked: Closing Inspector");
+                
+                // Reach up to the master layout container
                 const layout = document.querySelector('.three-pane-layout');
                 if (layout) {
                     layout.classList.add('zen-mode-active');
+                    
+                    // Clear state focus
                     state.activeInspectorResId = null;
-                    OL.syncCanvasHighlights(); // Clear the yellow/blue glowing borders
+                    state.activeInspectorParentId = null;
+                    
+                    // 🪄 Visual Polish: Update the zoom/pan logic if needed
+                    OL.syncCanvasHighlights(); 
                 }
             }
         });
@@ -9674,6 +9687,11 @@ OL.initV2Panning = function() {
             return;
         }
 
+        if (!e.target.closest('.v2-node-card') && !e.target.closest('.btn')) {
+             const layout = document.querySelector('.three-pane-layout');
+             if (layout) layout.classList.add('zen-mode-active');
+        }
+        
         // 2. 🚀 THE CLOSE LOGIC (Triggered on background click)
         const isBackground = e.target.id === 'v2-viewport' || 
                              e.target.id === 'v2-canvas' || 
