@@ -9691,7 +9691,7 @@ OL.initV2Panning = function() {
              const layout = document.querySelector('.three-pane-layout');
              if (layout) layout.classList.add('zen-mode-active');
         }
-        
+
         // 2. 🚀 THE CLOSE LOGIC (Triggered on background click)
         const isBackground = e.target.id === 'v2-viewport' || 
                              e.target.id === 'v2-canvas' || 
@@ -10208,7 +10208,6 @@ function renderV2Nodes(isVault) {
             <div class="v2-node-card ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
-                onclick="event.stopPropagation(); OL.loadInspector('${node.id})"
                 onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')">
 
                 ${cornerLinkers}
@@ -10227,7 +10226,9 @@ function renderV2Nodes(isVault) {
                     <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
                 </div>
                 
-                <div class="v2-node-body" style="text-align: ${isLooseStep ? 'right' : 'left'}; pointer-events: none; padding-right: ${isLooseStep ? '4px' : '0'};">
+                <div class="v2-node-body" 
+                onclick="event.stopPropagation(); OL.loadInspector('${node.id})"
+                style="text-align: ${isLooseStep ? 'right' : 'left'}; padding-right: ${isLooseStep ? '4px' : '0'};">
                     ${esc(node.name || node.text || "Untitled Step")}
                 </div>
 
