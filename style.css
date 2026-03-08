@@ -126,7 +126,6 @@ body {
 }
 
 #mainContent {
-    margin-left: 240px; 
     padding: 40px;
     height: auto;
     /* 🚀 THE FIX: Use variables for the gradient colors */
