@@ -2695,11 +2695,12 @@ body.is-visualizer #mainContent {
 }
 
 .three-pane-layout {
-    display: flex;
-    flex-direction: row;
-    width: 100% !important;
+    display: grid;
+    grid-template-columns: var(--sidebar-width, 280px) 1fr 0px; /* Hidden by default */
+    width: 100vw;
     height: calc(100vh); /* Adjust based on your top nav height */
     overflow: hidden;
+    transition: grid-template-columns 0.3s ease;
 }
 
 /* When no sidebar is present, let the canvas take the full starting width */
@@ -2710,9 +2711,13 @@ body.is-visualizer #mainContent {
 
 .three-pane-layout:not(.zen-mode-active) {
     display: grid;
-    grid-template-columns: var(--sidebar-width, 280px) 1fr 350px; /* Force 3 columns */
+    grid-template-columns: var(--sidebar-width, 280px) 1fr 380px; /* 380px width for inspector */
 }
 
+/* 🌙 When in Zen Mode (Inspector Closed) */
+.three-pane-layout.zen-mode-active {
+    grid-template-columns: var(--sidebar-width, 280px) 1fr 0px;
+}
 
 /* Hide the Toolbox divider line if it exists in global mode */
 .no-sidebar .pane-drawer {
@@ -3234,6 +3239,14 @@ body.is-visualizer #mainContent {
 .stage-workflow-stream.drag-over {
     background: rgba(56, 189, 248, 0.05) !important;
     border-color: var(--accent) !important;
+}
+
+#v2-workbench-target, #fs-canvas {
+    grid-column: 2; /* Middle column */
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden; /* Canvas handles its own panning */
 }
 
 /* 🚀 THE INTERNAL SCROLL WINDOW */
@@ -3866,13 +3879,15 @@ ARROWS
 }
 
 #inspector-panel {
-    width: 350px;
+    grid-column: 3; /* Force to the 3rd column */
+    width: 100%;    /* Fill the 380px slot */
+    height: 100%;
     background: #0f172a;
-    border-left: 1px solid var(--panel-border);
-    transition: transform 0.3s ease, margin-right 0.3s ease;
-    display: flex !important; /* Always in DOM */
+    border-left: 1px solid rgba(255,255,255,0.1);
+    display: flex !important; 
     flex-direction: column;
-    min-height: 100vh;
+    overflow: hidden;
+    z-index: 1000;
 }
 
 #inspector-panel.pane-inspector {
