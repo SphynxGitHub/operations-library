@@ -13962,7 +13962,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     layout.classList.remove('zen-mode-active');
 
     // 3. 🏗️ THE SKELETON: Prepare the scroll container
-    let contentWrapper = panel.querySelector('.inspector-scroll-content');
+    let contentWrapper = panel?.querySelector('.inspector-scroll-content');
     if (!contentWrapper) {
         panel.innerHTML = `
             <div class="sidebar-resizer right-side-handle"></div>

@@ -2708,6 +2708,11 @@ body.is-visualizer #mainContent {
     margin-left: 0;
 }
 
+.three-pane-layout:not(.zen-mode-active) {
+    display: grid;
+    grid-template-columns: var(--sidebar-width, 280px) 1fr 350px; /* Force 3 columns */
+}
+
 
 /* Hide the Toolbox divider line if it exists in global mode */
 .no-sidebar .pane-drawer {
@@ -3865,7 +3870,9 @@ ARROWS
     background: #0f172a;
     border-left: 1px solid var(--panel-border);
     transition: transform 0.3s ease, margin-right 0.3s ease;
-    display: block !important; /* Always in DOM */
+    display: flex !important; /* Always in DOM */
+    flex-direction: column;
+    min-height: 100vh;
 }
 
 #inspector-panel.pane-inspector {
@@ -3881,6 +3888,8 @@ ARROWS
     overflow-x: hidden;
     width: 100%;
     height: 100%;
+    display: block;
+    visibility: visible;
 }
 
 /* 2. The Invisible Resize Handle */
