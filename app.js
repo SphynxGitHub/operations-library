@@ -14214,18 +14214,42 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 🚀 NEW: ENTRANCE LOGIC (The "Incoming" Scanner)
+    // 🚀 UPDATED: ENTRANCE LOGIC (The "Universal" Scanner)
     // ------------------------------------------------------------
-    // 1. Scan for all steps in the library that point to THIS targetId
-    const incomingPaths = allResources.flatMap(res => 
+
+    // 1. Scan for standard "Jump" logic (Outcomes)
+    const flowInbound = allResources.flatMap(res => 
         (res.steps || []).flatMap(step => 
             (step.outcomes || []).filter(oc => {
                 const tid = oc.targetId || oc.action?.replace('jump_step_', '').replace('jump_res_', '');
                 return String(tid) === String(targetId);
-            }).map(oc => ({ parentRes: res, sourceStep: step, outcome: oc }))
+            }).map(oc => ({ 
+                parentRes: res, 
+                sourceName: step.name || res.name, 
+                sourceId: step.id || res.id,
+                type: 'Logic Path',
+                detail: oc.condition || 'Always' 
+            }))
         )
     );
 
+    // 2. Scan for "Leash" logic (Parent -> Child)
+    const leashInbound = allResources.filter(res => {
+        // Find if any resource lists THIS targetId as its child
+        // Or if the current data object has a parentId pointing to another resource
+        return String(data.parentId) === String(res.id);
+    }).map(parent => ({
+        parentRes: parent,
+        sourceName: parent.name,
+        sourceId: parent.id,
+        type: 'Parent Leash',
+        detail: 'Structural Connection'
+    }));
+
+    // 3. Combine both types of incoming connections
+    const incomingPaths = [...flowInbound, ...leashInbound];
+
+    // Update the HTML generation to show the specific connection type
     html += `
         <div class="card-section" style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); margin-top:20px;">
             <label class="modal-section-label" style="color:#a855f7;">📥 ENTRANCE SOURCES (Inbound Logic)</label>
@@ -14233,23 +14257,17 @@ OL.loadInspector = function(targetId, parentId = null) {
             <div id="incoming-paths-list" style="margin-bottom: 12px;">
                 ${incomingPaths.map(path => `
                     <div class="pill soft is-clickable" style="display:flex; align-items:center; gap:8px; margin-bottom:5px; background: rgba(0,0,0,0.2);"
-                        onclick="OL.loadInspector('${path.sourceStep.id}', '${path.parentRes.id}')">
-                        <span style="font-size:10px;">⬅️</span>
+                        onclick="OL.loadInspector('${path.sourceId}')">
+                        <span style="font-size:10px;">${path.type === 'Parent Leash' ? '🐕' : '⬅️'}</span>
                         <div style="flex:1;">
-                            <div style="font-size:10px; font-weight:bold;">${esc(path.sourceStep.name)}</div>
-                            <div style="font-size:8px; opacity:0.6;">Condition: ${esc(path.outcome.condition || 'Always')}</div>
+                            <div style="font-size:10px; font-weight:bold;">${esc(path.sourceName)}</div>
+                            <div style="font-size:8px; opacity:0.6;">${path.type}: ${esc(path.detail)}</div>
                         </div>
                         <span class="tiny muted">Inspect ➔</span>
                     </div>
                 `).join('') || '<div class="tiny muted italic">No incoming logic paths found.</div>'}
             </div>
-
-            <div class="search-map-container">
-                <input type="text" class="modal-input tiny" placeholder="+ Connect a Source Step..." 
-                    onfocus="OL.filterEntranceSourceSearch('${targetId}', '')"
-                    oninput="OL.filterEntranceSourceSearch('${targetId}', this.value)">
-                <div id="entrance-source-results" class="search-results-overlay"></div>
-            </div>
+            ...
         </div>`;
 
     // ------------------------------------------------------------
