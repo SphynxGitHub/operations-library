@@ -6368,12 +6368,15 @@ OL.executeAssignment = async function(parentId, stepId, isTrigger, memberId, mem
     if (!res) return;
 
     await OL.updateAndSync(() => {
-        const step = (res.steps || []).find(s => String(s.id) === String(stepId));
-        const target = step || res; // Apply to step if found, otherwise the resource root
+        const isFullResource = String(parentId) === String(stepId);
+        const target = isFullResource ? res : (res.steps || []).find(s => String(s.id) === String(stepId));
 
-        target.assigneeId = memberId;
-        target.assigneeName = memberName;
-        target.assigneeType = type; // 'person', 'role', or 'system'
+        if (target) {
+            target.assigneeId = memberId;
+            target.assigneeName = memberName;
+            target.assigneeType = type; // 'person', 'role', or 'system'
+            console.log(`✅ Assigned ${memberName} to ${isFullResource ? 'Resource' : 'Step'}`);
+        }
     });
 
     OL.loadInspector(stepId, parentId);
@@ -6610,27 +6613,44 @@ OL.updateSopStep = function (resId, stepId, field, value) {
   }
 };
 
-OL.updateAtomicStep = async function(parentId, stepId, field, value) {
+OL.updateAtomicStep = async function(parentId, targetId, field, value) {
+    // 1. Identify the Resource context
     const res = OL.getResourceById(parentId);
-    if (!res) return;
+    if (!res) return console.error("❌ Context Resource not found:", parentId);
 
     await OL.updateAndSync(() => {
-        const step = (res.steps || []).find(s => String(s.id) === String(stepId));
-        if (step) {
-            // Save the value (Date string or Member ID)
-            step[field] = value;
+        // 🎯 THE SWITCH
+        // If targetId === parentId, we are updating the FULL RESOURCE
+        // If they differ, we are updating a STEP inside that resource
+        const isFullResource = String(parentId) === String(targetId);
+        
+        if (isFullResource) {
+            console.log(`💾 Saving [${field}] to Full Resource: ${res.name}`);
+            res[field] = value;
             
-            // 🚀 SYNC NAMES: If assigning a member, fetch the name for the UI
+            // 🚀 Special Case: Sync Name to Assignment
             if (field === 'assigneeId') {
                 const client = getActiveClient();
                 const member = client?.projectData?.teamMembers?.find(m => m.id === value);
-                step.assigneeName = member ? member.name : "Unassigned";
+                res.assigneeName = member ? member.name : "Unassigned";
+            }
+        } else {
+            const step = (res.steps || []).find(s => String(s.id) === String(targetId));
+            if (step) {
+                console.log(`💾 Saving [${field}] to Step: ${step.name}`);
+                step[field] = value;
+                
+                if (field === 'assigneeId') {
+                    const client = getActiveClient();
+                    const member = client?.projectData?.teamMembers?.find(m => m.id === value);
+                    step.assigneeName = member ? member.name : "Unassigned";
+                }
             }
         }
     });
 
-    // 🔄 REFRESH: Repaint Inspector and Canvas highlights
-    OL.loadInspector(stepId, parentId);
+    // 🔄 REFRESH: Reload the inspector to show the saved state
+    OL.loadInspector(targetId, parentId);
 };
 
 OL.removeSopStep = function (resId, stepId) {
