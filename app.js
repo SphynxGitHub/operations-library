@@ -9966,6 +9966,9 @@ OL.initWBMotion = function(e, id) {
                     if (!movingRes) return;
 
                     if (isUnmapDrop) {
+                        const res = OL.getResourceById(id);
+                        node.text = res?.name || node.name;
+                        
                         delete movingRes.coords; 
                         movingRes.parentId = null;
                         movingRes.isGlobal = false;
@@ -10252,14 +10255,15 @@ function renderV2Nodes(isVault) {
 
         const isSelected = state.v2.selectedNodes.has(String(node.id));
       
-        const id = String(node.id);
-        
-        // If node.id fails, check if node.resourceLinkId holds the real ID.
-        let res = OL.getResourceById(id) || (node.resourceLinkId ? OL.getResourceById(node.resourceLinkId) : null);
-        if (!res) {
-            res = (state.master.resources || []).find(r => r.id === id || r.masterRefId === id);
-        }
-        const displayName = res ? res.name : (node.text || "Unknown Resource");
+        const nodeID = String(node.id);
+
+        // 1. Try to find the Resource directly in the Project (Local)
+        let res = OL.getResourceById(nodeID);
+
+        // 2. 🚀 THE PARACHUTE FIX: 
+        // If it's a loose step, its name might be stored in 'node.text' 
+        // or as a 'resourceLinkId' reference.
+        const displayName = res?.name || node.text || node.name || "Untitled Step";
 
         return `
             <div class="v2-node-card ${isSelected ? 'is-selected' : ''} ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
