@@ -6364,24 +6364,37 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
 };
 
 OL.executeAssignment = async function(parentId, stepId, isTrigger, memberId, memberName, type) {
-    // 🛡️ Guard: If parentId is undefined or matches stepId, use stepId as the root
-    const rootId = (parentId === 'undefined' || !parentId || parentId === stepId) ? stepId : parentId;
+    // 🛡️ Resolve Context: If they are equal, it's a Resource. If not, it's a Step.
+    const isResourceLevel = String(parentId) === String(stepId);
     
-    const res = OL.getResourceById(rootId);
-    if (!res) return console.error("❌ Context Resource not found for assignment");
-
     await OL.updateAndSync(() => {
-        const isFullResource = String(res.id) === String(stepId);
-        const target = isFullResource ? res : (res.steps || []).find(s => String(s.id) === String(stepId));
+        const res = OL.getResourceById(parentId);
+        if (!res) return console.error("❌ Context Resource not found");
 
-        if (target) {
-            target.assigneeId = memberId;
-            target.assigneeName = memberName;
-            target.assigneeType = type; // 'person', 'role', or 'system'
+        if (isResourceLevel) {
+            // 🏰 Apply to Resource Root
+            res.assigneeId = memberId;
+            res.assigneeName = memberName;
+            res.assigneeType = type;
+        } else {
+            // 📝 Apply to specific Step inside the Resource
+            if (!res.steps) res.steps = [];
+            const step = res.steps.find(s => String(s.id) === String(stepId));
+            
+            if (step) {
+                step.assigneeId = memberId;
+                step.assigneeName = memberName;
+                step.assigneeType = type;
+                console.log(`✅ Step [${step.name}] assigned to ${memberName}`);
+            } else {
+                // 🚨 Fallback: Check if it's a 'link' type step
+                console.error("❌ Step object not found in parent array. Check ID mapping.");
+            }
         }
     });
 
-    OL.loadInspector(stepId, rootId);
+    // 🔄 Force UI to show the data we just saved
+    OL.loadInspector(stepId, parentId);
     OL.refreshMap();
 };
 
