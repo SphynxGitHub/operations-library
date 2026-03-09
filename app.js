@@ -11311,28 +11311,39 @@ OL.ejectStep = async function(resourceId, stepIdx) {
     const stepData = parentNode.steps[stepIdx];
 
     await OL.updateAndSync(() => {
-        // 1. Create the new independent node
+        // 1. 🚀 THE IDENTITY FIX:
+        // Try to get the name from the existing resource link if it exists
+        const linkedRes = OL.getResourceById(stepData.resourceLinkId);
+        const stableName = linkedRes?.name || stepData.text || stepData.name || "New SOP";
+
         const newNode = {
-            id: 'sop-' + Date.now(),
-            name: stepData.text,
-            type: 'SOP',
-            parentId: resourceId, // 🚀 THE LEASH: Keeps track of where it came from
-            parentName: parentNode.name,
+            id: stepData.resourceLinkId || ('sop-' + Date.now()), // Keep ID if possible
+            name: stableName,
+            type: linkedRes?.type || 'SOP',
+            parentId: resourceId, 
             coords: {
-                x: (parentNode.coords?.x || 0) + 300, // Spawn it to the right
+                x: (parentNode.coords?.x || 0) + 300,
                 y: (parentNode.coords?.y || 0) + (stepIdx * 50)
             },
-            steps: []
+            steps: linkedRes?.steps || []
         };
 
-        source.push(newNode);
+        // 2. Only push if it's not already in the library (deduplicate)
+        const exists = source.find(r => r.id === newNode.id);
+        if (!exists) {
+            source.push(newNode);
+        } else {
+            // If it exists, just update its connection status
+            exists.parentId = resourceId;
+            exists.coords = newNode.coords;
+        }
 
-        // 2. Remove from parent
+        // 3. Remove from parent's internal step array
         parentNode.steps.splice(stepIdx, 1);
     });
 
     renderVisualizerV2(isVault);
-    console.log("🪂 Step ejected and transformed into loose SOP");
+    console.log(`🪂 Ejected "${stepData.name}" successfully.`);
 };
 
 OL.handleNodeClick = async function(nodeId) {
