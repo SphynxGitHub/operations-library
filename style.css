@@ -127,6 +127,7 @@ body {
     background-attachment: fixed;
     background-size: cover;
     transition: background 0.3s ease;
+    overflow-y: auto;
 }
 
 /* ============================================================
@@ -2673,6 +2674,16 @@ body.fs-mode-active {
 
 body.is-visualizer #mainContent {
     padding: 10px 10px 40px 0 !important;
+}
+
+/* 🔒 Keep the Workbench locked (no browser scroll, use canvas pan) */
+body.view-workbench #mainContent {
+    overflow: hidden !important;
+}
+
+/* Ensure the scoping grid itself doesn't trap the scroll */
+.scoping-grid, .rounds-container {
+    overflow: visible !important;
 }
 
 .three-pane-layout {
