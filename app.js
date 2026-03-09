@@ -14218,7 +14218,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     // ------------------------------------------------------------
     const incomingPaths = [];
     const normalizedTargetId = String(targetId).trim();
-    
+
     // Search through every resource in the project
     allResources.forEach(res => {
         // Check 1: Does the Resource itself point to our target?
@@ -14275,7 +14275,6 @@ OL.loadInspector = function(targetId, parentId = null) {
                     </div>
                 `).join('') || '<div class="tiny muted italic">No incoming logic paths found in this project.</div>'}
             </div>
-            ...
         </div>`;
 
     // ------------------------------------------------------------
