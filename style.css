@@ -4074,8 +4074,6 @@ ARROWS
 }
 
 .v2-canvas-scroll-wrap {
-    /* 🚀 THE LINES: Linear gradient create a 1px line every 300px (matching lane width) */
-    background-image: linear-gradient(to right, rgba(56, 189, 248, 0.1) 1px, transparent 1px);
     background-size: 300px 100%;
     background-repeat: repeat-x;
     background-attachment: local; /* Syncs lines with panning */
