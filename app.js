@@ -8798,6 +8798,8 @@ state.v2.trayTypeFilter = state.v2.trayTypeFilter || 'All';
 
 state.v2.trayExpandedNodes = state.v2.trayExpandedNodes || new Set();
 
+state.v2.selectedNodes = new Set();
+
 // Add this to your global listeners if it's not there
 document.addEventListener('mousedown', (e) => {
     // If we click the background canvas or a card, hide the connection toolbar
@@ -9290,10 +9292,35 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             </div>
         </div>
     `;
+
     // 🌊 THE AUTO-CLOSE LISTENER (Optimized for Grid)
     const viewport = container.querySelector('#v2-viewport');
     if (viewport) {
         viewport.addEventListener('mousedown', (e) => {
+            const card = e.target.closest('.v2-node-card');
+    
+            if (card) {
+                const nodeId = card.id.replace('v2-node-', '');
+                
+                // 🔑 SHIFT + CLICK: Toggle Selection
+                if (e.shiftKey) {
+                    e.stopPropagation();
+                    if (state.v2.selectedNodes.has(nodeId)) state.v2.selectedNodes.delete(nodeId);
+                    else state.v2.selectedNodes.add(nodeId);
+                    renderVisualizerV2(isVault); // Re-render to show dashed lines
+                    return;
+                }
+
+                // 🖱️ NORMAL CLICK: Select ONLY this one if not already part of a group
+                if (!state.v2.selectedNodes.has(nodeId)) {
+                    state.v2.selectedNodes.clear();
+                    state.v2.selectedNodes.add(nodeId);
+                }
+            } else if (!e.target.closest('.v2-toolbar')) {
+                // 🌊 CLICK BACKGROUND: Clear all
+                state.v2.selectedNodes.clear();
+                renderVisualizerV2(isVault);
+            }
             // 1. 🛡️ Check if we hit a card, a button, or a port
             if (e.target.closest('.v2-node-card') || e.target.closest('.btn') || e.target.closest('.v2-port')) {
                 return; // Let those elements handle their own clicks
@@ -9791,6 +9818,12 @@ OL.startNodeDrag = function(e, nodeId) {
         return; 
     }
 
+    if (!state.v2.selectedNodes.has(nodeId)) {
+        state.v2.selectedNodes.clear();
+        state.v2.selectedNodes.add(nodeId);
+        // Optional: renderVisualizerV2(); // To show selection immediately
+    }
+
     e.preventDefault();
     state.v2.activeDragId = nodeId;
     state.v2.isFromTray = false;
@@ -9804,10 +9837,21 @@ OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
     const startX = e.clientX;
     const startY = e.clientY;
+    const zoom = state.v2.zoom || 1;
     
     // 🚀 MOVE THIS HERE: Now both onMove and onUp can see it
     let hasMovedSignificantAmount = false;
-   
+
+    // Capture initial coordinates for every selected node
+    const dragGroup = Array.from(state.v2.selectedNodes).map(nodeId => {
+        const res = OL.getResourceById(nodeId);
+        return {
+            id: nodeId,
+            initialX: res.coords?.x || 0,
+            initialY: res.coords?.y || 0,
+            el: document.getElementById(`v2-node-${nodeId}`)
+        };
+    })
 
     const onMove = (mE) => {
         // 1. 📏 CHECK THRESHOLD
@@ -9822,9 +9866,30 @@ OL.initWBMotion = function(e, id) {
             const zone = document.getElementById('unmap-zone');
             if (zone) zone.classList.add('visible');
             
-            const card = document.getElementById(`v2-node-${id}`);
-            if (card) card.classList.add('is-dragging')
+            // Mark all selected cards as dragging
+            dragGroup.forEach(node => {
+                if (node.el) node.el.classList.add('is-dragging');
+            });
         }
+
+        // 📏 2. CALCULATE DELTA (Relative movement)
+        const dx = (mE.clientX - startX) / zoom;
+        const dy = (mE.clientY - startY) / zoom;
+
+        // 🚀 3. APPLY DELTA TO ALL GHOSTS/ELEMENTS
+        dragGroup.forEach(node => {
+            const newX = node.initialX + dx;
+            const newY = node.initialY + dy;
+
+            // Move the actual DOM element for real-time feedback
+            if (node.el) {
+                node.el.style.left = `${newX}px`;
+                node.el.style.top = `${newY}px`;
+            }
+        });
+
+        // Update SVG connections in real-time
+        OL.drawV2Connections();
 
         const canvas = document.getElementById('v2-canvas');
         const rect = canvas.getBoundingClientRect();
@@ -9889,6 +9954,24 @@ OL.initWBMotion = function(e, id) {
             if (ghost) ghost.remove();
             return; 
         }
+
+        const dx = (uE.clientX - startX) / zoom;
+        const dy = (uE.clientY - startY) / zoom;
+
+        // 💾 4. SECURE SYNC GROUP
+        await OL.updateAndSync(() => {
+            dragGroup.forEach(node => {
+                const movingRes = OL.getResourceById(node.id);
+                if (!movingRes) return;
+
+                // For simplicity, we assume group moves are usually "grid moves"
+                // rather than "drop-into-container" moves, but you can add targetCardEl logic here
+                movingRes.coords = {
+                    x: node.initialX + dx,
+                    y: node.initialY + dy
+                };
+            });
+        });
 
         // --- Everything below only runs if the card was actually DRAGGED ---
 
@@ -10218,7 +10301,7 @@ function renderV2Nodes(isVault) {
             : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
 
         return `
-            <div class="v2-node-card ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
+            <div class="v2-node-card ${state.v2.selectedNodes.has(node.id) ? 'is-selected' : ''} ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')"
