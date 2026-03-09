@@ -14141,7 +14141,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     
     // 🚀 2. RESOLVE THE SPECIFIC DATA OBJECT
     let data;
-    const isStep = parentId && parentId !== targetId;
+    const isStep = parentId && String(parentId) !== String(targetId);
 
     if (isStep) {
         // We are looking at a STEP instance inside a Zap/SOP
