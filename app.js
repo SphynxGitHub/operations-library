@@ -9964,20 +9964,29 @@ OL.initWBMotion = function(e, id) {
                     if (!movingRes) return;
 
                     if (isUnmapDrop) {
-                        // 🚀 THE PARACHUTE FIX: 
-                        // Preserve the actual resource name and type
-                        const stableName = movingRes.name || node.text || "Unnamed Step";
-                        
-                        delete movingRes.coords; 
-                        movingRes.parentId = null;
-                        movingRes.isGlobal = false;
-                        
-                        // Re-assert identity to prevent "Untitled" ghosts
-                        movingRes.name = stableName; 
-                        node.text = stableName; 
+                        const movingRes = OL.getResourceById(node.id);
+                        if (movingRes) {
+                            // 🛡️ THE IDENTITY SHIELD
+                            // We MUST capture the name from the resource OR the node text OR the sidebar
+                            const stableName = movingRes.name || node.text || node.name || "Unnamed Step";
+                            const stableType = movingRes.type || "Action";
 
-                        console.log(`🪂 Parachuted: ${stableName} (Type: ${movingRes.type})`);
-                    } else if (targetCardEl) {
+                            delete movingRes.coords; 
+                            movingRes.parentId = null;
+                            movingRes.isGlobal = false;
+                            
+                            // Burn the identity back into the object so it can't be lost
+                            movingRes.name = stableName;
+                            movingRes.type = stableType;
+                            
+                            // Sync the visual node
+                            node.text = stableName;
+                            node.name = stableName;
+                            node.type = stableType;
+
+                            console.log(`🪂 PARACHUTE SUCCESS: Kept identity [${stableName}]`);
+                        }
+                    }else if (targetCardEl) {
                         const targetId = targetCardEl.id.replace('v2-node-', '');
                         const parentRes = OL.getResourceById(targetId);
                         if (parentRes) {
@@ -11311,39 +11320,41 @@ OL.ejectStep = async function(resourceId, stepIdx) {
     const stepData = parentNode.steps[stepIdx];
 
     await OL.updateAndSync(() => {
-        // 1. 🚀 THE IDENTITY FIX:
-        // Try to get the name from the existing resource link if it exists
+        // 1. Find existing data
         const linkedRes = OL.getResourceById(stepData.resourceLinkId);
+        
+        // 🚀 THE FIX: Never let the name be "Step" or "Untitled"
         const stableName = linkedRes?.name || stepData.text || stepData.name || "New SOP";
+        const stableType = linkedRes?.type || "Action";
 
         const newNode = {
-            id: stepData.resourceLinkId || ('sop-' + Date.now()), // Keep ID if possible
+            id: stepData.resourceLinkId || ('sop-' + Date.now()), 
             name: stableName,
-            type: linkedRes?.type || 'SOP',
+            type: stableType,
             parentId: resourceId, 
             coords: {
-                x: (parentNode.coords?.x || 0) + 300,
-                y: (parentNode.coords?.y || 0) + (stepIdx * 50)
+                x: (parentNode.coords?.x || 0) + 350, // Spawn clear of the parent
+                y: (parentNode.coords?.y || 0) + (stepIdx * 60)
             },
             steps: linkedRes?.steps || []
         };
 
-        // 2. Only push if it's not already in the library (deduplicate)
+        // 2. Prevent duplication
         const exists = source.find(r => r.id === newNode.id);
         if (!exists) {
             source.push(newNode);
         } else {
-            // If it exists, just update its connection status
             exists.parentId = resourceId;
             exists.coords = newNode.coords;
+            exists.name = stableName;
+            exists.type = stableType;
         }
 
-        // 3. Remove from parent's internal step array
+        // 3. Remove from parent
         parentNode.steps.splice(stepIdx, 1);
     });
 
     renderVisualizerV2(isVault);
-    console.log(`🪂 Ejected "${stepData.name}" successfully.`);
 };
 
 OL.handleNodeClick = async function(nodeId) {
