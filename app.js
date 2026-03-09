@@ -10208,7 +10208,8 @@ function renderV2Nodes(isVault) {
             <div class="v2-node-card ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
-                onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')">
+                onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')"
+                onclick="event.stopPropagation(); OL.loadInspector('${node.id}')">
 
                 ${cornerLinkers}
 
@@ -10227,7 +10228,6 @@ function renderV2Nodes(isVault) {
                 </div>
                 
                 <div class="v2-node-body" 
-                onclick="event.stopPropagation(); OL.loadInspector('${node.id})"
                 style="text-align: ${isLooseStep ? 'right' : 'left'}; padding-right: ${isLooseStep ? '4px' : '0'};">
                     ${esc(node.name || node.text || "Untitled Step")}
                 </div>
