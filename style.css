@@ -2714,7 +2714,9 @@ body.is-visualizer #mainContent {
     height: 100%;
 }
 
-.v2-workbench-shell, .pane-canvas-wrap
+.v2-workbench-shell, .pane-canvas-wrap {
+    overflow:hidden;
+}
 
 /*==================================================================
   2. LEFT SIDEBAR (The Workflow Library Toolbox)
