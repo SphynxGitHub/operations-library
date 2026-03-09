@@ -9772,38 +9772,37 @@ OL.handleTrayDrag = function(e, resId) {
 
 // 🖱️ Dragging on Canvas (MouseDown)
 OL.startNodeDrag = function(e, nodeId) {
-    // 1. Port/Step Shields
     if (e.target.classList.contains('v2-port')) return;
     if (e.target.closest('.v2-step-item')) return;
 
     const idStr = String(nodeId);
     const isVault = window.location.hash.includes('vault');
 
-    // 🚀 NEW: SELECTION LOGIC MOVED HERE
     if (e.shiftKey) {
-        // Toggle selection
+        // 🛑 STOP EVERYTHING ELSE
+        e.preventDefault();
+        e.stopPropagation();
+
         if (state.v2.selectedNodes.has(idStr)) {
             state.v2.selectedNodes.delete(idStr);
         } else {
             state.v2.selectedNodes.add(idStr);
         }
-        // Force re-render to show highlights
-        renderVisualizerV2(isVault);
-        return; // Stop here; don't start dragging while holding shift
-    } else {
-        // Normal Drag: If the node isn't already part of a group, select ONLY this one
-        if (!state.v2.selectedNodes.has(idStr)) {
-            state.v2.selectedNodes.clear();
-            state.v2.selectedNodes.add(idStr);
-            renderVisualizerV2(isVault);
-        }
+        
+        console.log("Multi-Select Active:", Array.from(state.v2.selectedNodes));
+        
+        renderVisualizerV2(isVault); 
+        return; // 🚀 CRITICAL: Exit here so inspector doesn't open
+    } 
+
+    // NORMAL DRAG/CLICK
+    if (!state.v2.selectedNodes.has(idStr)) {
+        state.v2.selectedNodes.clear();
+        state.v2.selectedNodes.add(idStr);
+        // We don't render here to avoid flicker; the Inspector call below will handle UI focus
     }
 
-    // 2. Movement Logic
-    e.preventDefault();
     state.v2.activeDragId = idStr;
-    state.v2.isFromTray = false;
-    
     OL.initWBMotion(e, idStr);
 };
 
@@ -10218,7 +10217,7 @@ function renderV2Nodes(isVault) {
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')"
-                onclick="event.stopPropagation(); OL.loadInspector('${node.id}')">
+                onclick="if(event.shiftKey) { event.stopPropagation(); return; } OL.loadInspector('${node.id}')">
 
                 ${cornerLinkers}
 
