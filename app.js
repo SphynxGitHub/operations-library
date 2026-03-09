@@ -16093,9 +16093,8 @@ window.renderScopingSheet = function () {
     const filteredItems = sheet.lineItems.filter(item => {
         // 🎯 SURGICAL OVERRIDE
         if (state.scopingFilterActive && state.scopingTargetId) {
-            const match = String(item.resourceId) === String(state.scopingTargetId);
-            // console.log(`🔍 Comparing Item: ${item.resourceId} vs Target: ${state.scopingTargetId} | Match: ${match}`);
-            return match;
+            // Force both to strings to avoid Number vs String mismatches
+            return String(item.resourceId) === String(state.scopingTargetId);
         }
 
         const res = OL.getResourceById(item.resourceId);
@@ -16406,8 +16405,10 @@ function renderScopingRow (item, idx, showUnits) {
     ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
     : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
 
+    const isTarget = state.scopingFilterActive && String(item.resourceId) === String(state.scopingTargetId);
+
     return `
-        <div class="grid-row" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
+        <div class="grid-row ${isTarget ? 'surgical-focus-row' : ''}" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
             <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
                 <span style="font-size: 1.2em; line-height: 1; margin-top: 2px;">${typeIcon}</span>

@@ -4985,3 +4985,15 @@ path[stroke="transparent"] {
     pointer-events: none;
     z-index: 9999;
 }
+
+/* Add this to style.css */
+.surgical-focus-row {
+    outline: 2px solid var(--accent) !important;
+    background: rgba(56, 189, 248, 0.15) !important;
+    animation: surgical-pulse 2s ease-out;
+}
+
+@keyframes surgical-pulse {
+    0% { background: rgba(56, 189, 248, 0.4); }
+    100% { background: rgba(56, 189, 248, 0.15); }
+}
