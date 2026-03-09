@@ -11351,7 +11351,7 @@ OL.ejectStep = async function(resourceId, stepIdx) {
             type: stableType,
             parentId: resourceId, 
             coords: {
-                x: (parentNode.coords?.x || 0) + 350, // Spawn clear of the parent
+                x: (parentNode.coords?.x || 0), // Spawn clear of the parent
                 y: (parentNode.coords?.y || 0) + (stepIdx * 60)
             },
             steps: linkedRes?.steps || []
