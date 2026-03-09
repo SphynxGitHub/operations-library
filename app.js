@@ -11107,9 +11107,13 @@ OL.toggleStepView = function(nodeId) {
     });
 
     // 3. Align, Persist and Paint
-    OL.autoAlignNodes();
-    OL.persist();
     renderVisualizerV2(isVault);
+
+    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
+    setTimeout(() => {
+        OL.autoAlignNodes();
+        OL.persist(); // Save positions once they are correct
+    }, 50);
     
     setTimeout(() => OL.drawV2Connections(), 150);
 };
@@ -11172,9 +11176,13 @@ OL.toggleMasterExpand = function() {
     }
 
     // 5. Align, Persist and Paint
-    OL.autoAlignNodes();
-    OL.persist();
     renderVisualizerV2(isVault);
+
+    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
+    setTimeout(() => {
+        OL.autoAlignNodes();
+        OL.persist(); // Save positions once they are correct
+    }, 50);
 
     setTimeout(() => OL.drawV2Connections(), 150);
 };
