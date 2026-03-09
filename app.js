@@ -9930,7 +9930,6 @@ OL.initWBMotion = function(e, id) {
                 if (!movingRes) return;
 
                 if (isUnmapDrop) {
-                    // Dropped back into tray: just reset it
                     delete movingRes.coords;
                     movingRes.parentId = null;
                 } else if (targetCardEl) {
@@ -9944,9 +9943,9 @@ OL.initWBMotion = function(e, id) {
                             resourceLinkId: movingRes.id
                         });
                         delete movingRes.coords;
-                        movingRes.parentId = parentRes.id;
+                        // 🚀 THE FIX: Hide the original from sidebar by setting parentId
+                        movingRes.parentId = parentRes.id; 
                         movingRes.isGlobal = false;
-                        console.log(`🔗 Linked ${movingRes.name} as a step inside ${parentRes.name}`);
                     }
                 } else {
                     movingRes.coords = {
@@ -9965,14 +9964,15 @@ OL.initWBMotion = function(e, id) {
                     if (!movingRes) return;
 
                     if (isUnmapDrop) {
-                        // 🚀 FIXED PARACHUTE LOGIC:
-                        // Use the existing name so it doesn't turn into "Unmapped" or "SOP"
+                        // 🚀 THE PARACHUTE FIX: 
+                        // Preserve the actual resource name and type
                         const stableName = movingRes.name || node.text || "Unnamed Step";
                         
                         delete movingRes.coords; 
                         movingRes.parentId = null;
                         movingRes.isGlobal = false;
                         
+                        // Re-assert identity to prevent "Untitled" ghosts
                         movingRes.name = stableName; 
                         node.text = stableName; 
 
@@ -9988,6 +9988,8 @@ OL.initWBMotion = function(e, id) {
                                 resourceLinkId: movingRes.id
                             });
                             delete movingRes.coords;
+                            // 🚀 THE HIDE RULE: Prevent it from reappearing in Sidebar
+                            movingRes.parentId = parentRes.id; 
                             movingRes.isGlobal = false;
                         }
                     } else {
