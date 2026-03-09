@@ -14332,49 +14332,37 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 📱 DYNAMIC APP CONTEXT (Step-to-Parent Resolution)
+    // 📱 DYNAMIC APP CONTEXT (With Manual Override)
     // ------------------------------------------------------------
-    // 🚀 THE FIX: Resolve App ID by checking the Step first, then the Parent Resource
-    const linkedAppId = data.appId || 
-                        data.integration?.appId || 
-                        parentRes?.appId || 
-                        parentRes?.integration?.appId;
-
+    const linkedAppId = data.appId || data.integration?.appId || parentRes?.appId || parentRes?.integration?.appId;
     const linkedApp = allApps.find(a => String(a.id) === String(linkedAppId));
-
-    // Also resolve the integration/automation object from the parent if the step is a pointer
     const effectiveIntegration = data.integration || parentRes?.integration;
 
-    if (linkedApp || effectiveIntegration) {
+    // 🚀 NEW: State check to see if we are currently "Changing" the app
+    const isChangingApp = state.ui.activeSwapId === targetId;
+
+    if ((linkedApp || effectiveIntegration) && !isChangingApp) {
         const appName = linkedApp ? linkedApp.name : (effectiveIntegration?.app || "Unknown App");
-        
-        // Define icons based on the context of the data being viewed
         const typeIcon = (data.type === 'Trigger' || parentRes?.type === 'Trigger') ? '⚡' : '🛠️';
         
         html += `
             <div class="card-section" style="margin-top:20px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px;">
-                <label class="modal-section-label" style="color: var(--accent); margin-bottom: 8px; display: block;">📱 LINKED APPLICATION</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label class="modal-section-label" style="color: var(--accent); margin:0;">📱 LINKED APPLICATION</label>
+                    <span class="is-clickable tiny muted hover-bright" 
+                          onclick="state.ui.activeSwapId = '${targetId}'; OL.loadInspector('${targetId}', '${parentId}')" 
+                          title="Change App">🔄 Swap</span>
+                </div>
                 
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div class="is-clickable" onclick="OL.openAppModal('${linkedApp?.id || ''}')" style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 18px;">${OL.getRegistryIcon('app')}</span>
                         <div style="line-height: 1.2;">
                             <div style="font-weight: bold; color: white; font-size: 13px;">${esc(appName)}</div>
-                            <div class="tiny muted uppercase">${isStep ? 'Inherited from Parent' : 'Direct Connection'}</div>
+                            <div class="tiny muted uppercase">${!data.appId && parentRes?.appId ? 'Inherited' : 'Direct Link'}</div>
                         </div>
                     </div>
-                    
-                    <button class="btn tiny soft" onclick="OL.openAppModal('${linkedApp?.id || ''}')">⚙️ Configure</button>
                 </div>
-
-                ${effectiveIntegration?.verb ? `
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
-                        <div class="tiny-label">AUTOMATION EVENT</div>
-                        <div style="font-size: 11px; color: #eee; font-family: monospace;">
-                            ${typeIcon} ${esc(effectiveIntegration.verb)} ${esc(effectiveIntegration.object)}
-                        </div>
-                    </div>
-                ` : ''}
             </div>
         `;
     }
@@ -14389,6 +14377,25 @@ OL.loadInspector = function(targetId, parentId = null) {
                            oninput="OL.filterAppSearch('${parentId}', '${targetId}', this.value)">
                     <div id="app-search-results" class="search-results-overlay"></div>
                 </div>
+            </div>
+        `;
+    } else {
+        // ------------------------------------------------------------
+        // 🔍 APP SEARCH / SWAP INTERFACE
+        // ------------------------------------------------------------
+        html += `
+            <div class="card-section" style="margin-top:20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label class="modal-section-label">📱 ${isChangingApp ? 'Change Application' : 'Link Application'}</label>
+                    ${isChangingApp ? `<span class="is-clickable tiny muted" onclick="state.ui.activeSwapId = null; OL.loadInspector('${targetId}', '${parentId}')">Cancel</span>` : ''}
+                </div>
+                <div class="search-map-container">
+                    <input type="text" class="modal-input tiny" placeholder="Search local apps (Excel, Slack...)" 
+                           onfocus="OL.filterAppSearch('${parentId}', '${targetId}', '')"
+                           oninput="OL.filterAppSearch('${parentId}', '${targetId}', this.value)">
+                    <div id="app-search-results" class="search-results-overlay"></div>
+                </div>
+                <div class="tiny muted" style="margin-top:5px; font-size:8px;">Linking an app here will override the parent's default for this specific step.</div>
             </div>
         `;
     }
