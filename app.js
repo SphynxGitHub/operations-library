@@ -6324,8 +6324,24 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     const team = client?.projectData?.teamMembers || [];
     const localApps = client?.projectData?.localApps || [];
     const roles = [...new Set(team.flatMap(m => m.roles || []))];
+    const systemRoles = [
+        { name: "Client 1", icon: "🙎‍♀️", type: "client" },
+        { name: "Client 2", icon: "🙎‍♂️", type: "client" },
+        { name: "Household", icon: "🏠", type: "household" }
+    ];
 
     let html = "";
+
+    // 🟡 Render Client/ System Roles (Filtered by query)
+    const matchedSystem = systemRoles.filter(s => s.name.toLowerCase().includes(q));
+    if (matchedSystem.length > 0) {
+        html += `<div class="search-group-header">External Parties</div>`;
+        html += matchedSystem.map(s => `
+            <div class="search-result-item" 
+                 onmousedown="event.stopPropagation(); OL.executeAssignment('${resId}', '${targetId}', ${isTrigger}, '${s.name}', '${s.name}', 'role')">
+                <span style="margin-right:8px;">${s.icon}</span> ${esc(s.name)}
+            </div>`).join('');
+    }
 
     // 🟢 Section: People
     const matchPeople = team.filter(m => m.name.toLowerCase().includes(q));
@@ -14382,7 +14398,12 @@ OL.loadInspector = function(targetId, parentId = null) {
     // 👨‍💼 NEW: MULTI-TYPE ASSIGNEE PICKER
     // ------------------------------------------------------------
     const assigneeLabel = data.assigneeName || 'Unassigned';
-    const assigneeIcon = data.assigneeType === 'system' ? '📱' : (data.assigneeType === 'role' ? '🎭' : '👨‍💼');
+    let assigneeIcon = '👨‍💼'; // Default
+
+    if (assigneeLabel === 'Household') assigneeIcon = '🏠';
+    else if (assigneeLabel.includes('Client')) assigneeIcon = '🙍‍♂️';
+    else if (data.assigneeType === 'system') assigneeIcon = '📱';
+    else if (data.assigneeType === 'role') assigneeIcon = '🎭'
 
     html += `
         <div class="card-section" style="margin-top:20px;">
