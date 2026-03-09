@@ -10252,7 +10252,11 @@ function renderV2Nodes(isVault) {
 
         const isSelected = state.v2.selectedNodes.has(String(node.id));
         
-        const res = OL.getResourceById(node.id);
+        // If node.id fails, check if node.resourceLinkId holds the real ID.
+        let res = OL.getResourceById(id) || (node.resourceLinkId ? OL.getResourceById(node.resourceLinkId) : null);
+        if (!res) {
+            res = (state.master.resources || []).find(r => r.id === id || r.masterRefId === id);
+        }
         const displayName = res ? res.name : (node.text || "Unknown Resource");
 
         return `
