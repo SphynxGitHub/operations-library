@@ -14332,7 +14332,7 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 📱 DYNAMIC APP CONTEXT (Inside OL.loadInspector)
+    // 📱 DYNAMIC APP CONTEXT (Fixed & Hardened)
     // ------------------------------------------------------------
     const linkedApp = allApps.find(a => 
         String(a.id) === String(data.appId) || 
@@ -14341,6 +14341,9 @@ OL.loadInspector = function(targetId, parentId = null) {
 
     if (linkedApp || data.integration) {
         const appName = linkedApp ? linkedApp.name : (data.integration?.app || "Unknown App");
+        
+        // 🚀 THE FIX: Define typeIcon before using it
+        const typeIcon = (data.type === 'Trigger') ? '⚡' : '🛠️';
         
         html += `
             <div class="card-section" style="margin-top:20px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px;">
@@ -14362,7 +14365,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
                         <div class="tiny-label">AUTOMATION EVENT</div>
                         <div style="font-size: 11px; color: #eee; font-family: monospace;">
-                            ${esc(data.integration.verb)} ${esc(data.integration.object)}
+                            ${typeIcon} ${esc(data.integration.verb)} ${esc(data.integration.object)}
                         </div>
                     </div>
                 ` : ''}
@@ -14383,7 +14386,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             </div>
         `;
     }
-    
+
     // ------------------------------------------------------------
     // 🚀 THE DEEP SCANNER: Find any node pointing to targetId
     // ------------------------------------------------------------
