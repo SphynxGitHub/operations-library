@@ -11338,37 +11338,31 @@ OL.ejectStep = async function(resourceId, stepIdx) {
     const stepData = parentNode.steps[stepIdx];
 
     await OL.updateAndSync(() => {
-        // 1. Find existing data
         const linkedRes = OL.getResourceById(stepData.resourceLinkId);
-        
-        // 🚀 THE FIX: Never let the name be "Step" or "Untitled"
         const stableName = linkedRes?.name || stepData.text || stepData.name || "New SOP";
-        const stableType = linkedRes?.type || "Action";
 
         const newNode = {
             id: stepData.resourceLinkId || ('sop-' + Date.now()), 
             name: stableName,
-            type: stableType,
-            parentId: resourceId, 
+            type: linkedRes?.type || 'SOP',
+            parentId: null, // 🚀 It's free now!
+            // 🎯 THE POSITIONING FIX:
             coords: {
-                x: (parentNode.coords?.x || 0) + 350, // Spawn clear of the parent
-                y: (parentNode.coords?.y || 0) + (stepIdx * 60)
+                x: parentNode.coords?.x || 0, // Same X as parent
+                y: (parentNode.coords?.y || 0) + 180  // Directly below (adjust 180 based on card height)
             },
             steps: linkedRes?.steps || []
         };
 
-        // 2. Prevent duplication
         const exists = source.find(r => r.id === newNode.id);
         if (!exists) {
             source.push(newNode);
         } else {
-            exists.parentId = resourceId;
+            exists.parentId = null;
             exists.coords = newNode.coords;
             exists.name = stableName;
-            exists.type = stableType;
         }
 
-        // 3. Remove from parent
         parentNode.steps.splice(stepIdx, 1);
     });
 
