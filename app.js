@@ -9841,7 +9841,8 @@ OL.initWBMotion = function(e, id) {
     const startX = e.clientX;
     const startY = e.clientY;
     
-    // 🚀 MOVE THIS HERE: Now both onMove and onUp can see it
+    // 🚀 THE FIX: Define zone here so all sub-functions can see it
+    const zone = document.getElementById('unmap-zone');
     let hasMovedSignificantAmount = false;
 
     // Capture initial coordinates for every selected node
@@ -9853,74 +9854,59 @@ OL.initWBMotion = function(e, id) {
             initialY: res.coords?.y || 0,
             el: document.getElementById(`v2-node-${nodeId}`)
         };
-    })
+    });
 
     const onMove = (mE) => {
+        const dx = (mE.clientX - startX) / zoom;
+        const dy = (mE.clientY - startY) / zoom;
+
         // 1. 📏 CHECK THRESHOLD
         if (!hasMovedSignificantAmount) {
             const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
-            if (dist < 5) return; // Increased to 5px for safer "click" detection
+            if (dist < 5) return; 
             hasMovedSignificantAmount = true;
 
             document.body.classList.add('is-dragging-node');
 
-            // 🔥 NOW wake up the zone and add the dragging class
-            const zone = document.getElementById('unmap-zone');
             if (zone) zone.classList.add('visible');
             
-            // Mark all selected cards as dragging
             dragGroup.forEach(node => {
                 if (node.el) node.el.classList.add('is-dragging');
             });
         }
 
-        // 📏 2. CALCULATE DELTA (Relative movement)
-        const dx = (mE.clientX - startX) / zoom;
-        const dy = (mE.clientY - startY) / zoom;
-
-        // 🚀 3. APPLY DELTA TO ALL GHOSTS/ELEMENTS
+        // 🚀 2. APPLY DELTA TO ALL SELECTED ELEMENTS
         dragGroup.forEach(node => {
-            const newX = node.initialX + dx;
-            const newY = node.initialY + dy;
-
-            // Move the actual DOM element for real-time feedback
             if (node.el) {
-                node.el.style.left = `${newX}px`;
-                node.el.style.top = `${newY}px`;
+                node.el.style.left = `${node.initialX + dx}px`;
+                node.el.style.top = `${node.initialY + dy}px`;
             }
         });
 
-        // Update SVG connections in real-time
         OL.drawV2Connections();
 
-        // 1. 🎯 DETECT HOVER TARGET
+        // 3. 🎯 DETECT HOVER TARGET
         const target = document.elementFromPoint(mE.clientX, mE.clientY);
         const isOverUnmap = !!target?.closest('#unmap-zone');
 
-        // 🚀 NEW: TARGET HIGHLIGHTING
-        // First, clear any existing highlights from all cards
         document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
-
-        // Check if we are hovering over a valid "Container" card (Resource, SOP, or Workflow)
         const targetCardEl = target?.closest('.v2-node-card');
         
-        // Only highlight if it's NOT the card we are currently dragging
-        if (targetCardEl && targetCardEl.id !== `v2-node-${id}`) {
+        // Highlight logic (Only if target isn't part of the dragged group)
+        if (targetCardEl && !state.v2.selectedNodes.has(targetCardEl.id.replace('v2-node-', ''))) {
             targetCardEl.classList.add('drop-target-highlight');
         }
 
-        // 2. 🔴 TOGGLE RED GLOW (Unmap Zone)
         if (zone) {
             if (isOverUnmap) {
                 zone.classList.add('is-hovered');
-                // Remove card highlights if we are over the trash/unmap zone
                 targetCardEl?.classList.remove('drop-target-highlight');
             } else {
                 zone.classList.remove('is-hovered');
             }
         }
 
-        // 3. 👻 HANDLE GHOST
+        // 4. 👻 HANDLE GHOST (Primary node only)
         let ghost = document.getElementById('drag-ghost');
         if (target?.closest('#v2-workbench-target')) {
             if (!ghost) {
@@ -9939,22 +9925,25 @@ OL.initWBMotion = function(e, id) {
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
-        
         document.body.classList.remove('is-dragging-node');
         
-        // 🛑 1. THE CLICK PROTECTION
-        // If the mouse didn't move more than 3px, treat this as a select/click.
-        // We exit early and DO NOT touch the database or trigger a re-render.
         if (!hasMovedSignificantAmount) {
             state.v2.activeDragId = null;
-            console.log("🖱️ Single click: Movement ignored.");
-            const ghost = document.getElementById('drag-ghost');
-            if (ghost) ghost.remove();
             return; 
         }
 
         const dx = (uE.clientX - startX) / zoom;
         const dy = (uE.clientY - startY) / zoom;
+
+        const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+        const targetCardEl = elementsAtPoint.find(el => 
+            el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
+        );
+        const isUnmapDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
+
+        if (zone) {
+            zone.classList.remove('active', 'visible', 'is-hovered');
+        }
 
         // 💾 4. SECURE SYNC GROUP
         await OL.updateAndSync(() => {
@@ -9962,91 +9951,40 @@ OL.initWBMotion = function(e, id) {
                 const movingRes = OL.getResourceById(node.id);
                 if (!movingRes) return;
 
-                // For simplicity, we assume group moves are usually "grid moves"
-                // rather than "drop-into-container" moves, but you can add targetCardEl logic here
-                movingRes.coords = {
-                    x: node.initialX + dx,
-                    y: node.initialY + dy
-                };
-            });
-        });
-
-        // --- Everything below only runs if the card was actually DRAGGED ---
-
-        const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
-        const targetCardEl = elementsAtPoint.find(el => 
-            el.classList.contains('v2-node-card') && el.id !== `v2-node-${id}`
-        );
-
-        const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
-        const isTrayDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
-        
-        // 🔍 Check if we are releasing over the unmap zone
-        const dropTarget = document.elementFromPoint(uE.clientX, uE.clientY);
-        const isUnmapDrop = !!dropTarget?.closest('#unmap-zone');
-
-        // 🧼 UI Cleanup
-        const zone = document.getElementById('unmap-zone');
-        if (zone) {
-            zone.classList.remove('active');
-            zone.classList.remove('visible');
-        }
-
-        if (isUnmapDrop) {
-            await OL.updateAndSync(() => {
-                const res = OL.getResourceById(id);
-                if (res) {
-                    console.log("♻️ Unmapping resource:", res.name);
-                    delete res.coords; 
-                    res.parentId = null;
-                    res.isGlobal = false;
-                }
-            });
-            window.renderGlobalVisualizer(isVault);
-            return; // Exit early, don't trigger grid drop
-        }
-            
-        const ghost = document.getElementById('drag-ghost');
-        if (ghost) ghost.remove();
-
-        // 🚀 2. SECURE SYNC (Only happens on real drag)
-        await OL.updateAndSync(() => {
-            const movingRes = OL.getResourceById(id);
-            if (!movingRes) return;
-
-            if (targetCardEl) {
-                const targetId = targetCardEl.id.replace('v2-node-', '');
-                const parentRes = OL.getResourceById(targetId);
-                if (parentRes) {
-                    if (!parentRes.steps) parentRes.steps = [];
-                    parentRes.steps.push({
-                        id: 'link_' + Date.now(),
-                        name: movingRes.name,
-                        resourceLinkId: movingRes.id
-                    });
-                    delete movingRes.coords;
+                if (isUnmapDrop) {
+                    delete movingRes.coords; 
+                    movingRes.parentId = null;
+                    movingRes.isGlobal = false;
+                } else if (targetCardEl) {
+                    const targetId = targetCardEl.id.replace('v2-node-', '');
+                    const parentRes = OL.getResourceById(targetId);
+                    if (parentRes) {
+                        if (!parentRes.steps) parentRes.steps = [];
+                        parentRes.steps.push({
+                            id: 'link_' + Date.now(),
+                            name: movingRes.name,
+                            resourceLinkId: movingRes.id
+                        });
+                        delete movingRes.coords;
+                        movingRes.isGlobal = false;
+                    }
+                } else {
+                    // Standard Grid Move
+                    movingRes.coords = {
+                        x: node.initialX + dx,
+                        y: node.initialY + dy
+                    };
                     movingRes.isGlobal = false;
                 }
-            } else if (isTrayDrop) {
-                delete movingRes.coords;
-                movingRes.isGlobal = false;
-            } else if (isShelfDrop) {
-                movingRes.isGlobal = true;
-                delete movingRes.coords;
-            } else {
-                const canvas = document.getElementById('v2-canvas');
-                const rect = canvas.getBoundingClientRect();
-                movingRes.isGlobal = false;
-                movingRes.coords = {
-                    x: (uE.clientX - rect.left) / state.v2.zoom,
-                    y: (uE.clientY - rect.top) / state.v2.zoom
-                };
-            }
+            });
         });
 
+        const ghost = document.getElementById('drag-ghost');
+        if (ghost) ghost.remove();
         state.v2.activeDragId = null;
         window.renderGlobalVisualizer(isVault);
     };
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
