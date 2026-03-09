@@ -13095,15 +13095,11 @@ OL.handleCanvasDrop = async function(e) {
 };
 
 OL.handleShelfDrop = async function(e) {
-    // 🛡️ STOP the browser from refreshing
     if (e.preventDefault) e.preventDefault();
     if (e.stopPropagation) e.stopPropagation();
     
-    // 1. Identify the resource being dropped
-    // We check both dataTransfer (for tray items) and activeDragId (for grid items)
+    // Get the ID being dragged (handles both Sidebar and Canvas sources)
     const resId = e.dataTransfer.getData("moveId") || state.v2.activeDragId;
-    
-    console.log("📥 Attempting Shelf Drop for ID:", resId);
     
     const shelf = document.getElementById('global-shelf');
     if (shelf) shelf.classList.remove('drag-over');
@@ -13113,18 +13109,17 @@ OL.handleShelfDrop = async function(e) {
             const res = OL.getResourceById(resId);
             if (res) {
                 console.log(`⭐ Promoting ${res.name} to Global Shelf`);
+                
+                // 🚀 THE FIX: Clean the slate for the Shelf
                 res.isGlobal = true; 
-                delete res.coords; // Remove X/Y so it follows flex flow
-                res.stageId = null; // Unlink from any specific vertical lane
+                res.parentId = null; // Sever parent links so it shows on shelf
+                delete res.coords;   // Remove X/Y so it follows flex flow
+                res.stageId = null;  // Unlink from lanes
             }
         });
         
-        // Full refresh to move the DOM element into the shelf container
         window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-    } else {
-        console.warn("⚠️ Shelf drop failed: No resource ID found in event.");
     }
-    
     return false;
 };
 
