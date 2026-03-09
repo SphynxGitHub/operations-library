@@ -9892,6 +9892,7 @@ OL.initWBMotion = function(e, id) {
         const dy = (uE.clientY - startY) / zoom;
 
         const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+        const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
         const targetCardEl = elementsAtPoint.find(el => 
             el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
         );
@@ -9900,32 +9901,45 @@ OL.initWBMotion = function(e, id) {
         if (zone) {
             zone.classList.remove('active', 'visible', 'is-hovered');
         }
-
-        // 🚀 HANDLE DROPS FROM TRAY
+// 🚀 HANDLE DROPS FROM TRAY
         if (state.v2.isFromTray) {
             await OL.updateAndSync(() => {
                 const movingRes = OL.getResourceById(id);
                 if (!movingRes) return;
 
-                if (isUnmapDrop) {
+                if (isShelfDrop) {
+                    // 🚀 PROMOTION TO SHELF
+                    // We treat the "id" from the tray directly
+                    movingRes.isGlobal = true;
+                    movingRes.parentId = null;
+                    movingRes.stageId = null;
+                    delete movingRes.coords;
+                    console.log(`⭐ ${movingRes.name || 'Resource'} promoted to shelf from Tray`);
+                } 
+                else if (isUnmapDrop) {
+                    // 🪂 DROP BACK TO TRAY AREA (Unmapping)
                     delete movingRes.coords;
                     movingRes.parentId = null;
-                } else if (targetCardEl) {
+                } 
+                else if (targetCardEl) {
+                    // 🔗 DROP FROM TRAY INTO ANOTHER CARD (Mapping as step)
                     const targetId = targetCardEl.id.replace('v2-node-', '');
                     const parentRes = OL.getResourceById(targetId);
                     if (parentRes) {
                         if (!parentRes.steps) parentRes.steps = [];
                         parentRes.steps.push({
                             id: 'link_' + Date.now(),
-                            name: movingRes.name,
+                            name: movingRes.name || "Step", // 🛡️ Ensure name is preserved here
                             resourceLinkId: movingRes.id
                         });
                         delete movingRes.coords;
-                        // 🚀 THE FIX: Hide the original from sidebar by setting parentId
+                        // Hide original from sidebar/canvas by assigning parent
                         movingRes.parentId = parentRes.id; 
                         movingRes.isGlobal = false;
                     }
-                } else {
+                } 
+                else {
+                    // 🎯 STANDARD DROP FROM TRAY TO CANVAS
                     movingRes.coords = {
                         x: (uE.clientX - rect.left) / zoom,
                         y: (uE.clientY - rect.top) / zoom
@@ -9934,56 +9948,66 @@ OL.initWBMotion = function(e, id) {
                     movingRes.parentId = null;
                 }
             });
+            console.log("✅ Tray drop sequence finalized.");
         } else {
-            // 💾 HANDLE MOVES ON CANVAS (Parachuting happens here)
+            // 💾 HANDLE MOVES ON CANVAS (Selection Groups + Parachuting)
             await OL.updateAndSync(() => {
                 dragGroup.forEach(node => {
                     const movingRes = OL.getResourceById(node.id);
                     if (!movingRes) return;
 
-                    if (isUnmapDrop) {
-                        const movingRes = OL.getResourceById(node.id);
-                        if (movingRes) {
-                            // 🛡️ THE IDENTITY SHIELD
-                            // We MUST capture the name from the resource OR the node text OR the sidebar
-                            const stableName = movingRes.name || node.text || node.name || "Unnamed Step";
-                            const stableType = movingRes.type || "Action";
+                    if (isShelfDrop) {
+                        // 🚀 MOVE FROM CANVAS TO SHELF
+                        movingRes.isGlobal = true;
+                        movingRes.parentId = null;
+                        movingRes.stageId = null;
+                        delete movingRes.coords;
+                        console.log(`⭐ ${movingRes.name} moved to shelf.`);
+                    } 
+                    else if (isUnmapDrop) {
+                        // 🪂 PARACHUTE: Resource becomes "Loose" on the Canvas
+                        // 🛡️ Lock name before severing parent link
+                        const stableName = movingRes.name || node.text || "Unnamed Step";
+                        const stableType = movingRes.type || "Action";
 
-                            delete movingRes.coords; 
-                            movingRes.parentId = null;
-                            movingRes.isGlobal = false;
-                            
-                            // Burn the identity back into the object so it can't be lost
-                            movingRes.name = stableName;
-                            movingRes.type = stableType;
-                            
-                            // Sync the visual node
-                            node.text = stableName;
-                            node.name = stableName;
-                            node.type = stableType;
+                        delete movingRes.coords; // Remove position to hide it
+                        movingRes.parentId = null;
+                        movingRes.isGlobal = false;
+                        
+                        // Force identity back into the resource record
+                        movingRes.name = stableName;
+                        movingRes.type = stableType;
 
-                            console.log(`🪂 PARACHUTE SUCCESS: Kept identity [${stableName}]`);
-                        }
-                    }else if (targetCardEl) {
+                        // Keep the UI node in sync
+                        node.text = stableName;
+                        console.log(`🪂 Parachuted: ${stableName}`);
+                    } 
+                    else if (targetCardEl) {
+                        // 🔗 NESTING: Dragging one canvas card into another
                         const targetId = targetCardEl.id.replace('v2-node-', '');
                         const parentRes = OL.getResourceById(targetId);
-                        if (parentRes) {
+                        
+                        if (parentRes && parentRes.id !== movingRes.id) {
                             if (!parentRes.steps) parentRes.steps = [];
                             parentRes.steps.push({
                                 id: 'link_' + Date.now(),
-                                name: movingRes.name,
+                                name: movingRes.name || node.text,
                                 resourceLinkId: movingRes.id
                             });
+                            
+                            // Hide the card from the grid and sidebar
                             delete movingRes.coords;
-                            // 🚀 THE HIDE RULE: Prevent it from reappearing in Sidebar
-                            movingRes.parentId = parentRes.id; 
+                            movingRes.parentId = parentRes.id;
                             movingRes.isGlobal = false;
                         }
-                    } else {
+                    } 
+                    else {
+                        // 🎯 STANDARD REPOSITIONING (The actual "Move")
                         movingRes.coords = {
                             x: node.initialX + dx,
                             y: node.initialY + dy
                         };
+                        // Ensure it's marked as not global so it stays on the grid
                         movingRes.isGlobal = false;
                     }
                 });
@@ -13073,31 +13097,38 @@ OL.handleCanvasDrop = async function(e) {
 };
 
 OL.handleShelfDrop = async function(e) {
+    // 🛡️ Guard against browser refresh
     if (e.preventDefault) e.preventDefault();
     if (e.stopPropagation) e.stopPropagation();
-    
-    // Get the ID being dragged (handles both Sidebar and Canvas sources)
-    const resId = e.dataTransfer.getData("moveId") || state.v2.activeDragId;
     
     const shelf = document.getElementById('global-shelf');
     if (shelf) shelf.classList.remove('drag-over');
 
-    if (resId) {
-        await OL.updateAndSync(() => {
-            const res = OL.getResourceById(resId);
-            if (res) {
-                console.log(`⭐ Promoting ${res.name} to Global Shelf`);
-                
-                // 🚀 THE FIX: Clean the slate for the Shelf
-                res.isGlobal = true; 
-                res.parentId = null; // Sever parent links so it shows on shelf
-                delete res.coords;   // Remove X/Y so it follows flex flow
-                res.stageId = null;  // Unlink from lanes
-            }
-        });
-        
-        window.renderGlobalVisualizer(window.location.hash.includes('vault'));
-    }
+    // 1. Identify the Resource ID
+    // We check dataTransfer (tray items) or activeDragId (canvas items)
+    const resId = e.dataTransfer.getData("moveId") || state.v2.activeDragId;
+    
+    if (!resId) return console.warn("⚠️ No resource ID found for shelf drop.");
+
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(resId);
+        if (res) {
+            console.log(`📦 Promoting ${res.name} to Global Shelf`);
+            
+            // 🚀 THE SNAP LOGIC
+            res.isGlobal = true; 
+            res.parentId = null; // Clean parentage
+            res.stageId = null;  // Remove from vertical lanes
+            
+            // 🧹 Clean coordinates so it follows the Shelf's Flexbox flow
+            delete res.coords; 
+        }
+    });
+    
+    // 🔄 Force the Post-Render script to move the DOM element into the shelf
+    const isVault = window.location.hash.includes('vault');
+    window.renderGlobalVisualizer(isVault);
+    
     return false;
 };
 
