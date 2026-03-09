@@ -14137,7 +14137,8 @@ OL.loadInspector = function(targetId, parentId = null) {
     let cleanId = String(targetId).replace(/^(empty-|step-|link-)/, '');
     
     // 🚀 1. FIND THE CONTAINER FIRST
-    const parentRes = OL.getResourceById(parentId || cleanId);
+    const swapParentContext = parentId || targetId;
+    const parentRes = OL.getResourceById(swapParentContext);
     
     // 🚀 2. RESOLVE THE SPECIFIC DATA OBJECT
     let data;
@@ -14160,7 +14161,11 @@ OL.loadInspector = function(targetId, parentId = null) {
     }
 
     if (!data) {
-        console.error("❌ Inspector Error: Target object not found in parent context", cleanId);
+        console.error("❌ Inspector Error: Target object not found in parent context", {
+            targetId: cleanId, 
+            parentId: parentId, 
+            context: isStep ? "Step" : "Root" 
+        });
         return;
     }
 
@@ -14350,7 +14355,7 @@ OL.loadInspector = function(targetId, parentId = null) {
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <label class="modal-section-label" style="color: var(--accent); margin:0;">📱 LINKED APPLICATION</label>
                     <span class="is-clickable tiny muted hover-bright" 
-                          onclick="state.ui.activeSwapId = '${targetId}'; OL.loadInspector('${targetId}', '${parentId}')" 
+                          onclick="state.ui.activeSwapId = '${targetId}'; OL.loadInspector('${targetId}', '${swapParentContext}')" 
                           title="Change App">🔄 Swap</span>
                 </div>
                 
