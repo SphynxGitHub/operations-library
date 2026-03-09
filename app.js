@@ -14214,42 +14214,50 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 🚀 UPDATED: ENTRANCE LOGIC (The "Universal" Scanner)
+    // 🚀 THE DEEP SCANNER: Find any node pointing to targetId
     // ------------------------------------------------------------
+    const incomingPaths = [];
+    const normalizedTargetId = String(targetId).trim();
+    
+    // Search through every resource in the project
+    allResources.forEach(res => {
+        // Check 1: Does the Resource itself point to our target?
+        if (res.outcomes) {
+            res.outcomes.forEach(oc => {
+                const ocTarget = oc.targetId || oc.toId || oc.action?.replace('jump_res_', '').replace('jump_step_', '');
+                if (String(ocTarget) === String(targetId)) {
+                    incomingPaths.push({ 
+                        sourceId: res.id, 
+                        sourceName: res.name, 
+                        type: 'Resource Link', 
+                        detail: oc.label || 'Direct' 
+                    });
+                }
+            });
+        }
 
-    // 1. Scan for standard "Jump" logic (Outcomes)
-    const flowInbound = allResources.flatMap(res => 
-        (res.steps || []).flatMap(step => 
-            (step.outcomes || []).filter(oc => {
-                const tid = oc.targetId || oc.action?.replace('jump_step_', '').replace('jump_res_', '');
-                return String(tid) === String(targetId);
-            }).map(oc => ({ 
-                parentRes: res, 
-                sourceName: step.name || res.name, 
-                sourceId: step.id || res.id,
-                type: 'Logic Path',
-                detail: oc.condition || 'Always' 
-            }))
-        )
-    );
+        // Check 2: Do any of this Resource's internal STEPS point to our target?
+        if (res.steps) {
+            res.steps.forEach(step => {
+                if (step.outcomes) {
+                    step.outcomes.forEach(oc => {
+                        const ocTarget = oc.targetId || oc.toId || oc.action?.replace('jump_res_', '').replace('jump_step_', '');
+                        if (String(ocTarget) === String(targetId)) {
+                            incomingPaths.push({ 
+                                sourceId: step.id, 
+                                parentId: res.id,
+                                sourceName: step.name, 
+                                type: 'Step Logic', 
+                                detail: oc.label || 'Condition' 
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    });
 
-    // 2. Scan for "Leash" logic (Parent -> Child)
-    const leashInbound = allResources.filter(res => {
-        // Find if any resource lists THIS targetId as its child
-        // Or if the current data object has a parentId pointing to another resource
-        return String(data.parentId) === String(res.id);
-    }).map(parent => ({
-        parentRes: parent,
-        sourceName: parent.name,
-        sourceId: parent.id,
-        type: 'Parent Leash',
-        detail: 'Structural Connection'
-    }));
-
-    // 3. Combine both types of incoming connections
-    const incomingPaths = [...flowInbound, ...leashInbound];
-
-    // Update the HTML generation to show the specific connection type
+    // 🏗️ RENDER THE LIST
     html += `
         <div class="card-section" style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); margin-top:20px;">
             <label class="modal-section-label" style="color:#a855f7;">📥 ENTRANCE SOURCES (Inbound Logic)</label>
@@ -14257,15 +14265,15 @@ OL.loadInspector = function(targetId, parentId = null) {
             <div id="incoming-paths-list" style="margin-bottom: 12px;">
                 ${incomingPaths.map(path => `
                     <div class="pill soft is-clickable" style="display:flex; align-items:center; gap:8px; margin-bottom:5px; background: rgba(0,0,0,0.2);"
-                        onclick="OL.loadInspector('${path.sourceId}')">
-                        <span style="font-size:10px;">${path.type === 'Parent Leash' ? '🐕' : '⬅️'}</span>
+                         onclick="OL.loadInspector('${path.sourceId}', '${path.parentId || path.sourceId}')">
+                        <span style="font-size:10px;">⬅️</span>
                         <div style="flex:1;">
                             <div style="font-size:10px; font-weight:bold;">${esc(path.sourceName)}</div>
                             <div style="font-size:8px; opacity:0.6;">${path.type}: ${esc(path.detail)}</div>
                         </div>
                         <span class="tiny muted">Inspect ➔</span>
                     </div>
-                `).join('') || '<div class="tiny muted italic">No incoming logic paths found.</div>'}
+                `).join('') || '<div class="tiny muted italic">No incoming logic paths found in this project.</div>'}
             </div>
             ...
         </div>`;
