@@ -9998,7 +9998,7 @@ OL.initWBMotion = function(e, id) {
         state.v2.activeDragId = null;
         window.renderGlobalVisualizer(isVault);
     };
-    
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
@@ -10200,13 +10200,13 @@ function renderV2Nodes(isVault) {
             : `position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;`
 
        // Change it to a simple link that clears the filter flags
+        // Inside renderV2Nodes
         const scopeBadge = isInScope ? `
-            <a href="#/scoping-sheet" 
-            class="v2-scope-badge" 
-            onclick="state.scopingTargetId = '${node.id}'; state.scopingFilterActive = true; state.viewMode = 'scoping';"
-            title="View in Scoping">
+            <div class="v2-scope-badge" 
+                onclick="event.stopPropagation(); OL.navigateToScoping('${node.id}')"
+                title="View in Scoping Sheet">
                 $
-            </a>
+            </div>
         ` : '';
 
         // 🚀 Dynamic Badge for standard resources
@@ -10287,6 +10287,31 @@ function renderV2Nodes(isVault) {
         `;
     }).join('');
 }
+
+OL.navigateToScoping = function(resourceId) {
+    const idStr = String(resourceId);
+    
+    // 1. Prepare State
+    state.viewMode = 'scoping';
+    state.scopingTargetId = idStr;
+    state.scopingFilterActive = true; 
+    
+    // 2. Set the search query so the search box matches the filter
+    const res = OL.getResourceById(idStr);
+    state.ui.scopingSearchQuery = res ? res.name : ''; 
+
+    // 3. Navigate
+    window.location.hash = '#/scoping-sheet';
+
+    // 4. Smooth Scroll & Highlight once rendered
+    setTimeout(() => {
+        const targetRow = document.querySelector(`[data-scoping-id="${idStr}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetRow.classList.add('row-highlight-flash');
+        }
+    }, 300);
+};
 
 OL.jumpToScopingItem = function(nodeId) {
     console.log("🧨 KILLING VISUALIZER CONTEXT for:", nodeId);
