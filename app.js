@@ -9807,6 +9807,8 @@ OL.initWBMotion = function(e, id) {
             if (dist < 5) return; // Increased to 5px for safer "click" detection
             hasMovedSignificantAmount = true;
 
+            document.body.classList.add('is-dragging-node');
+
             // 🔥 NOW wake up the zone and add the dragging class
             const zone = document.getElementById('unmap-zone');
             if (zone) zone.classList.add('visible');
@@ -9865,6 +9867,8 @@ OL.initWBMotion = function(e, id) {
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        
+        document.body.classList.remove('is-dragging-node');
         
         // 🛑 1. THE CLICK PROTECTION
         // If the mouse didn't move more than 3px, treat this as a select/click.
