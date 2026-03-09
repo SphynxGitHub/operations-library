@@ -15753,17 +15753,20 @@ OL.handleUniversalDrop = async function(e, sectionId) {
     const moveId = e.dataTransfer.getData("moveId");
     const itemType = e.dataTransfer.getData("itemType"); 
     const dragIdx = parseInt(e.dataTransfer.getData("dragIdx"));
+    const dragContext = e.dataTransfer.getData("parentContext");
     const isVault = location.hash.includes('vault');
+
     const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
 
     document.querySelectorAll('.hovered').forEach(el => el.classList.remove('hovered'));
     document.querySelectorAll('.drop-placeholder').forEach(el => el.remove());
 
+    const activeParentId = state.focusedWorkflowId || state.focusedResourceId || dragContext;
+
     await OL.updateAndSync(async () => {
         const client = getActiveClient();
         // 🎯 REFERENCE: Get the actual live array
         const source = isVault ? state.master.resources : client.projectData.localResources;
-        const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
 
         // --- BRANCH A: GLOBAL REARRANGE ---
         if (!activeParentId && itemType === 'workflow') {
@@ -15958,7 +15961,6 @@ OL.closeSidebar = function() {
     }
 
     // 4. Force Repaint to clear the sidebar from the DOM
-    const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault);
 };
 
