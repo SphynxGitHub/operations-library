@@ -4375,6 +4375,21 @@ ARROWS
     opacity: 0.7;
 }
 
+.v2-node-card {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.v2-node-card *, 
+.v2-step-item * {
+    cursor: inherit;
+}
+
+body.resizing-active,
+body.is-dragging-node {
+    cursor: grabbing !important;
+}
+
 .v2-node-card.drop-hover {
     border: 2px solid var(--accent) !important;
     background: rgba(56, 189, 248, 0.2) !important;
