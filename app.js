@@ -12976,8 +12976,7 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
             <div id="unmap-zone2" 
                 ondragover="event.preventDefault(); this.classList.add('active');" 
                 ondragleave="this.classList.remove('active');" 
-                ondrop="OL.handleUnmapDrop(event)"
-                style="position: fixed; left: 0; top: 0; width: 300px; height: 100vh; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease;">
+                ondrop="OL.handleUnmapDrop(event)">
                 
                 <div class="unmap-content" style="opacity: 0; background: rgba(239, 68, 68, 0.1); border: 2px dashed #ef4444; color: #ef4444; padding: 40px; border-radius: 20px; font-weight: bold; pointer-events: none;">
                     Drop here to Unmap

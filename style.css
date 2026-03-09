@@ -4269,7 +4269,9 @@ ARROWS
 }
 
 .global-shelf-container {
-    position: relative; /* Changed from absolute to flow with header area */
+    position: absolute;
+    left: 0;
+    top: 60px;
     margin: 75px 20px 10px 20px;
     width: auto;
     min-height: 100px;
@@ -4282,7 +4284,8 @@ ARROWS
     gap: 15px;
     pointer-events: all;
     top: 10px;
-    z-index: 100;
+    z-index: 2000;
+    pointer-events: all;
 }
 .global-shelf-fixed-bg {
     position: absolute;
@@ -4306,7 +4309,7 @@ ARROWS
     overflow: visible;
 }
 
-.global-shelf-container.drag-over {
+.global-shelf.drag-over {
     background: rgba(56, 189, 248, 0.08);
     border-color: var(--accent);
 }
@@ -4840,12 +4843,12 @@ path[stroke="transparent"] {
 }
 
 /* 🚨 THE UNMAP ZONE RECOVERY */
-#unmap-zone {
+#unmap-zone, #unmap-zone2 {
     position: fixed;
-    top: 0;
+    top:80%;
     width: 320px; /* Sidebar width */
-    height: 100vh;
-    z-index: 10001 !important; /* Must be higher than everything */
+    height: 20vh;
+    z-index: 1500 !important; /* Must be higher than everything */
     pointer-events: none; /* Default to passthrough */
     align-items: center;
     justify-content: center;
