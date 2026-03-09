@@ -14542,21 +14542,8 @@ OL.loadInspector = function(targetId, parentId = null) {
                         draggable="true"
                         data-step-id="${step.id}"
                         ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
-                        style="
-                            display: flex !important; 
-                            position: relative !important; /* 🚀 Stops the pile-up */
-                            left: 0 !important; 
-                            top: 0 !important; 
-                            margin-bottom: 8px; /* Spacing between rows */
-                            align-items: center; 
-                            gap: 8px; 
-                            background: rgba(255,255,255,0.05); 
-                            padding: 10px; 
-                            border-radius: 4px; 
-                            border: 1px solid rgba(255,255,255,0.1); 
-                            cursor: default;
-                            width: 100%;
-                        ">
+                        style="display: flex !important; position: relative !important; left: 0 !important; top: 0 !important; margin-bottom: 8px; 
+                        align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); cursor: default; width: 100%;">
                         
                         <span class="muted" style="cursor:grab; font-size:12px; opacity:0.5;">⋮⋮</span>
                         <span class="tiny bold accent" style="width:18px;">${idx + 1}</span>
@@ -14564,6 +14551,13 @@ OL.loadInspector = function(targetId, parentId = null) {
                         <div class="is-clickable" style="flex:1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
                             onclick="OL.loadInspector('${step.id || step.resourceLinkId}', '${data.id}')">
                             ${esc(step.name || 'Unnamed Step')}
+                        </div>
+
+                        <div style="display: flex; gap: 2px; margin-right: 5px;">
+                            <button class="btn tiny soft" onclick="event.stopPropagation(); OL.shiftStep('${data.id}', ${idx}, -1)" 
+                                    style="padding: 2px 6px; font-size: 8px;" ${idx === 0 ? 'disabled' : ''}>▲</button>
+                            <button class="btn tiny soft" onclick="event.stopPropagation(); OL.shiftStep('${data.id}', ${idx}, 1)" 
+                                    style="padding: 2px 6px; font-size: 8px;" ${idx === (data.steps.length - 1) ? 'disabled' : ''}>▼</button>
                         </div>
                         
                         <button class="card-delete-btn" style="position:static; font-size:16px; opacity:0.7;" 
@@ -14753,6 +14747,32 @@ OL.loadInspector = function(targetId, parentId = null) {
             // Redraw logic lines...
         }
     }
+};
+
+OL.shiftStep = async function(resourceId, currentIndex, direction) {
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const res = source.find(n => n.id === resourceId);
+
+    if (!res || !res.steps) return;
+
+    const newIndex = currentIndex + direction;
+    if (newIndex < 0 || newIndex >= res.steps.length) return;
+
+    await OL.updateAndSync(() => {
+        // Swap elements in the array
+        const temp = res.steps[currentIndex];
+        res.steps[currentIndex] = res.steps[newIndex];
+        res.steps[newIndex] = temp;
+        
+        console.log(`↕️ Step rearranged in ${res.name}`);
+    });
+
+    // 🔄 Refresh the Inspector to show the new order
+    OL.loadInspector(resourceId);
+    
+    // Refresh canvas to update step numbering/badges
+    if (window.renderVisualizerV2) renderVisualizerV2(isVault);
 };
 
 OL.updateEntranceLogic = async function(nodeId, field, value) {
