@@ -14541,7 +14541,15 @@ OL.loadInspector = function(targetId, parentId = null) {
                     <div class="inspector-step-row vis-node" 
                         draggable="true"
                         data-step-id="${step.id}"
-                        ondragstart="event.stopPropagation(); OL.handleDragStart(event, '${step.id}', 'step', ${idx})"
+                        data-index="${idx}"
+                        ondragstart="
+                            e.dataTransfer.setData('moveId', '${step.id}');
+                            
+                            e.dataTransfer.setData('itemType', 'step');
+                            e.dataTransfer.setData('dragIdx', ${idx});
+                            this.style.opacity = '0.4';
+                        "
+                        ondragenter="state.currentDropIndex = ${idx};"
                         style="display: flex !important; position: relative !important; left: 0 !important; top: 0 !important; margin-bottom: 8px; 
                         align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); cursor: default; width: 100%;">
                         
@@ -14747,32 +14755,6 @@ OL.loadInspector = function(targetId, parentId = null) {
             // Redraw logic lines...
         }
     }
-};
-
-OL.shiftStep = async function(resourceId, currentIndex, direction) {
-    const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-    const res = source.find(n => n.id === resourceId);
-
-    if (!res || !res.steps) return;
-
-    const newIndex = currentIndex + direction;
-    if (newIndex < 0 || newIndex >= res.steps.length) return;
-
-    await OL.updateAndSync(() => {
-        // Swap elements in the array
-        const temp = res.steps[currentIndex];
-        res.steps[currentIndex] = res.steps[newIndex];
-        res.steps[newIndex] = temp;
-        
-        console.log(`↕️ Step rearranged in ${res.name}`);
-    });
-
-    // 🔄 Refresh the Inspector to show the new order
-    OL.loadInspector(resourceId);
-    
-    // Refresh canvas to update step numbering/badges
-    if (window.renderVisualizerV2) renderVisualizerV2(isVault);
 };
 
 OL.updateEntranceLogic = async function(nodeId, field, value) {
@@ -15790,32 +15772,6 @@ OL.handleUniversalDrop = async function(e, sectionId) {
         const source = isVault ? state.master.resources : client.projectData.localResources;
         const activeParentId = state.focusedWorkflowId || state.focusedResourceId;
 
-        // --- BRANCH A: GLOBAL REARRANGE ---
-        /* if (!activeParentId && itemType === 'workflow') {
-            const wf = source.find(r => String(r.id) === String(moveId));
-            if (wf) {
-                wf.stageId = sectionId;
-
-                // 1. Get all siblings in the target stage
-                const siblings = source.filter(r => String(r.stageId) === String(sectionId));
-                
-                // 2. Sort by current mapOrder
-                siblings.sort((a, b) => (a.mapOrder || 0) - (b.mapOrder || 0));
-
-                // 3. Remove the moving workflow from its current sibling position
-                const oldIdx = siblings.findIndex(r => String(r.id) === String(moveId));
-                if (oldIdx > -1) siblings.splice(oldIdx, 1);
-
-                // 4. Insert at the new visual target
-                // If targetIdx is too high, splice handles it by pushing to end
-                siblings.splice(targetIdx, 0, wf);
-
-                // 5. 💾 PERSISTENCE KEY: Update the original objects
-                siblings.forEach((r, i) => {
-                    r.mapOrder = i;
-                });
-            }
-        }*/
         // --- BRANCH A: GLOBAL REARRANGE ---
         if (!activeParentId && itemType === 'workflow') {
             const wf = source.find(r => String(r.id) === String(moveId));
