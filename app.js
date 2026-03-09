@@ -12978,7 +12978,7 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
                 ondragleave="this.classList.remove('active');" 
                 ondrop="OL.handleUnmapDrop(event)">
                 
-                <div class="unmap-content" style="opacity: 0; background: rgba(239, 68, 68, 0.1); border: 2px dashed #ef4444; color: #ef4444; padding: 40px; border-radius: 20px; font-weight: bold; pointer-events: none;">
+                <div class="unmap-content" style="opacity: 0; background: rgba(239, 68, 68, 0.1);">
                     Drop here to Unmap
                 </div>
             </div>
