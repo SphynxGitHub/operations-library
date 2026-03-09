@@ -16111,6 +16111,14 @@ window.renderScopingSheet = function () {
         return matchesSearch && matchesType;
     });
 
+    const backBtn = state.scopingFilterActive ? `
+    <button class="btn primary" 
+            onclick="state.scopingFilterActive = false; state.viewMode = 'workbench'; window.location.hash = '#/workbench';"
+            style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+        ← Back to Workbench (Exit Focus Mode)
+    </button>
+` : '';
+
     // 3. DATA FOR DROPDOWNS (Pulled from full list so you can always see options)
     const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
     const availableParties = [...new Set(sheet.lineItems.map(i => i.responsibleParty))].filter(Boolean).sort();
@@ -16135,6 +16143,7 @@ window.renderScopingSheet = function () {
             <h2>📊 ${esc(client.meta.name)} Scoping Sheet</h2>
         </div>
         <div class="header-actions">
+            ${backBtn}
             <button class="btn small soft" onclick="OL.toggleScopingUnits()">
                 ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
             </button>
@@ -16683,8 +16692,14 @@ OL.filterResourceForScope = function (query) {
     // Combine local items with only the "un-cloned" master items
     const combined = [...localSource, ...filteredMaster];
 
-    // 3. Filter for search term AND exclude items ALREADY on the scoping sheet
+    // 3. Filter for search term OR surgical match
     const matches = combined.filter((res) => {
+        // 🚀 SURGICAL OVERRIDE: If we are coming from a badge click
+        if (state.scopingFilterActive && state.scopingTargetId) {
+            return String(res.id) === String(state.scopingTargetId);
+        }
+
+        // Standard behavior for normal searching
         const nameMatch = res.name.toLowerCase().includes(q);
         const alreadyInScope = existingIds.includes(res.id);
         return nameMatch && !alreadyInScope;
