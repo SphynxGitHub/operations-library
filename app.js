@@ -15750,12 +15750,11 @@ OL.handleUniversalDragLeave = function(e) {
 OL.handleUniversalDrop = async function(e, sectionId) {
     e.preventDefault();
     
+    const isVault = location.hash.includes('vault');
     const moveId = e.dataTransfer.getData("moveId");
     const itemType = e.dataTransfer.getData("itemType"); 
     const dragIdx = parseInt(e.dataTransfer.getData("dragIdx"));
     const dragContext = e.dataTransfer.getData("parentContext");
-    const isVault = location.hash.includes('vault');
-
     const targetIdx = (state.currentDropIndex !== null) ? state.currentDropIndex : 999;
 
     document.querySelectorAll('.hovered').forEach(el => el.classList.remove('hovered'));
@@ -15961,6 +15960,7 @@ OL.closeSidebar = function() {
     }
 
     // 4. Force Repaint to clear the sidebar from the DOM
+    const isVault = window.location.hash.includes('vault');
     window.renderGlobalVisualizer(isVault);
 };
 
