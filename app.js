@@ -9777,9 +9777,11 @@ OL.startNodeDrag = function(e, nodeId) {
 
     const idStr = String(nodeId);
     const isVault = window.location.hash.includes('vault');
+    
+    // 🚀 NEW: Check if the element is in the Sidebar/Tray
+    const isFromTray = !!e.target.closest('.v2-workbench-tray') || !!e.target.closest('.v2-sidebar');
 
-    if (e.shiftKey) {
-        // 🛑 STOP EVERYTHING ELSE
+    if (e.shiftKey && !isFromTray) { // Only handle shift-select if NOT in the tray
         e.preventDefault();
         e.stopPropagation();
 
@@ -9789,20 +9791,20 @@ OL.startNodeDrag = function(e, nodeId) {
             state.v2.selectedNodes.add(idStr);
         }
         
-        console.log("Multi-Select Active:", Array.from(state.v2.selectedNodes));
-        
         renderVisualizerV2(isVault); 
-        return; // 🚀 CRITICAL: Exit here so inspector doesn't open
+        return; 
     } 
 
-    // NORMAL DRAG/CLICK
-    if (!state.v2.selectedNodes.has(idStr)) {
+    // NORMAL DRAG
+    // Only clear selection if we aren't dragging from the tray
+    if (!isFromTray && !state.v2.selectedNodes.has(idStr)) {
         state.v2.selectedNodes.clear();
         state.v2.selectedNodes.add(idStr);
-        // We don't render here to avoid flicker; the Inspector call below will handle UI focus
     }
 
     state.v2.activeDragId = idStr;
+    state.v2.isFromTray = isFromTray; // ⬅️ Ensure this is set correctly
+    
     OL.initWBMotion(e, idStr);
 };
 
