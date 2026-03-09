@@ -9923,18 +9923,17 @@ OL.initWBMotion = function(e, id) {
             zone.classList.remove('active', 'visible', 'is-hovered');
         }
 
-        // 🚀 NEW: Handle drops coming from the Sidebar/Tray
+        // 🚀 HANDLE DROPS FROM TRAY
         if (state.v2.isFromTray) {
             await OL.updateAndSync(() => {
                 const movingRes = OL.getResourceById(id);
                 if (!movingRes) return;
 
                 if (isUnmapDrop) {
-                    // Dropped back into unmap or tray area
+                    // Dropped back into tray: just reset it
                     delete movingRes.coords;
                     movingRes.parentId = null;
                 } else if (targetCardEl) {
-                    // Dropped from tray directly INTO another card
                     const targetId = targetCardEl.id.replace('v2-node-', '');
                     const parentRes = OL.getResourceById(targetId);
                     if (parentRes) {
@@ -9948,7 +9947,6 @@ OL.initWBMotion = function(e, id) {
                         movingRes.isGlobal = false;
                     }
                 } else {
-                    // 🎯 Standard Drop from Tray to Canvas
                     movingRes.coords = {
                         x: (uE.clientX - rect.left) / zoom,
                         y: (uE.clientY - rect.top) / zoom
@@ -9957,21 +9955,26 @@ OL.initWBMotion = function(e, id) {
                     movingRes.parentId = null;
                 }
             });
-            console.log("✅ Node mapped from tray to canvas.");
         } else {
-            // 💾 4. SECURE SYNC GROUP (Existing move logic)
+            // 💾 HANDLE MOVES ON CANVAS (Parachuting happens here)
             await OL.updateAndSync(() => {
                 dragGroup.forEach(node => {
                     const movingRes = OL.getResourceById(node.id);
                     if (!movingRes) return;
 
                     if (isUnmapDrop) {
-                        const res = OL.getResourceById(id);
-                        node.text = res?.name || node.name;
+                        // 🚀 FIXED PARACHUTE LOGIC:
+                        // Use the existing name so it doesn't turn into "Unmapped" or "SOP"
+                        const stableName = movingRes.name || node.text || "Unnamed Step";
                         
                         delete movingRes.coords; 
                         movingRes.parentId = null;
                         movingRes.isGlobal = false;
+                        
+                        movingRes.name = stableName; 
+                        node.text = stableName; 
+
+                        console.log(`🪂 Parachuted: ${stableName} (Type: ${movingRes.type})`);
                     } else if (targetCardEl) {
                         const targetId = targetCardEl.id.replace('v2-node-', '');
                         const parentRes = OL.getResourceById(targetId);
