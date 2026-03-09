@@ -14332,18 +14332,21 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 📱 DYNAMIC APP CONTEXT (Fixed & Hardened)
+    // 📱 DYNAMIC APP CONTEXT (Step-to-Parent Resolution)
     // ------------------------------------------------------------
-    const linkedApp = allApps.find(a => 
-        String(a.id) === String(data.appId) || 
-        String(a.id) === String(data.integration?.appId)
-    );
+    // 1. Check the data directly (Works for Resources)
+    // 2. Fallback to data.integration (Works for Brain Dumps)
+    // 3. Fallback to ParentRes (Works for Steps inside a Resource)
+    const linkedAppId = data.appId || data.integration?.appId || parentRes?.appId || parentRes?.integration?.appId;
 
-    if (linkedApp || data.integration) {
-        const appName = linkedApp ? linkedApp.name : (data.integration?.app || "Unknown App");
-        
-        // 🚀 THE FIX: Define typeIcon before using it
-        const typeIcon = (data.type === 'Trigger') ? '⚡' : '🛠️';
+    const linkedApp = allApps.find(a => String(a.id) === String(linkedAppId));
+
+    // Also resolve the integration object from the parent if the step is just a pointer
+    const effectiveIntegration = data.integration || parentRes?.integration;
+
+    if (linkedApp || effectiveIntegration) {
+        const appName = linkedApp ? linkedApp.name : (effectiveIntegration?.app || "Unknown App");
+        const typeIcon = (data.type === 'Trigger' || parentRes?.type === 'Trigger') ? '⚡' : '🛠️';
         
         html += `
             <div class="card-section" style="margin-top:20px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px;">
@@ -14354,18 +14357,18 @@ OL.loadInspector = function(targetId, parentId = null) {
                         <span style="font-size: 18px;">${OL.getRegistryIcon('app')}</span>
                         <div style="line-height: 1.2;">
                             <div style="font-weight: bold; color: white; font-size: 13px;">${esc(appName)}</div>
-                            <div class="tiny muted uppercase">Connection Active</div>
+                            <div class="tiny muted uppercase">${isStep ? 'Inherited from Parent' : 'Direct Connection'}</div>
                         </div>
                     </div>
                     
                     <button class="btn tiny soft" onclick="OL.openAppModal('${linkedApp?.id || ''}')">⚙️ Configure</button>
                 </div>
 
-                ${data.integration?.verb ? `
+                ${effectiveIntegration?.verb ? `
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
                         <div class="tiny-label">AUTOMATION EVENT</div>
                         <div style="font-size: 11px; color: #eee; font-family: monospace;">
-                            ${typeIcon} ${esc(data.integration.verb)} ${esc(data.integration.object)}
+                            ${typeIcon} ${esc(effectiveIntegration.verb)} ${esc(effectiveIntegration.object)}
                         </div>
                     </div>
                 ` : ''}
