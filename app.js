@@ -9300,23 +9300,34 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             const card = e.target.closest('.v2-node-card');
     
             if (card) {
-                const nodeId = card.id.replace('v2-node-', '');
+                const nodeId = String(card.id.replace('v2-node-', ''));
                 
-                // 🔑 SHIFT + CLICK: Toggle Selection
                 if (e.shiftKey) {
                     e.stopPropagation();
-                    if (state.v2.selectedNodes.has(nodeId)) state.v2.selectedNodes.delete(nodeId);
-                    else state.v2.selectedNodes.add(nodeId);
-                    renderVisualizerV2(isVault); // Re-render to show dashed lines
-                    return;
+                    e.preventDefault();
+
+                    // 🚀 FORCE RE-SYNC: Ensure the Set has the string ID
+                    if (state.v2.selectedNodes.has(nodeId)) {
+                        state.v2.selectedNodes.delete(nodeId);
+                    } else {
+                        state.v2.selectedNodes.add(nodeId);
+                    }
+                    
+                    console.log("Current Selection Set:", Array.from(state.v2.selectedNodes));
+                    
+                    // ⚡ RE-RENDER: This triggers renderV2Nodes again
+                    renderVisualizerV2(isVault); 
+                    return; 
                 }
 
-                // 🖱️ NORMAL CLICK: Select ONLY this one if not already part of a group
+                // 🖱️ NORMAL CLICK (No Shift)
+                // Only clear if we are clicking a node that isn't ALREADY selected
                 if (!state.v2.selectedNodes.has(nodeId)) {
                     state.v2.selectedNodes.clear();
                     state.v2.selectedNodes.add(nodeId);
+                    renderVisualizerV2(isVault);
                 }
-            } else if (!e.target.closest('.v2-toolbar')) {
+            }else if (!e.target.closest('.v2-toolbar')) {
                 // 🌊 CLICK BACKGROUND: Clear all
                 state.v2.selectedNodes.clear();
                 renderVisualizerV2(isVault);
