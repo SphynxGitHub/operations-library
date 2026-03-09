@@ -10251,6 +10251,9 @@ function renderV2Nodes(isVault) {
             : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
 
         const isSelected = state.v2.selectedNodes.has(String(node.id));
+        
+        const res = OL.getResourceById(node.id);
+        const displayName = res ? res.name : (node.text || "Unknown Resource");
 
         return `
             <div class="v2-node-card ${isSelected ? 'is-selected' : ''} ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
@@ -10277,7 +10280,7 @@ function renderV2Nodes(isVault) {
                 
                 <div class="v2-node-body" 
                 style="text-align: ${isLooseStep ? 'right' : 'left'}; padding-right: ${isLooseStep ? '4px' : '0'};">
-                    ${esc(node.name || node.text || "Untitled Step")}
+                    ${esc(displayName|| node.text || "Untitled Step")}
                 </div>
 
                 <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
