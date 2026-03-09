@@ -14258,23 +14258,22 @@ OL.loadInspector = function(targetId, parentId = null) {
     });
 
     // 🏗️ RENDER THE LIST
+    // Inside the incomingPaths.map loop in OL.loadInspector
     html += `
-        <div class="card-section" style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); margin-top:20px;">
-            <label class="modal-section-label" style="color:#a855f7;">📥 ENTRANCE SOURCES (Inbound Logic)</label>
-            
-            <div id="incoming-paths-list" style="margin-bottom: 12px;">
-                ${incomingPaths.map(path => `
-                    <div class="pill soft is-clickable" style="display:flex; align-items:center; gap:8px; margin-bottom:5px; background: rgba(0,0,0,0.2);"
-                         onclick="OL.loadInspector('${path.sourceId}', '${path.parentId || path.sourceId}')">
-                        <span style="font-size:10px;">⬅️</span>
-                        <div style="flex:1;">
-                            <div style="font-size:10px; font-weight:bold;">${esc(path.sourceName)}</div>
-                            <div style="font-size:8px; opacity:0.6;">${path.type}: ${esc(path.detail)}</div>
+        <div id="incoming-paths-list" style="margin-bottom: 12px;">
+            ${incomingPaths.map(path => `
+                <div class="pill soft is-clickable" style="display:flex; align-items:center; gap:8px; margin-bottom:5px; background: rgba(0,0,0,0.2); overflow: hidden;">
+                    <span style="font-size:10px; flex-shrink: 0;">⬅️</span>
+                    <div style="flex:1; min-width: 0;"> <div style="font-size:10px; font-weight:bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${esc(path.sourceName)}
                         </div>
-                        <span class="tiny muted">Inspect ➔</span>
+                        <div style="font-size:8px; opacity:0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${path.type}: ${esc(path.detail)}
+                        </div>
                     </div>
-                `).join('') || '<div class="tiny muted italic">No incoming logic paths found in this project.</div>'}
-            </div>
+                    <span class="tiny muted" style="flex-shrink: 0; font-size: 8px;">➔</span>
+                </div>
+            `).join('') || '<div class="tiny muted italic">No incoming logic paths found.</div>'}
         </div>`;
 
     // ------------------------------------------------------------
@@ -14460,16 +14459,20 @@ OL.loadInspector = function(targetId, parentId = null) {
                 <div style="display: flex; flex-direction: column; gap: 6px;">
                     ${filteredConnections.map(conn => `
                         <div class="pill accent is-clickable" 
-                             onclick="event.preventDefault(); event.stopPropagation(); OL.loadInspector('${conn.id}')"
-                             style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); pointer-events: auto !important;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
-                                <div style="display:flex; flex-direction:column;">
-                                    <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
-                                    <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
+                            onclick="event.preventDefault(); event.stopPropagation(); OL.loadInspector('${conn.id}')"
+                            style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); overflow: hidden;">
+                            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                                <span style="font-size: 12px; flex-shrink: 0;">${OL.getRegistryIcon(conn.type)}</span>
+                                <div style="display:flex; flex-direction:column; min-width: 0;">
+                                    <span style="font-size: 11px; color: #eee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                        ${esc(conn.name)}
+                                    </span>
+                                    <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">
+                                        ${conn.type.toUpperCase()}
+                                    </span>
                                 </div>
                             </div>
-                            <span style="font-size: 9px; opacity: 0.5;">Navigate →</span>
+                            <span style="font-size: 9px; opacity: 0.3; flex-shrink: 0; margin-left: 10px;">➔</span>
                         </div>
                     `).join('')}
                 </div>
