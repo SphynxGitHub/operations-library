@@ -9829,10 +9829,12 @@ OL.startNodeDrag = function(e, nodeId) {
         return; 
     }
 
-    if (!state.v2.selectedNodes.has(nodeId)) {
-        state.v2.selectedNodes.clear();
-        state.v2.selectedNodes.add(nodeId);
-        // Optional: renderVisualizerV2(); // To show selection immediately
+    if (!state.v2.selectedNodes.has(String(nodeId))) {
+        if (!e.shiftKey) {
+            state.v2.selectedNodes.clear();
+            state.v2.selectedNodes.add(nodeId);
+            renderVisualizerV2(); // To show highlight
+        }
     }
 
     e.preventDefault();
