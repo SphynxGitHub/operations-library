@@ -2714,7 +2714,7 @@ body.is-visualizer #mainContent {
     height: 100%;
 }
 
-.v2-workbench-shell, .pane-canvas-wrap {
+.v2-workbench-shell, .pane-canvas-wrap, body.view-workbench #mainContent {
     overflow:hidden;
 }
 
