@@ -14332,46 +14332,58 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 🚀 NEW: INTEGRATION / APP CONTEXT
+    // 📱 DYNAMIC APP CONTEXT (Inside OL.loadInspector)
     // ------------------------------------------------------------
-    if (data.integration && data.integration.app) {
-        const appColor = (data.type === 'Trigger') ? '#ffbf00' : '#38bdf8';
+    const linkedApp = allApps.find(a => 
+        String(a.id) === String(data.appId) || 
+        String(a.id) === String(data.integration?.appId)
+    );
+
+    if (linkedApp || data.integration) {
+        const appName = linkedApp ? linkedApp.name : (data.integration?.app || "Unknown App");
         
         html += `
-            <div class="card-section" style="margin-top:20px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px;">
-                <label class="modal-section-label" style="color: ${appColor};">🔌 INTEGRATION DETAILS</label>
+            <div class="card-section" style="margin-top:20px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px;">
+                <label class="modal-section-label" style="color: var(--accent); margin-bottom: 8px; display: block;">📱 LINKED APPLICATION</label>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                    <div class="modal-column">
-                        <label class="tiny-label">APPLICATION</label>
-                        <div style="font-weight: bold; color: white; font-size: 13px; cursor: pointer;" 
-                            onclick="OL.openAppModalByName('${esc(data.integration.app)}')">
-                            📱 ${esc(data.integration.app)} ➔
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div class="is-clickable" onclick="OL.openAppModal('${linkedApp?.id || ''}')" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 18px;">${OL.getRegistryIcon('app')}</span>
+                        <div style="line-height: 1.2;">
+                            <div style="font-weight: bold; color: white; font-size: 13px;">${esc(appName)}</div>
+                            <div class="tiny muted uppercase">Connection Active</div>
                         </div>
                     </div>
-                    <div class="modal-column">
-                        <label class="tiny-label">EVENT TYPE</label>
-                        <div style="font-weight: bold; color: white; font-size: 13px;">${typeIcon} ${esc(data.type)}</div>
-                    </div>
+                    
+                    <button class="btn tiny soft" onclick="OL.openAppModal('${linkedApp?.id || ''}')">⚙️ Configure</button>
                 </div>
 
-                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
-                    <label class="tiny-label">ACTION / VERB</label>
-                    <div style="font-size: 12px; color: #eee;">${esc(data.integration.verb)} ${esc(data.integration.object)}</div>
-                </div>
-
-                ${data.integration.fullEvent ? `
-                    <div style="margin-top: 8px;">
-                        <label class="tiny-label">ZAPIER EVENT</label>
-                        <div class="tiny muted" style="font-family: monospace; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 3px;">
-                            ${esc(data.integration.fullEvent)}
+                ${data.integration?.verb ? `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+                        <div class="tiny-label">AUTOMATION EVENT</div>
+                        <div style="font-size: 11px; color: #eee; font-family: monospace;">
+                            ${esc(data.integration.verb)} ${esc(data.integration.object)}
                         </div>
                     </div>
                 ` : ''}
             </div>
         `;
     }
-
+    else if (isTechnicalResource || isAtomicStep) {
+        // Show a "Link App" button if none is present
+        html += `
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">📱 Application</label>
+                <div class="search-map-container">
+                    <input type="text" class="modal-input tiny" placeholder="Link to App (Excel, Slack...)" 
+                           onfocus="OL.filterAppSearch('${parentId}', '${targetId}', '')"
+                           oninput="OL.filterAppSearch('${parentId}', '${targetId}', this.value)">
+                    <div id="app-search-results" class="search-results-overlay"></div>
+                </div>
+            </div>
+        `;
+    }
+    
     // ------------------------------------------------------------
     // 🚀 THE DEEP SCANNER: Find any node pointing to targetId
     // ------------------------------------------------------------
