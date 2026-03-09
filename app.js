@@ -10297,7 +10297,7 @@ OL.navigateToScoping = function(resourceId) {
     state.scopingFilterActive = true; 
 
     // 2. Switch Hash (Triggers page switch)
-    window.location.hash = '#/scoping-sheet';
+    window.location.hash = `#/scoping-sheet?focus=${resourceId}`;
 
     // 3. ⚡ FORCE RENDER: Explicitly call the function to ensure it uses the NEW state
     // Use a small timeout to let the hash-change settle
@@ -16065,6 +16065,14 @@ window.renderScopingSheet = function () {
 
     OL.registerView(renderScopingSheet); // Set the legacy reference too
 
+    const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
+    const focusId = urlParams.get('focus');
+    
+    if (focusId) {
+        state.scopingFilterActive = true;
+        state.scopingTargetId = focusId;
+    }
+
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
     const isAdmin = state.adminMode === true;
@@ -16091,9 +16099,8 @@ window.renderScopingSheet = function () {
 
     // 2. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
-        // 🎯 SURGICAL OVERRIDE
+        // 🎯 Now this will work because focusId is pulled from the URL
         if (state.scopingFilterActive && state.scopingTargetId) {
-            // Force both to strings to avoid Number vs String mismatches
             return String(item.resourceId) === String(state.scopingTargetId);
         }
 
