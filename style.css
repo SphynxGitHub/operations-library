@@ -4854,6 +4854,7 @@ path[stroke="transparent"] {
     transition: all 0.3s ease;
     display: none;
     border-radius: 5px;
+    border: 2px dashed #ef4444;
 }
 
 #unmap-zone.visible {
@@ -4864,7 +4865,6 @@ path[stroke="transparent"] {
 
 #unmap-zone.visible .unmap-content {
     opacity: 1 !important;
-    border: 2px dashed #ef4444;
 }
 
 /* 3. The Unmap Zone needs to be the top-most target */
