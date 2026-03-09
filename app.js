@@ -11106,7 +11106,8 @@ OL.toggleStepView = function(nodeId) {
         }
     });
 
-    // 3. Persist and Paint
+    // 3. Align, Persist and Paint
+    OL.autoAlignNodes();
     OL.persist();
     renderVisualizerV2(isVault);
     
@@ -11170,7 +11171,8 @@ OL.toggleMasterExpand = function() {
         });
     }
 
-    // 5. Persist and Paint
+    // 5. Align, Persist and Paint
+    OL.autoAlignNodes();
     OL.persist();
     renderVisualizerV2(isVault);
 
