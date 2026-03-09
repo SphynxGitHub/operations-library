@@ -9296,68 +9296,21 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     // 🌊 THE AUTO-CLOSE LISTENER (Optimized for Grid)
     const viewport = container.querySelector('#v2-viewport');
     if (viewport) {
+        // 🌊 THE AUTO-CLOSE & CLEAR LISTENER
         viewport.addEventListener('mousedown', (e) => {
-            const card = e.target.closest('.v2-node-card');
-    
-            if (card) {
-                const nodeId = String(card.id.replace('v2-node-', ''));
-                
-                if (e.shiftKey) {
-                    e.stopPropagation();
-                    e.preventDefault();
+            // If we clicked a card, stop. (startNodeDrag handles that now)
+            if (e.target.closest('.v2-node-card')) return;
 
-                    // 🚀 FORCE RE-SYNC: Ensure the Set has the string ID
-                    if (state.v2.selectedNodes.has(nodeId)) {
-                        state.v2.selectedNodes.delete(nodeId);
-                    } else {
-                        state.v2.selectedNodes.add(nodeId);
-                    }
-                    
-                    console.log("Current Selection Set:", Array.from(state.v2.selectedNodes));
-                    
-                    // ⚡ RE-RENDER: This triggers renderV2Nodes again
-                    renderVisualizerV2(isVault); 
-                    return; 
-                }
-
-                // 🖱️ NORMAL CLICK (No Shift)
-                // Only clear if we are clicking a node that isn't ALREADY selected
-                if (!state.v2.selectedNodes.has(nodeId)) {
-                    state.v2.selectedNodes.clear();
-                    state.v2.selectedNodes.add(nodeId);
-                    renderVisualizerV2(isVault);
-                }
-            }else if (!e.target.closest('.v2-toolbar')) {
-                // 🌊 CLICK BACKGROUND: Clear all
+            // If we clicked the background (and not a toolbar/button)
+            if (!e.target.closest('.v2-toolbar') && !e.target.closest('.btn')) {
+                console.log("🌊 Background clicked: Clearing selection");
                 state.v2.selectedNodes.clear();
-                renderVisualizerV2(isVault);
-            }
-            // 1. 🛡️ Check if we hit a card, a button, or a port
-            if (e.target.closest('.v2-node-card') || e.target.closest('.btn') || e.target.closest('.v2-port')) {
-                return; // Let those elements handle their own clicks
-            }
-
-            // 2. 🚀 ACTIVATE ZEN MODE (Close Inspector)
-            // If the click was on the background of the viewport or canvas...
-            const isCanvasBackground = e.target.classList.contains('v2-viewport') || 
-                                       e.target.id === 'v2-canvas' || 
-                                       e.target.id === 'v2-canvas-scroll-wrap';
-
-            if (isCanvasBackground) {
-                console.log("🌊 Canvas background clicked: Closing Inspector");
                 
-                // Reach up to the master layout container
+                // Reach up to close inspector
                 const layout = document.querySelector('.three-pane-layout');
-                if (layout) {
-                    layout.classList.add('zen-mode-active');
-                    
-                    // Clear state focus
-                    state.activeInspectorResId = null;
-                    state.activeInspectorParentId = null;
-                    
-                    // 🪄 Visual Polish: Update the zoom/pan logic if needed
-                    OL.syncCanvasHighlights(); 
-                }
+                if (layout) layout.classList.add('zen-mode-active');
+                
+                renderVisualizerV2(isVault);
             }
         });
     }
@@ -9819,30 +9772,39 @@ OL.handleTrayDrag = function(e, resId) {
 
 // 🖱️ Dragging on Canvas (MouseDown)
 OL.startNodeDrag = function(e, nodeId) {
-    // 🛡️ 1. Port Shield: Don't drag if we are clicking a wiring port
+    // 1. Port/Step Shields
     if (e.target.classList.contains('v2-port')) return;
-    
-    // 🛡️ 2. Step Shield: If clicking an internal step row, 
-    // let the Step's own click/inspector logic handle it.
-    if (e.target.closest('.v2-step-item')) {
-        console.log("👆 Step clicked, skipping card drag.");
-        return; 
-    }
+    if (e.target.closest('.v2-step-item')) return;
 
-    if (!state.v2.selectedNodes.has(String(nodeId))) {
-        if (!e.shiftKey) {
+    const idStr = String(nodeId);
+    const isVault = window.location.hash.includes('vault');
+
+    // 🚀 NEW: SELECTION LOGIC MOVED HERE
+    if (e.shiftKey) {
+        // Toggle selection
+        if (state.v2.selectedNodes.has(idStr)) {
+            state.v2.selectedNodes.delete(idStr);
+        } else {
+            state.v2.selectedNodes.add(idStr);
+        }
+        // Force re-render to show highlights
+        renderVisualizerV2(isVault);
+        return; // Stop here; don't start dragging while holding shift
+    } else {
+        // Normal Drag: If the node isn't already part of a group, select ONLY this one
+        if (!state.v2.selectedNodes.has(idStr)) {
             state.v2.selectedNodes.clear();
-            state.v2.selectedNodes.add(nodeId);
-            renderVisualizerV2(); // To show highlight
+            state.v2.selectedNodes.add(idStr);
+            renderVisualizerV2(isVault);
         }
     }
 
+    // 2. Movement Logic
     e.preventDefault();
-    state.v2.activeDragId = nodeId;
+    state.v2.activeDragId = idStr;
     state.v2.isFromTray = false;
     
-    // Initialize the motion tracker (the code you just sent me)
-    OL.initWBMotion(e, nodeId);
+    OL.initWBMotion(e, idStr);
 };
 
 // ⚙️ THE PHYSICS CORE
