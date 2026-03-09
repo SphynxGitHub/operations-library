@@ -14214,28 +14214,42 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
-    // 🚀 NEW: ENTRANCE LOGIC (The "lambda" inlet)
+    // 🚀 NEW: ENTRANCE LOGIC (The "Incoming" Scanner)
     // ------------------------------------------------------------
-    const entLogic = data.entranceLogic || { field: '', operator: 'exists', value: '' };
+    // 1. Scan for all steps in the library that point to THIS targetId
+    const incomingPaths = allResources.flatMap(res => 
+        (res.steps || []).flatMap(step => 
+            (step.outcomes || []).filter(oc => {
+                const tid = oc.targetId || oc.action?.replace('jump_step_', '').replace('jump_res_', '');
+                return String(tid) === String(targetId);
+            }).map(oc => ({ parentRes: res, sourceStep: step, outcome: oc }))
+        )
+    );
+
     html += `
         <div class="card-section" style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); margin-top:20px;">
-            <label class="modal-section-label" style="color:#a855f7;">λ ENTRANCE CONDITION</label>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-                <input type="text" class="modal-input tiny" placeholder="Data Field..." 
-                       value="${esc(entLogic.field)}" 
-                       onblur="OL.updateEntranceLogic('${targetId}', 'field', this.value)">
-                
-                <select class="modal-input tiny" onchange="OL.updateEntranceLogic('${targetId}', 'operator', this.value)">
-                    <option value="exists" ${entLogic.operator === 'exists' ? 'selected' : ''}>Exists</option>
-                    <option value="equals" ${entLogic.operator === 'equals' ? 'selected' : ''}>Equals</option>
-                    <option value="contains" ${entLogic.operator === 'contains' ? 'selected' : ''}>Contains</option>
-                </select>
+            <label class="modal-section-label" style="color:#a855f7;">📥 ENTRANCE SOURCES (Inbound Logic)</label>
+            
+            <div id="incoming-paths-list" style="margin-bottom: 12px;">
+                ${incomingPaths.map(path => `
+                    <div class="pill soft is-clickable" style="display:flex; align-items:center; gap:8px; margin-bottom:5px; background: rgba(0,0,0,0.2);"
+                        onclick="OL.loadInspector('${path.sourceStep.id}', '${path.parentRes.id}')">
+                        <span style="font-size:10px;">⬅️</span>
+                        <div style="flex:1;">
+                            <div style="font-size:10px; font-weight:bold;">${esc(path.sourceStep.name)}</div>
+                            <div style="font-size:8px; opacity:0.6;">Condition: ${esc(path.outcome.condition || 'Always')}</div>
+                        </div>
+                        <span class="tiny muted">Inspect ➔</span>
+                    </div>
+                `).join('') || '<div class="tiny muted italic">No incoming logic paths found.</div>'}
             </div>
-            ${entLogic.operator !== 'exists' ? `
-                <input type="text" class="modal-input tiny" style="margin-top:8px; width:100%;" 
-                       placeholder="Value to match..." value="${esc(entLogic.value)}" 
-                       onblur="OL.updateEntranceLogic('${targetId}', 'value', this.value)">
-            ` : ''}
+
+            <div class="search-map-container">
+                <input type="text" class="modal-input tiny" placeholder="+ Connect a Source Step..." 
+                    onfocus="OL.filterEntranceSourceSearch('${targetId}', '')"
+                    oninput="OL.filterEntranceSourceSearch('${targetId}', this.value)">
+                <div id="entrance-source-results" class="search-results-overlay"></div>
+            </div>
         </div>`;
 
     // ------------------------------------------------------------
@@ -14529,6 +14543,55 @@ OL.updateEntranceLogic = async function(nodeId, field, value) {
     
     // Update canvas visuals to show the λ icon on the card
     OL.drawV2Connections(); 
+};
+
+OL.filterEntranceSourceSearch = function(currentTargetId, query) {
+    const listEl = document.getElementById("entrance-source-results");
+    if (!listEl) return;
+    const q = query.toLowerCase().trim();
+    const client = getActiveClient();
+    const allResources = [...state.master.resources, ...(client?.projectData?.localResources || [])];
+
+    let matches = [];
+    allResources.forEach(res => {
+        (res.steps || []).forEach(step => {
+            // Don't link to self
+            if (String(step.id) === String(currentTargetId)) return;
+            
+            if (step.name.toLowerCase().includes(q)) {
+                matches.push({ res, step });
+            }
+        });
+    });
+
+    listEl.innerHTML = matches.slice(0, 10).map(m => `
+        <div class="search-result-item" onmousedown="OL.executeEntranceLink('${m.res.id}', '${m.step.id}', '${currentTargetId}')">
+            <div style="display:flex; justify-content:space-between;">
+                <span>🎯 ${esc(m.step.name)}</span>
+                <span class="tiny muted">In: ${esc(m.res.name)}</span>
+            </div>
+        </div>
+    `).join('') || '<div class="search-result-item muted">No potential sources found</div>';
+};
+
+OL.executeEntranceLink = async function(sourceParentId, sourceStepId, targetId) {
+    await OL.updateAndSync(() => {
+        const sourceRes = OL.getResourceById(sourceParentId);
+        const step = sourceRes?.steps?.find(s => String(s.id) === String(sourceStepId));
+        
+        if (step) {
+            if (!step.outcomes) step.outcomes = [];
+            step.outcomes.push({
+                id: 'link_' + Date.now(),
+                action: `jump_step_${targetId}`,
+                label: "Connected Path",
+                condition: "Success"
+            });
+        }
+    });
+    
+    OL.loadInspector(targetId, state.activeInspectorParentId);
+    OL.drawV2Connections();
 };
 
 // 🔓 Strip the resource link
