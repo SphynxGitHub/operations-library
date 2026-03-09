@@ -6364,23 +6364,34 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
 };
 
 OL.executeAssignment = async function(parentId, stepId, isTrigger, memberId, memberName, type) {
-    const res = OL.getResourceById(parentId);
-    if (!res) return;
+    console.log("🎯 Executing Assignment:", { parentId, stepId, memberName });
 
     await OL.updateAndSync(() => {
-        const isFullResource = String(parentId) === String(stepId);
-        const target = isFullResource ? res : (res.steps || []).find(s => String(s.id) === String(stepId));
+        // 1. Resolve the Main Resource
+        const res = OL.getResourceById(parentId);
+        if (!res) return console.error("❌ Context Resource not found");
+
+        // 2. Determine the Target (Are we assigning the Card itself or a Step inside it?)
+        let target;
+        if (String(parentId) === String(stepId)) {
+            target = res; // 🏰 Resource Level
+        } else {
+            target = (res.steps || []).find(s => String(s.id) === String(stepId)); // 📝 Step Level
+        }
 
         if (target) {
             target.assigneeId = memberId;
             target.assigneeName = memberName;
             target.assigneeType = type; // 'person', 'role', or 'system'
-            console.log(`✅ Assigned ${memberName} to ${isFullResource ? 'Resource' : 'Step'}`);
+            console.log("✅ Assignment Saved to State");
+        } else {
+            console.error("❌ Could not locate target inside resource", stepId);
         }
     });
 
+    // 3. 🚀 FORCE UI SYNC
     OL.loadInspector(stepId, parentId);
-    OL.refreshMap();
+    OL.drawV2Connections(); // Update icons on the canvas
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
