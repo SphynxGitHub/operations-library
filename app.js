@@ -10236,8 +10236,10 @@ function renderV2Nodes(isVault) {
             ? `<i class="fas fa-link active-link-icon" title="Leashed to Parent" style="color: #fbbf24;"></i>`
             : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
 
+        const isSelected = state.v2.selectedNodes.has(String(node.id));
+
         return `
-            <div class="v2-node-card ${state.v2.selectedNodes.has(String(node.id)) ? 'is-selected' : ''} ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
+            <div class="v2-node-card ${isSelected ? 'is-selected' : ''} ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')"
