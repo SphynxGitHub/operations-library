@@ -6363,46 +6363,20 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
     listEl.innerHTML = html || `<div class="search-result-item muted">No matching local assignments found</div>`;
 };
 
-OL.executeAssignment = async function(resId, stepId, isTrigger, memberId, memberName, type) {
-    const client = getActiveClient();
-    if (!client) return;
-
-    // 1. Determine exactly which library we are in
-    const isVault = window.location.hash.includes('vault');
-    const targetLibrary = isVault ? state.master.resources : state.clients[state.activeClientId].projectData.localResources;
+OL.executeAssignment = async function(parentId, stepId, isTrigger, memberId, memberName, type) {
+    const res = OL.getResourceById(parentId);
+    if (!res) return;
 
     await OL.updateAndSync(() => {
-        let found = false;
+        const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+        const target = step || res; // Apply to step if found, otherwise the resource root
 
-        for (let r of targetLibrary) {
-            // Case A: The target is the Resource itself
-            if (String(r.id) === String(stepId)) {
-                r.assigneeId = memberId;
-                r.assigneeName = memberName;
-                r.assigneeType = type;
-                found = true;
-                break;
-            }
-
-            // Case B: The target is a Step inside this resource
-            if (r.steps) {
-                const stepIdx = r.steps.findIndex(s => String(s.id) === String(stepId));
-                if (stepIdx > -1) {
-                    r.steps[stepIdx].assigneeId = memberId;
-                    r.steps[stepIdx].assigneeName = memberName;
-                    r.steps[stepIdx].assigneeType = type;
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        if (!found) throw new Error("Target ID not found in live state tree.");
-        console.log("🎯 Property injected into Live State index.");
+        target.assigneeId = memberId;
+        target.assigneeName = memberName;
+        target.assigneeType = type; // 'person', 'role', or 'system'
     });
 
-    // 2. UI REFRESH
-    OL.loadInspector(stepId, resId !== stepId ? resId : null);
+    OL.loadInspector(stepId, parentId);
     OL.refreshMap();
 };
 
@@ -14188,6 +14162,77 @@ OL.loadInspector = function(targetId, parentId = null) {
                         `OL.updateResourceMetadata('${targetId}', 'description', this.value)`}">${esc(data.description || data.notes || '')}</textarea>
         </div>`;
 
+        // ------------------------------------------------------------
+    // 🚀 NEW: ENTRANCE LOGIC (The "lambda" inlet)
+    // ------------------------------------------------------------
+    const entLogic = data.entranceLogic || { field: '', operator: 'exists', value: '' };
+    html += `
+        <div class="card-section" style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2); margin-top:20px;">
+            <label class="modal-section-label" style="color:#a855f7;">λ ENTRANCE CONDITION</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <input type="text" class="modal-input tiny" placeholder="Data Field..." 
+                       value="${esc(entLogic.field)}" 
+                       onblur="OL.updateEntranceLogic('${targetId}', 'field', this.value)">
+                
+                <select class="modal-input tiny" onchange="OL.updateEntranceLogic('${targetId}', 'operator', this.value)">
+                    <option value="exists" ${entLogic.operator === 'exists' ? 'selected' : ''}>Exists</option>
+                    <option value="equals" ${entLogic.operator === 'equals' ? 'selected' : ''}>Equals</option>
+                    <option value="contains" ${entLogic.operator === 'contains' ? 'selected' : ''}>Contains</option>
+                </select>
+            </div>
+            ${entLogic.operator !== 'exists' ? `
+                <input type="text" class="modal-input tiny" style="margin-top:8px; width:100%;" 
+                       placeholder="Value to match..." value="${esc(entLogic.value)}" 
+                       onblur="OL.updateEntranceLogic('${targetId}', 'value', this.value)">
+            ` : ''}
+        </div>`;
+
+    // ------------------------------------------------------------
+    // 👨‍💼 NEW: MULTI-TYPE ASSIGNEE PICKER
+    // ------------------------------------------------------------
+    const assigneeLabel = data.assigneeName || 'Unassigned';
+    const assigneeIcon = data.assigneeType === 'system' ? '📱' : (data.assigneeType === 'role' ? '🎭' : '👨‍💼');
+
+    html += `
+        <div class="card-section" style="margin-top:20px;">
+            <label class="modal-section-label">👨‍💼 Responsibility Assignment</label>
+            <div class="pill accent" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05);">
+                <span style="font-size:11px;">${assigneeIcon} ${esc(assigneeLabel)}</span>
+                ${data.assigneeId ? `<b class="is-clickable" style="padding:0 5px;" onclick="OL.executeAssignment('${parentId}', '${targetId}', false, '', '', '')">×</b>` : ''}
+            </div>
+            <div class="search-map-container">
+                <input type="text" class="modal-input tiny" placeholder="Search Team, Roles, or Apps..."
+                       onfocus="OL.filterAssignmentSearch('${parentId}', '${targetId}', false, '')"
+                       oninput="OL.filterAssignmentSearch('${parentId}', '${targetId}', false, this.value)">
+                <div id="assignment-search-results" class="search-results-overlay"></div>
+            </div>
+        </div>`;
+
+    // ------------------------------------------------------------
+    // 📅 NEW: RELATIONAL SCHEDULING
+    // ------------------------------------------------------------
+    html += `
+        <div class="card-section" style="margin-top:20px;">
+            <label class="modal-section-label">📅 Relational Scheduling</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="number" class="modal-input tiny" style="width:50px;" 
+                       value="${data.timingValue || 0}" 
+                       onblur="${isAtomicStep ? `OL.updateAtomicStep('${parentId}', '${targetId}', 'timingValue', this.value)` : `OL.updateResourceMetadata('${targetId}', 'timingValue', this.value)`}">
+                
+                <select class="modal-input tiny" style="flex:1;" 
+                        onchange="${isAtomicStep ? `OL.updateAtomicStep('${parentId}', '${targetId}', 'timingType', this.value)` : `OL.updateResourceMetadata('${targetId}', 'timingType', this.value)`}">
+                    <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>Days after Previous</option>
+                    <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>Days after Project Start</option>
+                    <option value="manual" ${data.timingType === 'manual' ? 'selected' : ''}>Fixed Calendar Date</option>
+                </select>
+            </div>
+            ${data.timingType === 'manual' ? `
+                <input type="date" class="modal-input tiny" style="margin-top:8px; width:100%;" 
+                       value="${data.fixedDate || ''}" 
+                       onchange="${isAtomicStep ? `OL.updateAtomicStep('${parentId}', '${targetId}', 'fixedDate', this.value)` : `OL.updateResourceMetadata('${targetId}', 'fixedDate', this.value)`}">
+            ` : ''}
+        </div>`;
+
     // ------------------------------------------------------------
     // 3. INTERNAL PROCEDURE / STEPS (For Workflows & Resources)
     // ------------------------------------------------------------
@@ -14418,6 +14463,21 @@ OL.loadInspector = function(targetId, parentId = null) {
             // Redraw logic lines...
         }
     }
+};
+
+OL.updateEntranceLogic = async function(nodeId, field, value) {
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(nodeId);
+        if (!res) return;
+        if (!res.entranceLogic) res.entranceLogic = { field: '', operator: 'exists', value: '' };
+        res.entranceLogic[field] = value;
+    });
+    
+    // Refresh the inspector to show/hide the Value field if operator changed
+    OL.loadInspector(nodeId, state.activeInspectorParentId);
+    
+    // Optional: Refresh canvas to show λ badge
+    OL.drawV2Connections(); 
 };
 
 // 🔓 Strip the resource link
