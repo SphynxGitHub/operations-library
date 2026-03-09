@@ -4269,9 +4269,8 @@ ARROWS
 }
 
 .global-shelf-container {
-    position: absolute;
+    position: relative;
     left: 0;
-    top: 60px;
     margin: 75px 20px 10px 20px;
     width: auto;
     min-height: 100px;
