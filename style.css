@@ -4845,7 +4845,7 @@ path[stroke="transparent"] {
 #unmap-zone, #unmap-zone2 {
     position: fixed;
     top:80%;
-    width: 320px; /* Sidebar width */
+    width: 300px; /* Sidebar width */
     height: 20vh;
     z-index: 1500 !important; /* Must be higher than everything */
     pointer-events: none; /* Default to passthrough */
@@ -4853,6 +4853,7 @@ path[stroke="transparent"] {
     justify-content: center;
     transition: all 0.3s ease;
     display: none;
+    border-radius: 5px;
 }
 
 #unmap-zone.visible {
