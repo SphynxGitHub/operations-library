@@ -14332,6 +14332,47 @@ OL.loadInspector = function(targetId, parentId = null) {
     const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
+    // 🚀 NEW: INTEGRATION / APP CONTEXT
+    // ------------------------------------------------------------
+    if (data.integration && data.integration.app) {
+        const appColor = (data.type === 'Trigger') ? '#ffbf00' : '#38bdf8';
+        
+        html += `
+            <div class="card-section" style="margin-top:20px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px;">
+                <label class="modal-section-label" style="color: ${appColor};">🔌 INTEGRATION DETAILS</label>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                    <div class="modal-column">
+                        <label class="tiny-label">APPLICATION</label>
+                        <div style="font-weight: bold; color: white; font-size: 13px; cursor: pointer;" 
+                            onclick="OL.openAppModalByName('${esc(data.integration.app)}')">
+                            📱 ${esc(data.integration.app)} ➔
+                        </div>
+                    </div>
+                    <div class="modal-column">
+                        <label class="tiny-label">EVENT TYPE</label>
+                        <div style="font-weight: bold; color: white; font-size: 13px;">${typeIcon} ${esc(data.type)}</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+                    <label class="tiny-label">ACTION / VERB</label>
+                    <div style="font-size: 12px; color: #eee;">${esc(data.integration.verb)} ${esc(data.integration.object)}</div>
+                </div>
+
+                ${data.integration.fullEvent ? `
+                    <div style="margin-top: 8px;">
+                        <label class="tiny-label">ZAPIER EVENT</label>
+                        <div class="tiny muted" style="font-family: monospace; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 3px;">
+                            ${esc(data.integration.fullEvent)}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    // ------------------------------------------------------------
     // 🚀 THE DEEP SCANNER: Find any node pointing to targetId
     // ------------------------------------------------------------
     const incomingPaths = [];
