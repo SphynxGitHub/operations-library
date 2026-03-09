@@ -9944,7 +9944,9 @@ OL.initWBMotion = function(e, id) {
                             resourceLinkId: movingRes.id
                         });
                         delete movingRes.coords;
+                        movingRes.parentId = parentRes.id;
                         movingRes.isGlobal = false;
+                        console.log(`🔗 Linked ${movingRes.name} as a step inside ${parentRes.name}`);
                     }
                 } else {
                     movingRes.coords = {
