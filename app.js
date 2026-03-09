@@ -9835,9 +9835,11 @@ OL.startNodeDrag = function(e, nodeId) {
 // ⚙️ THE PHYSICS CORE
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
+    const canvas = document.getElementById('v2-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
     const startX = e.clientX;
     const startY = e.clientY;
-    const zoom = state.v2.zoom || 1;
     
     // 🚀 MOVE THIS HERE: Now both onMove and onUp can see it
     let hasMovedSignificantAmount = false;
@@ -9890,10 +9892,6 @@ OL.initWBMotion = function(e, id) {
 
         // Update SVG connections in real-time
         OL.drawV2Connections();
-
-        const canvas = document.getElementById('v2-canvas');
-        const rect = canvas.getBoundingClientRect();
-        const zoom = state.v2.zoom || 1;
 
         // 1. 🎯 DETECT HOVER TARGET
         const target = document.elementFromPoint(mE.clientX, mE.clientY);
