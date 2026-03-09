@@ -16153,7 +16153,7 @@ window.renderScopingSheet = function () {
 
     ${state.scopingFilterActive ? `
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <button class="btn primary" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; renderScopingSheet();">
+            <button class="btn primary" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/scoping-sheet';">
                 ⬅ Show Full Scoping Sheet
             </button>
             <button class="btn soft" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/visualizer';">
