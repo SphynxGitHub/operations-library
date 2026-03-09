@@ -14538,40 +14538,33 @@ OL.loadInspector = function(targetId, parentId = null) {
                      style="display:flex; flex-direction:column; gap:5px; min-height:50px; transition: background 0.2s;">
                     
                     ${(data.steps || []).map((step, idx) => `
-                    <div class="inspector-step-row vis-node" 
-                        draggable="true"
-                        data-step-id="${step.id}"
-                        data-index="${idx}"
-                        ondragstart="
-                            e.dataTransfer.setData('moveId', '${step.id}');
+                        <div class="inspector-step-row vis-node" 
+                            draggable="true"
+                            data-step-id="${step.id}"
+                            data-index="${idx}"
+                            ondragstart="
+                                event.stopPropagation();
+                                event.dataTransfer.setData('moveId', '${step.id}');
+                                event.dataTransfer.setData('itemType', 'step');
+                                event.dataTransfer.setData('dragIdx', ${idx});
+                                event.dataTransfer.setData('parentContext', '${data.id}');
+                                this.style.opacity = '0.4';
+                            "
+                            ondragenter="state.currentDropIndex = ${idx};"
+                            style="display: flex !important; position: relative !important; margin-bottom: 8px; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); cursor: grab; width: 100%;">
                             
-                            e.dataTransfer.setData('itemType', 'step');
-                            e.dataTransfer.setData('dragIdx', ${idx});
-                            this.style.opacity = '0.4';
-                        "
-                        ondragenter="state.currentDropIndex = ${idx};"
-                        style="display: flex !important; position: relative !important; left: 0 !important; top: 0 !important; margin-bottom: 8px; 
-                        align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); cursor: default; width: 100%;">
-                        
-                        <span class="muted" style="cursor:grab; font-size:12px; opacity:0.5;">⋮⋮</span>
-                        <span class="tiny bold accent" style="width:18px;">${idx + 1}</span>
-                        
-                        <div class="is-clickable" style="flex:1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
-                            onclick="OL.loadInspector('${step.id || step.resourceLinkId}', '${data.id}')">
-                            ${esc(step.name || 'Unnamed Step')}
+                            <span class="muted" style="font-size:14px; opacity:0.5; pointer-events: none; flex-shrink: 0;">⋮⋮</span>
+                            <span class="tiny bold accent" style="width:20px; pointer-events: none; flex-shrink: 0;">${idx + 1}</span>
+                            
+                            <div class="is-clickable" style="flex:1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                                onclick="OL.loadInspector('${step.id || step.resourceLinkId}', '${data.id}')">
+                                ${esc(step.name || 'Unnamed Step')}
+                            </div>
+                            
+                            <button class="card-delete-btn" style="position:static; font-size:16px; opacity:0.7; flex-shrink: 0;" 
+                                    onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
                         </div>
-
-                        <div style="display: flex; gap: 2px; margin-right: 5px;">
-                            <button class="btn tiny soft" onclick="event.stopPropagation(); OL.shiftStep('${data.id}', ${idx}, -1)" 
-                                    style="padding: 2px 6px; font-size: 8px;" ${idx === 0 ? 'disabled' : ''}>▲</button>
-                            <button class="btn tiny soft" onclick="event.stopPropagation(); OL.shiftStep('${data.id}', ${idx}, 1)" 
-                                    style="padding: 2px 6px; font-size: 8px;" ${idx === (data.steps.length - 1) ? 'disabled' : ''}>▼</button>
-                        </div>
-                        
-                        <button class="card-delete-btn" style="position:static; font-size:16px; opacity:0.7;" 
-                                onclick="event.stopPropagation(); OL.removeStepFromCanvas('${data.id}', '${step.id}')">×</button>
-                    </div>
-                `).join('')}
+                    `).join('')}
                 </div>
             </div>`;
     }
@@ -15811,13 +15804,32 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             }
         }
         // --- BRANCH B: INTERNAL REARRANGE (Tier 2/3) ---
-        else if (activeParentId) {
+        else if (activeParentId || e.dataTransfer.getData("parentContext")) {
             const isL3Drop = (sectionId === 'Trigger' || sectionId === 'Action');
     
-            const parentId = isL3Drop ? state.focusedResourceId : state.focusedWorkflowId;
+            const parentId = activeParentId || e.dataTransfer.getData("parentContext");
             const parent = source.find(r => String(r.id) === String(parentId));
             
             if (!parent) return console.error("Drop failed: Parent not found for ID", parentId);
+
+            if (itemType === 'step') {
+                const moveId = e.dataTransfer.getData("moveId");
+                const dragIdxFromEvent = parseInt(e.dataTransfer.getData("dragIdx"));
+                
+                // Find where it is currently
+                const actualDragIdx = parent.steps.findIndex(s => String(s.id) === String(moveId));
+                const sourceIdx = (actualDragIdx > -1) ? actualDragIdx : dragIdxFromEvent;
+
+                if (sourceIdx > -1 && targetIdx !== 999) {
+                    const [movingItem] = parent.steps.splice(sourceIdx, 1);
+                    parent.steps.splice(targetIdx, 0, movingItem);
+                    
+                    // 💾 Normalize for persistence
+                    parent.steps.forEach((s, i) => s.mapOrder = i);
+                    
+                    console.log(`✅ Rearranged: ${sourceIdx} -> ${targetIdx}`);
+                }
+            }
 
             // 1. Dropping a NEW item
             if (itemType.includes('factory') || itemType === 'resource' || itemType === 'workflow') {
@@ -15895,6 +15907,15 @@ OL.handleUniversalDrop = async function(e, sectionId) {
     
     // Clear inspector to prevent ghosting old data
     OL.clearInspector?.();
+
+    if (itemType === 'step') {
+        // Keep inspector open and reload with the parent context
+        const refreshId = activeParentId || e.dataTransfer.getData("parentContext");
+        OL.loadInspector(refreshId);
+    } else {
+        // Only close if it's a global workflow move or a tray drop
+        if (typeof OL.closeSidebar === 'function') OL.closeSidebar();
+    }
 
     if (typeof window.renderGlobalVisualizer === 'function') {
         window.renderGlobalVisualizer(isVault);
