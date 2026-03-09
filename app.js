@@ -12936,8 +12936,9 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
     const trayItems = allResources.filter(res => {
         // 🚀 THE FIX: A resource is only "Unmapped" if it has NO coords AND is NOT Global
         const isMappedOnGrid = res.coords && typeof res.coords.x === 'number';
+        const isMappedInParent = !!res.parentId;
         const isMappedOnShelf = !!res.isGlobal;
-        const isActuallyUnmapped = !isMappedOnGrid && !isMappedOnShelf;
+        const isActuallyUnmapped = !isMappedOnGrid && !isMappedInParent && !isMappedOnShelf;
 
         const matchesType = typeFilter === "All" || res.type === typeFilter;
         
