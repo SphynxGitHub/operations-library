@@ -6364,34 +6364,25 @@ OL.filterAssignmentSearch = function(resId, targetId, isTrigger, query) {
 };
 
 OL.executeAssignment = async function(parentId, stepId, isTrigger, memberId, memberName, type) {
-    console.log("🎯 Executing Assignment:", { parentId, stepId, memberName });
+    // 🛡️ Guard: If parentId is undefined or matches stepId, use stepId as the root
+    const rootId = (parentId === 'undefined' || !parentId || parentId === stepId) ? stepId : parentId;
+    
+    const res = OL.getResourceById(rootId);
+    if (!res) return console.error("❌ Context Resource not found for assignment");
 
     await OL.updateAndSync(() => {
-        // 1. Resolve the Main Resource
-        const res = OL.getResourceById(parentId);
-        if (!res) return console.error("❌ Context Resource not found");
-
-        // 2. Determine the Target (Are we assigning the Card itself or a Step inside it?)
-        let target;
-        if (String(parentId) === String(stepId)) {
-            target = res; // 🏰 Resource Level
-        } else {
-            target = (res.steps || []).find(s => String(s.id) === String(stepId)); // 📝 Step Level
-        }
+        const isFullResource = String(res.id) === String(stepId);
+        const target = isFullResource ? res : (res.steps || []).find(s => String(s.id) === String(stepId));
 
         if (target) {
             target.assigneeId = memberId;
             target.assigneeName = memberName;
             target.assigneeType = type; // 'person', 'role', or 'system'
-            console.log("✅ Assignment Saved to State");
-        } else {
-            console.error("❌ Could not locate target inside resource", stepId);
         }
     });
 
-    // 3. 🚀 FORCE UI SYNC
-    OL.loadInspector(stepId, parentId);
-    OL.drawV2Connections(); // Update icons on the canvas
+    OL.loadInspector(stepId, rootId);
+    OL.refreshMap();
 };
 
 // ADD UPDATE OR REMOVE TRIGGERS
@@ -14193,7 +14184,9 @@ OL.loadInspector = function(targetId, parentId = null) {
                         `OL.updateResourceMetadata('${targetId}', 'description', this.value)`}">${esc(data.description || data.notes || '')}</textarea>
         </div>`;
 
-        // ------------------------------------------------------------
+    const effectiveParentId = parentId || targetId;
+
+    // ------------------------------------------------------------
     // 🚀 NEW: ENTRANCE LOGIC (The "lambda" inlet)
     // ------------------------------------------------------------
     const entLogic = data.entranceLogic || { field: '', operator: 'exists', value: '' };
@@ -14229,12 +14222,12 @@ OL.loadInspector = function(targetId, parentId = null) {
             <label class="modal-section-label">👨‍💼 Responsibility Assignment</label>
             <div class="pill accent" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05);">
                 <span style="font-size:11px;">${assigneeIcon} ${esc(assigneeLabel)}</span>
-                ${data.assigneeId ? `<b class="is-clickable" style="padding:0 5px;" onclick="OL.executeAssignment('${parentId}', '${targetId}', false, '', '', '')">×</b>` : ''}
+                ${data.assigneeId ? `<b class="is-clickable" style="padding:0 5px;" onclick="OL.executeAssignment('${effectiveParentId}', '${targetId}', false, '', '', '')">×</b>` : ''}
             </div>
             <div class="search-map-container">
                 <input type="text" class="modal-input tiny" placeholder="Search Team, Roles, or Apps..."
-                       onfocus="OL.filterAssignmentSearch('${parentId}', '${targetId}', false, '')"
-                       oninput="OL.filterAssignmentSearch('${parentId}', '${targetId}', false, this.value)">
+                       onfocus="OL.filterAssignmentSearch('${effectiveParentId}', '${targetId}', false, '')"
+                       oninput="OL.filterAssignmentSearch('${effectiveParentId}', '${targetId}', false, this.value)">
                 <div id="assignment-search-results" class="search-results-overlay"></div>
             </div>
         </div>`;
@@ -14248,10 +14241,10 @@ OL.loadInspector = function(targetId, parentId = null) {
             <div style="display:flex; gap:8px; align-items:center;">
                 <input type="number" class="modal-input tiny" style="width:50px;" 
                        value="${data.timingValue || 0}" 
-                       onblur="${isAtomicStep ? `OL.updateAtomicStep('${parentId}', '${targetId}', 'timingValue', this.value)` : `OL.updateResourceMetadata('${targetId}', 'timingValue', this.value)`}">
+                       onblur="OL.updateAtomicStep('${effectiveParentId}', '${targetId}', 'timingValue', this.value)">
                 
                 <select class="modal-input tiny" style="flex:1;" 
-                        onchange="${isAtomicStep ? `OL.updateAtomicStep('${parentId}', '${targetId}', 'timingType', this.value)` : `OL.updateResourceMetadata('${targetId}', 'timingType', this.value)`}">
+                        onchange="OL.updateAtomicStep('${effectiveParentId}', '${targetId}', 'timingType', this.value)">
                     <option value="after_prev" ${data.timingType === 'after_prev' ? 'selected' : ''}>Days after Previous</option>
                     <option value="after_start" ${data.timingType === 'after_start' ? 'selected' : ''}>Days after Project Start</option>
                     <option value="manual" ${data.timingType === 'manual' ? 'selected' : ''}>Fixed Calendar Date</option>
@@ -14260,7 +14253,7 @@ OL.loadInspector = function(targetId, parentId = null) {
             ${data.timingType === 'manual' ? `
                 <input type="date" class="modal-input tiny" style="margin-top:8px; width:100%;" 
                        value="${data.fixedDate || ''}" 
-                       onchange="${isAtomicStep ? `OL.updateAtomicStep('${parentId}', '${targetId}', 'fixedDate', this.value)` : `OL.updateResourceMetadata('${targetId}', 'fixedDate', this.value)`}">
+                       onchange="OL.updateAtomicStep('${effectiveParentId}', '${targetId}', 'fixedDate', this.value)">
             ` : ''}
         </div>`;
 
@@ -14504,10 +14497,10 @@ OL.updateEntranceLogic = async function(nodeId, field, value) {
         res.entranceLogic[field] = value;
     });
     
-    // Refresh the inspector to show/hide the Value field if operator changed
+    // Refresh inspector to reflect logic changes (like showing/hiding value input)
     OL.loadInspector(nodeId, state.activeInspectorParentId);
     
-    // Optional: Refresh canvas to show λ badge
+    // Update canvas visuals to show the λ icon on the card
     OL.drawV2Connections(); 
 };
 
