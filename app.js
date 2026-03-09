@@ -10291,26 +10291,22 @@ function renderV2Nodes(isVault) {
 OL.navigateToScoping = function(resourceId) {
     const idStr = String(resourceId);
     
-    // 1. Prepare State
+    // 1. Lock the state first
     state.viewMode = 'scoping';
     state.scopingTargetId = idStr;
     state.scopingFilterActive = true; 
-    
-    // 2. Set the search query so the search box matches the filter
-    const res = OL.getResourceById(idStr);
-    state.ui.scopingSearchQuery = res ? res.name : ''; 
 
-    // 3. Navigate
+    // 2. Switch Hash (Triggers page switch)
     window.location.hash = '#/scoping-sheet';
 
-    // 4. Smooth Scroll & Highlight once rendered
+    // 3. ⚡ FORCE RENDER: Explicitly call the function to ensure it uses the NEW state
+    // Use a small timeout to let the hash-change settle
     setTimeout(() => {
-        const targetRow = document.querySelector(`[data-scoping-id="${idStr}"]`);
-        if (targetRow) {
-            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetRow.classList.add('row-highlight-flash');
+        if (typeof renderScopingSheet === 'function') {
+            console.log("⚡ Executing Surgical Render for ID:", idStr);
+            renderScopingSheet();
         }
-    }, 300);
+    }, 50);
 };
 
 OL.jumpToScopingItem = function(nodeId) {
@@ -16095,9 +16091,11 @@ window.renderScopingSheet = function () {
 
     // 2. ADVANCED FILTERING LOGIC
     const filteredItems = sheet.lineItems.filter(item => {
-        // 🎯 The Only Logic That Matters:
+        // 🎯 SURGICAL OVERRIDE
         if (state.scopingFilterActive && state.scopingTargetId) {
-            return String(item.resourceId) === String(state.scopingTargetId);
+            const match = String(item.resourceId) === String(state.scopingTargetId);
+            // console.log(`🔍 Comparing Item: ${item.resourceId} vs Target: ${state.scopingTargetId} | Match: ${match}`);
+            return match;
         }
 
         const res = OL.getResourceById(item.resourceId);
