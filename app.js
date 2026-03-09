@@ -9905,6 +9905,8 @@ OL.initWBMotion = function(e, id) {
         
         if (!hasMovedSignificantAmount) {
             state.v2.activeDragId = null;
+            const ghost = document.getElementById('drag-ghost');
+            if (ghost) ghost.remove();
             return; 
         }
 
@@ -9921,17 +9923,18 @@ OL.initWBMotion = function(e, id) {
             zone.classList.remove('active', 'visible', 'is-hovered');
         }
 
-        // 💾 4. SECURE SYNC GROUP
-        await OL.updateAndSync(() => {
-            dragGroup.forEach(node => {
-                const movingRes = OL.getResourceById(node.id);
+        // 🚀 NEW: Handle drops coming from the Sidebar/Tray
+        if (state.v2.isFromTray) {
+            await OL.updateAndSync(() => {
+                const movingRes = OL.getResourceById(id);
                 if (!movingRes) return;
 
                 if (isUnmapDrop) {
-                    delete movingRes.coords; 
+                    // Dropped back into unmap or tray area
+                    delete movingRes.coords;
                     movingRes.parentId = null;
-                    movingRes.isGlobal = false;
                 } else if (targetCardEl) {
+                    // Dropped from tray directly INTO another card
                     const targetId = targetCardEl.id.replace('v2-node-', '');
                     const parentRes = OL.getResourceById(targetId);
                     if (parentRes) {
@@ -9945,22 +9948,57 @@ OL.initWBMotion = function(e, id) {
                         movingRes.isGlobal = false;
                     }
                 } else {
-                    // Standard Grid Move
+                    // 🎯 Standard Drop from Tray to Canvas
                     movingRes.coords = {
-                        x: node.initialX + dx,
-                        y: node.initialY + dy
+                        x: (uE.clientX - rect.left) / zoom,
+                        y: (uE.clientY - rect.top) / zoom
                     };
                     movingRes.isGlobal = false;
+                    movingRes.parentId = null;
                 }
             });
-        });
+            console.log("✅ Node mapped from tray to canvas.");
+        } else {
+            // 💾 4. SECURE SYNC GROUP (Existing move logic)
+            await OL.updateAndSync(() => {
+                dragGroup.forEach(node => {
+                    const movingRes = OL.getResourceById(node.id);
+                    if (!movingRes) return;
+
+                    if (isUnmapDrop) {
+                        delete movingRes.coords; 
+                        movingRes.parentId = null;
+                        movingRes.isGlobal = false;
+                    } else if (targetCardEl) {
+                        const targetId = targetCardEl.id.replace('v2-node-', '');
+                        const parentRes = OL.getResourceById(targetId);
+                        if (parentRes) {
+                            if (!parentRes.steps) parentRes.steps = [];
+                            parentRes.steps.push({
+                                id: 'link_' + Date.now(),
+                                name: movingRes.name,
+                                resourceLinkId: movingRes.id
+                            });
+                            delete movingRes.coords;
+                            movingRes.isGlobal = false;
+                        }
+                    } else {
+                        movingRes.coords = {
+                            x: node.initialX + dx,
+                            y: node.initialY + dy
+                        };
+                        movingRes.isGlobal = false;
+                    }
+                });
+            });
+        }
 
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
         state.v2.activeDragId = null;
         window.renderGlobalVisualizer(isVault);
     };
-
+    
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
