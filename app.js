@@ -9159,7 +9159,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             <div class="v2-canvas-header-area">
 
                 <div id="global-shelf" class="global-shelf-container"
-                    style="pointer-events: all !important; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});""
+                    style="scale: ${state.v2.zoom};"
                     ondragover="event.preventDefault(); this.classList.add('drag-over');"
                     ondragleave="this.classList.remove('drag-over');"
                     ondrop="OL.handleShelfDrop(event)">
@@ -9674,70 +9674,48 @@ OL.syncZapLogic = function(selectEl) {
 
 OL.initV2Panning = function() {
     const viewport = document.getElementById('v2-viewport');
-    const canvas = document.getElementById('v2-canvas');
-    const headers = document.getElementById('v2-sticky-stage-headers'); // 🚀 Added
-    if (!viewport || !canvas) return;
+    if (!viewport) return;
 
     let isPanning = false;
     let startX, startY;
 
     viewport.onmousedown = (e) => {
-        // 1. 🛡️ Check if we hit a node or UI element
-        if (e.target.closest('.v2-node-card') || e.target.closest('.btn') || e.target.closest('.v2-toolbar')) {
-            return;
-        }
+        // Only pan if clicking the background
+        if (e.target.closest('.v2-node-card') || e.target.closest('.btn') || e.target.closest('.v2-toolbar')) return;
 
-        if (!e.target.closest('.v2-node-card') && !e.target.closest('.btn')) {
-             const layout = document.querySelector('.three-pane-layout');
-             if (layout) layout.classList.add('zen-mode-active');
-        }
-
-        // 2. 🚀 THE CLOSE LOGIC (Triggered on background click)
-        const isBackground = e.target.id === 'v2-viewport' || 
-                             e.target.id === 'v2-canvas' || 
-                             e.target.id === 'v2-canvas-scroll-wrap' ||
-                             e.target.classList.contains('v2-viewport');
-
-        if (isBackground) {
-            console.log("🌊 Background hit: Closing Inspector");
-            const layout = document.querySelector('.three-pane-layout');
-            if (layout) {
-                layout.classList.add('zen-mode-active');
-                state.activeInspectorResId = null;
-                OL.syncCanvasHighlights(); 
-            }
-        }
-
-        // 3. START PANNING ENGINE
         isPanning = true;
         startX = e.clientX - state.v2.pan.x;
         startY = e.clientY - state.v2.pan.y;
+        
+        viewport.style.cursor = 'grabbing';
     };
 
-    window.onmousemove = (e) => {
+    // 🚀 USE DOCUMENT instead of window/viewport for smoother tracking
+    document.addEventListener('mousemove', (e) => {
         if (!isPanning) return;
+        
         state.v2.pan.x = e.clientX - startX;
         state.v2.pan.y = e.clientY - startY;
 
         const canvas = document.getElementById('v2-canvas');
-        const viewport = document.getElementById('v2-viewport');
         const headers = document.getElementById('v2-sticky-stage-headers');
 
-        // 1. Move the Canvas (Cards + Lines zoom/pan together now)
-        canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
-        
-        // 2. Sync the sticky labels (Still needs manual sync since they are fixed)
-        if (headers) {
-            headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
-        }
+        // 🏎️ Use requestAnimationFrame for buttery smooth 60fps
+        requestAnimationFrame(() => {
+            if (canvas) {
+                canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
+            }
+            if (headers) {
+                // Headers follow X pan but stay at top
+                headers.style.transform = `translateX(${state.v2.pan.x}px) scale(${state.v2.zoom})`;
+            }
+        });
+    });
 
-        // 3. Sync only the infinite dots
-        if (viewport) {
-            viewport.style.backgroundPosition = `${state.v2.pan.x}px ${state.v2.pan.y}px`;
-        }
-    };
-
-    window.onmouseup = () => { isPanning = false; };
+    document.addEventListener('mouseup', () => {
+        isPanning = false;
+        if(viewport) viewport.style.cursor = 'grab';
+    });
 };
 
 OL.zoom = function(delta) {
