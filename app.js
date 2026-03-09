@@ -14334,18 +14334,21 @@ OL.loadInspector = function(targetId, parentId = null) {
     // ------------------------------------------------------------
     // 📱 DYNAMIC APP CONTEXT (Step-to-Parent Resolution)
     // ------------------------------------------------------------
-    // 1. Check the data directly (Works for Resources)
-    // 2. Fallback to data.integration (Works for Brain Dumps)
-    // 3. Fallback to ParentRes (Works for Steps inside a Resource)
-    const linkedAppId = data.appId || data.integration?.appId || parentRes?.appId || parentRes?.integration?.appId;
+    // 🚀 THE FIX: Resolve App ID by checking the Step first, then the Parent Resource
+    const linkedAppId = data.appId || 
+                        data.integration?.appId || 
+                        parentRes?.appId || 
+                        parentRes?.integration?.appId;
 
     const linkedApp = allApps.find(a => String(a.id) === String(linkedAppId));
 
-    // Also resolve the integration object from the parent if the step is just a pointer
+    // Also resolve the integration/automation object from the parent if the step is a pointer
     const effectiveIntegration = data.integration || parentRes?.integration;
 
     if (linkedApp || effectiveIntegration) {
         const appName = linkedApp ? linkedApp.name : (effectiveIntegration?.app || "Unknown App");
+        
+        // Define icons based on the context of the data being viewed
         const typeIcon = (data.type === 'Trigger' || parentRes?.type === 'Trigger') ? '⚡' : '🛠️';
         
         html += `
