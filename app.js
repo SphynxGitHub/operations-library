@@ -16115,13 +16115,6 @@ window.renderScopingSheet = function () {
         return matchesSearch && matchesType;
     });
 
-    const backBtn = state.scopingFilterActive ? `
-    <button class="btn primary" 
-            onclick="state.scopingFilterActive = false; state.viewMode = 'workbench'; window.location.hash = '#/workbench';"
-            style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-        ← Back to Workbench (Exit Focus Mode)
-    </button>
-` : '';
 
     // 3. DATA FOR DROPDOWNS (Pulled from full list so you can always see options)
     const availableTypes = [...new Set(sheet.lineItems.map(i => OL.getResourceById(i.resourceId)?.type))].filter(Boolean).sort();
@@ -16147,7 +16140,6 @@ window.renderScopingSheet = function () {
             <h2>📊 ${esc(client.meta.name)} Scoping Sheet</h2>
         </div>
         <div class="header-actions">
-            ${backBtn}
             <button class="btn small soft" onclick="OL.toggleScopingUnits()">
                 ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
             </button>
