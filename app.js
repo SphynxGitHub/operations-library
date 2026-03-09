@@ -14197,7 +14197,8 @@ OL.loadInspector = function(targetId, parentId = null) {
                         `OL.updateResourceMetadata('${targetId}', 'description', this.value)`}">${esc(data.description || data.notes || '')}</textarea>
         </div>`;
 
-    const effectiveParentId = parentId || targetId;
+    const effectiveParentId = parentId || data.id; // The Zap/Resource ID
+    const effectiveStepId = targetId;              // The Step ID
 
     // ------------------------------------------------------------
     // 🚀 NEW: ENTRANCE LOGIC (The "lambda" inlet)
@@ -14239,8 +14240,8 @@ OL.loadInspector = function(targetId, parentId = null) {
             </div>
             <div class="search-map-container">
                 <input type="text" class="modal-input tiny" placeholder="Search Team, Roles, or Apps..."
-                       onfocus="OL.filterAssignmentSearch('${effectiveParentId}', '${targetId}', false, '')"
-                       oninput="OL.filterAssignmentSearch('${effectiveParentId}', '${targetId}', false, this.value)">
+                       onfocus="OL.filterAssignmentSearch('${effectiveParentId}', '${effectiveStepId}', false, '')"
+                       oninput="OL.filterAssignmentSearch('${effectiveParentId}', '${effectiveStepId}', false, this.value)">
                 <div id="assignment-search-results" class="search-results-overlay"></div>
             </div>
         </div>`;
