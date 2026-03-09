@@ -10251,6 +10251,8 @@ function renderV2Nodes(isVault) {
             : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
 
         const isSelected = state.v2.selectedNodes.has(String(node.id));
+      
+        const id = String(node.id);
         
         // If node.id fails, check if node.resourceLinkId holds the real ID.
         let res = OL.getResourceById(id) || (node.resourceLinkId ? OL.getResourceById(node.resourceLinkId) : null);
