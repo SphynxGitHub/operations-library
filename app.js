@@ -14017,19 +14017,32 @@ OL.loadInspector = function(targetId, parentId = null) {
     const isVaultMode = location.hash.includes('vault');
     const client = getActiveClient();
     let cleanId = String(targetId).replace(/^(empty-|step-|link-)/, '');
-    let finalDataId = cleanId;
+    
+    // 🚀 1. FIND THE CONTAINER FIRST
+    const parentRes = OL.getResourceById(parentId || cleanId);
+    
+    // 🚀 2. RESOLVE THE SPECIFIC DATA OBJECT
+    let data;
+    const isStep = parentId && parentId !== targetId;
 
-    if (cleanId.startsWith('link_')) {
-        const parent = OL.getResourceById(parentId);
-        const linkStep = parent?.steps?.find(s => s.id === cleanId);
-        if (linkStep?.resourceLinkId) {
-            finalDataId = linkStep.resourceLinkId;
+    if (isStep) {
+        // We are looking at a STEP instance inside a Zap/SOP
+        data = (parentRes?.steps || []).find(s => String(s.id) === cleanId);
+        
+        // If it's a 'link' type step, we might need to peek at the library for 
+        // the name/icon, but the ASSIGNEE must come from this 'data' object.
+        if (data?.resourceLinkId) {
+            const libraryRef = OL.getResourceById(data.resourceLinkId);
+            // We merge them so we get the library name but the STEP's assignment
+            data = { ...libraryRef, ...data }; 
         }
+    } else {
+        // We are looking at the ROOT Resource
+        data = parentRes;
     }
 
-    const data = OL.getResourceById(finalDataId);
     if (!data) {
-        console.error("❌ Inspector Error: No data found for", cleanId);
+        console.error("❌ Inspector Error: Target object not found in parent context", cleanId);
         return;
     }
 
