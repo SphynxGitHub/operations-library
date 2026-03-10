@@ -10040,6 +10040,18 @@ OL.initWBMotion = function(e, id) {
     window.addEventListener('mouseup', onUp);
 };
 
+OL.performInternalMerge = function(moving, target, source) {
+    const stepsToMove = JSON.parse(JSON.stringify(moving.steps || []));
+    target.steps = [...target.steps, ...stepsToMove];
+    target.steps.forEach((s, i) => s.mapOrder = i);
+
+    const idx = source.findIndex(r => r.id === moving.id);
+    if (idx > -1) source.splice(idx, 1);
+    
+    // Refresh family counters
+    OL.refreshFamilyNaming(target, source);
+};
+
 OL.syncDumpOptions = function() {
     const appVal = document.getElementById('dump-app').value;
     const typeVal = document.getElementById('dump-type').value; // 'triggers' or 'actions'
