@@ -4332,21 +4332,6 @@ ARROWS
     pointer-events: none;
 }    
 
-.v2-step-badge {
-    position: absolute;
-    top: -10px;
-    right: 15px;
-    background: var(--accent);
-    color: #000;
-    font-size: 9px;
-    font-weight: bold;
-    padding: 2px 8px;
-    border-radius: 10px;
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    z-index: 999;
-}
-
 .v2-logic-badge {
     background: var(--accent);
     color: white;
@@ -5056,35 +5041,64 @@ path[stroke="transparent"] {
     opacity: 1;
     transform: scale(1);
 }
-.v2-duplicate-badge {
+
+/* Container to hold both badges in a row */
+.v2-badge-container {
     position: absolute;
-    top: -10px;
-    right: 30px; /* Offset from the step badge */
+    top: -12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px; /* Space between the two badges */
+    z-index: 20;
+}
+
+.v2-duplicate-badge {
     background: #1e293b;
     border: 1px solid #fbbf24;
     color: #fbbf24;
-    border-radius: 50%;
-    width: 22px;
-    height: 22px;
+    border-radius: 4px; /* Matches the square look of the icon */
+    padding: 2px 6px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 14px; /* Size of the ⿻ symbol */
     cursor: pointer;
-    z-index: 20;
     opacity: 0;
-    transform: scale(0.8);
+    transform: translateY(5px);
     transition: all 0.2s ease;
 }
 
+/* Show on hover */
 .v2-node-card:hover .v2-duplicate-badge {
     opacity: 1;
-    transform: scale(1);
-    top: -12px;
+    transform: translateY(0);
 }
 
 .v2-duplicate-badge:hover {
     background: #fbbf24;
     color: #1e293b;
-    box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
 }
+
+/* Ensure step badge matches height and styling */
+.v2-step-badge {
+    background: var(--accent);
+    color: #000;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 9px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+/*
+.v2-step-badge {
+    position: absolute;
+    top: -10px;
+    right: 15px;
+    z-index: 999;
+}*/

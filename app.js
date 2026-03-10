@@ -10256,7 +10256,7 @@ function renderV2Nodes(isVault) {
             <div class="v2-duplicate-badge" 
                 onclick="event.stopPropagation(); OL.duplicateResourceV2('${node.id}')"
                 title="Duplicate Resource">
-                <i class="fas fa-copy"></i>
+                ⿻
             </div>
         `;
 
