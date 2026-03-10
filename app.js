@@ -9896,149 +9896,78 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         document.body.classList.remove('is-dragging-node');
-        
-        const isVault = window.location.hash.includes('vault');
-        const source = isVault ? state.master.resources : getActiveClient().proje
-        
+
         if (!hasMovedSignificantAmount) {
             state.v2.activeDragId = null;
-            const ghost = document.getElementById('drag-ghost');
-            if (ghost) ghost.remove();
             return; 
         }
 
+        const isVault = window.location.hash.includes('vault');
         const dx = (uE.clientX - startX) / zoom;
         const dy = (uE.clientY - startY) / zoom;
 
-        const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
-        const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
-        const targetCardEl = elementsAtPoint.find(el => 
-            el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
-        );
-        const isUnmapDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
+        // 🚀 THE FIX: Move the source resolution INSIDE updateAndSync
+        await OL.updateAndSync(async () => {
+            // Resolve source here so it's impossible for it to be undefined
+            const client = getActiveClient();
+            const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
-        if (zone) {
-            zone.classList.remove('active', 'visible', 'is-hovered');
-        }
-// 🚀 HANDLE DROPS FROM TRAY
-        if (state.v2.isFromTray) {
-            await OL.updateAndSync(() => {
-                const movingRes = OL.getResourceById(id);
-                if (!movingRes) return;
+            if (!source) throw new Error("Sync aborted: Source data unreachable.");
 
-                if (isShelfDrop) {
-                    // 🚀 PROMOTION TO SHELF
-                    // We treat the "id" from the tray directly
-                    movingRes.isGlobal = true;
-                    movingRes.parentId = null;
-                    movingRes.stageId = null;
-                    delete movingRes.coords;
-                    console.log(`⭐ ${movingRes.name || 'Resource'} promoted to shelf from Tray`);
-                } 
-                else if (isUnmapDrop) {
-                    // 🪂 DROP BACK TO TRAY AREA (Unmapping)
-                    delete movingRes.coords;
-                    movingRes.parentId = null;
-                } 
-                else if (targetCardEl) {
-                    // 🔗 DROP FROM TRAY INTO ANOTHER CARD (Mapping as step)
+            for (const node of dragGroup) {
+                // Use the locally pinned 'source'
+                const movingRes = source.find(r => String(r.id) === String(node.id));
+                if (!movingRes) continue;
+
+                const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+                const targetCardEl = elementsAtPoint.find(el => 
+                    el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
+                );
+
+                if (targetCardEl) {
                     const targetId = targetCardEl.id.replace('v2-node-', '');
-                    const parentRes = OL.getResourceById(targetId);
-                    if (parentRes) {
-                        if (!parentRes.steps) parentRes.steps = [];
-                        parentRes.steps.push({
-                            id: 'link_' + Date.now(),
-                            name: movingRes.name || "Step", // 🛡️ Ensure name is preserved here
-                            resourceLinkId: movingRes.id
-                        });
-                        delete movingRes.coords;
-                        // Hide original from sidebar/canvas by assigning parent
-                        movingRes.parentId = parentRes.id; 
-                        movingRes.isGlobal = false;
-                    }
-                } 
-                else {
-                    // 🎯 STANDARD DROP FROM TRAY TO CANVAS
-                    movingRes.coords = {
-                        x: (uE.clientX - rect.left) / zoom,
-                        y: (uE.clientY - rect.top) / zoom
-                    };
-                    movingRes.isGlobal = false;
-                    movingRes.parentId = null;
-                }
-            });
-            console.log("✅ Tray drop sequence finalized.");
-        } else {
-            // 💾 HANDLE MOVES ON CANVAS (Selection Groups + Parachuting)
-            // 🚀 THE FIX: Use for...of to respect 'await' inside the loop
-            await OL.updateAndSync(async () => {
-                for (const node of dragGroup) {
-                    const movingRes = source.find(r => String(r.id) === String(node.id));
-                    if (!movingRes) continue;
+                    const parentRes = source.find(r => String(r.id) === String(targetId));
 
-                    const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
-                    const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
-                    const targetCardEl = elementsAtPoint.find(el => 
-                        el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
-                    );
-                    const isUnmapDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
-
-                    if (isShelfDrop) {
-                        movingRes.isGlobal = true;
-                        delete movingRes.coords;
-                    } 
-                    else if (isUnmapDrop) {
-                        // Parachute logic...
-                        movingRes.parentId = null;
-                    } 
-                    else if (targetCardEl) {
-                        const targetId = targetCardEl.id.replace('v2-node-', '');
-                        const parentRes = source.find(r => String(r.id) === String(targetId));
-
-                        if (parentRes && parentRes.id !== movingRes.id) {
-                            // 🧬 MERGE LOGIC (Using the now-defined 'source')
+                    if (parentRes && parentRes.id !== movingRes.id) {
+                        const isSurgicalMerge = movingRes.type !== 'STEP' && parentRes.type !== 'STEP';
+                        
+                        if (isSurgicalMerge) {
+                            // 🧬 Direct data manipulation (No nested awaits)
                             const stepsToMove = JSON.parse(JSON.stringify(movingRes.steps || []));
                             parentRes.steps = [...(parentRes.steps || []), ...stepsToMove];
                             
-                            // Remove the merged card from the source array
                             const idx = source.findIndex(r => String(r.id) === String(movingRes.id));
                             if (idx > -1) source.splice(idx, 1);
                             
-                            // Update family naming
+                            // Re-calculate the part naming (1/2, 2/2)
                             OL.refreshFamilyNaming(parentRes, source);
+                        } else {
+                            // Standard Nesting
+                            if (!parentRes.steps) parentRes.steps = [];
+                            parentRes.steps.push({
+                                id: 'link_' + Date.now(),
+                                name: movingRes.name || "Step",
+                                resourceLinkId: movingRes.id
+                            });
+                            delete movingRes.coords;
+                            movingRes.parentId = parentRes.id;
                         }
                     }
-
-                    else {
-                        // 🎯 STANDARD REPOSITIONING (The actual "Move")
-                        // Use a 20px grid snap to make side-by-side alignment effortless
-                        const gridSnap = 20;
-                        
-                        movingRes.coords = {
-                            x: Math.round((node.initialX + dx) / gridSnap) * gridSnap,
-                            y: Math.round((node.initialY + dy) / gridSnap) * gridSnap
-                        };
-                        
-                        // Ensure metadata is updated to the current lane if applicable
-                        // This allows you to have multiple cards in 'Lane A' side-by-side
-                        if (state.v2.activeLaneId) {
-                            movingRes.gridLane = state.v2.activeLaneId;
-                        }
-
-                        movingRes.isGlobal = false;
-                        movingRes.parentId = null; // Ensure it's fully detached from any parent
-                    }
+                } else {
+                    // Standard Repositioning
+                    movingRes.coords = {
+                        x: node.initialX + dx,
+                        y: node.initialY + dy
+                    };
                 }
-             
-            });
-        }
+            }
+        });
 
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
         state.v2.activeDragId = null;
         window.renderGlobalVisualizer(isVault);
     };
-
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
