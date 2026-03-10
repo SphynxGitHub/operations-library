@@ -9356,6 +9356,26 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     }, 100);
 };
 
+OL.adjustLaneWidths = function() {
+    const lanes = document.querySelectorAll('.v2-lane-section');
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+
+    lanes.forEach(laneEl => {
+        const laneId = laneEl.getAttribute('data-lane-id');
+        // Find all cards belonging to this lane
+        const cardsInLane = source.filter(r => r.gridLane === laneId && r.coords);
+        
+        if (cardsInLane.length > 0) {
+            // Find the card furthest to the right
+            const maxRight = Math.max(...cardsInLane.map(r => r.coords.x + 260)); // 260 is card width + margin
+            laneEl.style.width = `${maxRight}px`;
+        } else {
+            laneEl.style.width = '300px'; // Reset to default if empty
+        }
+    });
+};
+
 OL.toggleFilterMenu = function(e) {
     if (e) e.stopPropagation();
     const menu = document.getElementById('v2-filter-submenu');
@@ -9984,6 +10004,7 @@ OL.initWBMotion = function(e, id) {
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
         state.v2.activeDragId = null;
+        OL.adjustLaneWidths();
         window.renderGlobalVisualizer(isVault);
     };
     window.addEventListener('mousemove', onMove);

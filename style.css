@@ -4047,7 +4047,7 @@ ARROWS
     position: relative;
     top: 0;
     left: 0;
-    width: 5000px; /* Large for panning */
+    min-width: 5000px; /* Large for panning */
     height: 5000px;
     background-image: radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
     background-size: 30px 30px; /* Dot grid spacing */
@@ -4055,6 +4055,10 @@ ARROWS
     transition: transform 0.1s ease-out;
     contain: layout style;
     overflow: visible;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    width: max-content;
 }
 
 #v2-connections {
@@ -4125,6 +4129,17 @@ ARROWS
     width: 400px; /* Width of your stages */
     border-right: 1px solid rgba(56, 189, 248, 0.1);
     background: linear-gradient(to bottom, rgba(56, 189, 248, 0.02), transparent);
+}
+
+.v2-lane-section {
+    display: block;
+    position: relative;
+    min-width: 300px; /* Base width for one card */
+    width: auto; /* 🚀 Grows based on content */
+    padding: 40px;
+    border-right: 2px dashed rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.01);
+    transition: width 0.2s ease;
 }
 
 .v2-lane-label {
