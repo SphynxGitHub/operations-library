@@ -9931,15 +9931,19 @@ OL.initWBMotion = function(e, id) {
                     if (parentRes && parentRes.id !== movingRes.id) {
                         const isSurgicalMerge = movingRes.type !== 'STEP' && parentRes.type !== 'STEP';
                         
+                        // --- Inside your onUp -> updateAndSync -> for...of loop ---
                         if (isSurgicalMerge) {
-                            // 🧬 Direct data manipulation (No nested awaits)
+                            console.log("🧬 Surgical Merge: Consolidating steps...");
+                            
+                            // Move steps
                             const stepsToMove = JSON.parse(JSON.stringify(movingRes.steps || []));
                             parentRes.steps = [...(parentRes.steps || []), ...stepsToMove];
                             
+                            // Remove the source card
                             const idx = source.findIndex(r => String(r.id) === String(movingRes.id));
                             if (idx > -1) source.splice(idx, 1);
                             
-                            // Re-calculate the part naming (1/2, 2/2)
+                            // 🚀 THE FIX: Now this function is defined!
                             OL.refreshFamilyNaming(parentRes, source);
                         } else {
                             // Standard Nesting
@@ -9982,6 +9986,30 @@ OL.performInternalMerge = function(moving, target, source) {
     
     // Refresh family counters
     OL.refreshFamilyNaming(target, source);
+};
+
+OL.refreshFamilyNaming = function(targetRes, source) {
+    if (!targetRes || !source) return;
+
+    // 1. Get the 'Base Name' by stripping any existing (1/2) suffixes
+    const baseName = targetRes.name.replace(/\s\(\d+\/\d+\)$/, "").trim();
+    
+    // 2. Find all current parts on the canvas that share this base name
+    const family = source.filter(r => {
+        const rBase = r.name.replace(/\s\(\d+\/\d+\)$/, "").trim();
+        return rBase === baseName;
+    }).sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+
+    // 3. Re-assign the counters based on the new current total
+    if (family.length <= 1) {
+        // If it's the only one left, remove the counter entirely
+        family[0].name = baseName;
+    } else {
+        family.forEach((member, i) => {
+            member.name = `${baseName} (${i + 1}/${family.length})`;
+        });
+    }
+    console.log(`🏷️ Family naming refreshed for: ${baseName} (Total: ${family.length})`);
 };
 
 OL.syncDumpOptions = function() {
