@@ -9897,6 +9897,9 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mouseup', onUp);
         document.body.classList.remove('is-dragging-node');
         
+        const isVault = window.location.hash.includes('vault');
+        const source = isVault ? state.master.resources : getActiveClient().proje
+        
         if (!hasMovedSignificantAmount) {
             state.v2.activeDragId = null;
             const ghost = document.getElementById('drag-ghost');
@@ -9970,7 +9973,7 @@ OL.initWBMotion = function(e, id) {
             // 🚀 THE FIX: Use for...of to respect 'await' inside the loop
             await OL.updateAndSync(async () => {
                 for (const node of dragGroup) {
-                    const movingRes = OL.getResourceById(node.id);
+                    const movingRes = source.find(r => String(r.id) === String(node.id));
                     if (!movingRes) continue;
 
                     const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
@@ -9990,21 +9993,21 @@ OL.initWBMotion = function(e, id) {
                     } 
                     else if (targetCardEl) {
                         const targetId = targetCardEl.id.replace('v2-node-', '');
-                        const parentRes = OL.getResourceById(targetId);
-                        
+                        const parentRes = source.find(r => String(r.id) === String(targetId));
+
                         if (parentRes && parentRes.id !== movingRes.id) {
-                            const isSurgicalMerge = movingRes.type !== 'STEP' && parentRes.type !== 'STEP';
+                            // 🧬 MERGE LOGIC (Using the now-defined 'source')
+                            const stepsToMove = JSON.parse(JSON.stringify(movingRes.steps || []));
+                            parentRes.steps = [...(parentRes.steps || []), ...stepsToMove];
                             
-                            if (isSurgicalMerge) {
-                                // 🚀 NO NESTED AWAIT: Call the logic directly
-                                // Since we are ALREADY inside an updateAndSync, 
-                                // mergeResources should not call its own updateAndSync.
-                                OL.performInternalMerge(movingRes, parentRes, source);
-                            } else {
-                                // Standard Nesting...
-                            }
+                            // Remove the merged card from the source array
+                            const idx = source.findIndex(r => String(r.id) === String(movingRes.id));
+                            if (idx > -1) source.splice(idx, 1);
+                            
+                            // Update family naming
+                            OL.refreshFamilyNaming(parentRes, source);
                         }
-                    } 
+                    }
 
                     else {
                         // 🎯 STANDARD REPOSITIONING (The actual "Move")
