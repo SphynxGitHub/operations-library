@@ -10645,44 +10645,53 @@ OL.drawV2Connections = function() {
                 let sAnchor, eAnchor;
 
                 // --- SOURCE ANCHOR RESOLUTION ---
+                const sEl = document.getElementById(`v2-node-${node.id}`);
+                if (!sEl) return;
+                const sR = sEl.getBoundingClientRect();
+
                 if (sPort && (outcome.fromStepIndex !== null && outcome.fromStepIndex !== undefined)) {
                     const r = sPort.getBoundingClientRect();
                     sAnchor = {
                         x: (r.left + r.width / 2 - canvasRect.left) / zoom,
                         y: (r.top + r.height / 2 - canvasRect.top) / zoom,
-                        dir: 'right' // Internal steps always exit right
+                        dir: 'right'
                     };
                 } else {
-                    const sEl = document.getElementById(`v2-node-${node.id}`);
-                    if (!sEl) return;
-                    const sR = sEl.getBoundingClientRect();
-                    const anchors = getAnchors(sR); // Uses your helper
-                    // Fallback: Pick closest to target element center
+                    const anchors = getAnchors(sR, canvasRect, zoom);
                     const tEl = document.getElementById(`v2-node-${tid}`);
                     const tRect = tEl ? tEl.getBoundingClientRect() : {left:0, top:0, width:0, height:0};
-                    const tCenter = { x: (tRect.left + tRect.width/2 - canvasRect.left)/zoom, y: (tRect.top + tRect.height/2 - canvasRect.top)/zoom };
-                    sAnchor = anchors.reduce((prev, curr) => 
-                        Math.hypot(curr.x - tCenter.x, curr.y - tCenter.y) < Math.hypot(prev.x - tCenter.x, prev.y - tCenter.y) ? curr : prev
-                    );
+                    const tCenter = { 
+                        x: (tRect.left + tRect.width/2 - canvasRect.left)/zoom, 
+                        y: (tRect.top + tRect.height/2 - canvasRect.top)/zoom 
+                    };
+                    
+                    sAnchor = anchors.length > 0 ? anchors.reduce((prev, curr) => 
+                        Math.hypot(curr.x - tCenter.x, curr.y - tCenter.y) < Math.hypot(prev.x - tCenter.x, prev.y - tCenter.y) ? curr : prev, anchors[0]
+                    ) : null;
                 }
 
+                if (!sAnchor) return;
+
                 // --- TARGET ANCHOR RESOLUTION ---
+                const tEl = document.getElementById(`v2-node-${tid}`);
+                if (!tEl) return;
+                const tR = tEl.getBoundingClientRect();
+
                 if (tPort && (outcome.toStepIndex !== null && outcome.toStepIndex !== undefined)) {
                     const r = tPort.getBoundingClientRect();
                     eAnchor = {
                         x: (r.left + r.width / 2 - canvasRect.left) / zoom,
                         y: (r.top + r.height / 2 - canvasRect.top) / zoom,
-                        dir: 'left' // Internal steps always enter left
+                        dir: 'left'
                     };
                 } else {
-                    const tEl = document.getElementById(`v2-node-${tid}`);
-                    if (!tEl) return;
-                    const tR = tEl.getBoundingClientRect();
-                    const anchors = getAnchors(tR);
-                    eAnchor = anchors.reduce((prev, curr) => 
-                        Math.hypot(curr.x - sAnchor.x, curr.y - sAnchor.y) < Math.hypot(prev.x - sAnchor.x, prev.y - sAnchor.y) ? curr : prev
-                    );
+                    const anchors = getAnchors(tR, canvasRect, zoom);
+                    eAnchor = anchors.length > 0 ? anchors.reduce((prev, curr) => 
+                        Math.hypot(curr.x - sAnchor.x, curr.y - sAnchor.y) < Math.hypot(prev.x - sAnchor.x, prev.y - sAnchor.y) ? curr : prev, anchors[0]
+                    ) : null;
                 }
+
+                if (!eAnchor) return;
 
                 // 📐 PATH GENERATION (Bezier)
                 const sX = sAnchor.x; const sY = sAnchor.y;
@@ -10699,7 +10708,6 @@ OL.drawV2Connections = function() {
                 const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 group.setAttribute("class", "v2-connection-group flow-link");
 
-                // 🖱️ THE DOCKING LOGIC (Group Click)
                 group.onmousedown = (clickEvt) => {
                     clickEvt.stopPropagation();
                     clickEvt.preventDefault();
@@ -10727,7 +10735,7 @@ OL.drawV2Connections = function() {
                 group.appendChild(hitArea);
                 group.appendChild(visualPath);
 
-                // 🛠️ DYNAMIC INDICATOR PLACEMENT (Logic, Delay, Loop)
+                // 🛠️ DYNAMIC INDICATOR PLACEMENT
                 const indicators = [];
                 if (outcome.isLoop || outcome.loop) indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
                 if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) indicators.push({ char: "λ", tip: "Logic", side: 'source' });
@@ -10748,7 +10756,7 @@ OL.drawV2Connections = function() {
 
                 svg.appendChild(group);
             });
-        };
+        }
 
     });
 };
