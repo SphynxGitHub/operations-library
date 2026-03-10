@@ -10450,23 +10450,37 @@ OL.drawV2Connections = function() {
     function drawIcon(x, y, char, tooltip) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         
+        // 1. The Backdrop Circle
         const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        bg.setAttribute("cx", x + 8);
-        bg.setAttribute("cy", y - 5);
+        bg.setAttribute("cx", x); // Now using the raw x
+        bg.setAttribute("cy", y); // Now using the raw y
         bg.setAttribute("r", "10");
-        bg.setAttribute("fill", "#1e293b"); // Match your canvas background
+        bg.setAttribute("fill", "#1e293b"); 
         bg.setAttribute("stroke", "#fbbf24");
         bg.setAttribute("stroke-width", "1");
         
+        // 2. The Centered Text
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", x);
         text.setAttribute("y", y);
         text.setAttribute("fill", "#fbbf24");
-        text.setAttribute("font-size", "14px");
+        text.setAttribute("font-size", "12px"); // 12px usually fits best in a 10r circle
+        text.setAttribute("font-family", "Arial, sans-serif");
+        text.setAttribute("font-weight", "bold");
+        
+        // 🚀 THE MAGIC ALIGNMENT SETTINGS:
+        text.setAttribute("text-anchor", "middle");      // Horizontal centering
+        text.setAttribute("dominant-baseline", "central"); // Vertical centering
+        
         text.textContent = char;
+        
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = tooltip;
         
         g.appendChild(bg);
         g.appendChild(text);
+        text.appendChild(title);
+        
         return g;
     }
 
@@ -10479,12 +10493,12 @@ OL.drawV2Connections = function() {
         // Reverse direction if we are drawing icons at the "Target" (Incoming) side
         const d = isTargetSide ? -1 : 1;
 
-        switch (anchor.dir) {
-            case 'right':  return { x: anchor.x + (startOffset * d), y: anchor.y - 12 };
-            case 'left':   return { x: anchor.x - (startOffset * d), y: anchor.y - 12 };
-            case 'bottom': return { x: anchor.x - 8, y: anchor.y + (startOffset * d) + 12 };
-            case 'top':    return { x: anchor.x - 8, y: anchor.y - (startOffset * d) };
-            default:       return { x: anchor.x + (startOffset * d), y: anchor.y - 12 };
+       switch (anchor.dir) {
+            case 'right':  return { x: anchor.x + startOffset, y: anchor.y };
+            case 'left':   return { x: anchor.x - startOffset, y: anchor.y };
+            case 'bottom': return { x: anchor.x, y: anchor.y + startOffset };
+            case 'top':    return { x: anchor.x, y: anchor.y - startOffset };
+            default:       return { x: anchor.x + startOffset, y: anchor.y };
         }
     }
 
