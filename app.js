@@ -10434,7 +10434,7 @@ OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
     if (!original || !original.steps || original.steps.length < 2) return;
 
     await OL.updateAndSync(() => {
-        // 1. Clone everything for Part 2
+        // 1. Clone Part 2
         const part2 = JSON.parse(JSON.stringify(original));
         part2.id = 'res-' + Date.now();
         
@@ -10443,20 +10443,24 @@ OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
         original.steps = originalSteps.slice(0, splitAfterIndex + 1);
         part2.steps = originalSteps.slice(splitAfterIndex + 1);
 
-        // 3. Offset Part 2 so it appears below the original
-        part2.coords.y += (original.steps.length * 40) + 50; 
+        // 🚀 THE FIX: Ensure coordinates exist before sorting
+        if (!original.coords) original.coords = { x: 100, y: 100 };
+        part2.coords = { 
+            x: original.coords.x, 
+            y: original.coords.y + (original.steps.length * 40) + 60 
+        };
 
-        // 4. Handle Counters (1/2, 2/2, etc.)
         const baseName = original.name.replace(/\s\(\d+\/\d+\)$/, "");
-        
-        // Find existing family members
         const family = source.filter(r => r.name.startsWith(baseName));
-        const totalParts = family.length + 1;
-
-        // Re-calculate the naming for the whole family
-        // Sort by their current Y position to keep the numbering logical
-        const allParts = [...family, part2].sort((a, b) => a.coords.y - b.coords.y);
         
+        // 🛡️ HARDENED SORT: Provide fallback value for 'y'
+        const allParts = [...family, part2].sort((a, b) => {
+            const ay = (a.coords && a.coords.y) ? a.coords.y : 0;
+            const by = (b.coords && b.coords.y) ? b.coords.y : 0;
+            return ay - by;
+        });
+        
+        const totalParts = allParts.length;
         allParts.forEach((member, idx) => {
             member.name = `${baseName} (${idx + 1}/${totalParts})`;
         });
