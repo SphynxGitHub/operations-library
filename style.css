@@ -5007,3 +5007,52 @@ path[stroke="transparent"] {
     0% { background: rgba(56, 189, 248, 0.4); }
     100% { background: rgba(56, 189, 248, 0.15); }
 }
+
+.v2-steps-preview {
+    margin-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 5px;
+}
+
+/* The invisible hit area between rows */
+.v2-step-divider {
+    height: 10px;
+    margin: -5px 0; /* Overlaps rows slightly for a tight feel */
+    position: relative;
+    z-index: 10;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.v2-step-divider::before {
+    content: '';
+    width: 80%;
+    height: 1px;
+    background: transparent;
+    transition: background 0.2s, height 0.2s;
+}
+
+.v2-step-divider:hover::before {
+    background: #fbbf24;
+    height: 2px;
+}
+
+.v2-step-divider .split-icon {
+    position: absolute;
+    font-size: 12px;
+    background: #1e293b;
+    border: 1px solid #fbbf24;
+    border-radius: 4px;
+    padding: 1px 3px;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s ease;
+    pointer-events: none;
+}
+
+.v2-step-divider:hover .split-icon {
+    opacity: 1;
+    transform: scale(1);
+}

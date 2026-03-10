@@ -10257,21 +10257,38 @@ function renderV2Nodes(isVault) {
             const portInId = `port-in-${node.id}-step-${i}`;
             const portOutId = `port-out-${node.id}-step-${i}`;
 
-            return `
-                <div class="v2-step-item"
-                    onmousedown="event.stopPropagation();"
-                    onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${node.id}')">
-                    <div class="v2-port step-port-in" id="${portInId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})"></div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 12px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="v2-step-number">${i + 1}</span>
-                            <span class="v2-step-text" style="font-size: 11px;">${esc(content)}</span>
+            // 🚀 THE STEP ROW
+            let rowHtml = `
+                <div class="v2-step-row-container">
+                    <div class="v2-step-item"
+                        onmousedown="event.stopPropagation();"
+                        onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${node.id}')">
+                        
+                        <div class="v2-port step-port-in" id="${portInId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})"></div>
+                        
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 12px; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="v2-step-number">${i + 1}</span>
+                                <span class="v2-step-text" style="font-size: 11px;">${esc(content)}</span>
+                            </div>
+                            <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
                         </div>
-                        <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
+                        
+                        <div class="v2-port step-port-out" id="${portOutId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})"></div>
                     </div>
-                    <div class="v2-port step-port-out" id="${portOutId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})"></div>
                 </div>
             `;
+
+            // 🚀 THE SPLIT DIVIDER (Injected BETWEEN rows)
+            if (i < node.steps.length - 1) {
+                rowHtml += `
+                    <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitResourceAtStep('${node.id}', ${i})">
+                        <div class="split-icon">✂️</div>
+                    </div>
+                `;
+            }
+
+            return rowHtml;
         }).join('') : '';
 
         // Add 4 tiny invisible/subtle hit-areas for linking
@@ -10334,6 +10351,47 @@ function renderV2Nodes(isVault) {
         `;
     }).join('');
 }
+
+OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
+    const isVault = location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const original = source.find(r => r.id === resourceId);
+
+    if (!original || !original.steps || original.steps.length < 2) return;
+
+    await OL.updateAndSync(() => {
+        // 1. Clone everything for Part 2
+        const part2 = JSON.parse(JSON.stringify(original));
+        part2.id = 'res-' + Date.now();
+        
+        // 2. Distribute the steps
+        const originalSteps = [...original.steps];
+        original.steps = originalSteps.slice(0, splitAfterIndex + 1);
+        part2.steps = originalSteps.slice(splitAfterIndex + 1);
+
+        // 3. Offset Part 2 so it appears below the original
+        part2.coords.y += (original.steps.length * 40) + 50; 
+
+        // 4. Handle Counters (1/2, 2/2, etc.)
+        const baseName = original.name.replace(/\s\(\d+\/\d+\)$/, "");
+        
+        // Find existing family members
+        const family = source.filter(r => r.name.startsWith(baseName));
+        const totalParts = family.length + 1;
+
+        // Re-calculate the naming for the whole family
+        // Sort by their current Y position to keep the numbering logical
+        const allParts = [...family, part2].sort((a, b) => a.coords.y - b.coords.y);
+        
+        allParts.forEach((member, idx) => {
+            member.name = `${baseName} (${idx + 1}/${totalParts})`;
+        });
+
+        source.push(part2);
+    });
+
+    if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
+};
 
 OL.navigateToScoping = function(resourceId) {
     const idStr = String(resourceId);
@@ -10762,7 +10820,7 @@ OL.drawV2Connections = function() {
                     tip: `Wait: ${outcome.delay}`, 
                     side: 'source' 
                 });
-                
+
                 const sourceIcons = indicators.filter(i => i.side === 'source');
                 const targetIcons = indicators.filter(i => i.side === 'target');
 
