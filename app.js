@@ -10252,6 +10252,14 @@ function renderV2Nodes(isVault) {
                 ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
             </div>` : '';
 
+        const duplicateBadge = `
+            <div class="v2-duplicate-badge" 
+                onclick="event.stopPropagation(); OL.duplicateResourceV2('${node.id}')"
+                title="Duplicate Resource">
+                <i class="fas fa-copy"></i>
+            </div>
+        `;
+
         const stepsHtml = isExpanded ? steps.map((step, i) => {
             const content = step.text || step.name || "Step";
             const portInId = `port-in-${node.id}-step-${i}`;
@@ -10327,6 +10335,7 @@ function renderV2Nodes(isVault) {
 
                 <div class="v2-context-corner">${contextIcon}</div>
                 ${scopeBadge}
+                ${duplicateBadge}
                 ${stepBadge}
                 
                 <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
@@ -10351,6 +10360,57 @@ function renderV2Nodes(isVault) {
         `;
     }).join('');
 }
+
+// --- DUPLICATE LOGIC ---
+OL.duplicateResourceV2 = async function(resourceId) {
+    const isVault = location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const original = source.find(r => r.id === resourceId);
+    if (!original) return;
+
+    await OL.updateAndSync(() => {
+        const clone = JSON.parse(JSON.stringify(original));
+        clone.id = 'res-' + Date.now();
+        clone.coords.x += 30; // Slight offset so it's visible
+        clone.coords.y += 30;
+        
+        // Remove counter if duplicating a split part, or keep base name
+        clone.name = original.name.replace(/\s\(\d+\/\d+\)$/, "") + " (Copy)";
+        
+        source.push(clone);
+    });
+    if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
+};
+
+// --- MERGE LOGIC (Internal logic for handleUniversalDrop) ---
+OL.mergeResources = async function(droppedId, targetId) {
+    const isVault = location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    
+    const moving = source.find(r => r.id === droppedId);
+    const target = source.find(r => r.id === targetId);
+
+    if (!moving || !target || moving.id === targetId) return;
+
+    await OL.updateAndSync(() => {
+        // Append steps from moving card to target card
+        target.steps = [...target.steps, ...moving.steps];
+        
+        // Remove the moving card from source
+        const idx = source.findIndex(r => r.id === droppedId);
+        if (idx > -1) source.splice(idx, 1);
+        
+        // Update numbering for remaining family members
+        const baseName = target.name.replace(/\s\(\d+\/\d+\)$/, "");
+        const family = source.filter(r => r.name.startsWith(baseName))
+                             .sort((a, b) => a.coords.y - b.coords.y);
+        
+        family.forEach((member, i) => {
+            member.name = family.length > 1 ? `${baseName} (${i + 1}/${family.length})` : baseName;
+        });
+    });
+    if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
+};
 
 OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
     const isVault = location.hash.includes('vault');
