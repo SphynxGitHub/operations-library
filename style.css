@@ -5068,6 +5068,7 @@ path[stroke="transparent"] {
     opacity: 0;
     transform: translateY(5px);
     transition: all 0.2s ease;
+    gap: 6px;
 }
 
 /* Show on hover */
