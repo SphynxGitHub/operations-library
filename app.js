@@ -10448,21 +10448,44 @@ OL.drawV2Connections = function() {
 
     // Ensure this is globally accessible or at the top of OL.drawV2Connections
     function drawIcon(x, y, char, tooltip) {
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        
+        const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        bg.setAttribute("cx", x + 8);
+        bg.setAttribute("cy", y - 5);
+        bg.setAttribute("r", "10");
+        bg.setAttribute("fill", "#1e293b"); // Match your canvas background
+        bg.setAttribute("stroke", "#fbbf24");
+        bg.setAttribute("stroke-width", "1");
+        
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        // We use numerical attributes to avoid string concatenation errors
-        text.setAttribute("x", parseFloat(x));
-        text.setAttribute("y", parseFloat(y));
+        text.setAttribute("x", x);
+        text.setAttribute("y", y);
         text.setAttribute("fill", "#fbbf24");
-        text.setAttribute("font-size", "16px"); // Slightly larger to be sure
-        text.setAttribute("font-family", "Arial, sans-serif");
-        text.setAttribute("font-weight", "bold");
-        text.setAttribute("style", "pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,1);");
+        text.setAttribute("font-size", "14px");
         text.textContent = char;
+        
+        g.appendChild(bg);
+        g.appendChild(text);
+        return g;
+    }
 
-        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-        title.textContent = tooltip;
-        text.appendChild(title);
-        return text;
+    // 🚀 NEW HELPER: Calculate position based on line direction
+    function getOffsetPos(anchor, index, total, isTargetSide = false) {
+        const gap = 22;
+        const margin = 25; // Distance from the card edge
+        const startOffset = margin + (index * gap);
+        
+        // Reverse direction if we are drawing icons at the "Target" (Incoming) side
+        const d = isTargetSide ? -1 : 1;
+
+        switch (anchor.dir) {
+            case 'right':  return { x: anchor.x + (startOffset * d), y: anchor.y - 12 };
+            case 'left':   return { x: anchor.x - (startOffset * d), y: anchor.y - 12 };
+            case 'bottom': return { x: anchor.x - 8, y: anchor.y + (startOffset * d) + 12 };
+            case 'top':    return { x: anchor.x - 8, y: anchor.y - (startOffset * d) };
+            default:       return { x: anchor.x + (startOffset * d), y: anchor.y - 12 };
+        }
     }
 
     source.forEach(node => {
@@ -10674,19 +10697,37 @@ OL.drawV2Connections = function() {
                     group.appendChild(hitArea);
                     group.appendChild(visualPath);
 
-                    // 🛠️ INDICATOR PLACEMENT (λ, ⏱, ⟳)
-                    let iconOffset = 15;
+                    // 🛠️ DYNAMIC INDICATOR PLACEMENT
+                    const indicators = [];
+                    
+                    // Rule 1: Loop is ALWAYS in front (Incoming side)
+                    if (outcome.isLoop || outcome.loop) {
+                        indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
+                    }
+
+                    // Rule 2: Logic/Delay position based on flow
+                    // If it's outbound from this node, put it at the start (Source side)
+                    // If it's inbound, put it at the end (Target side)
                     if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
-                        group.appendChild(drawIcon(sX + iconOffset, sY - 10, "λ", "Logic Attached"));
-                        iconOffset += 20;
+                        indicators.push({ char: "λ", tip: "Logic", side: 'source' });
                     }
                     if (outcome.delay && outcome.delay !== "0") {
-                        group.appendChild(drawIcon(sX + iconOffset, sY - 10, "⏱", `Delay: ${outcome.delay}`));
-                        iconOffset += 20;
+                        indicators.push({ char: "⏱", tip: `Delay: ${outcome.delay}`, side: 'source' });
                     }
-                    if (outcome.isLoop || outcome.loop) {
-                        group.appendChild(drawIcon(sX + iconOffset, sY - 10, "⟳", "Looping"));
-                    }
+
+                    // Render the collected indicators
+                    const sourceIcons = indicators.filter(i => i.side === 'source');
+                    const targetIcons = indicators.filter(i => i.side === 'target');
+
+                    sourceIcons.forEach((icon, i) => {
+                        const pos = getOffsetPos(sAnchor, i, sourceIcons.length, false);
+                        group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
+                    });
+
+                    targetIcons.forEach((icon, i) => {
+                        const pos = getOffsetPos(eAnchor, i, targetIcons.length, true);
+                        group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
+                    });
 
                     svg.appendChild(group);
                 }
