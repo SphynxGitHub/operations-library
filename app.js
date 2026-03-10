@@ -10490,6 +10490,7 @@ OL.drawV2Connections = function() {
 
     // 🚀 NEW HELPER: Resolves the 4 cardinal points of a card
     function getAnchors(r, canvasRect, zoom) {
+        if (!r || !canvasRect) return []; // Return empty array if rect is missing
         return [
             { x: (r.left + r.width / 2 - canvasRect.left) / zoom, y: (r.top - canvasRect.top) / zoom, dir: 'top' },
             { x: (r.left + r.width / 2 - canvasRect.left) / zoom, y: (r.bottom - canvasRect.top) / zoom, dir: 'bottom' },
