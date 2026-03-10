@@ -9999,32 +9999,50 @@ OL.initWBMotion = function(e, id) {
                         console.log(`🪂 Parachuted: ${stableName}`);
                     } 
                     else if (targetCardEl) {
-                        // 🔗 NESTING: Dragging one canvas card into another
                         const targetId = targetCardEl.id.replace('v2-node-', '');
                         const parentRes = OL.getResourceById(targetId);
                         
                         if (parentRes && parentRes.id !== movingRes.id) {
-                            if (!parentRes.steps) parentRes.steps = [];
-                            parentRes.steps.push({
-                                id: 'link_' + Date.now(),
-                                name: movingRes.name || node.text,
-                                resourceLinkId: movingRes.id
-                            });
+                            // 🚀 THE SURGICAL MERGE INTERCEPT
+                            // If we are dropping a 'Resource' onto a 'Resource', merge steps instead of nesting
+                            const isSurgicalMerge = movingRes.type !== 'STEP' && parentRes.type !== 'STEP';
                             
-                            // Hide the card from the grid and sidebar
-                            delete movingRes.coords;
-                            movingRes.parentId = parentRes.id;
-                            movingRes.isGlobal = false;
+                            if (isSurgicalMerge) {
+                                console.log("🧬 Surgical Merge Triggered via Drag & Drop");
+                                // We call the merge function we built earlier
+                                await OL.mergeResources(movingRes.id, parentRes.id);
+                            } else {
+                                // 🔗 STANDARD NESTING: Treat as a Step Link
+                                if (!parentRes.steps) parentRes.steps = [];
+                                parentRes.steps.push({
+                                    id: 'link_' + Date.now(),
+                                    name: movingRes.name || node.text,
+                                    resourceLinkId: movingRes.id
+                                });
+                                delete movingRes.coords;
+                                movingRes.parentId = parentRes.id;
+                                movingRes.isGlobal = false;
+                            }
                         }
-                    } 
+                    }
                     else {
                         // 🎯 STANDARD REPOSITIONING (The actual "Move")
+                        // Use a 20px grid snap to make side-by-side alignment effortless
+                        const gridSnap = 20;
+                        
                         movingRes.coords = {
-                            x: node.initialX + dx,
-                            y: node.initialY + dy
+                            x: Math.round((node.initialX + dx) / gridSnap) * gridSnap,
+                            y: Math.round((node.initialY + dy) / gridSnap) * gridSnap
                         };
-                        // Ensure it's marked as not global so it stays on the grid
+                        
+                        // Ensure metadata is updated to the current lane if applicable
+                        // This allows you to have multiple cards in 'Lane A' side-by-side
+                        if (state.v2.activeLaneId) {
+                            movingRes.gridLane = state.v2.activeLaneId;
+                        }
+
                         movingRes.isGlobal = false;
+                        movingRes.parentId = null; // Ensure it's fully detached from any parent
                     }
                 });
             });
