@@ -5058,7 +5058,7 @@ path[stroke="transparent"] {
     border: 1px solid #fbbf24;
     color: #fbbf24;
     border-radius: 4px; /* Matches the square look of the icon */
-    padding: 2px 6px;
+    padding: 2px 6px 4px 6px;
     height: 20px;
     align-items: center;
     justify-content: center;
