@@ -5103,7 +5103,8 @@ path[stroke="transparent"] {
     right: 15px;
     z-index: 999;
 }
-/*
-.v2-step-badge {
-    
-}*/
+/* Add this to style.css */
+.v2-node-card.drop-target-merge {
+    border: 2px dashed #fbbf24;
+    background: rgba(251, 191, 36, 0.1) !important;
+}

@@ -10390,25 +10390,39 @@ OL.mergeResources = async function(droppedId, targetId) {
     const moving = source.find(r => r.id === droppedId);
     const target = source.find(r => r.id === targetId);
 
-    if (!moving || !target || moving.id === targetId) return;
+    if (!moving || !target) return;
 
     await OL.updateAndSync(() => {
-        // Append steps from moving card to target card
-        target.steps = [...target.steps, ...moving.steps];
+        // 1. Combine the steps
+        const combinedSteps = [...target.steps, ...moving.steps];
         
-        // Remove the moving card from source
-        const idx = source.findIndex(r => r.id === droppedId);
-        if (idx > -1) source.splice(idx, 1);
-        
-        // Update numbering for remaining family members
+        // 2. Normalize mapOrder and clean up IDs to prevent collisions
+        target.steps = combinedSteps.map((step, idx) => ({
+            ...step,
+            mapOrder: idx
+        }));
+
+        // 3. Delete the "orphaned" part
+        const movingIdx = source.findIndex(r => r.id === droppedId);
+        if (movingIdx > -1) source.splice(movingIdx, 1);
+
+        // 4. Update the Family Naming
         const baseName = target.name.replace(/\s\(\d+\/\d+\)$/, "");
         const family = source.filter(r => r.name.startsWith(baseName))
                              .sort((a, b) => a.coords.y - b.coords.y);
         
-        family.forEach((member, i) => {
-            member.name = family.length > 1 ? `${baseName} (${i + 1}/${family.length})` : baseName;
-        });
+        if (family.length === 1) {
+            // Only one left? Revert to the original name without (1/1)
+            family[0].name = baseName;
+        } else {
+            family.forEach((member, i) => {
+                member.name = `${baseName} (${i + 1}/${family.length})`;
+            });
+        }
+        
+        console.log(`🧬 Successfully merged steps into ${target.name}`);
     });
+
     if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
 };
 
@@ -16058,29 +16072,38 @@ OL.handleUniversalDrop = async function(e, sectionId) {
             }
 
             // 1. Dropping a NEW item
-            if (itemType.includes('factory') || itemType === 'resource' || itemType === 'workflow') {
-                const stepName = e.dataTransfer.getData("stepName");
-                const stepType = e.dataTransfer.getData("stepType");
-                
-                const isTrigger = sectionId === 'Trigger';
-                const verb = document.getElementById(isTrigger ? 'trigger-verb' : 'builder-verb')?.value;
-                const obj = document.getElementById(isTrigger ? 'trigger-object' : 'builder-object')?.value;
+            if (itemType === 'resource' || itemType === 'workflow') {
+                // 🚀 THE FIX: Check if we are dropping a card onto another card
+                // targetParentId is the ID of the card being dropped ON
+                if (targetParentId && targetParentId !== moveId) {
+                    console.log("🧬 Merge detected: Merging steps instead of nesting.");
+                    await OL.mergeResources(moveId, targetParentId);
+                    return; // Exit early so it doesn't try to add it as a step too
+                }
+                else if (itemType.includes('factory') || itemType === 'resource' || itemType === 'workflow') {
+                    const stepName = e.dataTransfer.getData("stepName");
+                    const stepType = e.dataTransfer.getData("stepType");
+                    
+                    const isTrigger = sectionId === 'Trigger';
+                    const verb = document.getElementById(isTrigger ? 'trigger-verb' : 'builder-verb')?.value;
+                    const obj = document.getElementById(isTrigger ? 'trigger-object' : 'builder-object')?.value;
 
-                const newStep = { 
-                    id: 'step-' + Date.now(), 
-                    name: stepName || (verb ? `${verb} ${obj}` : "New Step"), 
-                    // 🚀 Ensure L3 (focusedResourceId) always gets the sectionId as the type
-                    type: isL3Drop ? sectionId : (stepType || 'Action'),
-                    gridLane: !isL3Drop ? sectionId : null,
-                    resourceLinkId: (moveId === 'new' || moveId === 'factory') ? null : moveId,
-                    verb: verb || null,
-                    object: obj || null,
-                    outcomes: [],
-                    mapOrder: targetIdx
-                };
-                
-                parent.steps.splice(targetIdx, 0, newStep);
-            } 
+                    const newStep = { 
+                        id: 'step-' + Date.now(), 
+                        name: stepName || (verb ? `${verb} ${obj}` : "New Step"), 
+                        // 🚀 Ensure L3 (focusedResourceId) always gets the sectionId as the type
+                        type: isL3Drop ? sectionId : (stepType || 'Action'),
+                        gridLane: !isL3Drop ? sectionId : null,
+                        resourceLinkId: (moveId === 'new' || moveId === 'factory') ? null : moveId,
+                        verb: verb || null,
+                        object: obj || null,
+                        outcomes: [],
+                        mapOrder: targetIdx
+                    };
+                    
+                    parent.steps.splice(targetIdx, 0, newStep);
+                } 
+            }
             
             // 2. Rearranging Existing
             else if (itemType === 'step') {
