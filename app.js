@@ -9376,6 +9376,31 @@ OL.adjustLaneWidths = function() {
     });
 };
 
+OL.recalculateLaneWidths = function() {
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    if (!source) return;
+
+    // 1. Group cards by their lane
+    const laneMap = {};
+    source.forEach(res => {
+        if (res.coords && res.gridLane) {
+            const rightEdge = res.coords.x + 300; // Card width (250px) + some padding
+            if (!laneMap[res.gridLane] || rightEdge > laneMap[res.gridLane]) {
+                laneMap[res.gridLane] = rightEdge;
+            }
+        }
+    });
+
+    // 2. Apply the width to the DOM elements
+    document.querySelectorAll('.v2-lane-section').forEach(laneEl => {
+        const laneId = laneEl.getAttribute('data-lane-id'); // Ensure your HTML has this attr
+        const maxWidth = laneMap[laneId] || 350; // Fallback to default width
+        laneEl.style.width = `${maxWidth}px`;
+        laneEl.style.minWidth = `${maxWidth}px`;
+    });
+};
+
 OL.toggleFilterMenu = function(e) {
     if (e) e.stopPropagation();
     const menu = document.getElementById('v2-filter-submenu');
@@ -9872,7 +9897,7 @@ OL.initWBMotion = function(e, id) {
                 node.el.style.top = `${node.initialY + dy}px`;
             }
         });
-
+        OL.recalculateLaneWidths();
         OL.drawV2Connections();
 
         // 3. 🎯 DETECT HOVER TARGET
@@ -10004,7 +10029,7 @@ OL.initWBMotion = function(e, id) {
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
         state.v2.activeDragId = null;
-        OL.adjustLaneWidths();
+        OL.recalculateLaneWidths();
         window.renderGlobalVisualizer(isVault);
     };
     window.addEventListener('mousemove', onMove);
