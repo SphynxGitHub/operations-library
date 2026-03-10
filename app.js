@@ -10615,59 +10615,78 @@ OL.drawV2Connections = function() {
                     tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
                 }
 
-                const sourceEl = document.getElementById(`v2-node-${node.id}`);
-                const targetEl = document.getElementById(`v2-node-${tid}`);
-                
-                if (sourceEl && targetEl) {
-                    const canvas = document.getElementById('v2-canvas');
-                    const canvasRect = canvas.getBoundingClientRect();
-                    const sRect = sourceEl.getBoundingClientRect();
-                    const tRect = targetEl.getBoundingClientRect();
-                    const zoom = state.v2.zoom || 1;
+                const canvas = document.getElementById('v2-canvas');
+                const canvasRect = canvas.getBoundingClientRect();
+                const zoom = state.v2.zoom || 1;
 
-                    // 🎯 DYNAMIC SNAP PORTS (Calculated relative to the zoomed/panned canvas)
-                    const getAnchors = (r) => [
-                        { x: (r.left + r.width/2 - canvasRect.left) / zoom, y: (r.top - canvasRect.top) / zoom, dir: 'top' },
-                        { x: (r.left + r.width/2 - canvasRect.left) / zoom, y: (r.bottom - canvasRect.top) / zoom, dir: 'bottom' },
-                        { x: (r.left - canvasRect.left) / zoom, y: (r.top + r.height/2 - canvasRect.top) / zoom, dir: 'left' },
-                        { x: (r.right - canvasRect.left) / zoom, y: (r.top + r.height/2 - canvasRect.top) / zoom, dir: 'right' }
-                    ];
+                // 🚀 1. SPECIFIC PORT RESOLUTION (The "Lock")
+                const sourcePortId = (outcome.fromStepIndex !== null && outcome.fromStepIndex !== undefined)
+                    ? `port-out-${node.id}-step-${outcome.fromStepIndex}`
+                    : `port-out-${node.id}`;
 
-                    const pAnchors = getAnchors(sRect);
-                    const cAnchors = getAnchors(tRect);
+                const targetPortId = (outcome.toStepIndex !== null && outcome.toStepIndex !== undefined)
+                    ? `port-in-${tid}-step-${outcome.toStepIndex}`
+                    : `port-in-${tid}`;
 
-                    let minDist = Infinity;
-                    let sAnchor = pAnchors[3]; // Default Right
-                    let eAnchor = cAnchors[2]; // Default Left
+                const sPort = document.getElementById(sourcePortId);
+                const tPort = document.getElementById(targetPortId);
 
-                    pAnchors.forEach(pa => {
-                        cAnchors.forEach(ca => {
-                            const d = Math.hypot(pa.x - ca.x, pa.y - ca.y);
-                            if (d < minDist) {
-                                minDist = d;
-                                sAnchor = pa;
-                                eAnchor = ca;
-                            }
-                        });
-                    });
+                let sAnchor, eAnchor;
 
-                    const sX = sAnchor.x;
-                    const sY = sAnchor.y;
-                    const eX = eAnchor.x;
-                    const eY = eAnchor.y;
+                // --- SOURCE ANCHOR RESOLUTION ---
+                if (sPort && (outcome.fromStepIndex !== null && outcome.fromStepIndex !== undefined)) {
+                    const r = sPort.getBoundingClientRect();
+                    sAnchor = {
+                        x: (r.left + r.width / 2 - canvasRect.left) / zoom,
+                        y: (r.top + r.height / 2 - canvasRect.top) / zoom,
+                        dir: 'right' // Internal steps always exit right
+                    };
+                } else {
+                    const sEl = document.getElementById(`v2-node-${node.id}`);
+                    if (!sEl) return;
+                    const sR = sEl.getBoundingClientRect();
+                    const anchors = getAnchors(sR); // Uses your helper
+                    // Fallback: Pick closest to target element center
+                    const tEl = document.getElementById(`v2-node-${tid}`);
+                    const tRect = tEl ? tEl.getBoundingClientRect() : {left:0, top:0, width:0, height:0};
+                    const tCenter = { x: (tRect.left + tRect.width/2 - canvasRect.left)/zoom, y: (tRect.top + tRect.height/2 - canvasRect.top)/zoom };
+                    sAnchor = anchors.reduce((prev, curr) => 
+                        Math.hypot(curr.x - tCenter.x, curr.y - tCenter.y) < Math.hypot(prev.x - tCenter.x, prev.y - tCenter.y) ? curr : prev
+                    );
+                }
 
-                    // 📐 CURVATURE LOGIC
-                    let pathData;
-                    if (sAnchor.dir === 'top' || sAnchor.dir === 'bottom') {
-                        const cpY = (sY + eY) / 2;
-                        pathData = `M ${sX} ${sY} C ${sX} ${cpY}, ${eX} ${cpY}, ${eX} ${eY}`;
-                    } else {
-                        const cpX = (sX + eX) / 2;
-                        pathData = `M ${sX} ${sY} C ${cpX} ${sY}, ${cpX} ${eY}, ${eX} ${eY}`;
-                    }
+                // --- TARGET ANCHOR RESOLUTION ---
+                if (tPort && (outcome.toStepIndex !== null && outcome.toStepIndex !== undefined)) {
+                    const r = tPort.getBoundingClientRect();
+                    eAnchor = {
+                        x: (r.left + r.width / 2 - canvasRect.left) / zoom,
+                        y: (r.top + r.height / 2 - canvasRect.top) / zoom,
+                        dir: 'left' // Internal steps always enter left
+                    };
+                } else {
+                    const tEl = document.getElementById(`v2-node-${tid}`);
+                    if (!tEl) return;
+                    const tR = tEl.getBoundingClientRect();
+                    const anchors = getAnchors(tR);
+                    eAnchor = anchors.reduce((prev, curr) => 
+                        Math.hypot(curr.x - sAnchor.x, curr.y - sAnchor.y) < Math.hypot(prev.x - sAnchor.x, prev.y - sAnchor.y) ? curr : prev
+                    );
+                }
 
-                    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                    group.setAttribute("class", "v2-connection-group flow-link");
+                // 📐 PATH GENERATION (Bezier)
+                const sX = sAnchor.x; const sY = sAnchor.y;
+                const eX = eAnchor.x; const eY = eAnchor.y;
+                let pathData;
+                if (sAnchor.dir === 'top' || sAnchor.dir === 'bottom') {
+                    const cpY = (sY + eY) / 2;
+                    pathData = `M ${sX} ${sY} C ${sX} ${cpY}, ${eX} ${cpY}, ${eX} ${eY}`;
+                } else {
+                    const cpX = (sX + eX) / 2;
+                    pathData = `M ${sX} ${sY} C ${cpX} ${sX < eX ? sY : eY}, ${cpX} ${sX < eX ? eY : sY}, ${eX} ${eY}`;
+                }
+
+                const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                group.setAttribute("class", "v2-connection-group flow-link");
 
                     // 🖱️ THE DOCKING LOGIC (Group Click)
                     group.onmousedown = (clickEvt) => {
@@ -10697,25 +10716,12 @@ OL.drawV2Connections = function() {
                     group.appendChild(hitArea);
                     group.appendChild(visualPath);
 
-                    // 🛠️ DYNAMIC INDICATOR PLACEMENT
+                    // 🛠️ DYNAMIC INDICATOR PLACEMENT (Logic, Delay, Loop)
                     const indicators = [];
-                    
-                    // Rule 1: Loop is ALWAYS in front (Incoming side)
-                    if (outcome.isLoop || outcome.loop) {
-                        indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
-                    }
+                    if (outcome.isLoop || outcome.loop) indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
+                    if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) indicators.push({ char: "λ", tip: "Logic", side: 'source' });
+                    if (outcome.delay && outcome.delay !== "0") indicators.push({ char: "⏱", tip: `Delay: ${outcome.delay}`, side: 'source' });
 
-                    // Rule 2: Logic/Delay position based on flow
-                    // If it's outbound from this node, put it at the start (Source side)
-                    // If it's inbound, put it at the end (Target side)
-                    if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) {
-                        indicators.push({ char: "λ", tip: "Logic", side: 'source' });
-                    }
-                    if (outcome.delay && outcome.delay !== "0") {
-                        indicators.push({ char: "⏱", tip: `Delay: ${outcome.delay}`, side: 'source' });
-                    }
-
-                    // Render the collected indicators
                     const sourceIcons = indicators.filter(i => i.side === 'source');
                     const targetIcons = indicators.filter(i => i.side === 'target');
 
@@ -10730,8 +10736,8 @@ OL.drawV2Connections = function() {
                     });
 
                     svg.appendChild(group);
-                }
-            });
+                });
+            }
         }
     });
 };
