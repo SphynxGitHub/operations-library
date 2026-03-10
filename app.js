@@ -10599,22 +10599,38 @@ OL.drawV2Connections = function() {
     }
 
     // 🚀 NEW HELPER: Calculate position based on line direction
-    function getOffsetPos(anchor, index, total, isTargetSide = false) {
-        const gap = 25;    // 🚀 Increased gap between icons
-        const margin = 20; // 🚀 Reduced margin to bring them closer to the card
-        const startOffset = margin + (index * gap);
-        
-        const d = isTargetSide ? -1 : 1;
+    function getSmartOffsetPos(sAnchor, eAnchor, index) {
+        const gap = 22;
+        const margin = 28;
+        const offset = margin + (index * gap);
 
-        switch (anchor.dir) {
-            case 'right':  return { x: anchor.x + startOffset, y: anchor.y };
-            case 'left':   return { x: anchor.x - startOffset, y: anchor.y };
-            case 'bottom': return { x: anchor.x, y: anchor.y + startOffset };
-            case 'top':    return { x: anchor.x, y: anchor.y - startOffset };
-            default:       return { x: anchor.x + startOffset, y: anchor.y };
+        // Calculate relative distance
+        const dx = Math.abs(sAnchor.x - eAnchor.x);
+        const dy = Math.abs(sAnchor.y - eAnchor.y);
+
+        // 🎯 LOGIC: 
+        // If dy > dx, cards are stacked vertically -> Align icons HORIZONTALLY
+        // If dx > dy, cards are in different columns -> Align icons VERTICALLY
+        const isVerticalFlow = dy > dx;
+
+        if (isVerticalFlow) {
+            // Stacked vertically: Move icons left/right of the port, then spread them horizontally
+            const horizontalSpread = index * gap;
+            return { 
+                x: sAnchor.dir === 'left' ? sAnchor.x - margin - horizontalSpread : sAnchor.x + margin + horizontalSpread, 
+                y: sAnchor.y 
+            };
+        } else {
+            // Different columns: Spread them along the line direction
+            switch (sAnchor.dir) {
+                case 'right':  return { x: sAnchor.x + offset, y: sAnchor.y };
+                case 'left':   return { x: sAnchor.x - offset, y: sAnchor.y };
+                case 'bottom': return { x: sAnchor.x, y: sAnchor.y + offset };
+                case 'top':    return { x: sAnchor.x, y: sAnchor.y - offset };
+                default:       return { x: sAnchor.x + offset, y: sAnchor.y };
+            }
         }
     }
-
     // 🚀 NEW HELPER: Resolves the 4 cardinal points of a card
     function getAnchors(r, canvasRect, zoom) {
         if (!r || !canvasRect) return []; // Return empty array if rect is missing
@@ -10885,12 +10901,14 @@ OL.drawV2Connections = function() {
                 const targetIcons = indicators.filter(i => i.side === 'target');
 
                 sourceIcons.forEach((icon, i) => {
-                    const pos = getOffsetPos(sAnchor, i, sourceIcons.length, false);
+                    const pos = getSmartOffsetPos(sAnchor, eAnchor, i);
                     group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
                 });
 
+                // Inside the targetIcons.forEach loop (for the Loop icon):
                 targetIcons.forEach((icon, i) => {
-                    const pos = getOffsetPos(eAnchor, i, targetIcons.length, true);
+                    // For target icons, we usually want them near the end of the line
+                    const pos = getSmartOffsetPos(eAnchor, sAnchor, i); // Pass eAnchor as primary
                     group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
                 });
 
