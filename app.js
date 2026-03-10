@@ -10488,6 +10488,16 @@ OL.drawV2Connections = function() {
         }
     }
 
+    // 🚀 NEW HELPER: Resolves the 4 cardinal points of a card
+    function getAnchors(r, canvasRect, zoom) {
+        return [
+            { x: (r.left + r.width / 2 - canvasRect.left) / zoom, y: (r.top - canvasRect.top) / zoom, dir: 'top' },
+            { x: (r.left + r.width / 2 - canvasRect.left) / zoom, y: (r.bottom - canvasRect.top) / zoom, dir: 'bottom' },
+            { x: (r.left - canvasRect.left) / zoom, y: (r.top + r.height / 2 - canvasRect.top) / zoom, dir: 'left' },
+            { x: (r.right - canvasRect.left) / zoom, y: (r.top + r.height / 2 - canvasRect.top) / zoom, dir: 'right' }
+        ];
+    }
+
     source.forEach(node => {
         // 🐕 1. REFINED LEASH LINES (Parent -> Child)
         if (node.parentId) {
