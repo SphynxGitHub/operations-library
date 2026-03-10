@@ -10449,53 +10449,46 @@ OL.drawV2Connections = function() {
     // Ensure this is globally accessible or at the top of OL.drawV2Connections
    function drawIcon(x, y, char, tooltip) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        
-        // 1. Standardized Circle (Always 10r)
+        g.style.cursor = "help"; // 🚀 Visual cue that there is hover info
+
         const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         bg.setAttribute("cx", x);
         bg.setAttribute("cy", y);
-        bg.setAttribute("r", "11"); // 🚀 Standard size for both
+        bg.setAttribute("r", "9"); // 🚀 Reduced size
         bg.setAttribute("fill", "#1e293b"); 
         bg.setAttribute("stroke", "#fbbf24");
-        bg.setAttribute("stroke-width", "1.5"); // Slightly thicker border makes size feel consistent
+        bg.setAttribute("stroke-width", "1");
         
-        // 2. Optimized Text
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", x);
-        text.setAttribute("y", y); // 🚀 No Y offset needed with central baseline
+        text.setAttribute("y", y);
         text.setAttribute("fill", "#fbbf24");
-        
-        // 🎯 OPTICAL BALANCE: ⏱ is 'bulkier' than λ, so we downscale it slightly
-        const fontSize = (char === "⏱") ? "11px" : "13px";
-        text.setAttribute("font-size", fontSize);
-        
-        text.setAttribute("font-family", "Arial, sans-serif");
-        text.setAttribute("font-weight", "bold");
+        text.setAttribute("font-size", char === "⏱" ? "9px" : "11px"); // 🚀 Proportional scaling
         text.setAttribute("text-anchor", "middle");
         text.setAttribute("dominant-baseline", "central");
-        
+        text.setAttribute("font-weight", "bold");
         text.textContent = char;
-        
+
+        // 🚀 THE HOVER PARAMETERS:
         const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-        title.textContent = tooltip;
+        title.textContent = tooltip; 
         
         g.appendChild(bg);
         g.appendChild(text);
-        text.appendChild(title);
+        g.appendChild(title); // This creates the native browser tooltip
         
         return g;
     }
 
     // 🚀 NEW HELPER: Calculate position based on line direction
     function getOffsetPos(anchor, index, total, isTargetSide = false) {
-        const gap = 22;
-        const margin = 25; // Distance from the card edge
+        const gap = 25;    // 🚀 Increased gap between icons
+        const margin = 20; // 🚀 Reduced margin to bring them closer to the card
         const startOffset = margin + (index * gap);
         
-        // Reverse direction if we are drawing icons at the "Target" (Incoming) side
         const d = isTargetSide ? -1 : 1;
 
-       switch (anchor.dir) {
+        switch (anchor.dir) {
             case 'right':  return { x: anchor.x + startOffset, y: anchor.y };
             case 'left':   return { x: anchor.x - startOffset, y: anchor.y };
             case 'bottom': return { x: anchor.x, y: anchor.y + startOffset };
@@ -10752,11 +10745,24 @@ OL.drawV2Connections = function() {
                 group.appendChild(visualPath);
 
                 // 🛠️ DYNAMIC INDICATOR PLACEMENT
+                // Inside the outcome loop:
                 const indicators = [];
-                if (outcome.isLoop || outcome.loop) indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
-                if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) indicators.push({ char: "λ", tip: "Logic", side: 'source' });
-                if (outcome.delay && outcome.delay !== "0") indicators.push({ char: "⏱", tip: `Delay: ${outcome.delay}`, side: 'source' });
-
+                if (outcome.isLoop) indicators.push({ 
+                    char: "⟳", 
+                    tip: `Loop: ${outcome.loopCount || 'Infinite'} times`, 
+                    side: 'target' 
+                });
+                if (outcome.logic) indicators.push({ 
+                    char: "λ", 
+                    tip: `Condition: ${outcome.logic.field} ${outcome.logic.operator} ${outcome.logic.value}`, 
+                    side: 'source' 
+                });
+                if (outcome.delay && outcome.delay !== "0") indicators.push({ 
+                    char: "⏱", 
+                    tip: `Wait: ${outcome.delay}`, 
+                    side: 'source' 
+                });
+                
                 const sourceIcons = indicators.filter(i => i.side === 'source');
                 const targetIcons = indicators.filter(i => i.side === 'target');
 
