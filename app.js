@@ -10688,57 +10688,57 @@ OL.drawV2Connections = function() {
                 const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 group.setAttribute("class", "v2-connection-group flow-link");
 
-                    // 🖱️ THE DOCKING LOGIC (Group Click)
-                    group.onmousedown = (clickEvt) => {
-                        clickEvt.stopPropagation();
-                        clickEvt.preventDefault();
-                        state.v2.activeConnection = { sourceId: node.id, targetId: tid, outcomeIdx: outcomeIdx, isLeash: false };
-                        document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
-                        group.classList.add('is-sticky');
-                        const ctxBar = document.getElementById('v2-context-toolbar');
-                        if (ctxBar) ctxBar.style.display = 'flex';
-                    };
+                // 🖱️ THE DOCKING LOGIC (Group Click)
+                group.onmousedown = (clickEvt) => {
+                    clickEvt.stopPropagation();
+                    clickEvt.preventDefault();
+                    state.v2.activeConnection = { sourceId: node.id, targetId: tid, outcomeIdx: outcomeIdx, isLeash: false };
+                    document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
+                    group.classList.add('is-sticky');
+                    const ctxBar = document.getElementById('v2-context-toolbar');
+                    if (ctxBar) ctxBar.style.display = 'flex';
+                };
 
-                    const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    visualPath.setAttribute("d", pathData);
-                    visualPath.setAttribute("stroke", "#fbbf24");
-                    visualPath.setAttribute("stroke-width", "2");
-                    visualPath.setAttribute("fill", "none");
-                    visualPath.setAttribute("marker-end", "url(#arrowhead-v2)");
+                const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                visualPath.setAttribute("d", pathData);
+                visualPath.setAttribute("stroke", "#fbbf24");
+                visualPath.setAttribute("stroke-width", "2");
+                visualPath.setAttribute("fill", "none");
+                visualPath.setAttribute("marker-end", "url(#arrowhead-v2)");
 
-                    const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    hitArea.setAttribute("d", pathData);
-                    hitArea.setAttribute("stroke", "transparent");
-                    hitArea.setAttribute("stroke-width", "20");
-                    hitArea.setAttribute("fill", "none");
-                    hitArea.style.cursor = "pointer";
+                const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                hitArea.setAttribute("d", pathData);
+                hitArea.setAttribute("stroke", "transparent");
+                hitArea.setAttribute("stroke-width", "20");
+                hitArea.setAttribute("fill", "none");
+                hitArea.style.cursor = "pointer";
 
-                    group.appendChild(hitArea);
-                    group.appendChild(visualPath);
+                group.appendChild(hitArea);
+                group.appendChild(visualPath);
 
-                    // 🛠️ DYNAMIC INDICATOR PLACEMENT (Logic, Delay, Loop)
-                    const indicators = [];
-                    if (outcome.isLoop || outcome.loop) indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
-                    if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) indicators.push({ char: "λ", tip: "Logic", side: 'source' });
-                    if (outcome.delay && outcome.delay !== "0") indicators.push({ char: "⏱", tip: `Delay: ${outcome.delay}`, side: 'source' });
+                // 🛠️ DYNAMIC INDICATOR PLACEMENT (Logic, Delay, Loop)
+                const indicators = [];
+                if (outcome.isLoop || outcome.loop) indicators.push({ char: "⟳", tip: "Looping", side: 'target' });
+                if (outcome.logic && (outcome.logic.field || outcome.logic.operator)) indicators.push({ char: "λ", tip: "Logic", side: 'source' });
+                if (outcome.delay && outcome.delay !== "0") indicators.push({ char: "⏱", tip: `Delay: ${outcome.delay}`, side: 'source' });
 
-                    const sourceIcons = indicators.filter(i => i.side === 'source');
-                    const targetIcons = indicators.filter(i => i.side === 'target');
+                const sourceIcons = indicators.filter(i => i.side === 'source');
+                const targetIcons = indicators.filter(i => i.side === 'target');
 
-                    sourceIcons.forEach((icon, i) => {
-                        const pos = getOffsetPos(sAnchor, i, sourceIcons.length, false);
-                        group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
-                    });
-
-                    targetIcons.forEach((icon, i) => {
-                        const pos = getOffsetPos(eAnchor, i, targetIcons.length, true);
-                        group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
-                    });
-
-                    svg.appendChild(group);
+                sourceIcons.forEach((icon, i) => {
+                    const pos = getOffsetPos(sAnchor, i, sourceIcons.length, false);
+                    group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
                 });
-            }
-        }
+
+                targetIcons.forEach((icon, i) => {
+                    const pos = getOffsetPos(eAnchor, i, targetIcons.length, true);
+                    group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
+                });
+
+                svg.appendChild(group);
+            });
+        };
+
     });
 };
 
