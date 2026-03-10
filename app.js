@@ -9906,16 +9906,12 @@ OL.initWBMotion = function(e, id) {
         const dx = (uE.clientX - startX) / zoom;
         const dy = (uE.clientY - startY) / zoom;
 
-        // 🚀 THE FIX: Move the source resolution INSIDE updateAndSync
         await OL.updateAndSync(async () => {
-            // Resolve source here so it's impossible for it to be undefined
             const client = getActiveClient();
             const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-
             if (!source) throw new Error("Sync aborted: Source data unreachable.");
 
             for (const node of dragGroup) {
-                // Use the locally pinned 'source'
                 const movingRes = source.find(r => String(r.id) === String(node.id));
                 if (!movingRes) continue;
 
@@ -9929,24 +9925,39 @@ OL.initWBMotion = function(e, id) {
                     const parentRes = source.find(r => String(r.id) === String(targetId));
 
                     if (parentRes && parentRes.id !== movingRes.id) {
-                        const isSurgicalMerge = movingRes.type !== 'STEP' && parentRes.type !== 'STEP';
-                        
-                        // --- Inside your onUp -> updateAndSync -> for...of loop ---
-                        if (isSurgicalMerge) {
-                            console.log("🧬 Surgical Merge: Consolidating steps...");
-                            
-                            // Move steps
-                            const stepsToMove = JSON.parse(JSON.stringify(movingRes.steps || []));
+                        // 🧬 UNIFIED MERGE: Check if moving item has steps OR is a loose step
+                        const hasSteps = movingRes.steps && movingRes.steps.length > 0;
+                        const isLooseStep = movingRes.type === 'STEP' || movingRes.type === 'SOP';
+
+                        if (hasSteps || isLooseStep) {
+                            console.log("🧬 Absorbing content into target...");
+
+                            // 1. Prepare steps to move (either the children or the node itself)
+                            const stepsToMove = hasSteps 
+                                ? JSON.parse(JSON.stringify(movingRes.steps)) 
+                                : [JSON.parse(JSON.stringify(movingRes))];
+
                             parentRes.steps = [...(parentRes.steps || []), ...stepsToMove];
                             
-                            // Remove the source card
+                            // 2. Normalize mapOrder
+                            parentRes.steps.forEach((s, i) => s.mapOrder = i);
+
+                            // 3. Promote parent to RESOURCE if it was just a STEP
+                            if (parentRes.type === 'STEP' || parentRes.type === 'SOP') {
+                                parentRes.type = 'RESOURCE';
+                            }
+
+                            // 4. Remove the source card
                             const idx = source.findIndex(r => String(r.id) === String(movingRes.id));
                             if (idx > -1) source.splice(idx, 1);
-                            
-                            // 🚀 THE FIX: Now this function is defined!
+
+                            // 🚀 AUTO-EXPAND: Ensure the user sees the new steps immediately
+                            state.v2.expandedNodes.add(parentRes.id);
+
+                            // 5. Update naming/counters
                             OL.refreshFamilyNaming(parentRes, source);
                         } else {
-                            // Standard Nesting
+                            // Standard Nesting Fallback
                             if (!parentRes.steps) parentRes.steps = [];
                             parentRes.steps.push({
                                 id: 'link_' + Date.now(),
@@ -9955,6 +9966,9 @@ OL.initWBMotion = function(e, id) {
                             });
                             delete movingRes.coords;
                             movingRes.parentId = parentRes.id;
+                            
+                            // Also auto-expand for nesting
+                            state.v2.expandedNodes.add(parentRes.id);
                         }
                     }
                 } else {
@@ -10219,7 +10233,7 @@ function renderV2Nodes(isVault) {
         ` : '';
 
         // 🚀 Dynamic Badge for standard resources
-        const stepBadge = (steps.length > 0 && !isLooseStep) ? 
+        const stepBadge = (steps.length > 0) ? 
             `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
                 ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
             </div>` : '';
