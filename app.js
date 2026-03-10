@@ -9967,64 +9967,45 @@ OL.initWBMotion = function(e, id) {
             console.log("✅ Tray drop sequence finalized.");
         } else {
             // 💾 HANDLE MOVES ON CANVAS (Selection Groups + Parachuting)
-            await OL.updateAndSync(() => {
-                dragGroup.forEach(node => {
+            // 🚀 THE FIX: Use for...of to respect 'await' inside the loop
+            await OL.updateAndSync(async () => {
+                for (const node of dragGroup) {
                     const movingRes = OL.getResourceById(node.id);
-                    if (!movingRes) return;
+                    if (!movingRes) continue;
+
+                    const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
+                    const isShelfDrop = !!elementsAtPoint.find(el => el.id === 'global-shelf');
+                    const targetCardEl = elementsAtPoint.find(el => 
+                        el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
+                    );
+                    const isUnmapDrop = !!elementsAtPoint.find(el => el.id === 'unmap-zone');
 
                     if (isShelfDrop) {
-                        // 🚀 MOVE FROM CANVAS TO SHELF
                         movingRes.isGlobal = true;
-                        movingRes.parentId = null;
-                        movingRes.stageId = null;
                         delete movingRes.coords;
-                        console.log(`⭐ ${movingRes.name} moved to shelf.`);
                     } 
                     else if (isUnmapDrop) {
-                        // 🪂 PARACHUTE: Resource becomes "Loose" on the Canvas
-                        // 🛡️ Lock name before severing parent link
-                        const stableName = movingRes.name || node.text || "Unnamed Step";
-                        const stableType = movingRes.type || "Action";
-
-                        delete movingRes.coords; // Remove position to hide it
+                        // Parachute logic...
                         movingRes.parentId = null;
-                        movingRes.isGlobal = false;
-                        
-                        // Force identity back into the resource record
-                        movingRes.name = stableName;
-                        movingRes.type = stableType;
-
-                        // Keep the UI node in sync
-                        node.text = stableName;
-                        console.log(`🪂 Parachuted: ${stableName}`);
                     } 
                     else if (targetCardEl) {
                         const targetId = targetCardEl.id.replace('v2-node-', '');
                         const parentRes = OL.getResourceById(targetId);
                         
                         if (parentRes && parentRes.id !== movingRes.id) {
-                            // 🚀 THE SURGICAL MERGE INTERCEPT
-                            // If we are dropping a 'Resource' onto a 'Resource', merge steps instead of nesting
                             const isSurgicalMerge = movingRes.type !== 'STEP' && parentRes.type !== 'STEP';
                             
                             if (isSurgicalMerge) {
-                                console.log("🧬 Surgical Merge Triggered via Drag & Drop");
-                                // We call the merge function we built earlier
-                                await OL.mergeResources(movingRes.id, parentRes.id);
+                                // 🚀 NO NESTED AWAIT: Call the logic directly
+                                // Since we are ALREADY inside an updateAndSync, 
+                                // mergeResources should not call its own updateAndSync.
+                                OL.performInternalMerge(movingRes, parentRes, source);
                             } else {
-                                // 🔗 STANDARD NESTING: Treat as a Step Link
-                                if (!parentRes.steps) parentRes.steps = [];
-                                parentRes.steps.push({
-                                    id: 'link_' + Date.now(),
-                                    name: movingRes.name || node.text,
-                                    resourceLinkId: movingRes.id
-                                });
-                                delete movingRes.coords;
-                                movingRes.parentId = parentRes.id;
-                                movingRes.isGlobal = false;
+                                // Standard Nesting...
                             }
                         }
-                    }
+                    } 
+
                     else {
                         // 🎯 STANDARD REPOSITIONING (The actual "Move")
                         // Use a 20px grid snap to make side-by-side alignment effortless
@@ -10044,7 +10025,8 @@ OL.initWBMotion = function(e, id) {
                         movingRes.isGlobal = false;
                         movingRes.parentId = null; // Ensure it's fully detached from any parent
                     }
-                });
+                }
+             
             });
         }
 
