@@ -10387,40 +10387,40 @@ OL.mergeResources = async function(droppedId, targetId) {
     const isVault = location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
     
-    const moving = source.find(r => r.id === droppedId);
-    const target = source.find(r => r.id === targetId);
+    const moving = source.find(r => String(r.id) === String(droppedId));
+    const target = source.find(r => String(r.id) === String(targetId));
 
-    if (!moving || !target) return;
+    if (!moving || !target || moving.id === target.id) return;
 
     await OL.updateAndSync(() => {
-        // 1. Combine the steps
-        const combinedSteps = [...target.steps, ...moving.steps];
+        // 🚀 1. EXTRACT STEPS ONLY
+        // We ensure we are grabbing the step data, not the resource reference
+        const stepsToMove = JSON.parse(JSON.stringify(moving.steps || []));
         
-        // 2. Normalize mapOrder and clean up IDs to prevent collisions
-        target.steps = combinedSteps.map((step, idx) => ({
-            ...step,
-            mapOrder: idx
-        }));
+        // 🚀 2. APPEND & RE-INDEX
+        target.steps = [...target.steps, ...stepsToMove];
+        target.steps.forEach((s, i) => s.mapOrder = i);
 
-        // 3. Delete the "orphaned" part
-        const movingIdx = source.findIndex(r => r.id === droppedId);
+        // 🚀 3. DELETE THE OLD CONTAINER
+        const movingIdx = source.findIndex(r => String(r.id) === String(droppedId));
         if (movingIdx > -1) source.splice(movingIdx, 1);
 
-        // 4. Update the Family Naming
-        const baseName = target.name.replace(/\s\(\d+\/\d+\)$/, "");
-        const family = source.filter(r => r.name.startsWith(baseName))
-                             .sort((a, b) => a.coords.y - b.coords.y);
+        // 🚀 4. RE-CALCULATE FAMILY (The Counter Fix)
+        const baseName = target.name.replace(/\s\(\d+\/\d+\)$/, "").trim();
         
-        if (family.length === 1) {
-            // Only one left? Revert to the original name without (1/1)
-            family[0].name = baseName;
+        // Find everyone currently ALIVE on the canvas with this base name
+        const family = source.filter(r => 
+            r.name.replace(/\s\(\d+\/\d+\)$/, "").trim() === baseName
+        ).sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+
+        // Update the numbers based on the new current total
+        if (family.length <= 1) {
+            family[0].name = baseName; // Remove (1/1) if it's the only one left
         } else {
             family.forEach((member, i) => {
                 member.name = `${baseName} (${i + 1}/${family.length})`;
             });
         }
-        
-        console.log(`🧬 Successfully merged steps into ${target.name}`);
     });
 
     if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
@@ -10450,19 +10450,24 @@ OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
             y: original.coords.y + (original.steps.length * 40) + 60 
         };
 
-        const baseName = original.name.replace(/\s\(\d+\/\d+\)$/, "");
-        const family = source.filter(r => r.name.startsWith(baseName));
+        const baseName = original.name.replace(/\s\(\d+\/\d+\)$/, "").trim();
         
-        // 🛡️ HARDENED SORT: Provide fallback value for 'y'
-        const allParts = [...family, part2].sort((a, b) => {
-            const ay = (a.coords && a.coords.y) ? a.coords.y : 0;
-            const by = (b.coords && b.coords.y) ? b.coords.y : 0;
-            return ay - by;
-        });
-        
-        const totalParts = allParts.length;
+        // 1. Find all current parts (excluding the one we're about to add)
+        const existingFamily = source.filter(r => 
+            r.name.replace(/\s\(\d+\/\d+\)$/, "").trim() === baseName
+        );
+
+        // 2. The new total is existing + the one we just created
+        const newTotal = existingFamily.length + 1;
+
+        // 3. Combine them and sort by Y position for logical numbering
+        const allParts = [...existingFamily, part2].sort((a, b) => 
+            (a.coords?.y || 0) - (b.coords?.y || 0)
+        );
+
+        // 4. Assign fresh (X/Total) strings to everyone
         allParts.forEach((member, idx) => {
-            member.name = `${baseName} (${idx + 1}/${totalParts})`;
+            member.name = `${baseName} (${idx + 1}/${newTotal})`;
         });
 
         source.push(part2);
