@@ -10447,30 +10447,32 @@ OL.drawV2Connections = function() {
     svg.setAttribute('viewBox', '0 0 5000 5000');
 
     // Ensure this is globally accessible or at the top of OL.drawV2Connections
-    function drawIcon(x, y, char, tooltip) {
+   function drawIcon(x, y, char, tooltip) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         
-        // 1. The Backdrop Circle
+        // 1. Standardized Circle (Always 10r)
         const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        bg.setAttribute("cx", x); // Now using the raw x
-        bg.setAttribute("cy", y); // Now using the raw y
-        bg.setAttribute("r", "10");
+        bg.setAttribute("cx", x);
+        bg.setAttribute("cy", y);
+        bg.setAttribute("r", "11"); // 🚀 Standard size for both
         bg.setAttribute("fill", "#1e293b"); 
         bg.setAttribute("stroke", "#fbbf24");
-        bg.setAttribute("stroke-width", "1");
+        bg.setAttribute("stroke-width", "1.5"); // Slightly thicker border makes size feel consistent
         
-        // 2. The Centered Text
+        // 2. Optimized Text
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", x);
-        text.setAttribute("y", y);
+        text.setAttribute("y", y); // 🚀 No Y offset needed with central baseline
         text.setAttribute("fill", "#fbbf24");
-        text.setAttribute("font-size", "12px"); // 12px usually fits best in a 10r circle
+        
+        // 🎯 OPTICAL BALANCE: ⏱ is 'bulkier' than λ, so we downscale it slightly
+        const fontSize = (char === "⏱") ? "11px" : "13px";
+        text.setAttribute("font-size", fontSize);
+        
         text.setAttribute("font-family", "Arial, sans-serif");
         text.setAttribute("font-weight", "bold");
-        
-        // 🚀 THE MAGIC ALIGNMENT SETTINGS:
-        text.setAttribute("text-anchor", "middle");      // Horizontal centering
-        text.setAttribute("dominant-baseline", "central"); // Vertical centering
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "central");
         
         text.textContent = char;
         
