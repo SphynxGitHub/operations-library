@@ -2378,6 +2378,12 @@ body.fs-mode-active {
         position: relative !important;
     }
 
+    /* 🛡️ PREVENT CROP */
+    * {
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact;
+    }
+    
     /* 🚀 CRITICAL: Hide the background app entirely so it doesn't push content down */
     #mainContent .fs-canvas { 
         display: none !important; 
