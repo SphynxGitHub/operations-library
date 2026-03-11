@@ -7108,7 +7108,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                                             <div style="display:flex; align-items:center; gap:2px; flex: 0 0 auto; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; margin-left: auto;">
                                                                 <span class="tiny muted" style="font-size: 9px; opacity: 0.5;">$</span>
                                                                 <input type="number" class="price-input-tiny" 
-                                                                    style="width: 35px; color: var(--accent); background:transparent; border: none; text-align: right; font-size: 10px; padding: 0; font-weight: bold; outline: none;" 
+                                                                    style="width: 45px; color: var(--accent); background:transparent; border: none; text-align: right; font-size: 10px; padding: 0; font-weight: bold; outline: none;" 
                                                                     placeholder="0" value="${t.price}" 
                                                                     onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
                                                             </div>
