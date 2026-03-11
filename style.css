@@ -2566,13 +2566,7 @@ body.fs-mode-active {
         height: auto !important;
         display: block !important;
     }
-
-    tr, .grid-row, .tier-entry, .matrix-card-main {
-        page-break-inside: avoid !important; /* Legacy support */
-        break-inside: avoid !important;      /* Modern support */
-        display: table-row !important;       /* Ensures table logic stays intact */
-    }
-
+    
     /* 5. Hide the actual scrollbar track in Webkit browsers */
     ::-webkit-scrollbar {
         display: none !important;
