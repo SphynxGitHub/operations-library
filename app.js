@@ -9193,7 +9193,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                                     style="cursor: text; border-bottom: 1px dashed rgba(255,255,255,0.2);">
                                     ${esc(s.name)}
                                 </span>
-                                <button class="v2-lane-delete-btn" 
+                                <button class="card-delete-btn" 
                                         onclick="event.stopPropagation(); OL.removeStage(${i})">×</button>
                             </div>
                         </div>
