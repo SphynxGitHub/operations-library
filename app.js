@@ -9766,34 +9766,34 @@ OL.initV2Panning = function() {
     });
 
     // 🚀 THE ULTIMATE CLEANUP: Attach to window to catch releases outside the viewport
-window.addEventListener('mouseup', (e) => {
-    if (state.v2.isDraggingNode) {
-        console.log("🌊 Global Release: Cleaning up drag states");
-        
-        // 1. Remove visual ghosts and hover effects from ALL cards
-        document.querySelectorAll('.v2-node-card').forEach(card => {
-            card.classList.remove('is-dragging', 'drop-hover', 'drop-target-highlight');
-            card.style.opacity = '1';
-            card.style.pointerEvents = 'auto'; // Re-enable clicking
-        });
+    window.addEventListener('mouseup', (e) => {
+        if (state.v2.isDraggingNode) {
+            console.log("🌊 Global Release: Cleaning up drag states");
+            
+            // 1. Remove visual ghosts and hover effects from ALL cards
+            document.querySelectorAll('.v2-node-card').forEach(card => {
+                card.classList.remove('is-dragging', 'drop-hover', 'drop-target-highlight');
+                card.style.opacity = '1';
+                card.style.pointerEvents = 'auto'; // Re-enable clicking
+            });
 
-        // 2. Hide the Unmap Zone if it's visible
-        const unmapZone = document.getElementById('unmap-zone');
-        if (unmapZone) unmapZone.classList.remove('visible');
+            // 2. Hide the Unmap Zone if it's visible
+            const unmapZone = document.getElementById('unmap-zone');
+            if (unmapZone) unmapZone.classList.remove('visible');
 
-        // 3. Reset internal state
-        state.v2.isDraggingNode = false;
-        state.v2.draggedNodeId = null;
-        
-        // 4. Reset global cursor
-        document.body.style.cursor = 'default';
-        
-        // 🚀 CRITICAL: Recalculate lane widths in case the card moved
-        if (typeof OL.recalculateLaneWidths === 'function') {
-            OL.recalculateLaneWidths();
+            // 3. Reset internal state
+            state.v2.isDraggingNode = false;
+            state.v2.draggedNodeId = null;
+            
+            // 4. Reset global cursor
+            document.body.style.cursor = 'default';
+            
+            // 🚀 CRITICAL: Recalculate lane widths in case the card moved
+            if (typeof OL.recalculateLaneWidths === 'function') {
+                OL.recalculateLaneWidths();
+            }
         }
-    }
-});
+    });
 };
 
 OL.zoom = function(delta) {
