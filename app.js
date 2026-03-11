@@ -9199,9 +9199,12 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         </div>
                     `).join('')}
 
-                    <div class="v2-lane-label add-stage-zone" style="min-width: 300px;">
-                        <button class="btn soft tiny" style="pointer-events: all; position: relative; z-index: 2000;"
-                        onclick="console.log('Button Clicked!'); OL.addNewStage()">+ Add Stage</button>
+                   <div class="v2-lane-label add-stage-zone" style="width: 300px; flex-shrink: 0; pointer-events: all; display: flex; align-items: center;">
+                        <button class="btn soft tiny" 
+                                style="position: relative; z-index: 2000; margin-left: 20px; background: rgba(251, 191, 36, 0.1); border: 1px dashed #fbbf24; color: #fbbf24;"
+                                onclick="console.log('Button Clicked!'); OL.addNewStage()">
+                            + Add Stage
+                        </button>
                     </div>
                 </div>
             </div>
