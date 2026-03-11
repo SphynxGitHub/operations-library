@@ -16763,7 +16763,7 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
                     -$${totalRoundSavings.toLocaleString()}
                 </div>
                 
-                <div class="col-numeric bold" style="color: white; font-size: 12px; text-align:right; line-height: 1.1;">
+                <div class="col-numeric bold" style="font-size: 12px; text-align:right; line-height: 1.1;">
                     $${finalRoundNet.toLocaleString()}
                 </div>
                 
@@ -17422,7 +17422,7 @@ window.renderGrandTotals = function(lineItems, baseRate) {
 
       <div class="total-item-net">
         <div class="tiny muted uppercase bold" style="color: var(--accent);">Final Approved</div>
-        <div style="font-size: 22px; font-weight: 900; color: #fff; line-height: 1;">$${finalApproved.toLocaleString()}</div>
+        <div style="font-size: 22px; font-weight: 900; line-height: 1;">$${finalApproved.toLocaleString()}</div>
       </div>
     </div>`;
 };
