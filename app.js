@@ -16746,4 +16746,2504 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
                     -$${totalRoundSavings.toLocaleString()}
                 </div>
                 
-                <div class="col-numeric bold" style="
+                <div class="col-numeric bold" style="font-size: 12px; text-align:right; line-height: 1.1;">
+                    $${finalRoundNet.toLocaleString()}
+                </div>
+                
+                <div class="col-actions"></div>
+            </div>
+            <div class="round-grid">${rows}</div>
+        </div>
+    `;
+};
+
+// 3. RENDER SCOPING ROW / UPDATE ROW
+function renderScopingRow (item, idx, showUnits) {
+    const client = getActiveClient();
+    
+    // 1. Resolve Resource using the robust helper
+    const res = OL.getResourceById(item.resourceId);
+    const isAdmin = state.adminMode === true;
+
+    // 🛡️ SAFETY CHECK: Handle deleted/missing resources
+    if (!res) {
+        return `
+            <div class="grid-row" style="opacity: 0.6; background: rgba(255,0,0,0.05); padding: 8px 10px;">
+                <div class="col-expand">
+                    <div class="row-title text-danger">⚠️ Missing Resource</div>
+                    <div class="tiny muted">Item: ${item.id}</div>
+                </div>
+                <div class="col-status">N/A</div>
+                <div class="col-team">N/A</div>
+                <div class="col-gross">N/A</div>
+                <div class="col-discount">—</div>
+                <div class="col-numeric">$0</div>
+                <div class="col-actions">
+                    ${isAdmin ? `
+                        <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeByID('${item.id}')">×</button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    // 2. Financial Calculations
+    // Only "Do Now" and "Sphynx/Joint" count towards the totals
+    const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
+    const isCounted = item.status === 'Do Now' && isBillable;
+
+    const typeIcon = OL.getRegistryIcon(res.type);
+
+    const gross = OL.calculateBaseFeeWithMultiplier(item, res);
+    const net = isCounted ? OL.calculateRowFee(item, res) : 0;
+    const discountAmt = gross - net;
+
+    const combinedData = { ...(res.data || {}), ...(item.data || {}) };
+    const unitsHtml = showUnits ? OL.renderUnitBadges(combinedData, res) : "";
+
+    const projectTeam = client?.projectData?.teamMembers || [];
+    const mode = (item.teamMode || 'everyone').toLowerCase();
+
+    // 3. Team UI Logic
+    let teamLabel = '';
+    let btnIcon = '👨🏼‍🤝‍👨🏻';
+    let btnClass = 'soft';
+    const multiplierHtml = `<span class="multiplier-tag">${OL.getMultiplierDisplay(item)}</span>`;
+
+    if (mode === 'global') {
+        teamLabel = '<span class="tiny muted italic">Global Item</span>';
+        hoverText = "Applies to the entire project scope";
+        btnIcon = '🌎';
+        btnClass = 'accent';
+    } else if (mode === 'individual') {
+        const selectedIds = item.teamIds || []; 
+        const selectedCount = selectedIds.length;
+        btnIcon = '👨‍💼';
+        btnClass = 'primary';
+        const names = selectedIds
+            .map(id => projectTeam.find(tm => tm.id === id)?.name || "Unknown")
+            .filter(n => n !== "Unknown");
+
+        if (selectedCount > 0) {
+            teamLabel = `<span class="tiny muted">Individuals (${selectedCount})</span>`;
+            hoverText = names.join(", "); // Plain text list for the title attribute
+        } else {
+            teamLabel = '<span class="tiny danger">No members!</span>';
+            hoverText = "Click to assign team members";
+        }
+    } else {
+        const totalCount = projectTeam.length;
+        teamLabel = `<span class="tiny muted">Everyone (${totalCount})</span>`;
+        hoverText = projectTeam.map(tm => tm.name).join(", ");
+    }
+
+    const teamBtnAttr = isAdmin 
+    ? `onclick="OL.openTeamAssignmentModal('${item.id}')" class="btn tiny ${btnClass}"` 
+    : `class="btn tiny ${btnClass}" style="cursor: default; pointer-events: none; opacity: 0.9;"`;
+
+    const isTarget = state.scopingFilterActive && String(item.resourceId) === String(state.scopingTargetId);
+
+    return `
+        <div class="grid-row ${isTarget ? 'surgical-focus-row' : ''}" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
+        <div class="col-expand">
+            <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
+                <span style="font-size: 1.2em; line-height: 1; margin-top: 2px;">${typeIcon}</span>
+                ${esc(res.name || "Manual Item")}
+            </div>
+            ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
+            ${unitsHtml}
+        </div>
+      
+        <div class="col-status">
+            <select class="tiny-select" onchange="OL.updateLineItem('${item.id}', 'status', this.value)">
+            <option value="Do Now" ${item.status === "Do Now" ? "selected" : ""}>Do Now</option>
+            <option value="Do Later" ${item.status === "Do Later" ? "selected" : ""}>Do Later</option>
+            <option value="Don't Do" ${item.status === "Don't Do" ? "selected" : ""}>Don't Do</option>
+            <option value="Done" ${item.status === "Done" ? "selected" : ""}>Done</option>
+            </select>
+            <select class="tiny-select" style="margin-top:4px" onchange="OL.updateLineItem('${item.id}', 'responsibleParty', this.value)">
+            <option value="Sphynx" ${item.responsibleParty === "Sphynx" ? "selected" : ""}>Sphynx</option>
+            <option value="${esc(client.meta.name)}" ${item.responsibleParty === client.meta.name ? "selected" : ""}>${esc(client.meta.name)}</option>
+            <option value="Joint" ${item.responsibleParty === "Joint" ? "selected" : ""}>Joint</option>
+            </select>
+        </div>
+
+        <div class="col-team">
+            <div style="display:flex; flex-direction:column; gap:4px;" title="${esc(hoverText)}">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <button ${teamBtnAttr}>
+                        ${btnIcon}
+                    </button>
+                    
+                    <div class="pills-row" 
+                        ${isAdmin ? `onclick="OL.openTeamAssignmentModal('${item.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                        ${teamLabel}
+                    </div>
+                </div>
+                <div style="padding-left: 34px;">
+                    ${multiplierHtml}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-gross tiny muted" style="text-align:center;">
+            $${gross.toLocaleString()}
+        </div>
+
+        <div class="col-discount">
+            ${discountAmt > 0 ? `
+                <span class="tiny muted" onclick="OL.openDiscountManager()" style="padding: 2px 4px; font-size: 9px;">
+                    -$${discountAmt.toLocaleString()}
+                </span>
+            ` : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
+        </div>
+
+        <div class="col-numeric">
+            <div class="bold" style="font-size: 13px;">$${net.toLocaleString()}</div>
+        </div>
+
+        <div class="col-actions">
+            ${isAdmin ? `
+                <button class="card-delete-btn" style="opacity: 0.3; font-size: 16px;" onclick="OL.removeFromScopeByID('${item.id}')">×</button>
+            ` : ''}
+        </div>
+    </div>
+  `;
+}
+
+OL.openTeamAssignmentModal = function (itemId) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
+    const team = client.projectData.teamMembers || [];
+
+    if (!item.teamIds) item.teamIds = [];
+
+    let html = `
+        <div class="modal-head">
+            <div class="modal-title-text">👥 Assign Team to Item</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Done</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted" style="margin-bottom:15px;">
+                Selecting individual members will apply a multiplier based on the group size.
+            </p>
+            <div class="dp-manager-list">
+                ${team.map(m => {
+                    const isAssigned = item.teamIds.includes(m.id);
+                    return `
+                        <div class="dp-manager-row is-clickable" 
+                             style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--line);"
+                             onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span>${isAssigned ? '✅' : '⬜'}</span>
+                                <span style="${isAssigned ? 'font-weight:bold; color:var(--accent);' : ''}">${esc(m.name)}</span>
+                            </div>
+                            <span class="tiny muted uppercase">${esc(m.roles?.[0] || 'Member')}</span>
+                        </div>
+                    `;
+                }).join('')}
+                ${team.length === 0 ? '<div class="empty-hint">No project team members found. Add them in the Team tab first.</div>' : ''}
+            </div>
+            
+            <div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--line); display:flex; gap:10px;">
+                <button class="btn tiny soft flex-1" onclick="OL.setTeamMode('${itemId}', 'everyone')">Apply to Everyone</button>
+                <button class="btn tiny soft flex-1" onclick="OL.setTeamMode('${itemId}', 'global')">Mark as Global (1x)</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+// Helper to quickly switch modes from the modal
+OL.setTeamMode = function(itemId, mode) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
+    if (item) {
+        item.teamMode = mode;
+        if (mode === 'everyone') item.teamIds = []; 
+        OL.persist();
+        OL.closeModal();
+        renderScopingSheet();
+    }
+};
+
+OL.updateLineItem = function(itemId, field, value) {
+    const client = getActiveClient();
+    const sheet = client.projectData.scopingSheets[0];
+    
+    // 1. Try to find by strict ID (the li- ID)
+    let item = sheet.lineItems.find(i => String(i.id) === String(itemId));
+
+    // 2. FALLBACK: If not found, user might have passed a Resource ID
+    if (!item) {
+        console.warn("⚠️ li-ID not found, searching via Resource ID:", itemId);
+        item = sheet.lineItems.find(i => String(i.resourceId) === String(itemId));
+    }
+
+    if (item) {
+        console.log(`✅ Item Resolved. Updating ${field} to:`, value);
+
+        if (field === 'round') {
+            item.round = parseInt(value, 10) || 1;
+        } else {
+            item[field] = value;
+        }
+
+        // Save and Re-render
+        OL.persist(); 
+        window.renderScopingSheet();
+    } else {
+        console.error("❌ CRITICAL: Item completely missing from sheet.", itemId);
+        console.log("Available Sheet Items:", sheet.lineItems);
+    }
+};
+
+// 4. HANDLE UNIT BADGE SHOW/HIDE BUTTON AND TAGS
+OL.toggleScopingUnits = function () {
+  if (!state.ui) state.ui = {};
+  state.ui.showScopingUnits = !state.ui.showScopingUnits;
+
+  OL.persist();
+  renderScopingSheet();
+};
+
+// 74. HARDENED UNIT BADGE RENDERER
+OL.renderUnitBadges = function (dataObject, res) {
+    if (!state.ui?.showScopingUnits) return "";
+    if (!dataObject || Object.keys(dataObject).length === 0) return "";
+
+    const vars = state.master.rates.variables || {};
+    const normalize = (s) => String(s || "").toLowerCase().replace(/\s+/g, "").trim();
+    const resTypeKey = normalize(res?.type);
+
+    const badges = Object.entries(dataObject)
+        .filter(([varId, count]) => {
+            const v = vars[varId];
+            return v && count > 0 && normalize(v.applyTo) === resTypeKey;
+        })
+        .map(([varId, count]) => {
+            const v = vars[varId];
+            return `<span class="unit-tag">${count} ${esc(v.label)}</span>`;
+        })
+        .join("");
+
+    return badges ? `<div class="unit-badge-container">${badges}</div>` : "";
+};
+
+// 5. ADD ITEM TO SCOPING SHEET FROM MASTER LIBRARY
+OL.addResourceToScope = function () {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔎 Add Resource to Scope</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Click to view library or search..." 
+                       onfocus="OL.filterResourceForScope('')"  // 🚀 THE FIX: Opens list immediately
+                       oninput="OL.filterResourceForScope(this.value)" 
+                       autofocus>
+                <div id="scope-search-results" class="search-results-overlay" style="margin-top:15px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.removeFromScope = async function(indexStr) {
+    if (!confirm("Remove this item from project scope?")) return;
+    
+    const client = getActiveClient();
+    if (!client || !client.projectData.scopingSheets) return;
+
+    const index = parseInt(indexStr, 10);
+    const sheet = client.projectData.scopingSheets[0];
+
+    console.log(`🗑️ Attempting to remove item at index: ${index}`);
+
+    // 🚀 THE SHIELD: Use updateAndSync to ensure Firebase saves the deletion
+    await OL.updateAndSync(() => {
+        if (index > -1 && index < sheet.lineItems.length) {
+            const removed = sheet.lineItems.splice(index, 1);
+            console.log("✅ Successfully removed item:", removed[0]);
+        } else {
+            console.error("❌ Removal failed: Index out of bounds", index);
+        }
+    });
+
+    // Refresh the UI
+    renderScopingSheet();
+};
+
+OL.removeFromScopeByID = async function(lineItemId) {
+    if (!confirm("Remove this specific item from project scope?")) return;
+    
+    const client = getActiveClient();
+    if (!client || !client.projectData.scopingSheets) return;
+
+    const sheet = client.projectData.scopingSheets[0];
+
+    // 🚀 THE FIX: Find the actual index of the item with this specific ID
+    const actualIndex = sheet.lineItems.findIndex(i => String(i.id) === String(lineItemId));
+
+    if (actualIndex > -1) {
+        console.log(`🗑️ Removing specific item ID: ${lineItemId} found at database index: ${actualIndex}`);
+        
+        await OL.updateAndSync(() => {
+            sheet.lineItems.splice(actualIndex, 1);
+        });
+
+        // 🔄 Surgical UI Update
+        renderScopingSheet();
+    } else {
+        console.error("❌ Could not find item ID in database:", lineItemId);
+        alert("Error: Item not found in database. Please refresh.");
+    }
+};
+
+OL.filterResourceForScope = function (query) {
+    const listEl = document.getElementById("scope-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    
+    // 1. Get current IDs already on the scoping sheet to hide them
+    const existingIds = (client?.projectData?.scopingSheets?.[0]?.lineItems || []).map(i => i.resourceId);
+
+    // 2. Identify and Tag Sources
+    const masterSource = (state.master.resources || []).map(r => ({ ...r, origin: 'Master' }));
+    const localSource = (client?.projectData?.localResources || []).map(r => ({ ...r, origin: 'Local' }));
+    
+    // 🚀 THE DEDUPLICATION FIX:
+    // Create a list of IDs that are already "cloned" into the local project
+    const localMasterRefs = localSource.map(r => r.masterRefId);
+    
+    // Filter the Master source so it only shows items NOT yet cloned locally
+    const filteredMaster = masterSource.filter(m => !localMasterRefs.includes(m.id));
+
+    // Combine local items with only the "un-cloned" master items
+    const combined = [...localSource, ...filteredMaster];
+
+    // 3. Filter for search term OR surgical match
+    const matches = combined.filter((res) => {
+        // 🚀 SURGICAL OVERRIDE: If we are coming from a badge click
+        if (state.scopingFilterActive && state.scopingTargetId) {
+            return String(res.id) === String(state.scopingTargetId);
+        }
+
+        // Standard behavior for normal searching
+        const nameMatch = res.name.toLowerCase().includes(q);
+        const alreadyInScope = existingIds.includes(res.id);
+        return nameMatch && !alreadyInScope;
+    });
+
+    // 4. Split into Groups for rendering
+    const masterMatches = matches.filter(m => m.origin === 'Master').sort((a,b) => a.name.localeCompare(b.name));
+    const localMatches = matches.filter(m => m.origin === 'Local').sort((a,b) => a.name.localeCompare(b.name));
+
+    let html = "";
+
+    // 🏗️ Render Local Group (Items already in project library)
+    if (localMatches.length > 0) {
+        html += `<div class="search-group-header">📍 Available in Project</div>`;
+        html += localMatches.map(res => renderResourceSearchResult(res, 'local')).join('');
+    }
+
+    // 🏛️ Render Master Group (Standard templates not yet used in this project)
+    if (masterMatches.length > 0) {
+        html += `<div class="search-group-header" style="margin-top:10px;">🏛️ Master Vault Standards</div>`;
+        html += masterMatches.map(res => renderResourceSearchResult(res, 'vault')).join('');
+    }
+
+    if (matches.length === 0) {
+        html = `<div class="search-result-item muted">No unlinked resources match "${esc(query)}"</div>`;
+    }
+
+    listEl.innerHTML = html;
+};
+
+function renderResourceSearchResult(res, tagClass) {
+    return `
+        <div class="search-result-item" onmousedown="OL.executeScopeAdd('${res.id}')">
+            <div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span>🛠️</span>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 500;">${esc(res.name)}</div>
+                        <div class="tiny muted">${esc(res.type || "General")}</div>
+                    </div>
+                </div>
+                <span class="pill tiny ${tagClass}">${tagClass.toUpperCase()}</span>
+            </div>
+        </div>
+    `;
+}
+
+OL.executeScopeAdd = async function (resId) {
+    const client = getActiveClient();
+    if (!client) return;
+
+    let finalResourceId = resId;
+
+    // 🚀 STEP 1: Handle Auto-Cloning to Library
+    if (resId.startsWith('res-vlt-')) {
+        const template = state.master.resources.find(r => r.id === resId);
+        if (template) {
+            // Check if we already have this specific master item in our local project
+            const existingLocal = (client.projectData.localResources || [])
+                .find(r => r.masterRefId === resId);
+
+            if (existingLocal) {
+                finalResourceId = existingLocal.id;
+            } else {
+                // DEEP CLONE: Make a permanent project-specific copy
+                const newRes = JSON.parse(JSON.stringify(template));
+                newRes.id = 'local-prj-' + Date.now() + Math.random().toString(36).substr(2, 5);
+                newRes.masterRefId = resId; // Essential for the "Sync" logic
+                
+                if (!client.projectData.localResources) client.projectData.localResources = [];
+                client.projectData.localResources.push(newRes);
+                finalResourceId = newRes.id;
+            }
+        }
+    }
+
+    // 🚀 STEP 2: Add to Scoping Sheet
+    const newItem = {
+        id: 'li-' + Date.now(),
+        resourceId: finalResourceId, 
+        status: "Do Now",
+        responsibleParty: "Sphynx",
+        round: 1,
+        teamMode: "everyone", 
+        teamIds: [],
+        data: {},
+        manualHours: 0
+    };
+
+    if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{id: 'initial', lineItems: []}];
+    client.projectData.scopingSheets[0].lineItems.push(newItem);
+
+    // 🚀 STEP 3: PERSIST BOTH ARRAYS
+    await OL.persist();
+    
+    OL.closeModal();
+    renderScopingSheet(); 
+};
+
+// 6. ADD CUSTOM ITEM TO SCOPING SHEET
+
+// 7. STATUS AND RESPONSIBLE PARTY
+
+// 8. TEAM ASSIGNMENT FOR SCOPING ITEM
+OL.cycleTeamMode = function(itemId) {
+    const client = getActiveClient();
+    const item = client.projectData.scopingSheets[0].lineItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Define the cycle: everyone -> individual -> global -> back to everyone
+    const modes = ['everyone', 'individual', 'global'];
+    let currentIdx = modes.indexOf(item.teamMode || 'everyone');
+    item.teamMode = modes[(currentIdx + 1) % modes.length];
+
+    OL.persist();
+    renderScopingSheet();
+};
+
+// 9. MULTIPLIER DISPLAY
+OL.getMultiplierDisplay = function (item) {
+  const client = getActiveClient();
+  const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
+  
+  // 🚀 HARDENING: Force lowercase and provide strict fallback
+  const mode = (item.teamMode || "everyone").toLowerCase();
+
+  if (mode === "global") {
+    return `<span class="text-dim">1.00x</span>`;
+  }
+
+  let count = 0;
+  // Check for 'individual' OR if there are specific IDs present
+  if (mode === "individual" || (item.teamIds && item.teamIds.length > 0)) {
+    count = (item.teamIds || []).length;
+  } else {
+    count = (client?.projectData?.teamMembers || []).length || 1;
+  }
+  
+  // ✅ THE FORMULA: 1 + ((count - 1) * (rate - 1))
+  // If rate is 1.1, (rate - 1) is 0.1
+  const incrementalRate = rate - 1;
+  const additionalMembers = Math.max(0, count - 1);
+  const displayMult = 1 + additionalMembers * incrementalRate;
+  const isIncremented = additionalMembers > 0;
+  const color = isIncremented ? "var(--accent)" : "var(--text-dim)";
+
+  return `
+    <span style="color: ${color}; font-weight: ${isIncremented ? "600" : "400"};">
+        ${displayMult.toFixed(2)}x
+    </span>
+  `;
+};
+
+// 10. FEE CALCULATION
+// Net Calculation (Line Item Level)
+OL.calculateRowFee = function(item, resource) {
+    const gross = OL.calculateBaseFeeWithMultiplier(item, resource);
+    return OL.applyDiscount(gross, item.discountValue, item.discountType);
+};
+
+// Alias for consistency in older renderers
+// Function to calculate the "Sticker Price" before line-item discounts
+OL.calculateBaseFeeWithMultiplier = function(item, resource) {
+    if (!item) return 0;
+    const vars = state.master.rates.variables || {};
+    
+    // Merge template data and local overrides
+    let calcData = { ...(resource?.data || {}), ...(item.data || {}) };
+    
+    let baseAmount = 0;
+    let hasTechnicalData = false;
+
+    // Calculate via technical variables
+    Object.entries(calcData).forEach(([varId, count]) => {
+        const v = vars[varId];
+        const numCount = parseFloat(count) || 0;
+        if (v && numCount > 0 && v.applyTo === resource?.type) {
+            baseAmount += numCount * (parseFloat(v.value) || 0);
+            hasTechnicalData = true;
+        }
+    });
+
+    // Fallback to hourly if no technical units exist
+    if (!hasTechnicalData) {
+        const client = getActiveClient();
+        const baseRate = client?.projectData?.customBaseRate || state.master.rates.baseHourlyRate || 300;
+        baseAmount = (parseFloat(item.manualHours) || 0) * baseRate;
+    }
+
+    // Apply Team Multiplier
+    let multiplier = 1.0;
+    const mode = (item.teamMode || 'everyone').toLowerCase();
+    if (mode !== 'global') {
+        const rate = parseFloat(state.master.rates.teamMultiplier) || 1.1;
+        const inc = rate - 1;
+        const count = mode === 'individual' ? (item.teamIds || []).length : (getActiveClient()?.projectData?.teamMembers || []).length || 1;
+        multiplier = 1 + (Math.max(0, count - 1) * inc);
+    }
+
+    return Math.round(baseAmount * multiplier);
+};
+
+// 11. GRAND TOTALS SUMMARY
+window.renderGrandTotals = function(lineItems, baseRate) {
+    const area = document.getElementById("grand-totals-area");
+    const client = getActiveClient();
+    const sheet = client?.projectData?.scopingSheets?.[0];
+    const isAdmin = state.adminMode === true;
+
+    if (!area || !client || !sheet) return;
+
+    let totalGross = 0; // 🚀 Include EVERYTHING
+    let netAfterLineItems = 0; // 💸 Only billable "Do Now"
+
+    lineItems.forEach(item => {
+        const res = OL.getResourceById(item.resourceId);
+        if (!res) return;
+
+        // 1. Calculate Gross (Total potential value regardless of status/party)
+        totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
+
+        // 2. Calculate Net (Only "Do Now" and billable parties)
+        const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
+        if (item.status === 'Do Now' && isBillable) {
+            netAfterLineItems += OL.calculateRowFee(item, res);
+        }
+    });
+
+    // 3. Subtract Adjustments/Discounts from the Net
+    let netAfterRounds = netAfterLineItems;
+    if (sheet.roundDiscounts) {
+        Object.keys(sheet.roundDiscounts).forEach(rNum => {
+            const rDisc = sheet.roundDiscounts[rNum];
+            const roundItems = lineItems.filter(i => i.round == rNum && i.status === 'Do Now');
+            const roundSubtotal = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
+            
+            const rDeduct = rDisc.type === '%' 
+                ? Math.round(roundSubtotal * (parseFloat(rDisc.value) / 100)) 
+                : parseFloat(rDisc.value) || 0;
+            netAfterRounds -= rDeduct;
+        });
+    }
+
+    const gVal = client.projectData.totalDiscountValue || 0;
+    const gType = client.projectData.totalDiscountType || '$';
+    const globalAdjustment = gType === '%' ? Math.round(netAfterRounds * (gVal / 100)) : Math.min(netAfterRounds, gVal);
+    const finalApproved = netAfterRounds - globalAdjustment;
+
+    // The "Adjustments" display shows the gap between Gross and Final Net
+    const totalAdjustments = totalGross - finalApproved;
+
+    area.innerHTML = `
+    <div class="grand-totals-bar">
+      <div class="grand-actions">
+        <button class="btn tiny soft" onclick="window.print()">🖨️ PDF</button>
+        ${isAdmin ? `<button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>` : ''}
+      </div>
+
+      <div class="total-item-gross">
+        <div class="tiny muted uppercase bold">Gross Value</div>
+        <div style="font-size: 14px; font-weight: 600;">$${totalGross.toLocaleString()}</div>
+      </div>
+
+      <div class="total-item-disc">
+        <div class="tiny accent uppercase bold">Adjustments</div>
+        <div class="accent" style="font-size: 14px; font-weight: 600;">-$${totalAdjustments.toLocaleString()}</div>
+      </div>
+
+      <div class="total-item-net">
+        <div class="tiny muted uppercase bold" style="color: var(--accent);">Final Approved</div>
+        <div style="font-size: 22px; font-weight: 900; line-height: 1;">$${finalApproved.toLocaleString()}</div>
+      </div>
+    </div>`;
+};
+
+// 12. DISCOUNT MANAGEMENT
+window.renderDiscountInput = function (level, id, value, type) {
+  return `
+    <div class="discount-control">
+      <input type="number" class="tiny-input"
+        value="${Number(value) || 0}"
+        oninput="OL.updateDiscount('${level}', '${id}', 'value', this.value)">
+      <div class="toggle-group">
+        <button class="toggle-btn ${type === "$" ? "active" : ""}"
+          onclick="OL.updateDiscount('${level}', '${id}', 'type', '$')">$</button>
+        <button class="toggle-btn ${type === "%" ? "active" : ""}"
+          onclick="OL.updateDiscount('${level}', '${id}', 'type', '%')">%</button>
+      </div>
+    </div>
+  `;
+};
+
+OL.openDiscountManager = function () {
+  const client = getActiveClient();
+  const sheet = client?.projectData?.scopingSheets?.[0];
+  if (!client || !sheet) return;
+
+  const allRes = [
+    ...(state.master.resources || []),
+    ...(client.projectData.localResources || []),
+  ];
+
+  // Build rounds with billable items only
+  const rounds = {};
+  sheet.lineItems.forEach((item) => {
+    if (
+      item.status === "Do Now" &&
+      (item.responsibleParty === "Sphynx" || item.responsibleParty === "Joint")
+    ) {
+      const r = item.round || 1;
+      if (!rounds[r]) rounds[r] = [];
+      rounds[r].push(item);
+    }
+  });
+
+  let html = `
+    <div class="modal-head">
+      <div class="modal-title-text">💰 Financial Adjustments</div>
+      <button class="btn tiny soft"
+        onclick="if(confirm('Clear all discounts?')) OL.clearAllDiscounts()">
+        🔄 Reset
+      </button>
+    </div>
+
+    <div class="modal-body" style="max-height:75vh; overflow:auto;">
+  `;
+
+  Object.keys(rounds)
+    .sort((a, b) => a - b)
+    .forEach((rNum) => {
+      const items = rounds[rNum];
+      let roundGross = 0;
+      let itemDeductions = 0;
+
+      html += `
+      <div class="card-section" style="margin-bottom:25px;">
+        <label class="modal-section-label">ROUND ${rNum}</label>
+    `;
+
+      items.forEach((item) => {
+        const res = allRes.find((r) => r.id === item.resourceId);
+        const gross = OL.calculateBaseFeeWithMultiplier(item, res);
+        const net = OL.calculateRowFee(item, res);
+        const deduct = gross - net;
+
+        roundGross += gross;
+        itemDeductions += deduct;
+
+        html += `
+        <div class="discount-row">
+          <div class="tiny">${esc(res?.name || "Manual Item")}</div>
+          <div class="tiny muted">$${gross.toLocaleString()}</div>
+          ${renderDiscountInput(
+            "item",
+            item.id,
+            item.discountValue || 0,
+            item.discountType || "$",
+          )}
+        </div>
+      `;
+      });
+
+      const rDisc = sheet.roundDiscounts?.[rNum] || { value: 0, type: "$" };
+      const netAfterItems = roundGross - itemDeductions;
+
+      html += `
+        <div class="divider"></div>
+
+        <div class="discount-row">
+          <span class="tiny muted">Item Discounts</span>
+          <span class="tiny accent">-$${itemDeductions.toLocaleString()}</span>
+        </div>
+
+        <div class="discount-row">
+          <span class="tiny muted">Round Discount</span>
+          ${renderDiscountInput("round", rNum, rDisc.value, rDisc.type)}
+        </div>
+      </div>
+    `;
+    });
+
+  const gVal = client.projectData.totalDiscountValue || 0;
+  const gType = client.projectData.totalDiscountType || "$";
+
+  html += `
+      <div class="card-section">
+        <label class="modal-section-label">GLOBAL DISCOUNT</label>
+        ${renderDiscountInput("total", "global", gVal, gType)}
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn primary full"
+        onclick="OL.closeModal(); renderScopingSheet();">
+        Apply Adjustments
+      </button>
+    </div>
+  `;
+
+  openModal(html);
+};
+
+OL.updateDiscount = function (level, id, field, value) {
+  const client = getActiveClient();
+  const sheet = client?.projectData?.scopingSheets?.[0];
+  if (!client || !sheet) return;
+
+  if (level === "item") {
+    const item = sheet.lineItems.find((i) => i.id === id);
+    if (!item) return;
+    if (field === "value") item.discountValue = parseFloat(value) || 0;
+    if (field === "type") item.discountType = value;
+  }
+
+  if (level === "round") {
+    if (!sheet.roundDiscounts) sheet.roundDiscounts = {};
+    const rKey = String(id); // Force string key
+    if (!sheet.roundDiscounts[rKey]) {
+        sheet.roundDiscounts[rKey] = { value: 0, type: "$" };
+    }
+    if (field === "value")
+      sheet.roundDiscounts[id].value = parseFloat(value) || 0;
+    if (field === "type") sheet.roundDiscounts[id].type = value;
+  }
+
+  if (level === "total") {
+    if (field === "value")
+      client.projectData.totalDiscountValue = parseFloat(value) || 0;
+    if (field === "type") client.projectData.totalDiscountType = value;
+  }
+
+  OL.persist();
+
+  // Refresh both contexts safely
+  OL.refreshDiscountManagerUI();
+  renderScopingSheet();
+};
+
+OL.refreshDiscountManagerUI = function () {
+  const client = getActiveClient();
+  const sheet = client?.projectData?.scopingSheets?.[0];
+  if (!client || !sheet) return;
+
+  const allRes = [
+    ...(state.master.resources || []),
+    ...(client.projectData.localResources || []),
+  ];
+
+  let gross = 0;
+  let deductions = 0;
+
+  sheet.lineItems.forEach((item) => {
+    if (
+      item.status !== "Do Now" ||
+      (item.responsibleParty !== "Sphynx" && item.responsibleParty !== "Joint")
+    )
+      return;
+
+    const res = allRes.find((r) => r.id === item.resourceId);
+    const g = OL.calculateBaseFeeWithMultiplier(item, res);
+    const n = OL.calculateRowFee(item, res);
+
+    gross += g;
+    deductions += g - n;
+  });
+
+  const netPreGlobal = gross - deductions;
+  const gVal = client.projectData.totalDiscountValue || 0;
+  const gType = client.projectData.totalDiscountType || "$";
+  const gDeduct =
+    gType === "%"
+      ? Math.round(netPreGlobal * (gVal / 100))
+      : Math.min(netPreGlobal, gVal);
+
+  const final = gross - deductions - gDeduct;
+
+  const elGross = document.getElementById("summary-gross-total");
+  const elDeduct = document.getElementById("summary-total-deductions");
+  const elFinal = document.getElementById("summary-final-total");
+
+  if (elGross) elGross.textContent = `$${gross.toLocaleString()}`;
+  if (elDeduct)
+    elDeduct.textContent = `-$${(deductions + gDeduct).toLocaleString()}`;
+  if (elFinal) elFinal.textContent = `$${final.toLocaleString()}`;
+};
+
+OL.applyDiscount = function (amount, value, type) {
+  const v = parseFloat(value) || 0;
+  if (v <= 0) return amount;
+
+  if (type === "%") {
+    return Math.round(amount * (1 - v / 100));
+  }
+
+  // "$"
+  return Math.max(0, Math.round(amount - v));
+};
+
+OL.clearAllDiscounts = function () {
+  const client = getActiveClient();
+  const sheet = client?.projectData?.scopingSheets?.[0];
+  if (!client || !sheet) return;
+
+  client.projectData.totalDiscountValue = 0;
+  client.projectData.totalDiscountType = "$";
+  sheet.roundDiscounts = {};
+
+  sheet.lineItems.forEach((item) => {
+    delete item.discountValue;
+    delete item.discountType;
+  });
+
+  OL.persist();
+  renderScopingSheet();
+};
+
+// 13. PRICING FOLDER MODAL
+
+OL.openTypeDetailModal = function (typeKey) {
+  const registry = state.master.resourceTypes || [];
+  const typeData = registry.find(
+    (r) => r.type === typeKey || r.typeKey === typeKey,
+  );
+  const variables = state.master.rates.variables || {};
+  const relevantVars = Object.entries(variables).filter(
+    ([_, v]) => v.applyTo === typeKey,
+  );
+
+  const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">⚙️ Pricing Folder: ${esc(typeData?.type || typeKey)}</div>
+        </div>
+        <div class="modal-body">
+            <label class="modal-section-label">Active Rates</label>
+            <div class="dp-manager-list" style="margin-bottom: 25px;">
+                ${relevantVars.map(([key, v]) => `
+                    <div class="dp-manager-row" style="display:flex; align-items:center; gap:12px; padding: 10px 10px; border-bottom: 1px solid var(--line);">
+                        <div style="flex:1">
+                            <div contenteditable="true" 
+                                class="bold" 
+                                style="cursor: text; outline:none;"
+                                onblur="OL.updateVarRate('${key}', 'label', this.innerText)">
+                                ${esc(v.label)}
+                            </div>
+                            <div class="tiny muted" style="font-family: monospace; opacity: 0.5;">ID: ${key}</div>
+                        </div>
+                        
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="display:flex; align-items:center; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--line);">
+                                <span class="tiny muted" style="margin-right:4px;">$</span>
+                                <input type="number" class="modal-input tiny" value="${v.value}" 
+                                      style="width:60px; border:none; background:transparent; color: white; text-align:right;"
+                                      onblur="OL.updateVarRate('${key}', 'value', this.value)">
+                            </div>
+                            
+                            <button class="card-delete-btn" 
+                                    style="position:static; opacity: 0.3;" 
+                                    onmouseover="this.style.opacity=1" 
+                                    onmouseout="this.style.opacity=0.3"
+                                    onclick="OL.removeScopingVariable('${key}', '${typeKey}')">
+                                ×
+                            </button>
+                        </div>
+                    </div>
+                `).join("")}
+                ${relevantVars.length === 0 ? '<div class="empty-hint">No variables yet.</div>' : ""}
+            </div>
+
+            <label class="modal-section-label">Create New Variable</label>
+            <div class="search-map-container">
+                <input type="text" class="modal-input" placeholder="Enter label (e.g. Per Segment)..." 
+                       onkeydown="if(event.key==='Enter'){ OL.createNewVarForType(this.value, '${typeKey}'); this.value=''; }">
+                <div class="tiny muted" style="margin-top:5px;">Press Enter to save.</div>
+            </div>
+        </div>
+    `;
+  openModal(html);
+};
+
+OL.createNewVarForType = function (label, typeKey) {
+    const safeTypeKey = (typeKey || "general").toLowerCase().trim();
+    const varKey = label.toLowerCase().replace(/[^a-z0-9]+/g, "") + "_" + Date.now().toString().slice(-4);
+    
+    if (!state.master.rates.variables) state.master.rates.variables = {};
+
+    state.master.rates.variables[varKey] = {
+        label,
+        value: 0,
+        applyTo: typeKey, // Match exactly what the folder is using
+        archetype: "Base",
+    };
+
+    OL.persist();
+    
+    // 1. Refresh the Modal to show the new row
+    OL.openTypeDetailModal(typeKey); 
+    
+    // 2. 🚀 Refresh the Background Page to update the "X variables defined" count on the card
+    renderVaultRatesPage(); 
+};
+
+OL.updateVarRate = async function (key, field, val) {
+    if (state.master.rates.variables[key]) {
+        // 1. Update the local memory variable only
+        state.master.rates.variables[key][field] = field === "value" ? parseFloat(val) || 0 : val.trim();
+        
+        // 2. Perform a "Surgical Save"
+        // Instead of saving the whole state, we just tell Firebase to update this one key
+        const updatePath = `master.rates.variables.${key}`;
+        try {
+            await db.collection('systems').doc('main_state').update({
+                [updatePath]: state.master.rates.variables[key]
+            });
+            console.log("🎯 Surgical Rate Update Successful.");
+            renderVaultRatesPage();
+        } catch (e) {
+            // Fallback to full persist if update fails
+            await OL.persist();
+        }
+    }
+};
+
+OL.removeScopingVariable = function(varKey, typeKey) {
+    if (!confirm("Are you sure you want to delete this pricing variable? This will remove it from all resources using this type.")) return;
+
+    if (state.master.rates.variables && state.master.rates.variables[varKey]) {
+        // 1. Delete from data
+        delete state.master.rates.variables[varKey];
+        
+        OL.persist();
+
+        // 2. Refresh the background grid (the folder cards)
+        if (window.location.hash.includes('vault/rates')) {
+            renderVaultRatesPage();
+        }
+
+        // 3. Refresh the modal to show the updated list
+        OL.openTypeDetailModal(typeKey);
+        
+        console.log(`🗑️ Variable ${varKey} removed.`);
+    }
+};
+
+//======================= SCOPING-TASKS OVERLAP ========================//
+
+//======================= TEAM MANAGEMENT SECTION =======================//
+
+// 1. RENDER TEAM GRID
+window.renderTeamManager = function () {
+  OL.registerView(renderTeamManager);
+  const container = document.getElementById("mainContent");
+  const client = getActiveClient();
+  if (!client || !container) return;
+
+  // Ensure the data structure exists
+  if (!client.projectData.teamMembers) client.projectData.teamMembers = [];
+  const members = client.projectData.teamMembers;
+
+  const memberCardsHtml = members
+    .map((m) => {
+      // Handle the multi-role display logic here
+      const rolesHtml = (m.roles || []).length
+        ? m.roles
+            .map(
+              (r) =>
+                `<span class="pill tiny soft" style="font-size: 8px;">${esc(r)}</span>`,
+            )
+            .join("")
+        : `<span class="tiny muted uppercase">${esc(m.role || "Contributor")}</span>`;
+
+      return `
+           <div class="card is-clickable" onclick="OL.openTeamMemberModal('${m.id}')">
+              <div class="card-header">
+                  <div class="card-title tm-card-title-${m.id}">${esc(m.name)}</div>
+                  <button class="card-delete-btn" onclick="event.stopPropagation(); OL.removeTeamMember('${m.id}')">×</button>
+              </div>
+              <div class="card-body">
+                  <div class="pills-row" style="margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px;">
+                      ${rolesHtml}
+                  </div>
+              </div>
+          </div>
+      `;
+    })
+    .join("");
+
+  container.innerHTML = `
+        <div class="section-header">
+            <div>
+                <h2>👬 Team Members</h2>
+                <div class="small muted subheader">Manage members assigned to ${esc(client.meta.name)}</div>
+            </div>
+            <button class="btn primary" onclick="OL.promptAddTeamMember()">+ Add Member</button>
+        </div>
+
+        <div class="cards-grid">
+            ${memberCardsHtml}
+            ${members.length === 0 ? '<div class="empty-hint">No team members added yet.</div>' : ""}
+        </div>
+    `;
+};
+
+// 2. ADD, UPDATE, REMOVE TEAM MEMBERS
+OL.promptAddTeamMember = function () {
+    const draftId = 'draft-tm-' + Date.now();
+    const draftMember = {
+        id: draftId,
+        name: "",
+        roles: [],
+        isDraft: true
+    };
+    
+    // Trigger the modal directly with the draft object
+    OL.openTeamMemberModal(draftId, draftMember);
+};
+
+OL.handleTeamMemberSave = function(id, name) {
+    const cleanName = name.trim();
+    if (!cleanName) return; 
+
+    const client = getActiveClient();
+    const isDraft = id.startsWith('draft-tm-');
+
+    if (isDraft) {
+        // 🚀 1. CREATE the ID first so it can be referenced
+        const newId = 'tm-' + Date.now(); 
+        
+        const newMember = {
+            id: newId,
+            name: cleanName,
+            roles: [], 
+            createdDate: new Date().toISOString()
+        };
+
+        // 2. Add to projectData safely
+        if (!client.projectData.teamMembers) client.projectData.teamMembers = [];
+        client.projectData.teamMembers.push(newMember);
+
+        OL.persist(); // Save to Firebase
+        renderTeamManager(); // Update background grid
+        
+        // 🚀 3. RELOAD modal with the permanent ID
+        // This stops the "ReferenceError" by using the variable we just created
+        OL.openTeamMemberModal(newId);
+        
+    } else {
+        // Handle standard rename for existing members
+        const member = client?.projectData?.teamMembers.find(m => m.id === id);
+        if (member) {
+            member.name = cleanName;
+            OL.persist();
+        }
+    }
+};
+
+OL.updateTeamMember = function (memberId, field, value) {
+  const client = getActiveClient();
+  const member = client?.projectData?.teamMembers.find(
+    (m) => m.id === memberId,
+  );
+
+  if (member) {
+    member[field] = value.trim();
+    OL.persist();
+    renderTeamManager(); // Refresh the grid behind the modal
+  }
+};
+
+OL.removeTeamMember = function (memberId) {
+  if (!confirm("Remove this team member?")) return;
+  const client = getActiveClient();
+  client.projectData.teamMembers = client.projectData.teamMembers.filter(
+    (m) => m.id !== memberId,
+  );
+  OL.persist();
+  renderTeamManager();
+};
+
+// 3. OPEN TEAM MEMBER MODAL
+
+OL.openTeamMemberModal = function (memberId, draftObj = null) {
+    const client = getActiveClient();
+    
+    // 1. Resolve Data: Use draft if provided, otherwise find in client data
+    let member = draftObj;
+    if (!member) {
+        member = client?.projectData?.teamMembers.find(m => m.id === memberId);
+    }
+    
+    if (!member) return;
+
+    // Ensure roles is initialized as an array
+    if (!Array.isArray(member.roles)) {
+        member.roles = member.role ? [member.role] : [];
+    }
+
+    const html = `
+        <div class="modal-head" style="gap:15px;">
+            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                <span style="font-size:18px;">👨‍💼</span>
+                <input type="text" class="header-editable-input" 
+                       value="${esc(member.name)}" 
+                       placeholder="Full Name..."
+                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       oninput="OL.syncTeamMemberName('${member.id}', this.value)"
+                       onblur="OL.handleTeamMemberSave('${member.id}', this.value)">
+            </div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+
+            <div class="card-section" style="margin-top: 20px;">
+                <label class="modal-section-label">Assigned Roles</label>
+                <div class="pills-row" style="margin-bottom: 12px; min-height: 32px;">
+                    ${member.roles.map(role => `
+                        <span class="pill tiny accent">
+                            ${esc(role)}
+                            <b style="cursor:pointer; margin-left:4px;" onclick="OL.removeRoleFromMember('${memberId}', '${esc(role)}')">×</b>
+                        </span>
+                    `).join("") || '<span class="tiny muted">No roles assigned</span>'}
+                </div>
+
+                <div class="search-map-container">
+                    <input type="text" class="modal-input tiny" 
+                        placeholder="Search roles or type to add new..." 
+                        onfocus="OL.filterRoleSearch('${memberId}', '')" // 🚀 THE FIX: Trigger on click/focus
+                        oninput="OL.filterRoleSearch('${memberId}', this.value)">
+                    <div id="role-search-results" class="search-results-overlay"></div>
+                </div>
+            </div>
+            <div class="card-section" style="margin-top: 20px;">
+                <label class="modal-section-label">✍️ Email Signature</label>
+                <textarea class="modal-textarea" 
+                        style="min-height: 100px; font-family: monospace; font-size: 11px;" 
+                        placeholder="Best regards,\n{{name}}\nSphynx Financial"
+                        onblur="OL.updateTeamMember('${memberId}', 'signature', this.value)">${esc(member.signature || '')}</textarea>
+                <div class="tiny muted" style="margin-top:5px;">This signature will be used for all email templates sent by this member.</div>
+            </div>
+            ${OL.renderAccessSection(memberId, "member")} 
+        </div>
+    `;
+    openModal(html);
+
+    // Auto-focus name field immediately
+    setTimeout(() => {
+        const input = document.getElementById('modal-tm-name-input');
+        if (input) input.focus();
+    }, 100);
+};
+
+// 🚀 REAL-TIME SURGICAL SYNC
+OL.syncTeamMemberName = function(memberId, newName) {
+    const cardTitles = document.querySelectorAll(`.tm-card-title-${memberId}`);
+    cardTitles.forEach(el => {
+        el.innerText = newName;
+    });
+};
+
+// 4. TEAM ROLE MANAGEMENT
+OL.filterRoleSearch = function (memberId, query) {
+    const listEl = document.getElementById("role-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
+    if (!member) return;
+
+    // 1. Get unique list of every role used in the project
+    const allProjectRoles = [
+        ...new Set(client.projectData.teamMembers.flatMap(m => m.roles || []))
+    ];
+
+    // 2. Filter: Match search AND exclude roles the member already has
+    const memberRoles = member.roles || [];
+    const matches = allProjectRoles.filter(role => 
+        role.toLowerCase().includes(q) && !memberRoles.includes(role)
+    ).sort();
+
+    let html = matches.map(role => `
+        <div class="search-result-item" onmousedown="OL.addRoleToMember('${memberId}', '${esc(role)}')">
+            <span>🎭 ${esc(role)}</span>
+            <span class="tiny muted">Assign</span>
+        </div>
+    `).join("");
+
+    // 3. Add "Create New" option if typing a unique role name
+    if (q.length > 0 && !allProjectRoles.some(r => r.toLowerCase() === q)) {
+        html += `
+            <div class="search-result-item create-action" onmousedown="OL.addRoleToMember('${memberId}', '${esc(query)}')">
+                <span class="pill tiny accent">+ New</span> Create Role "${esc(query)}"
+            </div>`;
+    }
+
+    listEl.innerHTML = html || `<div class="search-result-item muted">No other roles found.</div>`;
+};
+
+OL.addRoleToMember = function (memberId, roleName) {
+    const client = getActiveClient();
+    const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
+
+    if (member) {
+        if (!member.roles) member.roles = [];
+        if (!member.roles.includes(roleName)) {
+            member.roles.push(roleName);
+            OL.persist();
+            
+            // 🚀 THE FIX: Clear the dropdown results immediately
+            const results = document.getElementById("role-search-results");
+            if (results) results.innerHTML = "";
+            
+            OL.openTeamMemberModal(memberId); // Refresh modal to show new pill
+            renderTeamManager(); // Sync background
+        }
+    }
+};
+
+OL.removeRoleFromMember = function (memberId, roleName) {
+  const client = getActiveClient();
+  const member = client?.projectData?.teamMembers.find(
+    (m) => m.id === memberId,
+  );
+
+  if (member && member.roles) {
+    member.roles = member.roles.filter((r) => r !== roleName);
+    OL.persist();
+    OL.openTeamMemberModal(memberId);
+    renderTeamManager();
+  }
+};
+
+// 5. ASSIGN TEAM MEMBERS TO SCOPING SHEET ITEMS
+OL.toggleTeamAssignment = function (itemId, memberId) {
+  const client = getActiveClient();
+  const item = client.projectData.scopingSheets[0].lineItems.find(
+    (i) => i.id === itemId,
+  );
+
+  if (item) {
+    if (!item.teamIds) item.teamIds = [];
+    const idx = item.teamIds.indexOf(memberId);
+
+    if (idx === -1) item.teamIds.push(memberId);
+    else item.teamIds.splice(idx, 1);
+
+    if (item.teamIds.length > 0) {
+        item.teamMode = 'individual';
+    } else {
+        item.teamMode = 'everyone';
+    }
+    
+    OL.persist();
+
+    // Refresh UI components
+    OL.openTeamAssignmentModal(itemId);
+    renderScopingSheet();
+
+    // Clear search results overlay if it exists
+    const searchResults = document.getElementById("team-search-results");
+    if (searchResults) searchResults.innerHTML = "";
+  }
+};
+
+OL.filterTeamMapList = function (itemId, query) {
+  const listEl = document.getElementById("team-search-results");
+  if (!listEl) return;
+
+  const q = (query || "").toLowerCase().trim();
+  const client = getActiveClient();
+  const team = client?.projectData?.teamMembers || [];
+
+  const matches = team.filter((m) => m.name.toLowerCase().includes(q));
+  const exactMatch = team.find((m) => m.name.toLowerCase() === q);
+
+  let html = matches
+    .map(
+      (m) => `
+        <div class="search-result-item" onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
+            👨‍💼 ${esc(m.name)} <span class="tiny muted">(Existing Member)</span>
+        </div>
+    `,
+    )
+    .join("");
+
+  // If no exact match, provide the "Create & Map" option
+  if (!exactMatch) {
+    html += `
+            <div class="search-result-item create-action" onclick="OL.executeCreateTeamAndMap('${itemId}', '${esc(query)}')">
+                <span class="pill tiny accent" style="margin-right:8px;">+ New</span> 
+                Add "${esc(query)}" to Project Team
+            </div>
+        `;
+  }
+
+  listEl.innerHTML = html;
+};
+
+OL.executeCreateTeamAndMap = function (itemId, name) {
+  const client = getActiveClient();
+  if (!client) return;
+
+  // 🛡️ SAFETY CHECK: Initialize the array if it is missing
+  if (!client.projectData.teamMembers) {
+    client.projectData.teamMembers = [];
+  }
+
+  const newMember = {
+    id: uid(),
+    name: name.trim(),
+    role: "Contributor",
+  };
+
+  // 1. Add to Project Team
+  client.projectData.teamMembers.push(newMember);
+
+  // 2. Assign to the Line Item (This also sets mode to 'individual')
+  OL.toggleTeamAssignment(itemId, newMember.id);
+
+  OL.persist();
+  console.log(`✅ Created and assigned new member: ${name}`);
+};
+
+//======================= CREDENTIALS AND APP ACCESS MANAGEMENT SECTION =======================//
+
+// 1. RENDER CREDENTIALS SECTION ON TEAM MEMBER CARDS
+OL.renderAccessSection = function (ownerId, type) {
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Determine the correct data source (Project vs Master)
+    const dataContext = client?.projectData || state.master;
+    
+    // Ensure accessRegistry exists on whichever context we are using
+    if (!dataContext.accessRegistry) dataContext.accessRegistry = [];
+    const registry = dataContext.accessRegistry;
+
+    const connections = type === "member"
+        ? registry.filter((a) => a.memberId === ownerId)
+        : registry.filter((a) => a.appId === ownerId);
+
+    const allApps = [
+        ...(state.master.apps || []),
+        ...(client?.projectData?.localApps || []),
+    ];
+    
+    const allMembers = client?.projectData?.teamMembers || state.master.teamMembers || [];
+
+    return `
+        <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
+            <label class="modal-section-label">System Access & Credentials</label>
+            <div class="dp-manager-list" style="margin-bottom:10px;">
+                ${connections.length === 0 ? '<div class="muted tiny" style="padding:10px;">No linked credentials found.</div>' : ''}
+                ${connections.map((conn) => {
+                    const linkedObj = type === "member"
+                        ? allApps.find((a) => a.id === conn.appId)
+                        : allMembers.find((m) => m.id === conn.memberId);
+
+                    const jumpTarget = type === "member"
+                        ? `OL.openAppModal('${conn.appId}')`
+                        : `OL.openTeamMemberModal('${conn.memberId}')`;
+
+                    return `
+                        <div class="dp-manager-row" style="display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <div style="width: 140px; min-width: 140px; padding: 5px;">
+                                <strong class="is-clickable text-accent" 
+                                        style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" 
+                                        onclick="${jumpTarget}" 
+                                        title="Jump to ${esc(linkedObj?.name)}">
+                                    ${type === "member" ? "📱" : "👨‍💼"} ${esc(linkedObj?.name || "Unknown")}
+                                </strong>
+                            </div>
+
+                            <div style="flex: 1; padding: 5px;">
+                                <input type="text" 
+                                       class="modal-input tiny" 
+                                       style="font-family: monospace; color: white; font-size: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);"
+                                       placeholder="API Key / Secret / Notes..."
+                                       value="${esc(conn.secret || "")}"
+                                       onblur="OL.updateAccessValue('${conn.id}', 'secret', this.value)">
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px; padding: 5px;">
+                                <select class="tiny-select" style="width: 80px;" onchange="OL.updateAccessValue('${conn.id}', 'level', this.value)">
+                                    <option value="Viewer" ${conn.level === "Viewer" ? "selected" : ""}>Viewer</option>
+                                    <option value="Editor" ${conn.level === "Editor" ? "selected" : ""}>Editor</option>
+                                    <option value="Admin" ${conn.level === "Admin" ? "selected" : ""}>Admin</option>
+                                </select>
+                                <button class="card-delete-btn" onclick="OL.removeAccess('${conn.id}', '${ownerId}', '${type}')">×</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+
+            <div class="search-map-container" style="margin-top: 15px;">
+                <input type="text" class="modal-input" 
+                    placeholder="Click to link ${type === "member" ? "an App" : "a Member"}..." 
+                    onfocus="OL.filterAccessSearch('${ownerId}', '${type}', '')" 
+                    oninput="OL.filterAccessSearch('${ownerId}', '${type}', this.value)">
+                <div id="access-search-results" class="search-results-overlay"></div>
+            </div>
+        </div>
+    `;
+};
+
+OL.filterAccessSearch = function (ownerId, type, query) {
+    const listEl = document.getElementById("access-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    if (!client) return;
+
+    const registry = client.projectData.accessRegistry || [];
+    let source = [];
+
+    if (type === "member") {
+        // 🚀 THE FIX: Inside a Member Modal, only search LOCAL Project Apps
+        const linkedAppIds = registry.filter(r => r.memberId === ownerId).map(r => r.appId);
+        source = (client.projectData.localApps || [])
+                 .filter(a => !linkedAppIds.includes(a.id));
+    } else {
+        // Inside an App Modal, searching for a Member (This is already local-only)
+        const linkedMemberIds = registry.filter(r => r.appId === ownerId).map(r => r.memberId);
+        source = (client.projectData.teamMembers || [])
+                 .filter(m => !linkedMemberIds.includes(m.id));
+    }
+
+    const matches = source.filter((item) => item.name.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+        listEl.innerHTML = `<div class="search-result-item muted">No unlinked ${type === "member" ? "local apps" : "team members"} found.</div>`;
+        return;
+    }
+
+    listEl.innerHTML = matches.map(item => `
+        <div class="search-result-item" onclick="OL.linkAccess('${ownerId}', '${item.id}', '${type}')">
+            ${type === "member" ? "📱" : "👨‍💼"} ${esc(item.name)}
+        </div>
+    `).join('');
+};
+
+OL.linkAccess = function (ownerId, targetId, type) {
+  const client = getActiveClient();
+  const memberId = type === "member" ? ownerId : targetId;
+  const appId = type === "member" ? targetId : ownerId;
+
+  client.projectData.accessRegistry.push({
+    id: "acc_" + Date.now(),
+    memberId,
+    appId,
+    level: "Viewer",
+    secret: "",
+  });
+
+  OL.persist();
+  // Refresh whichever modal is currently open
+  type === "member"
+    ? OL.openTeamMemberModal(ownerId)
+    : OL.openAppModal(ownerId);
+};
+
+OL.updateAccessValue = function (accessId, field, value) {
+  const client = getActiveClient();
+  const entry = client.projectData.accessRegistry.find(
+    (a) => a.id === accessId,
+  );
+  if (entry) {
+    entry[field] = value;
+    OL.persist();
+  }
+};
+
+OL.removeAccess = function (accessId, ownerId, type) {
+  const client = getActiveClient();
+  client.projectData.accessRegistry = client.projectData.accessRegistry.filter(
+    (a) => a.id !== accessId,
+  );
+  OL.persist();
+  type === "member"
+    ? OL.openTeamMemberModal(ownerId)
+    : OL.openAppModal(ownerId);
+};
+
+// 2. RENDER CREDENTIALS SECTION ON APP CARDS
+
+function renderCredentialRow(clientId, cred, idx, perm) {
+  const app = state.master.apps.find((a) => a.id === cred.appId);
+  const isFull = perm === "full";
+
+  return `
+        <tr>
+            <td>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    ${OL.iconHTML(app || { name: "?" })} 
+                    <strong>${esc(app?.name || "Unknown App")}</strong>
+                </div>
+            </td>
+            <td><span class="pill tiny soft">${esc(cred.type)}</span></td>
+            <td>
+                <div class="reveal-box" onclick="this.classList.toggle('revealed')">
+                    <span class="hidden-val">••••••••</span>
+                    <span class="visible-val">${esc(cred.username)}</span>
+                </div>
+            </td>
+            <td>
+                <div class="reveal-box" onclick="this.classList.toggle('revealed')">
+                    <span class="hidden-val">••••••••</span>
+                    <span class="visible-val">${esc(cred.password)}</span>
+                </div>
+            </td>
+            <td>
+                <select class="perm-select" style="width:100px;"
+                        onchange="OL.updateCredentialStatus('${clientId}', ${idx}, this.value)"
+                        ${!isFull ? "disabled" : ""}>
+                    <option value="Pending" ${cred.status === "Pending" ? "selected" : ""}>⏳ Pending</option>
+                    <option value="Verified" ${cred.status === "Verified" ? "selected" : ""}>✅ Verified</option>
+                    <option value="Invalid" ${cred.status === "Invalid" ? "selected" : ""}>❌ Invalid</option>
+                </select>
+            </td>
+            <td>
+                ${isFull ? `<span class="card-delete-btn" onclick="OL.deleteCredential('${clientId}', ${idx})">×</span>` : ""}
+            </td>
+        </tr>
+    `;
+}
+
+OL.updateCredentialStatus = function (clientId, idx, status) {
+  const client = state.clients[clientId];
+  const cred = client.projectData.credentials[idx];
+
+  if (cred) {
+    cred.status = status;
+    // Auto-log the verification in the project history
+    const app = state.master.apps.find((a) => a.id === cred.appId);
+    console.log(`Access for ${app?.name} marked as ${status}`);
+
+    OL.persist();
+  }
+};
+
+//============================= HOW TO SECTION ============================== //
+
+window.renderHowToLibrary = function() {
+    OL.registerView(renderHowToLibrary);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    const hash = window.location.hash;
+
+    if (!container) return;
+
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isVaultView = hash.startsWith('#/vault');
+
+    // 1. Data Selection (Master + Project Local)
+    const masterLibrary = state.master.howToLibrary || [];
+    const localLibrary = (client && client.projectData.localHowTo) || [];
+    
+    // If in Vault, show all master. If in project, show shared masters + locals.
+    const visibleGuides = isVaultView 
+        ? masterLibrary 
+        : [...masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id)), ...localLibrary];
+
+    container.innerHTML = `
+        <div class="section-header" style="display: flex !important; visibility: visible !important; opacity: 1 !important;">
+            <div style="flex: 1;">
+                <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
+                <div class="small muted">${isVaultView ? 'Global Standards' : `Custom guides for ${esc(client?.meta?.name)}`}</div>
+            </div>
+            
+            <div class="header-actions" style="display: flex !important; gap: 10px !important;">
+                ${isVaultView && isAdmin ? `
+                    <button class="btn primary" style="background: #38bdf8 !important; color: black !important; font-weight: bold;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                ` : ''}
+
+                ${!isVaultView ? `
+                    <button class="btn small soft" onclick="OL.openLocalHowToEditor()">+ Create Local SOP</button>
+                    ${isAdmin ? `<button class="btn primary" style="background: #38bdf8 !important; color: black !important; margin-left:8px;" onclick="OL.importHowToToProject()">⬇ Import Master</button>` : ''}
+                ` : ''}
+            </div>
+        </div>
+
+        <div class="cards-grid" style="margin-top: 20px;">
+            ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
+        </div>
+    `;
+};
+
+// 2. RENDER HOW TO CARDS
+function renderHowToCard(clientId, ht, isClientView) {
+    const client = state.clients[clientId];
+    const isAdmin = window.FORCE_ADMIN === true;
+    
+    // 🚀 THE FIX: Define the missing variable
+    const isVaultView = window.location.hash.includes('vault');
+    
+    const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal;
+    const canDelete = isAdmin || isLocal;
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
+
+    return `
+        <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
+             style="cursor: pointer; position: relative;" 
+             onclick="OL.openHowToModal('${ht.id}')">
+
+            <div class="card-header">
+                <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
+
+                ${canDelete ? `
+                <button class="card-delete-btn" 
+                        title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">×</button>
+                ` : ''}
+            </div>
+            
+            <div class="card-body" style="padding-top: 12px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
+                        ${isMaster ? 'MASTER' : 'LOCAL'}
+                    </span>
+
+                    ${!isClientView && isMaster ? `
+                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                              style="font-size: 8px; cursor: pointer;"
+                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                        </span>
+                    ` : ''}
+                </div>
+                <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">
+                    ${esc(ht.summary || 'No summary provided.')}
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+OL.getProjectsSharingSOP = function(sopId) {
+    return Object.values(state.clients || {}).filter(client => 
+        (client.sharedMasterIds || []).includes(sopId)
+    ).map(client => ({
+        id: client.id,
+        name: client.meta?.name || 'Unnamed Client'
+    }));
+};
+
+OL.openLocalHowToEditor = function() {
+    const client = getActiveClient();
+    if (!client) return;
+
+    const draftId = 'draft-local-ht-' + Date.now();
+    const draftHowTo = {
+        id: draftId,
+        name: "",
+        summary: "",
+        content: "",
+        isDraft: true,
+        isLocal: true // 🚀 Flag to tell the saver where to go
+    };
+    OL.openHowToModal(draftId, draftHowTo);
+};
+
+// 3. RENDER HOW TO MODAL
+OL.openHowToModal = function(htId, draftObj = null) {
+    const hash = window.location.hash;
+    const isVaultMode = hash.includes('vault'); 
+    const client = getActiveClient();
+    
+    // 1. Resolve Guide Data
+    let ht = draftObj || (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    }
+    if (!ht) return;
+
+    // 2. Identify Permissions & Scope
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal; // 🚀 FIXED: isMaster is now defined here
+    const isDraft = String(htId).startsWith('draft');
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
+
+    const canEdit = isAdmin || isLocal || isDraft;
+    const canPromote = isAdmin && isLocal && !isVaultMode;
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const backlinks = OL.getSOPBacklinks(ht.id);
+    const sharedProjects = isMaster ? OL.getProjectsSharingSOP(ht.id) : [];
+
+    const html = `
+        <div class="modal-head" style="gap:15px;">
+            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                <span style="font-size:18px;">📖</span>
+                <input type="text" class="header-editable-input" 
+                       value="${esc(ht.name)}" 
+                       placeholder="Enter SOP Name..."
+                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       ${!canEdit ? 'readonly' : ''} 
+                       onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
+            </div>
+            
+            ${canPromote ? `
+                <button class="btn tiny primary" 
+                        style="background: #fbbf24 !important; color: black !important; font-weight: bold;" 
+                        onclick="OL.promoteLocalSOPToMaster('${ht.id}')">
+                    ⭐ PROMOTE TO MASTER
+                </button>
+            ` : ''}
+
+            ${isAdmin && isMaster ? `
+                <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                    style="font-size: 8px; cursor: pointer;"
+                    onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
+                    ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                </span>
+            ` : ''}
+            
+            ${!isAdmin && isLocal ? `
+                <span class="pill tiny soft" style="font-size: 8px;">📍 Project-Specific</span>
+            ` : ''}
+
+        </div>
+        <div class="modal-body">
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">📄 Brief Summary (Shows on card)</label>
+                <input type="text" class="modal-input tiny" 
+                       placeholder="One-sentence overview..."
+                       value="${esc(ht.summary || '')}" 
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL.handleHowToSave('${ht.id}', 'summary', this.value)">
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">🎥 Training Video URL</label>
+                ${canEdit ? `
+                    <input type="text" class="modal-input tiny" 
+                           placeholder="Paste link..."
+                           value="${esc(ht.videoUrl || '')}" 
+                           onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value); OL.openHowToModal('${ht.id}')">
+                ` : ''}
+                ${ht.videoUrl ? `<div class="video-preview-wrap" style="margin-top:10px;">${OL.parseVideoEmbed(ht.videoUrl)}</div>` : ''}
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">📂 Category</label>
+                <input type="text" class="modal-input tiny" 
+                       value="${esc(ht.category || 'General')}" 
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL.handleHowToSave('${ht.id}', 'category', this.value)">
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">📱 Related Applications</label>
+                <div class="pills-row" id="ht-app-pills">
+                    ${(ht.appIds || []).map(appId => {
+                        const app = allApps.find(a => a.id === appId);
+                        return app ? `<span class="pill tiny accent">${esc(app.name)}</span>` : '';
+                    }).join('')}
+                </div>
+                ${canEdit ? `
+                    <div class="search-map-container" style="margin-top:8px;">
+                        <input type="text" class="modal-input tiny" placeholder="Link an app..." 
+                               onfocus="OL.filterHTAppSearch('${ht.id}', '')"
+                               oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
+                        <div id="ht-app-search-results" class="search-results-overlay"></div>
+                    </div>
+                ` : ''}
+            </div>
+
+            <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:20px;">
+                <label class="modal-section-label">Instructions</label>
+                <textarea class="modal-textarea" rows="12" 
+                          ${!canEdit ? 'readonly' : ''} 
+                          style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.5);' : ''}"
+                          onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
+            </div>
+            ${backlinks.length > 0 ? `
+                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
+                    <label class="modal-section-label" style="color: var(--accent); opacity: 1;">🔗 Mapped to Technical Resources</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                        ${backlinks.map(link => `
+                            <div class="pill soft is-clickable" 
+                                style="display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(56, 189, 248, 0.05);"
+                                onclick="OL.openResourceModal('${link.resId}')">
+                                <span style="font-size: 12px;">📱</span>
+                                <div style="flex: 1;">
+                                    <div style="font-size: 10px; font-weight: bold;">${esc(link.resName)}</div>
+                                    <div style="font-size: 8px; opacity: 0.6;">Linked via ${link.context}: "${esc(link.detail)}"</div>
+                                </div>
+                                <span style="font-size: 10px; opacity: 0.4;">View Resource ➔</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            ${sharedProjects.length > 0 ? `
+                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
+                    <label class="modal-section-label" style="color: #10b981;">🌍 Shared With Projects</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                        ${sharedProjects.map(p => `
+                            <div class="pill soft" style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <span style="font-size: 10px;">🏢</span>
+                                <span style="font-size: 10px; font-weight: bold;">${esc(p.name)}</span>
+                                <button class="pill-remove-x" 
+                                        style="cursor:pointer; opacity: 0.5; margin-left: 5px;" 
+                                        onclick="event.stopPropagation(); OL.deleteSOP('${p.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">×</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : (isMaster ? '<div class="tiny muted" style="margin-top:20px;">This Master SOP is not shared with any projects.</div>' : '')}
+                    </div>
+        `;
+    openModal(html);
+};
+
+window.OL.promoteLocalSOPToMaster = function(localId) {
+    const client = getActiveClient();
+    const localSOP = client?.projectData?.localHowTo?.find(h => h.id === localId);
+
+    if (!localSOP) return;
+    if (!confirm(`Standardize "${localSOP.name}"? This will add it to the Global Vault for all future projects.`)) return;
+
+    // 1. Create the Master Copy
+    const masterId = 'ht-vlt-' + Date.now();
+    const masterCopy = {
+        ...JSON.parse(JSON.stringify(localSOP)), 
+        id: masterId,
+        scope: 'global',
+        createdDate: new Date().toISOString()
+    };
+
+    // 2. Add to Global Library
+    if (!state.master.howToLibrary) state.master.howToLibrary = [];
+    state.master.howToLibrary.push(masterCopy);
+
+    // 3. Remove Local copy and replace with Shared Master link
+    client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== localId);
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    client.sharedMasterIds.push(masterId);
+
+    OL.persist();
+    OL.closeModal();
+    renderHowToLibrary(); // Refresh grid to show new status
+    
+    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
+};
+
+function renderHTRequirements(ht) {
+    const requirements = ht.requirements || [];
+    const masterFunctions = (state.master?.functions || []);
+    const allGuides = (state.master.howToLibrary || []);
+
+    return requirements.map((req, idx) => `
+        <div class="dp-manager-row" style="flex-direction:column; gap:8px; background:rgba(var(--accent-rgb), 0.05); padding:12px; margin-bottom:10px; border-left:3px solid var(--accent);">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" class="modal-input tiny" style="flex:2;" placeholder="Action Name (e.g. Provide Login)" 
+                       value="${esc(req.actionName || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'actionName', this.value)">
+                
+                <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'targetId', this.value)">
+                    <option value="">-- Target Function --</option>
+                    ${masterFunctions.map(f => `<option value="${f.id}" ${req.targetId === f.id ? 'selected' : ''}>⚙️ ${esc(f.name)}</option>`).join('')}
+                </select>
+                <button class="card-delete-btn" style="position:static;" onclick="OL.removeHTReq('${ht.id}', ${idx})">×</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; align-items:center;">
+                <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'clientGuideId', this.value)">
+                    <option value="">-- Client Helper Guide (SOP) --</option>
+                    ${allGuides.filter(g => g.id !== ht.id).map(g => `<option value="${g.id}" ${req.clientGuideId === g.id ? 'selected' : ''}>📖 ${esc(g.name)}</option>`).join('')}
+                </select>
+                <input type="text" class="modal-input tiny" style="flex:1;" placeholder="Instructions for client..." 
+                       value="${esc(req.description || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'description', this.value)">
+            </div>
+        </div>
+    `).join('') || '<div class="empty-hint">No structured requirements defined.</div>';
+}
+
+// HOW TO AND APP OVERLAP
+OL.toggleHTApp = function(htId, appId) {
+    const client = getActiveClient();
+    let ht = state.master.howToLibrary.find(h => h.id === htId);
+    
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    if (!ht) return;
+    
+    if (!ht.appIds) ht.appIds = [];
+    const idx = ht.appIds.indexOf(appId);
+    
+    if (idx === -1) ht.appIds.push(appId);
+    else ht.appIds.splice(idx, 1);
+    
+    OL.persist();
+    OL.openHowToModal(htId);
+};
+
+OL.filterHTAppSearch = function(htId, query) {
+    const listEl = document.getElementById("ht-app-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    
+    // 1. Resolve current guide (to avoid linking to itself)
+    let currentHt = state.master.howToLibrary.find(h => h.id === htId) || 
+                   (client?.projectData?.localHowTo || []).find(h => h.id === htId);
+
+    const currentAppIds = currentHt ? (currentHt.appIds || []) : [];
+
+    // 🚀 2. THE MERGE: Combine Global Master Apps/SOPs with Local Project Apps/SOPs
+    const masterApps = state.master.apps || [];
+    const localApps = client?.projectData?.localApps || [];
+    const allAvailableApps = [...masterApps, ...localApps];
+
+    // 3. Filter based on query and exclude what's already linked
+    const matches = allAvailableApps.filter(a => 
+        a.name.toLowerCase().includes(q) && 
+        !currentAppIds.includes(a.id)
+    );
+    
+    // 4. Render results
+    listEl.innerHTML = matches.map(app => `
+        <div class="search-result-item" onmousedown="OL.toggleHTApp('${htId}', '${app.id}')">
+            ${String(app.id).includes('local') ? '📍' : '🏛️'} ${esc(app.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No matching items found</div>';
+};
+
+OL.parseVideoEmbed = function(url) {
+    if (!url) return "";
+    
+    // YouTube logic
+    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) return `<iframe width="100%" height="315" src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allowfullscreen></iframe>`;
+    
+    // Loom logic
+    const loomMatch = url.match(/(?:https?:\/\/)?(?:www\.)?loom\.com\/share\/([a-zA-Z0-9]+)/);
+    if (loomMatch) return `<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/${loomMatch[1]}" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>`;
+
+    // Vimeo logic
+    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="100%" height="315" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+
+    return `<div class="p-10 tiny warn">Unrecognized video format. Please use Loom, YouTube, or Vimeo.</div>`;
+};
+
+// Toggle a resource ID in the guide's resourceIds array
+OL.toggleHTResource = function(htId, resId) {
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Find the target SOP in Master OR Local
+    let ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    if (!ht) return;
+    
+    if (!ht.resourceIds) ht.resourceIds = [];
+    const idx = ht.resourceIds.indexOf(resId);
+    
+    if (idx === -1) {
+        ht.resourceIds.push(resId);
+    } else {
+        ht.resourceIds.splice(idx, 1);
+    }
+    
+    OL.persist(); // This will now save the modified object in whichever array it lives in
+    OL.openHowToModal(htId); 
+};
+
+// Filter the master resource library for the search dropdown
+OL.filterHTResourceSearch = function(htId, query) {
+    const listEl = document.getElementById("ht-resource-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    
+    const availableResources = (state.master.resources || []).filter(res => 
+        res.name.toLowerCase().includes(q) && 
+        !(ht.resourceIds || []).includes(res.id)
+    );
+    
+    listEl.innerHTML = availableResources.map(res => `
+        <div class="search-result-item" onmousedown="OL.toggleHTResource('${htId}', '${res.id}')">
+            🛠️ ${esc(res.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No resources found</div>';
+};
+
+// 4. HANDLE STATUS / EDITING
+OL.toggleSOPSharing = function(clientId, htId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const idx = client.sharedMasterIds.indexOf(htId);
+    if (idx === -1) {
+        client.sharedMasterIds.push(htId);
+    } else {
+        client.sharedMasterIds.splice(idx, 1);
+    }
+
+    OL.persist();
+    renderResourceLibrary(); // Refresh view
+};
+
+// 5. HANDLE EDIT or REMOVE HOW TO
+OL.openHowToEditorModal = function() {
+    const draftId = 'draft-ht-' + Date.now();
+    const draftHowTo = {
+        id: draftId,
+        name: "",
+        summary: "",
+        content: "",
+        isDraft: true
+    };
+    OL.openHowToModal(draftId, draftHowTo);
+};
+
+// 🚀 REAL-TIME SURGICAL SYNC
+OL.syncHowToName = function(htId, newName) {
+    const cardTitles = document.querySelectorAll(`.ht-card-title-${htId}`);
+    cardTitles.forEach(el => {
+        el.innerText = newName;
+    });
+};
+
+// UPDATED SAVE LOGIC
+OL.handleHowToSave = function(id, field, value) {
+    const client = getActiveClient();
+    const cleanVal = (typeof value === 'string') ? value.trim() : value;
+    const isVaultMode = window.location.hash.includes('vault');
+    
+    // 1. Resolve Target
+    let ht = state.master.howToLibrary.find(h => h.id === id);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === id);
+    }
+
+    // 🚀 NEW: Initialize MASTER SOP if it's a new draft in the Vault
+    if (!ht && isVaultMode && (id.startsWith('draft') || id.startsWith('vlt'))) {
+        const newMaster = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            scope: "internal", // Default to internal/private
+            appIds: [],
+            resourceIds: []
+        };
+        state.master.howToLibrary.push(newMaster);
+        ht = newMaster;
+        renderHowToLibrary();
+        console.log("🏛️ New Master SOP Initialized in Vault");
+    }
+
+    // 🚀 EXISTING: Initialize LOCAL SOP if it's a new local draft
+    if (!ht && id.includes('local') && client) {
+        if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+        const newLocal = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            appIds: [],
+            resourceIds: []
+        };
+        client.projectData.localHowTo.push(newLocal);
+        ht = newLocal;
+        renderHowToLibrary();
+        console.log("📍 New Local SOP Initialized in Project Data");
+    }
+
+    if (ht) {
+        ht[field] = cleanVal;
+
+        // 🔒 TERMINOLOGY SYNC: If scope becomes internal, revoke client sharing
+        if (field === 'scope' && cleanVal === 'internal') {
+            Object.values(state.clients).forEach(c => {
+                if (c.sharedMasterIds) {
+                    c.sharedMasterIds = c.sharedMasterIds.filter(mid => mid !== id);
+                }
+            });
+            console.log("🔒 Revoked sharing for internal guide.");
+        }
+
+        OL.persist();
+        
+        // 🔄 Surgical UI Sync for name
+        if (field === 'name') {
+            document.querySelectorAll(`.ht-card-title-${id}`).forEach(el => el.innerText = cleanVal || "New SOP");
+        }
+    } else {
+        console.error("❌ SAVE FAILED: No SOP or Client Context found for ID:", id);
+    }
+};
+
+OL.deleteSOP = function(clientId, htId) {
+    const isVaultView = window.location.hash.includes('vault');
+    const isLocal = String(htId).includes('local');
+    const client = state.clients[clientId];
+    
+    // 1. Backlink Check (Only for permanent deletes)
+    if (isVaultView || isLocal) {
+        const backlinks = OL.getSOPBacklinks(htId);
+        if (backlinks.length > 0) {
+            const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
+            if (!confirm(`⚠️ WARNING: This SOP is mapped to: ${resNames}.\n\nDeleting the SOURCE will break these links. Proceed?`)) return;
+        }
+    }
+
+    // 2. Resolve Guide Name
+    let guide;
+    if (isLocal && client) {
+        guide = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    } else {
+        guide = (state.master.howToLibrary || []).find(h => h.id === htId);
+    }
+    if (!guide) return;
+
+    // 3. Contextual Execution
+    if (isVaultView) {
+        // --- MASTER VAULT DELETE ---
+        if (!confirm(`⚠️ PERMANENT VAULT DELETE: "${guide.name}"\n\nThis removes the source file for ALL projects. This cannot be undone.`)) return;
+        
+        state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
+        // Scrub the ID from every single client's shared list
+        Object.values(state.clients).forEach(c => {
+            if (c.sharedMasterIds) c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
+        });
+        console.log("🗑️ Master Source Deleted:", htId);
+
+    } else if (isLocal) {
+        // --- LOCAL PROJECT DELETE ---
+        if (!confirm(`Delete local SOP "${guide.name}"?`)) return;
+        if (client) {
+            client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
+        }
+        console.log("🗑️ Local SOP Deleted:", htId);
+
+    } else {
+        // --- MASTER UNLINK (Revoke Access) ---
+        if (!confirm(`Remove "${guide.name}" from this project?\n\nThe guide will remain safe in your Master Vault.`)) return;
+        if (client && client.sharedMasterIds) {
+            client.sharedMasterIds = client.sharedMasterIds.filter(id => id !== htId);
+        }
+        console.log("🔒 Master SOP Unlinked from Client:", clientId);
+    }
+
+    // 4. Finalize
+    OL.persist();
+    renderHowToLibrary();
+};
+
+// 6. HANDLE SYNCING TO MASTER AND VICE VERSA
+OL.importHowToToProject = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📚 Link Master SOP</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Click to view guides..." 
+                       onfocus="OL.filterMasterHowToImport('')"
+                       oninput="OL.filterMasterHowToImport(this.value)" 
+                       autofocus>
+                <div id="master-howto-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterMasterHowToImport = function(query) {
+    const listEl = document.getElementById("master-howto-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const alreadyShared = client?.sharedMasterIds || [];
+
+    const available = (state.master.howToLibrary || []).filter(ht => 
+        ht.name.toLowerCase().includes(q) && !alreadyShared.includes(ht.id)
+    );
+
+    listEl.innerHTML = available.map(ht => `
+        <div class="search-result-item" onmousedown="OL.toggleSOPSharing('${client.id}', '${ht.id}'); OL.closeModal();">
+            📖 ${esc(ht.name)}
+        </div>
+    `).join('') || `<div class="search-result-item muted">No unlinked guides found.</div>`;
+};
+
+//=======================HOW-TO RESOURCES OVERLAP ====================//
+OL.getSOPBacklinks = function(sopId) {
+    const client = getActiveClient();
+    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+    const links = [];
+
+    allResources.forEach(res => {
+        // Check Triggers
+        (res.triggers || []).forEach((trig, idx) => {
+            if ((trig.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Trigger', detail: trig.name });
+            }
+        });
+        // Check Steps
+        (res.steps || []).forEach(step => {
+            if ((step.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Step', detail: step.text });
+            }
+        });
+    });
+    return links;
+};
+
+//======================= HOW-TO TASKS OVERLAP ========================//
+
+OL.filterTaskHowToSearch = function(taskId, query, isVault) {
+    const container = document.getElementById('task-howto-results');
+    if (!container) return;
+
+    const client = getActiveClient();
+    const q = (query || "").toLowerCase().trim();
+    
+    // 1. Resolve current task to find existing links
+    const task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+    
+    const existingIds = task?.howToIds || [];
+
+    // 2. Filter available guides (exclude existing)
+    const results = (state.master.howToLibrary || []).filter(guide => {
+        const matches = (guide.name || "").toLowerCase().includes(q);
+        const alreadyLinked = existingIds.includes(guide.id);
+        return matches && !alreadyLinked;
+    });
+
+    if (results.length === 0) {
+        container.innerHTML = `<div class="search-result-item muted">No unlinked guides found.</div>`;
+        return;
+    }
+
+    container.innerHTML = results.map(guide => `
+        <div class="search-result-item is-clickable" 
+             onmousedown="OL.toggleTaskHowTo(event, '${taskId}', '${guide.id}', ${isVault})">
+            📖 ${esc(guide.name)}
+        </div>
+    `).join('');
+};
+
+OL.toggleTaskHowTo = function(event, taskId, howToId, isVault) {
+    if (event) event.stopPropagation();
+    const client = getActiveClient();
+    
+    let task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+
+    const guide = (state.master.howToLibrary || []).find(g => g.id === howToId);
+
+    if (task && guide) {
+        if (!task.howToIds) task.howToIds = [];
+        const idx = task.howToIds.indexOf(howToId);
+        
+        if (idx === -1) {
+            // 🚀 LINKING: Add ID and Sync Content
+            task.howToIds.push(howToId);
+            
+            // Append Prework and Items Needed to the task description
+            const syncNotice = `\n\n--- Linked SOP: ${guide.name} ---`;
+            const itemsText = guide.itemsNeeded ? `\n📦 Items Needed: ${guide.itemsNeeded}` : "";
+            const preworkText = guide.prework ? `\n⚡ Required Prework: ${guide.prework}` : "";
+            
+            task.description = (task.description || "") + syncNotice + itemsText + preworkText;
+        } else {
+            // UNLINKING: Remove ID
+            task.howToIds.splice(idx, 1);
+        }
+        
+        OL.persist();
+        OL.openTaskModal(taskId, isVault); 
+    }
+};
+
+// Add a new empty requirement object to a guide
+OL.addHTRequirement = function(htId) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht) return;
+
+    // Initialize the requirements array if it doesn't exist
+    if (!ht.requirements) ht.requirements = [];
+
+    // Push a new requirement structure
+    ht.requirements.push({
+        actionName: "",
+        targetType: "function", // Default to function-based resolution
+        targetId: "",           // Will hold the Function ID
+        clientGuideId: "",      // Will hold the Helper SOP ID
+        description: ""
+    });
+
+    OL.persist(); // Sync to storage
+    OL.openHowToModal(htId); // Refresh the modal to show the new row
+};
+
+OL.updateHTReq = function(htId, index, field, value) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht || !ht.requirements || !ht.requirements[index]) return;
+
+    ht.requirements[index][field] = value;
+
+    // We persist, but we don't necessarily need to re-open the modal 
+    // for text inputs to avoid losing focus, unless it's a dropdown change.
+    OL.persist();
+    
+    if (field === 'targetId' || field === 'clientGuideId') {
+        OL.openHowToModal(htId);
+    }
+};
+
+// Remove a requirement from the list
+OL.removeHTRequirement = function(htId, index) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht || !ht.requirements) return;
+
+    ht.requirements.splice(index, 1);
+    
+    OL.persist();
+    OL.openHowToModal(htId);
+};
+
+// =========================HOW TO SCOPING OVERLAP=====================================
+OL.resolveRequirementTarget = function(requirement) {
+    const client = getActiveClient();
+    if (requirement.targetType === 'app') return requirement.targetId;
+
+    if (requirement.targetType === 'function') {
+        // Find the client's app that is the "Primary" for this function
+        const localApps = client.projectData.localApps || [];
+        const primaryApp = localApps.find(app => 
+            app.functionIds?.some(m => (m.id === requirement.targetId && m.status === 'primary'))
+        );
+        return primaryApp ? primaryApp.id : null;
+    }
+    return null;
+};
+
+OL.deployRequirementsFromResource = function(resourceId) {
+    const client = getActiveClient();
+    // Find the Master Guide linked to this Resource
+    const guide = (state.master.howToLibrary || []).find(ht => (ht.resourceIds || []).includes(resourceId));
+    
+    if (!guide || !guide.requirements || guide.requirements.length === 0) return;
+
+    guide.requirements.forEach(req => {
+        // Resolve the target App by looking for the "Primary" mapping for the Function
+        const targetAppId = OL.resolveRequirementTarget(req);
+        const allApps = [...state.master.apps, ...(client.projectData.localApps || [])];
+        const targetAppName = allApps.find(a => a.id === targetAppId)?.name || "System";
+
+        const newTask = {
+            id: 'tm-' + Date.now() + Math.random().toString(36).substr(2, 5),
+            name: `${req.actionName || 'Requirement'} (${targetAppName})`,
+            description: req.description || `Required for ${guide.name} implementation.`,
+            status: "Pending",
+            appIds: targetAppId ? [targetAppId] : [],
+            howToIds: req.clientGuideId ? [req.clientGuideId] : [], // Attach the Helper Guide
+            createdDate: new Date().toISOString()
+        };
+
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+        client.projectData.clientTasks.push(newTask);
+    });
+    
+    OL.persist();
+};
+
+// 🚀 THE BULLETPROOF STARTER
+function bootRouter() {
+    console.log("🏁 App Ignition: Checking route...");
+    // Force a default if empty
+    if (!window.location.hash || window.location.hash === "#/") {
+        // window.location.hash = "#/client-tasks"; 
+    }
+    window.handleRoute();
+}
+
+// 🔄 Handle initial load (covers all browser timings)
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    bootRouter();
+} else {
+    window.addEventListener("DOMContentLoaded", bootRouter);
+}
+
+// 🔄 Handle every click thereafter
+window.addEventListener("hashchange", window.handleRoute);
+
+// 🛑 GLOBAL REFRESH SHIELD
+// This stops the browser from navigating if a drop fails or is mishandled
+['dragover', 'drop'].forEach(eventName => {
+    window.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
