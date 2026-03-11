@@ -9184,33 +9184,36 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 
                 <div id="v2-sticky-stage-headers" style="width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom});">
                     ${stages.map((s, i) => `
-                        <div class="v2-lane-label" style="width: 300px; pointer-events: none;">
-                            <div style="pointer-events: all; display: flex; align-items: center; gap: 8px;">
+                        <div class="v2-lane-label" 
+                            style="width: 300px; flex-shrink: 0; position: relative; pointer-events: none; overflow: visible; display: flex; align-items: center;">
+                            
+                            <div class="v2-label-interactive-area" 
+                                style="pointer-events: all; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px;">
+                                
                                 <span class="stage-name-text" 
                                     contenteditable="true"
-                                    onblur="OL.editStageName(${i}, this.innerText)"
+                                    onblur="OL.updateStageName(${i}, this.innerText)"
                                     onmousedown="event.stopPropagation();"
-                                    style="cursor: text; border-bottom: 1px dashed rgba(255,255,255,0.2);">
+                                    style="cursor: text; color: #fff; font-size: 12px; font-weight: 600;">
                                     ${esc(s.name)}
                                 </span>
-                                <button class="card-delete-btn" 
-                                        onclick="event.stopPropagation(); OL.removeStage(${i})">×</button>
+
+                                <button class="v2-lane-delete-btn" 
+                                    style="pointer-events: all; cursor: pointer; background: none; border: none; color: #ef4444; font-size: 16px; line-height: 1;"
+                                    onmousedown="event.stopPropagation();"
+                                    onclick="event.stopPropagation(); console.log('Deleting stage ${i}'); OL.removeStage(${i})">
+                                    ×
+                                </button>
                             </div>
+
                             <div class="v2-lane-divider-trigger" 
-                                onclick="event.stopPropagation(); OL.addNewStageAfter(${i})"
-                                title="Insert Stage After ${esc(s.name)}">
+                                style="pointer-events: all; position: absolute; right: -12px; z-index: 2500; cursor: pointer;"
+                                onmousedown="event.stopPropagation();"
+                                onclick="event.stopPropagation(); OL.addNewStageAfter(${i})">
                                 <span>+</span>
                             </div>
                         </div>
                     `).join('')}
-
-                   <div class="v2-lane-label add-stage-zone" style="width: 300px; flex-shrink: 0; pointer-events: all; display: flex; align-items: center;">
-                        <button class="btn soft tiny" 
-                                style="position: relative; z-index: 2000; margin-left: 20px; background: rgba(251, 191, 36, 0.1); border: 1px dashed #fbbf24; color: #fbbf24;"
-                                onclick="console.log('Button Clicked!'); OL.addNewStage()">
-                            + Add Stage
-                        </button>
-                    </div>
                 </div>
             </div>
 
