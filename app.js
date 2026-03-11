@@ -9196,6 +9196,11 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                                 <button class="card-delete-btn" 
                                         onclick="event.stopPropagation(); OL.removeStage(${i})">×</button>
                             </div>
+                            <div class="v2-lane-divider-trigger" 
+                                onclick="event.stopPropagation(); OL.addNewStageAfter(${i})"
+                                title="Insert Stage After ${esc(s.name)}">
+                                <span>+</span>
+                            </div>
                         </div>
                     `).join('')}
 
