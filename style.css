@@ -4025,7 +4025,7 @@ ARROWS
     position: relative;
     width: 100%;
     height: 100vh; /* Adjust based on your header */
-    background-color: #050816;
+    background-color: var(--bg);
     background-image: 
         /*The Dotted Grid (Drawn every 40px) */
         radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
