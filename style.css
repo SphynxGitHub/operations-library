@@ -4749,6 +4749,7 @@ path[stroke="transparent"] {
 
 #v2-context-toolbar {
     animation: slideInDock 0.2s ease-out;
+    gap: 6px;
 }
 
 @keyframes slideInDock {
