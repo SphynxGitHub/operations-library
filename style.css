@@ -282,7 +282,7 @@ body:has(.sidebar.collapsed) #mainContent {
     width: 32px;
     height: 32px;
     background: var(--accent);
-    color: #000;
+    color: var(--text-main);
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -384,7 +384,7 @@ body:has(.sidebar.collapsed) #mainContent {
 
 .header-actions .btn.primary:hover {
     background: var(--accent);
-    color: #000;
+    color:  var(--text-main);
     box-shadow: 0 0 15px var(--accent-glow);
 }
 
@@ -535,7 +535,7 @@ body:has(.sidebar.collapsed) #mainContent {
 
 .btn.primary {
     background: var(--accent);
-    color: #000;
+    color: var(--text-main);
 }
 
 .btn.soft {
@@ -598,7 +598,7 @@ body:has(.sidebar.collapsed) #mainContent {
 .vault-tag {
     font-size: 8px;
     background: var(--vault-gold);
-    color: #000;
+    color:  var(--text-main);
     padding: 1px 4px;
     border-radius: 3px;
     font-weight: 900;
@@ -651,14 +651,14 @@ body:has(.sidebar.collapsed) #mainContent {
 .dropdown-item {
     padding: 10px 15px;
     font-size: 13px;
-    color: #d1d5db;
+    color: var(--text-main);
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .dropdown-item:hover {
     background: var(--accent);
-    color: #000;
+    color: var(--text-main);
     padding-left: 20px; /* Slight slide effect */
 }
 
@@ -1101,7 +1101,7 @@ body:has(.sidebar.collapsed) #mainContent {
 
 .btn-guide-link:hover {
     background: var(--accent);
-    color: #000;
+    color: var(--text-main);
 }
 
 /* ============================================================
@@ -1171,7 +1171,7 @@ body:has(.sidebar.collapsed) #mainContent {
 
 .modal-input, .form-control, .ghost-input {
     background: var(--panel-soft);
-    color: #fff;
+    color:  var(--text-main);
     border: 1px solid var(--panel-border);
     padding: 6px 10px;
     outline: none;
@@ -1496,7 +1496,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
 
 .pill.status-evaluating {
     background: #eab308 !important; /* Yellow */
-    color: #000;
+    color: var(--text-main);
     border: 1px solid #ca8a04;
 }
 
@@ -1655,17 +1655,17 @@ body.fs-mode-active {
     overflow: auto !important; 
     position: relative; 
     display: block; /* Ensure it treats children as a long list */
-    background: #050816; 
+    background: var(--bg); 
     height: calc(100vh - 60px);
 }
 
 .fs-header {
-    background: #161b22; border-bottom: 1px solid #30363d;
+    background: var(--bg); border-bottom: 1px solid #30363d;
     padding: 15px 30px; display: flex; align-items: center; justify-content: space-between;
 }
 
 .fs-mode-toggle {
-    background: #000; padding: 4px; border-radius: 8px; display: flex; gap: 4px;
+    background: var(--bg); padding: 4px; border-radius: 8px; display: flex; gap: 4px;
 }
 
 .fs-mode-btn {
@@ -1673,7 +1673,7 @@ body.fs-mode-active {
     border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
 }
 
-.fs-mode-btn.active { background: var(--accent); color: #000; }
+.fs-mode-btn.active { background: var(--accent); color:  var(--text-main); }
 
 .fs-body { flex: 1; overflow: auto !important; position: relative; }
 
@@ -1870,7 +1870,7 @@ body.fs-mode-active {
 }
 
 .vis-idx { 
-    background: var(--accent); color: #000; width: 22px; height: 22px; 
+    background: var(--accent); color:  var(--text-main); width: 22px; height: 22px; 
     border-radius: 50%; display: flex; align-items: center; justify-content: center; 
     font-weight: 900; font-size: 10px; 
 }
@@ -1992,7 +1992,7 @@ body.fs-mode-active {
     left: 50%;
     transform: translateX(-50%);
     background: var(--accent);
-    color: #000;
+    color:  var(--text-main);
     border: none;
     width: 24px;
     height: 24px;
@@ -2060,7 +2060,7 @@ body.fs-mode-active {
     width: 20px;
     height: 20px;
     background: var(--accent);
-    color: #000;
+    color:  var(--text-main);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -2382,12 +2382,12 @@ body.fs-mode-active {
     }
 
     textarea, .price-input-tiny {
-        color: #000 !important; /* Ensure high contrast for printing */
+        color:  var(--text-main); !important; /* Ensure high contrast for printing */
     }
 
     .tiny-select {
         border: none !important;
-        color: #000 !important; /* Ensure high contrast for printing */
+        color:  var(--text-main); !important; /* Ensure high contrast for printing */
         font-weight: bold;
     }
 
@@ -2434,7 +2434,7 @@ body.fs-mode-active {
 
     /* 8. Categorization Headers - Ensure they span correctly */
     .category-header-row td {
-        background-color: #f9f9f9 !important;
+        background-color: var(--bg) !important;
         -webkit-print-color-adjust: exact; /* Ensure background prints */
     }
 
@@ -2482,7 +2482,7 @@ body.fs-mode-active {
         line-height: 1.4 !important;
         white-space: pre-wrap !important; /* This preserves your line breaks */
         background: transparent !important;
-        color: #000 !important; /* Ensure high contrast for printing */
+        color:  var(--text-main); !important; /* Ensure high contrast for printing */
         -webkit-print-color-adjust: exact;
     }
 
@@ -2521,7 +2521,7 @@ body.fs-mode-active {
         height: auto !important;
         border: none !important;
         background: transparent !important;
-        color: #000 !important;
+        color:  var(--text-main); !important;
         font-family: inherit;
         font-size: 11px;
         line-height: 1.4;
@@ -2896,7 +2896,7 @@ body.is-visualizer #mainContent {
 .draggable-factory-item:hover {
     background: rgba(56, 189, 248, 0.08);
     border-color: var(--accent);
-    color: #fff;
+    color:  var(--text-main);;
     transform: translateX(4px);
 }
 
@@ -3099,7 +3099,7 @@ body.is-visualizer #mainContent {
     position: absolute;
     left: -45px;
     background: var(--accent);
-    color: #000;
+    color:  var(--text-main);
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -3114,7 +3114,7 @@ body.is-visualizer #mainContent {
 
 .stage-name {
     font-weight: 800;
-    color: #fff;
+    color:  var(--text-main);
     text-transform: uppercase;
     letter-spacing: 2px;
     font-size: 14px;
@@ -3246,7 +3246,7 @@ body.is-visualizer #mainContent {
     left: 0;
     width: 140px;
     min-width: 140px;
-    background: #0b0f1a;
+    background: var(--bg);
     z-index: 40;
     display: flex;
     align-items: center;
@@ -3457,7 +3457,7 @@ body.is-visualizer #mainContent {
 
 .draggable-workflow-item .btn-icon-only:hover {
     background: var(--accent);
-    color: black;
+    color:  var(--text-main);;
 }
 
 /* Placeholder highlight when dragging over a stage */
@@ -3632,7 +3632,7 @@ ARROWS
 
 .logic-trace-icon:hover {
     background: var(--accent);
-    color: black;
+    color:  var(--text-main);
     transform: scale(1.3);
 }
 
@@ -3643,7 +3643,7 @@ ARROWS
     left: 50%;
     transform: translateX(-50%);
     background: var(--accent);
-    color: #000;
+    color:  var(--text-main);
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 10px;
@@ -3684,14 +3684,14 @@ ARROWS
 .trace-active-icon {
     box-shadow: 0 0 8px var(--accent);
     background: var(--accent) !important;
-    color: black !important;
+    color:  var(--text-main) !important;
 }
 
 .logic-trace-trigger {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    background: #1e293b;
+    background: var(--bg);
     border: 1px solid var(--accent);
     border-radius: 4px;
     width: 22px;
@@ -3711,7 +3711,7 @@ ARROWS
 
 .logic-trace-trigger:hover {
     background: var(--accent);
-    color: black;
+    color:  var(--text-main);
     transform: translateX(-50%) scale(1.2);
 }
 
@@ -3833,7 +3833,7 @@ ARROWS
 /* 3. Atomic Step (The Text Level) */
 .step-active.is-inspecting {
     background: var(--accent) !important;
-    color: #000 !important;
+    color:  var(--text-main) !important;
     border-radius: 4px;
     padding: 0 4px;
     margin: 2%;
@@ -3845,7 +3845,7 @@ ARROWS
 ==================================================================*/
 .pane-inventory-split {
     height: 300px;
-    background: #080c14;
+    background: var(--bg);
     border-top: 2px solid var(--accent);
     overflow-y: auto;
 }
@@ -4161,7 +4161,7 @@ ARROWS
     width: 24px;
     height: 24px;
     background: #fbbf24;
-    color: #0f172a;
+    color: var(--text-main);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -4187,7 +4187,7 @@ ARROWS
 }
 
 .stage-name-input {
-    background: #1e293b !important;
+    background: var(--bg) !important;
     border: 1px solid var(--accent) !important;
     color: white !important;
     padding: 4px 8px;
@@ -4547,7 +4547,7 @@ body.is-dragging-node {
     justify-content: center;
     cursor: crosshair;
     border: 2px solid #000;
-    color: #000;
+    color:  var(--text-main);
     font-size: 10px;
     z-index: 30;
     transition: transform 0.2s;
@@ -4928,7 +4928,7 @@ path[stroke="transparent"] {
 }
 
 .tray-search-header select option {
-    background: #0f172a;
+    background: var(--bg);
     color: white;
 }
 
@@ -5009,7 +5009,7 @@ path[stroke="transparent"] {
     left: 50%;
     transform: translateX(-50%);
     background: #38bdf8;
-    color: #000;
+    color:  var(--text-main);
     font-size: 8px;
     font-weight: bold;
     padding: 2px 6px;
@@ -5072,7 +5072,7 @@ path[stroke="transparent"] {
 .v2-step-divider .split-icon {
     position: absolute;
     font-size: 12px;
-    background: #1e293b;
+    background: var(--bg);
     border: 1px solid #fbbf24;
     border-radius: 4px;
     padding: 1px 3px;
@@ -5099,7 +5099,7 @@ path[stroke="transparent"] {
 }
 
 .v2-duplicate-badge {
-    background: #1e293b;
+    background: var(--bg);
     border: 1px solid #fbbf24;
     color: #fbbf24;
     border-radius: 4px; /* Matches the square look of the icon */
@@ -5127,13 +5127,13 @@ path[stroke="transparent"] {
 
 .v2-duplicate-badge:hover {
     background: #fbbf24;
-    color: #1e293b;
+    color:  var(--text-main);
 }
 
 /* Ensure step badge matches height and styling */
 .v2-step-badge {
     background: var(--accent);
-    color: #000;
+    color:  var(--text-main);
     border-radius: 10px;
     padding: 2px 8px;
     font-size: 9px;
