@@ -1567,7 +1567,9 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
     border-radius: 12px;
     background: var(--bg);
     border: 1px solid var(--accent);
-    overflow: hidden; /* Ensures corners clip the results */
+    max-height: 160px; 
+    overflow-y: auto;
+    overflow-x: hidden;
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
