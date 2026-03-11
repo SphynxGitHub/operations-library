@@ -968,6 +968,39 @@ body:has(.sidebar.collapsed) #mainContent {
     font-size: 11.5px;
 }
 
+/* Container for each pricing row */
+.tier-entry-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+/* The Name Input - 🚀 MAKE THIS EXPAND */
+.tier-name-input {
+    flex: 1; /* This tells it to take all remaining space */
+    min-width: 0; /* Prevents input from pushing out of the cell */
+    font-size: 10px;
+    padding: 2px 4px;
+}
+
+/* The Price Wrapper - 📏 MAKE THIS SMALL */
+.tier-price-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 65px; /* Fixed small width for the currency + amount */
+    flex-shrink: 0; /* Prevents the name box from squishing this */
+}
+
+.tier-price-input {
+    width: 100%;
+    font-size: 10px;
+    text-align: right;
+    padding: 2px;
+}
+
 /* Standard UI adjustment to hide scrollbar in web view during preview */
 #activeAnalysisMatrix {
     scrollbar-width: none; /* Firefox */

@@ -7054,7 +7054,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                    <thead>
                         <tr>
                             <th style="text-align: left;">Features</th>
-                            <th style="text-align: center; width: 80px;">Weight</th>
+                            <th style="text-align: center; width:60px;">Weight</th>
 
                             ${(anly.apps || []).map(appObj => {
                                 const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
