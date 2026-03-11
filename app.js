@@ -9192,7 +9192,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                                 
                                 <span class="stage-name-text" 
                                     contenteditable="true"
-                                    onblur="OL.updateStageName(${i}, this.innerText)"
+                                    onblur="OL.editStageName(${i}, this.innerText)"
                                     onmousedown="event.stopPropagation();"
                                     style="cursor: text; color: #fff; font-size: 12px; font-weight: 600;">
                                     ${esc(s.name)}
