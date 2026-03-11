@@ -9569,25 +9569,31 @@ OL.runCanvasFilters = function() {
 };
 
 OL.editStageName = async function(index, newName) {
-    if (newName === undefined) return;
-    
-    const isVault = window.location.hash.includes('vault');
+    // 1. Sanitize input
     const cleanName = newName.trim();
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    
+    // 2. Locate the source of truth
+    const sourceData = isVault ? state.master : client?.projectData;
+    
+    if (!sourceData || !sourceData.stages || !sourceData.stages[index]) {
+        console.error("❌ Stage update failed: Target not found.");
+        return;
+    }
 
-    if (!cleanName) return; // Don't save empty names
+    const oldName = sourceData.stages[index].name;
+    if (cleanName === oldName) return;
 
+    // 🚀 THE SYNC: Wrap in the global sync handler
     await OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const target = isVault ? state.master : client?.projectData;
-        
-        if (target?.stages?.[index]) {
-            target.stages[index].name = cleanName;
-            console.log(`✅ Stage ${index} updated to: ${cleanName}`);
-        }
+        // Update the actual object in the state
+        sourceData.stages[index].name = cleanName;
+        console.log(`✅ Stage ${index} state updated to: ${cleanName}`);
     });
 
-    // We don't necessarily need a full re-render here because 
-    // contenteditable already updated the UI text.
+    // 3. Final visual refresh to lock it in
+    window.renderGlobalVisualizer(isVault);
 };
 
 OL.removeStage = async function(index) {
