@@ -1055,6 +1055,17 @@ body:has(.sidebar.collapsed) #mainContent {
     max-width: 60px; /* Keeps the pill shape professional */
 }
 
+.matrix-notes-auto {
+    border: 1px solid var(--panel-border);
+    min-height: 40px;
+    height: auto;
+    overflow: hidden;
+    line-height: 1.1; 
+    resize: none; 
+    padding: 4px; 
+    border-radius: 4px;
+    font-family: inherit;
+}
 
 /* ============================================================
    TASK BLUEPRINTS
