@@ -2368,6 +2368,9 @@ body.fs-mode-active {
         width: 100% !important;
         height: auto !important;
         background: white !important;
+        background-color: white !important;
+        border-right: none !important; /* Hides that ghost right border */
+        box-shadow: none !important;
         color: black !important;
         overflow: visible !important;
         margin: 0 !important;
@@ -2383,7 +2386,7 @@ body.fs-mode-active {
         overflow: visible !important;
         -webkit-print-color-adjust: exact;
     }
-    
+
     /* 🚀 CRITICAL: Hide the background app entirely so it doesn't push content down */
     #mainContent .fs-canvas { 
         display: none !important; 
@@ -2434,6 +2437,10 @@ body.fs-mode-active {
         border: none !important;
         color:  var(--text-main) !important; /* Ensure high contrast for printing */
         font-weight: bold;
+    }
+
+    #activeAnalysisMatrix {
+        border-right: none !important;
     }
 
     .matrix-table {
@@ -2558,6 +2565,12 @@ body.fs-mode-active {
         overflow: visible !important;
         height: auto !important;
         display: block !important;
+    }
+
+    tr, .grid-row, .tier-entry, .matrix-card-main {
+        page-break-inside: avoid !important; /* Legacy support */
+        break-inside: avoid !important;      /* Modern support */
+        display: table-row !important;       /* Ensures table logic stays intact */
     }
 
     /* 5. Hide the actual scrollbar track in Webkit browsers */
