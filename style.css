@@ -2332,15 +2332,17 @@ body.fs-mode-active {
 
     /* 1. Global Reset - Eliminates the Blank Page 1 */
     html, body, .main-content, #mainContent, .scoping-container, #activeAnalysisMatrix{
+        width: 100% !important;
+        height: auto !important;
         background: white !important;
         color: black !important;
-        height: auto !important;
         overflow: visible !important;
         margin: 0 !important;
         padding: 0 !important;
         filter: none !important; 
         backdrop-filter: none !important;
         display: block !important;
+        position: relative !important;
     }
 
     /* 🚀 CRITICAL: Hide the background app entirely so it doesn't push content down */
@@ -2497,6 +2499,11 @@ body.fs-mode-active {
         overflow: visible !important;
         display: block !important;
         page-break-inside: auto !important;
+    }
+
+    matrix-card-main {
+        zoom: 0.85; /* Adjust this percentage if it still cuts off horizontally */
+        transform-origin: top left;
     }
 
     /* Ensure table cells don't constrain the height */

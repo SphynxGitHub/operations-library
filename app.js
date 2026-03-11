@@ -7405,6 +7405,7 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
 
     // 3. Enter Print Mode
     document.body.classList.add("print-mode-active");
+    window.scrollTo(0,0);
     container.classList.add("print-target");
 
     setTimeout(() => {
