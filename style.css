@@ -4108,7 +4108,7 @@ ARROWS
     left: 0;
     width: 100%;
     z-index: 1000; /* High z-index to stay above nodes */
-    background: #0b0f1a; /* Match your background to hide nodes sliding under */
+    background: var(--bg); /* Match your background to hide nodes sliding under */
     pointer-events: none; /* Let clicks pass through to canvas unless hitting a button */
     border-bottom: 1px solid rgba(255,255,255,0.05);
 }
@@ -4121,7 +4121,7 @@ ARROWS
 .v2-stage-header-row {
     display: flex;
     padding: 20px 50px 10px 50px;
-    background: #0b0f1a;
+    background: var(--bg);
     pointer-events: all;
 }
 
