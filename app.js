@@ -1686,7 +1686,7 @@ OL.openAppModal = function(appId, draftObj = null) {
             ${canPushToMaster ? `
                 <button class="btn tiny primary" 
                         onclick="OL.pushLocalAppToMaster('${app.id}')"
-                        style="background: var(--accent); color: #000; font-weight: bold; border:none;">
+                        style="background: var(--accent); color: var(--main-text); font-weight: bold; border:none;">
                     ⭐ PUSH TO MASTER
                 </button>
             ` : ''}
@@ -9194,7 +9194,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                                     contenteditable="true"
                                     onblur="OL.editStageName(${i}, this.innerText)"
                                     onmousedown="event.stopPropagation();"
-                                    style="cursor: text; color: #fff; font-size: 12px; font-weight: 600;">
+                                    style="cursor: text; font-size: 12px; font-weight: 600;">
                                     ${esc(s.name)}
                                 </span>
 
@@ -10198,7 +10198,7 @@ OL.parseBrainDump = function() {
 
     // 2. Generate rows using a <select> for the App
     listContainer.innerHTML = lines.map((line, i) => `
-        <div class="bd-draft-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155;">
+        <div class="bd-draft-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid #334155;">
             <div style="display: flex; gap: 8px; align-items: center;">
                 <input type="text" class="modal-input tiny bd-main-name" value="${esc(line)}" style="flex: 1; font-weight: bold;">
                 <button class="card-delete-btn" onclick="this.parentElement.parentElement.remove(); OL.updateBDCount();" style="position: static;">×</button>
@@ -12265,7 +12265,7 @@ function renderGlobalWorkflowNode(wf, allResources, isVaultMode) {
                                 border-left: 3px solid ${isInScope ? '#10b981' : '#38bdf8'}; border: 1px solid rgba(255,255,255,0.05);">
                         
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom:8px;">
-                            <div style="font-size: 11px; font-weight: bold; color: #eee; flex: 1;">
+                            <div style="font-size: 11px; font-weight: bold; color: var(--main-text); flex: 1;">
                                 ${OL.getRegistryIcon(asset.type)} ${esc(asset.name)}
                             </div>
                             ${isInScope ? `<button 
