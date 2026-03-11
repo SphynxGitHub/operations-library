@@ -7311,7 +7311,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                         <div style="display: flex; flex-direction: column; gap: 4px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
                                 
-                                <div style="display: ${costType === 'not_included' ? 'none' : 'flex'}; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px; flex: 1;">
+                                <div style="display: ${isHidden ? 'none' : 'flex'}; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 2px 5px; flex: 1;">
                                     <span style="color: var(--muted); font-weight: bold; font-size: 9px;">Score</span>
                                     <input type="number" 
                                         min="0" max="3"
@@ -7321,11 +7321,11 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                         onblur="OL.updateAnalysisScore('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})">
                                 </div>
 
-                                ${costType === 'not_included' ? `
+                                ${isHidden ? `
                                 ` : ''}
 
                                 <select class="tiny-select" 
-                                    style="width: ${costType === 'not_included' ? '100px' : 'auto'}; flex-shrink: 0;"
+                                    style="width: ${isHidden ? '100px' : 'auto'}; flex-shrink: 0;"
                                     onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
                                     <option value="not_included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
                                     <optgroup label="Included In:">
@@ -7337,23 +7337,17 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                                     </optgroup>
                                     <option value="addon" ${costType === 'addon' ? 'selected' : ''}>Add-on</option>
                                 </select>
-
-                                <div id="addon-price-${appObj.appId}-${feat.id}" 
-                                    style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                    <span class="tiny muted">$</span>
-                                    <input type="number" class="price-input-tiny" style="max-width:40px; color: #ccc; background:transparent; border: 1px solid var(--panel-border);"
-                                        value="${currentAddonPrice}" 
-                                        onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
-                                </div>
                             </div>
-                            
-                            <textarea 
-                                placeholder="Notes..." 
-                                class="matrix-notes-auto"
-                                style="width: 100%; min-height: 40px; height: auto; overflow: hidden; line-height: 1.1; background: transparent; border: 1px solid rgba(255,255,255,0.05); color: #ccc; resize: none; padding: 4px; border-radius: 4px; font-family: inherit;"
-                                oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
-                                onblur="OL.updateAnalysisNote('${analysisId}', '${appObj.appId}', '${feat.id}', this.value, ${isMaster})"
-                            >${esc(currentNote)}</textarea>
+
+                            <div id="addon-price-${appObj.appId}-${feat.id}" 
+                                style="display: ${costType === 'addon' ? 'flex' : 'none'}; align-items: center; gap: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+                                <span class="tiny muted">Add-on Price: $</span>
+                                <input type="number" class="price-input-tiny" style="max-width:50px; color: var(--accent); background:transparent; border: 1px solid var(--panel-border); font-size: 10px;"
+                                    value="${currentAddonPrice}" 
+                                    onblur="OL.updateAppFeatAddonPrice('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                            </div>
+
+                            <textarea ... >${esc(currentNote)}</textarea>
                         </div>
                     </td>`;
             }).join('');
