@@ -2381,6 +2381,10 @@ body.fs-mode-active {
         position: relative !important;
     }
 
+    .card {
+        background: transparent;
+    }
+
     /* 🛡️ PREVENT CROP */
     * {
         overflow: visible !important;
@@ -2566,7 +2570,7 @@ body.fs-mode-active {
         height: auto !important;
         display: block !important;
     }
-    
+
     /* 5. Hide the actual scrollbar track in Webkit browsers */
     ::-webkit-scrollbar {
         display: none !important;
