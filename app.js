@@ -9568,45 +9568,26 @@ OL.runCanvasFilters = function() {
     connections.forEach(l => l.style.opacity = isFiltered ? "0.1" : "1");
 };
 
-OL.editStageName = function(event, index) {
-    const span = event.currentTarget;
-    const currentName = span.innerText;
+OL.editStageName = async function(index, newName) {
+    if (newName === undefined) return;
+    
     const isVault = window.location.hash.includes('vault');
+    const cleanName = newName.trim();
 
-    // Create the input
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = currentName;
-    input.className = 'stage-name-input';
-    input.style.width = "100%";
+    if (!cleanName) return; // Don't save empty names
 
-    // Function to handle the actual save
-    const performSave = async () => {
-        const newName = input.value.trim();
-        if (newName && newName !== currentName) {
-            await OL.updateAndSync(() => {
-                const target = isVault ? state.master : getActiveClient()?.projectData;
-                if (target?.stages?.[index]) {
-                    target.stages[index].name = newName;
-                }
-            });
-            window.renderVisualizerV2(isVault);
-        } else {
-            input.replaceWith(span);
+    await OL.updateAndSync(() => {
+        const client = getActiveClient();
+        const target = isVault ? state.master : client?.projectData;
+        
+        if (target?.stages?.[index]) {
+            target.stages[index].name = cleanName;
+            console.log(`✅ Stage ${index} updated to: ${cleanName}`);
         }
-    };
+    });
 
-    // Events
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); performSave(); }
-        if (e.key === 'Escape') input.replaceWith(span);
-    };
-    input.onblur = performSave;
-
-    // Swap and Focus
-    span.replaceWith(input);
-    input.focus();
-    input.select();
+    // We don't necessarily need a full re-render here because 
+    // contenteditable already updated the UI text.
 };
 
 OL.removeStage = async function(index) {
