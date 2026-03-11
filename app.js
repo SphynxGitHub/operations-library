@@ -16916,7 +16916,7 @@ function renderScopingRow (item, idx, showUnits) {
         </div>
 
         <div class="col-numeric">
-            <div class="bold" style="color: white; font-size: 13px;">$${net.toLocaleString()}</div>
+            <div class="bold" style="font-size: 13px;">$${net.toLocaleString()}</div>
         </div>
 
         <div class="col-actions">
