@@ -4238,7 +4238,6 @@ ARROWS
     display: box;
     width: 220px; /* Wider to accommodate Zap names seen in your screenshot */
     min-height: 60px;
-    background: #111827; /* Darker, high-contrast gray */
     border: 1px solid rgba(56, 189, 248, 0.3);
     border-radius: 8px;
     padding: 10px;
