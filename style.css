@@ -4153,6 +4153,39 @@ ARROWS
     letter-spacing: 2px;
 }
 
+.v2-lane-divider-trigger {
+    position: absolute;
+    right: -12px; /* Centers it over the gap */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    background: #fbbf24;
+    color: #0f172a;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 2001;
+    opacity: 0; /* Hidden by default */
+    transition: all 0.2s ease;
+    pointer-events: all;
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+/* Show the trigger when hovering over the label area or the trigger itself */
+.v2-lane-label:hover .v2-lane-divider-trigger {
+    opacity: 1;
+}
+
+.v2-lane-divider-trigger:hover {
+    transform: translateY(-50%) scale(1.2);
+    background: #ffffff;
+}
+
 .stage-name-input {
     background: #1e293b !important;
     border: 1px solid var(--accent) !important;
