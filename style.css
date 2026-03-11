@@ -4640,7 +4640,6 @@ path[stroke="transparent"] {
 }
 
 .v2-toolbar.context-menu {
-    background: rgba(15, 23, 42, 0.95);
     border: 1px solid #fbbf24; /* Amber border to indicate selection */
     box-shadow: 0 0 15px rgba(251, 191, 36, 0.2);
     animation: slideDown 0.2s ease-out;
@@ -4694,7 +4693,6 @@ path[stroke="transparent"] {
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
-    background: rgba(15, 23, 42, 0.85);
     border-radius: 8px;
     border: 1px solid rgba(56, 189, 248, 0.2);
     backdrop-filter: blur(8px);
