@@ -9,6 +9,7 @@
     --panel-soft: #111827;
     --panel-border: #1f2937;
     --line: rgba(255, 255, 255, 0.1);
+    --dot-color: rgba(255, 255, 255, 0.1);
     
     /* Branding Colors */
     --accent: #38bdf8; 
@@ -34,6 +35,7 @@ body.light-mode {
     --panel-soft: #f8fafc;
     --panel-border: #cbd5e1;
     --line: rgba(0, 0, 0, 0.1);
+    --dot-color: rgba(0, 0, 0, 0.1);
     
     /* Sharpening Branding for Light BG */
     --accent: #0284c7;        /* Deeper blue for readability */
@@ -2602,7 +2604,7 @@ body.fs-mode-active {
         background: transparent !important;
         resize: none !important;
         overflow: visible !important;
-        color: black !important;
+        color: var(--text-main) !important;
         font-size: 10pt !important;
     }
 
@@ -4028,7 +4030,7 @@ ARROWS
     background-color: var(--bg);
     background-image: 
         /*The Dotted Grid (Drawn every 40px) */
-        radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+        radial-gradient(var(--dot-color) 1px, transparent 1px);
     
     /* 📏 Size: 1st val is Stage Width, 2nd is Dot Spacing */
     background-size: 300px 100%, 40px 40px;
@@ -4137,8 +4139,8 @@ ARROWS
     min-width: 300px; /* Base width for one card */
     width: auto; /* 🚀 Grows based on content */
     padding: 40px;
-    border-right: 2px dashed rgba(255, 255, 255, 0.05);
-    background: rgba(255, 255, 255, 0.01);
+    border-right: 2px dashed var(--line);
+    background: transparent;
     transition: width 0.2s ease;
 }
 
@@ -4966,7 +4968,7 @@ path[stroke="transparent"] {
 
 /* Ensure the search bar itself looks integrated */
 #canvas-filter-input::placeholder {
-    color: rgba(255,255,255,0.3);
+    color: var(--text-muted);
     font-style: italic;
 }
 
