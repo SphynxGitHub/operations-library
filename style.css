@@ -2754,12 +2754,12 @@ body.is-visualizer #mainContent {
     flex: 1;
     grid-column: 2;
     position: relative;
-    width: 100%;
     height: 100%;
 }
 
-.v2-workbench-shell, .pane-canvas-wrap, body.view-workbench #mainContent {
+.v2-workbench-shell, .pane-canvas-wrap, body.view-workbench {
     overflow:hidden;
+    width: 100%;
 }
 
 /*==================================================================
