@@ -2388,12 +2388,12 @@ body.fs-mode-active {
     }
 
     textarea, .price-input-tiny {
-        color:  var(--text-main); !important; /* Ensure high contrast for printing */
+        color:  var(--text-main) !important; /* Ensure high contrast for printing */
     }
 
     .tiny-select {
         border: none !important;
-        color:  var(--text-main); !important; /* Ensure high contrast for printing */
+        color:  var(--text-main) !important; /* Ensure high contrast for printing */
         font-weight: bold;
     }
 
@@ -2488,7 +2488,7 @@ body.fs-mode-active {
         line-height: 1.4 !important;
         white-space: pre-wrap !important; /* This preserves your line breaks */
         background: transparent !important;
-        color:  var(--text-main); !important; /* Ensure high contrast for printing */
+        color:  var(--text-main) !important; /* Ensure high contrast for printing */
         -webkit-print-color-adjust: exact;
     }
 
@@ -2532,7 +2532,7 @@ body.fs-mode-active {
         height: auto !important;
         border: none !important;
         background: transparent !important;
-        color:  var(--text-main); !important;
+        color:  var(--text-main) !important;
         font-family: inherit;
         font-size: 11px;
         line-height: 1.4;
