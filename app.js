@@ -9201,8 +9201,9 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                     <div class="v2-stage-layer" id="v2-stage-layer" style="position: absolute; top: 0; left: 0; display: flex; height: 10000px; pointer-events: none;">
                         ${stages.map((s, i) => `
                             <div class="v2-lane-section" 
+                                id="bg-lane-${s.id}"
                                 data-lane-id="${s.id || i}" 
-                                style="width: ${s.width || 300}px; flex-shrink: 0; border-right: 1px dashed rgba(56, 189, 248, 0.4); height: 100%;">
+                                style="min-width: ${s.width}px; width: ${sWidth}|| 300}px; flex-shrink: 0; border-right: 1px dashed rgba(56, 189, 248, 0.4); height: 100%;">
                             </div>
                         `).join('')}
                     </div>
@@ -9377,6 +9378,52 @@ OL.recalculateLaneWidths = async function() {
     if (needsUpdate) {
         await OL.persist();
         renderVisualizerV2(isVault);
+    }
+};
+
+OL.syncLaneWidthsToContent = async function() {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : client?.projectData;
+    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+    
+    if (!sourceData?.stages || !allResources) return;
+
+    let needsPersist = false;
+    const padding = 60; // Space after the last card
+    const cardWidth = 220;
+
+    sourceData.stages.forEach((stage, i) => {
+        // 1. Find all nodes assigned to this stage
+        const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
+        
+        if (nodesInLane.length > 0) {
+            // 2. Find the card furthest to the right relative to the lane start
+            // We calculate its position relative to the lane's X origin
+            const laneStartX = sourceData.stages.slice(0, i).reduce((sum, s) => sum + (s.width || 300), 0);
+            
+            const rightMostEdge = Math.max(...nodesInLane.map(n => n.coords.x + cardWidth));
+            const requiredWidth = (rightMostEdge - laneStartX) + padding;
+
+            // 3. Update if the content exceeds the current width
+            const currentWidth = stage.width || 300;
+            if (requiredWidth > currentWidth) {
+                stage.width = Math.round(requiredWidth);
+                needsPersist = true;
+            } 
+            // Optional: shrink back to 300 if lane is mostly empty
+            else if (requiredWidth < 300 && currentWidth > 300) {
+                stage.width = 300;
+                needsPersist = true;
+            }
+        }
+    });
+
+    if (needsPersist) {
+        console.log("📏 Auto-expanded lanes to fit content");
+        await OL.persist();
+        // Re-render to update the header alignment
+        window.renderVisualizerV2(isVault);
     }
 };
 
@@ -9962,6 +10009,7 @@ OL.initWBMotion = function(e, id) {
         state.v2.isDraggingNode = false;
         
         // Final UI Refresh
+        await OL.syncLaneWidthsToContent();
         renderVisualizerV2(window.location.hash.includes('vault'));
     };
 
@@ -11763,6 +11811,7 @@ OL.autoAlignNodes = async function() {
     // 5. Cleanup
     setTimeout(() => {
         cardEls.forEach(el => el.style.transition = "");
+        OL.syncLaneWidthsToContent();
         OL.drawV2Connections();
     }, 600);
 };
