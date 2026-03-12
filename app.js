@@ -11748,47 +11748,41 @@ OL.autoAlignNodes = async function() {
     const sourceData = isVault ? state.master : getActiveClient()?.projectData;
     const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
     
-    if (!sourceData?.stages) return console.error("No stage data found.");
+    if (!sourceData?.stages) return;
 
-    console.log("🪄 STARTING TIDY...");
+    console.log("🪄 EXECUTING CLASS-GRABBER TIDY...");
     let accumulatedX = 0;
-    const report = [];
 
     sourceData.stages.forEach((stage, idx) => {
-        // 1. Find the cards assigned to this stage
         const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        
-        // 2. Default width
         let currentLaneWidth = 300; 
 
         if (laneNodes.length > 0) {
-            // Sort by Y to keep vertical order
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
             let nextY = 120;
             laneNodes.forEach(res => {
-                // Determine if we snap to center or keep expansion
-                const centerX = accumulatedX + (300 / 2) - 110; // 110 is half card width
-                const isExpanded = Math.abs(res.coords.x - centerX) > 100;
-                
-                const targetX = isExpanded ? res.coords.x : centerX;
+                const centerX = accumulatedX + (300 / 2) - 110;
+                // If the card is already pushed far right, keep its X
+                const isExpanded = Math.abs((res.coords.x || 0) - centerX) > 100;
+                const targetX = isExpanded ? (res.coords.x || centerX) : centerX;
                 const targetY = nextY;
 
-                // 🚀 DIRECT DOM MOVE
-                const el = document.querySelector(`[data-id="${res.id}"], #v2-node-${res.id}`);
+                // 🚀 THE FIX: Try multiple ways to find the element
+                const el = document.querySelector(`[data-id="${res.id}"]`) || 
+                           document.getElementById(`v2-node-${res.id}`) ||
+                           Array.from(document.querySelectorAll('.v2-node-card')).find(c => c.innerText.includes(res.name.substring(0,10)));
+
                 if (el) {
-                    el.style.transition = "all 0.5s ease";
+                    el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
                     el.style.left = `${targetX}px`;
                     el.style.top = `${targetY}px`;
                     
-                    // Update the data object
                     res.coords.x = targetX;
                     res.coords.y = targetY;
                 }
 
-                nextY += 130; // Vertical spacing
-                
-                // Track if this lane needs to be wider
+                nextY += 130;
                 const rightEdge = targetX + 240;
                 if ((rightEdge - accumulatedX) + 60 > currentLaneWidth) {
                     currentLaneWidth = (rightEdge - accumulatedX) + 60;
@@ -11796,19 +11790,19 @@ OL.autoAlignNodes = async function() {
             });
         }
 
-        // 🚀 UPDATE BACKGROUND & HEADER WIDTHS
         stage.width = Math.round(currentLaneWidth);
-        const bg = document.querySelectorAll('#v2-stage-layer > div')[idx];
-        const hd = document.querySelectorAll('#v2-sticky-stage-headers .v2-lane-label')[idx];
-        if (bg) bg.style.width = `${stage.width}px`;
-        if (hd) hd.style.width = `${stage.width}px`;
 
-        report.push({ Lane: stage.name, Width: stage.width, Nodes: laneNodes.length });
+        // 🚀 UPDATE BACKGROUNDS using more robust selectors
+        const bgLanes = document.querySelectorAll('.v2-lane-section');
+        const hdLanes = document.querySelectorAll('.v2-lane-label');
+        
+        if (bgLanes[idx]) bgLanes[idx].style.width = `${stage.width}px`;
+        if (hdLanes[idx]) hdLanes[idx].style.width = `${stage.width}px`;
+
         accumulatedX += stage.width;
     });
 
-    console.table(report);
-    OL.persist(); // Save to DB
+    OL.persist();
     setTimeout(() => { if(window.OL.drawV2Connections) OL.drawV2Connections(); }, 600);
 };
 
