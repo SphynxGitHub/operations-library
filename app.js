@@ -9847,38 +9847,25 @@ OL.handleTrayDrag = function(e, resId) {
 // 🖱️ Dragging on Canvas (MouseDown)
 OL.startNodeDrag = function(e, nodeId) {
     if (e.target.classList.contains('v2-port')) return;
-    if (e.target.closest('.v2-step-item')) return;
-
+    
     const idStr = String(nodeId);
-    const isVault = window.location.hash.includes('vault');
-    
-    // 🚀 NEW: Check if the element is in the Sidebar/Tray
+    console.log(`%c 🛫 DRAG START: ${idStr} `, 'background: #222; color: #bada55; font-weight: bold;');
+
+    // Identify Source
     const isFromTray = !!e.target.closest('.v2-workbench-tray') || !!e.target.closest('.v2-sidebar');
+    const isFromShelf = !!e.target.closest('#global-shelf');
+    console.log(`🔍 Source context: ${isFromTray ? 'TRAY' : isFromShelf ? 'SHELF' : 'CANVAS'}`);
 
-    if (e.shiftKey && !isFromTray) { // Only handle shift-select if NOT in the tray
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (state.v2.selectedNodes.has(idStr)) {
-            state.v2.selectedNodes.delete(idStr);
-        } else {
-            state.v2.selectedNodes.add(idStr);
-        }
-        
-        renderVisualizerV2(isVault); 
-        return; 
-    } 
-
-    // NORMAL DRAG
-    // Only clear selection if we aren't dragging from the tray
-    if (!isFromTray && !state.v2.selectedNodes.has(idStr)) {
-        state.v2.selectedNodes.clear();
-        state.v2.selectedNodes.add(idStr);
-    }
-
+    // Update Global State
     state.v2.activeDragId = idStr;
-    state.v2.isFromTray = isFromTray; // ⬅️ Ensure this is set correctly
-    
+    state.v2.isDraggingNode = true;
+    state.v2.isFromTray = isFromTray;
+
+    // Set DataTransfer for native events
+    e.dataTransfer.setData("moveId", idStr);
+    e.dataTransfer.effectAllowed = "move";
+
+    document.body.classList.add('is-dragging-node');
     OL.initWBMotion(e, idStr);
 };
 
@@ -13373,46 +13360,64 @@ document.addEventListener('dragend', (e) => {
     }
 });
 
-OL.handleCanvasDrop = async function(e, laneId) {
+OL.handleCanvasDrop = async function(e) {
     e.preventDefault();
-    const resId = state.v2.activeDragId;
-    if (!resId) return;
+    const resId = state.v2.activeDragId || e.dataTransfer.getData("moveId");
+    
+    console.log(`%c 🎨 CANVAS DROP DETECTED `, 'background: #ff8800; color: black; font-weight: bold;');
+    
+    if (!resId) {
+        console.warn("⚠️ CANVAS DROP: No ID found. Checking if this was a background click...");
+        return;
+    }
 
     const canvas = document.getElementById('v2-canvas');
     const rect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
-
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
+
+    console.log(`🎯 Drop Coordinates: X:${Math.round(x)} Y:${Math.round(y)} (Zoom: ${zoom})`);
 
     await OL.updateAndSync(() => {
         const res = OL.getResourceById(resId);
         if (res) {
-            res.isGlobal = false;   // Come off shelf
-            res.stageId = laneId;   // Assign to lane
-            res.gridLane = laneId;
+            console.log(`✅ CANVAS DROP SUCCESS: Mapping ${res.name}`);
+            res.isGlobal = false;
             res.coords = { x: Math.round(x), y: Math.round(y) };
+        } else {
+            console.error(`❌ CANVAS DROP FAILURE: Resource ${resId} disappeared from state.`);
         }
     });
-    
-    OL.recalculateLaneWidths(); // 🚀 Adjust width immediately
+
+    OL.recalculateLaneWidths();
     renderVisualizerV2(window.location.hash.includes('vault'));
 };
 
 OL.handleShelfDrop = async function(e) {
     e.preventDefault();
-    const resId = state.v2.activeDragId;
-    if (!resId) return;
+    const resId = state.v2.activeDragId || e.dataTransfer.getData("moveId");
+    
+    console.log(`%c 📥 SHELF DROP DETECTED `, 'background: #0055ff; color: white; font-weight: bold;');
+    console.log(`📦 Resource ID: ${resId}`);
+
+    if (!resId) {
+        console.error("❌ SHELF DROP FAILURE: No activeDragId found in state or dataTransfer.");
+        return;
+    }
 
     await OL.updateAndSync(() => {
         const res = OL.getResourceById(resId);
         if (res) {
-            res.isGlobal = true;    // Move to shelf
-            res.stageId = null;     // Unmap from lanes
-            res.gridLane = null;
-            delete res.coords;      // Let flexbox handle shelf position
+            console.log(`✅ SHELF DROP SUCCESS: Moving ${res.name} to Global.`);
+            res.isGlobal = true;
+            res.stageId = null;
+            delete res.coords;
+        } else {
+            console.error(`❌ SHELF DROP FAILURE: Could not find resource in library for ID: ${resId}`);
         }
     });
+    
     renderVisualizerV2(window.location.hash.includes('vault'));
 };
 
