@@ -11744,55 +11744,68 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 };
 
 OL.autoAlignNodes = async function() {
-    if (state.v2.isTidying) return; // Prevent double-clicks
-    state.v2.isTidying = true;
+    console.log("🪄 Executing Physical Force Tidy...");
+    
+    const isVault = window.location.hash.includes('vault');
+    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
 
-    try {
-        const isVault = window.location.hash.includes('vault');
-        const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-        const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    if (!sourceData?.stages) return;
+
+    let accumulatedX = 0;
+
+    sourceData.stages.forEach((stage, idx) => {
+        // 1. Get nodes for this lane
+        const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
         
-        console.log("🪄 Executing Atomic Tidy...");
+        let maxLaneWidth = 300;
+        let nextY = 120;
 
-        let accumulatedX = 0;
-        // 1. Perform ALL math on the data objects first
-        sourceData.stages.forEach((stage) => {
-            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+        if (laneNodes.length > 0) {
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
-            let nextY = 120;
-            let maxW = 300;
             laneNodes.forEach(res => {
                 const centerX = accumulatedX + (300 / 2) - 110;
-                // Preserve horizontal intent if already expanded
+                // Preserve expansion if user dragged it out
                 const isExpanded = Math.abs((res.coords.x || 0) - centerX) > 100;
-                res.coords.x = isExpanded ? (res.coords.x || centerX) : centerX;
-                res.coords.y = nextY;
-                
+                const targetX = isExpanded ? (res.coords.x || centerX) : centerX;
+                const targetY = nextY;
+
+                // 🚀 THE PHYSICAL MOVE
+                const el = document.getElementById(`v2-node-${res.id}`) || document.querySelector(`[data-id="${res.id}"]`);
+                if (el) {
+                    el.style.transition = "all 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28)"; // Bouncy
+                    el.style.left = `${targetX}px`;
+                    el.style.top = `${targetY}px`;
+                    
+                    // Update data so it sticks after refresh
+                    res.coords.x = targetX;
+                    res.coords.y = targetY;
+                }
+
                 nextY += 140;
-                maxW = Math.max(maxW, (res.coords.x - accumulatedX) + 260);
+                maxLaneWidth = Math.max(maxLaneWidth, (targetX - accumulatedX) + 260);
             });
-            stage.width = Math.round(maxW);
-            accumulatedX += stage.width;
-        });
+        }
 
-        // 2. 🚀 THE CRITICAL STEP: Manually trigger the render with the NEW local data
-        window.renderVisualizerV2(isVault);
+        // 🚀 THE PHYSICAL STRETCH (Lines & Headers)
+        const bg = document.querySelectorAll('.v2-lane-section')[idx];
+        const hd = document.querySelectorAll('.v2-lane-label')[idx];
+        if (bg) bg.style.width = `${maxLaneWidth}px`;
+        if (hd) hd.style.width = `${maxLaneWidth}px`;
 
-        // 3. Persist to DB in the background
-        OL.persist();
+        stage.width = Math.round(maxLaneWidth);
+        accumulatedX += stage.width;
+    });
 
-    } catch (err) {
-        console.error("❌ Tidy Error:", err);
-    } finally {
-        // Unlock after a short delay
-        setTimeout(() => { 
-            state.v2.isTidying = false; 
-            if(OL.drawV2Connections) OL.drawV2Connections();
-        }, 500);
-    }
+    // Save the changes so they persist on refresh
+    OL.persist();
+    
+    setTimeout(() => {
+        if (window.OL.drawV2Connections) OL.drawV2Connections();
+        console.log("✅ Physical Force Tidy Complete.");
+    }, 600);
 };
-
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
