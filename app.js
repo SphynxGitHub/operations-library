@@ -9126,6 +9126,7 @@ OL.getInferredScope = (node) => {
     return null;
 };
 
+/*
 window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const container = document.getElementById(targetId);
     if (!container) return;
@@ -9154,7 +9155,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     
     const totalWidth = stages.reduce((sum, s) => sum + (s.width || 300), 400);
     
-    /*container.innerHTML = `
+    container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
 
             <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 5000;">
@@ -9294,40 +9295,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
             </div>
         </div>
-    `;*/
-
-    container.innerHTML = `
-        <div class="v2-viewport" id="v2-viewport">
-            
-            <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 5000;">
-                <div id="global-shelf" class="global-shelf-container" 
-                    style="pointer-events: all; display: flex; flex-wrap: wrap; gap: 10px; min-height: 80px; padding: 20px; background: rgba(56, 189, 248, 0.05); border-bottom: 1px solid var(--line);"
-                    ondragover="event.preventDefault();" ondrop="OL.handleShelfDrop(event)">
-                    <span class="global-shelf-label">Global Resources</span>
-                    </div>
-            </div>
-
-            <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap" onmousedown="OL.initV2Panning(event)">
-                <div class="v2-canvas" id="v2-canvas" 
-                    style="width: ${totalWidth}px; transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); display: flex;">
-                    
-                    <div class="v2-stage-layer" style="display: flex; position: absolute; top: 0; left: 0; height: 10000px; pointer-events: none;">
-                        ${stages.map((s, i) => `
-                            <div class="v2-lane-section" 
-                                data-lane-id="${s.id || i}" 
-                                style="width: ${s.width || 300}px; flex-shrink: 0; border-right: 1px dashed rgba(56, 189, 248, 0.4); position: relative;">
-                                <div class="lane-drop-zone" style="position: absolute; inset: 0; pointer-events: all; z-index: 1;" 
-                                    ondragover="event.preventDefault();" 
-                                    ondrop="OL.handleCanvasDrop(event, '${s.id || i}')"></div>
-                            </div>
-                        `).join('')}
-                    </div>
-
-                    <div class="v2-node-layer" id="v2-nodes" style="position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 10;">
-                        </div>
-                </div>
-            </div>
-        </div>
     `;
 
     // 🌊 THE AUTO-CLOSE LISTENER (Optimized for Grid)
@@ -9376,6 +9343,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         OL.drawV2Connections();
     }, 100);
 };
+*/
 
 OL.recalculateLaneWidths = async function() {
     const isVault = window.location.hash.includes('vault');
@@ -13351,7 +13319,7 @@ document.addEventListener('dragend', (e) => {
         e.target.style.opacity = "1";
     }
 });
-
+/*
 OL.handleCanvasDrop = async function(e) {
     e.preventDefault();
     const resId = state.v2.activeDragId || e.dataTransfer.getData("moveId");
@@ -13410,6 +13378,122 @@ OL.handleShelfDrop = async function(e) {
         }
     });
     
+    renderVisualizerV2(window.location.hash.includes('vault'));
+};
+*/
+
+window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
+    const container = document.getElementById(targetId);
+    if (!container) return;
+
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : (client?.projectData || {});
+    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Fixed lane width for the working version
+    const laneWidth = 300;
+    const totalWidth = (stages.length + 1) * laneWidth;
+
+    container.innerHTML = `
+        <div class="v2-viewport" id="v2-viewport" style="background-size: ${laneWidth}px 100%, 40px 40px;">
+            
+            <div class="v2-canvas-header-area" style="position:absolute; top:0; left:0; width:100%; height:0; z-index:5000; pointer-events:none;">
+                
+                <div id="global-shelf" class="global-shelf-container"
+                    style="pointer-events:all; min-height:80px; padding:20px; background:rgba(5,8,22,0.9); border-bottom:1px solid var(--accent); display:flex; flex-wrap:wrap; gap:10px; scale:${state.v2.zoom};"
+                    ondragover="event.preventDefault();"
+                    ondrop="OL.handleShelfDrop(event)">
+                    <span class="global-shelf-label">GLOBAL RESOURCES</span>
+                </div>
+
+                <div id="v2-sticky-stage-headers" 
+                     style="display:flex; transform:translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin:top left; pointer-events:none;">
+                    ${stages.map((s, i) => `
+                        <div class="v2-lane-label" style="width:${laneWidth}px; flex-shrink:0; text-align:center; padding-top:10px; pointer-events:none;">
+                            <div class="v2-label-interactive-area" style="pointer-events:all; display:inline-flex; align-items:center; gap:8px; background:#1e293b; padding:4px 12px; border-radius:20px; border:1px solid var(--accent);">
+                                <span>${esc(s.name)}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap" 
+                 style="position:absolute; inset:0; z-index:1;"
+                 onmousedown="OL.initV2Panning(event)"
+                 ondragover="event.preventDefault();" 
+                 ondrop="OL.handleCanvasDrop(event)">
+
+                <div class="v2-canvas" id="v2-canvas" 
+                    style="width:${totalWidth}px; height:5000px; transform:translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); transform-origin:top left;">
+                    
+                    <div class="v2-stage-layer" style="display:flex; position:absolute; inset:0; pointer-events:none;">
+                        ${stages.map(() => `<div style="width:${laneWidth}px; flex-shrink:0; border-right:1px dashed rgba(56,189,248,0.2); height:100%;"></div>`).join('')}
+                    </div>
+
+                    <svg class="v2-svg-layer" id="v2-connections" style="position:absolute; inset:0; pointer-events:none; z-index:10;"></svg>
+                    <div class="v2-node-layer" id="v2-nodes" style="position:absolute; inset:0; pointer-events:none; z-index:20;"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Re-render nodes and sort them into layers
+    const allNodesHTML = renderV2Nodes(isVault);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = allNodesHTML;
+
+    const shelf = document.getElementById('global-shelf');
+    const nodesLayer = document.getElementById('v2-nodes');
+
+    Array.from(tempDiv.children).forEach(nodeEl => {
+        if (nodeEl.classList.contains('on-shelf')) shelf.appendChild(nodeEl);
+        else nodesLayer.appendChild(nodeEl);
+    });
+
+    setTimeout(() => { OL.drawV2Connections(); }, 100);
+};
+
+OL.handleCanvasDrop = async function(e) {
+    e.preventDefault();
+    const resId = state.v2.activeDragId;
+    if (!resId) return;
+
+    const canvas = document.getElementById('v2-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(resId);
+        if (res) {
+            res.isGlobal = false;
+            res.coords = { x: Math.round(x), y: Math.round(y) };
+            console.log(`📍 Card ${res.name} dropped at ${x}, ${y}`);
+        }
+    });
+
+    state.v2.activeDragId = null;
+    renderVisualizerV2(window.location.hash.includes('vault'));
+};
+
+OL.handleShelfDrop = async function(e) {
+    e.preventDefault();
+    const resId = state.v2.activeDragId;
+    if (!resId) return;
+
+    await OL.updateAndSync(() => {
+        const res = OL.getResourceById(resId);
+        if (res) {
+            res.isGlobal = true;
+            delete res.coords;
+            res.stageId = null;
+        }
+    });
+    
+    state.v2.activeDragId = null;
     renderVisualizerV2(window.location.hash.includes('vault'));
 };
 
