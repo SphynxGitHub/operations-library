@@ -9126,7 +9126,7 @@ OL.getInferredScope = (node) => {
     return null;
 };
 
-/*
+
 window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const container = document.getElementById(targetId);
     if (!container) return;
@@ -9343,7 +9343,6 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
         OL.drawV2Connections();
     }, 100);
 };
-*/
 
 OL.recalculateLaneWidths = async function() {
     const isVault = window.location.hash.includes('vault');
@@ -9919,103 +9918,6 @@ OL.initWBMotion = function(e, id) {
             ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
         }
     };
-    
-    /*const onUp = async (uE) => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        document.body.classList.remove('is-dragging-node');
-
-        if (!hasMovedSignificantAmount) {
-            state.v2.activeDragId = null;
-            return; 
-        }
-
-        const isVault = window.location.hash.includes('vault');
-        const dx = (uE.clientX - startX) / zoom;
-        const dy = (uE.clientY - startY) / zoom;
-
-        await OL.updateAndSync(async () => {
-            const client = getActiveClient();
-            const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-            if (!source) throw new Error("Sync aborted: Source data unreachable.");
-
-            for (const node of dragGroup) {
-                const movingRes = source.find(r => String(r.id) === String(node.id));
-                if (!movingRes) continue;
-
-                const elementsAtPoint = document.elementsFromPoint(uE.clientX, uE.clientY);
-                const targetCardEl = elementsAtPoint.find(el => 
-                    el.classList.contains('v2-node-card') && !state.v2.selectedNodes.has(el.id.replace('v2-node-', ''))
-                );
-
-                if (targetCardEl) {
-                    const targetId = targetCardEl.id.replace('v2-node-', '');
-                    const parentRes = source.find(r => String(r.id) === String(targetId));
-
-                    if (parentRes && parentRes.id !== movingRes.id) {
-                        // 🧬 UNIFIED MERGE: Check if moving item has steps OR is a loose step
-                        const hasSteps = movingRes.steps && movingRes.steps.length > 0;
-                        const isLooseStep = movingRes.type === 'STEP' || movingRes.type === 'SOP';
-
-                        if (hasSteps || isLooseStep) {
-                            console.log("🧬 Absorbing content into target...");
-
-                            // 1. Prepare steps to move (either the children or the node itself)
-                            const stepsToMove = hasSteps 
-                                ? JSON.parse(JSON.stringify(movingRes.steps)) 
-                                : [JSON.parse(JSON.stringify(movingRes))];
-
-                            parentRes.steps = [...(parentRes.steps || []), ...stepsToMove];
-                            
-                            // 2. Normalize mapOrder
-                            parentRes.steps.forEach((s, i) => s.mapOrder = i);
-
-                            // 3. Promote parent to RESOURCE if it was just a STEP
-                            if (parentRes.type === 'STEP' || parentRes.type === 'SOP') {
-                                parentRes.type = 'RESOURCE';
-                            }
-
-                            // 4. Remove the source card
-                            const idx = source.findIndex(r => String(r.id) === String(movingRes.id));
-                            if (idx > -1) source.splice(idx, 1);
-
-                            // 🚀 AUTO-EXPAND: Ensure the user sees the new steps immediately
-                            state.v2.expandedNodes.add(parentRes.id);
-
-                            // 5. Update naming/counters
-                            OL.refreshFamilyNaming(parentRes, source);
-                        } else {
-                            // Standard Nesting Fallback
-                            if (!parentRes.steps) parentRes.steps = [];
-                            parentRes.steps.push({
-                                id: 'link_' + Date.now(),
-                                name: movingRes.name || "Step",
-                                resourceLinkId: movingRes.id
-                            });
-                            delete movingRes.coords;
-                            movingRes.parentId = parentRes.id;
-                            
-                            // Also auto-expand for nesting
-                            state.v2.expandedNodes.add(parentRes.id);
-                        }
-                    }
-                } else {
-                    // Standard Repositioning
-                    movingRes.coords = {
-                        x: node.initialX + dx,
-                        y: node.initialY + dy
-                    };
-                }
-            }
-        });
-
-        const ghost = document.getElementById('drag-ghost');
-        if (ghost) ghost.remove();
-        state.v2.activeDragId = null;
-        OL.recalculateLaneWidths();
-        window.renderGlobalVisualizer(isVault);
-    };
-    */
 
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
@@ -13367,140 +13269,6 @@ document.addEventListener('dragend', (e) => {
         e.target.style.opacity = "1";
     }
 });
-/*
-OL.handleCanvasDrop = async function(e) {
-    e.preventDefault();
-    const resId = state.v2.activeDragId || e.dataTransfer.getData("moveId");
-    
-    console.log(`%c 🎨 CANVAS DROP DETECTED `, 'background: #ff8800; color: black; font-weight: bold;');
-    
-    if (!resId) {
-        console.warn("⚠️ CANVAS DROP: No ID found. Checking if this was a background click...");
-        return;
-    }
-
-    const canvas = document.getElementById('v2-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const zoom = state.v2.zoom || 1;
-    const x = (e.clientX - rect.left) / zoom;
-    const y = (e.clientY - rect.top) / zoom;
-
-    console.log(`🎯 Drop Coordinates: X:${Math.round(x)} Y:${Math.round(y)} (Zoom: ${zoom})`);
-
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(resId);
-        if (res) {
-            console.log(`✅ CANVAS DROP SUCCESS: Mapping ${res.name}`);
-            res.isGlobal = false;
-            res.coords = { x: Math.round(x), y: Math.round(y) };
-        } else {
-            console.error(`❌ CANVAS DROP FAILURE: Resource ${resId} disappeared from state.`);
-        }
-    });
-
-    OL.recalculateLaneWidths();
-    renderVisualizerV2(window.location.hash.includes('vault'));
-};
-
-OL.handleShelfDrop = async function(e) {
-    e.preventDefault();
-    const resId = state.v2.activeDragId || e.dataTransfer.getData("moveId");
-    
-    console.log(`%c 📥 SHELF DROP DETECTED `, 'background: #0055ff; color: white; font-weight: bold;');
-    console.log(`📦 Resource ID: ${resId}`);
-
-    if (!resId) {
-        console.error("❌ SHELF DROP FAILURE: No activeDragId found in state or dataTransfer.");
-        return;
-    }
-
-    await OL.updateAndSync(() => {
-        const res = OL.getResourceById(resId);
-        if (res) {
-            console.log(`✅ SHELF DROP SUCCESS: Moving ${res.name} to Global.`);
-            res.isGlobal = true;
-            res.stageId = null;
-            delete res.coords;
-        } else {
-            console.error(`❌ SHELF DROP FAILURE: Could not find resource in library for ID: ${resId}`);
-        }
-    });
-    
-    renderVisualizerV2(window.location.hash.includes('vault'));
-};
-*/
-
-window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
-    const container = document.getElementById(targetId);
-    if (!container) return;
-
-    const client = getActiveClient();
-    const sourceData = isVault ? state.master : (client?.projectData || {});
-    const stages = (sourceData.stages || []).sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    // Fixed lane width for the working version
-    const laneWidth = 300;
-    const totalWidth = (stages.length + 1) * laneWidth;
-
-    container.innerHTML = `
-        <div class="v2-viewport" id="v2-viewport" style="background-size: ${laneWidth}px 100%, 40px 40px;">
-            
-            <div class="v2-canvas-header-area" style="position:absolute; top:0; left:0; width:100%; height:0; z-index:5000; pointer-events:none;">
-                
-                <div id="global-shelf" class="global-shelf-container"
-                    style="pointer-events:all; min-height:80px; padding:20px; background:rgba(5,8,22,0.9); border-bottom:1px solid var(--accent); display:flex; flex-wrap:wrap; gap:10px; scale:${state.v2.zoom};"
-                    ondragover="event.preventDefault();"
-                    ondrop="OL.handleShelfDrop(event)">
-                    <span class="global-shelf-label">GLOBAL RESOURCES</span>
-                </div>
-
-                <div id="v2-sticky-stage-headers" 
-                     style="display:flex; transform:translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); transform-origin:top left; pointer-events:none;">
-                    ${stages.map((s, i) => `
-                        <div class="v2-lane-label" style="width:${laneWidth}px; flex-shrink:0; text-align:center; padding-top:10px; pointer-events:none;">
-                            <div class="v2-label-interactive-area" style="pointer-events:all; display:inline-flex; align-items:center; gap:8px; background:#1e293b; padding:4px 12px; border-radius:20px; border:1px solid var(--accent);">
-                                <span>${esc(s.name)}</span>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-
-            <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap" 
-                 style="position:absolute; inset:0; z-index:1;"
-                 onmousedown="OL.initV2Panning(event)"
-                 ondragover="event.preventDefault();" 
-                 ondrop="OL.handleCanvasDrop(event)">
-
-                <div class="v2-canvas" id="v2-canvas" 
-                    style="width:${totalWidth}px; height:5000px; transform:translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); transform-origin:top left;">
-                    
-                    <div class="v2-stage-layer" style="display:flex; position:absolute; inset:0; pointer-events:none;">
-                        ${stages.map(() => `<div style="width:${laneWidth}px; flex-shrink:0; border-right:1px dashed rgba(56,189,248,0.2); height:100%;"></div>`).join('')}
-                    </div>
-
-                    <svg class="v2-svg-layer" id="v2-connections" style="position:absolute; inset:0; pointer-events:none; z-index:10;"></svg>
-                    <div class="v2-node-layer" id="v2-nodes" style="position:absolute; inset:0; pointer-events:none; z-index:20;"></div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // Re-render nodes and sort them into layers
-    const allNodesHTML = renderV2Nodes(isVault);
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = allNodesHTML;
-
-    const shelf = document.getElementById('global-shelf');
-    const nodesLayer = document.getElementById('v2-nodes');
-
-    Array.from(tempDiv.children).forEach(nodeEl => {
-        if (nodeEl.classList.contains('on-shelf')) shelf.appendChild(nodeEl);
-        else nodesLayer.appendChild(nodeEl);
-    });
-
-    setTimeout(() => { OL.drawV2Connections(); }, 100);
-};
 
 OL.handleCanvasDrop = async function(e) {
     if (e) { e.preventDefault(); e.stopPropagation(); }
