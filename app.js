@@ -9394,29 +9394,32 @@ OL.syncLaneWidthsToContent = async function() {
     const cardWidth = 220;
 
     sourceData.stages.forEach((stage, i) => {
-        // 1. Find all nodes assigned to this stage
-        const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
+        // 🚀 THE FIX: Filter out the node currently being dragged
+        const nodesInLane = allResources.filter(r => 
+            r.stageId === stage.id && 
+            r.coords && 
+            String(r.id) !== String(state.v2.activeDragId) // Ignore the moving piece
+        );
         
+        // If no nodes are left in the lane (besides the one being dragged),
+        // default the width calculation to its minimum.
         if (nodesInLane.length > 0) {
-            // 2. Find the card furthest to the right relative to the lane start
-            // We calculate its position relative to the lane's X origin
             const laneStartX = sourceData.stages.slice(0, i).reduce((sum, s) => sum + (s.width || 300), 0);
-            
             const rightMostEdge = Math.max(...nodesInLane.map(n => n.coords.x + cardWidth));
             const requiredWidth = (rightMostEdge - laneStartX) + padding;
 
-            // 3. Update if the content exceeds the current width
             const currentWidth = stage.width || 300;
-            if (requiredWidth > currentWidth) {
+            // Only update if the static nodes actually need more space
+            if (requiredWidth > 300) {
                 stage.width = Math.round(requiredWidth);
-                needsPersist = true;
-            } 
-            // Optional: shrink back to 300 if lane is mostly empty
-            else if (requiredWidth < 300 && currentWidth > 300) {
+            } else {
                 stage.width = 300;
-                needsPersist = true;
             }
+        } else {
+            // Lane is empty or only contains the dragging node -> Snap back to default
+            stage.width = 300;
         }
+        needsPersist = true; 
     });
 
     if (needsPersist) {
@@ -9925,9 +9928,14 @@ OL.initWBMotion = function(e, id) {
                 node.el.style.left = `${node.initialX + dx}px`;
                 node.el.style.top = `${node.initialY + dy}px`;
             }
+            
+            if (!state.v2._lastWidthSync || Date.now() - state.v2._lastWidthSync > 100) {
+                OL.syncLaneWidthsToContent();
+                state.v2._lastWidthSync = Date.now();
+            }
+
+            OL.drawV2Connections();
         });
-        OL.recalculateLaneWidths();
-        OL.drawV2Connections();
 
         // 3. 🎯 DETECT HOVER TARGET
         const target = document.elementFromPoint(mE.clientX, mE.clientY);
