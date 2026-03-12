@@ -11744,83 +11744,56 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 };
 
 OL.autoAlignNodes = async function() {
-    try {
-        const isVault = window.location.hash.includes('vault');
-        const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-        const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
-        
-        if (!sourceData || !allResources) return;
+    const isVault = window.location.hash.includes('vault');
+    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    
+    if (!sourceData?.stages || !allResources) return;
 
-        console.log("🪄 Force-Moving DOM Elements...");
-
+    await OL.updateAndSync(() => {
         let accumulatedX = 0;
-        sourceData.stages.forEach((stage, stageIndex) => {
+
+        sourceData.stages.forEach((stage) => {
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
             
-            // 1. Calculate Lane Width
-            let maxRowWidth = 300;
+            // 🚀 Reset lane width to 300 base, then we'll grow it if needed
+            stage.width = 300; 
+
             if (laneNodes.length > 0) {
+                // Sort by Y to maintain the vertical list order
                 laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
-                const rows = [];
-                laneNodes.forEach(node => {
-                    let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 80);
-                    if (foundRow) foundRow.push(node);
-                    else rows.push([node]);
-                });
 
                 let nextY = 120;
-                rows.forEach(row => {
-                    row.sort((a, b) => (a.coords.x || 0) - (b.coords.x || 0));
-                    row.forEach((node, colIndex) => {
-                        const targetX = accumulatedX + 40 + (colIndex * 240);
-                        const targetY = nextY;
-                        
-                        // 🚀 THE SURGICAL MOVE: Grab the actual DOM element
-                        const el = document.getElementById(`v2-node-${node.id}`);
-                        if (el) {
-                            el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
-                            el.style.left = `${targetX}px`;
-                            el.style.top = `${targetY}px`;
-                        }
-                        
-                        // Update data in background
-                        node.coords.x = targetX;
-                        node.coords.y = targetY;
-                        
-                        const widthNeeded = (colIndex + 1) * 240 + 80;
-                        if (widthNeeded > maxRowWidth) maxRowWidth = widthNeeded;
-                    });
-                    nextY += 160;
+                const cardWidth = 220;
+                const laneCenter = accumulatedX + (300 / 2) - (cardWidth / 2);
+
+                laneNodes.forEach(res => {
+                    // 🚀 THE FIX: Magnetic Snapping
+                    // If card is within 100px of center, snap it. Otherwise, keep its "expanded" X.
+                    const isNearCenter = Math.abs(res.coords.x - laneCenter) < 100;
+                    
+                    if (isNearCenter) {
+                        res.coords.x = laneCenter;
+                    }
+
+                    res.coords.y = nextY;
+                    nextY += 120; // Standard vertical gap
                 });
+
+                // 🚀 Update Lane Width based on the right-most card
+                const rightEdge = Math.max(...laneNodes.map(n => n.coords.x + cardWidth));
+                const neededWidth = (rightEdge - accumulatedX) + 60;
+                if (neededWidth > 300) stage.width = Math.round(neededWidth);
             }
-
-            stage.width = Math.round(maxRowWidth);
-
-            // 🚀 THE SURGICAL STRETCH: Update Lane Background & Header
-            const bgLane = document.querySelectorAll('#v2-stage-layer .v2-lane-section')[stageIndex];
-            const headerLane = document.querySelectorAll('#v2-sticky-stage-headers .v2-lane-label')[stageIndex];
-            
-            if (bgLane) bgLane.style.width = `${stage.width}px`;
-            if (headerLane) headerLane.style.width = `${stage.width}px`;
 
             accumulatedX += stage.width;
         });
+    });
 
-        // Sync data to DB after the animation starts
-        OL.persist();
-
-        setTimeout(() => {
-            // Cleanup transitions so dragging feels snappy again
-            document.querySelectorAll('.v2-node-card').forEach(el => el.style.transition = "");
-            if (OL.drawV2Connections) OL.drawV2Connections();
-            console.log("✅ DOM Force-Sync Complete.");
-        }, 600);
-
-    } catch (err) {
-        console.error("❌ Surgical Tidy Error:", err);
-    }
+    // Use the force-render that worked for dragging
+    renderVisualizerV2(isVault);
+    setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 150);
 };
-
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
