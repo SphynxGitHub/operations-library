@@ -25,6 +25,9 @@
     --text: #f8fafc; /* Bridge for legacy code */
 
     --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+
+    --tray-item-bg: rgba(255, 255, 255, 0.03);
+    --tray-item-hover: rgba(255, 255, 255, 0.08);
 }
 
 /* ☀️ Light Mode Overrides */
@@ -47,6 +50,9 @@ body.light-mode {
     --text-dim: #475569;
     --text-muted: #64748b;
     --text: #0f172a;
+
+    --tray-item-bg: rgba(0, 0, 0, 0.03);
+    --tray-item-hover: rgba(0, 0, 0, 0.06);
 }
 
 /* Add this to your CSS */
@@ -4898,8 +4904,9 @@ path[stroke="transparent"] {
 }
 
 .draggable-tray-item {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--tray-item-bg);
     border: 1px solid var(--line);
+    color: var(--main-text); /* Ensure text flips too */
     border-radius: 8px;
     padding: 10px;
     margin-bottom: 8px;
@@ -4907,7 +4914,17 @@ path[stroke="transparent"] {
     align-items: center;
     gap: 10px;
     cursor: grab;
-    transition: transform 0.1s;
+    
+    /* 🚀 THE FIX: Transition colors AND transform */
+    transition: 
+        transform 0.1s ease, 
+        background-color 0.3s ease, 
+        border-color 0.3s ease;
+}
+
+.draggable-tray-item:hover {
+    background: var(--tray-item-hover);
+    transform: translateX(4px); /* Subtle nudge on hover */
 }
 
 .draggable-tray-item:active { cursor: grabbing; }
