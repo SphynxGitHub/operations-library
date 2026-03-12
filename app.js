@@ -11688,53 +11688,70 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
-    const sourceData = isVault ? state.master : client.projectData;
-    const sourceResources = isVault ? state.master.resources : client.projectData.localResources;
-    const stages = sourceData.stages || [];
+    const sourceData = isVault ? state.master : client?.projectData;
+    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
     
+    if (!sourceData || !sourceData.stages || !allResources) return;
+
+    const stages = sourceData.stages;
     const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'));
     if (cardEls.length === 0) return;
 
+    console.log("🪄 Tidying Canvas...");
+
     await OL.updateAndSync(() => {
-        // 1. Group by Stage ID or Lane Index
-        const lanes = {};
+        // 1. Map out the X-Center for every stage based on dynamic widths
+        let accumulatedX = 0;
+        const stageCenters = {};
+        
+        stages.forEach(stage => {
+            const width = stage.width || 300;
+            // Center = Current Offset + (Lane Width / 2) - (Card Width / 2)
+            stageCenters[stage.id] = accumulatedX + (width / 2) - 110; // 110 is half of 220px card
+            accumulatedX += width;
+        });
+
+        // 2. Group cards by their assigned stageId
+        const laneGroups = {};
         cardEls.forEach(el => {
             const id = el.id.replace('v2-node-', '');
-            const nodeData = sourceResources.find(n => String(n.id) === String(id));
-            if (nodeData) {
-                const laneId = nodeData.gridLane || nodeData.stageId || 0;
-                if (!lanes[laneId]) lanes[laneId] = [];
-                lanes[laneId].push({ el, data: nodeData });
+            const res = allResources.find(r => String(r.id) === id);
+            if (res && res.stageId) {
+                if (!laneGroups[res.stageId]) laneGroups[res.stageId] = [];
+                laneGroups[res.stageId].push({ el, res });
             }
         });
 
-        // 2. Iterate through Stages to find X-Centers
-        let currentXOffset = 0;
-        stages.forEach((stage) => {
-            const laneId = stage.id;
-            const currentLane = lanes[laneId] || [];
-            const stageWidth = stage.width || 300;
-            const cardWidth = 220; // Your node card width
-            
-            // 🎯 THE CENTERING MATH
-            const centerX = currentXOffset + (stageWidth / 2) - (cardWidth / 2);
+        // 3. Vertically stack and horizontally center
+        Object.keys(laneGroups).forEach(stageId => {
+            const group = laneGroups[stageId];
+            const targetX = stageCenters[stageId] || 100;
+            let nextY = 120; // Starting Y padding
 
-            let nextY = 100;
-            currentLane.sort((a, b) => a.data.coords.y - b.data.coords.y).forEach(item => {
-                item.data.coords.x = centerX;
-                item.data.coords.y = nextY;
-                
-                // Visual Sync
-                item.el.style.left = `${centerX}px`;
+            // Sort by current Y to preserve user's vertical order
+            group.sort((a, b) => (a.res.coords?.y || 0) - (b.res.coords?.y || 0));
+
+            group.forEach(item => {
+                // Update Database
+                item.res.coords = { x: targetX, y: nextY };
+
+                // Apply Smooth Transition to DOM
+                item.el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
+                item.el.style.left = `${targetX}px`;
                 item.el.style.top = `${nextY}px`;
-                
-                nextY += item.el.offsetHeight + 40; // Card height + margin
-            });
 
-            currentXOffset += stageWidth;
+                // Increment Y for next card (Height + Margin)
+                const height = item.el.offsetHeight || 80;
+                nextY += height + 40; 
+            });
         });
     });
-    OL.drawV2Connections();
+
+    // 4. Cleanup transitions and redraw lines
+    setTimeout(() => {
+        cardEls.forEach(el => el.style.transition = "");
+        OL.drawV2Connections();
+    }, 600);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
