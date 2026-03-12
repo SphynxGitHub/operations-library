@@ -10017,25 +10017,27 @@ OL.initWBMotion = function(e, id) {
     };
     */
 
-    const onUp = (uE) => {
+    const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        
+        // 🛑 STOP: Do NOT call renderVisualizerV2 or sync here.
+        // Let the handleCanvasDrop function handle the "Landing."
 
-        // 🚀 THE FIX: Wait 100ms before doing any cleanup re-renders.
-        // This allows the handleCanvasDrop function to finish the DB write first.
-        setTimeout(async () => {
-            const ghost = document.getElementById('drag-ghost');
-            if (ghost) ghost.remove();
-            
-            document.body.classList.remove('is-dragging-node');
-            
-            // If the card is still 'stuck' visually, this will refresh it from the NEW data
-            if (state.v2.activeDragId) {
-                renderVisualizerV2(window.location.hash.includes('vault'));
-            }
-        }, 100); 
+        const ghost = document.getElementById('drag-ghost');
+        if (ghost) ghost.remove();
+
+        document.body.classList.remove('is-dragging-node');
+
+        // 🚀 We only clear the CSS classes of the dragged cards 
+        // so they don't look "stuck" while the database saves.
+        dragGroup.forEach(node => {
+            if (node.el) node.el.classList.remove('is-dragging');
+        });
+        
+        console.log("⏳ Movement stopped. Waiting for Drop handler to save...");
     };
-    
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
@@ -13476,7 +13478,8 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
 };
 
 OL.handleCanvasDrop = async function(e) {
-    e.preventDefault();
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    
     const resId = state.v2.activeDragId;
     if (!resId) return;
 
@@ -13484,20 +13487,28 @@ OL.handleCanvasDrop = async function(e) {
     const rect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
-    const x = (e.clientX - rect.left) / zoom;
-    const y = (e.clientY - rect.top) / zoom;
+    // 🎯 CALCULATE
+    const x = Math.round((e.clientX - rect.left) / zoom);
+    const y = Math.round((e.clientY - rect.top) / zoom);
 
+    console.log(`🚀 LANDING: Saving ${resId} at ${x}, ${y}`);
+
+    // 🎯 SAVE
     await OL.updateAndSync(() => {
         const res = OL.getResourceById(resId);
         if (res) {
             res.isGlobal = false;
-            res.coords = { x: Math.round(x), y: Math.round(y) };
-            console.log(`📍 Card ${res.name} dropped at ${x}, ${y}`);
+            res.coords = { x, y };
+            res.stageId = null; 
         }
     });
 
+    // 🎯 CLEANUP & REPAINT (Only now is it safe!)
     state.v2.activeDragId = null;
-    renderVisualizerV2(window.location.hash.includes('vault'));
+    state.v2.isDraggingNode = false;
+    
+    // This is the ONLY place the refresh should happen after a drag
+    window.renderVisualizerV2(window.location.hash.includes('vault'));
 };
 
 OL.handleShelfDrop = async function(e) {
