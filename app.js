@@ -9998,18 +9998,28 @@ OL.initWBMotion = function(e, id) {
 
         if (!allResources || !id) return;
 
-        await OL.updateAndSync(() => {
-            const res = OL.getResourceById(id);
-            if (!res) return;
+        // 1. Calculate the Drag Delta to determine direction
+        const res = OL.getResourceById(id);
+        const startX = res.coords.x;
+        const dx = dropX - startX; // Positive = Moving Right
+        
+        // 🚀 THE FIX: Determine which "Edge" to use for lane detection
+        // If moving right, use the right edge (dropX + 220).
+        // If moving left, use the left edge (dropX).
+        // If barely moved, use the center.
+        let detectX = dropX + 110; // Default center
+        if (dx > 20) detectX = dropX + 200; // Leading right edge
+        if (dx < -20) detectX = dropX + 20; // Leading left edge
 
-            // 1. Determine target lane based on drop center
+        await OL.updateAndSync(() => {
+            // 2. Identify Lane using the Biased detectX
             let accumulatedX = 0;
             let targetStageIdx = 0;
-            const dropCenterX = dropX + 110; // Middle of the card being dropped
 
             for (let i = 0; i < stages.length; i++) {
                 const w = stages[i].width || 300;
-                if (dropCenterX >= accumulatedX && dropCenterX <= accumulatedX + w + 50) {
+                // We give it a small "gravity" buffer of 40px
+                if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
                     targetStageIdx = i;
                     break;
                 }
@@ -10018,50 +10028,46 @@ OL.initWBMotion = function(e, id) {
             
             const targetStage = stages[targetStageIdx];
             res.stageId = targetStage.id;
+            
+            const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
 
-            // 2. Find all other cards already in this specific lane and row
+            // 3. THE SHOVE (Row Logic)
             const laneSiblings = allResources.filter(r => 
                 r.stageId === res.stageId && 
                 r.id !== res.id && 
                 r.coords && 
-                Math.abs(r.coords.y - dropY) < 80 // Same vertical row
+                Math.abs(r.coords.y - dropY) < 80 
             );
 
-            // 3. THE SHOVE: Determine order within the row
-            // Add current card to the mix to sort them all together
             const rowGroup = [...laneSiblings, res];
+            // Sort based on their relative position to the lane start
             rowGroup.sort((a, b) => {
-                const ax = a.id === res.id ? dropX : a.coords.x;
-                const bx = b.id === res.id ? dropX : b.coords.x;
+                const ax = (a.id === id) ? dropX : a.coords.x;
+                const bx = (b.id === id) ? dropX : b.coords.x;
                 return ax - bx;
             });
 
-            // 4. Reposition everyone in the row based on the new order
-            let currentXInLane = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0) + 40;
-            
+            // 4. Arrange cards and Push Width
+            let currentXInLane = laneStartX + 40;
             rowGroup.forEach((node) => {
-                // If it's a sibling, we move them. If it's the dropped card, we set its final coord.
                 if (node.id === res.id) {
                     res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
                 } else {
                     node.coords.x = currentXInLane;
                 }
-                currentXInLane += 240; // Card width + gap
+                currentXInLane += 240; 
             });
 
-            // 5. GLOBAL SHIFT: Update all lane widths to accommodate the new "shoved" content
+            // 5. GLOBAL SYNC (Ensure background lines move)
             let runningTotalX = 0;
             stages.forEach(stage => {
                 const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
                 if (nodesInLane.length > 0) {
                     const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
-                    const neededWidth = (farRight - runningTotalX) + 60;
-                    stage.width = Math.max(300, Math.round(neededWidth));
+                    stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
                 } else {
                     stage.width = 300;
                 }
-                // 🚀 IMPORTANT: Any card to the RIGHT of this lane must also be shifted 
-                // if this lane grew, but our relative math in Step 4 handles that on next render.
                 runningTotalX += stage.width;
             });
         });
