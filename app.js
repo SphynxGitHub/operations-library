@@ -10021,21 +10021,46 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         
-        // 🛑 STOP: Do NOT call renderVisualizerV2 or sync here.
-        // Let the handleCanvasDrop function handle the "Landing."
+        console.log("🏁 MOUSE UP: Forcing Landing Logic...");
 
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
 
         document.body.classList.remove('is-dragging-node');
 
-        // 🚀 We only clear the CSS classes of the dragged cards 
-        // so they don't look "stuck" while the database saves.
-        dragGroup.forEach(node => {
-            if (node.el) node.el.classList.remove('is-dragging');
+        // 🚀 THE FORCE LANDING:
+        // We calculate the position and save right here instead of waiting for 'ondrop'
+        const canvas = document.getElementById('v2-canvas');
+        const rect = canvas.getBoundingClientRect();
+        const zoom = state.v2.zoom || 1;
+
+        const finalX = Math.round((uE.clientX - rect.left) / zoom);
+        const finalY = Math.round((uE.clientY - rect.top) / zoom);
+
+        // 🎯 CHECK IF OVER SHELF
+        const isOverShelf = !!uE.target.closest('#global-shelf');
+
+        await OL.updateAndSync(() => {
+            const res = OL.getResourceById(id);
+            if (res) {
+                if (isOverShelf) {
+                    console.log(`📦 Dropped on Shelf: ${res.name}`);
+                    res.isGlobal = true;
+                    res.stageId = null;
+                    delete res.coords;
+                } else {
+                    console.log(`📍 Dropped on Canvas: ${res.name} at ${finalX}, ${finalY}`);
+                    res.isGlobal = false;
+                    res.coords = { x: finalX, y: finalY };
+                }
+            }
         });
+
+        state.v2.activeDragId = null;
+        state.v2.isDraggingNode = false;
         
-        console.log("⏳ Movement stopped. Waiting for Drop handler to save...");
+        // Final UI Refresh
+        renderVisualizerV2(window.location.hash.includes('vault'));
     };
 
     window.addEventListener('mousemove', onMove);
