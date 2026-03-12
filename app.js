@@ -9194,7 +9194,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 onmousedown="OL.initV2Panning(event)"
                 ondragover="event.preventDefault();" 
                 ondrop="OL.handleCanvasDrop(event)">
-
+                    
                 <div class="v2-canvas" id="v2-canvas" 
                     style="width: ${totalWidth}px; transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); display: flex;">
                     
@@ -9228,7 +9228,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button id="filter-menu-btn" class="btn soft" onclick="OL.toggleFilterMenu(event)">
                             🔍 Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
                         </button>
-                        <button class="btn soft" onclick="event.stopPropagation(); OL.autoAlignNodes()" title="Tidy">🪄</button>
+                        <button class="btn soft" onclick="event.stopImmediatePropagation(); OL.autoAlignNodes()" title="Tidy">🪄</button>
                         <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
@@ -11744,66 +11744,53 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 };
 
 OL.autoAlignNodes = async function() {
-    const isVault = window.location.hash.includes('vault');
-    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
-    
-    if (!sourceData?.stages) return;
+    if (state.v2.isTidying) return; // Prevent double-clicks
+    state.v2.isTidying = true;
 
-    console.log("🪄 EXECUTING CLASS-GRABBER TIDY...");
-    let accumulatedX = 0;
+    try {
+        const isVault = window.location.hash.includes('vault');
+        const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+        const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+        
+        console.log("🪄 Executing Atomic Tidy...");
 
-    sourceData.stages.forEach((stage, idx) => {
-        const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        let currentLaneWidth = 300; 
-
-        if (laneNodes.length > 0) {
+        let accumulatedX = 0;
+        // 1. Perform ALL math on the data objects first
+        sourceData.stages.forEach((stage) => {
+            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
             let nextY = 120;
+            let maxW = 300;
             laneNodes.forEach(res => {
                 const centerX = accumulatedX + (300 / 2) - 110;
-                // If the card is already pushed far right, keep its X
+                // Preserve horizontal intent if already expanded
                 const isExpanded = Math.abs((res.coords.x || 0) - centerX) > 100;
-                const targetX = isExpanded ? (res.coords.x || centerX) : centerX;
-                const targetY = nextY;
-
-                // 🚀 THE FIX: Try multiple ways to find the element
-                const el = document.querySelector(`[data-id="${res.id}"]`) || 
-                           document.getElementById(`v2-node-${res.id}`) ||
-                           Array.from(document.querySelectorAll('.v2-node-card')).find(c => c.innerText.includes(res.name.substring(0,10)));
-
-                if (el) {
-                    el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
-                    el.style.left = `${targetX}px`;
-                    el.style.top = `${targetY}px`;
-                    
-                    res.coords.x = targetX;
-                    res.coords.y = targetY;
-                }
-
-                nextY += 130;
-                const rightEdge = targetX + 240;
-                if ((rightEdge - accumulatedX) + 60 > currentLaneWidth) {
-                    currentLaneWidth = (rightEdge - accumulatedX) + 60;
-                }
+                res.coords.x = isExpanded ? (res.coords.x || centerX) : centerX;
+                res.coords.y = nextY;
+                
+                nextY += 140;
+                maxW = Math.max(maxW, (res.coords.x - accumulatedX) + 260);
             });
-        }
+            stage.width = Math.round(maxW);
+            accumulatedX += stage.width;
+        });
 
-        stage.width = Math.round(currentLaneWidth);
+        // 2. 🚀 THE CRITICAL STEP: Manually trigger the render with the NEW local data
+        window.renderVisualizerV2(isVault);
 
-        // 🚀 UPDATE BACKGROUNDS using more robust selectors
-        const bgLanes = document.querySelectorAll('.v2-lane-section');
-        const hdLanes = document.querySelectorAll('.v2-lane-label');
-        
-        if (bgLanes[idx]) bgLanes[idx].style.width = `${stage.width}px`;
-        if (hdLanes[idx]) hdLanes[idx].style.width = `${stage.width}px`;
+        // 3. Persist to DB in the background
+        OL.persist();
 
-        accumulatedX += stage.width;
-    });
-
-    OL.persist();
-    setTimeout(() => { if(window.OL.drawV2Connections) OL.drawV2Connections(); }, 600);
+    } catch (err) {
+        console.error("❌ Tidy Error:", err);
+    } finally {
+        // Unlock after a short delay
+        setTimeout(() => { 
+            state.v2.isTidying = false; 
+            if(OL.drawV2Connections) OL.drawV2Connections();
+        }, 500);
+    }
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
