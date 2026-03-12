@@ -11745,45 +11745,71 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
-    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : client?.projectData;
+    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
     
     if (!sourceData?.stages || !allResources) return;
 
-    // 🚀 RESET: Assume all lanes are 300px initially
-    sourceData.stages.forEach(s => s.width = 300);
+    console.log("🪄 Running Elastic Tidy...");
 
-    // 🚀 PASS 1: Assign nodes to stages based on their current drop X
-    let tempX = 0;
-    allResources.forEach(res => {
-        if (res.coords && !res.isGlobal) {
-            const currentX = res.coords.x + 110; 
-            let runningX = 0;
-            for (let stage of sourceData.stages) {
-                const w = stage.width || 300;
-                if (currentX >= runningX && currentX <= runningX + w + 100) { // added buffer
-                    res.stageId = stage.id;
-                    break;
+    await OL.updateAndSync(() => {
+        // --- STEP 1: RESET & MAPPING ---
+        // Reset all to min-width so they can shrink
+        sourceData.stages.forEach(s => s.width = 300);
+
+        // Map nodes to stages based on their current X position
+        allResources.forEach(res => {
+            if (res.coords && !res.isGlobal) {
+                const currentX = res.coords.x + 110; 
+                let runningX = 0;
+                for (let stage of sourceData.stages) {
+                    const w = stage.width || 300;
+                    if (currentX >= runningX && currentX <= runningX + w + 150) {
+                        res.stageId = stage.id;
+                        break;
+                    }
+                    runningX += w;
                 }
-                runningX += w;
             }
-        }
+        });
+
+        // --- STEP 2: STACKING & WIDTH CALC ---
+        let currentXOffset = 0;
+        sourceData.stages.forEach((stage) => {
+            // Find nodes assigned to THIS specific stage
+            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+            
+            // Sort them by their current Y so the user's vertical order is preserved
+            laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
+
+            let nextY = 120; // Starting top padding
+            const cardWidth = 220;
+
+            laneNodes.forEach(res => {
+                // Center the card in the lane (based on current stage width)
+                // Note: We use 300 initially, but if cards are wider, we'll update later
+                res.coords.x = currentXOffset + (Math.max(300, stage.width) / 2) - (cardWidth / 2);
+                res.coords.y = nextY;
+
+                // Push next card down (Card height ~80px + 40px margin)
+                nextY += 120; 
+            });
+
+            // Adjust lane width if any connections or specific cards are forcing it wide
+            // (Standard Tidy usually narrows everything back to 300px unless cards are huge)
+            const rightEdge = laneNodes.length > 0 ? Math.max(...laneNodes.map(n => n.coords.x + cardWidth)) : 0;
+            const neededWidth = (rightEdge - currentXOffset) + 60;
+            stage.width = Math.max(300, Math.round(neededWidth));
+
+            currentXOffset += stage.width;
+        });
     });
 
-    // 🚀 PASS 2: Calculate how wide lanes NEED to be for their new residents
-    sourceData.stages.forEach((stage, i) => {
-        const nodes = allResources.filter(r => r.stageId === stage.id && r.coords);
-        if (nodes.length > 0) {
-            const laneStartX = sourceData.stages.slice(0, i).reduce((sum, s) => sum + (s.width || 300), 0);
-            const rightEdge = Math.max(...nodes.map(n => n.coords.x + 240));
-            const needed = (rightEdge - laneStartX) + 60;
-            if (needed > 300) stage.width = Math.round(needed);
-        }
-    });
-
-    // 🚀 PASS 3: Apply positions
-    await OL.persist();
+    // --- STEP 3: REFRESH ---
     renderVisualizerV2(isVault);
+    // Draw connections after the DOM has updated
+    setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 100);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
