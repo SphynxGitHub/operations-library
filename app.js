@@ -8780,7 +8780,7 @@ OL.handleCategorySelection = function(catName, type, params = {}) {
 //===========================INFINITE GRID=========================================
 state.v2 = {
     zoom: 1,
-    pan: { x: -200, y: 300 },
+    pan: { x: 0, y: 250 },
     activeDragId: null, // 🚀 NEW: Tracks current node moving
     isFromTray: false,   // 🚀 NEW: Distinguishes between mapping and moving
     expandedNodes: state.v2?.expandedNodes || new Set(),
