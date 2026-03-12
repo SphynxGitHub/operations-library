@@ -11797,74 +11797,73 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
-    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : client?.projectData;
+    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
     
     if (!sourceData?.stages || !allResources) return;
 
-    await OL.updateAndSync(() => {
-        let currentXOffset = 0;
+    // 🚀 1. BLOCK AUTO-REFRESH
+    // Set a flag that tells your Firebase listener: "Don't overwrite my UI right now!"
+    state.v2.isSyncingLayout = true;
 
-        sourceData.stages.forEach((stage) => {
-            const laneNodes = allResources.filter(r => 
-                r.stageId === stage.id && r.coords && !r.isGlobal
-            );
+    console.log("🪄 Running Sync-Locked Tidy...");
 
-            // Sort Top-to-Bottom, then Left-to-Right
-            laneNodes.sort((a, b) => (a.coords.y - b.coords.y) || (a.coords.x - b.coords.x));
+    // 2. Perform the Height-Aware Math
+    let currentXOffset = 0;
+    sourceData.stages.forEach((stage) => {
+        const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+        laneNodes.sort((a, b) => (a.coords.y - b.coords.y) || (a.coords.x - b.coords.x));
 
-            let nextY = 120;
-            const cardWidth = 220;
-            const slotWidth = 240; 
-            const rows = [];
+        let nextY = 120;
+        const slotWidth = 240;
+        const rows = [];
 
-            // 1. Group into collision-aware rows
-            laneNodes.forEach(node => {
-                let placed = false;
-                for (let row of rows) {
-                    const preferredCol = Math.round((node.coords.x - currentXOffset - 40) / slotWidth);
-                    const isColumnTaken = row.some(n => n._col === preferredCol);
-                    if (!isColumnTaken) {
-                        node._col = Math.max(0, preferredCol);
-                        row.push(node);
-                        placed = true;
-                        break;
-                    }
+        laneNodes.forEach(node => {
+            let placed = false;
+            for (let row of rows) {
+                const preferredCol = Math.round((node.coords.x - currentXOffset - 40) / slotWidth);
+                if (!row.some(n => n._col === preferredCol)) {
+                    node._col = Math.max(0, preferredCol);
+                    row.push(node);
+                    placed = true;
+                    break;
                 }
-                if (!placed) {
-                    node._col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / slotWidth));
-                    rows.push([node]);
-                }
-            });
-
-            // 2. Apply coordinates with DYNAMIC row height
-            rows.forEach(row => {
-                // Find the tallest card in this specific row
-                const rowHeight = row.some(n => n.isExpanded) ? 320 : 140; 
-
-                row.forEach(node => {
-                    node.coords.x = currentXOffset + 40 + (node._col * slotWidth);
-                    node.coords.y = nextY;
-                });
-
-                // 🚀 THE FIX: Push nextY down based on the row's height, not a fixed number
-                nextY += rowHeight; 
-            });
-
-            // 3. Update lane width
-            const farRight = laneNodes.length > 0 
-                ? Math.max(...laneNodes.map(n => n.coords.x + cardWidth)) 
-                : currentXOffset + 300;
-            
-            stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 60);
-            currentXOffset += stage.width;
-            
-            laneNodes.forEach(n => delete n._col);
+            }
+            if (!placed) {
+                node._col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / slotWidth));
+                rows.push([node]);
+            }
         });
+
+        rows.forEach(row => {
+            const rowHeight = row.some(n => n.isExpanded) ? 340 : 150; // Added a bit more padding
+            row.forEach(node => {
+                node.coords.x = currentXOffset + 40 + (node._col * slotWidth);
+                node.coords.y = nextY;
+            });
+            nextY += rowHeight;
+        });
+
+        const farRight = laneNodes.length > 0 ? Math.max(...laneNodes.map(n => n.coords.x + 220)) : currentXOffset + 300;
+        stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 60);
+        currentXOffset += stage.width;
+        laneNodes.forEach(n => delete n._col);
     });
 
+    // 🚀 3. FORCE SAVE & WAIT
+    // We await the persist to ensure Firebase acknowledges the new positions 
+    // BEFORE we let the UI breathe again.
+    await OL.persist();
+
+    // 4. Repaint and Release the Lock
     window.renderVisualizerV2(isVault);
-    OL.persist();
+    
+    setTimeout(() => {
+        state.v2.isSyncingLayout = false;
+        if (OL.drawV2Connections) OL.drawV2Connections();
+        console.log("✅ Tidy Locked and Loaded.");
+    }, 500);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
