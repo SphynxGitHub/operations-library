@@ -9157,11 +9157,14 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
             <div class="v2-canvas-header-area">
-                <div id="global-shelf" class="global-shelf-container" style="scale: ${state.v2.zoom};">
+                <div id="global-shelf" class="global-shelf-container" style="scale: ${state.v2.zoom};"
+                ondragover="event.preventDefault(); this.classList.add('drag-over');"
+                ondrop = "OL.handleShelfDrop(event)">
                     <span class="global-shelf-label">Global Resources</span>
                 </div>
 
-                <div id="v2-sticky-stage-headers" style="width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); display: flex;">
+                <div id="v2-sticky-stage-headers" 
+                    style="width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); display: flex;">
                     ${stages.map((s, i) => {
                         const sWidth = s.width || 300; // 🚀 Use saved width
                         return `
@@ -9187,7 +9190,10 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
             </div>
 
-            <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap" onmousedown="OL.initV2Panning(event)">
+            <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap" 
+                onmousedown="OL.initV2Panning(event)"
+                ondragover="event.preventDefault();"
+                ondrop="OL.handleCanvasDrop(event)">
                 <div class="v2-canvas" id="v2-canvas" 
                     style="width: ${totalWidth}px; transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); display: flex;">
                     

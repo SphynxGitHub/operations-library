@@ -4214,6 +4214,7 @@ ARROWS
     border-right: 2px dashed var(--line);
     background: transparent;
     transition: width 0.2s ease;
+    pointer-events: none;
 }
 
 .v2-lane-label {
@@ -4226,6 +4227,10 @@ ARROWS
     width: 320px;
     min-width: 300px;
     letter-spacing: 2px;
+}
+
+.v2-label-interactive-area {
+    pointer-events: all;
 }
 
 .v2-lane-divider-trigger {
@@ -4408,6 +4413,7 @@ ARROWS
     z-index: 2000;
     pointer-events: all;
 }
+
 .global-shelf-fixed-bg {
     position: absolute;
     top: 15px;
