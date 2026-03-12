@@ -9169,7 +9169,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 </div>
 
                 <div id="v2-sticky-stage-headers" 
-                    style="pointer-events: none; width: ${totalWidth}px; transform: scale(${state.v2.zoom}); display: flex;">
+                    style="pointer-events: none; width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); display: flex;">
                     ${stages.map((s, i) => {
                         const sWidth = s.width || 300;
                         return `
