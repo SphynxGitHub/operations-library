@@ -11751,14 +11751,14 @@ OL.autoAlignNodes = async function() {
     
     if (!sourceData?.stages || !allResources) return;
 
-    console.log("🪄 Running Elastic Tidy...");
+    console.log("🪄 Running Elastic-Aware Tidy...");
 
     await OL.updateAndSync(() => {
-        // --- STEP 1: RESET & MAPPING ---
-        // Reset all to min-width so they can shrink
+        // --- STEP 1: RESET WIDTHS ---
         sourceData.stages.forEach(s => s.width = 300);
 
-        // Map nodes to stages based on their current X position
+        // --- STEP 2: MAP TO LANES ---
+        // (Keep the existing mapping logic to find which lane the card is in)
         allResources.forEach(res => {
             if (res.coords && !res.isGlobal) {
                 const currentX = res.coords.x + 110; 
@@ -11774,31 +11774,35 @@ OL.autoAlignNodes = async function() {
             }
         });
 
-        // --- STEP 2: STACKING & WIDTH CALC ---
+        // --- STEP 3: SMART ALIGNMENT ---
         let currentXOffset = 0;
         sourceData.stages.forEach((stage) => {
-            // Find nodes assigned to THIS specific stage
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-            
-            // Sort them by their current Y so the user's vertical order is preserved
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
-            let nextY = 120; // Starting top padding
+            let nextY = 120;
             const cardWidth = 220;
+            const laneCenter = currentXOffset + (300 / 2) - (cardWidth / 2);
 
             laneNodes.forEach(res => {
-                // Center the card in the lane (based on current stage width)
-                // Note: We use 300 initially, but if cards are wider, we'll update later
-                res.coords.x = currentXOffset + (Math.max(300, stage.width) / 2) - (cardWidth / 2);
+                // 🚀 THE SMART FIX: 
+                // If the card is within 50px of the center, snap it.
+                // If it's further out (expanded), let it stay at its current X.
+                const isNearCenter = Math.abs(res.coords.x - laneCenter) < 50;
+                
+                if (isNearCenter) {
+                    res.coords.x = laneCenter;
+                }
+                
                 res.coords.y = nextY;
-
-                // Push next card down (Card height ~80px + 40px margin)
                 nextY += 120; 
             });
 
-            // Adjust lane width if any connections or specific cards are forcing it wide
-            // (Standard Tidy usually narrows everything back to 300px unless cards are huge)
-            const rightEdge = laneNodes.length > 0 ? Math.max(...laneNodes.map(n => n.coords.x + cardWidth)) : 0;
+            // 🚀 UPDATE WIDTH BASED ON ACTUAL CARD POSITIONS
+            const rightEdge = laneNodes.length > 0 
+                ? Math.max(...laneNodes.map(n => n.coords.x + cardWidth)) 
+                : 0;
+            
             const neededWidth = (rightEdge - currentXOffset) + 60;
             stage.width = Math.max(300, Math.round(neededWidth));
 
@@ -11806,9 +11810,7 @@ OL.autoAlignNodes = async function() {
         });
     });
 
-    // --- STEP 3: REFRESH ---
     renderVisualizerV2(isVault);
-    // Draw connections after the DOM has updated
     setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 100);
 };
 
