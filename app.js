@@ -11746,68 +11746,78 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 OL.autoAlignNodes = async function() {
     try {
         const isVault = window.location.hash.includes('vault');
-        const client = getActiveClient();
-        const sourceData = isVault ? state.master : client?.projectData;
-        const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+        const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+        const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
         
         if (!sourceData || !allResources) return;
 
-        console.log("🪄 1. Applying Layout to Local State...");
+        console.log("🪄 Force-Moving DOM Elements...");
 
-        // --- STEP 1: UPDATE LOCAL STATE IMMEDIATELY (Synchronous) ---
         let accumulatedX = 0;
-        sourceData.stages.forEach((stage) => {
+        sourceData.stages.forEach((stage, stageIndex) => {
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
             
-            if (laneNodes.length === 0) {
-                stage.width = 300;
-                accumulatedX += 300;
-                return;
+            // 1. Calculate Lane Width
+            let maxRowWidth = 300;
+            if (laneNodes.length > 0) {
+                laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
+                const rows = [];
+                laneNodes.forEach(node => {
+                    let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 80);
+                    if (foundRow) foundRow.push(node);
+                    else rows.push([node]);
+                });
+
+                let nextY = 120;
+                rows.forEach(row => {
+                    row.sort((a, b) => (a.coords.x || 0) - (b.coords.x || 0));
+                    row.forEach((node, colIndex) => {
+                        const targetX = accumulatedX + 40 + (colIndex * 240);
+                        const targetY = nextY;
+                        
+                        // 🚀 THE SURGICAL MOVE: Grab the actual DOM element
+                        const el = document.getElementById(`v2-node-${node.id}`);
+                        if (el) {
+                            el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
+                            el.style.left = `${targetX}px`;
+                            el.style.top = `${targetY}px`;
+                        }
+                        
+                        // Update data in background
+                        node.coords.x = targetX;
+                        node.coords.y = targetY;
+                        
+                        const widthNeeded = (colIndex + 1) * 240 + 80;
+                        if (widthNeeded > maxRowWidth) maxRowWidth = widthNeeded;
+                    });
+                    nextY += 160;
+                });
             }
 
-            laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
-            const rows = [];
-            laneNodes.forEach(node => {
-                let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 80);
-                if (foundRow) foundRow.push(node);
-                else rows.push([node]);
-            });
+            stage.width = Math.round(maxRowWidth);
 
-            let nextY = 120;
-            let maxLaneWidthNeeded = 300;
-            const cardWidth = 240; 
+            // 🚀 THE SURGICAL STRETCH: Update Lane Background & Header
+            const bgLane = document.querySelectorAll('#v2-stage-layer .v2-lane-section')[stageIndex];
+            const headerLane = document.querySelectorAll('#v2-sticky-stage-headers .v2-lane-label')[stageIndex];
+            
+            if (bgLane) bgLane.style.width = `${stage.width}px`;
+            if (headerLane) headerLane.style.width = `${stage.width}px`;
 
-            rows.forEach(row => {
-                row.sort((a, b) => (a.coords.x || 0) - (b.coords.x || 0));
-                row.forEach((node, colIndex) => {
-                    // 🎯 UPDATE LOCAL OBJECT DIRECTLY
-                    node.coords.x = accumulatedX + 40 + (colIndex * cardWidth);
-                    node.coords.y = nextY;
-                    const rowWidth = (colIndex + 1) * cardWidth + 80;
-                    if (rowWidth > maxLaneWidthNeeded) maxLaneWidthNeeded = rowWidth;
-                });
-                nextY += 160;
-            });
-
-            stage.width = Math.round(maxLaneWidthNeeded);
             accumulatedX += stage.width;
         });
 
-        // --- STEP 2: RE-RENDER NOW (Don't wait for Firebase) ---
-        console.log("🪄 2. Rendering Local State...");
-        window.renderVisualizerV2(isVault);
+        // Sync data to DB after the animation starts
+        OL.persist();
 
-        // --- STEP 3: PERSIST IN BACKGROUND ---
-        console.log("🪄 3. Syncing with Firebase in background...");
-        OL.persist(); 
-
-        setTimeout(() => { 
-            if (OL.drawV2Connections) OL.drawV2Connections(); 
-            console.log("✅ Tidy Process Finished.");
-        }, 100);
+        setTimeout(() => {
+            // Cleanup transitions so dragging feels snappy again
+            document.querySelectorAll('.v2-node-card').forEach(el => el.style.transition = "");
+            if (OL.drawV2Connections) OL.drawV2Connections();
+            console.log("✅ DOM Force-Sync Complete.");
+        }, 600);
 
     } catch (err) {
-        console.error("❌ Tidy Logic Error:", err);
+        console.error("❌ Surgical Tidy Error:", err);
     }
 };
 
