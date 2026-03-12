@@ -11796,67 +11796,72 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 };
 
 OL.autoAlignNodes = async function() {
-    console.log("🪄 Executing Physical Force Tidy...");
-    
     const isVault = window.location.hash.includes('vault');
     const sourceData = isVault ? state.master : getActiveClient()?.projectData;
     const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    
+    if (!sourceData?.stages || !allResources) return;
 
-    if (!sourceData?.stages) return;
+    console.log("🪄 Running Respectful Tidy...");
 
-    let accumulatedX = 0;
+    await OL.updateAndSync(() => {
+        let currentXOffset = 0;
 
-    sourceData.stages.forEach((stage, idx) => {
-        // 1. Get nodes for this lane
-        const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        
-        let maxLaneWidth = 300;
-        let nextY = 120;
+        sourceData.stages.forEach((stage) => {
+            // 1. Get nodes belonging to this stage
+            const laneNodes = allResources.filter(r => 
+                r.stageId === stage.id && 
+                r.coords && 
+                !r.isGlobal
+            );
 
-        if (laneNodes.length > 0) {
+            // 2. Sort them by Y so the vertical order doesn't jump
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
-            laneNodes.forEach(res => {
-                const centerX = accumulatedX + (300 / 2) - 110;
-                // Preserve expansion if user dragged it out
-                const isExpanded = Math.abs((res.coords.x || 0) - centerX) > 100;
-                const targetX = isExpanded ? (res.coords.x || centerX) : centerX;
-                const targetY = nextY;
-
-                // 🚀 THE PHYSICAL MOVE
-                const el = document.getElementById(`v2-node-${res.id}`) || document.querySelector(`[data-id="${res.id}"]`);
-                if (el) {
-                    el.style.transition = "all 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28)"; // Bouncy
-                    el.style.left = `${targetX}px`;
-                    el.style.top = `${targetY}px`;
-                    
-                    // Update data so it sticks after refresh
-                    res.coords.x = targetX;
-                    res.coords.y = targetY;
-                }
-
-                nextY += 140;
-                maxLaneWidth = Math.max(maxLaneWidth, (targetX - accumulatedX) + 260);
+            // 3. Stack them vertically while keeping their relative X
+            // If there's only one card, we center it. 
+            // If there are multiple side-by-side, we keep that horizontal spacing.
+            let nextY = 120;
+            
+            // Check if this lane has "Horizontal Trains" (side-by-side cards)
+            // We group by Y to see which cards are in the same "row"
+            const rows = [];
+            laneNodes.forEach(node => {
+                let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 50);
+                if (foundRow) foundRow.push(node);
+                else rows.push([node]);
             });
-        }
 
-        // 🚀 THE PHYSICAL STRETCH (Lines & Headers)
-        const bg = document.querySelectorAll('.v2-lane-section')[idx];
-        const hd = document.querySelectorAll('.v2-lane-label')[idx];
-        if (bg) bg.style.width = `${maxLaneWidth}px`;
-        if (hd) hd.style.width = `${maxLaneWidth}px`;
+            rows.forEach(row => {
+                // Sort the row left-to-right
+                row.sort((a, b) => a.coords.x - b.coords.x);
+                
+                // Position each card in the row
+                row.forEach((node, colIdx) => {
+                    // We align the first card of every row to a 40px padding
+                    // and keep the 240px offset for subsequent cards
+                    node.coords.x = currentXOffset + 40 + (colIdx * 240);
+                    node.coords.y = nextY;
+                });
+                
+                nextY += 140; // Move to next vertical slot
+            });
 
-        stage.width = Math.round(maxLaneWidth);
-        accumulatedX += stage.width;
+            // 4. Update the stage width one last time to be safe
+            const farRight = laneNodes.length > 0 
+                ? Math.max(...laneNodes.map(n => n.coords.x + 220)) 
+                : currentXOffset + 300;
+            
+            stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 60);
+
+            // 5. Move the 'cursor' for the next lane's math
+            currentXOffset += stage.width;
+        });
     });
 
-    // Save the changes so they persist on refresh
+    // Re-render and save
+    window.renderVisualizerV2(isVault);
     OL.persist();
-    
-    setTimeout(() => {
-        if (window.OL.drawV2Connections) OL.drawV2Connections();
-        console.log("✅ Physical Force Tidy Complete.");
-    }, 600);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
