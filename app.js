@@ -11802,64 +11802,67 @@ OL.autoAlignNodes = async function() {
     
     if (!sourceData?.stages || !allResources) return;
 
-    console.log("🪄 Running Respectful Tidy...");
-
     await OL.updateAndSync(() => {
         let currentXOffset = 0;
 
         sourceData.stages.forEach((stage) => {
-            // 1. Get nodes belonging to this stage
             const laneNodes = allResources.filter(r => 
-                r.stageId === stage.id && 
-                r.coords && 
-                !r.isGlobal
+                r.stageId === stage.id && r.coords && !r.isGlobal
             );
 
-            // 2. Sort them by Y so the vertical order doesn't jump
-            laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
+            // Sort Top-to-Bottom, then Left-to-Right
+            laneNodes.sort((a, b) => (a.coords.y - b.coords.y) || (a.coords.x - b.coords.x));
 
-            // 3. Stack them vertically while keeping their relative X
-            // If there's only one card, we center it. 
-            // If there are multiple side-by-side, we keep that horizontal spacing.
             let nextY = 120;
-            
-            // Check if this lane has "Horizontal Trains" (side-by-side cards)
-            // We group by Y to see which cards are in the same "row"
+            const cardWidth = 220;
+            const slotWidth = 240; 
             const rows = [];
+
+            // 1. Group into collision-aware rows
             laneNodes.forEach(node => {
-                let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 50);
-                if (foundRow) foundRow.push(node);
-                else rows.push([node]);
+                let placed = false;
+                for (let row of rows) {
+                    const preferredCol = Math.round((node.coords.x - currentXOffset - 40) / slotWidth);
+                    const isColumnTaken = row.some(n => n._col === preferredCol);
+                    if (!isColumnTaken) {
+                        node._col = Math.max(0, preferredCol);
+                        row.push(node);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    node._col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / slotWidth));
+                    rows.push([node]);
+                }
             });
 
+            // 2. Apply coordinates with DYNAMIC row height
             rows.forEach(row => {
-                // Sort the row left-to-right
-                row.sort((a, b) => a.coords.x - b.coords.x);
-                
-                // Position each card in the row
-                row.forEach((node, colIdx) => {
-                    // We align the first card of every row to a 40px padding
-                    // and keep the 240px offset for subsequent cards
-                    node.coords.x = currentXOffset + 40 + (colIdx * 240);
+                // Find the tallest card in this specific row
+                const rowHeight = row.some(n => n.isExpanded) ? 320 : 140; 
+
+                row.forEach(node => {
+                    node.coords.x = currentXOffset + 40 + (node._col * slotWidth);
                     node.coords.y = nextY;
                 });
-                
-                nextY += 140; // Move to next vertical slot
+
+                // 🚀 THE FIX: Push nextY down based on the row's height, not a fixed number
+                nextY += rowHeight; 
             });
 
-            // 4. Update the stage width one last time to be safe
+            // 3. Update lane width
             const farRight = laneNodes.length > 0 
-                ? Math.max(...laneNodes.map(n => n.coords.x + 220)) 
+                ? Math.max(...laneNodes.map(n => n.coords.x + cardWidth)) 
                 : currentXOffset + 300;
             
             stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 60);
-
-            // 5. Move the 'cursor' for the next lane's math
             currentXOffset += stage.width;
+            
+            laneNodes.forEach(n => delete n._col);
         });
     });
 
-    // Re-render and save
     window.renderVisualizerV2(isVault);
     OL.persist();
 };
