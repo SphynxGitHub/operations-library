@@ -11744,66 +11744,85 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 };
 
 OL.autoAlignNodes = async function() {
-    const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const sourceData = isVault ? state.master : client?.projectData;
-    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
-    
-    if (!sourceData?.stages || !allResources) return;
+    try {
+        const isVault = window.location.hash.includes('vault');
+        const client = getActiveClient();
+        const sourceData = isVault ? state.master : client?.projectData;
+        const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+        
+        if (!sourceData?.stages || !allResources) {
+            console.error("❌ Tidy Aborted: Missing source data.");
+            return;
+        }
 
-    console.log("🪄 Running Sub-Column Tidy...");
+        console.log("🪄 Executing Bulletproof Tidy...");
 
-    await OL.updateAndSync(() => {
-        let accumulatedX = 0;
+        await OL.updateAndSync(() => {
+            let accumulatedX = 0;
 
-        sourceData.stages.forEach((stage) => {
-            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-            if (laneNodes.length === 0) {
-                stage.width = 300;
-                accumulatedX += stage.width;
-                return;
-            }
+            sourceData.stages.forEach((stage) => {
+                // 1. Find valid nodes in this lane
+                const laneNodes = allResources.filter(r => 
+                    r.stageId === stage.id && 
+                    r.coords && 
+                    !r.isGlobal
+                );
 
-            // 🚀 1. Group cards into "Rows" based on their Y position (within 60px of each other)
-            laneNodes.sort((a, b) => a.coords.y - b.coords.y);
-            const rows = [];
-            laneNodes.forEach(node => {
-                let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 60);
-                if (foundRow) foundRow.push(node);
-                else rows.push([node]);
-            });
+                if (laneNodes.length === 0) {
+                    stage.width = 300;
+                    accumulatedX += 300;
+                    return;
+                }
 
-            // 🚀 2. Position cards within Rows
-            let nextY = 120;
-            let maxLaneWidthNeeded = 300;
-            const cardWidth = 240; // Card + gap
-
-            rows.forEach(row => {
-                // Sort cards within the row by their X to keep left-to-right order
-                row.sort((a, b) => a.coords.x - b.coords.x);
-                
-                row.forEach((node, colIndex) => {
-                    // X is start of lane + (column index * card width)
-                    const targetX = accumulatedX + 40 + (colIndex * cardWidth);
-                    node.coords.x = targetX;
-                    node.coords.y = nextY;
-
-                    // Track how wide this specific lane needs to be
-                    maxLaneWidthNeeded = Math.max(maxLaneWidthNeeded, (colIndex + 1) * cardWidth + 80);
+                // 2. Group into Rows (Vertical sensitivity: 80px)
+                laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
+                const rows = [];
+                laneNodes.forEach(node => {
+                    let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 80);
+                    if (foundRow) foundRow.push(node);
+                    else rows.push([node]);
                 });
-                
-                nextY += 140; // Move to next row slot
+
+                // 3. Position and Expand
+                let nextY = 120;
+                let maxLaneWidthNeeded = 300;
+                const cardWidth = 240; 
+
+                rows.forEach(row => {
+                    row.sort((a, b) => (a.coords.x || 0) - (b.coords.x || 0));
+                    
+                    row.forEach((node, colIndex) => {
+                        // Position relative to current accumulated start
+                        node.coords.x = accumulatedX + 40 + (colIndex * cardWidth);
+                        node.coords.y = nextY;
+
+                        // Calculate width needed for this specific row
+                        const rowWidth = (colIndex + 1) * cardWidth + 80;
+                        if (rowWidth > maxLaneWidthNeeded) maxLaneWidthNeeded = rowWidth;
+                    });
+                    
+                    nextY += 160; // Row spacing
+                });
+
+                // Update stage width and move the 'cursor' for the next lane
+                stage.width = Math.round(maxLaneWidthNeeded);
+                accumulatedX += stage.width;
             });
-
-            stage.width = Math.round(maxLaneWidthNeeded);
-            accumulatedX += stage.width;
         });
-    });
 
-    renderVisualizerV2(isVault);
-    setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 150);
+        // 🔥 FORCE REPAINT
+        renderVisualizerV2(isVault);
+        
+        // Ensure lines redraw
+        setTimeout(() => { 
+            if (OL.drawV2Connections) OL.drawV2Connections(); 
+            console.log("✅ Tidy Complete.");
+        }, 150);
+
+    } catch (err) {
+        console.error("❌ Tidy Logic Crashed:", err);
+    }
 };
-
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
