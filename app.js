@@ -11748,52 +11748,70 @@ OL.autoAlignNodes = async function() {
     const sourceData = isVault ? state.master : getActiveClient()?.projectData;
     const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
     
-    if (!sourceData?.stages || !allResources) return;
+    if (!sourceData?.stages) return console.error("No stage data found.");
 
-    await OL.updateAndSync(() => {
-        let accumulatedX = 0;
+    console.log("🪄 STARTING TIDY...");
+    let accumulatedX = 0;
+    const report = [];
 
-        sourceData.stages.forEach((stage) => {
-            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-            
-            // 🚀 Reset lane width to 300 base, then we'll grow it if needed
-            stage.width = 300; 
+    sourceData.stages.forEach((stage, idx) => {
+        // 1. Find the cards assigned to this stage
+        const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+        
+        // 2. Default width
+        let currentLaneWidth = 300; 
 
-            if (laneNodes.length > 0) {
-                // Sort by Y to maintain the vertical list order
-                laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
+        if (laneNodes.length > 0) {
+            // Sort by Y to keep vertical order
+            laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
-                let nextY = 120;
-                const cardWidth = 220;
-                const laneCenter = accumulatedX + (300 / 2) - (cardWidth / 2);
+            let nextY = 120;
+            laneNodes.forEach(res => {
+                // Determine if we snap to center or keep expansion
+                const centerX = accumulatedX + (300 / 2) - 110; // 110 is half card width
+                const isExpanded = Math.abs(res.coords.x - centerX) > 100;
+                
+                const targetX = isExpanded ? res.coords.x : centerX;
+                const targetY = nextY;
 
-                laneNodes.forEach(res => {
-                    // 🚀 THE FIX: Magnetic Snapping
-                    // If card is within 100px of center, snap it. Otherwise, keep its "expanded" X.
-                    const isNearCenter = Math.abs(res.coords.x - laneCenter) < 100;
+                // 🚀 DIRECT DOM MOVE
+                const el = document.querySelector(`[data-id="${res.id}"], #v2-node-${res.id}`);
+                if (el) {
+                    el.style.transition = "all 0.5s ease";
+                    el.style.left = `${targetX}px`;
+                    el.style.top = `${targetY}px`;
                     
-                    if (isNearCenter) {
-                        res.coords.x = laneCenter;
-                    }
+                    // Update the data object
+                    res.coords.x = targetX;
+                    res.coords.y = targetY;
+                }
 
-                    res.coords.y = nextY;
-                    nextY += 120; // Standard vertical gap
-                });
+                nextY += 130; // Vertical spacing
+                
+                // Track if this lane needs to be wider
+                const rightEdge = targetX + 240;
+                if ((rightEdge - accumulatedX) + 60 > currentLaneWidth) {
+                    currentLaneWidth = (rightEdge - accumulatedX) + 60;
+                }
+            });
+        }
 
-                // 🚀 Update Lane Width based on the right-most card
-                const rightEdge = Math.max(...laneNodes.map(n => n.coords.x + cardWidth));
-                const neededWidth = (rightEdge - accumulatedX) + 60;
-                if (neededWidth > 300) stage.width = Math.round(neededWidth);
-            }
+        // 🚀 UPDATE BACKGROUND & HEADER WIDTHS
+        stage.width = Math.round(currentLaneWidth);
+        const bg = document.querySelectorAll('#v2-stage-layer > div')[idx];
+        const hd = document.querySelectorAll('#v2-sticky-stage-headers .v2-lane-label')[idx];
+        if (bg) bg.style.width = `${stage.width}px`;
+        if (hd) hd.style.width = `${stage.width}px`;
 
-            accumulatedX += stage.width;
-        });
+        report.push({ Lane: stage.name, Width: stage.width, Nodes: laneNodes.length });
+        accumulatedX += stage.width;
     });
 
-    // Use the force-render that worked for dragging
-    renderVisualizerV2(isVault);
-    setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 150);
+    console.table(report);
+    OL.persist(); // Save to DB
+    setTimeout(() => { if(window.OL.drawV2Connections) OL.drawV2Connections(); }, 600);
 };
+
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
