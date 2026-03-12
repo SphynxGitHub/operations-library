@@ -4157,20 +4157,9 @@ ARROWS
 }
 
 .v2-stage-layer {
-    position: absolute;
-    top: -10000px;
-    left: -10000px;
-    width: 20000px;
-    height: 20000px;
-    /* Draws a line every 300px infinitely */
-    background-image: repeating-linear-gradient(
-        to right,
-        rgba(56, 189, 248, 0.15),
-        rgba(56, 189, 248, 0.15) 1px,
-        transparent 1px,
-        transparent 300px
-    );
     z-index: 1;
+    display: flex;
+    flex-direction: row;
 }
 
 /* 📌 THE STICKY HEADER WRAPPER */
@@ -4211,10 +4200,11 @@ ARROWS
     min-width: 300px; /* Base width for one card */
     width: auto; /* 🚀 Grows based on content */
     padding: 40px;
-    border-right: 2px dashed var(--line);
+    border-right: 2px dashed rgba(56, 189, 248, 0.5);
     background: transparent;
     transition: width 0.2s ease;
     pointer-events: none;
+    flex-shrink: 0
 }
 
 .v2-lane-label {

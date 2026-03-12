@@ -9156,33 +9156,31 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
-            <div class="v2-canvas-header-area">
-                <div id="global-shelf" class="global-shelf-container" style="scale: ${state.v2.zoom};"
-                ondragover="event.preventDefault(); this.classList.add('drag-over');"
-                ondrop = "OL.handleShelfDrop(event)">
+        
+            <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 5000;">
+            
+                <div id="global-shelf" class="global-shelf-container"
+                    style="pointer-events: all !important; scale: ${state.v2.zoom};"
+                    ondragover="event.preventDefault(); this.classList.add('drag-over');"
+                    ondragleave="this.classList.remove('drag-over');"
+                    ondrop="OL.handleShelfDrop(event)">
                     <span class="global-shelf-label">Global Resources</span>
                 </div>
 
                 <div id="v2-sticky-stage-headers" 
-                    style="width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); display: flex;">
+                    style="pointer-events: none; width: ${totalWidth}px; transform: translateX(${state.v2.pan.x}px) scale(${state.v2.zoom}); display: flex;">
                     ${stages.map((s, i) => {
-                        const sWidth = s.width || 300; // 🚀 Use saved width
+                        const sWidth = s.width || 300;
                         return `
-                        <div class="v2-lane-label" 
-                            style="width: ${sWidth}px; flex-shrink: 0; position: relative; pointer-events: none; overflow: visible; display: flex; align-items: center;">
-                            
+                        <div class="v2-lane-label" style="width: ${sWidth}px; flex-shrink: 0; position: relative; pointer-events: none; display: flex; align-items: center; justify-content: center;">
                             <div class="v2-label-interactive-area" 
-                                style="pointer-events: all; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px;">
-                                <span class="stage-name-text" contenteditable="true"
-                                    onblur="OL.editStageName(${i}, this.innerText)"
-                                    onmousedown="event.stopPropagation();"
-                                    style="cursor: text; font-size: 12px; font-weight: 600;">
+                                style="pointer-events: all !important; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 20px;">
+                                <span class="stage-name-text" contenteditable="true" onblur="OL.editStageName(${i}, this.innerText)" style="cursor: text;">
                                     ${esc(s.name)}
                                 </span>
-                                <button class="v2-lane-delete-btn" style="..." onclick="OL.removeStage(${i})">×</button>
+                                <button class="v2-lane-delete-btn" onclick="OL.removeStage(${i})">×</button>
                             </div>
-
-                            <div class="v2-lane-divider-trigger" style="..." onclick="OL.addNewStageAfter(${i})">
+                            <div class="v2-lane-divider-trigger" style="pointer-events: all !important;" onclick="OL.addNewStageAfter(${i})">
                                 <span>+</span>
                             </div>
                         </div>`;
@@ -9191,30 +9189,25 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
             </div>
 
             <div id="v2-canvas-scroll-wrap" class="v2-canvas-scroll-wrap" 
+                style="z-index: 1;"
                 onmousedown="OL.initV2Panning(event)"
-                ondragover="event.preventDefault();"
+                ondragover="event.preventDefault();" 
                 ondrop="OL.handleCanvasDrop(event)">
+
                 <div class="v2-canvas" id="v2-canvas" 
                     style="width: ${totalWidth}px; transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); display: flex;">
                     
-                    <div class="v2-stage-layer" id="v2-stage-layer" style="position: relative; display: flex;">
-                        ${stages.map((s, i) => {
-                            const sWidth = s.width || 300; // 🚀 Use saved width
-                            return `
-                                <div class="v2-lane-section" 
-                                    data-lane-id="${s.id || i}" 
-                                    style="width: ${sWidth}px; flex-shrink: 0; position: relative; border-right: 1px solid var(--line);">
-                                    <div class="v2-lane-guide"></div>
-                                    <div class="v2-add-stage-trigger" onclick="OL.addNewStageAfter(${i})">
-                                        <div class="v2-add-icon">+</div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                    <div class="v2-stage-layer" id="v2-stage-layer" style="position: absolute; top: 0; left: 0; display: flex; height: 10000px; pointer-events: none;">
+                        ${stages.map((s, i) => `
+                            <div class="v2-lane-section" 
+                                data-lane-id="${s.id || i}" 
+                                style="width: ${s.width || 300}px; flex-shrink: 0; border-right: 1px dashed rgba(56, 189, 248, 0.4); height: 100%;">
+                            </div>
+                        `).join('')}
                     </div>
 
-                    <svg class="v2-svg-layer" id="v2-connections" style="width: ${totalWidth}px"></svg>
-                    <div class="v2-node-layer" id="v2-nodes" style="width: ${totalWidth}px"></div>
+                    <svg class="v2-svg-layer" id="v2-connections" style="width: ${totalWidth}px; z-index: 10;"></svg>
+                    <div class="v2-node-layer" id="v2-nodes" style="width: ${totalWidth}px; z-index: 20;"></div>
                 </div>
             </div>
 
