@@ -9998,74 +9998,58 @@ OL.initWBMotion = function(e, id) {
 
         if (!allResources || !id) return;
 
-        const res = OL.getResourceById(id);
-        if (!res || !res.coords) return;
-
-        // 🚀 1. CALCULATE DIRECTION
-        const dx = dropX - res.coords.x; // Positive = Moving Right, Negative = Moving Left
-        const direction = dx > 0 ? 'right' : 'left';
-
         await OL.updateAndSync(() => {
-            // 🚀 2. SEARCH FOR ANCHORS IN DIRECTION OF TRAVEL
-            // If moving right, we look for cards slightly to our LEFT to "snap" onto.
-            const neighbors = allResources.filter(r => 
-                String(r.id) !== String(id) && 
-                r.coords && 
-                !r.isGlobal &&
-                Math.abs(r.coords.y - dropY) < 100 && // Same vertical row
-                (direction === 'right' ? (r.coords.x < dropX) : (r.coords.x > dropX)) &&
-                Math.abs(r.coords.x - dropX) < 400 // Magnet reach
-            );
+            const res = OL.getResourceById(id);
+            if (!res) return;
 
-            if (neighbors.length > 0) {
-                // Sort to find the neighbor closest to our drop point in that direction
-                neighbors.sort((a, b) => Math.abs(a.coords.x - dropX) - Math.abs(b.coords.x - dropX));
-                
-                const anchor = neighbors[0];
-                const targetY = anchor.coords.y;
-                
-                // If we moved right, snap to the RIGHT of the anchor.
-                // If we moved left, snap to the LEFT of the anchor.
-                let targetX = direction === 'right' ? anchor.coords.x + 240 : anchor.coords.x - 240;
-
-                // 🚀 3. PREVENT OVERLAPS (The Slot Finder)
-                let isOccupied = true;
-                let safetyValve = 0;
-                while (isOccupied && safetyValve < 10) {
-                    const obstacle = allResources.find(r => 
-                        String(r.id) !== String(id) && 
-                        r.coords && 
-                        Math.abs(r.coords.x - targetX) < 150 && 
-                        Math.abs(r.coords.y - targetY) < 50
-                    );
-
-                    if (obstacle) {
-                        // Slide further in the direction of travel
-                        targetX += (direction === 'right' ? 240 : -240);
-                        safetyValve++;
-                    } else {
-                        isOccupied = false;
-                    }
-                }
-
-                res.coords = { x: targetX, y: targetY };
-            } else {
-                // No neighbor found? Standard drop
-                res.coords = { x: dropX, y: dropY };
-            }
-
-            // 2. RE-ASSIGN LANE based on new X
+            // 1. Determine target lane based on drop center
             let accumulatedX = 0;
-            for (let s of stages) {
-                const w = s.width || 300;
-                if (res.coords.x >= accumulatedX && res.coords.x <= accumulatedX + w + 100) {
-                    res.stageId = s.id;
+            let targetStageIdx = 0;
+            const dropCenterX = dropX + 110; // Middle of the card being dropped
+
+            for (let i = 0; i < stages.length; i++) {
+                const w = stages[i].width || 300;
+                if (dropCenterX >= accumulatedX && dropCenterX <= accumulatedX + w + 50) {
+                    targetStageIdx = i;
                     break;
                 }
                 accumulatedX += w;
             }
+            
+            const targetStage = stages[targetStageIdx];
+            res.stageId = targetStage.id;
 
-            // 3. RE-CALCULATE ALL LANE WIDTHS
+            // 2. Find all other cards already in this specific lane and row
+            const laneSiblings = allResources.filter(r => 
+                r.stageId === res.stageId && 
+                r.id !== res.id && 
+                r.coords && 
+                Math.abs(r.coords.y - dropY) < 80 // Same vertical row
+            );
+
+            // 3. THE SHOVE: Determine order within the row
+            // Add current card to the mix to sort them all together
+            const rowGroup = [...laneSiblings, res];
+            rowGroup.sort((a, b) => {
+                const ax = a.id === res.id ? dropX : a.coords.x;
+                const bx = b.id === res.id ? dropX : b.coords.x;
+                return ax - bx;
+            });
+
+            // 4. Reposition everyone in the row based on the new order
+            let currentXInLane = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0) + 40;
+            
+            rowGroup.forEach((node) => {
+                // If it's a sibling, we move them. If it's the dropped card, we set its final coord.
+                if (node.id === res.id) {
+                    res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
+                } else {
+                    node.coords.x = currentXInLane;
+                }
+                currentXInLane += 240; // Card width + gap
+            });
+
+            // 5. GLOBAL SHIFT: Update all lane widths to accommodate the new "shoved" content
             let runningTotalX = 0;
             stages.forEach(stage => {
                 const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
@@ -10076,11 +10060,12 @@ OL.initWBMotion = function(e, id) {
                 } else {
                     stage.width = 300;
                 }
-                runningTotalX += (stage.width || 300);
+                // 🚀 IMPORTANT: Any card to the RIGHT of this lane must also be shifted 
+                // if this lane grew, but our relative math in Step 4 handles that on next render.
+                runningTotalX += stage.width;
             });
         });
 
-        // 4. PERSIST & REPAINT
         window.renderVisualizerV2(isVault);
         OL.persist();
     };
