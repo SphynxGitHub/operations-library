@@ -18081,4 +18081,1204 @@ OL.addRoleToMember = function (memberId, roleName) {
             const results = document.getElementById("role-search-results");
             if (results) results.innerHTML = "";
             
-            OL.openTeamMemberModal(memberId); // Refresh moda
+            OL.openTeamMemberModal(memberId); // Refresh modal to show new pill
+            renderTeamManager(); // Sync background
+        }
+    }
+};
+
+OL.removeRoleFromMember = function (memberId, roleName) {
+  const client = getActiveClient();
+  const member = client?.projectData?.teamMembers.find(
+    (m) => m.id === memberId,
+  );
+
+  if (member && member.roles) {
+    member.roles = member.roles.filter((r) => r !== roleName);
+    OL.persist();
+    OL.openTeamMemberModal(memberId);
+    renderTeamManager();
+  }
+};
+
+// 5. ASSIGN TEAM MEMBERS TO SCOPING SHEET ITEMS
+OL.toggleTeamAssignment = function (itemId, memberId) {
+  const client = getActiveClient();
+  const item = client.projectData.scopingSheets[0].lineItems.find(
+    (i) => i.id === itemId,
+  );
+
+  if (item) {
+    if (!item.teamIds) item.teamIds = [];
+    const idx = item.teamIds.indexOf(memberId);
+
+    if (idx === -1) item.teamIds.push(memberId);
+    else item.teamIds.splice(idx, 1);
+
+    if (item.teamIds.length > 0) {
+        item.teamMode = 'individual';
+    } else {
+        item.teamMode = 'everyone';
+    }
+    
+    OL.persist();
+
+    // Refresh UI components
+    OL.openTeamAssignmentModal(itemId);
+    renderScopingSheet();
+
+    // Clear search results overlay if it exists
+    const searchResults = document.getElementById("team-search-results");
+    if (searchResults) searchResults.innerHTML = "";
+  }
+};
+
+OL.filterTeamMapList = function (itemId, query) {
+  const listEl = document.getElementById("team-search-results");
+  if (!listEl) return;
+
+  const q = (query || "").toLowerCase().trim();
+  const client = getActiveClient();
+  const team = client?.projectData?.teamMembers || [];
+
+  const matches = team.filter((m) => m.name.toLowerCase().includes(q));
+  const exactMatch = team.find((m) => m.name.toLowerCase() === q);
+
+  let html = matches
+    .map(
+      (m) => `
+        <div class="search-result-item" onclick="OL.toggleTeamAssignment('${itemId}', '${m.id}')">
+            👨‍💼 ${esc(m.name)} <span class="tiny muted">(Existing Member)</span>
+        </div>
+    `,
+    )
+    .join("");
+
+  // If no exact match, provide the "Create & Map" option
+  if (!exactMatch) {
+    html += `
+            <div class="search-result-item create-action" onclick="OL.executeCreateTeamAndMap('${itemId}', '${esc(query)}')">
+                <span class="pill tiny accent" style="margin-right:8px;">+ New</span> 
+                Add "${esc(query)}" to Project Team
+            </div>
+        `;
+  }
+
+  listEl.innerHTML = html;
+};
+
+OL.executeCreateTeamAndMap = function (itemId, name) {
+  const client = getActiveClient();
+  if (!client) return;
+
+  // 🛡️ SAFETY CHECK: Initialize the array if it is missing
+  if (!client.projectData.teamMembers) {
+    client.projectData.teamMembers = [];
+  }
+
+  const newMember = {
+    id: uid(),
+    name: name.trim(),
+    role: "Contributor",
+  };
+
+  // 1. Add to Project Team
+  client.projectData.teamMembers.push(newMember);
+
+  // 2. Assign to the Line Item (This also sets mode to 'individual')
+  OL.toggleTeamAssignment(itemId, newMember.id);
+
+  OL.persist();
+  console.log(`✅ Created and assigned new member: ${name}`);
+};
+
+//======================= CREDENTIALS AND APP ACCESS MANAGEMENT SECTION =======================//
+
+// 1. RENDER CREDENTIALS SECTION ON TEAM MEMBER CARDS
+OL.renderAccessSection = function (ownerId, type) {
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Determine the correct data source (Project vs Master)
+    const dataContext = client?.projectData || state.master;
+    
+    // Ensure accessRegistry exists on whichever context we are using
+    if (!dataContext.accessRegistry) dataContext.accessRegistry = [];
+    const registry = dataContext.accessRegistry;
+
+    const connections = type === "member"
+        ? registry.filter((a) => a.memberId === ownerId)
+        : registry.filter((a) => a.appId === ownerId);
+
+    const allApps = [
+        ...(state.master.apps || []),
+        ...(client?.projectData?.localApps || []),
+    ];
+    
+    const allMembers = client?.projectData?.teamMembers || state.master.teamMembers || [];
+
+    return `
+        <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
+            <label class="modal-section-label">System Access & Credentials</label>
+            <div class="dp-manager-list" style="margin-bottom:10px;">
+                ${connections.length === 0 ? '<div class="muted tiny" style="padding:10px;">No linked credentials found.</div>' : ''}
+                ${connections.map((conn) => {
+                    const linkedObj = type === "member"
+                        ? allApps.find((a) => a.id === conn.appId)
+                        : allMembers.find((m) => m.id === conn.memberId);
+
+                    const jumpTarget = type === "member"
+                        ? `OL.openAppModal('${conn.appId}')`
+                        : `OL.openTeamMemberModal('${conn.memberId}')`;
+
+                    return `
+                        <div class="dp-manager-row" style="display: flex; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <div style="width: 140px; min-width: 140px; padding: 5px;">
+                                <strong class="is-clickable text-accent" 
+                                        style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" 
+                                        onclick="${jumpTarget}" 
+                                        title="Jump to ${esc(linkedObj?.name)}">
+                                    ${type === "member" ? "📱" : "👨‍💼"} ${esc(linkedObj?.name || "Unknown")}
+                                </strong>
+                            </div>
+
+                            <div style="flex: 1; padding: 5px;">
+                                <input type="text" 
+                                       class="modal-input tiny" 
+                                       style="font-family: monospace; color: white; font-size: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);"
+                                       placeholder="API Key / Secret / Notes..."
+                                       value="${esc(conn.secret || "")}"
+                                       onblur="OL.updateAccessValue('${conn.id}', 'secret', this.value)">
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px; padding: 5px;">
+                                <select class="tiny-select" style="width: 80px;" onchange="OL.updateAccessValue('${conn.id}', 'level', this.value)">
+                                    <option value="Viewer" ${conn.level === "Viewer" ? "selected" : ""}>Viewer</option>
+                                    <option value="Editor" ${conn.level === "Editor" ? "selected" : ""}>Editor</option>
+                                    <option value="Admin" ${conn.level === "Admin" ? "selected" : ""}>Admin</option>
+                                </select>
+                                <button class="card-delete-btn" onclick="OL.removeAccess('${conn.id}', '${ownerId}', '${type}')">×</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+
+            <div class="search-map-container" style="margin-top: 15px;">
+                <input type="text" class="modal-input" 
+                    placeholder="Click to link ${type === "member" ? "an App" : "a Member"}..." 
+                    onfocus="OL.filterAccessSearch('${ownerId}', '${type}', '')" 
+                    oninput="OL.filterAccessSearch('${ownerId}', '${type}', this.value)">
+                <div id="access-search-results" class="search-results-overlay"></div>
+            </div>
+        </div>
+    `;
+};
+
+OL.filterAccessSearch = function (ownerId, type, query) {
+    const listEl = document.getElementById("access-search-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    if (!client) return;
+
+    const registry = client.projectData.accessRegistry || [];
+    let source = [];
+
+    if (type === "member") {
+        // 🚀 THE FIX: Inside a Member Modal, only search LOCAL Project Apps
+        const linkedAppIds = registry.filter(r => r.memberId === ownerId).map(r => r.appId);
+        source = (client.projectData.localApps || [])
+                 .filter(a => !linkedAppIds.includes(a.id));
+    } else {
+        // Inside an App Modal, searching for a Member (This is already local-only)
+        const linkedMemberIds = registry.filter(r => r.appId === ownerId).map(r => r.memberId);
+        source = (client.projectData.teamMembers || [])
+                 .filter(m => !linkedMemberIds.includes(m.id));
+    }
+
+    const matches = source.filter((item) => item.name.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+        listEl.innerHTML = `<div class="search-result-item muted">No unlinked ${type === "member" ? "local apps" : "team members"} found.</div>`;
+        return;
+    }
+
+    listEl.innerHTML = matches.map(item => `
+        <div class="search-result-item" onclick="OL.linkAccess('${ownerId}', '${item.id}', '${type}')">
+            ${type === "member" ? "📱" : "👨‍💼"} ${esc(item.name)}
+        </div>
+    `).join('');
+};
+
+OL.linkAccess = function (ownerId, targetId, type) {
+  const client = getActiveClient();
+  const memberId = type === "member" ? ownerId : targetId;
+  const appId = type === "member" ? targetId : ownerId;
+
+  client.projectData.accessRegistry.push({
+    id: "acc_" + Date.now(),
+    memberId,
+    appId,
+    level: "Viewer",
+    secret: "",
+  });
+
+  OL.persist();
+  // Refresh whichever modal is currently open
+  type === "member"
+    ? OL.openTeamMemberModal(ownerId)
+    : OL.openAppModal(ownerId);
+};
+
+OL.updateAccessValue = function (accessId, field, value) {
+  const client = getActiveClient();
+  const entry = client.projectData.accessRegistry.find(
+    (a) => a.id === accessId,
+  );
+  if (entry) {
+    entry[field] = value;
+    OL.persist();
+  }
+};
+
+OL.removeAccess = function (accessId, ownerId, type) {
+  const client = getActiveClient();
+  client.projectData.accessRegistry = client.projectData.accessRegistry.filter(
+    (a) => a.id !== accessId,
+  );
+  OL.persist();
+  type === "member"
+    ? OL.openTeamMemberModal(ownerId)
+    : OL.openAppModal(ownerId);
+};
+
+// 2. RENDER CREDENTIALS SECTION ON APP CARDS
+
+function renderCredentialRow(clientId, cred, idx, perm) {
+  const app = state.master.apps.find((a) => a.id === cred.appId);
+  const isFull = perm === "full";
+
+  return `
+        <tr>
+            <td>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    ${OL.iconHTML(app || { name: "?" })} 
+                    <strong>${esc(app?.name || "Unknown App")}</strong>
+                </div>
+            </td>
+            <td><span class="pill tiny soft">${esc(cred.type)}</span></td>
+            <td>
+                <div class="reveal-box" onclick="this.classList.toggle('revealed')">
+                    <span class="hidden-val">••••••••</span>
+                    <span class="visible-val">${esc(cred.username)}</span>
+                </div>
+            </td>
+            <td>
+                <div class="reveal-box" onclick="this.classList.toggle('revealed')">
+                    <span class="hidden-val">••••••••</span>
+                    <span class="visible-val">${esc(cred.password)}</span>
+                </div>
+            </td>
+            <td>
+                <select class="perm-select" style="width:100px;"
+                        onchange="OL.updateCredentialStatus('${clientId}', ${idx}, this.value)"
+                        ${!isFull ? "disabled" : ""}>
+                    <option value="Pending" ${cred.status === "Pending" ? "selected" : ""}>⏳ Pending</option>
+                    <option value="Verified" ${cred.status === "Verified" ? "selected" : ""}>✅ Verified</option>
+                    <option value="Invalid" ${cred.status === "Invalid" ? "selected" : ""}>❌ Invalid</option>
+                </select>
+            </td>
+            <td>
+                ${isFull ? `<span class="card-delete-btn" onclick="OL.deleteCredential('${clientId}', ${idx})">×</span>` : ""}
+            </td>
+        </tr>
+    `;
+}
+
+OL.updateCredentialStatus = function (clientId, idx, status) {
+  const client = state.clients[clientId];
+  const cred = client.projectData.credentials[idx];
+
+  if (cred) {
+    cred.status = status;
+    // Auto-log the verification in the project history
+    const app = state.master.apps.find((a) => a.id === cred.appId);
+    console.log(`Access for ${app?.name} marked as ${status}`);
+
+    OL.persist();
+  }
+};
+
+//============================= HOW TO SECTION ============================== //
+
+window.renderHowToLibrary = function() {
+    OL.registerView(renderHowToLibrary);
+    const container = document.getElementById("mainContent");
+    const client = getActiveClient();
+    const hash = window.location.hash;
+
+    if (!container) return;
+
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isVaultView = hash.startsWith('#/vault');
+
+    // 1. Data Selection (Master + Project Local)
+    const masterLibrary = state.master.howToLibrary || [];
+    const localLibrary = (client && client.projectData.localHowTo) || [];
+    
+    // If in Vault, show all master. If in project, show shared masters + locals.
+    const visibleGuides = isVaultView 
+        ? masterLibrary 
+        : [...masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id)), ...localLibrary];
+
+    container.innerHTML = `
+        <div class="section-header" style="display: flex !important; visibility: visible !important; opacity: 1 !important;">
+            <div style="flex: 1;">
+                <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
+                <div class="small muted">${isVaultView ? 'Global Standards' : `Custom guides for ${esc(client?.meta?.name)}`}</div>
+            </div>
+            
+            <div class="header-actions" style="display: flex !important; gap: 10px !important;">
+                ${isVaultView && isAdmin ? `
+                    <button class="btn primary" style="background: #38bdf8 !important; color: black !important; font-weight: bold;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                ` : ''}
+
+                ${!isVaultView ? `
+                    <button class="btn small soft" onclick="OL.openLocalHowToEditor()">+ Create Local SOP</button>
+                    ${isAdmin ? `<button class="btn primary" style="background: #38bdf8 !important; color: black !important; margin-left:8px;" onclick="OL.importHowToToProject()">⬇ Import Master</button>` : ''}
+                ` : ''}
+            </div>
+        </div>
+
+        <div class="cards-grid" style="margin-top: 20px;">
+            ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
+            ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
+        </div>
+    `;
+};
+
+// 2. RENDER HOW TO CARDS
+function renderHowToCard(clientId, ht, isClientView) {
+    const client = state.clients[clientId];
+    const isAdmin = window.FORCE_ADMIN === true;
+    
+    // 🚀 THE FIX: Define the missing variable
+    const isVaultView = window.location.hash.includes('vault');
+    
+    const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal;
+    const canDelete = isAdmin || isLocal;
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
+
+    return `
+        <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
+             style="cursor: pointer; position: relative;" 
+             onclick="OL.openHowToModal('${ht.id}')">
+
+            <div class="card-header">
+                <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
+
+                ${canDelete ? `
+                <button class="card-delete-btn" 
+                        title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">×</button>
+                ` : ''}
+            </div>
+            
+            <div class="card-body" style="padding-top: 12px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
+                        ${isMaster ? 'MASTER' : 'LOCAL'}
+                    </span>
+
+                    ${!isClientView && isMaster ? `
+                        <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                              style="font-size: 8px; cursor: pointer;"
+                              onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
+                            ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                        </span>
+                    ` : ''}
+                </div>
+                <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">
+                    ${esc(ht.summary || 'No summary provided.')}
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+OL.getProjectsSharingSOP = function(sopId) {
+    return Object.values(state.clients || {}).filter(client => 
+        (client.sharedMasterIds || []).includes(sopId)
+    ).map(client => ({
+        id: client.id,
+        name: client.meta?.name || 'Unnamed Client'
+    }));
+};
+
+OL.openLocalHowToEditor = function() {
+    const client = getActiveClient();
+    if (!client) return;
+
+    const draftId = 'draft-local-ht-' + Date.now();
+    const draftHowTo = {
+        id: draftId,
+        name: "",
+        summary: "",
+        content: "",
+        isDraft: true,
+        isLocal: true // 🚀 Flag to tell the saver where to go
+    };
+    OL.openHowToModal(draftId, draftHowTo);
+};
+
+// 3. RENDER HOW TO MODAL
+OL.openHowToModal = function(htId, draftObj = null) {
+    const hash = window.location.hash;
+    const isVaultMode = hash.includes('vault'); 
+    const client = getActiveClient();
+    
+    // 1. Resolve Guide Data
+    let ht = draftObj || (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    }
+    if (!ht) return;
+
+    // 2. Identify Permissions & Scope
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isLocal = String(ht.id).includes('local');
+    const isMaster = !isLocal; // 🚀 FIXED: isMaster is now defined here
+    const isDraft = String(htId).startsWith('draft');
+    const isShared = client?.sharedMasterIds?.includes(ht.id);
+
+    const canEdit = isAdmin || isLocal || isDraft;
+    const canPromote = isAdmin && isLocal && !isVaultMode;
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const backlinks = OL.getSOPBacklinks(ht.id);
+    const sharedProjects = isMaster ? OL.getProjectsSharingSOP(ht.id) : [];
+
+    const html = `
+        <div class="modal-head" style="gap:15px;">
+            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                <span style="font-size:18px;">📖</span>
+                <input type="text" class="header-editable-input" 
+                       value="${esc(ht.name)}" 
+                       placeholder="Enter SOP Name..."
+                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       ${!canEdit ? 'readonly' : ''} 
+                       onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
+            </div>
+            
+            ${canPromote ? `
+                <button class="btn tiny primary" 
+                        style="background: #fbbf24 !important; color: black !important; font-weight: bold;" 
+                        onclick="OL.promoteLocalSOPToMaster('${ht.id}')">
+                    ⭐ PROMOTE TO MASTER
+                </button>
+            ` : ''}
+
+            ${isAdmin && isMaster ? `
+                <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                    style="font-size: 8px; cursor: pointer;"
+                    onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
+                    ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                </span>
+            ` : ''}
+            
+            ${!isAdmin && isLocal ? `
+                <span class="pill tiny soft" style="font-size: 8px;">📍 Project-Specific</span>
+            ` : ''}
+
+        </div>
+        <div class="modal-body">
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">📄 Brief Summary (Shows on card)</label>
+                <input type="text" class="modal-input tiny" 
+                       placeholder="One-sentence overview..."
+                       value="${esc(ht.summary || '')}" 
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL.handleHowToSave('${ht.id}', 'summary', this.value)">
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">🎥 Training Video URL</label>
+                ${canEdit ? `
+                    <input type="text" class="modal-input tiny" 
+                           placeholder="Paste link..."
+                           value="${esc(ht.videoUrl || '')}" 
+                           onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value); OL.openHowToModal('${ht.id}')">
+                ` : ''}
+                ${ht.videoUrl ? `<div class="video-preview-wrap" style="margin-top:10px;">${OL.parseVideoEmbed(ht.videoUrl)}</div>` : ''}
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">📂 Category</label>
+                <input type="text" class="modal-input tiny" 
+                       value="${esc(ht.category || 'General')}" 
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL.handleHowToSave('${ht.id}', 'category', this.value)">
+            </div>
+
+            <div class="card-section" style="margin-top:15px;">
+                <label class="modal-section-label">📱 Related Applications</label>
+                <div class="pills-row" id="ht-app-pills">
+                    ${(ht.appIds || []).map(appId => {
+                        const app = allApps.find(a => a.id === appId);
+                        return app ? `<span class="pill tiny accent">${esc(app.name)}</span>` : '';
+                    }).join('')}
+                </div>
+                ${canEdit ? `
+                    <div class="search-map-container" style="margin-top:8px;">
+                        <input type="text" class="modal-input tiny" placeholder="Link an app..." 
+                               onfocus="OL.filterHTAppSearch('${ht.id}', '')"
+                               oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
+                        <div id="ht-app-search-results" class="search-results-overlay"></div>
+                    </div>
+                ` : ''}
+            </div>
+
+            <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:20px;">
+                <label class="modal-section-label">Instructions</label>
+                <textarea class="modal-textarea" rows="12" 
+                          ${!canEdit ? 'readonly' : ''} 
+                          style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.5);' : ''}"
+                          onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
+            </div>
+            ${backlinks.length > 0 ? `
+                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
+                    <label class="modal-section-label" style="color: var(--accent); opacity: 1;">🔗 Mapped to Technical Resources</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                        ${backlinks.map(link => `
+                            <div class="pill soft is-clickable" 
+                                style="display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(56, 189, 248, 0.05);"
+                                onclick="OL.openResourceModal('${link.resId}')">
+                                <span style="font-size: 12px;">📱</span>
+                                <div style="flex: 1;">
+                                    <div style="font-size: 10px; font-weight: bold;">${esc(link.resName)}</div>
+                                    <div style="font-size: 8px; opacity: 0.6;">Linked via ${link.context}: "${esc(link.detail)}"</div>
+                                </div>
+                                <span style="font-size: 10px; opacity: 0.4;">View Resource ➔</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            ${sharedProjects.length > 0 ? `
+                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
+                    <label class="modal-section-label" style="color: #10b981;">🌍 Shared With Projects</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                        ${sharedProjects.map(p => `
+                            <div class="pill soft" style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <span style="font-size: 10px;">🏢</span>
+                                <span style="font-size: 10px; font-weight: bold;">${esc(p.name)}</span>
+                                <button class="pill-remove-x" 
+                                        style="cursor:pointer; opacity: 0.5; margin-left: 5px;" 
+                                        onclick="event.stopPropagation(); OL.deleteSOP('${p.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">×</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : (isMaster ? '<div class="tiny muted" style="margin-top:20px;">This Master SOP is not shared with any projects.</div>' : '')}
+                    </div>
+        `;
+    openModal(html);
+};
+
+window.OL.promoteLocalSOPToMaster = function(localId) {
+    const client = getActiveClient();
+    const localSOP = client?.projectData?.localHowTo?.find(h => h.id === localId);
+
+    if (!localSOP) return;
+    if (!confirm(`Standardize "${localSOP.name}"? This will add it to the Global Vault for all future projects.`)) return;
+
+    // 1. Create the Master Copy
+    const masterId = 'ht-vlt-' + Date.now();
+    const masterCopy = {
+        ...JSON.parse(JSON.stringify(localSOP)), 
+        id: masterId,
+        scope: 'global',
+        createdDate: new Date().toISOString()
+    };
+
+    // 2. Add to Global Library
+    if (!state.master.howToLibrary) state.master.howToLibrary = [];
+    state.master.howToLibrary.push(masterCopy);
+
+    // 3. Remove Local copy and replace with Shared Master link
+    client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== localId);
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    client.sharedMasterIds.push(masterId);
+
+    OL.persist();
+    OL.closeModal();
+    renderHowToLibrary(); // Refresh grid to show new status
+    
+    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
+};
+
+function renderHTRequirements(ht) {
+    const requirements = ht.requirements || [];
+    const masterFunctions = (state.master?.functions || []);
+    const allGuides = (state.master.howToLibrary || []);
+
+    return requirements.map((req, idx) => `
+        <div class="dp-manager-row" style="flex-direction:column; gap:8px; background:rgba(var(--accent-rgb), 0.05); padding:12px; margin-bottom:10px; border-left:3px solid var(--accent);">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" class="modal-input tiny" style="flex:2;" placeholder="Action Name (e.g. Provide Login)" 
+                       value="${esc(req.actionName || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'actionName', this.value)">
+                
+                <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'targetId', this.value)">
+                    <option value="">-- Target Function --</option>
+                    ${masterFunctions.map(f => `<option value="${f.id}" ${req.targetId === f.id ? 'selected' : ''}>⚙️ ${esc(f.name)}</option>`).join('')}
+                </select>
+                <button class="card-delete-btn" style="position:static;" onclick="OL.removeHTReq('${ht.id}', ${idx})">×</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; align-items:center;">
+                <select class="tiny-select" style="flex:1;" onchange="OL.updateHTReq('${ht.id}', ${idx}, 'clientGuideId', this.value)">
+                    <option value="">-- Client Helper Guide (SOP) --</option>
+                    ${allGuides.filter(g => g.id !== ht.id).map(g => `<option value="${g.id}" ${req.clientGuideId === g.id ? 'selected' : ''}>📖 ${esc(g.name)}</option>`).join('')}
+                </select>
+                <input type="text" class="modal-input tiny" style="flex:1;" placeholder="Instructions for client..." 
+                       value="${esc(req.description || '')}" onblur="OL.updateHTReq('${ht.id}', ${idx}, 'description', this.value)">
+            </div>
+        </div>
+    `).join('') || '<div class="empty-hint">No structured requirements defined.</div>';
+}
+
+// HOW TO AND APP OVERLAP
+OL.toggleHTApp = function(htId, appId) {
+    const client = getActiveClient();
+    let ht = state.master.howToLibrary.find(h => h.id === htId);
+    
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    if (!ht) return;
+    
+    if (!ht.appIds) ht.appIds = [];
+    const idx = ht.appIds.indexOf(appId);
+    
+    if (idx === -1) ht.appIds.push(appId);
+    else ht.appIds.splice(idx, 1);
+    
+    OL.persist();
+    OL.openHowToModal(htId);
+};
+
+OL.filterHTAppSearch = function(htId, query) {
+    const listEl = document.getElementById("ht-app-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const client = getActiveClient();
+    
+    // 1. Resolve current guide (to avoid linking to itself)
+    let currentHt = state.master.howToLibrary.find(h => h.id === htId) || 
+                   (client?.projectData?.localHowTo || []).find(h => h.id === htId);
+
+    const currentAppIds = currentHt ? (currentHt.appIds || []) : [];
+
+    // 🚀 2. THE MERGE: Combine Global Master Apps/SOPs with Local Project Apps/SOPs
+    const masterApps = state.master.apps || [];
+    const localApps = client?.projectData?.localApps || [];
+    const allAvailableApps = [...masterApps, ...localApps];
+
+    // 3. Filter based on query and exclude what's already linked
+    const matches = allAvailableApps.filter(a => 
+        a.name.toLowerCase().includes(q) && 
+        !currentAppIds.includes(a.id)
+    );
+    
+    // 4. Render results
+    listEl.innerHTML = matches.map(app => `
+        <div class="search-result-item" onmousedown="OL.toggleHTApp('${htId}', '${app.id}')">
+            ${String(app.id).includes('local') ? '📍' : '🏛️'} ${esc(app.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No matching items found</div>';
+};
+
+OL.parseVideoEmbed = function(url) {
+    if (!url) return "";
+    
+    // YouTube logic
+    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) return `<iframe width="100%" height="315" src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allowfullscreen></iframe>`;
+    
+    // Loom logic
+    const loomMatch = url.match(/(?:https?:\/\/)?(?:www\.)?loom\.com\/share\/([a-zA-Z0-9]+)/);
+    if (loomMatch) return `<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/${loomMatch[1]}" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>`;
+
+    // Vimeo logic
+    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="100%" height="315" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+
+    return `<div class="p-10 tiny warn">Unrecognized video format. Please use Loom, YouTube, or Vimeo.</div>`;
+};
+
+// Toggle a resource ID in the guide's resourceIds array
+OL.toggleHTResource = function(htId, resId) {
+    const client = getActiveClient();
+    
+    // 🚀 THE FIX: Find the target SOP in Master OR Local
+    let ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client && client.projectData.localHowTo) {
+        ht = client.projectData.localHowTo.find(h => h.id === htId);
+    }
+
+    if (!ht) return;
+    
+    if (!ht.resourceIds) ht.resourceIds = [];
+    const idx = ht.resourceIds.indexOf(resId);
+    
+    if (idx === -1) {
+        ht.resourceIds.push(resId);
+    } else {
+        ht.resourceIds.splice(idx, 1);
+    }
+    
+    OL.persist(); // This will now save the modified object in whichever array it lives in
+    OL.openHowToModal(htId); 
+};
+
+// Filter the master resource library for the search dropdown
+OL.filterHTResourceSearch = function(htId, query) {
+    const listEl = document.getElementById("ht-resource-search-results");
+    if (!listEl) return;
+    const q = (query || "").toLowerCase();
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    
+    const availableResources = (state.master.resources || []).filter(res => 
+        res.name.toLowerCase().includes(q) && 
+        !(ht.resourceIds || []).includes(res.id)
+    );
+    
+    listEl.innerHTML = availableResources.map(res => `
+        <div class="search-result-item" onmousedown="OL.toggleHTResource('${htId}', '${res.id}')">
+            🛠️ ${esc(res.name)}
+        </div>
+    `).join('') || '<div class="search-result-item muted">No resources found</div>';
+};
+
+// 4. HANDLE STATUS / EDITING
+OL.toggleSOPSharing = function(clientId, htId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    const idx = client.sharedMasterIds.indexOf(htId);
+    if (idx === -1) {
+        client.sharedMasterIds.push(htId);
+    } else {
+        client.sharedMasterIds.splice(idx, 1);
+    }
+
+    OL.persist();
+    renderResourceLibrary(); // Refresh view
+};
+
+// 5. HANDLE EDIT or REMOVE HOW TO
+OL.openHowToEditorModal = function() {
+    const draftId = 'draft-ht-' + Date.now();
+    const draftHowTo = {
+        id: draftId,
+        name: "",
+        summary: "",
+        content: "",
+        isDraft: true
+    };
+    OL.openHowToModal(draftId, draftHowTo);
+};
+
+// 🚀 REAL-TIME SURGICAL SYNC
+OL.syncHowToName = function(htId, newName) {
+    const cardTitles = document.querySelectorAll(`.ht-card-title-${htId}`);
+    cardTitles.forEach(el => {
+        el.innerText = newName;
+    });
+};
+
+// UPDATED SAVE LOGIC
+OL.handleHowToSave = function(id, field, value) {
+    const client = getActiveClient();
+    const cleanVal = (typeof value === 'string') ? value.trim() : value;
+    const isVaultMode = window.location.hash.includes('vault');
+    
+    // 1. Resolve Target
+    let ht = state.master.howToLibrary.find(h => h.id === id);
+    if (!ht && client) {
+        ht = (client.projectData.localHowTo || []).find(h => h.id === id);
+    }
+
+    // 🚀 NEW: Initialize MASTER SOP if it's a new draft in the Vault
+    if (!ht && isVaultMode && (id.startsWith('draft') || id.startsWith('vlt'))) {
+        const newMaster = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            scope: "internal", // Default to internal/private
+            appIds: [],
+            resourceIds: []
+        };
+        state.master.howToLibrary.push(newMaster);
+        ht = newMaster;
+        renderHowToLibrary();
+        console.log("🏛️ New Master SOP Initialized in Vault");
+    }
+
+    // 🚀 EXISTING: Initialize LOCAL SOP if it's a new local draft
+    if (!ht && id.includes('local') && client) {
+        if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+        const newLocal = { 
+            id: id, 
+            name: "", 
+            content: "", 
+            category: "General",
+            appIds: [],
+            resourceIds: []
+        };
+        client.projectData.localHowTo.push(newLocal);
+        ht = newLocal;
+        renderHowToLibrary();
+        console.log("📍 New Local SOP Initialized in Project Data");
+    }
+
+    if (ht) {
+        ht[field] = cleanVal;
+
+        // 🔒 TERMINOLOGY SYNC: If scope becomes internal, revoke client sharing
+        if (field === 'scope' && cleanVal === 'internal') {
+            Object.values(state.clients).forEach(c => {
+                if (c.sharedMasterIds) {
+                    c.sharedMasterIds = c.sharedMasterIds.filter(mid => mid !== id);
+                }
+            });
+            console.log("🔒 Revoked sharing for internal guide.");
+        }
+
+        OL.persist();
+        
+        // 🔄 Surgical UI Sync for name
+        if (field === 'name') {
+            document.querySelectorAll(`.ht-card-title-${id}`).forEach(el => el.innerText = cleanVal || "New SOP");
+        }
+    } else {
+        console.error("❌ SAVE FAILED: No SOP or Client Context found for ID:", id);
+    }
+};
+
+OL.deleteSOP = function(clientId, htId) {
+    const isVaultView = window.location.hash.includes('vault');
+    const isLocal = String(htId).includes('local');
+    const client = state.clients[clientId];
+    
+    // 1. Backlink Check (Only for permanent deletes)
+    if (isVaultView || isLocal) {
+        const backlinks = OL.getSOPBacklinks(htId);
+        if (backlinks.length > 0) {
+            const resNames = [...new Set(backlinks.map(b => b.resName))].join(', ');
+            if (!confirm(`⚠️ WARNING: This SOP is mapped to: ${resNames}.\n\nDeleting the SOURCE will break these links. Proceed?`)) return;
+        }
+    }
+
+    // 2. Resolve Guide Name
+    let guide;
+    if (isLocal && client) {
+        guide = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    } else {
+        guide = (state.master.howToLibrary || []).find(h => h.id === htId);
+    }
+    if (!guide) return;
+
+    // 3. Contextual Execution
+    if (isVaultView) {
+        // --- MASTER VAULT DELETE ---
+        if (!confirm(`⚠️ PERMANENT VAULT DELETE: "${guide.name}"\n\nThis removes the source file for ALL projects. This cannot be undone.`)) return;
+        
+        state.master.howToLibrary = (state.master.howToLibrary || []).filter(h => h.id !== htId);
+        // Scrub the ID from every single client's shared list
+        Object.values(state.clients).forEach(c => {
+            if (c.sharedMasterIds) c.sharedMasterIds = c.sharedMasterIds.filter(id => id !== htId);
+        });
+        console.log("🗑️ Master Source Deleted:", htId);
+
+    } else if (isLocal) {
+        // --- LOCAL PROJECT DELETE ---
+        if (!confirm(`Delete local SOP "${guide.name}"?`)) return;
+        if (client) {
+            client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== htId);
+        }
+        console.log("🗑️ Local SOP Deleted:", htId);
+
+    } else {
+        // --- MASTER UNLINK (Revoke Access) ---
+        if (!confirm(`Remove "${guide.name}" from this project?\n\nThe guide will remain safe in your Master Vault.`)) return;
+        if (client && client.sharedMasterIds) {
+            client.sharedMasterIds = client.sharedMasterIds.filter(id => id !== htId);
+        }
+        console.log("🔒 Master SOP Unlinked from Client:", clientId);
+    }
+
+    // 4. Finalize
+    OL.persist();
+    renderHowToLibrary();
+};
+
+// 6. HANDLE SYNCING TO MASTER AND VICE VERSA
+OL.importHowToToProject = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📚 Link Master SOP</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Click to view guides..." 
+                       onfocus="OL.filterMasterHowToImport('')"
+                       oninput="OL.filterMasterHowToImport(this.value)" 
+                       autofocus>
+                <div id="master-howto-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterMasterHowToImport = function(query) {
+    const listEl = document.getElementById("master-howto-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const alreadyShared = client?.sharedMasterIds || [];
+
+    const available = (state.master.howToLibrary || []).filter(ht => 
+        ht.name.toLowerCase().includes(q) && !alreadyShared.includes(ht.id)
+    );
+
+    listEl.innerHTML = available.map(ht => `
+        <div class="search-result-item" onmousedown="OL.toggleSOPSharing('${client.id}', '${ht.id}'); OL.closeModal();">
+            📖 ${esc(ht.name)}
+        </div>
+    `).join('') || `<div class="search-result-item muted">No unlinked guides found.</div>`;
+};
+
+//=======================HOW-TO RESOURCES OVERLAP ====================//
+OL.getSOPBacklinks = function(sopId) {
+    const client = getActiveClient();
+    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+    const links = [];
+
+    allResources.forEach(res => {
+        // Check Triggers
+        (res.triggers || []).forEach((trig, idx) => {
+            if ((trig.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Trigger', detail: trig.name });
+            }
+        });
+        // Check Steps
+        (res.steps || []).forEach(step => {
+            if ((step.links || []).some(l => String(l.id) === String(sopId))) {
+                links.push({ resId: res.id, resName: res.name, context: 'Step', detail: step.text });
+            }
+        });
+    });
+    return links;
+};
+
+//======================= HOW-TO TASKS OVERLAP ========================//
+
+OL.filterTaskHowToSearch = function(taskId, query, isVault) {
+    const container = document.getElementById('task-howto-results');
+    if (!container) return;
+
+    const client = getActiveClient();
+    const q = (query || "").toLowerCase().trim();
+    
+    // 1. Resolve current task to find existing links
+    const task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+    
+    const existingIds = task?.howToIds || [];
+
+    // 2. Filter available guides (exclude existing)
+    const results = (state.master.howToLibrary || []).filter(guide => {
+        const matches = (guide.name || "").toLowerCase().includes(q);
+        const alreadyLinked = existingIds.includes(guide.id);
+        return matches && !alreadyLinked;
+    });
+
+    if (results.length === 0) {
+        container.innerHTML = `<div class="search-result-item muted">No unlinked guides found.</div>`;
+        return;
+    }
+
+    container.innerHTML = results.map(guide => `
+        <div class="search-result-item is-clickable" 
+             onmousedown="OL.toggleTaskHowTo(event, '${taskId}', '${guide.id}', ${isVault})">
+            📖 ${esc(guide.name)}
+        </div>
+    `).join('');
+};
+
+OL.toggleTaskHowTo = function(event, taskId, howToId, isVault) {
+    if (event) event.stopPropagation();
+    const client = getActiveClient();
+    
+    let task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+
+    const guide = (state.master.howToLibrary || []).find(g => g.id === howToId);
+
+    if (task && guide) {
+        if (!task.howToIds) task.howToIds = [];
+        const idx = task.howToIds.indexOf(howToId);
+        
+        if (idx === -1) {
+            // 🚀 LINKING: Add ID and Sync Content
+            task.howToIds.push(howToId);
+            
+            // Append Prework and Items Needed to the task description
+            const syncNotice = `\n\n--- Linked SOP: ${guide.name} ---`;
+            const itemsText = guide.itemsNeeded ? `\n📦 Items Needed: ${guide.itemsNeeded}` : "";
+            const preworkText = guide.prework ? `\n⚡ Required Prework: ${guide.prework}` : "";
+            
+            task.description = (task.description || "") + syncNotice + itemsText + preworkText;
+        } else {
+            // UNLINKING: Remove ID
+            task.howToIds.splice(idx, 1);
+        }
+        
+        OL.persist();
+        OL.openTaskModal(taskId, isVault); 
+    }
+};
+
+// Add a new empty requirement object to a guide
+OL.addHTRequirement = function(htId) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht) return;
+
+    // Initialize the requirements array if it doesn't exist
+    if (!ht.requirements) ht.requirements = [];
+
+    // Push a new requirement structure
+    ht.requirements.push({
+        actionName: "",
+        targetType: "function", // Default to function-based resolution
+        targetId: "",           // Will hold the Function ID
+        clientGuideId: "",      // Will hold the Helper SOP ID
+        description: ""
+    });
+
+    OL.persist(); // Sync to storage
+    OL.openHowToModal(htId); // Refresh the modal to show the new row
+};
+
+OL.updateHTReq = function(htId, index, field, value) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht || !ht.requirements || !ht.requirements[index]) return;
+
+    ht.requirements[index][field] = value;
+
+    // We persist, but we don't necessarily need to re-open the modal 
+    // for text inputs to avoid losing focus, unless it's a dropdown change.
+    OL.persist();
+    
+    if (field === 'targetId' || field === 'clientGuideId') {
+        OL.openHowToModal(htId);
+    }
+};
+
+// Remove a requirement from the list
+OL.removeHTRequirement = function(htId, index) {
+    const ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht || !ht.requirements) return;
+
+    ht.requirements.splice(index, 1);
+    
+    OL.persist();
+    OL.openHowToModal(htId);
+};
+
+// =========================HOW TO SCOPING OVERLAP=====================================
+OL.resolveRequirementTarget = function(requirement) {
+    const client = getActiveClient();
+    if (requirement.targetType === 'app') return requirement.targetId;
+
+    if (requirement.targetType === 'function') {
+        // Find the client's app that is the "Primary" for this function
+        const localApps = client.projectData.localApps || [];
+        const primaryApp = localApps.find(app => 
+            app.functionIds?.some(m => (m.id === requirement.targetId && m.status === 'primary'))
+        );
+        return primaryApp ? primaryApp.id : null;
+    }
+    return null;
+};
+
+OL.deployRequirementsFromResource = function(resourceId) {
+    const client = getActiveClient();
+    // Find the Master Guide linked to this Resource
+    const guide = (state.master.howToLibrary || []).find(ht => (ht.resourceIds || []).includes(resourceId));
+    
+    if (!guide || !guide.requirements || guide.requirements.length === 0) return;
+
+    guide.requirements.forEach(req => {
+        // Resolve the target App by looking for the "Primary" mapping for the Function
+        const targetAppId = OL.resolveRequirementTarget(req);
+        const allApps = [...state.master.apps, ...(client.projectData.localApps || [])];
+        const targetAppName = allApps.find(a => a.id === targetAppId)?.name || "System";
+
+        const newTask = {
+            id: 'tm-' + Date.now() + Math.random().toString(36).substr(2, 5),
+            name: `${req.actionName || 'Requirement'} (${targetAppName})`,
+            description: req.description || `Required for ${guide.name} implementation.`,
+            status: "Pending",
+            appIds: targetAppId ? [targetAppId] : [],
+            howToIds: req.clientGuideId ? [req.clientGuideId] : [], // Attach the Helper Guide
+            createdDate: new Date().toISOString()
+        };
+
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+        client.projectData.clientTasks.push(newTask);
+    });
+    
+    OL.persist();
+};
+
+// 🚀 THE BULLETPROOF STARTER
+function bootRouter() {
+    console.log("🏁 App Ignition: Checking route...");
+    // Force a default if empty
+    if (!window.location.hash || window.location.hash === "#/") {
+        // window.location.hash = "#/client-tasks"; 
+    }
+    window.handleRoute();
+}
+
+// 🔄 Handle initial load (covers all browser timings)
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    bootRouter();
+} else {
+    window.addEventListener("DOMContentLoaded", bootRouter);
+}
+
+// 🔄 Handle every click thereafter
+window.addEventListener("hashchange", window.handleRoute);
+
+// 🛑 GLOBAL REFRESH SHIELD
+// This stops the browser from navigating if a drop fails or is mishandled
+['dragover', 'drop'].forEach(eventName => {
+    window.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
