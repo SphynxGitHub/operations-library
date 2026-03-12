@@ -13107,7 +13107,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
     const activeTypeFilter = state.v2.trayTypeFilter || 'All';
 
     main.innerHTML = `
-        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden; background: #0b0f1a;">
+        <div class="v2-workbench-shell" style="display: flex; height: 100vh; overflow: hidden;">
             
             <aside id="pane-drawer" class="v2-tray-sidebar" 
                 style="width: ${trayOpen ? '320px' : '0px'}; 
