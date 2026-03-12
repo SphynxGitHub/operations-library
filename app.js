@@ -9779,39 +9779,29 @@ OL.initV2Panning = function() {
 
     // 🚀 THE ULTIMATE CLEANUP: Attach to window to catch releases outside the viewport
     window.addEventListener('mouseup', (e) => {
-        // If we have an active drag OR lingering ghosts...
-        const ghost = document.getElementById('drag-ghost');
-        
-        if (state.v2.activeDragId || ghost) {
-            console.log("🧹 Nuclear cleanup triggered via window");
+        // 🚀 THE FIX: Delay the cleanup slightly so 'drop' events can finish
+        setTimeout(() => {
+            const ghost = document.getElementById('drag-ghost');
+            if (state.v2.activeDragId || ghost) {
+                console.log("🧹 Nuclear cleanup executed (delayed for drop)");
 
-            // 1. Kill the Ghost immediately
-            if (ghost) ghost.remove();
+                if (ghost) ghost.remove();
+                
+                document.querySelectorAll('.v2-node-card, .v2-lane-section, .grid-drop-target, #unmap-zone')
+                    .forEach(el => {
+                        el.classList.remove('is-dragging', 'drop-hover', 'drop-target-highlight', 'visible', 'is-hovered');
+                        el.style.opacity = '1';
+                        el.style.pointerEvents = 'auto';
+                    });
 
-            // 2. Kill the Snap Preview (Blue Zone)
-            const preview = document.getElementById('grid-snap-preview');
-            if (preview) {
-                preview.classList.remove('active');
-                preview.style.display = 'none';
+                document.body.classList.remove('is-dragging-node');
+                state.v2.isDraggingNode = false;
+                state.v2.activeDragId = null; // 🏁 Now safe to null this out
+                
+                if (OL.drawV2Connections) OL.drawV2Connections();
             }
-
-            // 3. Remove all visual artifact classes
-            document.querySelectorAll('.v2-node-card, .v2-lane-section, .grid-drop-target, #unmap-zone')
-                .forEach(el => {
-                    el.classList.remove('is-dragging', 'drop-hover', 'drop-target-highlight', 'visible', 'is-hovered');
-                    el.style.opacity = '1';
-                    el.style.pointerEvents = 'auto';
-                });
-
-            // 4. Reset Global Classes & States
-            document.body.classList.remove('is-dragging-node');
-            state.v2.isDraggingNode = false;
-            state.v2.activeDragId = null;
-            
-            // 5. Draw connections to snap lines to final resting place
-            if (OL.drawV2Connections) OL.drawV2Connections();
-        }
-    }, { capture: true }); // 🚀 CRITICAL: This intercepts the event first
+        }, 50); // ⏱️ 50ms is the "Goldilocks" zone
+    }, { capture: true });
 };
 
 OL.zoom = function(delta) {
