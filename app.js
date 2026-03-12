@@ -9228,7 +9228,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                         <button id="filter-menu-btn" class="btn soft" onclick="OL.toggleFilterMenu(event)">
                             🔍 Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
                         </button>
-                        <button class="btn soft" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
+                        <button class="btn soft" onclick="event.stopPropagation(); OL.autoAlignNodes()" title="Tidy">🪄</button>
                         <button class="btn soft" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
                         <button class="btn soft" onclick="OL.zoom(0.1)">+</button>
