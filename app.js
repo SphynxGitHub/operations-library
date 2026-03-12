@@ -11806,8 +11806,7 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
-    // 🚀 CLONE DATA: Work on a snapshot so the live 'state' can't jitter
-    const sourceData = JSON.parse(JSON.stringify(isVault ? state.master : client?.projectData));
+    const sourceData = isVault ? state.master : client?.projectData;
     const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
     
     if (!sourceData?.stages || !allResources) return;
@@ -11816,73 +11815,54 @@ OL.autoAlignNodes = async function() {
     state.isSaving = true; 
     window.lastLocalRender = Date.now();
 
-    console.log("🪄 Running Deep-Freeze Tidy...");
+    const FIXED_GAP = 40; // 🎯 The exact pixel gap between every card
+    const COLUMN_WIDTH = 240;
+    const START_Y = 120;
 
     let currentXOffset = 0;
+
     sourceData.stages.forEach((stage) => {
-        // Filter resources belonging to this stage from the LIVE state to get latest IDs
         const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
         
-        // Sort: Top to Bottom
-        laneNodes.sort((a, b) => (a.coords.y - b.coords.y));
+        // 1. Sort primarily by Y to keep your vertical order
+        laneNodes.sort((a, b) => a.coords.y - b.coords.y);
 
-        let nextY = 120;
-        const slotWidth = 240;
-        const rows = [];
+        // 2. Track the "cursor" for each column in the lane
+        // This allows side-by-side cards to have their own vertical stacking
+        const columnCursors = {}; // { 0: y, 1: y }
 
-        // 1. Grouping into Rows
         laneNodes.forEach(node => {
-            let placed = false;
-            for (let row of rows) {
-                const preferredCol = Math.round((node.coords.x - currentXOffset - 40) / slotWidth);
-                if (!row.some(n => n._col === preferredCol)) {
-                    node._col = Math.max(0, preferredCol);
-                    row.push(node);
-                    placed = true;
-                    break;
-                }
-            }
-            if (!placed) {
-                node._col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / slotWidth));
-                rows.push([node]);
-            }
+            // Determine column based on current X
+            const col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / COLUMN_WIDTH));
+            
+            // Initialize column cursor if new
+            if (!columnCursors[col]) columnCursors[col] = START_Y;
+
+            // Set coordinates
+            node.coords.x = currentXOffset + 40 + (col * COLUMN_WIDTH);
+            node.coords.y = columnCursors[col];
+
+            // 🚀 THE EQUALIZER: 
+            // Calculate height of THIS card and add the FIXED_GAP for the next one
+            const nodeHeight = node.isExpanded ? 280 : 100; 
+            columnCursors[col] += (nodeHeight + FIXED_GAP);
         });
 
-        // 2. Applying Coordinates with FORCED Buffers
-        rows.forEach(row => {
-            // 🚀 FORCE HEIGHT: Explicitly check the property, don't guess
-            const hasExpanded = row.some(n => n.isExpanded === true);
-            const rowHeight = hasExpanded ? 380 : 160; // Increased buffers to 380/160
-
-            row.forEach(node => {
-                node.coords.x = currentXOffset + 40 + (node._col * slotWidth);
-                node.coords.y = nextY;
-            });
-            nextY += rowHeight;
-        });
-
-        const farRight = laneNodes.length > 0 ? Math.max(...laneNodes.map(n => n.coords.x + 220)) : currentXOffset + 300;
-        stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 80);
+        // 3. Update stage width
+        const maxCol = Math.max(-1, ...Object.keys(columnCursors).map(Number));
+        stage.width = Math.max(300, (maxCol + 1) * COLUMN_WIDTH + 80);
         currentXOffset += stage.width;
-        laneNodes.forEach(n => delete n._col);
     });
 
-    // 🚀 3. UPDATE LIVE STATE FROM OUR SNAPSHOT
-    if (isVault) state.master = sourceData;
-    else client.projectData = sourceData;
-
     try {
-        window.renderVisualizerV2(isVault); // Render locally FIRST
+        window.renderVisualizerV2(isVault);
         await OL.persist();
-        console.log("✅ Deep-Freeze Tidy Persisted.");
-    } catch (err) {
-        console.error("❌ Tidy Persistence Error:", err);
     } finally {
         setTimeout(() => {
             state.isSaving = false;
             state.v2.isSyncingLayout = false;
             if (OL.drawV2Connections) OL.drawV2Connections();
-        }, 2500); // 2.5s Shield
+        }, 1500);
     }
 };
 
