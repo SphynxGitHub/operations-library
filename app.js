@@ -13199,14 +13199,13 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
                     const isExpanded = state.v2.trayExpandedNodes?.has(res.id) || hasStepMatch;
 
                     return `
-                    <div class="draggable-tray-item" 
-                         style="padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); 
+                    <div class="draggable-tray-item"  
                                 border-radius: 8px; margin-bottom: 8px; cursor: grab; position: relative;"
                          onmousedown="OL.handleTrayDrag(event, '${res.id}')">
                         
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div style="flex: 1;">
-                                <div style="font-size: 11px; font-weight: 600; color: #eee;">
+                                <div style="font-size: 11px; font-weight: 600;">
                                     ${OL.getRegistryIcon(res.type)} ${esc(res.name)}
                                 </div>
                                 <div class="tiny muted uppercase" style="font-size: 8px; margin-top: 2px; opacity: 0.5;">
