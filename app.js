@@ -10289,8 +10289,7 @@ function renderV2Nodes(isVault) {
 
         const positionStyle = isGlobal 
             ? `position: relative; transform: none; margin: 0;` 
-            : `position: absolute; top: ${node.coords.y}px;`
-            //left: ${node.coords.x}px;
+            : `position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;`
 
        // Change it to a simple link that clears the filter flags
         // Inside renderV2Nodes
