@@ -9203,7 +9203,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                             <div class="v2-lane-section" 
                                 id="bg-lane-${s.id}"
                                 data-lane-id="${s.id || i}" 
-                                style="min-width: ${s.width}px; width: ${sWidth}|| 300}px; flex-shrink: 0; border-right: 1px dashed rgba(56, 189, 248, 0.4); height: 100%;">
+                                style="min-width: ${sWidth}px; width: ${sWidth}|| 300}px; flex-shrink: 0; border-right: 1px dashed rgba(56, 189, 248, 0.4); height: 100%;">
                             </div>
                         `).join('')}
                     </div>
