@@ -11512,7 +11512,7 @@ OL.unlinkParent = async function(nodeId) {
     }
 };
 
-OL.toggleStepView = function(nodeId) {
+/*OL.toggleStepView = function(nodeId) {
     if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
     
     const isVault = window.location.hash.includes('vault');
@@ -11558,8 +11558,31 @@ OL.toggleStepView = function(nodeId) {
     }, 50);
     
     setTimeout(() => OL.drawV2Connections(), 150);
-};
+};*/
 
+OL.toggleStepView = function(nodeId) {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    const node = source.find(n => n.id === nodeId);
+    if (!node) return;
+
+    // 🚀 STEP 1: Just toggle the state. 
+    // (Ensure you're using 'node.isExpanded' since Tidy looks for that)
+    node.isExpanded = !node.isExpanded;
+
+    // Also update your Set if you use it for UI classes
+    if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
+    if (node.isExpanded) state.v2.expandedNodes.add(nodeId);
+    else state.v2.expandedNodes.delete(nodeId);
+
+    // 🚀 STEP 2: Let the Layout Engine do the math
+    // This will handle the "push down" of everything below it automatically
+    console.log("🪄 Reflowing layout for toggle...");
+    OL.autoAlignNodes(); 
+};
+/*
 OL.toggleMasterExpand = function() {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
@@ -11627,6 +11650,29 @@ OL.toggleMasterExpand = function() {
     }, 50);
 
     setTimeout(() => OL.drawV2Connections(), 150);
+};*/
+
+OL.toggleMasterExpand = function() {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const source = isVault ? state.master.resources : client.projectData.localResources;
+    
+    // Determine if we are expanding or collapsing based on the Set
+    const currentlyExpanded = state.v2.expandedNodes?.size > 0;
+
+    // 🚀 STEP 1: Just update the properties
+    source.forEach(node => {
+        if (!node.isGlobal && node.steps?.length > 0) {
+            node.isExpanded = !currentlyExpanded;
+            
+            if (node.isExpanded) state.v2.expandedNodes.add(node.id);
+            else state.v2.expandedNodes.delete(node.id);
+        }
+    });
+
+    // 🚀 STEP 2: Run the engine once
+    console.log("🪄 Master Reflow initiated...");
+    OL.autoAlignNodes();
 };
 
 OL.toggleWorkbenchTray = function() {
