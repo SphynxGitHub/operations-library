@@ -10010,9 +10010,11 @@ OL.initWBMotion = function(e, id) {
                     res.isGlobal = false;
                     res.coords = { x: finalX, y: finalY };
                 }
+                res.stageId = null;
             }
         });
 
+        await OL.autoAlignNodes();
         state.v2.activeDragId = null;
         state.v2.isDraggingNode = false;
         
@@ -11743,85 +11745,45 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const sourceData = isVault ? state.master : client?.projectData;
-    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
     
-    if (!sourceData || !sourceData.stages || !allResources) return;
+    if (!sourceData?.stages || !allResources) return;
 
-    const stages = sourceData.stages;
-    const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'));
-    if (cardEls.length === 0) return;
+    // 🚀 RESET: Assume all lanes are 300px initially
+    sourceData.stages.forEach(s => s.width = 300);
 
-    console.log("🪄 Smart Tidying Canvas...");
-
-    await OL.updateAndSync(() => {
-        // 1. Calculate X-Ranges for every stage
-        let accumulatedX = 0;
-        const stageMap = stages.map(s => {
-            const start = accumulatedX;
-            const width = s.width || 300;
-            accumulatedX += width;
-            return { id: s.id, start, end: accumulatedX, center: start + (width / 2) - 110 };
-        });
-
-        // 2. Pre-Pass: Auto-Assign stageId based on current X position
-        allResources.forEach(res => {
-            if (res.coords && !res.isGlobal) {
-                const currentX = res.coords.x + 110; // Use horizontal center of card
-                const matchedStage = stageMap.find(sm => currentX >= sm.start && currentX <= sm.end);
-                
-                if (matchedStage) {
-                    if (res.stageId !== matchedStage.id) {
-                        console.log(`📍 Auto-assigned ${res.name} to ${matchedStage.id}`);
-                        res.stageId = matchedStage.id;
-                    }
-                } else if (currentX > accumulatedX) {
-                    // If card is past the last lane, pin it to the last lane
-                    res.stageId = stages[stages.length - 1].id;
+    // 🚀 PASS 1: Assign nodes to stages based on their current drop X
+    let tempX = 0;
+    allResources.forEach(res => {
+        if (res.coords && !res.isGlobal) {
+            const currentX = res.coords.x + 110; 
+            let runningX = 0;
+            for (let stage of sourceData.stages) {
+                const w = stage.width || 300;
+                if (currentX >= runningX && currentX <= runningX + w + 100) { // added buffer
+                    res.stageId = stage.id;
+                    break;
                 }
+                runningX += w;
             }
-        });
-
-        // 3. Group cards by their (now confirmed) stageId
-        const laneGroups = {};
-        cardEls.forEach(el => {
-            const id = el.id.replace('v2-node-', '');
-            const res = allResources.find(r => String(r.id) === id);
-            if (res && res.stageId) {
-                if (!laneGroups[res.stageId]) laneGroups[res.stageId] = [];
-                laneGroups[res.stageId].push({ el, res });
-            }
-        });
-
-        // 4. Vertically stack and horizontally center
-        stageMap.forEach(sm => {
-            const group = laneGroups[sm.id] || [];
-            let nextY = 120;
-
-            // Sort by current Y to preserve vertical order
-            group.sort((a, b) => (a.res.coords?.y || 0) - (b.res.coords?.y || 0));
-
-            group.forEach(item => {
-                item.res.coords = { x: sm.center, y: nextY };
-
-                // Apply Smooth Transition
-                item.el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
-                item.el.style.left = `${sm.center}px`;
-                item.el.style.top = `${nextY}px`;
-
-                const height = item.el.offsetHeight || 80;
-                nextY += height + 40; 
-            });
-        });
+        }
     });
 
-    // 5. Cleanup
-    setTimeout(() => {
-        cardEls.forEach(el => el.style.transition = "");
-        OL.syncLaneWidthsToContent();
-        OL.drawV2Connections();
-    }, 600);
+    // 🚀 PASS 2: Calculate how wide lanes NEED to be for their new residents
+    sourceData.stages.forEach((stage, i) => {
+        const nodes = allResources.filter(r => r.stageId === stage.id && r.coords);
+        if (nodes.length > 0) {
+            const laneStartX = sourceData.stages.slice(0, i).reduce((sum, s) => sum + (s.width || 300), 0);
+            const rightEdge = Math.max(...nodes.map(n => n.coords.x + 240));
+            const needed = (rightEdge - laneStartX) + 60;
+            if (needed > 300) stage.width = Math.round(needed);
+        }
+    });
+
+    // 🚀 PASS 3: Apply positions
+    await OL.persist();
+    renderVisualizerV2(isVault);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
