@@ -9156,7 +9156,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     
     container.innerHTML = `
         <div class="v2-viewport" id="v2-viewport">
-        
+
             <div class="v2-canvas-header-area" style="pointer-events: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 5000;">
             
                 <div id="global-shelf" class="global-shelf-container"
@@ -11777,75 +11777,54 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : client.projectData;
+    const sourceResources = isVault ? state.master.resources : client.projectData.localResources;
+    const stages = sourceData.stages || [];
     
     const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'));
     if (cardEls.length === 0) return;
 
-    const columnWidth = 300; 
-    const cardWidth = 200;   
-    const centeringOffset = (columnWidth - cardWidth) / 2 - 110; 
-    const verticalMargin = 40; // ↕️ The fixed space BETWEEN cards
-    const startY = 100;      
-
     await OL.updateAndSync(() => {
-        // 1. Group cards by their lanes
+        // 1. Group by Stage ID or Lane Index
         const lanes = {};
-
         cardEls.forEach(el => {
             const id = el.id.replace('v2-node-', '');
-            const nodeData = source.find(n => n.id === id);
-            if (nodeData && nodeData.coords) {
-                const laneIndex = Math.round(nodeData.coords.x / columnWidth);
-                if (!lanes[laneIndex]) lanes[laneIndex] = [];
-                lanes[laneIndex].push({ el, data: nodeData });
+            const nodeData = sourceResources.find(n => String(n.id) === String(id));
+            if (nodeData) {
+                const laneId = nodeData.gridLane || nodeData.stageId || 0;
+                if (!lanes[laneId]) lanes[laneId] = [];
+                lanes[laneId].push({ el, data: nodeData });
             }
         });
 
-        // 2. Distribute vertically based on ACTUAL element height
-        Object.keys(lanes).forEach(laneIdx => {
-            const currentLane = lanes[laneIdx];
+        // 2. Iterate through Stages to find X-Centers
+        let currentXOffset = 0;
+        stages.forEach((stage) => {
+            const laneId = stage.id;
+            const currentLane = lanes[laneId] || [];
+            const stageWidth = stage.width || 300;
+            const cardWidth = 220; // Your node card width
             
-            // Sort by current Y to preserve user order
-            currentLane.sort((a, b) => a.data.coords.y - b.data.coords.y);
+            // 🎯 THE CENTERING MATH
+            const centerX = currentXOffset + (stageWidth / 2) - (cardWidth / 2);
 
-            // 🚀 THE FIX: Track a running Y position for this specific lane
-            let nextAvailableY = startY;
-
-            currentLane.forEach((item) => {
-                const targetX = (laneIdx * columnWidth) + centeringOffset;
-                const targetY = nextAvailableY;
-
-                // Update Database
-                item.data.coords.x = targetX;
-                item.data.coords.y = targetY;
-
-                // Update UI
-                item.el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
-                item.el.style.setProperty('left', `${targetX}px`, 'important');
-                item.el.style.setProperty('top', `${targetY}px`, 'important');
-
-                // 📏 CALCULATE OFFSET FOR NEXT CARD
-                // We take the current card's height and add our margin
-                const currentCardHeight = item.el.offsetHeight;
-                nextAvailableY += currentCardHeight + verticalMargin;
+            let nextY = 100;
+            currentLane.sort((a, b) => a.data.coords.y - b.data.coords.y).forEach(item => {
+                item.data.coords.x = centerX;
+                item.data.coords.y = nextY;
+                
+                // Visual Sync
+                item.el.style.left = `${centerX}px`;
+                item.el.style.top = `${nextY}px`;
+                
+                nextY += item.el.offsetHeight + 40; // Card height + margin
             });
+
+            currentXOffset += stageWidth;
         });
     });
-
-    // 🔄 Redraw connections with the heartbeat loop
-    let frames = 0;
-    const heartbeat = () => {
-        OL.drawV2Connections();
-        frames++;
-        if (frames < 30) requestAnimationFrame(heartbeat);
-    };
-    requestAnimationFrame(heartbeat);
-
-    setTimeout(() => {
-        OL.drawV2Connections();
-        cardEls.forEach(el => el.style.transition = "");
-    }, 600);
+    OL.drawV2Connections();
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
