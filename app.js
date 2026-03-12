@@ -9847,25 +9847,27 @@ OL.handleTrayDrag = function(e, resId) {
 // 🖱️ Dragging on Canvas (MouseDown)
 OL.startNodeDrag = function(e, nodeId) {
     if (e.target.classList.contains('v2-port')) return;
-    
+    if (e.target.closest('.v2-step-item')) return;
+
     const idStr = String(nodeId);
     console.log(`%c 🛫 DRAG START: ${idStr} `, 'background: #222; color: #bada55; font-weight: bold;');
 
-    // Identify Source
-    const isFromTray = !!e.target.closest('.v2-workbench-tray') || !!e.target.closest('.v2-sidebar');
-    const isFromShelf = !!e.target.closest('#global-shelf');
-    console.log(`🔍 Source context: ${isFromTray ? 'TRAY' : isFromShelf ? 'SHELF' : 'CANVAS'}`);
-
-    // Update Global State
+    // 1. Update Global State (This is our fallback for MouseMove)
     state.v2.activeDragId = idStr;
     state.v2.isDraggingNode = true;
-    state.v2.isFromTray = isFromTray;
 
-    // Set DataTransfer for native events
-    e.dataTransfer.setData("moveId", idStr);
-    e.dataTransfer.effectAllowed = "move";
+    // 🚀 THE FIX: Only call dataTransfer if it exists (Native Drag context)
+    if (e.dataTransfer) {
+        e.dataTransfer.setData("moveId", idStr);
+        e.dataTransfer.effectAllowed = "move";
+        console.log("📑 Native DataTransfer Initialized");
+    } else {
+        console.log("🖱️ MouseMove Physics Initialized (No DataTransfer)");
+    }
 
     document.body.classList.add('is-dragging-node');
+
+    // 2. Trigger your custom movement physics
     OL.initWBMotion(e, idStr);
 };
 
