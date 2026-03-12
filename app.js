@@ -11751,14 +11751,11 @@ OL.autoAlignNodes = async function() {
     
     if (!sourceData?.stages || !allResources) return;
 
-    console.log("🪄 Running Elastic-Aware Tidy...");
-
     await OL.updateAndSync(() => {
-        // --- STEP 1: RESET WIDTHS ---
+        // --- STEP 1: RESET & INITIAL MAPPING ---
         sourceData.stages.forEach(s => s.width = 300);
 
-        // --- STEP 2: MAP TO LANES ---
-        // (Keep the existing mapping logic to find which lane the card is in)
+        // Map nodes to stages based on current position
         allResources.forEach(res => {
             if (res.coords && !res.isGlobal) {
                 const currentX = res.coords.x + 110; 
@@ -11774,7 +11771,25 @@ OL.autoAlignNodes = async function() {
             }
         });
 
-        // --- STEP 3: SMART ALIGNMENT ---
+        // --- STEP 2: CALCULATE DYNAMIC WIDTHS FIRST ---
+        // We need to know how wide every lane is before we place the cards
+        let totalOffset = 0;
+        sourceData.stages.forEach((stage) => {
+            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+            const cardWidth = 220;
+            
+            // Temporary calculation: find the widest card intent
+            if (laneNodes.length > 0) {
+                // How far is the right-most card from the logic's perceived START of this lane?
+                const maxRelativeX = Math.max(...laneNodes.map(n => {
+                    // If it's the first time, assume it's centered, otherwise use its relative offset
+                    return n.relativeX !== undefined ? n.relativeX : 40; 
+                }));
+                stage.width = Math.max(300, maxRelativeX + cardWidth + 40);
+            }
+        });
+
+        // --- STEP 3: RE-POSITION NODES USING ACCUMULATED WIDTHS ---
         let currentXOffset = 0;
         sourceData.stages.forEach((stage) => {
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
@@ -11782,31 +11797,20 @@ OL.autoAlignNodes = async function() {
 
             let nextY = 120;
             const cardWidth = 220;
-            const laneCenter = currentXOffset + (300 / 2) - (cardWidth / 2);
 
             laneNodes.forEach(res => {
-                // 🚀 THE SMART FIX: 
-                // If the card is within 50px of the center, snap it.
-                // If it's further out (expanded), let it stay at its current X.
-                const isNearCenter = Math.abs(res.coords.x - laneCenter) < 50;
+                // 🚀 THE FIX: Calculate X based on the current accumulated offset
+                // This ensures that if the lane to the left grew, this node moves right.
+                const laneCenter = currentXOffset + (stage.width / 2) - (cardWidth / 2);
                 
-                if (isNearCenter) {
-                    res.coords.x = laneCenter;
-                }
-                
+                // Keep it centered unless the user manually moved it (we'll track that in relativeX)
+                res.coords.x = laneCenter; 
                 res.coords.y = nextY;
-                nextY += 120; 
+                
+                nextY += 120;
             });
 
-            // 🚀 UPDATE WIDTH BASED ON ACTUAL CARD POSITIONS
-            const rightEdge = laneNodes.length > 0 
-                ? Math.max(...laneNodes.map(n => n.coords.x + cardWidth)) 
-                : 0;
-            
-            const neededWidth = (rightEdge - currentXOffset) + 60;
-            stage.width = Math.max(300, Math.round(neededWidth));
-
-            currentXOffset += stage.width;
+            currentXOffset += stage.width; // 🚀 Push the "Start" for the next lane
         });
     });
 
