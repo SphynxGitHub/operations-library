@@ -11697,21 +11697,37 @@ OL.autoAlignNodes = async function() {
     const cardEls = Array.from(document.querySelectorAll('.v2-node-layer .v2-node-card'));
     if (cardEls.length === 0) return;
 
-    console.log("🪄 Tidying Canvas...");
+    console.log("🪄 Smart Tidying Canvas...");
 
     await OL.updateAndSync(() => {
-        // 1. Map out the X-Center for every stage based on dynamic widths
+        // 1. Calculate X-Ranges for every stage
         let accumulatedX = 0;
-        const stageCenters = {};
-        
-        stages.forEach(stage => {
-            const width = stage.width || 300;
-            // Center = Current Offset + (Lane Width / 2) - (Card Width / 2)
-            stageCenters[stage.id] = accumulatedX + (width / 2) - 110; // 110 is half of 220px card
+        const stageMap = stages.map(s => {
+            const start = accumulatedX;
+            const width = s.width || 300;
             accumulatedX += width;
+            return { id: s.id, start, end: accumulatedX, center: start + (width / 2) - 110 };
         });
 
-        // 2. Group cards by their assigned stageId
+        // 2. Pre-Pass: Auto-Assign stageId based on current X position
+        allResources.forEach(res => {
+            if (res.coords && !res.isGlobal) {
+                const currentX = res.coords.x + 110; // Use horizontal center of card
+                const matchedStage = stageMap.find(sm => currentX >= sm.start && currentX <= sm.end);
+                
+                if (matchedStage) {
+                    if (res.stageId !== matchedStage.id) {
+                        console.log(`📍 Auto-assigned ${res.name} to ${matchedStage.id}`);
+                        res.stageId = matchedStage.id;
+                    }
+                } else if (currentX > accumulatedX) {
+                    // If card is past the last lane, pin it to the last lane
+                    res.stageId = stages[stages.length - 1].id;
+                }
+            }
+        });
+
+        // 3. Group cards by their (now confirmed) stageId
         const laneGroups = {};
         cardEls.forEach(el => {
             const id = el.id.replace('v2-node-', '');
@@ -11722,32 +11738,29 @@ OL.autoAlignNodes = async function() {
             }
         });
 
-        // 3. Vertically stack and horizontally center
-        Object.keys(laneGroups).forEach(stageId => {
-            const group = laneGroups[stageId];
-            const targetX = stageCenters[stageId] || 100;
-            let nextY = 120; // Starting Y padding
+        // 4. Vertically stack and horizontally center
+        stageMap.forEach(sm => {
+            const group = laneGroups[sm.id] || [];
+            let nextY = 120;
 
-            // Sort by current Y to preserve user's vertical order
+            // Sort by current Y to preserve vertical order
             group.sort((a, b) => (a.res.coords?.y || 0) - (b.res.coords?.y || 0));
 
             group.forEach(item => {
-                // Update Database
-                item.res.coords = { x: targetX, y: nextY };
+                item.res.coords = { x: sm.center, y: nextY };
 
-                // Apply Smooth Transition to DOM
+                // Apply Smooth Transition
                 item.el.style.transition = "all 0.5s cubic-bezier(0.2, 1, 0.3, 1)";
-                item.el.style.left = `${targetX}px`;
+                item.el.style.left = `${sm.center}px`;
                 item.el.style.top = `${nextY}px`;
 
-                // Increment Y for next card (Height + Margin)
                 const height = item.el.offsetHeight || 80;
                 nextY += height + 40; 
             });
         });
     });
 
-    // 4. Cleanup transitions and redraw lines
+    // 5. Cleanup
     setTimeout(() => {
         cardEls.forEach(el => el.style.transition = "");
         OL.drawV2Connections();
