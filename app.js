@@ -11512,54 +11512,6 @@ OL.unlinkParent = async function(nodeId) {
     }
 };
 
-/*OL.toggleStepView = function(nodeId) {
-    if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
-    
-    const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
-    
-    const node = source.find(n => n.id === nodeId);
-    if (!node || !node.coords) return;
-
-    const wasExpanded = state.v2.expandedNodes.has(nodeId);
-    const stepHeight = 32;
-    const laneBuffer = 150;
-    const shiftAmount = (node.steps?.length || 0) * stepHeight;
-
-    // 1. Update State
-    if (wasExpanded) state.v2.expandedNodes.delete(nodeId);
-    else state.v2.expandedNodes.add(nodeId);
-
-    // 2. Nudge nodes in the same lane
-    source.forEach(otherNode => {
-        if (otherNode.id === nodeId || !otherNode.coords) return;
-
-        // Logic: Is it in the same lane AND below the toggled node?
-        const isInLane = Math.abs(otherNode.coords.x - node.coords.x) < laneBuffer;
-        const isBelow = otherNode.coords.y > node.coords.y;
-
-        if (isInLane && isBelow) {
-            if (wasExpanded) {
-                otherNode.coords.y -= shiftAmount; // Pull up
-            } else {
-                otherNode.coords.y += shiftAmount; // Push down
-            }
-        }
-    });
-
-    // 3. Align, Persist and Paint
-    renderVisualizerV2(isVault);
-
-    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
-    setTimeout(() => {
-        OL.autoAlignNodes();
-        OL.persist(); // Save positions once they are correct
-    }, 50);
-    
-    setTimeout(() => OL.drawV2Connections(), 150);
-};*/
-
 OL.toggleStepView = function(nodeId) {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
@@ -11582,75 +11534,6 @@ OL.toggleStepView = function(nodeId) {
     console.log("🪄 Reflowing layout for toggle...");
     OL.autoAlignNodes(); 
 };
-/*
-OL.toggleMasterExpand = function() {
-    const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
-    
-    const hasExpanded = state.v2.expandedNodes.size > 0;
-    const stepHeight = 32; 
-    const laneBuffer = 150; // Nodes within 150px horizontally are considered in the same "lane"
-
-    // 1. Get all nodes currently on the canvas
-    const activeNodes = [...source].filter(n => n.coords);
-    const padding = 20;
-
-    // 2. Identify unique vertical lanes
-    const lanes = [];
-    activeNodes.forEach(node => {
-        let foundLane = lanes.find(l => Math.abs(l.x - node.coords.x) < laneBuffer);
-        if (foundLane) {
-            foundLane.nodes.push(node);
-        } else {
-            lanes.push({ x: node.coords.x, nodes: [node] });
-        }
-    });
-
-    // 3. Process each lane independently
-    lanes.forEach(lane => {
-        // Sort nodes in THIS lane top-to-bottom
-        lane.nodes.sort((a, b) => a.coords.y - b.coords.y);
-
-        let runningOffset = 0;
-
-        lane.nodes.forEach(node => {
-            if (hasExpanded) {
-                // 🚀 COLLAPSE LOGIC (Pull up)
-                node.coords.y -= runningOffset;
-                if (state.v2.expandedNodes.has(node.id)) {
-                    runningOffset += (node.steps?.length || 0) * stepHeight + padding;
-                }
-            } else {
-                // 🚀 EXPAND LOGIC (Push down)
-                node.coords.y += runningOffset;
-                if (node.steps && node.steps.length > 0) {
-                    runningOffset += node.steps.length * stepHeight + padding;
-                }
-            }
-        });
-    });
-
-    // 4. Update the expanded state set
-    if (hasExpanded) {
-        state.v2.expandedNodes.clear();
-    } else {
-        activeNodes.forEach(n => {
-            if (n.steps?.length > 0) state.v2.expandedNodes.add(n.id);
-        });
-    }
-
-    // 5. Align, Persist and Paint
-    renderVisualizerV2(isVault);
-
-    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
-    setTimeout(() => {
-        OL.autoAlignNodes();
-        OL.persist(); // Save positions once they are correct
-    }, 50);
-
-    setTimeout(() => OL.drawV2Connections(), 150);
-};*/
 
 OL.toggleMasterExpand = function() {
     const isVault = window.location.hash.includes('vault');
@@ -11861,40 +11744,45 @@ OL.autoAlignNodes = async function() {
     state.isSaving = true; 
     window.lastLocalRender = Date.now();
 
-    const FIXED_GAP = 40; // 🎯 The exact pixel gap between every card
-    const COLUMN_WIDTH = 240;
+    const FIXED_GAP = 40; 
+    const COLUMN_WIDTH = 250; // Increased slightly for breathing room
     const START_Y = 120;
 
     let currentXOffset = 0;
 
     sourceData.stages.forEach((stage) => {
         const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        
-        // 1. Sort primarily by Y to keep your vertical order
         laneNodes.sort((a, b) => a.coords.y - b.coords.y);
 
-        // 2. Track the "cursor" for each column in the lane
-        // This allows side-by-side cards to have their own vertical stacking
-        const columnCursors = {}; // { 0: y, 1: y }
+        const columnCursors = {}; 
 
         laneNodes.forEach(node => {
-            // Determine column based on current X
-            const col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / COLUMN_WIDTH));
+            // 🚀 THE FIX: Sticky Column Logic
+            // If the card is in the first 300px of the lane, force it to Col 0.
+            // Only allow Col 1+ if the card is physically way out to the right.
+            const relativeX = node.coords.x - currentXOffset;
+            let col = 0;
             
-            // Initialize column cursor if new
+            if (relativeX > 280) { 
+                col = Math.round((relativeX - 40) / COLUMN_WIDTH);
+            }
+            
             if (!columnCursors[col]) columnCursors[col] = START_Y;
 
-            // Set coordinates
             node.coords.x = currentXOffset + 40 + (col * COLUMN_WIDTH);
             node.coords.y = columnCursors[col];
 
-            // 🚀 THE EQUALIZER: 
-            // Calculate height of THIS card and add the FIXED_GAP for the next one
-            const nodeHeight = node.isExpanded ? 280 : 100; 
-            columnCursors[col] += (nodeHeight + FIXED_GAP);
+            // Use the state Set or the property to check expansion
+            const isExpanded = node.isExpanded || (state.v2.expandedNodes && state.v2.expandedNodes.has(node.id));
+            
+            // Calculate dynamic height: Base height + (steps * stepHeight)
+            const baseHeight = 100;
+            const expandedHeight = isExpanded ? (baseHeight + (node.steps?.length || 0) * 32 + 20) : baseHeight;
+            
+            columnCursors[col] += (expandedHeight + FIXED_GAP);
         });
 
-        // 3. Update stage width
+        // Update stage width
         const maxCol = Math.max(-1, ...Object.keys(columnCursors).map(Number));
         stage.width = Math.max(300, (maxCol + 1) * COLUMN_WIDTH + 80);
         currentXOffset += stage.width;
@@ -11907,8 +11795,7 @@ OL.autoAlignNodes = async function() {
         setTimeout(() => {
             state.isSaving = false;
             state.v2.isSyncingLayout = false;
-            if (OL.drawV2Connections) OL.drawV2Connections();
-        }, 1500);
+        }, 1000);
     }
 };
 
