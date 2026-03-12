@@ -11751,18 +11751,17 @@ OL.autoAlignNodes = async function() {
     
     if (!sourceData?.stages || !allResources) return;
 
-    await OL.updateAndSync(() => {
-        // --- STEP 1: RESET & INITIAL MAPPING ---
-        sourceData.stages.forEach(s => s.width = 300);
+    console.log("🪄 Running Restore & Push Tidy...");
 
-        // Map nodes to stages based on current position
+    await OL.updateAndSync(() => {
+        // 1. Initial Mapping: Keep cards in the lanes they are physically over
         allResources.forEach(res => {
             if (res.coords && !res.isGlobal) {
                 const currentX = res.coords.x + 110; 
                 let runningX = 0;
                 for (let stage of sourceData.stages) {
                     const w = stage.width || 300;
-                    if (currentX >= runningX && currentX <= runningX + w + 150) {
+                    if (currentX >= runningX && currentX <= runningX + w + 100) {
                         res.stageId = stage.id;
                         break;
                     }
@@ -11771,51 +11770,49 @@ OL.autoAlignNodes = async function() {
             }
         });
 
-        // --- STEP 2: CALCULATE DYNAMIC WIDTHS FIRST ---
-        // We need to know how wide every lane is before we place the cards
-        let totalOffset = 0;
-        sourceData.stages.forEach((stage) => {
-            const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-            const cardWidth = 220;
-            
-            // Temporary calculation: find the widest card intent
-            if (laneNodes.length > 0) {
-                // How far is the right-most card from the logic's perceived START of this lane?
-                const maxRelativeX = Math.max(...laneNodes.map(n => {
-                    // If it's the first time, assume it's centered, otherwise use its relative offset
-                    return n.relativeX !== undefined ? n.relativeX : 40; 
-                }));
-                stage.width = Math.max(300, maxRelativeX + cardWidth + 40);
-            }
-        });
-
-        // --- STEP 3: RE-POSITION NODES USING ACCUMULATED WIDTHS ---
-        let currentXOffset = 0;
+        // 2. The Pushing Engine
+        let accumulatedX = 0; // This is the "Wall" that moves right
+        
         sourceData.stages.forEach((stage) => {
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
-            let nextY = 120;
             const cardWidth = 220;
-
+            const minLaneWidth = 300;
+            
+            // 🚀 Determine how wide THIS lane needs to be
+            let maxInternalX = 0;
             laneNodes.forEach(res => {
-                // 🚀 THE FIX: Calculate X based on the current accumulated offset
-                // This ensures that if the lane to the left grew, this node moves right.
-                const laneCenter = currentXOffset + (stage.width / 2) - (cardWidth / 2);
+                // If the card was already moved far right, find its distance from accumulatedX
+                const relativeX = res.coords.x - accumulatedX;
+                maxInternalX = Math.max(maxInternalX, relativeX + cardWidth);
+            });
+
+            // Set final stage width (at least 300px)
+            stage.width = Math.max(minLaneWidth, maxInternalX + 40);
+
+            // 🚀 Position cards inside this newly calculated width
+            let nextY = 120;
+            laneNodes.forEach(res => {
+                // If the card is in the 'center zone', snap it. Otherwise, keep its relative intent.
+                const centerX = accumulatedX + (stage.width / 2) - (cardWidth / 2);
+                const isNearCenter = Math.abs(res.coords.x - centerX) < 100;
+
+                if (isNearCenter || laneNodes.length === 1) {
+                    res.coords.x = centerX;
+                }
                 
-                // Keep it centered unless the user manually moved it (we'll track that in relativeX)
-                res.coords.x = laneCenter; 
                 res.coords.y = nextY;
-                
                 nextY += 120;
             });
 
-            currentXOffset += stage.width; // 🚀 Push the "Start" for the next lane
+            // 🚀 Move the "Wall" forward for the next lane
+            accumulatedX += stage.width;
         });
     });
 
     renderVisualizerV2(isVault);
-    setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 100);
+    setTimeout(() => { if (OL.drawV2Connections) OL.drawV2Connections(); }, 150);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
