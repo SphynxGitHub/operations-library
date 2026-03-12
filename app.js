@@ -8801,6 +8801,8 @@ state.v2.trayExpandedNodes = state.v2.trayExpandedNodes || new Set();
 
 state.v2.selectedNodes = new Set();
 
+state.v2.lastTidyTime = 0;
+
 // Add this to your global listeners if it's not there
 document.addEventListener('mousedown', (e) => {
     // If we click the background canvas or a card, hide the connection toolbar
@@ -11796,6 +11798,15 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 };
 
 OL.autoAlignNodes = async function() {
+    const now = Date.now();
+    if (now - state.v2.lastTidyTime < 2000) {
+        console.log("⏳ Tidy recently executed. Ignoring echo...");
+        return;
+    }
+    
+    state.v2.lastTidyTime = now;
+    state.v2.isSyncingLayout = true;
+
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
     const sourceData = isVault ? state.master : client?.projectData;
@@ -11807,7 +11818,7 @@ OL.autoAlignNodes = async function() {
     // Set a flag that tells your Firebase listener: "Don't overwrite my UI right now!"
     state.v2.isSyncingLayout = true;
 
-    console.log("🪄 Running Sync-Locked Tidy...");
+    console.log("🪄 Running Atomic Tidy with Echo-Shield...");
 
     // 2. Perform the Height-Aware Math
     let currentXOffset = 0;
