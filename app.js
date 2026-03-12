@@ -13112,7 +13112,7 @@ window.renderGlobalVisualizer = function(isVaultMode) {
             <aside id="pane-drawer" class="v2-tray-sidebar" 
                 style="width: ${trayOpen ? '320px' : '0px'}; 
                        min-width: ${trayOpen ? '320px' : '0px'}; 
-                       overflow: hidden; transition: width 0.3s ease; background: #0f172a; 
+                       overflow: hidden; transition: width 0.3s ease;
                        display: flex; flex-direction: column; z-index: 100; border-right: 1px solid rgba(255,255,255,0.1);">
                 
                 ${trayOpen ? window.renderTrayContent(isVaultMode) : ''}
