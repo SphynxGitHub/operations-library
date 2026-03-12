@@ -9198,7 +9198,7 @@ window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
                 <div class="v2-canvas" id="v2-canvas" 
                     style="width: ${totalWidth}px; transform: translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom}); display: flex;">
                     
-                    <div class="v2-stage-layer" id="v2-stage-layer" style="position: absolute; top: 0; left: -100px; display: flex; height: 10000px; pointer-events: none;">
+                    <div class="v2-stage-layer" id="v2-stage-layer" style="position: absolute; top: 0; left: 0; display: flex; height: 10000px; pointer-events: none;">
                         ${stages.map((s, i) => `
                             <div class="v2-lane-section" 
                                 data-lane-id="${s.id || i}" 
