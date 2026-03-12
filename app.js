@@ -11751,62 +11751,51 @@ OL.autoAlignNodes = async function() {
     
     if (!sourceData?.stages || !allResources) return;
 
-    console.log("🪄 Running Restore & Push Tidy...");
+    console.log("🪄 Running Sub-Column Tidy...");
 
     await OL.updateAndSync(() => {
-        // 1. Initial Mapping: Keep cards in the lanes they are physically over
-        allResources.forEach(res => {
-            if (res.coords && !res.isGlobal) {
-                const currentX = res.coords.x + 110; 
-                let runningX = 0;
-                for (let stage of sourceData.stages) {
-                    const w = stage.width || 300;
-                    if (currentX >= runningX && currentX <= runningX + w + 100) {
-                        res.stageId = stage.id;
-                        break;
-                    }
-                    runningX += w;
-                }
-            }
-        });
+        let accumulatedX = 0;
 
-        // 2. The Pushing Engine
-        let accumulatedX = 0; // This is the "Wall" that moves right
-        
         sourceData.stages.forEach((stage) => {
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-            laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
+            if (laneNodes.length === 0) {
+                stage.width = 300;
+                accumulatedX += stage.width;
+                return;
+            }
 
-            const cardWidth = 220;
-            const minLaneWidth = 300;
-            
-            // 🚀 Determine how wide THIS lane needs to be
-            let maxInternalX = 0;
-            laneNodes.forEach(res => {
-                // If the card was already moved far right, find its distance from accumulatedX
-                const relativeX = res.coords.x - accumulatedX;
-                maxInternalX = Math.max(maxInternalX, relativeX + cardWidth);
+            // 🚀 1. Group cards into "Rows" based on their Y position (within 60px of each other)
+            laneNodes.sort((a, b) => a.coords.y - b.coords.y);
+            const rows = [];
+            laneNodes.forEach(node => {
+                let foundRow = rows.find(row => Math.abs(row[0].coords.y - node.coords.y) < 60);
+                if (foundRow) foundRow.push(node);
+                else rows.push([node]);
             });
 
-            // Set final stage width (at least 300px)
-            stage.width = Math.max(minLaneWidth, maxInternalX + 40);
-
-            // 🚀 Position cards inside this newly calculated width
+            // 🚀 2. Position cards within Rows
             let nextY = 120;
-            laneNodes.forEach(res => {
-                // If the card is in the 'center zone', snap it. Otherwise, keep its relative intent.
-                const centerX = accumulatedX + (stage.width / 2) - (cardWidth / 2);
-                const isNearCenter = Math.abs(res.coords.x - centerX) < 100;
+            let maxLaneWidthNeeded = 300;
+            const cardWidth = 240; // Card + gap
 
-                if (isNearCenter || laneNodes.length === 1) {
-                    res.coords.x = centerX;
-                }
+            rows.forEach(row => {
+                // Sort cards within the row by their X to keep left-to-right order
+                row.sort((a, b) => a.coords.x - b.coords.x);
                 
-                res.coords.y = nextY;
-                nextY += 120;
+                row.forEach((node, colIndex) => {
+                    // X is start of lane + (column index * card width)
+                    const targetX = accumulatedX + 40 + (colIndex * cardWidth);
+                    node.coords.x = targetX;
+                    node.coords.y = nextY;
+
+                    // Track how wide this specific lane needs to be
+                    maxLaneWidthNeeded = Math.max(maxLaneWidthNeeded, (colIndex + 1) * cardWidth + 80);
+                });
+                
+                nextY += 140; // Move to next row slot
             });
 
-            // 🚀 Move the "Wall" forward for the next lane
+            stage.width = Math.round(maxLaneWidthNeeded);
             accumulatedX += stage.width;
         });
     });
