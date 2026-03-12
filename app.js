@@ -11746,14 +11746,15 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
 OL.autoAlignNodes = async function() {
     try {
         const isVault = window.location.hash.includes('vault');
-        const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-        const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+        const client = getActiveClient();
+        const sourceData = isVault ? state.master : client?.projectData;
+        const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
         
-        if (!sourceData?.stages || !allResources) return;
+        if (!sourceData || !allResources) return;
 
-        console.log("🪄 1. Calculating New Layout...");
+        console.log("🪄 1. Applying Layout to Local State...");
 
-        // --- STEP 1: DATA MATH (No UI logic here) ---
+        // --- STEP 1: UPDATE LOCAL STATE IMMEDIATELY (Synchronous) ---
         let accumulatedX = 0;
         sourceData.stages.forEach((stage) => {
             const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
@@ -11764,7 +11765,6 @@ OL.autoAlignNodes = async function() {
                 return;
             }
 
-            // Group into Rows
             laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
             const rows = [];
             laneNodes.forEach(node => {
@@ -11780,6 +11780,7 @@ OL.autoAlignNodes = async function() {
             rows.forEach(row => {
                 row.sort((a, b) => (a.coords.x || 0) - (b.coords.x || 0));
                 row.forEach((node, colIndex) => {
+                    // 🎯 UPDATE LOCAL OBJECT DIRECTLY
                     node.coords.x = accumulatedX + 40 + (colIndex * cardWidth);
                     node.coords.y = nextY;
                     const rowWidth = (colIndex + 1) * cardWidth + 80;
@@ -11792,22 +11793,18 @@ OL.autoAlignNodes = async function() {
             accumulatedX += stage.width;
         });
 
-        // --- STEP 2: PERSIST DATA ---
-        console.log("🪄 2. Persisting to Database...");
-        await OL.persist();
+        // --- STEP 2: RE-RENDER NOW (Don't wait for Firebase) ---
+        console.log("🪄 2. Rendering Local State...");
+        window.renderVisualizerV2(isVault);
 
-        // --- STEP 3: AGGRESSIVE UI REBUILD ---
-        console.log("🪄 3. Forcing DOM Refresh...");
-        
-        // Use the global window reference to ensure we aren't calling a local scoped copy
-        if (window.renderVisualizerV2) {
-            window.renderVisualizerV2(isVault);
-        }
+        // --- STEP 3: PERSIST IN BACKGROUND ---
+        console.log("🪄 3. Syncing with Firebase in background...");
+        OL.persist(); 
 
         setTimeout(() => { 
             if (OL.drawV2Connections) OL.drawV2Connections(); 
-            console.log("✅ Tidy Process Finished Successfully.");
-        }, 200);
+            console.log("✅ Tidy Process Finished.");
+        }, 100);
 
     } catch (err) {
         console.error("❌ Tidy Logic Error:", err);
