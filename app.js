@@ -102,8 +102,14 @@ OL.sync = function() {
         // 1. 🛡️ THE SHIELD
         // Prevent refresh if document doesn't exist, we are currently saving, 
         // or a local render just happened (prevents feedback loops).
-        if (!doc.exists || state.isSaving || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
+        if (!doc.exists || state.isSaving || state.v2?.isSyncingLayout || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
             return; 
+        }
+
+        // Check the timestamp we set in Tidy
+        if (window.lastLocalRender && (now - window.lastLocalRender < 2500)) {
+            console.log("⏳ Shielding DOM from Firebase echo...");
+            return;
         }
 
         const cloudData = doc.data();
@@ -11865,7 +11871,19 @@ OL.autoAlignNodes = async function() {
     // 🚀 3. FORCE SAVE & WAIT
     // We await the persist to ensure Firebase acknowledges the new positions 
     // BEFORE we let the UI breathe again.
-    await OL.persist();
+    window.lastLocalRender = Date.now(); 
+    state.isSaving = true; // Engage the sync shield
+
+    try {
+        await OL.persist();
+        window.renderVisualizerV2(window.location.hash.includes('vault'));
+        console.log("✅ Tidy persisted. Sync shield active for 2 seconds.");
+    } catch (e) {
+        console.error("Tidy Sync Failed", e);
+    } finally {
+        // Give Firebase time to "settle" before allowing cloud updates to overwrite DOM
+        setTimeout(() => { state.isSaving = false; }, 1000);
+    }
 
     // 4. Repaint and Release the Lock
     window.renderVisualizerV2(isVault);
