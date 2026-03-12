@@ -9920,7 +9920,7 @@ OL.initWBMotion = function(e, id) {
         }
     };
     
-    const onUp = async (uE) => {
+    /*const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         document.body.classList.remove('is-dragging-node');
@@ -10015,6 +10015,27 @@ OL.initWBMotion = function(e, id) {
         OL.recalculateLaneWidths();
         window.renderGlobalVisualizer(isVault);
     };
+    */
+
+    const onUp = (uE) => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+
+        // 🚀 THE FIX: Wait 100ms before doing any cleanup re-renders.
+        // This allows the handleCanvasDrop function to finish the DB write first.
+        setTimeout(async () => {
+            const ghost = document.getElementById('drag-ghost');
+            if (ghost) ghost.remove();
+            
+            document.body.classList.remove('is-dragging-node');
+            
+            // If the card is still 'stuck' visually, this will refresh it from the NEW data
+            if (state.v2.activeDragId) {
+                renderVisualizerV2(window.location.hash.includes('vault'));
+            }
+        }, 100); 
+    };
+    
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
