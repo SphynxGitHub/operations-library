@@ -9134,6 +9134,7 @@ OL.getInferredScope = (node) => {
     return null;
 };
 
+
 window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const container = document.getElementById(targetId);
     if (!container) return;
@@ -9894,11 +9895,12 @@ OL.initWBMotion = function(e, id) {
     const startX = e.clientX;
     const startY = e.clientY;
     
+    // 🚀 THE FIX: Define zone here so all sub-functions can see it
     const zone = document.getElementById('unmap-zone');
     let hasMovedSignificantAmount = false;
 
-    // Capture initial coordinates
-    const dragGroup = Array.from(state.v2.selectedNodes || [id]).map(nodeId => {
+    // Capture initial coordinates for every selected node
+    const dragGroup = Array.from(state.v2.selectedNodes).map(nodeId => {
         const res = OL.getResourceById(nodeId);
         return {
             id: nodeId,
@@ -9912,6 +9914,7 @@ OL.initWBMotion = function(e, id) {
         const dx = (mE.clientX - startX) / zoom;
         const dy = (mE.clientY - startY) / zoom;
 
+        // 1. 📏 CHECK THRESHOLD
         if (!hasMovedSignificantAmount) {
             const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
             if (dist < 5) return; 
@@ -9919,20 +9922,63 @@ OL.initWBMotion = function(e, id) {
 
             state.v2.isDraggingNode = true;
             document.body.classList.add('is-dragging-node');
+
             if (zone) zone.classList.add('visible');
+            
+            dragGroup.forEach(node => {
+                if (node.el) node.el.classList.add('is-dragging');
+            });
         }
 
+        // 🚀 2. APPLY DELTA TO ALL SELECTED ELEMENTS
         dragGroup.forEach(node => {
             if (node.el) {
                 node.el.style.left = `${node.initialX + dx}px`;
                 node.el.style.top = `${node.initialY + dy}px`;
             }
+            
+            if (!state.v2._lastWidthSync || Date.now() - state.v2._lastWidthSync > 100) {
+                OL.syncLaneWidthsToContent();
+                state.v2._lastWidthSync = Date.now();
+            }
+
+            OL.drawV2Connections();
         });
 
-        // Throttle connection drawing for performance
-        if (!window._lastConnDraw || Date.now() - window._lastConnDraw > 30) {
-            OL.drawV2Connections();
-            window._lastConnDraw = Date.now();
+        // 3. 🎯 DETECT HOVER TARGET
+        const target = document.elementFromPoint(mE.clientX, mE.clientY);
+        const isOverUnmap = !!target?.closest('#unmap-zone');
+
+        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
+        const targetCardEl = target?.closest('.v2-node-card');
+        
+        // Highlight logic (Only if target isn't part of the dragged group)
+        if (targetCardEl && !state.v2.selectedNodes.has(targetCardEl.id.replace('v2-node-', ''))) {
+            targetCardEl.classList.add('drop-target-highlight');
+        }
+
+        if (zone) {
+            if (isOverUnmap) {
+                zone.classList.add('is-hovered');
+                targetCardEl?.classList.remove('drop-target-highlight');
+            } else {
+                zone.classList.remove('is-hovered');
+            }
+        }
+
+        // 4. 👻 HANDLE GHOST (Primary node only)
+        let ghost = document.getElementById('drag-ghost');
+        if (target?.closest('#v2-workbench-target')) {
+            if (!ghost) {
+                ghost = document.createElement('div');
+                ghost.id = 'drag-ghost';
+                ghost.className = 'v2-node-card ghost';
+                canvas.appendChild(ghost);
+            }
+            const res = OL.getResourceById(id);
+            ghost.innerHTML = `<b style="color:var(--accent)">${res?.name || 'Mapping...'}</b>`;
+            ghost.style.left = `${(mE.clientX - rect.left) / zoom}px`;
+            ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
         }
     };
 
@@ -9943,49 +9989,100 @@ OL.initWBMotion = function(e, id) {
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
         document.body.classList.remove('is-dragging-node');
-        if (zone) zone.classList.remove('visible');
 
-        const dropX = (uE.clientX - startX) / zoom;
-        const dropY = (uE.clientY - startY) / zoom;
+        const canvas = document.getElementById('v2-canvas');
+        const rect = canvas.getBoundingClientRect();
+        const zoom = state.v2.zoom || 1;
 
-        // 🚀 1. UPDATE THE PRIMARY NODE POSITION
+        let dropX = Math.round((uE.clientX - rect.left) / zoom);
+        let dropY = Math.round((uE.clientY - rect.top) / zoom);
+
+        // 🚀 FIX: Define these variables BEFORE updateAndSync so the callback can see them
+        const isVault = window.location.hash.includes('vault');
+        const client = getActiveClient();
+        const sourceData = isVault ? state.master : client?.projectData;
+        const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+        const stages = sourceData?.stages || [];
+
+        if (!allResources || !id) return;
+
+        // 1. Calculate the Drag Delta to determine direction
         const res = OL.getResourceById(id);
-        if (res && res.coords) {
-            // Calculate final drop position before Snap
-            const finalX = res.coords.x + dropX;
-            const finalY = res.coords.y + dropY;
+        const startX = res.coords.x;
+        const dx = dropX - startX; // Positive = Moving Right
+        
+        // 🚀 THE FIX: Determine which "Edge" to use for lane detection
+        // If moving right, use the right edge (dropX + 220).
+        // If moving left, use the left edge (dropX).
+        // If barely moved, use the center.
+        let detectX = dropX + 110; // Default center
+        if (dx > 20) detectX = dropX + 200; // Leading right edge
+        if (dx < -20) detectX = dropX + 20; // Leading left edge
 
-            // Determine Drag Direction for Lane Detection
-            const dx = finalX - res.coords.x;
-            let detectX = finalX + 110; 
-            if (dx > 20) detectX = finalX + 200;
-            if (dx < -20) detectX = finalX + 20;
-
-            // Apply temporary drop coords
-            res.coords.x = finalX;
-            res.coords.y = finalY;
-
-            // 🚀 2. ASSIGN STAGE (Lane Detection)
-            const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-            const stages = sourceData?.stages || [];
+        await OL.updateAndSync(() => {
+            // 2. Identify Lane using the Biased detectX
             let accumulatedX = 0;
+            let targetStageIdx = 0;
+
             for (let i = 0; i < stages.length; i++) {
                 const w = stages[i].width || 300;
+                // We give it a small "gravity" buffer of 40px
                 if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
-                    res.stageId = stages[i].id;
+                    targetStageIdx = i;
                     break;
                 }
                 accumulatedX += w;
             }
-        }
+            
+            const targetStage = stages[targetStageIdx];
+            res.stageId = targetStage.id;
+            
+            const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
 
-        // 🚀 3. THE MAGIC SNAP
-        // We call autoAlignNodes(true) which handles the Column Logic, 
-        // Horizontal Shoving, Lane Resizing, and Persistence in one go.
-        console.log("🪄 Finalizing Motion with Snap...");
-        await OL.autoAlignNodes(true); 
+            // 3. THE SHOVE (Row Logic)
+            const laneSiblings = allResources.filter(r => 
+                r.stageId === res.stageId && 
+                r.id !== res.id && 
+                r.coords && 
+                Math.abs(r.coords.y - dropY) < 80 
+            );
+
+            const rowGroup = [...laneSiblings, res];
+            // Sort based on their relative position to the lane start
+            rowGroup.sort((a, b) => {
+                const ax = (a.id === id) ? dropX : a.coords.x;
+                const bx = (b.id === id) ? dropX : b.coords.x;
+                return ax - bx;
+            });
+
+            // 4. Arrange cards and Push Width
+            let currentXInLane = laneStartX + 40;
+            rowGroup.forEach((node) => {
+                if (node.id === res.id) {
+                    res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
+                } else {
+                    node.coords.x = currentXInLane;
+                }
+                currentXInLane += 240; 
+            });
+
+            // 5. GLOBAL SYNC (Ensure background lines move)
+            let runningTotalX = 0;
+            stages.forEach(stage => {
+                const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
+                if (nodesInLane.length > 0) {
+                    const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
+                    stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
+                } else {
+                    stage.width = 300;
+                }
+                runningTotalX += stage.width;
+            });
+        });
+
+        window.renderVisualizerV2(isVault);
+        OL.persist();
     };
-
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
@@ -11416,26 +11513,51 @@ OL.unlinkParent = async function(nodeId) {
 };
 
 OL.toggleStepView = function(nodeId) {
+    if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
+    
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
     const source = isVault ? state.master.resources : client.projectData.localResources;
     
     const node = source.find(n => n.id === nodeId);
-    if (!node) return;
+    if (!node || !node.coords) return;
 
-    // 🚀 STEP 1: Just toggle the state. 
-    // (Ensure you're using 'node.isExpanded' since Tidy looks for that)
-    node.isExpanded = !node.isExpanded;
+    const wasExpanded = state.v2.expandedNodes.has(nodeId);
+    const stepHeight = 32;
+    const laneBuffer = 150;
+    const shiftAmount = (node.steps?.length || 0) * stepHeight;
 
-    // Also update your Set if you use it for UI classes
-    if (!state.v2.expandedNodes) state.v2.expandedNodes = new Set();
-    if (node.isExpanded) state.v2.expandedNodes.add(nodeId);
-    else state.v2.expandedNodes.delete(nodeId);
+    // 1. Update State
+    if (wasExpanded) state.v2.expandedNodes.delete(nodeId);
+    else state.v2.expandedNodes.add(nodeId);
 
-    // 🚀 STEP 2: Let the Layout Engine do the math
-    // This will handle the "push down" of everything below it automatically
-    console.log("🪄 Reflowing layout for toggle...");
-    OL.autoAlignNodes(false); 
+    // 2. Nudge nodes in the same lane
+    source.forEach(otherNode => {
+        if (otherNode.id === nodeId || !otherNode.coords) return;
+
+        // Logic: Is it in the same lane AND below the toggled node?
+        const isInLane = Math.abs(otherNode.coords.x - node.coords.x) < laneBuffer;
+        const isBelow = otherNode.coords.y > node.coords.y;
+
+        if (isInLane && isBelow) {
+            if (wasExpanded) {
+                otherNode.coords.y -= shiftAmount; // Pull up
+            } else {
+                otherNode.coords.y += shiftAmount; // Push down
+            }
+        }
+    });
+
+    // 3. Align, Persist and Paint
+    renderVisualizerV2(isVault);
+
+    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
+    setTimeout(() => {
+        OL.autoAlignNodes();
+        OL.persist(); // Save positions once they are correct
+    }, 50);
+    
+    setTimeout(() => OL.drawV2Connections(), 150);
 };
 
 OL.toggleMasterExpand = function() {
@@ -11443,22 +11565,68 @@ OL.toggleMasterExpand = function() {
     const client = getActiveClient();
     const source = isVault ? state.master.resources : client.projectData.localResources;
     
-    // Determine if we are expanding or collapsing based on the Set
-    const currentlyExpanded = state.v2.expandedNodes?.size > 0;
+    const hasExpanded = state.v2.expandedNodes.size > 0;
+    const stepHeight = 32; 
+    const laneBuffer = 150; // Nodes within 150px horizontally are considered in the same "lane"
 
-    // 🚀 STEP 1: Just update the properties
-    source.forEach(node => {
-        if (!node.isGlobal && node.steps?.length > 0) {
-            node.isExpanded = !currentlyExpanded;
-            
-            if (node.isExpanded) state.v2.expandedNodes.add(node.id);
-            else state.v2.expandedNodes.delete(node.id);
+    // 1. Get all nodes currently on the canvas
+    const activeNodes = [...source].filter(n => n.coords);
+    const padding = 20;
+
+    // 2. Identify unique vertical lanes
+    const lanes = [];
+    activeNodes.forEach(node => {
+        let foundLane = lanes.find(l => Math.abs(l.x - node.coords.x) < laneBuffer);
+        if (foundLane) {
+            foundLane.nodes.push(node);
+        } else {
+            lanes.push({ x: node.coords.x, nodes: [node] });
         }
     });
 
-    // 🚀 STEP 2: Run the engine once
-    console.log("🪄 Master Reflow initiated...");
-    OL.autoAlignNodes(false);
+    // 3. Process each lane independently
+    lanes.forEach(lane => {
+        // Sort nodes in THIS lane top-to-bottom
+        lane.nodes.sort((a, b) => a.coords.y - b.coords.y);
+
+        let runningOffset = 0;
+
+        lane.nodes.forEach(node => {
+            if (hasExpanded) {
+                // 🚀 COLLAPSE LOGIC (Pull up)
+                node.coords.y -= runningOffset;
+                if (state.v2.expandedNodes.has(node.id)) {
+                    runningOffset += (node.steps?.length || 0) * stepHeight + padding;
+                }
+            } else {
+                // 🚀 EXPAND LOGIC (Push down)
+                node.coords.y += runningOffset;
+                if (node.steps && node.steps.length > 0) {
+                    runningOffset += node.steps.length * stepHeight + padding;
+                }
+            }
+        });
+    });
+
+    // 4. Update the expanded state set
+    if (hasExpanded) {
+        state.v2.expandedNodes.clear();
+    } else {
+        activeNodes.forEach(n => {
+            if (n.steps?.length > 0) state.v2.expandedNodes.add(n.id);
+        });
+    }
+
+    // 5. Align, Persist and Paint
+    renderVisualizerV2(isVault);
+
+    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
+    setTimeout(() => {
+        OL.autoAlignNodes();
+        OL.persist(); // Save positions once they are correct
+    }, 50);
+
+    setTimeout(() => OL.drawV2Connections(), 150);
 };
 
 OL.toggleWorkbenchTray = function() {
@@ -11635,72 +11803,98 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
     }
 };
 
-OL.autoAlignNodes = async function(isManualDrag = false) {
+OL.autoAlignNodes = async function() {
+    const now = Date.now();
+    if (now - state.v2.lastTidyTime < 2000) {
+        console.log("⏳ Tidy recently executed. Ignoring echo...");
+        return;
+    }
+    
+    state.v2.lastTidyTime = now;
+    state.v2.isSyncingLayout = true;
+
     const isVault = window.location.hash.includes('vault');
-    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
-    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : client?.projectData;
+    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
     
     if (!sourceData?.stages || !allResources) return;
 
+    // 🚀 1. BLOCK AUTO-REFRESH
+    // Set a flag that tells your Firebase listener: "Don't overwrite my UI right now!"
     state.v2.isSyncingLayout = true;
-    state.isSaving = true; 
-    window.lastLocalRender = Date.now();
 
-    const FIXED_GAP = 30; 
-    const COLUMN_WIDTH = 250; 
-    let accumulatedX = 0;
+    console.log("🪄 Running Atomic Tidy with Echo-Shield...");
 
+    // 2. Perform the Height-Aware Math
+    let currentXOffset = 0;
     sourceData.stages.forEach((stage) => {
         const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        laneNodes.sort((a, b) => a.coords.y - b.coords.y);
+        laneNodes.sort((a, b) => (a.coords.y - b.coords.y) || (a.coords.x - b.coords.x));
 
-        let columnCursors = { 0: 120 }; 
-        const laneStartX = accumulatedX;
+        let nextY = 120;
+        const slotWidth = 240;
+        const rows = [];
 
         laneNodes.forEach(node => {
-            // 🚀 THE FIX: Use 'isManualDrag' safely within the loop
-            // If we are just clicking (isManualDrag === false), we ONLY calculate col if it's missing
-            const needsColCalculation = isManualDrag || node._col === undefined;
-
-            if (needsColCalculation) {
-                const relativeX = (node.coords.x || 0) - laneStartX;
-                // If it's a click, and we ALREADY have a column, don't change it!
-                if (!isManualDrag && node._col !== undefined) {
-                    // Stay put
-                } else {
-                    node._col = relativeX > 350 ? Math.round((relativeX - 40) / COLUMN_WIDTH) : 0;
+            let placed = false;
+            for (let row of rows) {
+                const preferredCol = Math.round((node.coords.x - currentXOffset - 40) / slotWidth);
+                if (!row.some(n => n._col === preferredCol)) {
+                    node._col = Math.max(0, preferredCol);
+                    row.push(node);
+                    placed = true;
+                    break;
                 }
             }
-            
-            const col = node._col || 0;
-            if (!columnCursors[col]) columnCursors[col] = 120;
-
-            // Apply coordinates: The X is now strictly tied to the column index
-            node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
-            node.coords.y = columnCursors[col];
-
-            const isExpanded = node.isExpanded || (state.v2.expandedNodes && state.v2.expandedNodes.has(node.id));
-            // Standardizing heights for collapsed vs expanded
-            const nodeHeight = isExpanded ? (120 + (node.steps?.length || 0) * 32 + 20) : 100;
-            
-            columnCursors[col] += (nodeHeight + FIXED_GAP);
+            if (!placed) {
+                node._col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / slotWidth));
+                rows.push([node]);
+            }
         });
 
-        const maxCol = Math.max(0, ...Object.keys(columnCursors).map(Number));
-        stage.width = Math.max(300, (maxCol * COLUMN_WIDTH) + 320);
-        accumulatedX += stage.width;
+        rows.forEach(row => {
+            const rowHeight = row.some(n => n.isExpanded) ? 340 : 150; // Added a bit more padding
+            row.forEach(node => {
+                node.coords.x = currentXOffset + 40 + (node._col * slotWidth);
+                node.coords.y = nextY;
+            });
+            nextY += rowHeight;
+        });
+
+        const farRight = laneNodes.length > 0 ? Math.max(...laneNodes.map(n => n.coords.x + 220)) : currentXOffset + 300;
+        stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 60);
+        currentXOffset += stage.width;
+        laneNodes.forEach(n => delete n._col);
     });
 
+    // 🚀 3. FORCE SAVE & WAIT
+    // We await the persist to ensure Firebase acknowledges the new positions 
+    // BEFORE we let the UI breathe again.
+    window.lastLocalRender = Date.now(); 
+    state.isSaving = true; // Engage the sync shield
+
     try {
-        window.renderVisualizerV2(isVault);
         await OL.persist();
+        window.renderVisualizerV2(window.location.hash.includes('vault'));
+        console.log("✅ Tidy persisted. Sync shield active for 2 seconds.");
+    } catch (e) {
+        console.error("Tidy Sync Failed", e);
     } finally {
-        setTimeout(() => {
-            state.isSaving = false;
-            state.v2.isSyncingLayout = false;
-        }, 1000);
+        // Give Firebase time to "settle" before allowing cloud updates to overwrite DOM
+        setTimeout(() => { state.isSaving = false; }, 1000);
     }
+
+    // 4. Repaint and Release the Lock
+    window.renderVisualizerV2(isVault);
+    
+    setTimeout(() => {
+        state.v2.isSyncingLayout = false;
+        if (OL.drawV2Connections) OL.drawV2Connections();
+        console.log("✅ Tidy Locked and Loaded.");
+    }, 500);
 };
+
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
 
 window.renderGlobalCanvas = function(isVaultMode) {
