@@ -9969,84 +9969,81 @@ OL.initWBMotion = function(e, id) {
         if (!allResources || !id) return;
 
         // 1. Calculate the Drag Delta to determine direction
-        const res = OL.getResourceById(id);
-        const startX = res.coords.x;
-        const dx = dropX - startX; // Positive = Moving Right
-        
-        // 🚀 THE FIX: Determine which "Edge" to use for lane detection
-        // If moving right, use the right edge (dropX + 220).
-        // If moving left, use the left edge (dropX).
-        // If barely moved, use the center.
-        let detectX = dropX + 110; // Default center
-        if (dx > 20) detectX = dropX + 200; // Leading right edge
-        if (dx < -20) detectX = dropX + 20; // Leading left edge
+    const res = OL.getResourceById(id);
+    const startX = res.coords.x;
+    const dx = dropX - startX; // Positive = Moving Right
+    
+    // 🚀 THE FIX: Determine which "Edge" to use for lane detection
+    // If moving right, use the right edge (dropX + 220).
+    // If moving left, use the left edge (dropX).
+    // If barely moved, use the center.
+    let detectX = dropX + 110; // Default center
+    if (dx > 20) detectX = dropX + 200; // Leading right edge
+    if (dx < -20) detectX = dropX + 20; // Leading left edge
 
-        await OL.updateAndSync(() => {
-            // 2. Identify Lane using the Biased detectX
-            let accumulatedX = 0;
-            let targetStageIdx = 0;
+    await OL.updateAndSync(() => {
+        // 2. Identify Lane using the Biased detectX
+        let accumulatedX = 0;
+        let targetStageIdx = 0;
 
-            for (let i = 0; i < stages.length; i++) {
-                const w = stages[i].width || 300;
-                // We give it a small "gravity" buffer of 40px
-                if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
-                    targetStageIdx = i;
-                    break;
-                }
-                accumulatedX += w;
+        for (let i = 0; i < stages.length; i++) {
+            const w = stages[i].width || 300;
+            // We give it a small "gravity" buffer of 40px
+            if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
+                targetStageIdx = i;
+                break;
             }
-            
-            const targetStage = stages[targetStageIdx];
-            res.stageId = targetStage.id;
-            
-            const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
+            accumulatedX += w;
+        }
+        
+        const targetStage = stages[targetStageIdx];
+        res.stageId = targetStage.id;
+        
+        const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
 
-            // 3. THE SHOVE (Row Logic)
-            const laneSiblings = allResources.filter(r => 
-                r.stageId === res.stageId && 
-                r.id !== res.id && 
-                r.coords && 
-                Math.abs(r.coords.y - dropY) < 80 
-            );
+        // 3. THE SHOVE (Row Logic)
+        const laneSiblings = allResources.filter(r => 
+            r.stageId === res.stageId && 
+            r.id !== res.id && 
+            r.coords && 
+            Math.abs(r.coords.y - dropY) < 80 
+        );
 
-            const rowGroup = [...laneSiblings, res];
-            // Sort based on their relative position to the lane start
-            rowGroup.sort((a, b) => {
-                const ax = (a.id === id) ? dropX : a.coords.x;
-                const bx = (b.id === id) ? dropX : b.coords.x;
-                return ax - bx;
-            });
-
-            // 4. Arrange cards and Push Width
-            let currentXInLane = laneStartX + 40;
-            rowGroup.forEach((node) => {
-                if (node.id === res.id) {
-                    res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
-                } else {
-                    node.coords.x = currentXInLane;
-                }
-                currentXInLane += 240; 
-            });
-
-            // 5. GLOBAL SYNC (Ensure background lines move)
-            let runningTotalX = 0;
-            stages.forEach(stage => {
-                const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
-                if (nodesInLane.length > 0) {
-                    const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
-                    stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
-                } else {
-                    stage.width = 300;
-                }
-                runningTotalX += stage.width;
-            });
+        const rowGroup = [...laneSiblings, res];
+        // Sort based on their relative position to the lane start
+        rowGroup.sort((a, b) => {
+            const ax = (a.id === id) ? dropX : a.coords.x;
+            const bx = (b.id === id) ? dropX : b.coords.x;
+            return ax - bx;
         });
 
-        window.renderVisualizerV2(isVault);
-        OL.persist();
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+        // 4. Arrange cards and Push Width
+        let currentXInLane = laneStartX + 40;
+        rowGroup.forEach((node) => {
+            if (node.id === res.id) {
+                res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
+            } else {
+                node.coords.x = currentXInLane;
+            }
+            currentXInLane += 240; 
+        });
+
+        // 5. GLOBAL SYNC (Ensure background lines move)
+        let runningTotalX = 0;
+        stages.forEach(stage => {
+            const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
+            if (nodesInLane.length > 0) {
+                const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
+                stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
+            } else {
+                stage.width = 300;
+            }
+            runningTotalX += stage.width;
+        });
+    });
+
+    window.renderVisualizerV2(isVault);
+    OL.persist();
 };
 
 OL.performInternalMerge = function(moving, target, source) {
