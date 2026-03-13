@@ -10095,40 +10095,34 @@ OL.initWBMotion = function(e, id) {
     const res = OL.getResourceById(id);
     if (!res) return;
 
-    let hasMovedSignificantAmount = false; 
-    const startX = e.clientX;
-    const startY = e.clientY;
+    // 🚀 THE FIX: Force the indicator to exist and be visible
+    let indicator = document.getElementById('drag-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'drag-indicator';
+        document.body.appendChild(indicator);
+    }
     
-    let indicator = document.getElementById('drag-indicator') || document.createElement('div');
-    indicator.id = 'drag-indicator';
-    if (!indicator.parentElement) document.body.appendChild(indicator);
+    // Reset state and show
     indicator.style.display = 'block';
+    indicator.style.left = `${e.clientX - 7}px`;
+    indicator.style.top = `${e.clientY - 7}px`;
 
+    let hasMovedSignificantAmount = false;
     const el = document.getElementById(`v2-node-${id}`);
-    el.classList.add('is-dragging-ghost');
-
+    
     const onMove = (mE) => {
-        // 🎯 Position the Dot (Indicator) exactly on the cursor
-        // We use -6px to center a 12px dot on the tip of the mouse
-        indicator.style.left = `${mE.clientX - 6}px`;
-        indicator.style.top = `${mE.clientY - 6}px`;
+        // Move the dot
+        indicator.style.left = `${mE.clientX - 7}px`;
+        indicator.style.top = `${mE.clientY - 7}px`;
 
         if (!hasMovedSignificantAmount) {
-            const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
+            const dist = Math.hypot(mE.clientX - e.clientX, mE.clientY - e.clientY);
             if (dist < 5) return;
             hasMovedSignificantAmount = true;
-
-            state.v2.isDraggingNode = true;
-            document.body.classList.add('is-dragging-node');
             
-            // 🚀 Morph the actual card(s) into the dot's position/style
-            dragGroup.forEach(node => {
-                if (node.el) {
-                    node.el.classList.add('is-dragging');
-                    // Optional: make the original card invisible so only the indicator shows
-                    node.el.style.opacity = "0"; 
-                }
-            });
+            // Hide the actual card
+            if (el) el.classList.add('is-dragging-ghost');
         }
 
         // --- Merge Detection (Look through the indicator) ---
