@@ -10104,14 +10104,41 @@ OL.initWBMotion = function(e, id) {
     el.classList.add('is-dragging-ghost');
 
     const onMove = (mE) => {
-        indicator.style.left = `${mE.clientX - 4}px`;
-        indicator.style.top = `${mE.clientY - 4}px`;
+        // 🎯 Position the Dot (Indicator) exactly on the cursor
+        // We use -6px to center a 12px dot on the tip of the mouse
+        indicator.style.left = `${mE.clientX - 6}px`;
+        indicator.style.top = `${mE.clientY - 6}px`;
 
-        // Merge Highlight
+        if (!hasMovedSignificantAmount) {
+            const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
+            if (dist < 5) return;
+            hasMovedSignificantAmount = true;
+
+            state.v2.isDraggingNode = true;
+            document.body.classList.add('is-dragging-node');
+            
+            // 🚀 Morph the actual card(s) into the dot's position/style
+            dragGroup.forEach(node => {
+                if (node.el) {
+                    node.el.classList.add('is-dragging');
+                    // Optional: make the original card invisible so only the indicator shows
+                    node.el.style.opacity = "0"; 
+                }
+            });
+        }
+
+        // --- Merge Detection (Look through the indicator) ---
+        // Temporarily hide indicator so elementFromPoint doesn't hit the dot itself
+        indicator.style.pointerEvents = 'none'; 
         const targetEl = document.elementFromPoint(mE.clientX, mE.clientY);
         const hoverTarget = targetEl?.closest('.v2-node-card');
+        
         document.querySelectorAll('.merge-ready').forEach(c => c.classList.remove('merge-ready'));
-        if (hoverTarget && hoverTarget.id !== `v2-node-${id}`) hoverTarget.classList.add('merge-ready');
+        
+        // Don't highlight the card we are currently dragging
+        if (hoverTarget && hoverTarget.id !== `v2-node-${id}`) {
+            hoverTarget.classList.add('merge-ready');
+        }
     };
 
     const onUp = async (uE) => {
