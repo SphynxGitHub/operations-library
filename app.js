@@ -10095,46 +10095,64 @@ OL.initWBMotion = function(e, id) {
     const res = OL.getResourceById(id);
     if (!res) return;
 
-    // 🚀 THE FIX: Force the indicator to exist and be visible
+    // 1. 🚀 INITIALIZE SCOPE VARIABLES
+    let hasMovedSignificantAmount = false;
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    // 2. Ensure the Dot (Indicator) exists and is visible
     let indicator = document.getElementById('drag-indicator');
     if (!indicator) {
         indicator = document.createElement('div');
         indicator.id = 'drag-indicator';
         document.body.appendChild(indicator);
     }
-    
-    // Reset state and show
     indicator.style.display = 'block';
+    // Center dot on mouse (assuming 14px dot, so -7px)
     indicator.style.left = `${e.clientX - 7}px`;
     indicator.style.top = `${e.clientY - 7}px`;
 
-    let hasMovedSignificantAmount = false;
-    const el = document.getElementById(`v2-node-${id}`);
-    
+    // 3. 🚀 DEFINE DRAG GROUP (This fixes the ReferenceError)
+    // We move the single card 'id', plus anything else the user has selected
+    const selectedIds = state.v2.selectedNodes || new Set();
+    if (!selectedIds.has(String(id))) selectedIds.add(String(id));
+
+    const dragGroup = Array.from(selectedIds).map(nodeId => ({
+        id: nodeId,
+        el: document.getElementById(`v2-node-${nodeId}`),
+        initialX: OL.getResourceById(nodeId)?.coords?.x || 0,
+        initialY: OL.getResourceById(nodeId)?.coords?.y || 0
+    }));
+
     const onMove = (mE) => {
-        // Move the dot
+        // Move the Dot
         indicator.style.left = `${mE.clientX - 7}px`;
         indicator.style.top = `${mE.clientY - 7}px`;
 
+        const dx = (mE.clientX - startX) / zoom;
+        const dy = (mE.clientY - startY) / zoom;
+
         if (!hasMovedSignificantAmount) {
-            const dist = Math.hypot(mE.clientX - e.clientX, mE.clientY - e.clientY);
+            const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
             if (dist < 5) return;
             hasMovedSignificantAmount = true;
-            
-            // Hide the actual card
-            if (el) el.classList.add('is-dragging-ghost');
+
+            state.v2.isDraggingNode = true;
+            document.body.classList.add('is-dragging-node');
+
+            // 👻 Hide the cards in the drag group
+            dragGroup.forEach(node => {
+                if (node.el) node.el.classList.add('is-dragging-ghost');
+            });
         }
 
-        // --- Merge Detection (Look through the indicator) ---
-        // Temporarily hide indicator so elementFromPoint doesn't hit the dot itself
-        indicator.style.pointerEvents = 'none'; 
-        const targetEl = document.elementFromPoint(mE.clientX, mE.clientY);
-        const hoverTarget = targetEl?.closest('.v2-node-card');
-        
+        // --- Merge Highlight Logic ---
+        // We use pointer-events:none on the indicator (in CSS) so this sees through it
+        const target = document.elementFromPoint(mE.clientX, mE.clientY);
+        const hoverTarget = target?.closest('.v2-node-card');
         document.querySelectorAll('.merge-ready').forEach(c => c.classList.remove('merge-ready'));
         
-        // Don't highlight the card we are currently dragging
-        if (hoverTarget && hoverTarget.id !== `v2-node-${id}`) {
+        if (hoverTarget && !selectedIds.has(hoverTarget.id.replace('v2-node-', ''))) {
             hoverTarget.classList.add('merge-ready');
         }
     };
@@ -10142,8 +10160,13 @@ OL.initWBMotion = function(e, id) {
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        
         indicator.style.display = 'none';
-        el.classList.remove('is-dragging-ghost');
+        document.body.classList.remove('is-dragging-node');
+        
+        dragGroup.forEach(node => {
+            if (node.el) node.el.classList.remove('is-dragging-ghost');
+        });
 
         const targetEl = document.elementFromPoint(uE.clientX, uE.clientY);
         const dropTarget = targetEl?.closest('.v2-node-card');
