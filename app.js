@@ -9894,12 +9894,11 @@ OL.initWBMotion = function(e, id) {
     const startX = e.clientX;
     const startY = e.clientY;
     
-    // 🚀 THE FIX: Define zone here so all sub-functions can see it
     const zone = document.getElementById('unmap-zone');
     let hasMovedSignificantAmount = false;
 
-    // Capture initial coordinates for every selected node
-    const dragGroup = Array.from(state.v2.selectedNodes).map(nodeId => {
+    // Capture initial coordinates
+    const dragGroup = Array.from(state.v2.selectedNodes || [id]).map(nodeId => {
         const res = OL.getResourceById(nodeId);
         return {
             id: nodeId,
@@ -9913,7 +9912,6 @@ OL.initWBMotion = function(e, id) {
         const dx = (mE.clientX - startX) / zoom;
         const dy = (mE.clientY - startY) / zoom;
 
-        // 1. 📏 CHECK THRESHOLD
         if (!hasMovedSignificantAmount) {
             const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
             if (dist < 5) return; 
@@ -9921,63 +9919,20 @@ OL.initWBMotion = function(e, id) {
 
             state.v2.isDraggingNode = true;
             document.body.classList.add('is-dragging-node');
-
             if (zone) zone.classList.add('visible');
-            
-            dragGroup.forEach(node => {
-                if (node.el) node.el.classList.add('is-dragging');
-            });
         }
 
-        // 🚀 2. APPLY DELTA TO ALL SELECTED ELEMENTS
         dragGroup.forEach(node => {
             if (node.el) {
                 node.el.style.left = `${node.initialX + dx}px`;
                 node.el.style.top = `${node.initialY + dy}px`;
             }
-            
-            if (!state.v2._lastWidthSync || Date.now() - state.v2._lastWidthSync > 100) {
-                OL.syncLaneWidthsToContent();
-                state.v2._lastWidthSync = Date.now();
-            }
-
-            OL.drawV2Connections();
         });
 
-        // 3. 🎯 DETECT HOVER TARGET
-        const target = document.elementFromPoint(mE.clientX, mE.clientY);
-        const isOverUnmap = !!target?.closest('#unmap-zone');
-
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
-        const targetCardEl = target?.closest('.v2-node-card');
-        
-        // Highlight logic (Only if target isn't part of the dragged group)
-        if (targetCardEl && !state.v2.selectedNodes.has(targetCardEl.id.replace('v2-node-', ''))) {
-            targetCardEl.classList.add('drop-target-highlight');
-        }
-
-        if (zone) {
-            if (isOverUnmap) {
-                zone.classList.add('is-hovered');
-                targetCardEl?.classList.remove('drop-target-highlight');
-            } else {
-                zone.classList.remove('is-hovered');
-            }
-        }
-
-        // 4. 👻 HANDLE GHOST (Primary node only)
-        let ghost = document.getElementById('drag-ghost');
-        if (target?.closest('#v2-workbench-target')) {
-            if (!ghost) {
-                ghost = document.createElement('div');
-                ghost.id = 'drag-ghost';
-                ghost.className = 'v2-node-card ghost';
-                canvas.appendChild(ghost);
-            }
-            const res = OL.getResourceById(id);
-            ghost.innerHTML = `<b style="color:var(--accent)">${res?.name || 'Mapping...'}</b>`;
-            ghost.style.left = `${(mE.clientX - rect.left) / zoom}px`;
-            ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
+        // Throttle connection drawing for performance
+        if (!window._lastConnDraw || Date.now() - window._lastConnDraw > 30) {
+            OL.drawV2Connections();
+            window._lastConnDraw = Date.now();
         }
     };
 
@@ -9988,103 +9943,51 @@ OL.initWBMotion = function(e, id) {
         const ghost = document.getElementById('drag-ghost');
         if (ghost) ghost.remove();
         document.body.classList.remove('is-dragging-node');
+        if (zone) zone.classList.remove('visible');
 
-        const canvas = document.getElementById('v2-canvas');
-        const rect = canvas.getBoundingClientRect();
-        const zoom = state.v2.zoom || 1;
+        const dropX = (uE.clientX - startX) / zoom;
+        const dropY = (uE.clientY - startY) / zoom;
 
-        let dropX = Math.round((uE.clientX - rect.left) / zoom);
-        let dropY = Math.round((uE.clientY - rect.top) / zoom);
-
-        // 🚀 FIX: Define these variables BEFORE updateAndSync so the callback can see them
-        const isVault = window.location.hash.includes('vault');
-        const client = getActiveClient();
-        const sourceData = isVault ? state.master : client?.projectData;
-        const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
-        const stages = sourceData?.stages || [];
-
-        if (!allResources || !id) return;
-
-        // 1. Calculate the Drag Delta to determine direction
+        // 🚀 1. UPDATE THE PRIMARY NODE POSITION
         const res = OL.getResourceById(id);
-        const startX = res.coords.x;
-        const dx = dropX - startX; // Positive = Moving Right
-        
-        // 🚀 THE FIX: Determine which "Edge" to use for lane detection
-        // If moving right, use the right edge (dropX + 220).
-        // If moving left, use the left edge (dropX).
-        // If barely moved, use the center.
-        let detectX = dropX + 110; // Default center
-        if (dx > 20) detectX = dropX + 200; // Leading right edge
-        if (dx < -20) detectX = dropX + 20; // Leading left edge
+        if (res && res.coords) {
+            // Calculate final drop position before Snap
+            const finalX = res.coords.x + dropX;
+            const finalY = res.coords.y + dropY;
 
-        await OL.updateAndSync(() => {
-            // 2. Identify Lane using the Biased detectX
+            // Determine Drag Direction for Lane Detection
+            const dx = finalX - res.coords.x;
+            let detectX = finalX + 110; 
+            if (dx > 20) detectX = finalX + 200;
+            if (dx < -20) detectX = finalX + 20;
+
+            // Apply temporary drop coords
+            res.coords.x = finalX;
+            res.coords.y = finalY;
+
+            // 🚀 2. ASSIGN STAGE (Lane Detection)
+            const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+            const stages = sourceData?.stages || [];
             let accumulatedX = 0;
-            let targetStageIdx = 0;
-
             for (let i = 0; i < stages.length; i++) {
                 const w = stages[i].width || 300;
-                // We give it a small "gravity" buffer of 40px
                 if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
-                    targetStageIdx = i;
+                    res.stageId = stages[i].id;
                     break;
                 }
                 accumulatedX += w;
             }
-            
-            const targetStage = stages[targetStageIdx];
-            res.stageId = targetStage.id;
-            
-            const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
+        }
 
-            // 3. THE SHOVE (Row Logic)
-            const laneSiblings = allResources.filter(r => 
-                r.stageId === res.stageId && 
-                r.id !== res.id && 
-                r.coords && 
-                Math.abs(r.coords.y - dropY) < 80 
-            );
-
-            const rowGroup = [...laneSiblings, res];
-            // Sort based on their relative position to the lane start
-            rowGroup.sort((a, b) => {
-                const ax = (a.id === id) ? dropX : a.coords.x;
-                const bx = (b.id === id) ? dropX : b.coords.x;
-                return ax - bx;
-            });
-
-            // 4. Arrange cards and Push Width
-            let currentXInLane = laneStartX + 40;
-            rowGroup.forEach((node) => {
-                if (node.id === res.id) {
-                    res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
-                } else {
-                    node.coords.x = currentXInLane;
-                }
-                currentXInLane += 240; 
-            });
-
-            // 5. GLOBAL SYNC (Ensure background lines move)
-            let runningTotalX = 0;
-            stages.forEach(stage => {
-                const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
-                if (nodesInLane.length > 0) {
-                    const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
-                    stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
-                } else {
-                    stage.width = 300;
-                }
-                runningTotalX += stage.width;
-            });
-        });
-
-        window.renderVisualizerV2(isVault);
-        OL.persist();
+        // 🚀 3. THE MAGIC SNAP
+        // We call autoAlignNodes(true) which handles the Column Logic, 
+        // Horizontal Shoving, Lane Resizing, and Persistence in one go.
+        console.log("🪄 Finalizing Motion with Snap...");
+        await OL.autoAlignNodes(true); 
     };
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    OL.autoAlignNodes(true);
 };
 
 OL.performInternalMerge = function(moving, target, source) {
