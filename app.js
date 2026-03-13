@@ -12072,7 +12072,7 @@ OL.autoAlignNodes = async function(isManualDrag = false) {
         currentXOffset += stage.width;
     });
 
-    OL.renderVisualizerV2(isVault);
+    renderVisualizerV2(isVault);
     OL.persist();
 };
 
