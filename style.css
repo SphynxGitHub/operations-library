@@ -5005,6 +5005,24 @@ path[stroke="transparent"] {
     display: none !important;
 }
 
+#drag-indicator {
+    position: fixed;
+    width: 14px;
+    height: 14px;
+    background: #38bdf8;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 15px #38bdf8;
+    z-index: 999999;
+    pointer-events: none;
+    display: none;
+}
+
+.v2-node-card.is-dragging-ghost {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 /* 🚨 THE UNMAP ZONE RECOVERY */
 #unmap-zone, #unmap-zone2 {
     position: fixed;
