@@ -11732,26 +11732,19 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
     }
 };
 
-OL.autoAlignNodes = async function() {
+OL.autoAlignNodes = async function(isManualDrag = false) {
     const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const sourceData = isVault ? state.master : client?.projectData;
-    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+    const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+    const allResources = isVault ? state.master.resources : getActiveClient()?.projectData?.localResources;
     
     if (!sourceData?.stages || !allResources) return;
 
-    // 🛡️ LOCK EVERYTHING
     state.v2.isSyncingLayout = true;
     state.isSaving = true; 
     window.lastLocalRender = Date.now();
 
-    const FIXED_GAP = 30; // Consistent vertical gap
+    const FIXED_GAP = 30; 
     const COLUMN_WIDTH = 250; 
-    const BASE_LANE_WIDTH = 300; 
-
-    // 1. First, establish where every lane starts based on the stages' stored widths
-    let laneStarts = [];
-    let currentX = 0;
     let accumulatedX = 0;
 
     sourceData.stages.forEach((stage) => {
@@ -11762,22 +11755,29 @@ OL.autoAlignNodes = async function() {
         const laneStartX = accumulatedX;
 
         laneNodes.forEach(node => {
-            // 🚀 THE LOGIC GATE:
-            // If it's NOT a manual drag (i.e., it's a click/tidy), 
-            // DO NOT recalculate the column. Keep its current relative slot.
-            if (isManualDrag || node._col === undefined) {
-                const relativeX = node.coords.x - laneStartX;
-                node._col = relativeX > 350 ? Math.round((relativeX - 40) / COLUMN_WIDTH) : 0;
+            // 🚀 THE FIX: Use 'isManualDrag' safely within the loop
+            // If we are just clicking (isManualDrag === false), we ONLY calculate col if it's missing
+            const needsColCalculation = isManualDrag || node._col === undefined;
+
+            if (needsColCalculation) {
+                const relativeX = (node.coords.x || 0) - laneStartX;
+                // If it's a click, and we ALREADY have a column, don't change it!
+                if (!isManualDrag && node._col !== undefined) {
+                    // Stay put
+                } else {
+                    node._col = relativeX > 350 ? Math.round((relativeX - 40) / COLUMN_WIDTH) : 0;
+                }
             }
             
-            const col = node._col;
+            const col = node._col || 0;
             if (!columnCursors[col]) columnCursors[col] = 120;
 
-            // Apply coordinates based on the FIXED column
+            // Apply coordinates: The X is now strictly tied to the column index
             node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
             node.coords.y = columnCursors[col];
 
             const isExpanded = node.isExpanded || (state.v2.expandedNodes && state.v2.expandedNodes.has(node.id));
+            // Standardizing heights for collapsed vs expanded
             const nodeHeight = isExpanded ? (120 + (node.steps?.length || 0) * 32 + 20) : 100;
             
             columnCursors[col] += (nodeHeight + FIXED_GAP);
@@ -11788,14 +11788,6 @@ OL.autoAlignNodes = async function() {
         accumulatedX += stage.width;
     });
 
-    // 4. Update the background/headers in the DOM immediately so the lines move
-    sourceData.stages.forEach((stage, idx) => {
-        const bg = document.querySelectorAll('.v2-lane-section')[idx];
-        const hd = document.querySelectorAll('.v2-lane-label')[idx];
-        if (bg) bg.style.width = `${stage.width}px`;
-        if (hd) hd.style.width = `${stage.width}px`;
-    });
-
     try {
         window.renderVisualizerV2(isVault);
         await OL.persist();
@@ -11803,7 +11795,6 @@ OL.autoAlignNodes = async function() {
         setTimeout(() => {
             state.isSaving = false;
             state.v2.isSyncingLayout = false;
-            if (OL.drawV2Connections) OL.drawV2Connections();
         }, 1000);
     }
 };
