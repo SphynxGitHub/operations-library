@@ -9859,77 +9859,53 @@ OL.handleTrayDrag = function(e, resId) {
     OL.initWBMotion(e, resId);
 };
 
-// 🖱️ Dragging on Canvas (MouseDown)
+// 1. Updated Start Drag (Prevents click-routing during drag)
 OL.startNodeDrag = function(e, nodeId) {
     if (e.target.classList.contains('v2-port')) return;
     if (e.target.closest('.v2-step-item')) return;
 
-    const idStr = String(nodeId);
-    console.log(`%c 🛫 DRAG START: ${idStr} `, 'background: #222; color: #bada55; font-weight: bold;');
+    // Prevent the click event from bubbling up to loadInspector
+    e.stopPropagation(); 
 
-    // 1. Update Global State (This is our fallback for MouseMove)
-    state.v2.activeDragId = idStr;
+    state.v2.activeDragId = String(nodeId);
     state.v2.isDraggingNode = true;
-
-    // 🚀 THE FIX: Only call dataTransfer if it exists (Native Drag context)
-    if (e.dataTransfer) {
-        e.dataTransfer.setData("moveId", idStr);
-        e.dataTransfer.effectAllowed = "move";
-        console.log("📑 Native DataTransfer Initialized");
-    } else {
-        console.log("🖱️ MouseMove Physics Initialized (No DataTransfer)");
-    }
-
+    
     document.body.classList.add('is-dragging-node');
-
-    // 2. Trigger your custom movement physics
-    OL.initWBMotion(e, idStr);
+    OL.initWBMotion(e, String(nodeId));
 };
 
+// 2. Updated Motion Physics
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
     const canvas = document.getElementById('v2-canvas');
-    const rect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
     
-    // Capture Start Pixels
     const startX = e.clientX;
     const startY = e.clientY;
     
-    const zone = document.getElementById('unmap-zone');
-    let hasMovedSignificantAmount = false;
-
-    // Capture initial coordinates for the group
-    const dragGroup = Array.from(state.v2.selectedNodes.size > 0 ? state.v2.selectedNodes : [id]).map(nodeId => {
-        const res = OL.getResourceById(nodeId);
-        return {
-            id: nodeId,
-            initialX: res?.coords?.x || 0,
-            initialY: res?.coords?.y || 0,
-            el: document.getElementById(`v2-node-${nodeId}`)
-        };
-    });
+    // Capture initial positions
+    const res = OL.getResourceById(id);
+    if (!res || !res.coords) return;
+    const initialX = res.coords.x;
+    const initialY = res.coords.y;
 
     const onMove = (mE) => {
+        // Calculate how far we've moved since mousedown
         const dx = (mE.clientX - startX) / zoom;
         const dy = (mE.clientY - startY) / zoom;
 
-        if (!hasMovedSignificantAmount) {
-            const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
-            if (dist < 5) return; 
-            hasMovedSignificantAmount = true;
-            state.v2.isDraggingNode = true;
-            document.body.classList.add('is-dragging-node');
-            if (zone) zone.classList.add('visible');
+        // Visual only update for performance
+        const el = document.getElementById(`v2-node-${id}`);
+        if (el) {
+            el.style.left = `${initialX + dx}px`;
+            el.style.top = `${initialY + dy}px`;
+            el.classList.add('is-dragging');
         }
-
-        dragGroup.forEach(node => {
-            if (node.el) {
-                node.el.style.left = `${node.initialX + dx}px`;
-                node.el.style.top = `${node.initialY + dy}px`;
-            }
-        });
-        OL.drawV2Connections();
+        
+        // Only draw connections if moved significantly
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+            OL.drawV2Connections();
+        }
     };
 
     const onUp = async (uE) => {
@@ -9937,39 +9913,42 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mouseup', onUp);
         
         document.body.classList.remove('is-dragging-node');
-        if (zone) zone.classList.remove('visible');
+        const el = document.getElementById(`v2-node-${id}`);
+        if (el) el.classList.remove('is-dragging');
 
-        // 🚀 CALCULATE DELTA
+        // 🎯 CALCULATE FINAL POSITION
         const dx = (uE.clientX - startX) / zoom;
         const dy = (uE.clientY - startY) / zoom;
 
-        const res = OL.getResourceById(id);
-        if (!res || !res.coords) return;
-
-        // 🚀 UPDATE PERMANENT COORDS
-        res.coords.x = Math.round(res.coords.x + dx);
-        res.coords.y = Math.round(res.coords.y + dy);
-
-        // 🚀 AUTO-ASSIGN LANE (Hitbox Detection)
-        const client = getActiveClient();
-        const sourceData = isVault ? state.master : client?.projectData;
-        const stages = sourceData?.stages || [];
-        
-        let accumulatedX = 0;
-        let detectX = res.coords.x + 110; // Center bias
-
-        for (let i = 0; i < stages.length; i++) {
-            const w = stages[i].width || 300;
-            if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
-                res.stageId = stages[i].id;
-                break;
-            }
-            accumulatedX += w;
+        // If the movement was tiny, treat it as a click and open inspector NOW
+        if (Math.hypot(dx, dy) < 3) {
+            OL.loadInspector(id);
+            return;
         }
 
-        // 🚀 SNAP & SYNC
-        // We pass 'true' to signal this was a manual drag
-        await OL.autoAlignNodes(true); 
+        // 💾 APPLY AND PERSIST
+        await OL.updateAndSync(async () => {
+            res.coords.x = Math.round(initialX + dx);
+            res.coords.y = Math.round(initialY + dy);
+
+            // Lane assignment logic
+            const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+            const stages = sourceData?.stages || [];
+            let accumulatedX = 0;
+            let detectX = res.coords.x + 110;
+
+            for (let s of stages) {
+                const w = s.width || 300;
+                if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
+                    res.stageId = s.id;
+                    break;
+                }
+                accumulatedX += w;
+            }
+        });
+
+        // 🪄 Run Tidy to snap to columns
+        await OL.autoAlignNodes(true);
     };
 
     window.addEventListener('mousemove', onMove);
