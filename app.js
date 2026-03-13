@@ -10537,9 +10537,12 @@ function renderV2Nodes(isVault) {
                 <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
                 <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
 
-                <div class="v2-node-header" style="display: flex; justify-content: ${isLooseStep ? 'flex-end' : 'flex-start'}; align-items: center; gap: 8px; pointer-events: none;">
-                    <span>${icon}</span>
-                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
+                <div class="v2-node-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span>${icon}</span>
+                        <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
+                    </div>
+                    ${numberingHtml}
                 </div>
                 
                 <div class="v2-node-body" 

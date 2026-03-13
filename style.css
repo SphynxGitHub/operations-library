@@ -481,6 +481,23 @@ body:has(.sidebar.collapsed) #mainContent {
     margin-bottom: 12px;
 }
 
+/* Badge Style */
+.v2-card-part {
+    font-size: 9px;
+    background: rgba(56, 189, 248, 0.2);
+    color: #38bdf8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.v2-card-part:hover {
+    background: #38bdf8;
+    color: #0f172a;
+}
+
 .status-pill {
     font-size: 9px;
     font-weight: 800;
@@ -522,6 +539,18 @@ body:has(.sidebar.collapsed) #mainContent {
 
 .status-dot.available {
   border: 1px solid white;
+}
+
+/* Family Focus Highlighting */
+.canvas-dimmed .v2-node-card:not(.family-focus) {
+    opacity: 0.15;
+    filter: grayscale(1);
+    pointer-events: none;
+}
+.v2-node-card.family-focus {
+    box-shadow: 0 0 30px #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    z-index: 10000 !important;
 }
 
 /* ============================================================
