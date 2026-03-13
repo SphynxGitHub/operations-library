@@ -10095,6 +10095,10 @@ OL.initWBMotion = function(e, id) {
     const res = OL.getResourceById(id);
     if (!res) return;
 
+    let hasMovedSignificantAmount = false; 
+    const startX = e.clientX;
+    const startY = e.clientY;
+    
     let indicator = document.getElementById('drag-indicator') || document.createElement('div');
     indicator.id = 'drag-indicator';
     if (!indicator.parentElement) document.body.appendChild(indicator);
