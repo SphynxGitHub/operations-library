@@ -9134,7 +9134,6 @@ OL.getInferredScope = (node) => {
     return null;
 };
 
-
 window.renderVisualizerV2 = function(isVault, targetId="v2-workbench-target") {
     const container = document.getElementById(targetId);
     if (!container) return;
@@ -10085,6 +10084,7 @@ OL.initWBMotion = function(e, id) {
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    OL.autoAlignNodes(true);
 };
 
 OL.performInternalMerge = function(moving, target, source) {
@@ -11532,7 +11532,7 @@ OL.toggleStepView = function(nodeId) {
     // 🚀 STEP 2: Let the Layout Engine do the math
     // This will handle the "push down" of everything below it automatically
     console.log("🪄 Reflowing layout for toggle...");
-    OL.autoAlignNodes(); 
+    OL.autoAlignNodes(false); 
 };
 
 OL.toggleMasterExpand = function() {
@@ -11555,7 +11555,7 @@ OL.toggleMasterExpand = function() {
 
     // 🚀 STEP 2: Run the engine once
     console.log("🪄 Master Reflow initiated...");
-    OL.autoAlignNodes();
+    OL.autoAlignNodes(false);
 };
 
 OL.toggleWorkbenchTray = function() {
@@ -11752,43 +11752,40 @@ OL.autoAlignNodes = async function() {
     // 1. First, establish where every lane starts based on the stages' stored widths
     let laneStarts = [];
     let currentX = 0;
-    sourceData.stages.forEach((s, i) => {
-        laneStarts[i] = currentX;
-        currentX += (s.width || BASE_LANE_WIDTH);
-    });
+    let accumulatedX = 0;
 
-    // 2. Align Nodes
-    sourceData.stages.forEach((stage, stageIdx) => {
+    sourceData.stages.forEach((stage) => {
         const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        
-        // Sort purely by Y to maintain user's vertical intent
         laneNodes.sort((a, b) => a.coords.y - b.coords.y);
 
-        let columnCursors = { 0: 120 }; // Track Y for each column
-        const startX = laneStarts[stageIdx];
+        let columnCursors = { 0: 120 }; 
+        const laneStartX = accumulatedX;
 
         laneNodes.forEach(node => {
-            // 🚀 THE STICKY FIX: 
-            // Only go to Col 1 if the card was manually dragged way out (>350px from lane start)
-            const relativeX = node.coords.x - startX;
-            const col = relativeX > 350 ? Math.round((relativeX - 40) / COLUMN_WIDTH) : 0;
+            // 🚀 THE LOGIC GATE:
+            // If it's NOT a manual drag (i.e., it's a click/tidy), 
+            // DO NOT recalculate the column. Keep its current relative slot.
+            if (isManualDrag || node._col === undefined) {
+                const relativeX = node.coords.x - laneStartX;
+                node._col = relativeX > 350 ? Math.round((relativeX - 40) / COLUMN_WIDTH) : 0;
+            }
             
+            const col = node._col;
             if (!columnCursors[col]) columnCursors[col] = 120;
 
-            // Apply coordinates
-            node.coords.x = startX + 40 + (col * COLUMN_WIDTH);
+            // Apply coordinates based on the FIXED column
+            node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
             node.coords.y = columnCursors[col];
 
-            // Calculate height
             const isExpanded = node.isExpanded || (state.v2.expandedNodes && state.v2.expandedNodes.has(node.id));
             const nodeHeight = isExpanded ? (120 + (node.steps?.length || 0) * 32 + 20) : 100;
             
             columnCursors[col] += (nodeHeight + FIXED_GAP);
         });
 
-        // 3. Update THIS stage width based on its own cards
         const maxCol = Math.max(0, ...Object.keys(columnCursors).map(Number));
-        stage.width = Math.max(BASE_LANE_WIDTH, (maxCol * COLUMN_WIDTH) + 320);
+        stage.width = Math.max(300, (maxCol * COLUMN_WIDTH) + 320);
+        accumulatedX += stage.width;
     });
 
     // 4. Update the background/headers in the DOM immediately so the lines move
