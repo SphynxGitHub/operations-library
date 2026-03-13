@@ -4986,7 +4986,23 @@ path[stroke="transparent"] {
     z-index: 99999 !important;
     opacity: 0.7;
     /* 🚀 THIS IS THE KEY: The mouse "shines through" the card to hit the tray */
-    pointer-events: none !important; 
+    pointer-events: none !important;
+    width: 12px !important;
+    height: 12px !important;
+    min-height: 12px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    background: #38bdf8 !important; /* Match your blue dot theme */
+    border: 2px solid white !important;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.8) !important;
+    overflow: hidden !important;
+    z-index: 10000 !important;
+    transition: width 0.1s, height 0.1s, border-radius 0.1s;
+}
+
+/* Hide all text/content inside the card while it is a dot */
+.v2-node-card.is-dragging * {
+    display: none !important;
 }
 
 /* 🚨 THE UNMAP ZONE RECOVERY */
