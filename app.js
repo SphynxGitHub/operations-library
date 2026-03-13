@@ -1,4 +1,42 @@
+//======================= GENERAL SECTION =======================//
 
+// 1. MUST BE LINE 1: Define the namespace immediately
+const OL = window.OL = {};
+
+// 🚀 THE ANCHOR: Lock the security context at the absolute start
+const params = new URLSearchParams(window.location.search);
+window.FORCE_ADMIN = params.get('admin') === 'pizza123'; 
+console.log("🛠️ Global Admin Lock:", window.FORCE_ADMIN);
+
+// 2. Define standard helpers next (so functions can use them)
+
+// val: returns empty string if missing (allows placeholder to show)
+const val = (v) => (v === undefined || v === null) ? "" : v;
+
+// num: returns empty string if missing or 0 (allows placeholder to show)
+const num = (v) => (v === undefined || v === null || v === 0) ? "" : v;
+
+const esc = (s) => String(s ?? "").replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
+const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
+
+// 3. Firebase configuration
+const apiKey = window.GOOGLE_API_KEY;
+const firebaseConfig = {
+  apiKey: apiKey,
+  authDomain: "operations-library-d2fee.firebaseapp.com",
+  projectId: "operations-library-d2fee",
+  storageBucket: "operations-library-d2fee.firebasestorage.app",
+  messagingSenderId: "353128653022",
+  appId: "1:353128653022:web:5e6a11b7c91c8b3446224f",
+  measurementId: "G-B8Q6H7YXHE"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 4. Initialize the state placeholder
+let state = {
+    activeClientId: null,
+    viewMode: localStorage.getItem('ol_preferred_view_mode') || 'global',
     ui: { 
         showCompleted: false,
         zenMode: localStorage.getItem('ol_preferred_view_mode') === 'global' 
@@ -9969,81 +10007,84 @@ OL.initWBMotion = function(e, id) {
         if (!allResources || !id) return;
 
         // 1. Calculate the Drag Delta to determine direction
-    const res = OL.getResourceById(id);
-    const startX = res.coords.x;
-    const dx = dropX - startX; // Positive = Moving Right
-    
-    // 🚀 THE FIX: Determine which "Edge" to use for lane detection
-    // If moving right, use the right edge (dropX + 220).
-    // If moving left, use the left edge (dropX).
-    // If barely moved, use the center.
-    let detectX = dropX + 110; // Default center
-    if (dx > 20) detectX = dropX + 200; // Leading right edge
-    if (dx < -20) detectX = dropX + 20; // Leading left edge
-
-    await OL.updateAndSync(() => {
-        // 2. Identify Lane using the Biased detectX
-        let accumulatedX = 0;
-        let targetStageIdx = 0;
-
-        for (let i = 0; i < stages.length; i++) {
-            const w = stages[i].width || 300;
-            // We give it a small "gravity" buffer of 40px
-            if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
-                targetStageIdx = i;
-                break;
-            }
-            accumulatedX += w;
-        }
+        const res = OL.getResourceById(id);
+        const startX = res.coords.x;
+        const dx = dropX - startX; // Positive = Moving Right
         
-        const targetStage = stages[targetStageIdx];
-        res.stageId = targetStage.id;
-        
-        const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
+        // 🚀 THE FIX: Determine which "Edge" to use for lane detection
+        // If moving right, use the right edge (dropX + 220).
+        // If moving left, use the left edge (dropX).
+        // If barely moved, use the center.
+        let detectX = dropX + 110; // Default center
+        if (dx > 20) detectX = dropX + 200; // Leading right edge
+        if (dx < -20) detectX = dropX + 20; // Leading left edge
 
-        // 3. THE SHOVE (Row Logic)
-        const laneSiblings = allResources.filter(r => 
-            r.stageId === res.stageId && 
-            r.id !== res.id && 
-            r.coords && 
-            Math.abs(r.coords.y - dropY) < 80 
-        );
+        await OL.updateAndSync(() => {
+            // 2. Identify Lane using the Biased detectX
+            let accumulatedX = 0;
+            let targetStageIdx = 0;
 
-        const rowGroup = [...laneSiblings, res];
-        // Sort based on their relative position to the lane start
-        rowGroup.sort((a, b) => {
-            const ax = (a.id === id) ? dropX : a.coords.x;
-            const bx = (b.id === id) ? dropX : b.coords.x;
-            return ax - bx;
-        });
-
-        // 4. Arrange cards and Push Width
-        let currentXInLane = laneStartX + 40;
-        rowGroup.forEach((node) => {
-            if (node.id === res.id) {
-                res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
-            } else {
-                node.coords.x = currentXInLane;
+            for (let i = 0; i < stages.length; i++) {
+                const w = stages[i].width || 300;
+                // We give it a small "gravity" buffer of 40px
+                if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
+                    targetStageIdx = i;
+                    break;
+                }
+                accumulatedX += w;
             }
-            currentXInLane += 240; 
+            
+            const targetStage = stages[targetStageIdx];
+            res.stageId = targetStage.id;
+            
+            const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
+
+            // 3. THE SHOVE (Row Logic)
+            const laneSiblings = allResources.filter(r => 
+                r.stageId === res.stageId && 
+                r.id !== res.id && 
+                r.coords && 
+                Math.abs(r.coords.y - dropY) < 80 
+            );
+
+            const rowGroup = [...laneSiblings, res];
+            // Sort based on their relative position to the lane start
+            rowGroup.sort((a, b) => {
+                const ax = (a.id === id) ? dropX : a.coords.x;
+                const bx = (b.id === id) ? dropX : b.coords.x;
+                return ax - bx;
+            });
+
+            // 4. Arrange cards and Push Width
+            let currentXInLane = laneStartX + 40;
+            rowGroup.forEach((node) => {
+                if (node.id === res.id) {
+                    res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
+                } else {
+                    node.coords.x = currentXInLane;
+                }
+                currentXInLane += 240; 
+            });
+
+            // 5. GLOBAL SYNC (Ensure background lines move)
+            let runningTotalX = 0;
+            stages.forEach(stage => {
+                const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
+                if (nodesInLane.length > 0) {
+                    const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
+                    stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
+                } else {
+                    stage.width = 300;
+                }
+                runningTotalX += stage.width;
+            });
         });
 
-        // 5. GLOBAL SYNC (Ensure background lines move)
-        let runningTotalX = 0;
-        stages.forEach(stage => {
-            const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
-            if (nodesInLane.length > 0) {
-                const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
-                stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
-            } else {
-                stage.width = 300;
-            }
-            runningTotalX += stage.width;
-        });
-    });
-
-    window.renderVisualizerV2(isVault);
-    OL.persist();
+        window.renderVisualizerV2(isVault);
+        OL.persist();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
 };
 
 OL.performInternalMerge = function(moving, target, source) {
