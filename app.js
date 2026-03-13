@@ -9886,26 +9886,26 @@ OL.startNodeDrag = function(e, nodeId) {
     OL.initWBMotion(e, idStr);
 };
 
-// ⚙️ THE PHYSICS CORE
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
     const canvas = document.getElementById('v2-canvas');
     const rect = canvas.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
+    
+    // Capture Start Pixels
     const startX = e.clientX;
     const startY = e.clientY;
     
-    // 🚀 THE FIX: Define zone here so all sub-functions can see it
     const zone = document.getElementById('unmap-zone');
     let hasMovedSignificantAmount = false;
 
-    // Capture initial coordinates for every selected node
-    const dragGroup = Array.from(state.v2.selectedNodes).map(nodeId => {
+    // Capture initial coordinates for the group
+    const dragGroup = Array.from(state.v2.selectedNodes.size > 0 ? state.v2.selectedNodes : [id]).map(nodeId => {
         const res = OL.getResourceById(nodeId);
         return {
             id: nodeId,
-            initialX: res.coords?.x || 0,
-            initialY: res.coords?.y || 0,
+            initialX: res?.coords?.x || 0,
+            initialY: res?.coords?.y || 0,
             el: document.getElementById(`v2-node-${nodeId}`)
         };
     });
@@ -9914,175 +9914,64 @@ OL.initWBMotion = function(e, id) {
         const dx = (mE.clientX - startX) / zoom;
         const dy = (mE.clientY - startY) / zoom;
 
-        // 1. 📏 CHECK THRESHOLD
         if (!hasMovedSignificantAmount) {
             const dist = Math.hypot(mE.clientX - startX, mE.clientY - startY);
             if (dist < 5) return; 
             hasMovedSignificantAmount = true;
-
             state.v2.isDraggingNode = true;
             document.body.classList.add('is-dragging-node');
-
             if (zone) zone.classList.add('visible');
-            
-            dragGroup.forEach(node => {
-                if (node.el) node.el.classList.add('is-dragging');
-            });
         }
 
-        // 🚀 2. APPLY DELTA TO ALL SELECTED ELEMENTS
         dragGroup.forEach(node => {
             if (node.el) {
                 node.el.style.left = `${node.initialX + dx}px`;
                 node.el.style.top = `${node.initialY + dy}px`;
             }
-            
-            if (!state.v2._lastWidthSync || Date.now() - state.v2._lastWidthSync > 100) {
-                OL.syncLaneWidthsToContent();
-                state.v2._lastWidthSync = Date.now();
-            }
-
-            OL.drawV2Connections();
         });
-
-        // 3. 🎯 DETECT HOVER TARGET
-        const target = document.elementFromPoint(mE.clientX, mE.clientY);
-        const isOverUnmap = !!target?.closest('#unmap-zone');
-
-        document.querySelectorAll('.v2-node-card').forEach(c => c.classList.remove('drop-target-highlight'));
-        const targetCardEl = target?.closest('.v2-node-card');
-        
-        // Highlight logic (Only if target isn't part of the dragged group)
-        if (targetCardEl && !state.v2.selectedNodes.has(targetCardEl.id.replace('v2-node-', ''))) {
-            targetCardEl.classList.add('drop-target-highlight');
-        }
-
-        if (zone) {
-            if (isOverUnmap) {
-                zone.classList.add('is-hovered');
-                targetCardEl?.classList.remove('drop-target-highlight');
-            } else {
-                zone.classList.remove('is-hovered');
-            }
-        }
-
-        // 4. 👻 HANDLE GHOST (Primary node only)
-        let ghost = document.getElementById('drag-ghost');
-        if (target?.closest('#v2-workbench-target')) {
-            if (!ghost) {
-                ghost = document.createElement('div');
-                ghost.id = 'drag-ghost';
-                ghost.className = 'v2-node-card ghost';
-                canvas.appendChild(ghost);
-            }
-            const res = OL.getResourceById(id);
-            ghost.innerHTML = `<b style="color:var(--accent)">${res?.name || 'Mapping...'}</b>`;
-            ghost.style.left = `${(mE.clientX - rect.left) / zoom}px`;
-            ghost.style.top = `${(mE.clientY - rect.top) / zoom}px`;
-        }
+        OL.drawV2Connections();
     };
 
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         
-        const ghost = document.getElementById('drag-ghost');
-        if (ghost) ghost.remove();
         document.body.classList.remove('is-dragging-node');
+        if (zone) zone.classList.remove('visible');
 
-        const canvas = document.getElementById('v2-canvas');
-        const rect = canvas.getBoundingClientRect();
-        const zoom = state.v2.zoom || 1;
+        // 🚀 CALCULATE DELTA
+        const dx = (uE.clientX - startX) / zoom;
+        const dy = (uE.clientY - startY) / zoom;
 
-        let dropX = Math.round((uE.clientX - rect.left) / zoom);
-        let dropY = Math.round((uE.clientY - rect.top) / zoom);
+        const res = OL.getResourceById(id);
+        if (!res || !res.coords) return;
 
-        // 🚀 FIX: Define these variables BEFORE updateAndSync so the callback can see them
-        const isVault = window.location.hash.includes('vault');
+        // 🚀 UPDATE PERMANENT COORDS
+        res.coords.x = Math.round(res.coords.x + dx);
+        res.coords.y = Math.round(res.coords.y + dy);
+
+        // 🚀 AUTO-ASSIGN LANE (Hitbox Detection)
         const client = getActiveClient();
         const sourceData = isVault ? state.master : client?.projectData;
-        const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
         const stages = sourceData?.stages || [];
-
-        if (!allResources || !id) return;
-
-        // 1. Calculate the Drag Delta to determine direction
-        const res = OL.getResourceById(id);
-        const startX = res.coords.x;
-        const dx = dropX - startX; // Positive = Moving Right
         
-        // 🚀 THE FIX: Determine which "Edge" to use for lane detection
-        // If moving right, use the right edge (dropX + 220).
-        // If moving left, use the left edge (dropX).
-        // If barely moved, use the center.
-        let detectX = dropX + 110; // Default center
-        if (dx > 20) detectX = dropX + 200; // Leading right edge
-        if (dx < -20) detectX = dropX + 20; // Leading left edge
+        let accumulatedX = 0;
+        let detectX = res.coords.x + 110; // Center bias
 
-        await OL.updateAndSync(() => {
-            // 2. Identify Lane using the Biased detectX
-            let accumulatedX = 0;
-            let targetStageIdx = 0;
-
-            for (let i = 0; i < stages.length; i++) {
-                const w = stages[i].width || 300;
-                // We give it a small "gravity" buffer of 40px
-                if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
-                    targetStageIdx = i;
-                    break;
-                }
-                accumulatedX += w;
+        for (let i = 0; i < stages.length; i++) {
+            const w = stages[i].width || 300;
+            if (detectX >= accumulatedX - 40 && detectX <= accumulatedX + w + 40) {
+                res.stageId = stages[i].id;
+                break;
             }
-            
-            const targetStage = stages[targetStageIdx];
-            res.stageId = targetStage.id;
-            
-            const laneStartX = stages.slice(0, targetStageIdx).reduce((sum, s) => sum + (s.width || 300), 0);
+            accumulatedX += w;
+        }
 
-            // 3. THE SHOVE (Row Logic)
-            const laneSiblings = allResources.filter(r => 
-                r.stageId === res.stageId && 
-                r.id !== res.id && 
-                r.coords && 
-                Math.abs(r.coords.y - dropY) < 80 
-            );
-
-            const rowGroup = [...laneSiblings, res];
-            // Sort based on their relative position to the lane start
-            rowGroup.sort((a, b) => {
-                const ax = (a.id === id) ? dropX : a.coords.x;
-                const bx = (b.id === id) ? dropX : b.coords.x;
-                return ax - bx;
-            });
-
-            // 4. Arrange cards and Push Width
-            let currentXInLane = laneStartX + 40;
-            rowGroup.forEach((node) => {
-                if (node.id === res.id) {
-                    res.coords = { x: currentXInLane, y: laneSiblings[0]?.coords.y || dropY };
-                } else {
-                    node.coords.x = currentXInLane;
-                }
-                currentXInLane += 240; 
-            });
-
-            // 5. GLOBAL SYNC (Ensure background lines move)
-            let runningTotalX = 0;
-            stages.forEach(stage => {
-                const nodesInLane = allResources.filter(r => r.stageId === stage.id && r.coords);
-                if (nodesInLane.length > 0) {
-                    const farRight = Math.max(...nodesInLane.map(n => n.coords.x + 220));
-                    stage.width = Math.max(300, Math.round(farRight - runningTotalX) + 60);
-                } else {
-                    stage.width = 300;
-                }
-                runningTotalX += stage.width;
-            });
-        });
-
-        window.renderVisualizerV2(isVault);
-        OL.persist();
+        // 🚀 SNAP & SYNC
+        // We pass 'true' to signal this was a manual drag
+        await OL.autoAlignNodes(true); 
     };
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
@@ -11803,16 +11692,7 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
     }
 };
 
-OL.autoAlignNodes = async function() {
-    const now = Date.now();
-    if (now - state.v2.lastTidyTime < 2000) {
-        console.log("⏳ Tidy recently executed. Ignoring echo...");
-        return;
-    }
-    
-    state.v2.lastTidyTime = now;
-    state.v2.isSyncingLayout = true;
-
+OL.autoAlignNodes = async function(isManualDrag = false) {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
     const sourceData = isVault ? state.master : client?.projectData;
@@ -11820,79 +11700,55 @@ OL.autoAlignNodes = async function() {
     
     if (!sourceData?.stages || !allResources) return;
 
-    // 🚀 1. BLOCK AUTO-REFRESH
-    // Set a flag that tells your Firebase listener: "Don't overwrite my UI right now!"
     state.v2.isSyncingLayout = true;
+    state.isSaving = true; 
+    window.lastLocalRender = Date.now();
 
-    console.log("🪄 Running Atomic Tidy with Echo-Shield...");
+    const FIXED_GAP = 30; 
+    const COLUMN_WIDTH = 250; 
+    let accumulatedX = 0;
 
-    // 2. Perform the Height-Aware Math
-    let currentXOffset = 0;
     sourceData.stages.forEach((stage) => {
         const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
-        laneNodes.sort((a, b) => (a.coords.y - b.coords.y) || (a.coords.x - b.coords.x));
+        laneNodes.sort((a, b) => (a.coords.y || 0) - (b.coords.y || 0));
 
-        let nextY = 120;
-        const slotWidth = 240;
-        const rows = [];
+        let columnCursors = { 0: 120 }; 
+        const laneStartX = accumulatedX;
 
         laneNodes.forEach(node => {
-            let placed = false;
-            for (let row of rows) {
-                const preferredCol = Math.round((node.coords.x - currentXOffset - 40) / slotWidth);
-                if (!row.some(n => n._col === preferredCol)) {
-                    node._col = Math.max(0, preferredCol);
-                    row.push(node);
-                    placed = true;
-                    break;
-                }
+            // 🚀 STICKY COLUMN LOGIC
+            // If just clicking (expand), don't recalculate columns.
+            if (isManualDrag || node._col === undefined) {
+                const relativeX = (node.coords.x || 0) - laneStartX;
+                node._col = relativeX > 350 ? Math.round((relativeX - 40) / COLUMN_WIDTH) : 0;
             }
-            if (!placed) {
-                node._col = Math.max(0, Math.round((node.coords.x - currentXOffset - 40) / slotWidth));
-                rows.push([node]);
-            }
+            
+            const col = node._col || 0;
+            if (!columnCursors[col]) columnCursors[col] = 120;
+
+            node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
+            node.coords.y = columnCursors[col];
+
+            const isExpanded = node.isExpanded || (state.v2.expandedNodes && state.v2.expandedNodes.has(node.id));
+            const nodeHeight = isExpanded ? (120 + (node.steps?.length || 0) * 32 + 20) : 100;
+            
+            columnCursors[col] += (nodeHeight + FIXED_GAP);
         });
 
-        rows.forEach(row => {
-            const rowHeight = row.some(n => n.isExpanded) ? 340 : 150; // Added a bit more padding
-            row.forEach(node => {
-                node.coords.x = currentXOffset + 40 + (node._col * slotWidth);
-                node.coords.y = nextY;
-            });
-            nextY += rowHeight;
-        });
-
-        const farRight = laneNodes.length > 0 ? Math.max(...laneNodes.map(n => n.coords.x + 220)) : currentXOffset + 300;
-        stage.width = Math.max(300, Math.round(farRight - currentXOffset) + 60);
-        currentXOffset += stage.width;
-        laneNodes.forEach(n => delete n._col);
+        const maxCol = Math.max(0, ...Object.keys(columnCursors).map(Number));
+        stage.width = Math.max(300, (maxCol * COLUMN_WIDTH) + 320);
+        accumulatedX += stage.width;
     });
 
-    // 🚀 3. FORCE SAVE & WAIT
-    // We await the persist to ensure Firebase acknowledges the new positions 
-    // BEFORE we let the UI breathe again.
-    window.lastLocalRender = Date.now(); 
-    state.isSaving = true; // Engage the sync shield
-
     try {
+        window.renderVisualizerV2(isVault);
         await OL.persist();
-        window.renderVisualizerV2(window.location.hash.includes('vault'));
-        console.log("✅ Tidy persisted. Sync shield active for 2 seconds.");
-    } catch (e) {
-        console.error("Tidy Sync Failed", e);
     } finally {
-        // Give Firebase time to "settle" before allowing cloud updates to overwrite DOM
-        setTimeout(() => { state.isSaving = false; }, 1000);
+        setTimeout(() => {
+            state.isSaving = false;
+            state.v2.isSyncingLayout = false;
+        }, 1500);
     }
-
-    // 4. Repaint and Release the Lock
-    window.renderVisualizerV2(isVault);
-    
-    setTimeout(() => {
-        state.v2.isSyncingLayout = false;
-        if (OL.drawV2Connections) OL.drawV2Connections();
-        console.log("✅ Tidy Locked and Loaded.");
-    }, 500);
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
