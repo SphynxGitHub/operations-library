@@ -9912,26 +9912,38 @@ OL.initWBMotion = function(e, id) {
         const dy = (uE.clientY - startY) / zoom;
         const moveDist = Math.hypot(dx, dy);
 
-        // 🎯 LOGIC A: IT WAS A CLICK
+        // 🎯 1. CLICK CHECK
         if (moveDist < 3) {
-            console.log("🖱️ Static Click: Opening Inspector");
             OL.loadInspector(id);
             return; 
         }
 
-        // 🎯 LOGIC B: IT WAS A DRAG
-        console.log("🚚 Drag finalized: Saving coordinates");
-        
+        // 🎯 2. SHELF CHECK (Is it being dropped back at the top?)
+        // We use the raw clientY to see if they are hovering over the header area
+        const shelfRect = document.getElementById('global-shelf').getBoundingClientRect();
+        const isOverShelf = uE.clientY < (shelfRect.bottom + 20);
+
+        if (isOverShelf) {
+            console.log("📥 Returning node to Global Shelf");
+            await OL.updateAndSync(async () => {
+                res.isGlobal = true;
+                res.stageId = null;
+                delete res.coords; // Remove coordinates so it flows back into the shelf
+            });
+            window.renderGlobalVisualizer(isVault);
+            return; // Exit early
+        }
+
+        // 🎯 3. STANDARD GRID DROP
         await OL.updateAndSync(async () => {
-            res.isGlobal = false; // Pull off shelf if it was there
+            res.isGlobal = false;
             res.coords = {
                 x: Math.round(initialX + dx),
                 y: Math.round(initialY + dy)
             };
 
-            // Detect Lane
-            const client = getActiveClient();
-            const sourceData = isVault ? state.master : client?.projectData;
+            // Lane assignment logic
+            const sourceData = isVault ? state.master : getActiveClient()?.projectData;
             const stages = sourceData?.stages || [];
             let accumulatedX = 0;
             let detectX = res.coords.x + 110;
@@ -9946,7 +9958,7 @@ OL.initWBMotion = function(e, id) {
             }
         });
 
-        // Sync columns and spacing
+        // Reflow grid
         await OL.autoAlignNodes(true);
     };
 
