@@ -9859,13 +9859,12 @@ OL.handleTrayDrag = function(e, resId) {
     OL.initWBMotion(e, resId);
 };
 
-// 1. Updated Start Drag (Prevents click-routing during drag)
 OL.startNodeDrag = function(e, nodeId) {
     if (e.target.classList.contains('v2-port')) return;
     if (e.target.closest('.v2-step-item')) return;
 
-    // Prevent the click event from bubbling up to loadInspector
-    e.stopPropagation(); 
+    e.preventDefault();
+    e.stopPropagation(); // 🚀 Crucial: Stop the event here
 
     state.v2.activeDragId = String(nodeId);
     state.v2.isDraggingNode = true;
@@ -9874,7 +9873,6 @@ OL.startNodeDrag = function(e, nodeId) {
     OL.initWBMotion(e, String(nodeId));
 };
 
-// 2. Updated Motion Physics
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
     const canvas = document.getElementById('v2-canvas');
@@ -9883,29 +9881,25 @@ OL.initWBMotion = function(e, id) {
     const startX = e.clientX;
     const startY = e.clientY;
     
-    // Capture initial positions
     const res = OL.getResourceById(id);
-    if (!res || !res.coords) return;
-    const initialX = res.coords.x;
-    const initialY = res.coords.y;
+    if (!res) return;
+
+    // 🚀 INITIAL COORDS: Handle both Shelf (no coords) and Grid
+    const initialX = res.coords?.x || (e.clientX - canvas.getBoundingClientRect().left) / zoom;
+    const initialY = res.coords?.y || (e.clientY - canvas.getBoundingClientRect().top) / zoom;
 
     const onMove = (mE) => {
-        // Calculate how far we've moved since mousedown
         const dx = (mE.clientX - startX) / zoom;
         const dy = (mE.clientY - startY) / zoom;
 
-        // Visual only update for performance
+        // Visual feedback
         const el = document.getElementById(`v2-node-${id}`);
         if (el) {
             el.style.left = `${initialX + dx}px`;
             el.style.top = `${initialY + dy}px`;
-            el.classList.add('is-dragging');
+            el.style.zIndex = "9999";
         }
-        
-        // Only draw connections if moved significantly
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-            OL.drawV2Connections();
-        }
+        OL.drawV2Connections();
     };
 
     const onUp = async (uE) => {
@@ -9913,26 +9907,31 @@ OL.initWBMotion = function(e, id) {
         window.removeEventListener('mouseup', onUp);
         
         document.body.classList.remove('is-dragging-node');
-        const el = document.getElementById(`v2-node-${id}`);
-        if (el) el.classList.remove('is-dragging');
 
-        // 🎯 CALCULATE FINAL POSITION
         const dx = (uE.clientX - startX) / zoom;
         const dy = (uE.clientY - startY) / zoom;
+        const moveDist = Math.hypot(dx, dy);
 
-        // If the movement was tiny, treat it as a click and open inspector NOW
-        if (Math.hypot(dx, dy) < 3) {
+        // 🎯 LOGIC A: IT WAS A CLICK
+        if (moveDist < 3) {
+            console.log("🖱️ Static Click: Opening Inspector");
             OL.loadInspector(id);
-            return;
+            return; 
         }
 
-        // 💾 APPLY AND PERSIST
+        // 🎯 LOGIC B: IT WAS A DRAG
+        console.log("🚚 Drag finalized: Saving coordinates");
+        
         await OL.updateAndSync(async () => {
-            res.coords.x = Math.round(initialX + dx);
-            res.coords.y = Math.round(initialY + dy);
+            res.isGlobal = false; // Pull off shelf if it was there
+            res.coords = {
+                x: Math.round(initialX + dx),
+                y: Math.round(initialY + dy)
+            };
 
-            // Lane assignment logic
-            const sourceData = isVault ? state.master : getActiveClient()?.projectData;
+            // Detect Lane
+            const client = getActiveClient();
+            const sourceData = isVault ? state.master : client?.projectData;
             const stages = sourceData?.stages || [];
             let accumulatedX = 0;
             let detectX = res.coords.x + 110;
@@ -9947,7 +9946,7 @@ OL.initWBMotion = function(e, id) {
             }
         });
 
-        // 🪄 Run Tidy to snap to columns
+        // Sync columns and spacing
         await OL.autoAlignNodes(true);
     };
 
@@ -10280,7 +10279,7 @@ function renderV2Nodes(isVault) {
                 id="v2-node-${node.id}"
                 style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
                 onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')"
-                onclick="if(event.shiftKey) { event.stopPropagation(); return; } OL.loadInspector('${node.id}')">
+                onclick="event.stopPropagation();">
 
                 ${cornerLinkers}
 
