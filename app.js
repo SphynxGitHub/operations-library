@@ -9886,7 +9886,8 @@ OL.startNodeDrag = function(e, nodeId) {
     OL.initWBMotion(e, idStr);
 };
 
-// ⚙️ THE PHYSICS CORE
+// ⚙️ THE PHYSICS CORE 
+/*
 OL.initWBMotion = function(e, id) {
     const isVault = window.location.hash.includes('vault');
     const canvas = document.getElementById('v2-canvas');
@@ -10083,6 +10084,92 @@ OL.initWBMotion = function(e, id) {
         window.renderVisualizerV2(isVault);
         OL.persist();
     };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+};
+*/
+
+OL.initWBMotion = function(e, id) {
+    const canvas = document.getElementById('v2-canvas');
+    const zoom = state.v2.zoom || 1;
+    const res = OL.getResourceById(id);
+    if (!res) return;
+
+    let indicator = document.getElementById('drag-indicator') || document.createElement('div');
+    indicator.id = 'drag-indicator';
+    if (!indicator.parentElement) document.body.appendChild(indicator);
+    indicator.style.display = 'block';
+
+    const el = document.getElementById(`v2-node-${id}`);
+    el.classList.add('is-dragging-ghost');
+
+    const onMove = (mE) => {
+        indicator.style.left = `${mE.clientX - 4}px`;
+        indicator.style.top = `${mE.clientY - 4}px`;
+
+        // Merge Highlight
+        const targetEl = document.elementFromPoint(mE.clientX, mE.clientY);
+        const hoverTarget = targetEl?.closest('.v2-node-card');
+        document.querySelectorAll('.merge-ready').forEach(c => c.classList.remove('merge-ready'));
+        if (hoverTarget && hoverTarget.id !== `v2-node-${id}`) hoverTarget.classList.add('merge-ready');
+    };
+
+    const onUp = async (uE) => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        indicator.style.display = 'none';
+        el.classList.remove('is-dragging-ghost');
+
+        const targetEl = document.elementFromPoint(uE.clientX, uE.clientY);
+        const dropTarget = targetEl?.closest('.v2-node-card');
+        const targetId = dropTarget?.id.replace('v2-node-', '');
+
+        // 🚀 1. STEP SPLICER (Merge logic)
+        if (dropTarget && targetId !== String(res.id)) {
+            const tRes = OL.getResourceById(targetId);
+            if (tRes) {
+                await OL.updateAndSync(() => {
+                    tRes.steps = [...(tRes.steps || []), ...(res.steps || [])];
+                    res.steps = [];
+                    res.isGlobal = true;
+                    res.stageId = null;
+                    delete res.coords;
+                    delete res._col;
+                });
+                OL.autoAlignNodes(false);
+                return;
+            }
+        }
+
+        // 🚀 2. POSITIONING & LANE DETECTION
+        const rect = canvas.getBoundingClientRect();
+        const dropX = (uE.clientX - rect.left) / zoom;
+        const dropY = (uE.clientY - rect.top) / zoom;
+
+        await OL.updateAndSync(() => {
+            res.isGlobal = false;
+            // Align center of card to mouse
+            res.coords = { x: Math.round(dropX - 40), y: Math.round(dropY) };
+
+            const isVault = window.location.hash.includes('vault');
+            const stages = isVault ? state.master.stages : getActiveClient().projectData.stages;
+            
+            let accumulatedX = 0;
+            for (let s of stages) {
+                const w = s.width || 300;
+                if (dropX >= accumulatedX && dropX <= accumulatedX + w) {
+                    res.stageId = s.id;
+                    break;
+                }
+                accumulatedX += w;
+            }
+        });
+
+        // 🚀 3. TRIGGER TIDY (isManualDrag = true)
+        // This forces the column assignment logic to run based on the new X
+        await OL.autoAlignNodes(true);
+    };
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 };
@@ -10343,6 +10430,30 @@ function renderV2Nodes(isVault) {
             </div>
         `;
 
+        // 🚀 NEW: Family Numbering Logic
+        let numberingHtml = '';
+        if (node.originId) {
+            const family = filteredNodes
+                .filter(r => r.originId === node.originId)
+                .sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+            
+            if (family.length > 1) {
+                const partIndex = family.findIndex(r => r.id === node.id) + 1;
+                numberingHtml = `<span class="v2-card-part" onmousedown="event.stopPropagation();" onclick="event.stopPropagation(); OL.highlightFamily('${node.originId}')">${partIndex}/${family.length}</span>`;
+            }
+        }
+
+        // 🚀 NEW: Updated Header with numbering
+        const headerHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span>${icon}</span>
+                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
+                </div>
+                ${numberingHtml}
+            </div>
+        `;
+
         const stepsHtml = isExpanded ? steps.map((step, i) => {
             const content = step.text || step.name || "Step";
             const portInId = `port-in-${node.id}-step-${i}`;
@@ -10520,6 +10631,7 @@ OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
         // 1. Clone Part 2
         const part2 = JSON.parse(JSON.stringify(original));
         part2.id = 'res-' + Date.now();
+        part2.originId = original.originId;
         
         // 2. Distribute the steps
         const originalSteps = [...original.steps];
@@ -10557,6 +10669,23 @@ OL.splitResourceAtStep = async function(resourceId, splitAfterIndex) {
     });
 
     if (window.renderGlobalVisualizer) window.renderGlobalVisualizer(isVault);
+};
+
+OL.highlightFamily = function(originId) {
+    const nodes = document.querySelectorAll('.v2-node-card');
+    const isAlreadyDimmed = document.body.classList.contains('canvas-dimmed');
+    
+    if (isAlreadyDimmed) {
+        document.body.classList.remove('canvas-dimmed');
+        nodes.forEach(n => n.classList.remove('family-focus'));
+        return;
+    }
+
+    document.body.classList.add('canvas-dimmed');
+    nodes.forEach(n => {
+        const res = OL.getResourceById(n.id.replace('v2-node-', ''));
+        if (res?.originId === originId) n.classList.add('family-focus');
+    });
 };
 
 OL.navigateToScoping = function(resourceId) {
@@ -11803,6 +11932,7 @@ OL.shiftOutcome = async function(nodeId, index, direction) {
     }
 };
 
+/*
 OL.autoAlignNodes = async function() {
     const isVault = window.location.hash.includes('vault');
     const client = getActiveClient();
@@ -11864,6 +11994,56 @@ OL.autoAlignNodes = async function() {
             if (OL.drawV2Connections) OL.drawV2Connections();
         }, 1500);
     }
+};*/
+
+OL.autoAlignNodes = async function(isManualDrag = false) {
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    const sourceData = isVault ? state.master : client?.projectData;
+    const allResources = isVault ? state.master.resources : client?.projectData?.localResources;
+    
+    if (!sourceData?.stages || !allResources) return;
+
+    const VERTICAL_GAP = 40; 
+    const COLUMN_WIDTH = 260; // Slightly wider for comfort
+    const START_Y = 120;
+    let currentXOffset = 0;
+
+    sourceData.stages.forEach((stage) => {
+        const laneNodes = allResources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+        laneNodes.sort((a, b) => a.coords.y - b.coords.y);
+
+        const columnCursors = {}; 
+        const laneStartX = currentXOffset;
+
+        laneNodes.forEach(node => {
+            // 🛡️ RE-ASSIGN COLUMN ONLY ON MANUAL DRAG
+            if (isManualDrag || node._col === undefined) {
+                const relX = node.coords.x - laneStartX;
+                // Snap to column: Threshold 140px
+                node._col = relX > 140 ? Math.floor((relX - 40 + 100) / COLUMN_WIDTH) : 0;
+            }
+            
+            const col = node._col;
+            if (!columnCursors[col]) columnCursors[col] = START_Y;
+
+            // Apply Snap Position
+            node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
+            node.coords.y = columnCursors[col];
+
+            // Calculate height (Standard vs Expanded)
+            const nodeHeight = state.v2.expandedNodes.has(node.id) ? 280 : 100; 
+            columnCursors[col] += (nodeHeight + VERTICAL_GAP); 
+        });
+
+        // Stretch Lane Width to fit columns
+        const maxCol = Math.max(0, ...Object.keys(columnCursors).map(Number));
+        stage.width = Math.max(300, (maxCol * COLUMN_WIDTH) + 340);
+        currentXOffset += stage.width;
+    });
+
+    OL.renderVisualizerV2(isVault);
+    OL.persist();
 };
 
 // ===========================GLOBAL WORKFLOW VISUALIZER===========================
