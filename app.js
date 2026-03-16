@@ -8585,10 +8585,12 @@ OL.closeInspector = function() {
 
 // Helper to find the X/Y of a card's edge
 OL.getCardConnectionPoint = function(resId, stepIdx, side) {
-    const fullId = `${resId}-${stepIdx}`;
-    let el = document.querySelector(`[data-step-id="${fullId}"]`);
+    // 🚀 NEW: If stepIdx is null, we are connecting to the Card Shell
+    let el = (stepIdx !== null) 
+        ? document.querySelector(`[data-step-id="${resId}-${stepIdx}"]`)
+        : document.getElementById(`v2-node-${resId}`);
     
-    // Fallback logic
+    // Fallback if step is hidden or card is collapsed
     if (!el || el.offsetParent === null) { 
         el = document.getElementById(`v2-node-${resId}`);
     }
@@ -8600,18 +8602,13 @@ OL.getCardConnectionPoint = function(resId, stepIdx, side) {
     const canvasRect = canvas.getBoundingClientRect();
     const zoom = OL.state.v2.zoom || 1;
 
-    // Relative Coords
     const x = (rect.left - canvasRect.left) / zoom;
     const y = (rect.top - canvasRect.top) / zoom;
-    
-    // 🚀 THE GEOMETRY FIX:
-    // If rect.width is 0 (because of the bug), use the card width (220)
-    // If rect.height is 0, use a standard step height (32)
-    const w = (rect.width > 0) ? (rect.width / zoom) : 220;
-    const h = (rect.height > 0) ? (rect.height / zoom) : 32;
+    const w = rect.width / zoom;
+    const h = rect.height / zoom;
 
     return {
-        x: x + (side === 'right' ? w + 10 : -10),
+        x: x + (side === 'right' ? w + 5 : -5),
         y: y + (h / 2)
     };
 };
@@ -8619,47 +8616,44 @@ OL.getCardConnectionPoint = function(resId, stepIdx, side) {
 OL.drawConnections = function() {
     const svg = document.getElementById('v2-connections');
     const lineGroup = document.getElementById('line-group');
-    if (!lineGroup || !svg) return;
+    if (!svg || !lineGroup) return;
 
     lineGroup.innerHTML = ''; 
-
-    // 🔴 TEST 1: Draw a giant Red X. 
-    // If you don't see this, the SVG is invisible or off-screen.
-    const testLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    testLine.setAttribute('x1', '0'); testLine.setAttribute('y1', '0');
-    testLine.setAttribute('x2', '2000'); testLine.setAttribute('y2', '2000');
-    testLine.setAttribute('stroke', 'red'); testLine.setAttribute('stroke-width', '10');
-    lineGroup.appendChild(testLine);
 
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
 
     resources.forEach(sourceRes => {
-        if (sourceRes.isGlobal || !sourceRes.steps) return;
+        // 🚀 THE FIX: Draw connections from the CARD if there are no steps
+        // Or if the logic is attached to the card level (legacy data)
+        const logicSource = (sourceRes.steps && sourceRes.steps.length > 0) 
+            ? sourceRes.steps 
+            : [{ logic: sourceRes.logic, isCardLevel: true }];
 
-        sourceRes.steps.forEach((step, sIdx) => {
-            if (!step.logic?.out) return;
+        logicSource.forEach((stepOrCard, sIdx) => {
+            if (!stepOrCard.logic?.out) return;
 
-            step.logic.out.forEach((outLogic) => {
+            stepOrCard.logic.out.forEach((outLogic) => {
                 if (!outLogic.targetId) return;
 
-                const [tResId, tIdxStr] = outLogic.targetId.split('-');
+                const [tResId, tStepIdxStr] = outLogic.targetId.split('-');
                 const targetRes = resources.find(r => String(r.id) === String(tResId));
 
                 if (targetRes && targetRes.coords && sourceRes.coords && !targetRes.isGlobal) {
-                    const start = this.getCardConnectionPoint(sourceRes.id, sIdx, 'right');
-                    const end = this.getCardConnectionPoint(targetRes.id, parseInt(tIdxStr), 'left');
+                    // Determine anchor points
+                    // If isCardLevel, sIdx is irrelevant, we pass null to trigger card-shell anchor
+                    const start = this.getCardConnectionPoint(sourceRes.id, stepOrCard.isCardLevel ? null : sIdx, 'right');
+                    const end = this.getCardConnectionPoint(targetRes.id, parseInt(tStepIdxStr), 'left');
 
                     if (start && end) {
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        // Use a very simple straight line first to verify coordinates
-                        const d = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+                        const cpX = (start.x + end.x) / 2;
+                        const d = `M${start.x},${start.y} C${cpX},${start.y} ${cpX},${end.y} ${end.x},${end.y}`;
                         
                         path.setAttribute('d', d);
-                        path.setAttribute('stroke', '#fbbf24'); // Bright Gold
-                        path.setAttribute('stroke-width', '4');
-                        path.setAttribute('fill', 'none');
+                        path.setAttribute('class', outLogic.type === 'loop' ? 'path-loop' : 'path-standard');
                         path.setAttribute('marker-end', 'url(#arrowhead)');
+
                         lineGroup.appendChild(path);
                     }
                 }
