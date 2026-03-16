@@ -7591,6 +7591,25 @@ OL.autoAlignNodes = async function(isManualDrag = false) {
     OL.renderVisualizer();
 };
 
+OL.getCurrentProjectData = function() {
+    const hash = window.location.hash || "#/";
+    const isVault = hash.startsWith('#/vault');
+    
+    if (isVault) {
+        return {
+            stages: OL.state.master.stages || [],
+            resources: OL.state.master.resources || []
+        };
+    } else {
+        // Find the client project data via our global helper
+        const client = getActiveClient(); 
+        return {
+            stages: client?.projectData?.stages || [],
+            resources: client?.projectData?.localResources || []
+        };
+    }
+};
+
 OL.renderVisualizer = function() {
     const mainArea = document.getElementById('mainContent');
     if (!mainArea) return;
@@ -7649,7 +7668,7 @@ OL.renderVisualizer = function() {
                           <div id="v2-canvas">                    
                               <div id="v2-stage-layer"></div>
                               <div id="v2-node-layer"></div>
-                              <svg id="v2-connection-layer">
+                              <svg id="v2-connections">
                                   <defs>
                                       <marker id="arrowhead" 
                                               markerWidth="10" 
@@ -7837,28 +7856,6 @@ OL.renderVisualizer = function() {
 };
 
 window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
-};
-
-// 🏗️ Define the Tray Drag Handler
-OL.handleTrayDragStart = function(e, resId) {
-};
-
-OL.getCurrentProjectData = function() {
-    const isVault = window.location.hash.includes('vault');
-    
-    if (isVault) {
-        return {
-            stages: OL.state.master.stages || [],
-            resources: OL.state.master.resources || []
-        };
-    } else {
-        // Find the client project data
-        const client = getActiveClient(); // Assuming this is your helper for current project
-        return {
-            stages: client?.projectData?.stages || [],
-            resources: client?.projectData?.localResources || []
-        };
-    }
 };
 
 OL.save = function() {
@@ -8454,6 +8451,14 @@ OL.updateStepTarget = async function(resId, stepIdx, direction, logicIdx, newPar
     // 🎨 3. UI Refresh
     this.renderVisualizer(); 
     this.openInspector(resId, sIdx); 
+
+    // Replace your drawConnections() calls with this pattern:
+    requestAnimationFrame(() => {
+        // This waits for the next browser 'paint'
+        setTimeout(() => {
+            OL.drawConnections();
+        }, 50); 
+    });
 };
 
 OL.syncLogicPorts = function() {
@@ -8581,10 +8586,9 @@ OL.closeInspector = function() {
 // Helper to find the X/Y of a card's edge
 OL.getCardConnectionPoint = function(resId, stepIdx, side) {
     const fullId = `${resId}-${stepIdx}`;
-    // Look for the specific step row first
     let el = document.querySelector(`[data-step-id="${fullId}"]`);
     
-    // Fallback to the parent card if the step is hidden/collapsed
+    // Fallback logic
     if (!el || el.offsetParent === null) { 
         el = document.getElementById(`v2-node-${resId}`);
     }
@@ -8594,22 +8598,38 @@ OL.getCardConnectionPoint = function(resId, stepIdx, side) {
     const canvas = document.getElementById('v2-canvas');
     const rect = el.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
-    
-    // 🚀 THE ZOOM FIX: 
-    // We must factor out the current zoom level to get real map coordinates
     const zoom = OL.state.v2.zoom || 1;
 
+    // Relative Coords
+    const x = (rect.left - canvasRect.left) / zoom;
+    const y = (rect.top - canvasRect.top) / zoom;
+    
+    // 🚀 THE GEOMETRY FIX:
+    // If rect.width is 0 (because of the bug), use the card width (220)
+    // If rect.height is 0, use a standard step height (32)
+    const w = (rect.width > 0) ? (rect.width / zoom) : 220;
+    const h = (rect.height > 0) ? (rect.height / zoom) : 32;
+
     return {
-        x: (rect.left - canvasRect.left) / zoom + (side === 'right' ? (rect.width / zoom) + 10 : -10),
-        y: (rect.top - canvasRect.top) / zoom + (rect.height / zoom / 2)
+        x: x + (side === 'right' ? w + 10 : -10),
+        y: y + (h / 2)
     };
 };
 
 OL.drawConnections = function() {
-    const svg = document.getElementById('v2-connection-layer') || document.getElementById('v2-connections');
+    const svg = document.getElementById('v2-connections');
     const lineGroup = document.getElementById('line-group');
     if (!lineGroup || !svg) return;
+
     lineGroup.innerHTML = ''; 
+
+    // 🔴 TEST 1: Draw a giant Red X. 
+    // If you don't see this, the SVG is invisible or off-screen.
+    const testLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    testLine.setAttribute('x1', '0'); testLine.setAttribute('y1', '0');
+    testLine.setAttribute('x2', '2000'); testLine.setAttribute('y2', '2000');
+    testLine.setAttribute('stroke', 'red'); testLine.setAttribute('stroke-width', '10');
+    lineGroup.appendChild(testLine);
 
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
@@ -8617,56 +8637,30 @@ OL.drawConnections = function() {
     resources.forEach(sourceRes => {
         if (sourceRes.isGlobal || !sourceRes.steps) return;
 
-        sourceRes.steps.forEach((step, sourceStepIdx) => {
+        sourceRes.steps.forEach((step, sIdx) => {
             if (!step.logic?.out) return;
 
             step.logic.out.forEach((outLogic) => {
                 if (!outLogic.targetId) return;
 
-                const [targetResId, targetStepIdxStr] = outLogic.targetId.split('-');
-                const targetStepIdx = parseInt(targetStepIdxStr);
-                const targetRes = resources.find(r => String(r.id) === String(targetResId));
+                const [tResId, tIdxStr] = outLogic.targetId.split('-');
+                const targetRes = resources.find(r => String(r.id) === String(tResId));
 
-                // 🚀 THE FIX: Ensure both cards are on the canvas and have coordinates
                 if (targetRes && targetRes.coords && sourceRes.coords && !targetRes.isGlobal) {
-                    const dx = targetRes.coords.x - sourceRes.coords.x;
-                    const dy = targetRes.coords.y - sourceRes.coords.y;
-                    const isVerticalStack = Math.abs(dx) < 150;
-                    
-                    const isLoop = outLogic.type === 'loop';
-                    const isSelfLoop = outLogic.targetId === `${sourceRes.id}-${sourceStepIdx}`;
-
-                    let sourceSide, targetSide;
-                    if (isVerticalStack) {
-                        sourceSide = dy > 0 ? 'bottom' : 'top';
-                        targetSide = dy > 0 ? 'top' : 'bottom';
-                    } else {
-                        sourceSide = dx > 0 ? 'right' : 'left';
-                        targetSide = dx > 0 ? 'left' : 'right';
-                    }
-
-                    const start = this.getCardConnectionPoint(sourceRes.id, sourceStepIdx, sourceSide);
-                    const end = this.getCardConnectionPoint(targetResId, targetStepIdx, targetSide);
+                    const start = this.getCardConnectionPoint(sourceRes.id, sIdx, 'right');
+                    const end = this.getCardConnectionPoint(targetRes.id, parseInt(tIdxStr), 'left');
 
                     if (start && end) {
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        // Calculate Bezier Curve
-                        const cpX = (start.x + end.x) / 2;
-                        const d = `M${start.x},${start.y} C${cpX},${start.y} ${cpX},${end.y} ${end.x},${end.y}`;
+                        // Use a very simple straight line first to verify coordinates
+                        const d = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
                         
                         path.setAttribute('d', d);
-                        path.setAttribute('stroke', isLoop ? 'var(--warning)' : 'var(--accent)');
-                        path.setAttribute('stroke-width', '2');
+                        path.setAttribute('stroke', '#fbbf24'); // Bright Gold
+                        path.setAttribute('stroke-width', '4');
                         path.setAttribute('fill', 'none');
                         path.setAttribute('marker-end', 'url(#arrowhead)');
-                        if (isLoop) path.setAttribute('stroke-dasharray', '5,5');
-
                         lineGroup.appendChild(path);
-
-                        // Draw the λ or ↺ icon
-                        if (outLogic.rule || isLoop) {
-                            this.drawLogicIcon(lineGroup, cpX, (start.y + end.y) / 2, outLogic.rule || "Loop", isLoop, outLogic.loopLimit);
-                        }
                     }
                 }
             });
@@ -9000,40 +8994,6 @@ OL.syncZapLogic = function(selectEl) {
     eventSelect.innerHTML = html;
 };
 
-OL.initV2Panning = function() {
-    const viewport = document.getElementById('v2-viewport');
-    if (!viewport) return;
-
-    let isPanning = false;
-    let start = { x: 0, y: 0 };
-
-    viewport.onmousedown = (e) => {
-        if (e.target.closest('.v2-node-card') || e.target.closest('.btn')) return;
-        isPanning = true;
-        start = { x: e.clientX - state.v2.pan.x, y: e.clientY - state.v2.pan.y };
-        viewport.style.cursor = 'grabbing';
-    };
-
-    window.onmousemove = (e) => {
-        if (!isPanning) return;
-        state.v2.pan.x = e.clientX - start.x;
-        state.v2.pan.y = e.clientY - start.y;
-
-        requestAnimationFrame(() => {
-            const canvas = document.getElementById('v2-canvas');
-            const stages = document.getElementById('v2-stage-layer');
-            if (canvas) canvas.style.transform = `translate3d(${state.v2.pan.x}px, ${state.v2.pan.y}px, 0) scale(${state.v2.zoom})`;
-            // Keep stages synced if they are in a separate layer
-            if (stages) stages.style.transform = `translate3d(${state.v2.pan.x}px, 0, 0)`; 
-        });
-    };
-
-    window.onmouseup = () => {
-        isPanning = false;
-        viewport.style.cursor = 'grab';
-    };
-};
-
 OL.zoom = function(delta) {
     const canvas = document.getElementById('v2-canvas');
     if (!canvas) return;
@@ -9054,14 +9014,6 @@ OL.zoom = function(delta) {
     canvas.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${newZoom})`;
     
     console.log(`🔍 Zoom Level: ${Math.round(newZoom * 100)}%`);
-};
-
-// 🚚 Dragging from Tray (MouseDown)
-OL.handleTrayDrag = function(e, resId) {
-    e.preventDefault();
-    state.v2.activeDragId = resId;
-    state.v2.isFromTray = true;
-    OL.initWBMotion(e, resId);
 };
 
 OL.refreshFamilyNaming = function(targetRes, resources) {
@@ -9225,186 +9177,6 @@ OL.commitBrainDump = async function() {
     OL.renderVisualizer(isVault);
 };
 
-function renderV2Nodes(isVault) {
-    const client = getActiveClient();
-    let nodes = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
-
-    // 1. Filter by Scope if active
-    const visibleNodes = nodes.filter(node => (node.coords && typeof node.coords.x === 'number') || node.isGlobal);
-
-    // 2. Filter by Scope if active
-    let filteredNodes = visibleNodes;
-    if (state.v2.activeScope && state.v2.activeScope !== 'all') {
-        filteredNodes = visibleNodes.filter(n => 
-            (n.scope === state.v2.activeScope || n.originProject === state.v2.activeScope)
-        );
-    }
-
-    return filteredNodes.map((node, idx) => {
-        const isGlobal = !!node.isGlobal;
-        const icon = OL.getRegistryIcon(node.type);
-        const steps = Array.isArray(node.steps) ? node.steps : [];
-        const isExpanded = state.v2.expandedNodes.has(node.id);
-        const typeClean = (node.type || "").toUpperCase();
-        const isLooseStep = typeClean === 'SOP' || typeClean === 'STEP' || typeClean === 'INSTRUCTION';
-        const isInScope = !!OL.isResourceInScope(node.id);
-
-        const positionStyle = isGlobal 
-            ? `position: relative; transform: none; margin: 0;` 
-            : `position: absolute; left: ${node.coords.x}px; top: ${node.coords.y}px;`
-
-       // Change it to a simple link that clears the filter flags
-        // Inside renderV2Nodes
-        const scopeBadge = isInScope ? `
-            <div class="v2-scope-badge" 
-                onclick="event.stopPropagation(); OL.navigateToScoping('${node.id}')"
-                title="View in Scoping Sheet">
-                $
-            </div>
-        ` : '';
-
-        // 🚀 Dynamic Badge for standard resources
-        const stepBadge = (steps.length > 0) ? 
-            `<div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleStepView('${node.id}')">
-                ${steps.length} Steps ${isExpanded ? '▴' : '▾'}
-            </div>` : '';
-
-        const duplicateBadge = `
-            <div class="v2-duplicate-badge" 
-                onclick="event.stopPropagation(); OL.duplicateResourceV2('${node.id}')"
-                title="Duplicate Resource">
-                ⿻
-            </div>
-        `;
-
-        // 🚀 NEW: Family Numbering Logic
-        let numberingHtml = '';
-        if (node.originId) {
-            const family = filteredNodes
-                .filter(r => r.originId === node.originId)
-                .sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
-            
-            if (family.length > 1) {
-                const partIndex = family.findIndex(r => r.id === node.id) + 1;
-                numberingHtml = `<span class="v2-card-part" onmousedown="event.stopPropagation();" onclick="event.stopPropagation(); OL.highlightFamily('${node.originId}')">${partIndex}/${family.length}</span>`;
-            }
-        }
-
-        // 🚀 NEW: Updated Header with numbering
-        const headerHtml = `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span>${icon}</span>
-                    <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
-                </div>
-                ${numberingHtml}
-            </div>
-        `;
-
-        const stepsHtml = isExpanded ? steps.map((step, i) => {
-            const content = step.text || step.name || "Step";
-            const portInId = `port-in-${node.id}-step-${i}`;
-            const portOutId = `port-out-${node.id}-step-${i}`;
-
-            // 🚀 THE STEP ROW
-            let rowHtml = `
-                <div class="v2-step-row-container">
-                    <div class="v2-step-item"
-                        onmousedown="event.stopPropagation();"
-                        onclick="event.stopPropagation(); OL.loadInspector('${step.id}', '${node.id}')">
-                        
-                        <div class="v2-port step-port-in" id="${portInId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in', ${i})"></div>
-                        
-                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 12px; width: 100%;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="v2-step-number">${i + 1}</span>
-                                <span class="v2-step-text" style="font-size: 11px;">${esc(content)}</span>
-                            </div>
-                            <div class="v2-step-eject" onclick="event.stopPropagation(); OL.ejectStep('${node.id}', ${i})">🪂</div>
-                        </div>
-                        
-                        <div class="v2-port step-port-out" id="${portOutId}" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out', ${i})"></div>
-                    </div>
-                </div>
-            `;
-
-            // 🚀 THE SPLIT DIVIDER (Injected BETWEEN rows)
-            if (i < node.steps.length - 1) {
-                rowHtml += `
-                    <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitResourceAtStep('${node.id}', ${i})">
-                        <div class="split-icon">✂️</div>
-                    </div>
-                `;
-            }
-
-            return rowHtml;
-        }).join('') : '';
-
-        // Add 4 tiny invisible/subtle hit-areas for linking
-        const cornerLinkers = isLooseStep ? `
-            <div class="v2-corner-link tl" onmousedown="OL.startParentLinking(event, '${node.id}', 'tl')"></div>
-            <div class="v2-corner-link tr" onmousedown="OL.startParentLinking(event, '${node.id}', 'tr')"></div>
-            <div class="v2-corner-link bl" onmousedown="OL.startParentLinking(event, '${node.id}', 'bl')"></div>
-            <div class="v2-corner-link br" onmousedown="OL.startParentLinking(event, '${node.id}', 'br')"></div>
-        ` : '';
-
-        // Context Icon update: show active link if parentId exists
-        const contextIcon = node.parentId 
-            ? `<i class="fas fa-link active-link-icon" title="Leashed to Parent" style="color: #fbbf24;"></i>`
-            : (isLooseStep ? `<i class="fas fa-ghost muted-icon"></i>` : `<i class="fas fa-cube"></i>`);
-
-        const isSelected = state.v2.selectedNodes.has(String(node.id));
-      
-        const nodeID = String(node.id);
-
-        // 1. Try to find the Resource directly in the Project (Local)
-        let res = OL.getResourceById(nodeID);
-
-        // 2. 🚀 THE PARACHUTE FIX: 
-        // If it's a loose step, its name might be stored in 'node.text' 
-        // or as a 'resourceLinkId' reference.
-        const displayName = res?.name || node.text || node.name || "Untitled Step";
-
-        return `
-            <div class="v2-node-card ${isSelected ? 'is-selected' : ''} ${isGlobal ? 'on-shelf' : ''} ${isLooseStep ? 'is-loose type-step' : 'is-resource'} ${isExpanded ? 'is-expanded' : ''}" 
-                id="v2-node-${node.id}"
-                style="${positionStyle}; ${node.parentId ? 'border-left: 3px solid #fbbf24;' : ''}"
-                onmousedown="event.stopPropagation(); OL.startNodeDrag(event, '${node.id}')"
-                onclick="if(event.shiftKey) { event.stopPropagation(); return; } OL.loadInspector('${node.id}')">
-
-                ${cornerLinkers}
-
-                <div class="v2-context-corner">${contextIcon}</div>
-                ${scopeBadge}
-                ${duplicateBadge}
-                ${stepBadge}
-                
-                <div class="v2-port port-in" title="In" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                <div class="v2-port port-out" title="Out" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
-                <div class="v2-port port-top" title="Top" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'in')"></div>
-                <div class="v2-port port-bottom" title="Bottom" onclick="event.stopPropagation(); OL.handlePortClick('${node.id}', 'out')"></div>
-
-                <div class="v2-node-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span>${icon}</span>
-                        <span class="tiny muted uppercase bold" style="font-size: 8px;">${esc(node.type)}</span>
-                    </div>
-                    ${numberingHtml}
-                </div>
-                
-                <div class="v2-node-body" 
-                style="text-align: ${isLooseStep ? 'right' : 'left'}; padding-right: ${isLooseStep ? '4px' : '0'};">
-                    ${esc(displayName|| node.text || "Untitled Step")}
-                </div>
-
-                <div class="v2-steps-preview" id="steps-${node.id}" style="display: ${isExpanded ? 'block' : 'none'}">
-                    ${stepsHtml}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
 OL.duplicateResourceV2 = async function(resourceId) {
     const isVault = location.hash.includes('vault');
     const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
@@ -9468,468 +9240,6 @@ OL.jumpToScopingItem = function(nodeId) {
 
     // 4. Force Render
     window.renderScopingSheet();
-};
-
-OL.drawV2Connections = function() {
-    const svg = document.getElementById('v2-connections');
-    if (!svg) return;
-
-    const isVault = window.location.hash.includes('vault');
-    const source = isVault ? (state.master.resources || []) : (getActiveClient()?.projectData?.localResources || []);
-    
-    svg.innerHTML = ''; 
-    svg.setAttribute('viewBox', '0 0 5000 5000');
-
-    // Ensure this is globally accessible or at the top of OL.drawV2Connections
-   function drawIcon(x, y, char, tooltip) {
-        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        g.style.cursor = "help"; // 🚀 Visual cue that there is hover info
-
-        const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        bg.setAttribute("cx", x);
-        bg.setAttribute("cy", y);
-        bg.setAttribute("r", "9"); // 🚀 Reduced size
-        bg.setAttribute("fill", "#1e293b"); 
-        bg.setAttribute("stroke", "#fbbf24");
-        bg.setAttribute("stroke-width", "1");
-        
-        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", x);
-        text.setAttribute("y", y);
-        text.setAttribute("fill", "#fbbf24");
-        text.setAttribute("font-size", char === "⏱" ? "9px" : "11px"); // 🚀 Proportional scaling
-        text.setAttribute("text-anchor", "middle");
-        text.setAttribute("dominant-baseline", "central");
-        text.setAttribute("font-weight", "bold");
-        text.textContent = char;
-
-        // 🚀 THE HOVER PARAMETERS:
-        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-        title.textContent = tooltip; 
-        
-        g.appendChild(bg);
-        g.appendChild(text);
-        g.appendChild(title); // This creates the native browser tooltip
-        
-        return g;
-    }
-
-    // 🚀 NEW HELPER: Calculate position based on line direction
-    function getSmartOffsetPos(sAnchor, eAnchor, index) {
-        const gap = 22;
-        const margin = 28;
-        const offset = margin + (index * gap);
-
-        // Calculate relative distance
-        const dx = Math.abs(sAnchor.x - eAnchor.x);
-        const dy = Math.abs(sAnchor.y - eAnchor.y);
-
-        // 🎯 LOGIC: 
-        // If dy > dx, cards are stacked vertically -> Align icons HORIZONTALLY
-        // If dx > dy, cards are in different columns -> Align icons VERTICALLY
-        const isVerticalFlow = dy > dx;
-
-        if (isVerticalFlow) {
-            // Stacked vertically: Move icons left/right of the port, then spread them horizontally
-            const horizontalSpread = index * gap;
-            return { 
-                x: sAnchor.dir === 'left' ? sAnchor.x - margin - horizontalSpread : sAnchor.x + margin + horizontalSpread, 
-                y: sAnchor.y 
-            };
-        } else {
-            // Different columns: Spread them along the line direction
-            switch (sAnchor.dir) {
-                case 'right':  return { x: sAnchor.x + offset, y: sAnchor.y };
-                case 'left':   return { x: sAnchor.x - offset, y: sAnchor.y };
-                case 'bottom': return { x: sAnchor.x, y: sAnchor.y + offset };
-                case 'top':    return { x: sAnchor.x, y: sAnchor.y - offset };
-                default:       return { x: sAnchor.x + offset, y: sAnchor.y };
-            }
-        }
-    }
-    // 🚀 NEW HELPER: Resolves the 4 cardinal points of a card
-    function getAnchors(r, canvasRect, zoom) {
-        if (!r || !canvasRect) return []; // Return empty array if rect is missing
-        return [
-            { x: (r.left + r.width / 2 - canvasRect.left) / zoom, y: (r.top - canvasRect.top) / zoom, dir: 'top' },
-            { x: (r.left + r.width / 2 - canvasRect.left) / zoom, y: (r.bottom - canvasRect.top) / zoom, dir: 'bottom' },
-            { x: (r.left - canvasRect.left) / zoom, y: (r.top + r.height / 2 - canvasRect.top) / zoom, dir: 'left' },
-            { x: (r.right - canvasRect.left) / zoom, y: (r.top + r.height / 2 - canvasRect.top) / zoom, dir: 'right' }
-        ];
-    }
-
-    source.forEach(node => {
-        // 🐕 1. REFINED LEASH LINES (Parent -> Child)
-        if (node.parentId) {
-            const parent = source.find(n => n.id === node.parentId);
-            const sEl = document.getElementById(`v2-node-${parent?.id}`);
-            const tEl = document.getElementById(`v2-node-${node.id}`);
-
-            const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            group.setAttribute("class", "v2-connection-group leash-link");
-
-            let s, e;
-
-            if (sEl && tEl) {
-                const cRect = svg.getBoundingClientRect();
-                const sR = sEl.getBoundingClientRect();
-                const tR = tEl.getBoundingClientRect();
-
-                const getCorners = (r) => [
-                    { x: r.left - cRect.left, y: r.top - cRect.top },
-                    { x: r.right - cRect.left, y: r.top - cRect.top },
-                    { x: r.left - cRect.left, y: r.bottom - cRect.top },
-                    { x: r.right - cRect.left, y: r.bottom - cRect.top }
-                ];
-
-                const pC = getCorners(sR);
-                const cC = getCorners(tR);
-                let minDist = Infinity;
-                s = pC[0]; e = cC[0];
-
-                pC.forEach(pc => {
-                    cC.forEach(cc => {
-                        const d = Math.hypot(pc.x - cc.x, pc.y - cc.y);
-                        if (d < minDist) { minDist = d; s = pc; e = cc; }
-                    });
-                });
-            } else if (parent && parent.coords && node.coords) {
-                s = { x: parent.coords.x + 100, y: parent.coords.y + 80 };
-                e = { x: node.coords.x + 100, y: node.coords.y };
-            }
-
-            if (s && e) {
-                const midX = (s.x + e.x) / 2;
-                const midY = (s.y + e.y) / 2 + 30;
-                const pathData = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
-
-                const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                hitArea.setAttribute("d", pathData);
-                hitArea.setAttribute("stroke", "transparent");
-                hitArea.setAttribute("stroke-width", "25");
-                hitArea.setAttribute("fill", "none");
-                hitArea.style.cursor = "pointer";
-
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                path.setAttribute("d", pathData);
-                path.setAttribute("stroke", "#fbbf24");
-                path.setAttribute("stroke-width", "2");
-                path.setAttribute("stroke-dasharray", "6,4");
-                path.setAttribute("fill", "none");
-                path.setAttribute("opacity", "0.6");
-
-                group.onmousedown = (evt) => {
-                    evt.stopPropagation();
-                    
-                    // 🎯 TARGETING THE CHILD:
-                    // In this loop, 'node' is the child that possesses the leash.
-                    // We want the logic to be saved to THIS node.
-                    state.v2.activeConnection = { 
-                        sourceId: node.id,    // <--- This must be the CHILD ID (the SOP)
-                        targetId: parent.id,  // This is the Zap
-                        outcomeIdx: null,
-                        isLeash: true 
-                    };
-
-                    document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
-                    group.classList.add('is-sticky');
-                    
-                    const bar = document.getElementById('v2-context-toolbar');
-                    if (bar) bar.style.display = 'flex';
-                };
-
-                group.appendChild(hitArea);
-                group.appendChild(path);
-
-                // --- ICONS (Leash Logic) ---
-                // 🎯 THE FIX: Fetch the 'Live' child to ensure logic/delay are visible after sync
-                const liveChild = OL.getResourceById(node.id); 
-                let iconOffset = 20;
-
-                if (liveChild) {
-                    console.log(`✨ Checking Live Child (${liveChild.id}):`, { logic: liveChild.logic, delay: liveChild.delay, loop: liveChild.loop });
-
-                    // 🚀 1. RENDER LOGIC (Check for 'logic' object or 'hasLogic' flag)
-                    if (liveChild.logic && (liveChild.logic.field || liveChild.logic.operator)) {
-                        const text = drawIcon(s.x + iconOffset, s.y - 12, "λ", `Logic: ${liveChild.logic.field} ${liveChild.logic.operator}`);
-                        group.appendChild(text);
-                        iconOffset += 22; 
-                    }
-
-                    // ⏱️ 2. RENDER DELAY
-                    if (liveChild.delay && liveChild.delay !== "0") {
-                        const text = drawIcon(s.x + iconOffset, s.y - 12, "⏱", `Delay: ${liveChild.delay}`);
-                        text.setAttribute("font-size", "12px");
-                        group.appendChild(text);
-                        iconOffset += 22;
-                    }
-
-                    // 🔄 3. RENDER LOOP (Improved check for your 'action' strings)
-                    const isLooping = liveChild.isLoop || liveChild.allowLoop || liveChild.loop || (liveChild.action && liveChild.action.includes('loop'));
-                    if (isLooping) {
-                        const text = drawIcon(s.x + iconOffset, s.y - 12, "⟳", "Repeats");
-                        text.setAttribute("font-size", "14px");
-                        group.appendChild(text);
-                    }
-                }
-                // Append the group to SVG *after* icons are added to it
-                svg.appendChild(group);
-            }
-        }
-
-        // ⚡ 2. FLOW PATHS (Outcomes)
-        if (node.outcomes) {
-            node.outcomes.forEach((outcome, outcomeIdx) => {
-                let tid = outcome.targetId || outcome.toId;
-                if (!tid && outcome.action) {
-                    tid = outcome.action.replace('jump_res_', '').replace('jump_step_', '');
-                }
-
-                const canvas = document.getElementById('v2-canvas');
-                const canvasRect = canvas.getBoundingClientRect();
-                const zoom = state.v2.zoom || 1;
-
-                // 🚀 1. SPECIFIC PORT RESOLUTION (The "Lock")
-                const sourcePortId = (outcome.fromStepIndex !== null && outcome.fromStepIndex !== undefined)
-                    ? `port-out-${node.id}-step-${outcome.fromStepIndex}`
-                    : `port-out-${node.id}`;
-
-                const targetPortId = (outcome.toStepIndex !== null && outcome.toStepIndex !== undefined)
-                    ? `port-in-${tid}-step-${outcome.toStepIndex}`
-                    : `port-in-${tid}`;
-
-                const sPort = document.getElementById(sourcePortId);
-                const tPort = document.getElementById(targetPortId);
-
-                let sAnchor, eAnchor;
-
-                // --- SOURCE ANCHOR RESOLUTION ---
-                const sEl = document.getElementById(`v2-node-${node.id}`);
-                if (!sEl) return;
-                const sR = sEl.getBoundingClientRect();
-
-                if (sPort && (outcome.fromStepIndex !== null && outcome.fromStepIndex !== undefined)) {
-                    const r = sPort.getBoundingClientRect();
-                    sAnchor = {
-                        x: (r.left + r.width / 2 - canvasRect.left) / zoom,
-                        y: (r.top + r.height / 2 - canvasRect.top) / zoom,
-                        dir: 'right'
-                    };
-                } else {
-                    const anchors = getAnchors(sR, canvasRect, zoom);
-                    const tEl = document.getElementById(`v2-node-${tid}`);
-                    const tRect = tEl ? tEl.getBoundingClientRect() : {left:0, top:0, width:0, height:0};
-                    const tCenter = { 
-                        x: (tRect.left + tRect.width/2 - canvasRect.left)/zoom, 
-                        y: (tRect.top + tRect.height/2 - canvasRect.top)/zoom 
-                    };
-                    
-                    sAnchor = anchors.length > 0 ? anchors.reduce((prev, curr) => 
-                        Math.hypot(curr.x - tCenter.x, curr.y - tCenter.y) < Math.hypot(prev.x - tCenter.x, prev.y - tCenter.y) ? curr : prev, anchors[0]
-                    ) : null;
-                }
-
-                if (!sAnchor) return;
-
-                // --- TARGET ANCHOR RESOLUTION ---
-                const tEl = document.getElementById(`v2-node-${tid}`);
-                if (!tEl) return;
-                const tR = tEl.getBoundingClientRect();
-
-                if (tPort && (outcome.toStepIndex !== null && outcome.toStepIndex !== undefined)) {
-                    const r = tPort.getBoundingClientRect();
-                    eAnchor = {
-                        x: (r.left + r.width / 2 - canvasRect.left) / zoom,
-                        y: (r.top + r.height / 2 - canvasRect.top) / zoom,
-                        dir: 'left'
-                    };
-                } else {
-                    const anchors = getAnchors(tR, canvasRect, zoom);
-                    eAnchor = anchors.length > 0 ? anchors.reduce((prev, curr) => 
-                        Math.hypot(curr.x - sAnchor.x, curr.y - sAnchor.y) < Math.hypot(prev.x - sAnchor.x, prev.y - sAnchor.y) ? curr : prev, anchors[0]
-                    ) : null;
-                }
-
-                if (!eAnchor) return;
-
-                // 📐 PATH GENERATION (Bezier)
-                const sX = sAnchor.x; const sY = sAnchor.y;
-                const eX = eAnchor.x; const eY = eAnchor.y;
-                let pathData;
-                if (sAnchor.dir === 'top' || sAnchor.dir === 'bottom') {
-                    const cpY = (sY + eY) / 2;
-                    pathData = `M ${sX} ${sY} C ${sX} ${cpY}, ${eX} ${cpY}, ${eX} ${eY}`;
-                } else {
-                    const cpX = (sX + eX) / 2;
-                    pathData = `M ${sX} ${sY} C ${cpX} ${sX < eX ? sY : eY}, ${cpX} ${sX < eX ? eY : sY}, ${eX} ${eY}`;
-                }
-
-                const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                group.setAttribute("class", "v2-connection-group flow-link");
-
-                group.onmousedown = (clickEvt) => {
-                    clickEvt.stopPropagation();
-                    clickEvt.preventDefault();
-                    state.v2.activeConnection = { sourceId: node.id, targetId: tid, outcomeIdx: outcomeIdx, isLeash: false };
-                    document.querySelectorAll('.v2-connection-group').forEach(el => el.classList.remove('is-sticky'));
-                    group.classList.add('is-sticky');
-                    const ctxBar = document.getElementById('v2-context-toolbar');
-                    if (ctxBar) ctxBar.style.display = 'flex';
-                };
-
-                const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                visualPath.setAttribute("d", pathData);
-                visualPath.setAttribute("stroke", "#fbbf24");
-                visualPath.setAttribute("stroke-width", "2");
-                visualPath.setAttribute("fill", "none");
-                visualPath.setAttribute("marker-end", "url(#arrowhead-v2)");
-
-                const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                hitArea.setAttribute("d", pathData);
-                hitArea.setAttribute("stroke", "transparent");
-                hitArea.setAttribute("stroke-width", "20");
-                hitArea.setAttribute("fill", "none");
-                hitArea.style.cursor = "pointer";
-
-                group.appendChild(hitArea);
-                group.appendChild(visualPath);
-
-                // 🛠️ DYNAMIC INDICATOR PLACEMENT
-                // Inside the outcome loop:
-                const indicators = [];
-                if (outcome.isLoop) indicators.push({ 
-                    char: "⟳", 
-                    tip: `Loop: ${outcome.loopCount || 'Infinite'} times`, 
-                    side: 'target' 
-                });
-                if (outcome.logic) indicators.push({ 
-                    char: "λ", 
-                    tip: `Condition: ${outcome.logic.field} ${outcome.logic.operator} ${outcome.logic.value}`, 
-                    side: 'source' 
-                });
-                if (outcome.delay && outcome.delay !== "0") indicators.push({ 
-                    char: "⏱", 
-                    tip: `Wait: ${outcome.delay}`, 
-                    side: 'source' 
-                });
-
-                const sourceIcons = indicators.filter(i => i.side === 'source');
-                const targetIcons = indicators.filter(i => i.side === 'target');
-
-                sourceIcons.forEach((icon, i) => {
-                    const pos = getSmartOffsetPos(sAnchor, eAnchor, i);
-                    group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
-                });
-
-                // Inside the targetIcons.forEach loop (for the Loop icon):
-                targetIcons.forEach((icon, i) => {
-                    // For target icons, we usually want them near the end of the line
-                    const pos = getSmartOffsetPos(eAnchor, sAnchor, i); // Pass eAnchor as primary
-                    group.appendChild(drawIcon(pos.x, pos.y, icon.char, icon.tip));
-                });
-
-                svg.appendChild(group);
-            });
-        }
-
-    });
-};
-
-OL.handleMenuAction = function(action, sourceId, targetId, outcomeIdx) {
-    console.log(`Action: ${action} on ${sourceId} -> ${targetId}`);
-    
-    switch(action) {
-        case 'delete':
-            if (outcomeIdx === undefined) OL.unlinkParent(sourceId); // It's a leash
-            else OL.removeConnection(sourceId, outcomeIdx); // It's a flow line
-            break;
-        case 'reorder':
-            // Request the index mapping we discussed earlier
-            OL.requestReorder(sourceId, targetId);
-            break;
-        case 'logic':
-            alert("Logic Builder coming soon!");
-            break;
-        // Add other cases as you build them
-    }
-};
-
-OL.requestReorder = async function(stepId, parentId) {
-    const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-    const parent = source.find(n => n.id === parentId);
-    
-    if (!parent) return;
-    
-    const currentIdx = (parent.steps || []).findIndex(s => s.id === stepId);
-    const newPos = prompt(`Currently at position ${currentIdx + 1}. Enter new position (1 - ${parent.steps.length}):`);
-    
-    if (newPos) {
-        const targetIdx = parseInt(newPos) - 1;
-        // Logic to move the element in the parent.steps array...
-        alert(`Moving to index ${targetIdx}`);
-    }
-};
-
-OL.getRelativePointer = function(e, svg) {
-    const canvas = document.getElementById('v2-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const zoom = state.v2.zoom || 1;
-
-    // 🚀 Calculate position relative to the SCALED canvas
-    return {
-        x: (e.clientX - rect.left) / zoom,
-        y: (e.clientY - rect.top) / zoom
-    };
-};
-
-OL.drawLeashLine = function(svg, childEl, parentEl, nodeId) {
-    const res = OL.getResourceById(nodeId);
-    const parent = OL.getResourceById(res?.parentId);
-
-    if (!res?.coords || !parent?.coords) return;
-
-    // 1. Define all 4 corners for both (using 200x80 card dimensions)
-    const getCorners = (c) => [
-        { x: c.x, y: c.y },           // Top Left
-        { x: c.x + 200, y: c.y },     // Top Right
-        { x: c.x, y: c.y + 80 },      // Bottom Left
-        { x: c.x + 200, y: c.y + 80 }  // Bottom Right
-    ];
-
-    const cCorners = getCorners(res.coords);
-    const pCorners = getCorners(parent.coords);
-
-    // 2. Find the closest pair of corners
-    let minDist = Infinity;
-    let s = cCorners[0], e = pCorners[0];
-
-    cCorners.forEach(cc => {
-        pCorners.forEach(pc => {
-            const dist = Math.hypot(cc.x - pc.x, cc.y - pc.y);
-            if (dist < minDist) {
-                minDist = dist;
-                s = cc;
-                e = pc;
-            }
-        });
-    });
-
-    // 3. 🚀 THE CURVE MATH: Create an organic "sag"
-    // We use a mid-point with a slight Y-offset to make it look like a real leash
-    const midX = (s.x + e.x) / 2;
-    const midY = (s.y + e.y) / 2 + 20; // Adds 20px "gravity"
-    const d = `M ${s.x} ${s.y} Q ${midX} ${midY} ${e.x} ${e.y}`;
-
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    path.setAttribute("stroke", "#fbbf24");
-    path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-dasharray", "6,4");
-    path.setAttribute("fill", "none");
-    path.setAttribute("opacity", "0.6");
-    
-    svg.appendChild(path);
 };
 
 OL.toggleMasterExpand = function() {
@@ -9998,7 +9308,7 @@ OL.toggleMasterExpand = function() {
         OL.persist(); // Save positions once they are correct
     }, 50);
 
-    setTimeout(() => OL.drawV2Connections(), 150);
+    setTimeout(() => OL.drawConnections(), 150);
 };
 
 OL.toggleWorkbenchTray = function() {
@@ -10019,72 +9329,6 @@ OL.toggleWorkbenchTray = function() {
     // 3. Re-render to update the button icon (🔳 vs ⬜) and populate contents
     OL.renderVisualizer();
 };
-
-OL.toggleTrayNodeExpand = function(e, resId, isVault) {
-    e.stopPropagation(); // Prevents starting a drag by accident
-    
-    if (state.v2.trayExpandedNodes.has(resId)) {
-        state.v2.trayExpandedNodes.delete(resId);
-    } else {
-        state.v2.trayExpandedNodes.add(resId);
-    }
-    
-    // Refresh the tray only
-    const searchVal = document.getElementById('tray-search-input')?.value || "";
-    const typeFilter = state.v2.trayTypeFilter || "All";
-    const list = document.getElementById('pane-drawer');
-    if (list) {
-        list.innerHTML = window.renderTrayContent(isVault, searchVal, typeFilter);
-    }
-};
-
-OL.ejectStep = async function(resourceId, stepIdx) {
-    const isVault = window.location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-    const parentNode = source.find(n => n.id === resourceId);
-    
-    if (!parentNode || !parentNode.steps[stepIdx]) return;
-
-    const stepData = parentNode.steps[stepIdx];
-
-    await OL.updateAndSync(() => {
-        // 1. Find existing data
-        const linkedRes = OL.getResourceById(stepData.resourceLinkId);
-        
-        // 🚀 THE FIX: Never let the name be "Step" or "Untitled"
-        const stableName = linkedRes?.name || stepData.text || stepData.name || "New SOP";
-        const stableType = linkedRes?.type || "Action";
-
-        const newNode = {
-            id: stepData.resourceLinkId || ('sop-' + Date.now()), 
-            name: stableName,
-            type: stableType,
-            parentId: resourceId, 
-            coords: {
-                x: (parentNode.coords?.x || 0), // Spawn clear of the parent
-                y: (parentNode.coords?.y || 0) + (stepIdx * 60)
-            },
-            steps: linkedRes?.steps || []
-        };
-
-        // 2. Prevent duplication
-        const exists = source.find(r => r.id === newNode.id);
-        if (!exists) {
-            source.push(newNode);
-        } else {
-            exists.parentId = resourceId;
-            exists.coords = newNode.coords;
-            exists.name = stableName;
-            exists.type = stableType;
-        }
-
-        // 3. Remove from parent
-        parentNode.steps.splice(stepIdx, 1);
-    });
-
-    OL.renderVisualizer(isVault);
-};
-
 
 // ===========================TASK RESOURCE OVERLAP===========================
 
