@@ -3932,6 +3932,130 @@ OL.openResourceTypeManager = function () {
     openModal(html);
 };
 
+OL.renderHierarchySelectors = function (res, isVault) {
+    const data = OL.getCurrentProjectData();
+    const stages = data.stages || [];
+    
+    // Find any workflows (Resources typed as 'Workflow') 
+    // to populate the parent workflow dropdown
+    const workflows = (data.resources || []).filter(r => 
+        String(r.type).toLowerCase() === 'workflow' && r.id !== res.id
+    );
+
+    return `
+        <div class="hierarchy-selectors">
+            <div class="form-group">
+                <label class="tiny-label">Process Stage</label>
+                <select class="modal-input tiny" 
+                        onchange="OL.updateResourceMeta('${res.id}', 'stageId', this.value)">
+                    <option value="">-- No Stage --</option>
+                    ${stages.map(s => `
+                        <option value="${s.id}" ${res.stageId === s.id ? "selected" : ""}>
+                            ${esc(s.name)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="tiny-label">Parent Workflow</label>
+                <select class="modal-input tiny" 
+                        onchange="OL.updateResourceMeta('${res.id}', 'parentId', this.value)">
+                    <option value="">-- Standalone --</option>
+                    ${workflows.map(w => `
+                        <option value="${w.id}" ${res.parentId === w.id ? "selected" : ""}>
+                            ${esc(w.name)}
+                        </option>
+                    `).join("")}
+                </select>
+            </div>
+        </div>
+    `;
+};
+
+window.getAllIncomingLinks = function(targetResId, allResources) {
+    const links = [];
+    const targetIdStr = String(targetResId);
+
+    allResources.forEach(res => {
+        // 1. Check Step-Level Logic (Level 3)
+        if (res.steps) {
+            res.steps.forEach((step, sIdx) => {
+                if (step.logic && step.logic.out) {
+                    step.logic.out.forEach(outbound => {
+                        // Check if the targetId starts with our resource ID
+                        if (outbound.targetId && String(outbound.targetId).startsWith(targetIdStr)) {
+                            links.push({
+                                id: res.id,
+                                name: res.name,
+                                type: res.type || 'Resource',
+                                context: 'Logic Link',
+                                rule: outbound.rule || 'Direct'
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
+        // 2. Check Outcome-Level Links (Level 2)
+        if (res.outcomes) {
+            res.outcomes.forEach(outcome => {
+                const tid = outcome.targetId || outcome.toId;
+                if (String(tid) === targetIdStr) {
+                    links.push({
+                        id: res.id,
+                        name: res.name,
+                        type: res.type || 'Resource',
+                        context: 'Flow Outcome',
+                        rule: outcome.label || 'Next Step'
+                    });
+                }
+            });
+        }
+
+        // 3. Check Parent/Child Leash Links
+        if (String(res.parentId) === targetIdStr) {
+            links.push({
+                id: res.id,
+                name: res.name,
+                type: res.type || 'Resource',
+                context: 'Sub-Process',
+                rule: 'Child of'
+            });
+        }
+    });
+
+    // Deduplicate: If multiple steps link to the same card, just show the card once
+    const uniqueLinks = [];
+    const seen = new Set();
+    links.forEach(l => {
+        if (!seen.has(l.id)) {
+            uniqueLinks.push(l);
+            seen.add(l.id);
+        }
+    });
+
+    return uniqueLinks;
+};
+
+window.renderSopStepList = function(res) {
+    const steps = res.steps || [];
+    if (steps.length === 0) {
+        return `<div class="empty-hint p-10">No steps defined. Use the Visual Editor to add sequence logic.</div>`;
+    }
+
+    return steps.map((step, idx) => `
+        <div class="sop-step-row" style="display:flex; align-items:flex-start; gap:10px; padding:8px; border-bottom:1px solid var(--line);">
+            <div class="step-number-circle">${idx + 1}</div>
+            <div style="flex:1;">
+                <div class="bold" style="font-size:11px;">${esc(step.name || 'Untitled Step')}</div>
+                ${step.notes ? `<div class="tiny muted">${esc(step.notes)}</div>` : ''}
+            </div>
+        </div>
+    `).join('');
+};
+
 // 1. Add New Type
 OL.addNewResourceTypeFlat = function () {
     const input = document.getElementById('new-type-input');
