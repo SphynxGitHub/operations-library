@@ -175,6 +175,31 @@ OL.updateAndSync = async function(mutationFn) {
     }
 };
 
+OL.getRegistryIcon = function(type) {
+    if (!type) return "📄"; // Default fallback
+    
+    const registry = state.master.resourceTypes || [];
+    // Find the matching type in your global registry
+    const entry = registry.find(t => 
+        String(t.type).toLowerCase() === String(type).toLowerCase()
+    );
+
+    // 🚀 Return the custom icon from the registry, or a smart fallback
+    if (entry && entry.icon) return entry.icon;
+
+    // Smart Fallbacks if registry entry is missing icons
+    const defaults = {
+        zap: "⚡",
+        form: "📄",
+        email: "📧",
+        event: "🗓️",
+        sop: "📖",
+        workflow: "🕸️",
+        other: "⚙️"
+    };
+
+    return defaults[type.toLowerCase()] || "📄";
+};
 
 window.addEventListener("load", () => {
     // 1. Admin Verification
@@ -3635,6 +3660,19 @@ OL.removeClientTask = function(clientId, taskId) {
 };
 
 //======================= RESOURCES GRID SECTION =======================//
+
+OL.isResourceInScope = function(resourceId) {
+    const client = getActiveClient();
+    if (!client || !client.projectData?.scopingSheets) return null;
+
+    // Check the primary scoping sheet for any line item linked to this resource
+    const sheet = client.projectData.scopingSheets[0];
+    const foundItem = (sheet.lineItems || []).find(item => 
+        String(item.resourceId) === String(resourceId)
+    );
+
+    return foundItem || null; 
+};
 
 // 1. RESOURCE MANAGER
 if (!state.master.resourceTypes) {
