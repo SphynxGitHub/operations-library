@@ -4526,7 +4526,7 @@ body.light-mode {
 /* ================= Lines, Arrows and Icons */
 
 #v2-connections {
-    position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; pointer-events: none;
+    width: 100% !important; height: 100% !important; pointer-events: none;
     overflow: visible; z-index: 5; /* Sits behind nodes (z-index 10) but above stages */
 }
 
