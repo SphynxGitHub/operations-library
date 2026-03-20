@@ -4204,7 +4204,7 @@ body.light-mode {
 
 #v2-main-content {display: flex; flex-direction: row; flex: 1; overflow: hidden; background: var(--bg-main); }
 
-#v2-canvas { position: relative; width: 3000px; height: 2000px; transform-origin: 0 0; }
+#v2-canvas { position: relative; }
 
 #v2-canvas-scroll-wrap { flex: 1; overflow: auto; position: relative; }
 
@@ -4373,6 +4373,7 @@ body.light-mode {
 
 .v2-steps-preview {
     margin-top: 15px;  border-top: 1px solid var(--border); display: none; /* Hidden by default */
+    min-height: 10px;
 }
 
 .is-expanded .v2-steps-preview {
@@ -4382,7 +4383,7 @@ body.light-mode {
 .v2-step-item {
     font-size: 11px; color: var(--text-muted); padding: 10px 0; 
     overflow: hidden; text-overflow: ellipsis; transition: background 0.2s; position: relative; background: transparent;
-    box-sizing: border-box; pointer-events: all; cursor: pointer;
+    box-sizing: border-box; pointer-events: all; cursor: pointer; min-height: 32px; width: 100%;
 }
 
 .v2-step-item span {white-space: normal; word-break: break-word;}
@@ -4523,16 +4524,10 @@ body.light-mode {
 }
 
 /* ================= Lines, Arrows and Icons */
-#v2-connection-layer {
-  width: 100%; height: 100%;
-}
 
-#v2-connection-layer path {
-    filter: drop-shadow(0 0 3px var(--accent-glow));  pointer-events: none;
-}
-
-#v2-connection-layer path:hover {
-    opacity: 1 !important; stroke-width: 3;
+#v2-connections {
+    position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; pointer-events: none;
+    overflow: visible; z-index: 5; /* Sits behind nodes (z-index 10) but above stages */
 }
 
 #line-group, marker {
@@ -4665,4 +4660,37 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 /* 🛡️ SECURITY: Ensure the Main Sidebar is ALWAYS on top of the Workbench */
 .sidebar {
     z-index: 6000 !important;
+}
+
+.logic-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;              /* Space between dropdown and button */
+    width: 100%;
+}
+
+.logic-delete-btn {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.logic-delete-btn:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.logic-item.is-readonly {
+    background: rgba(255,255,255,0.02);
+    opacity: 0.8;
 }
