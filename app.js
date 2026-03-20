@@ -8362,10 +8362,15 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
                 <label class="section-label">INTERNAL NOTES</label>
                 <textarea onblur="OL.updateStepNote('${resId}', ${stepIdx}, this.value)">${esc(step.notes || '')}</textarea>
                 
+                <div class="logic-search-wrap" style="margin-bottom: 10px;">
+                    <input type="text" 
+                          placeholder="🔍 Search stages or steps..." 
+                          class="modal-input tiny"
+                          oninput="OL.filterLogicOptions(this.value)">
+                </div>
                 <div class="inspector-section">
                     <div class="section-label">📥 INPUT CONDITIONS (From where?)</div>
                     ${step.logic.in.map((l, i) => this.renderLogicBlock(resId, stepIdx, 'in', i, l, allOptions)).join('')}
-                    <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', ${stepIdx}, 'in')">+ Add Input Rule</button>
                 </div>
 
                 <div class="inspector-section">
@@ -8377,6 +8382,8 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
         `;
         return;
     }
+    // Add Input Rule Button <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', ${stepIdx}, 'in')">+ Add Input Rule</button>
+
 
     // 🏁 3. DEFAULT / FALLBACK
     content.innerHTML = `<div class="muted-notice">Select a step to view details.</div>`;
@@ -8385,51 +8392,85 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
 // 🎨 Helper to keep the Inspector code clean
 OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
     const myFullId = `${resId}-${stepIdx}`;
-    const targetId = dir === 'out' ? logic.targetId : logic.sourceId;
+    const targetId = dir === 'out' ? (logic.targetId || "") : (logic.sourceId || "");
+    const isReadOnly = dir === 'in';
     
-    // 🚀 THE FIX: If the ID matches 'me', it IS a loop, regardless of what the data says yet.
+    // 🔍 Find the searchable label for display (handles the wrapping issue)
+    const selectedOption = allOptions.find(opt => String(opt.id) === String(targetId));
+    const displayLabel = selectedOption ? selectedOption.label : (targetId === myFullId ? '[Current Step / Loopback]' : '-- Select Step --');
+    
+    // 🔄 Loop logic
     const isLoop = (logic.type === 'loop') || (String(targetId) === String(myFullId));
-    
     const filteredOptions = allOptions.filter(opt => opt.id !== myFullId);
 
     return `
-        <div class="logic-item" style="border-left: 3px solid ${isLoop ? 'var(--warning)' : (dir === 'out' ? 'var(--accent)' : '#4a90e2')};">
-            <button class="remove-logic-btn" onclick="OL.removeStepLogic('${resId}', ${stepIdx}, '${dir}', ${i})" 
-                    style="position:absolute; right:5px; top:5px; background:transparent; border:none; color:var(--danger); cursor:pointer;">✕</button>
+        <div class="logic-item ${isReadOnly ? 'is-readonly' : ''}" 
+             style="border-left: 3px solid ${isLoop ? 'var(--warning)' : (dir === 'out' ? 'var(--accent)' : '#4a90e2')}; 
+                    padding: 12px; margin-bottom: 10px; position: relative; background: rgba(255,255,255,0.03); border-radius: 6px;">
             
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-              <div class="section-label">${dir === 'out' ? 'OUTGOING' : 'INCOMING'}</div>
-              
-              ${dir === 'out' ? `
-                  <select onchange="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'type', this.value)" 
-                          style="background:var(--bg-panel); color:var(--text-muted);">
-                      <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
-                      <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
-                  </select>
-              ` : ''}
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap: 8px;">
+                <div style="flex-grow: 1;">
+                    <div class="section-label tiny" style="margin-bottom: 4px; color: ${isReadOnly ? 'var(--text-muted)' : 'var(--text-main)'}; font-weight: bold; letter-spacing: 0.5px;">
+                        ${dir === 'out' ? '📤 OUTGOING OUTPUT' : '📥 INCOMING INPUT'} ${isReadOnly ? '🔒' : ''}
+                    </div>
+
+                    ${dir === 'out' ? `
+                        <select onchange="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'type', this.value)">
+                            <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
+                            <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
+                        </select>
+                    ` : ''}
+                </div>
+
+                ${!isReadOnly ? `
+                    <button class="logic-delete-btn" 
+                            onclick="OL.removeStepLogic('${resId}', ${stepIdx}, '${dir}', ${i})"
+                            title="Remove Rule">×</button>
+                ` : ''}
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 5px;">
+                <span style="flex-grow: 1;">${esc(displayLabel)}</span>
+                
+                ${targetId ? `
+                    <button class="logic-jump-btn" 
+                            onclick="OL.focusCardOnCanvas('${targetId.split('-')[0]}')"
+                            title="Jump to Card">
+                        🎯
+                    </button>
+                ` : ''}
             </div>
 
             <input value="${esc(logic.rule || '')}" 
-                   placeholder="Condition..." 
+                   ${isReadOnly ? 'readonly' : ''}
+                   placeholder="${isReadOnly ? 'No condition' : 'Condition (e.g. If Approved)'}" 
+                   style="width: 100%; margin-bottom: 8px; font-size: 11px; ${isReadOnly ? 'border-color: transparent; background: transparent; pointer-events: none; opacity: 0.6;' : ''}"
                    onblur="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'rule', this.value)">
             
-            <select onchange="OL.updateStepTarget('${resId}', ${stepIdx}, '${dir}', ${i}, this.value)" 
-                    style="margin-top:8px; width:100%; background:var(--bg-panel); color:var(--text-main); border:1px solid var(--border); border-radius:4px;">
-                <option value="">-- Select Target --</option>
-                <option value="${myFullId}" ${String(targetId) === String(myFullId) ? 'selected' : ''}>[Current Step]</option>
-                ${filteredOptions.map(opt => `
-                    <option value="${opt.id}" ${String(targetId) === String(opt.id) ? 'selected' : ''}>
-                        ${opt.label}
-                    </option>
-                `).join('')}
-            </select>
+            ${!isReadOnly ? `
+                <select onchange="OL.updateStepTarget('${resId}', ${stepIdx}, '${dir}', ${i}, this.value)" 
+                        style="width:100%; background:var(--bg-panel); color:var(--text-muted); border:1px solid var(--border); border-radius:4px; font-size: 11px;">
+                    <option value="">-- Change Target --</option>
+                    <option value="${myFullId}" ${String(targetId) === String(myFullId) ? 'selected' : ''}>[Current Step / Loopback]</option>
+                    ${filteredOptions.map(opt => {
+                        const isHeader = opt.isHeader === true;
+                        return `
+                            <option value="${isHeader ? '' : opt.id}" 
+                                    ${isHeader ? 'disabled style="font-weight:bold; color:var(--accent);"' : ''} 
+                                    ${String(targetId) === String(opt.id) ? 'selected' : ''}>
+                                ${esc(opt.label)}
+                            </option>
+                        `;
+                    }).join('')}
+                </select>
+            ` : ''}
 
-            ${isLoop ? `
-                <div style="margin-top:8px;">
-                    <div class="section-label" style="font-size:8px;">LOOP LIMIT / EXIT CRITERIA</div>
+            ${isLoop && dir === 'out' ? `
+                <div style="margin-top:10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                    <div class="section-label" style="font-size:8px; color: var(--warning);">LOOP LIMIT / EXIT CRITERIA</div>
                     <input value="${esc(logic.loopLimit || '')}" 
-                           placeholder="e.g. 3 times..." 
-                           style="font-size:11px; border-style:dashed;"
+                           placeholder="e.g. 3 times or 'Until Signed'..." 
+                           style="font-size:11px; border-style:dashed; color: var(--warning); border-color: var(--warning);"
                            onblur="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'loopLimit', this.value)">
                 </div>
             ` : ''}
@@ -8437,29 +8478,73 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
     `;
 };
 
-OL.getAllStepOptions = function(excludeId = null) {
-    let options = [];
+OL.focusCardOnCanvas = function(resId) {
+    const el = document.getElementById(`v2-node-${resId}`);
+    if (!el) return;
+
+    // 1. Highlight the card briefly
+    el.style.outline = "4px solid var(--warning)";
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    
+    setTimeout(() => {
+        el.style.outline = "none";
+    }, 2000);
+};
+
+OL.getAllStepOptions = function() {
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
+    const stages = data.stages || [];
+    let options = [];
 
-    resources.forEach(res => {
-        const family = resources.filter(r => r.originId === res.originId);
-        const partNum = family.length > 1 ? ` (${family.findIndex(r => r.id === res.id) + 1}/${family.length})` : '';
+    // 1. Filter out Resources that have 0 steps first
+    const activeResources = resources.filter(res => res.steps && res.steps.length > 0);
+
+    stages.forEach(stage => {
+        // 2. Find only resources that belong to this stage AND have steps
+        const stageResources = activeResources.filter(r => r.stageId === stage.id);
         
-        (res.steps || []).forEach((step, idx) => {
-            // 🚀 THE FIX: Use the actual resource ID and the step's index in THAT card
-            const fullId = `${res.id}-${idx}`;
-            
-            if (fullId === excludeId) return;
+        // 🚀 THE FIX: If this stage has no resources with steps, skip the stage header entirely
+        if (stageResources.length === 0) return;
 
-            options.push({ 
-                id: fullId, 
-                label: `${res.name}${partNum}: ${step.name || 'Step ' + (idx + 1)}` 
+        // 📂 Add the STAGE header
+        options.push({ id: 'header', label: `📂 ${stage.name.toUpperCase()}`, isHeader: true });
+
+        stageResources.forEach(res => {
+            const family = activeResources.filter(r => r.originId === res.originId);
+            const partNum = family.length > 1 ? ` (${family.findIndex(r => r.id === res.id) + 1}/${family.length})` : '';
+            
+            // 📦 Add the RESOURCE (Indented level 1)
+            options.push({ id: 'header', label: `\u00A0\u00A0📦 ${res.name}${partNum}`, isHeader: true });
+
+            // ⚡ Add the STEPS (Indented level 2)
+            res.steps.forEach((step, idx) => {
+                options.push({
+                    id: `${res.id}-${idx}`,
+                    label: `\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0• ${step.name || 'Step ' + (idx + 1)}`
+                });
             });
         });
     });
 
-    return options.sort((a, b) => a.label.localeCompare(b.label));
+    return options;
+};
+
+OL.filterLogicOptions = function(query) {
+    const q = query.toLowerCase().trim();
+    const selects = document.querySelectorAll('.logic-target-select');
+    
+    selects.forEach(select => {
+        const options = select.options;
+        for (let i = 0; i < options.length; i++) {
+            const opt = options[i];
+            if (opt.value === "" || opt.text.includes('[Current')) continue; // Don't hide defaults
+            
+            // Show if match, hide if not
+            const isMatch = opt.text.toLowerCase().includes(q);
+            opt.style.display = isMatch ? 'block' : 'none';
+        }
+    });
 };
 
 // Helper to make the dropdown readable
@@ -8473,18 +8558,14 @@ OL.getPartNumber = function(res) {
 
 // ➕ Add Logic to a Step
 OL.addStepLogic = function(resId, stepIdx, direction) {
-    // 🎯 1. Get the current project context (fixes Master Vault vs Client Project)
-    const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-    
-    const res = resources.find(r => String(r.id) === String(resId));
-    const step = res?.steps?.[stepIdx];
-    
-    if (!step) {
-        console.error("❌ Could not find step to add logic", resId, stepIdx);
-        return;
-    }
 
+    //Get the current project and return all resources
+    const resources = OL.getCurrentProjectData().resources || [];
+    //Find the current resource by resId (passed via step clicked)
+    const res = resources.find(r => String(r.id) === String(resId));
+    //Find the current step by stepId (passed via step clicked)
+    const step = res?.steps?.[stepIdx];
+    //Check if step has logic holder; otherwise, add logic object
     if (!step.logic) step.logic = { in: [], out: [] };
     
     // Initialize with empty IDs so the dropdowns are ready
@@ -8496,7 +8577,7 @@ OL.addStepLogic = function(resId, stepIdx, direction) {
     
     // 💾 2. Save to the database/localStorage
     OL.save(); 
-    
+    console.log(step.logic)
     // 🔍 3. Refresh the Inspector UI
     // This triggers the re-render so the user sees the new logic block immediately
     this.openInspector(resId, stepIdx); 
