@@ -8014,7 +8014,14 @@ OL.renderVisualizer = function() {
         canvas.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${OL.state.v2.zoom})`;
     }
 
-    setTimeout(() => OL.drawConnections(), 10);
+    // 1. Instant attempt
+    OL.drawConnections();
+
+    // 2. Delayed attempt (after images and layouts settle)
+    setTimeout(() => {
+        console.log("🔄 [System] Final Connection Pass...");
+        OL.drawConnections();
+    }, 500);
 };
 
 window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
@@ -8856,53 +8863,104 @@ OL.getCardConnectionPoint = function(resId, stepIdx, side) {
     };
 };
 
+OL.getStepAnchor = function(fullIdWithStep, side) {
+    const zoom = state.v2.zoom || 1;
+    const canvas = document.getElementById('v2-canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+
+    // 1. Split the ID into ResourceID and StepIndex
+    const parts = fullIdWithStep.split('-');
+    const stepIdx = parts.pop(); // The last number
+    const resId = parts.join('-'); // Everything before the last dash
+
+    // 🎯 2. THE SMART LOOKUP
+    // We look for a card whose ID *contains* the numeric part of the resId
+    const numericId = resId.replace(/\D/g, ""); // Extract only the numbers
+    let cardEl = document.querySelector(`[id*="${numericId}"]`);
+
+    if (!cardEl) return null;
+
+    // 🎯 3. FIND THE STEP ROW
+    // Look for the step preview item inside that specific card
+    const stepEl = cardEl.querySelector(`[data-step-id$="-${stepIdx}"]`) || 
+                   cardEl.querySelector(`.v2-step-item:nth-child(${parseInt(stepIdx) + 1})`);
+
+    // Use step row if expanded/visible, otherwise fallback to card center
+    const targetEl = (stepEl && stepEl.offsetHeight > 0) ? stepEl : cardEl;
+    const rect = targetEl.getBoundingClientRect();
+
+    return {
+        x: (rect.left - canvasRect.left) / zoom + (side === 'right' ? (rect.width / zoom) : 0),
+        y: (rect.top - canvasRect.top) / zoom + (rect.height / zoom / 2)
+    };
+};
+
+OL.ensureSVGMarkers = function() {
+    const svg = document.getElementById('v2-connections');
+    if (!svg.querySelector('defs')) {
+        svg.insertAdjacentHTML('afterbegin', `
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8" />
+                </marker>
+            </defs>
+        `);
+    }
+};
+
 OL.drawConnections = function() {
     const svg = document.getElementById('v2-connections');
     const lineGroup = document.getElementById('line-group');
-    if (!svg || !lineGroup) return;
+    if (!svg || !lineGroup) return console.error("❌ SVG/LineGroup missing from DOM");
 
-    lineGroup.innerHTML = ''; 
+    lineGroup.innerHTML = ''; // Clear lines
+    // Optional: Clear debug dots if you have a layer for them
+    const debugLayer = document.getElementById('v2-node-layer');
 
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
+    let lineCount = 0;
+
+    console.log(`📡 [Logic] Scanning ${resources.length} resources for links...`);
 
     resources.forEach(sourceRes => {
-        // 🚀 THE FIX: Draw connections from the CARD if there are no steps
-        // Or if the logic is attached to the card level (legacy data)
-        const logicSource = (sourceRes.steps && sourceRes.steps.length > 0) 
-            ? sourceRes.steps 
-            : [{ logic: sourceRes.logic, isCardLevel: true }];
+        sourceRes.steps?.forEach((step, sIdx) => {
+            if (!step.logic?.out) return;
 
-        logicSource.forEach((stepOrCard, sIdx) => {
-            if (!stepOrCard.logic?.out) return;
+            step.logic.out.forEach(outRule => {
+                if (!outRule.targetId) return;
 
-            stepOrCard.logic.out.forEach((outLogic) => {
-                if (!outLogic.targetId) return;
+                // 📍 GET COORDINATES
+                const start = OL.getStepAnchor(`${sourceRes.id}-${sIdx}`, 'right');
+                const end = OL.getStepAnchor(outRule.targetId, 'left');
 
-                const [tResId, tStepIdxStr] = outLogic.targetId.split('-');
-                const targetRes = resources.find(r => String(r.id) === String(tResId));
+                if (start && end) {
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const cp1x = start.x + (end.x - start.x) * 0.5;
+                    const d = `M ${start.x} ${start.y} C ${cp1x} ${start.y}, ${cp1x} ${end.y}, ${end.x} ${end.y}`;
 
-                if (targetRes && targetRes.coords && sourceRes.coords && !targetRes.isGlobal) {
-                    // Determine anchor points
-                    // If isCardLevel, sIdx is irrelevant, we pass null to trigger card-shell anchor
-                    const start = this.getCardConnectionPoint(sourceRes.id, stepOrCard.isCardLevel ? null : sIdx, 'right');
-                    const end = this.getCardConnectionPoint(targetRes.id, parseInt(tStepIdxStr), 'left');
-
-                    if (start && end) {
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        const cpX = (start.x + end.x) / 2;
-                        const d = `M${start.x},${start.y} C${cpX},${start.y} ${cpX},${end.y} ${end.x},${end.y}`;
-                        
-                        path.setAttribute('d', d);
-                        path.setAttribute('class', outLogic.type === 'loop' ? 'path-loop' : 'path-standard');
-                        path.setAttribute('marker-end', 'url(#arrowhead)');
-
-                        lineGroup.appendChild(path);
-                    }
+                    path.setAttribute('d', d);
+                    path.setAttribute('stroke', outRule.type === 'loop' ? '#ffbf00' : '#38bdf8');
+                    path.setAttribute('stroke-width', '3');
+                    path.setAttribute('fill', 'none');
+                    path.setAttribute('marker-end', 'url(#arrowhead)');
+                    
+                    lineGroup.appendChild(path);
+                    lineCount++;
+                } else {
+                    console.warn(`Missing coords for link: ${sourceRes.id} -> ${outRule.targetId}`, {
+                        sourceFound: !!document.querySelector(`[id*="${sourceRes.id.replace(/\D/g, "")}"]`),
+                        targetFound: !!document.querySelector(`[id*="${outRule.targetId.split('-')[0].replace(/\D/g, "")}"]`),
+                        start, 
+                        end
+                    });
                 }
             });
         });
     });
+
+    console.log(`🕸️ [Render] Successfully drew ${lineCount} logic lines.`);
 };
 
 OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
