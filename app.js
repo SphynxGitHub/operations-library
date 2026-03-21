@@ -655,7 +655,7 @@ window.handleRoute = function () {
         return;
     }
     // 4. VISUALIZER ROUTE 🕸️
-    if (hash.includes('visualizer')) {
+    if (hash.includes('visualizer') && !hash.includes('scoping')) {
         state.viewMode = 'graph'; 
         
         // Sync state with session storage for recovery
@@ -9632,21 +9632,22 @@ OL.navigateToScoping = function(resId) {
 };
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🧨 JUMPING TO SCOPING FOR:", nodeId);
+    console.log("🧨 Manual Overhaul: Killing Visualizer Context...");
 
-    // 1. SET NAVIGATION FLAGS
-    state.viewMode = 'scoping';
-    state.scopingTargetId = nodeId;
-    state.scopingFilterActive = true;
-    
-    // 2. CLEAR VISUALIZER DEPTH (Crucial to prevent handleRoute "Auto-Resume")
-    state.focusedResourceId = null;
-    state.focusedWorkflowId = null;
+    // 1. Wipe all "Resume" data from browser memory
     sessionStorage.removeItem('active_resource_id');
     sessionStorage.removeItem('active_workflow_id');
+    
+    // 2. Clear current state object
+    state.focusedResourceId = null;
+    state.focusedWorkflowId = null;
+    state.viewMode = 'scoping';
+    
+    // 3. Set Scoping specific flags
+    state.scopingTargetId = nodeId;
+    state.scopingFilterActive = true;
 
-    // 3. FORCE THE HASH CHANGE
-    // We add the focus param to the URL so if the page refreshes, it stays filtered
+    // 4. Update URL - We use a query param so handleRoute can see it
     window.location.hash = `#/scoping-sheet?focus=${nodeId}`;
 };
 
