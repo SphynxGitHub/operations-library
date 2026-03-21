@@ -7641,7 +7641,7 @@ OL.initWBMotion = function(e, id) {
             
             // Identify Stage (Lane) AND Column
             let accX = 0;
-            const COLUMN_WIDTH = 260; // Ensure this matches your autoAlignNodes constant
+            const COLUMN_WIDTH = 300; // Ensure this matches your autoAlignNodes constant
 
             for (let s of stages) {
                 const w = s.width || 320;
@@ -7681,7 +7681,7 @@ OL.autoAlignNodes = async function(isManualDrag = false) {
     const stages = data.stages;
     
     const VERTICAL_GAP = 60; 
-    const COLUMN_WIDTH = 260; 
+    const COLUMN_WIDTH = 300; 
     const START_Y = 120;
     let currentXOffset = 0;
 
@@ -7834,8 +7834,8 @@ OL.renderVisualizer = function() {
                                   <defs>
                                       <marker id="arrowhead" 
                                               markerWidth="10" 
-                                              markerHeight="10" 
-                                              refX="11" 
+                                              markerHeight="15" 
+                                              refX="5" 
                                               refY="5" 
                                               orient="auto-start-reverse" 
                                               markerUnits="userSpaceOnUse">
@@ -8835,16 +8835,13 @@ OL.closeInspector = function() {
 
 // Helper to find the X/Y of a card's edge
 OL.getCardConnectionPoint = function(resId, stepIdx, side) {
-    // 🚀 NEW: If stepIdx is null, we are connecting to the Card Shell
-    let el = (stepIdx !== null) 
-        ? document.querySelector(`[data-step-id="${resId}-${stepIdx}"]`)
-        : document.getElementById(`v2-node-${resId}`);
+    // Attempt to find the specific step row
+    let el = document.querySelector(`[data-step-id="${resId}-${stepIdx}"]`);
     
-    // Fallback if step is hidden or card is collapsed
-    if (!el || el.offsetParent === null) { 
+    // Fallback to the card shell if step is hidden, card is collapsed, or connecting to top/bottom
+    if (!el || el.offsetParent === null || side === 'top' || side === 'bottom') {
         el = document.getElementById(`v2-node-${resId}`);
     }
-    
     if (!el) return null;
 
     const canvas = document.getElementById('v2-canvas');
@@ -8857,110 +8854,147 @@ OL.getCardConnectionPoint = function(resId, stepIdx, side) {
     const w = rect.width / zoom;
     const h = rect.height / zoom;
 
-    return {
-        x: x + (side === 'right' ? w + 5 : -5),
-        y: y + (h / 2)
-    };
-};
+    const buffer = 15; // Distance from the card edge
 
-OL.getStepAnchor = function(fullIdWithStep, side) {
-    const zoom = state.v2.zoom || 1;
-    const canvas = document.getElementById('v2-canvas');
-    const canvasRect = canvas.getBoundingClientRect();
-
-    // 1. Split the ID into ResourceID and StepIndex
-    const parts = fullIdWithStep.split('-');
-    const stepIdx = parts.pop(); // The last number
-    const resId = parts.join('-'); // Everything before the last dash
-
-    // 🎯 2. THE SMART LOOKUP
-    // We look for a card whose ID *contains* the numeric part of the resId
-    const numericId = resId.replace(/\D/g, ""); // Extract only the numbers
-    let cardEl = document.querySelector(`[id*="${numericId}"]`);
-
-    if (!cardEl) return null;
-
-    // 🎯 3. FIND THE STEP ROW
-    // Look for the step preview item inside that specific card
-    const stepEl = cardEl.querySelector(`[data-step-id$="-${stepIdx}"]`) || 
-                   cardEl.querySelector(`.v2-step-item:nth-child(${parseInt(stepIdx) + 1})`);
-
-    // Use step row if expanded/visible, otherwise fallback to card center
-    const targetEl = (stepEl && stepEl.offsetHeight > 0) ? stepEl : cardEl;
-    const rect = targetEl.getBoundingClientRect();
-
-    return {
-        x: (rect.left - canvasRect.left) / zoom + (side === 'right' ? (rect.width / zoom) : 0),
-        y: (rect.top - canvasRect.top) / zoom + (rect.height / zoom / 2)
-    };
-};
-
-OL.ensureSVGMarkers = function() {
-    const svg = document.getElementById('v2-connections');
-    if (!svg.querySelector('defs')) {
-        svg.insertAdjacentHTML('afterbegin', `
-            <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-                refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8" />
-                </marker>
-            </defs>
-        `);
-    }
+    if (side === 'right')  return { x: x + w + buffer, y: y + (h / 2) };
+    if (side === 'left')   return { x: x - buffer,     y: y + (h / 2) };
+    if (side === 'top')    return { x: x + (w / 2),    y: y - buffer };
+    if (side === 'bottom') return { x: x + (w / 2),    y: y + h + buffer };
+    
+    return { x: x + w, y: y + h / 2 }; // Default right
 };
 
 OL.drawConnections = function() {
     const svg = document.getElementById('v2-connections');
     const lineGroup = document.getElementById('line-group');
-    if (!svg || !lineGroup) return console.error("❌ SVG/LineGroup missing from DOM");
+    if (!svg || !lineGroup) return;
 
-    lineGroup.innerHTML = ''; // Clear lines
-    // Optional: Clear debug dots if you have a layer for them
-    const debugLayer = document.getElementById('v2-node-layer');
-
+    lineGroup.innerHTML = ''; 
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
     let lineCount = 0;
 
-    console.log(`📡 [Logic] Scanning ${resources.length} resources for links...`);
-
     resources.forEach(sourceRes => {
-        sourceRes.steps?.forEach((step, sIdx) => {
-            if (!step.logic?.out) return;
+        if (!sourceRes || !sourceRes.steps || !Array.isArray(sourceRes.steps)) return;
 
-            step.logic.out.forEach(outRule => {
-                if (!outRule.targetId) return;
+        sourceRes.steps.forEach((step, sIdx) => {
+            if (!step || !step.logic || !step.logic.out) return;
 
-                // 📍 GET COORDINATES
-                const start = OL.getStepAnchor(`${sourceRes.id}-${sIdx}`, 'right');
-                const end = OL.getStepAnchor(outRule.targetId, 'left');
+            step.logic.out.forEach(outLogic => {
+                if (!outLogic || !outLogic.targetId) return;
 
-                if (start && end) {
-                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    const cp1x = start.x + (end.x - start.x) * 0.5;
-                    const d = `M ${start.x} ${start.y} C ${cp1x} ${start.y}, ${cp1x} ${end.y}, ${end.x} ${end.y}`;
+                const parts = outLogic.targetId.split('-');
+                const tStepIdx = parseInt(parts.pop()); 
+                const tResId = parts.join('-'); 
 
-                    path.setAttribute('d', d);
-                    path.setAttribute('stroke', outRule.type === 'loop' ? '#ffbf00' : '#38bdf8');
-                    path.setAttribute('stroke-width', '3');
-                    path.setAttribute('fill', 'none');
-                    path.setAttribute('marker-end', 'url(#arrowhead)');
+                const targetRes = resources.find(r => String(r.id) === String(tResId));
+
+                if (!targetRes || !targetRes.steps || !targetRes.steps[tStepIdx]) return;
+
+                if (targetRes.coords && sourceRes.coords) {
+                    // 📐 1. Calculate relative positions
+                    const dx = targetRes.coords.x - sourceRes.coords.x;
+                    const dy = targetRes.coords.y - sourceRes.coords.y;
+
+                    // 🚀 THE TIGHTENED CHECK
+                    // Only consider it a "Vertical Stack" if they are within 100px of each other horizontally
+                    // AND they are in the same Lane (Stage)
+                    const isVertical = Math.abs(dx) < 100; 
+                    const isExpandedView = sourceRes.isExpanded || targetRes.isExpanded;
+                    const bothClosed = !sourceRes.isExpanded && !targetRes.isExpanded;
+
+                    let sSide, tSide;
+
+                    if (isVertical) {
+                        if (bothClosed) {
+                            // Top/Bottom flow for same-column closed cards
+                            sSide = dy > 0 ? 'bottom' : 'top';
+                            tSide = dy > 0 ? 'top' : 'bottom';
+                        } else {
+                            // Right-to-Right loop for same-column open cards
+                            sSide = 'right';
+                            tSide = 'right';
+                        }
+                    } else {
+                        // ➡️ FORCE HORIZONTAL: This handles the Lane 1 to Lane 2 flow
+                        // If target is right of source, use Right -> Left
+                        // If target is left of source, use Left -> Right
+                        sSide = dx > 0 ? 'right' : 'left';
+                        tSide = dx > 0 ? 'left' : 'right';
+                    }
+
+                    // 📍 2. Get the points
+                    const start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                    const end = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
                     
-                    lineGroup.appendChild(path);
-                    lineCount++;
-                } else {
-                    console.warn(`Missing coords for link: ${sourceRes.id} -> ${outRule.targetId}`, {
-                        sourceFound: !!document.querySelector(`[id*="${sourceRes.id.replace(/\D/g, "")}"]`),
-                        targetFound: !!document.querySelector(`[id*="${outRule.targetId.split('-')[0].replace(/\D/g, "")}"]`),
-                        start, 
-                        end
-                    });
+                    if (start && end) {
+                        let adjustedEnd = { x: end.x, y: end.y };
+                        const arrowGap = 10;
+                        if (tSide === 'right') adjustedEnd.x += arrowGap;
+                        if (tSide === 'left')  adjustedEnd.x -= arrowGap;
+                        if (tSide === 'top')   adjustedEnd.y -= arrowGap;
+                        if (tSide === 'bottom') adjustedEnd.y += arrowGap;
+
+                        let d;
+                        const absDx = Math.abs(end.x - start.x);
+                        const absDy = Math.abs(end.y - start.y);
+                        const snapThreshold = 30; // 🚀 Distance to trigger perfectly straight lines
+
+                        // 1. Calculate the final landing point with a gap for the arrowhead
+                        let targetX = end.x;
+                        let targetY = end.y;
+                        const gap = 6; 
+
+                        if (tSide === 'left') targetX -= gap;
+                        if (tSide === 'right') targetX += gap;
+                        if (tSide === 'top') targetY -= gap;
+                        if (tSide === 'bottom') targetY += gap;
+
+                        // 2. Determine Path String (The "D" Attribute)
+                        if (sSide === 'right' && tSide === 'right') {
+                            // 🔄 Vertical Loop (Open Cards)
+                            const sweep = Math.min(80, Math.abs(dy) * 0.4 + 30);
+                            d = `M ${start.x} ${start.y} C ${start.x + sweep} ${start.y}, ${targetX + sweep} ${targetY}, ${targetX} ${targetY}`;
+                        } 
+                        else if (absDy < snapThreshold && (sSide === 'right' || sSide === 'left')) {
+                            // 📏 HORIZONTAL SNAP: Force a perfectly straight line
+                            // We use the start Y to ensure it is a laser-flat horizontal line
+                            d = `M ${start.x} ${start.y} L ${targetX} ${start.y}`;
+                        } 
+                        else if (absDx < snapThreshold && (sSide === 'top' || sSide === 'bottom')) {
+                            // 📏 VERTICAL SNAP: Force a perfectly vertical plunge
+                            d = `M ${start.x} ${start.y} L ${start.x} ${targetY}`;
+                        }
+                        else if (sSide === 'right' || sSide === 'left') {
+                            // ➡️ Standard Horizontal S-Curve
+                            const tension = Math.min(absDx * 0.4, 100);
+                            const cp1x = start.x + (sSide === 'right' ? tension : -tension);
+                            const cp2x = targetX + (tSide === 'right' ? tension : -tension);
+                            d = `M ${start.x} ${start.y} C ${cp1x} ${start.y}, ${cp2x} ${targetY}, ${targetX} ${targetY}`;
+                        } 
+                        else {
+                            // ⬇️ Standard Vertical Elbow
+                            const midY = (start.y + targetY) / 2;
+                            d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
+                        }
+
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('d', d);
+
+                        path.setAttribute('stroke', outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
+                        path.setAttribute('stroke-width', '2.5');
+                        path.setAttribute('fill', 'none');
+                        path.setAttribute('marker-end', 'url(#arrowhead)');
+                        path.setAttribute('class', 'path-flow');
+                        path.style.opacity = '0.7';
+                        
+                        lineGroup.appendChild(path);
+                        lineCount++;
+                    }
                 }
             });
         });
     });
-
-    console.log(`🕸️ [Render] Successfully drew ${lineCount} logic lines.`);
 };
 
 OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
