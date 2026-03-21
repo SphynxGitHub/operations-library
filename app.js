@@ -635,25 +635,6 @@ window.handleRoute = function () {
             </div>`;
         return; 
     }
-    // 3. SCOPING ROUTE
-    if (isScoping) {
-        state.viewMode = 'scoping';
-        // Remove visualizer classes if they exist
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-        
-        // 🎯 Check for a focus param in the hash
-        const urlParts = hash.split('?');
-        if (urlParts[1]) {
-            const params = new URLSearchParams(urlParts[1]);
-            if (params.has('focus')) {
-                state.scopingTargetId = params.get('focus');
-                state.scopingFilterActive = true;
-            }
-        }
-        
-        renderScopingSheet();
-        return;
-    }
     // 4. VISUALIZER ROUTE 🕸️
     if (hash.includes('visualizer') && !hash.includes('scoping')) {
         state.viewMode = 'graph'; 
@@ -670,6 +651,37 @@ window.handleRoute = function () {
         OL.renderVisualizer(isVault);
         return; 
     }
+
+    // 5. SCOPING ROUTE 📊
+if (hash.includes('scoping-sheet')) {
+    console.log("📊 Scoping Route Detected. Clearing Visualizer Context...");
+    
+    // 🧹 THE JANITOR: Kill the "Sticky" focus so it doesn't force us back to the map
+    state.focusedResourceId = null;
+    state.focusedWorkflowId = null;
+    sessionStorage.removeItem('active_resource_id');
+    sessionStorage.removeItem('active_workflow_id');
+    
+    // Reset visual state
+    state.viewMode = 'scoping';
+    document.body.classList.remove('is-visualizer', 'fs-mode-active');
+
+    // 🎯 Apply Filter from URL
+    const urlParts = hash.split('?');
+    if (urlParts[1]) {
+        const params = new URLSearchParams(urlParts[1]);
+        if (params.has('focus')) {
+            state.scopingTargetId = params.get('focus');
+            state.scopingFilterActive = true;
+        }
+    } else {
+        state.scopingFilterActive = false;
+        state.scopingTargetId = null;
+    }
+
+    renderScopingSheet();
+    return;
+}
 
     // 5. Standard Routes Cleanup
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
@@ -9632,22 +9644,8 @@ OL.navigateToScoping = function(resId) {
 };
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🧨 Manual Overhaul: Killing Visualizer Context...");
-
-    // 1. Wipe all "Resume" data from browser memory
-    sessionStorage.removeItem('active_resource_id');
-    sessionStorage.removeItem('active_workflow_id');
-    
-    // 2. Clear current state object
-    state.focusedResourceId = null;
-    state.focusedWorkflowId = null;
-    state.viewMode = 'scoping';
-    
-    // 3. Set Scoping specific flags
-    state.scopingTargetId = nodeId;
-    state.scopingFilterActive = true;
-
-    // 4. Update URL - We use a query param so handleRoute can see it
+    console.log("🔗 Navigating via filtered link for:", nodeId);
+    // This is the "old way" that worked: just point the browser to the new hash
     window.location.hash = `#/scoping-sheet?focus=${nodeId}`;
 };
 
