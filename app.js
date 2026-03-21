@@ -8059,14 +8059,18 @@ OL.getPartNumberHtml = function(res) {
     `;
 };
 
-OL.addNewStepToCard = function(resId) {
-    const res = this.state.master.resources.find(r => String(r.id) === String(resId));
-    if (!res) return;
-
-    if (!res.steps) res.steps = [];
+OL.addNewStepToCard = async function(resId) {
+    console.log('⚡ Adding step to:', resId);
     
-    // 🚀 THE FIX: Force the card to expand so the new step is visible
-    res.isExpanded = true; 
+    // 🎯 1. Get correct context (Project vs Vault)
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    
+    if (!res) return console.error("Resource not found:", resId);
+
+    // 🏗️ 2. Update Data
+    if (!res.steps) res.steps = [];
+    res.isExpanded = true; // Force visibility
 
     res.steps.push({
         name: 'New Step',
@@ -8074,30 +8078,64 @@ OL.addNewStepToCard = function(resId) {
         logic: { in: [], out: [] }
     });
 
-    this.save();
-    this.renderVisualizer(); 
+    // 💾 3. Persist and Re-align
+    // We run autoAlign because the card height just changed
+    await OL.updateAndSync(() => {
+        OL.autoAlignNodes(false); 
+    });
+
+    // 🎨 4. Refresh UI
+    OL.renderVisualizer(); 
     
-    // Open the inspector so they can rename it immediately
-    this.openInspector(resId, res.steps.length - 1);
+    // 🔍 5. Open Inspector for immediate editing
+    OL.openInspector(resId, res.steps.length - 1);
 };
 
 OL.updateStepName = function(resId, stepIdx, newName) {
-    const res = this.state.master.resources.find(r => String(r.id) === String(resId));
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
     const step = res?.steps?.[stepIdx];
+
     if (step) {
         step.name = newName || 'Untitled Step';
-        this.save();
-        this.renderVisualizer(); // Update the card text on the canvas
+        
+        // 💾 Save change (Surgical update, no need to re-align)
+        OL.persist();
+        
+        // 🚀 SURGICAL DOM UPDATE: Update the step text on the canvas directly
+        // to avoid a full re-render while the user is typing in the inspector.
+        const stepEl = document.querySelector(`[data-step-id="${resId}-${stepIdx}"] span`);
+        if (stepEl) stepEl.innerText = `• ${step.name}`;
     }
 };
 
-OL.deleteStep = function(resId, stepIdx) {
-    const res = this.state.master.resources.find(r => String(r.id) === String(resId));
-    if (res && res.steps) {
+OL.deleteStep = async function(resId, stepIdx) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    
+    if (res && res.steps && res.steps[stepIdx]) {
         if (!confirm(`Delete step "${res.steps[stepIdx].name}"?`)) return;
+
+        // 🚀 THE FIX: Before deleting, clear any logic links pointing to this specific step
+        const stepFullId = `${resId}-${stepIdx}`;
+        data.resources.forEach(r => {
+            r.steps?.forEach(s => {
+                if (s.logic?.out) {
+                    s.logic.out = s.logic.out.filter(l => l.targetId !== stepFullId);
+                }
+            });
+        });
+
+        // Remove the step
         res.steps.splice(stepIdx, 1);
-        this.save();
-        this.renderVisualizer();
+
+        // 💾 Save and tidy up the vertical gaps
+        await OL.updateAndSync(() => {
+            OL.autoAlignNodes(false);
+        });
+
+        OL.renderVisualizer();
+        OL.closeInspector(); // Close if we just deleted what we were looking at
     }
 };
 
@@ -8555,17 +8593,32 @@ OL.filterLogicOptions = function(query) {
 };
 
 // Helper to make the dropdown readable
+// Helper to make the dropdown readable
 OL.getPartNumber = function(res) {
+    // 1. If it was never split, it's the only part
     if (!res.originId) return "1/1";
-    const family = this.state.master.resources
+
+    // 🎯 2. Get the correct data context (Project vs Vault)
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
+
+    // 🔍 3. Find all cards that belong to the same "Original" resource
+    const family = resources
         .filter(r => r.originId === res.originId)
+        // Sort by vertical position so the top-most card is #1
         .sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
-    return `${family.findIndex(r => r.id === res.id) + 1}/${family.length}`;
+
+    // 4. Find where this specific card sits in the vertical stack
+    const index = family.findIndex(r => r.id === res.id);
+
+    // 5. If for some reason it's not found in its own family, fallback to 1/1
+    if (index === -1) return "1/1";
+
+    return `${index + 1}/${family.length}`;
 };
 
 // ➕ Add Logic to a Step
 OL.addStepLogic = function(resId, stepIdx, direction) {
-
     //Get the current project and return all resources
     const resources = OL.getCurrentProjectData().resources || [];
     //Find the current resource by resId (passed via step clicked)
