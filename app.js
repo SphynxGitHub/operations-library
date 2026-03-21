@@ -221,10 +221,13 @@ window.addEventListener("load", () => {
     const isDashboard = currentHash === "" || currentHash === "#/";
     const isVisualizer = currentHash.includes('visualizer');
 
-    if ((state.focusedWorkflowId || state.focusedResourceId) && (isDashboard || isVisualizer)) {
-        console.log("♻️ Resuming Flow Map depth");
-        const isVault = currentHash.includes('vault');
-        location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+    // 🚀 THE SHIELD: Only resume the map if we aren't trying to go to Scoping
+    if ((state.focusedWorkflowId || state.focusedResourceId) && 
+        (isDashboard || isVisualizer) && 
+        !currentHash.includes('scoping')) { 
+            console.log("♻️ Resuming Flow Map depth");
+            const isVault = currentHash.includes('vault');
+            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
     }
     
     OL.sync(); 
@@ -653,35 +656,35 @@ window.handleRoute = function () {
     }
 
     // 5. SCOPING ROUTE 📊
-if (hash.includes('scoping-sheet')) {
-    console.log("📊 Scoping Route Detected. Clearing Visualizer Context...");
-    
-    // 🧹 THE JANITOR: Kill the "Sticky" focus so it doesn't force us back to the map
-    state.focusedResourceId = null;
-    state.focusedWorkflowId = null;
-    sessionStorage.removeItem('active_resource_id');
-    sessionStorage.removeItem('active_workflow_id');
-    
-    // Reset visual state
-    state.viewMode = 'scoping';
-    document.body.classList.remove('is-visualizer', 'fs-mode-active');
+    if (hash.includes("scoping-sheet")) {
+        console.log("📊 Scoping Route Detected. Cleaning Visualizer state...");
+        
+        // 🧹 THE JANITOR: Kill the "Resume" trap so we don't snap back to the map
+        state.focusedResourceId = null;
+        state.focusedWorkflowId = null;
+        sessionStorage.removeItem('active_resource_id');
+        sessionStorage.removeItem('active_workflow_id');
 
-    // 🎯 Apply Filter from URL
-    const urlParts = hash.split('?');
-    if (urlParts[1]) {
-        const params = new URLSearchParams(urlParts[1]);
-        if (params.has('focus')) {
-            state.scopingTargetId = params.get('focus');
-            state.scopingFilterActive = true;
+        state.viewMode = 'scoping';
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+
+        // 🎯 Parse Filter from URL
+        const urlParts = hash.split('?');
+        if (urlParts[1]) {
+            const params = new URLSearchParams(urlParts[1]);
+            if (params.has('focus')) {
+                state.scopingTargetId = params.get('focus');
+                state.scopingFilterActive = true;
+                console.log("🎯 Applying Surgical Filter for ID:", state.scopingTargetId);
+            }
+        } else {
+            state.scopingFilterActive = false;
+            state.scopingTargetId = null;
         }
-    } else {
-        state.scopingFilterActive = false;
-        state.scopingTargetId = null;
-    }
 
-    renderScopingSheet();
-    return;
-}
+        renderScopingSheet();
+        return;
+    }
 
     // 5. Standard Routes Cleanup
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
@@ -7975,7 +7978,7 @@ OL.renderVisualizer = function() {
         const isInScope = !!OL.isResourceInScope(res.id);
         const scopeBadge = isInScope ? `
             <div class="v2-scope-badge" 
-                onclick="event.stopPropagation(); event.preventDefault(); OL.navigateToScoping('${res.id}')"
+                onclick="event.stopPropagation();window.location.hash = '#/scoping-sheet?focus=${res.id}';"
                 title="View in Scoping Sheet">
                 $
             </div>
