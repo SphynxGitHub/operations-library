@@ -4326,6 +4326,33 @@ body.light-mode {
     box-shadow: 0 0 15px var(--accent-glow) !important;
 }
 
+/*==================Node Card Badges */
+
+.header-badges-wrap {
+    display: flex; gap: 4px; margin-left: auto; padding-left: 10px;
+}
+
+.v2-scope-badge, .v2-duplicate-badge {
+    width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; font-size: 10px; cursor: pointer; transition: all 0.2s;
+    background: rgba(255,255,255,0.05);  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.v2-scope-badge {
+    color: #10b981; /* Green for money/scoping */
+}
+
+.v2-scope-badge:hover {
+    background: #10b981; color: white;
+}
+
+.v2-duplicate-badge {
+    color: var(--accent);
+}
+
+.v2-duplicate-badge:hover {
+    background: var(--accent);  color: var(--bg-main);
+}
 /*=================Card Drag */
 
 .is-dragging-node { cursor: grabbing !important; }
