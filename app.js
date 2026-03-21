@@ -7836,15 +7836,21 @@ OL.renderVisualizer = function() {
     const tidyIcon = '🧹';
     const filterIcon = '📶';
 
-    // 1. 🏗️ BUILD THE UI SHELL
     if (!document.getElementById('v2-viewport')) {
         mainArea.innerHTML = `
             <div class="v2-ui-overlay" style="position: absolute; top: 20px; left: 20px; z-index: 5000; pointer-events: none;">
                 <div class="v2-master-toolbar" style="display: flex; align-items: center; gap: 10px; pointer-events: auto;">
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap">
-                            <span>🔍</span>
-                            <input type="text" id="canvas-filter-input" placeholder="Search map..." oninput="OL.filterCanvasNodes(this.value)">
+                            <span class="search-icon">🔍</span>
+                            <input class="v2-search-input" 
+                                type="text" id="canvas-filter-input" placeholder="Search map..." oninput="OL.syncCanvasFilters(this.value)">
+                        </div>
+                        <div class="v2-search-nav" id="search-nav-controls">
+                            <button class="btn tiny soft" onclick="OL.centerPrevCanvasMatch()" title="Previous Result">◀</button>
+                            <span id="canvas-match-count" class="tiny muted search-counter">0/0</span>
+                            <button class="btn tiny soft" onclick="OL.centerNextCanvasMatch()" title="Next Result">▶</button>
+                            <button class="btn tiny danger soft search-clear-btn" onclick="OL.clearAllFilters()" title="Clear Search">✕</button>
                         </div>
                         <button id="filter-menu-btn" class="btn tiny soft" onclick="OL.toggleFilterMenu(event)">
                             ${filterIcon} Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
@@ -7859,37 +7865,34 @@ OL.renderVisualizer = function() {
                     </div>
                 </div>
                 <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
-                    <button class="btn tiny danger soft" onclick="OL.clearAllFilters()" style="margin-right: 5px;">
-                        ✕ Clear
-                    </button>
-                    <select id="filter-type" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">All Types</option>
                         ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
                     </select>
-                    <select id="filter-app" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">All Apps</option>
                         ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
                     </select>
-                    <select id="filter-assignee" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-assignee" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">All Owners</option>
                         ${assignees.map(a => `<option value="${a}">${a}</option>`).join('')}
                     </select>
-                    <select id="filter-logic" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-logic" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">Any Logic</option>
                         <option value="has">With λ Logic</option>
                     </select>
                     
-                    <select id="filter-delay" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-delay" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">Any Timing</option>
                         <option value="has">With ⏱ Delay</option>
                     </select>
 
-                    <select id="filter-loop" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-loop" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">Any Repeat</option>
                         <option value="has">With ⟳ Loop</option>
                     </select>
 
-                    <select id="filter-scoped" class="tiny-select" onchange="OL.runCanvasFilters()">
+                    <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()">
                         <option value="">All Status</option>
                         <option value="priced">Scoped ($)</option>
                         <option value="unpriced">Unscoped</option>
@@ -7936,7 +7939,8 @@ OL.renderVisualizer = function() {
               </div>
             </div>
         `;
-    }
+    }    // 1. 🏗️ BUILD THE UI SHELL
+
 
     const shelfContents = document.getElementById('shelf-contents');
     const workbenchContents = document.getElementById('workbench-contents');
@@ -7976,16 +7980,16 @@ OL.renderVisualizer = function() {
         const isExpanded = res.isExpanded || false;
 
         const isInScope = !!OL.isResourceInScope(res.id);
-        const scopeBadge = isInScope ? `
+        const scopeBadge = `
             <a href="#/scoping-sheet?focus=${res.id}" 
-              class="v2-scope-badge" 
+              class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
               onmousedown="event.stopPropagation();" 
-              onclick="event.stopPropagation(); sessionStorage.removeItem('active_resource_id'); state.focusedResourceId = null;"
-              title="View in Scoping Sheet"
-              style="pointer-events: auto !important;">
+              onclick="if(!${isInScope}) { event.preventDefault(); } event.stopPropagation(); sessionStorage.removeItem('active_resource_id'); state.focusedResourceId = null;"
+              oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${res.id}', ${isInScope})"
+              title="Left Click: View in Sheet | Right Click: Toggle Status"
+              >
                 $
-            </a>
-        ` : '';
+            </a>`;
         const duplicateBadge = `
             <div class="v2-duplicate-badge" 
                 onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}')"
@@ -8012,24 +8016,36 @@ OL.renderVisualizer = function() {
             <div class="v2-node-header">
                 <div class="step-row-content">
                     <b class="res-name-text">${esc(res.name)}</b>
-                    ${numberingHtml}
                     <div class="header-badges-wrap">
+                        <small class="tiny muted uppercase type-badge">${esc(res.type || 'Resource')}</small>
+                        ${numberingHtml}
                         ${scopeBadge}
                         ${duplicateBadge}
                     </div>
                 </div>
-                <small class="tiny muted uppercase">${esc(res.type || 'Resource')}</small>
             </div>
             <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
                 ${(res.steps || []).map((s, i) => `
-                    <div class="v2-step-item" data-step-id="${res.id}-${i}" onclick="event.stopPropagation(); OL.openInspector('${res.id}', ${i})">
-                        <div class="step-row-content">
-                            <span>• ${esc(s.name || 'New Step')}</span>
-                            <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
-                        </div>
-                    </div>
-                    ${i < res.steps.length - 1 ? `<div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})"><div class="split-icon">✂️</div></div>` : ''}
-                `).join('')}
+                  <div class="v2-step-item" 
+                      data-step-id="${res.id}-${i}" 
+                      draggable="true"
+                      ondragstart="OL.handleStepDragStart(event, ${i})"
+                      ondragover="OL.handleStepDragOver(event)"
+                      ondragleave="OL.handleStepDragLeave(event)"
+                      ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
+                      onclick="event.stopPropagation(); OL.openInspector('${res.id}', ${i})">
+                      
+                      <div class="step-row-content">
+                          <span class="drag-handle" style="cursor: grab; opacity: 0.3; margin-right: 4px;">⋮</span>
+                          <span style="flex: 1;">• ${esc(s.name || 'New Step')}</span>
+                          <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                      </div>
+                  </div>
+                  ${i < res.steps.length - 1 ? `
+                      <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
+                          <div class="split-icon">✂️</div>
+                      </div>` : ''}
+              `).join('')}
             </div>
             <div class="v2-card-footer">
                 <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
@@ -8061,12 +8077,53 @@ OL.renderVisualizer = function() {
 
     // Refresh connections and run any active filters
     OL.drawConnections();
+    OL.refreshFilterDropdowns();
     if (document.getElementById('canvas-filter-input')?.value) {
-        OL.filterCanvasNodes(document.getElementById('canvas-filter-input').value);
+        OL.syncCanvasFilters(document.getElementById('canvas-filter-input').value);
     }
 };
 
 window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
+};
+
+// Global to track the dragged index
+state.draggingStepIdx = null;
+
+OL.handleStepDragStart = function(e, index) {
+    state.draggingStepIdx = index;
+    // Set a "ghost" image or effect
+    e.dataTransfer.effectAllowed = 'move';
+    e.target.classList.add('is-dragging');
+};
+
+OL.handleStepDragOver = function(e) {
+    e.preventDefault(); // Required to allow drop
+    const item = e.currentTarget;
+    item.classList.add('drag-over');
+};
+
+OL.handleStepDragLeave = function(e) {
+    e.currentTarget.classList.remove('drag-over');
+};
+
+OL.handleStepDrop = async function(e, resId, droppedOnIdx) {
+    e.preventDefault();
+    const draggedIdx = state.draggingStepIdx;
+    e.currentTarget.classList.remove('drag-over');
+
+    if (draggedIdx === null || draggedIdx === droppedOnIdx) return;
+
+    const res = OL.getResourceById(resId);
+    if (!res || !res.steps) return;
+
+    // 🚀 Splicing the array
+    const movedStep = res.steps.splice(draggedIdx, 1)[0];
+    res.steps.splice(droppedOnIdx, 0, movedStep);
+
+    await OL.persist();
+    
+    // Refresh the visualizer so step numbers/order update
+    OL.renderVisualizer();
 };
 
 OL.save = function() {
@@ -8410,16 +8467,40 @@ OL.highlightFamily = function(originId) {
     };
     window.addEventListener('mousedown', clearFocus);
 };
+
+OL.toggleScopingStatus = async function(resId, currentlyInScope) {
+    const client = getActiveClient();
+    if (!client.projectData.scopingItems) client.projectData.scopingItems = [];
+
+    if (currentlyInScope) {
+        // 🗑️ Remove from data
+        client.projectData.scopingItems = client.projectData.scopingItems.filter(item => item.id !== resId);
+    } else {
+        // ➕ Add to data
+        const res = OL.getResourceById(resId);
+        client.projectData.scopingItems.push({
+            id: resId,
+            name: res?.name || "New Resource",
+            cost: 0,
+            hours: 0
+        });
+    }
+
+    await OL.persist();
+    
+    // 🔄 Refresh the UI so the $ changes color
+    OL.renderVisualizer(); 
+};
+
 // 🔍 Open Inspector
 OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
     const panel = document.getElementById('v2-inspector-panel');
     const content = document.getElementById('inspector-content');
     if (!panel || !content) return;
 
-    // 🎯 1. Get the current context (Active Project vs Vault)
+    // 🎯 1. Get Context
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
-
     panel.classList.add('open');
 
     // 📑 2. STEP DETAIL MODE
@@ -8432,51 +8513,703 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
             return;
         }
         
+        // 🛡️ Data Safety: Initialize missing objects
         if (!step.logic) step.logic = { in: [], out: [] };
+        if (!step.assignees) step.assignees = [];
+        
         const allOptions = this.getAllStepOptions();
 
-       content.innerHTML = `
+        content.innerHTML = `
             <div class="breadcrumb" onclick="OL.openInspector('${resId}', null, 'cards')">« Back to Steps</div>
+            
             <div class="inspector-header">
                 <div class="section-label">EDIT STEP ${stepIdx + 1}</div>
                 <input type="text" class="inspector-name-input" 
                       value="${esc(step.name)}" 
-                      oninput="OL.updateStepName('${resId}', ${stepIdx}, this.value)"
+                      onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)"
                       placeholder="Step Name">
             </div>
 
             <div class="inspector-body">
-                <label class="section-label">INTERNAL NOTES</label>
-                <textarea onblur="OL.updateStepNote('${resId}', ${stepIdx}, this.value)">${esc(step.notes || '')}</textarea>
-                
-                <div class="logic-search-wrap" style="margin-bottom: 10px;">
-                    <input type="text" 
-                          placeholder="🔍 Search stages or steps..." 
-                          class="modal-input tiny"
-                          oninput="OL.filterLogicOptions(this.value)">
-                </div>
                 <div class="inspector-section">
                     <div class="section-label">📥 INPUT CONDITIONS (From where?)</div>
-                    ${step.logic.in.map((l, i) => this.renderLogicBlock(resId, stepIdx, 'in', i, l, allOptions)).join('')}
+                    ${step.logic.in.map((l, i) => renderLogicBlock(resId, stepIdx, 'in', i, l, allOptions)).join('')}
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">📝 INTERNAL NOTES</label>
+                    <textarea class="modal-textarea" style="min-height:60px;"
+                              onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">👤 ASSIGNEES (WHO?)</label>
+                    <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
+                        ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
+                            <div class="pill accent" style="display:flex; align-items:center; gap:6px; background:rgba(var(--accent-rgb), 0.1); border: 1px solid var(--accent);">
+                                <span style="font-size:10px;">${a.type === 'person' ? '👤' : a.type === 'role' ? '👥' : '📱'} ${esc(a.name)}</span>
+                                <b class="is-clickable" style="opacity:0.5;" onclick="OL.removeAssignee('${resId}', '${step.id}', ${idx})">×</b>
+                            </div>
+                        `).join('') : '<div class="tiny muted italic" style="padding: 5px;">Unassigned</div>'}
+                    </div>
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" placeholder="Add Person, Role, or App..."
+                               onfocus="OL.filterAssignmentSearch('${resId}', '${step.id}', false, '')"
+                               oninput="OL.filterAssignmentSearch('${resId}', '${step.id}', false, this.value)">
+                        <div id="assignment-search-results" class="search-results-overlay"></div>
+                    </div>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">📱 PRIMARY APPLICATION (TOOL)</label>
+                    
+                    ${step.appId ? `
+                        <div class="pill-display" style="margin-bottom:8px;">
+                            <div class="pill primary is-clickable" 
+                                style="display:flex; justify-content:space-between; align-items:center; background: rgba(var(--accent-rgb), 0.1); border: 1px solid var(--accent); padding: 5px 8px; border-radius: 6px;"
+                                onclick="OL.openAppModal('${step.appId}')">
+                                <span style="font-size:10px;">📱 ${esc(step.appName)}</span>
+                                <b class="pill-remove-x" style="opacity:0.5; margin-left: 8px;" 
+                                  onmouseover="this.style.opacity='1'; this.style.color='var(--danger)';"
+                                  onmouseout="this.style.opacity='0.5'; this.style.color='inherit';"
+                                  onclick="event.stopPropagation(); OL.removeAppFromStep('${resId}', '${step.id}')">×</b>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${!step.appId ? `
+                        <div class="search-map-container">
+                            <input type="text" class="modal-input tiny" 
+                                  value="" 
+                                  placeholder="Link Application..." 
+                                  onfocus="OL.filterAppSearch('${resId}', '${step.id}', '')"
+                                  oninput="OL.filterAppSearch('${resId}', '${step.id}', this.value)">
+                            <div id="app-search-results" class="search-results-overlay"></div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">🔗 ATTACHED GUIDES & ASSETS</label>
+                    <div id="step-resources-list-${step.id}" style="margin-bottom:8px;">
+                        ${renderStepResources(resId, step)}
+                    </div>
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" placeholder="+ Link Resource or SOP..." 
+                               onfocus="OL.filterResourceSearch('${resId}', '${step.id}', this.value)"
+                               oninput="OL.filterResourceSearch('${resId}', '${step.id}', this.value)">
+                        <div id="resource-results-${step.id}" class="search-results-overlay"></div>
+                    </div>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">📅 DYNAMIC SCHEDULING</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="number" class="modal-input tiny" style="width:50px;" 
+                               value="${step.timingValue || 0}" 
+                               onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'timingValue', this.value)">
+                        <select class="modal-input tiny" style="flex:1;" 
+                                onchange="OL.updateAtomicStep('${resId}', '${step.id}', 'timingType', this.value)">
+                            <option value="after_prev" ${step.timingType === 'after_prev' ? 'selected' : ''}>Days after Previous</option>
+                            <option value="after_start" ${step.timingType === 'after_start' ? 'selected' : ''}>Days after Project Start</option>
+                            <option value="manual" ${step.timingType === 'manual' ? 'selected' : ''}>Fixed Date</option>
+                        </select>
+                    </div>
+                    ${step.timingType === 'manual' ? `
+                        <input type="date" class="modal-input tiny" style="margin-top:8px;"
+                               value="${step.fixedDate || ''}"
+                               onchange="OL.updateAtomicStep('${resId}', '${step.id}', 'fixedDate', this.value)">
+                    ` : ''}
                 </div>
 
                 <div class="inspector-section">
                     <div class="section-label">📤 OUTPUT CONDITIONS (To where?)</div>
-                    ${step.logic.out.map((l, i) => this.renderLogicBlock(resId, stepIdx, 'out', i, l, allOptions)).join('')}
+                    ${step.logic.out.map((l, i) => renderLogicBlock(resId, stepIdx, 'out', i, l, allOptions)).join('')}
                     <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', ${stepIdx}, 'out')">+ Add Output Rule</button>
                 </div>
             </div>
         `;
         return;
     }
-    // Add Input Rule Button <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', ${stepIdx}, 'in')">+ Add Input Rule</button>
-
 
     // 🏁 3. DEFAULT / FALLBACK
-    content.innerHTML = `<div class="muted-notice">Select a step to view details.</div>`;
+    content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a step to view details.</div>`;
 };
 
-// 🎨 Helper to keep the Inspector code clean
+window.renderStepResources = function(resId, step) {
+    const links = step.links || [];
+    if (links.length === 0) return '<div class="tiny muted" style="padding: 5px; opacity:0.6;">No linked items.</div>';
+    
+    return links.map((link, idx) => {
+        // Determine Icon based on type
+        const isSOP = link.type === 'sop' || link.type === 'guide';
+        const icon = isSOP ? '📖' : '📱';
+        
+        // Navigation Logic
+        const openAction = isSOP ? `OL.openHowToModal('${link.id}')` : `OL.openResourceModal('${link.id}')`;
+        const deleteAction = `event.stopPropagation(); OL.removeStepLink('${resId}', '${step.id}', ${idx})`;
+
+        return `
+            <div class="pill soft is-clickable" 
+                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:6px 10px; background: rgba(255,255,255,0.05); border-radius: 4px;"
+                 onclick="${openAction}">
+                <span style="font-size:10px;">${icon}</span>
+                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${esc(link.name)}
+                </span>
+                <b class="pill-remove-x" 
+                   style="cursor:pointer; opacity: 0.4; padding: 2px 5px;" 
+                   onmouseover="this.style.opacity='1'; this.style.color='var(--danger)'"
+                   onmouseout="this.style.opacity='0.4'; this.style.color='inherit'"
+                   onclick="${deleteAction}">×</b>
+            </div>`;
+    }).join('');
+};
+
+OL.filterAppSearch = function(parentId, stepId, query) {
+    const resultsOverlay = document.getElementById('app-search-results');
+    if (!resultsOverlay) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const localApps = client?.projectData?.localApps || [];
+    const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+        resultsOverlay.innerHTML = `<div class="p-10 tiny muted">No apps found.</div>`;
+        resultsOverlay.style.display = 'block';
+        return;
+    }
+
+    resultsOverlay.innerHTML = matches.map(app => `
+        <div class="search-result-item" 
+             style="cursor: pointer; padding: 8px; border-bottom: 1px solid var(--line);"
+             onmousedown="event.preventDefault(); event.stopPropagation(); OL.selectAppForStep('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span>📱</span>
+                <div style="font-size:11px; font-weight:bold; color: white;">${esc(app.name)}</div>
+            </div>
+        </div>
+    `).join('');
+    
+    resultsOverlay.style.display = 'block';
+};
+
+window.OL.selectAppForStep = async function(parentId, stepId, appId, appName) {
+    const res = OL.getResourceById(parentId);
+    if (!res) return;
+
+    const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+    if (step) {
+        // 1. Update the data
+        step.appId = appId;
+        step.appName = appName;
+        
+        // 2. Persist
+        await OL.persist();
+        
+        // 3. 🚀 THE FIX: Manually find the input and force the new value
+        // This stops the browser from holding onto your 'typed' string.
+        const input = document.querySelector('.inspector-body .search-map-container input');
+        if (input) {
+            input.value = appName;
+            input.blur(); // Remove focus to trigger the UI refresh properly
+        }
+
+        // 4. Hide the results overlay
+        const resultsOverlay = document.getElementById('app-search-results');
+        if (resultsOverlay) resultsOverlay.style.display = 'none';
+        
+        // 5. Re-render the whole panel string
+        OL.loadInspector(stepId, parentId);
+    }
+};
+
+window.OL.removeAppFromStep = async function(resId, stepId) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+    if (step) {
+        // Clear the linkage data
+        step.appId = null;
+        step.appName = null;
+        
+        await OL.persist();
+        
+        // 🔄 Force re-render of the inspector to hide the pill and show the search box
+        console.log("🔄 App removed. Re-rendering inspector.");
+        OL.loadInspector(stepId, resId);
+    }
+};
+
+OL.filterAssignmentSearch = function(parentId, stepId, isResource, query) {
+    const resultsOverlay = document.getElementById('assignment-search-results');
+    if (!resultsOverlay) return;
+
+    const q = (query || "").toLowerCase().trim();
+    if (!q) {
+        resultsOverlay.style.display = 'none';
+        return;
+    }
+
+    const client = getActiveClient();
+    
+    // 1. GATHER DATA
+    const masterTeam = state.master.teamMembers || [];
+    const masterRoles = state.master.roles || [];
+    const clientPersonnel = client?.projectData?.teamMembers || [];
+    const clientRoles = client?.projectData?.roles || [];
+    const apps = client?.projectData?.localApps || [];
+
+    // 🚀 THE GHOST ROLES: Pre-defined for assignment only
+    const ghostRoles = [
+        { id: 'role-client-1', name: 'Client 1', type: 'role' },
+        { id: 'role-client-2', name: 'Client 2', type: 'role' }
+    ];
+
+    // 2. FILTER MATCHES
+    const filteredPeople = [...masterTeam, ...clientPersonnel].filter(m => 
+        m.name.toLowerCase().includes(q)
+    );
+    
+    // Combine real roles with our predefined ghost roles
+    const filteredRoles = [...masterRoles, ...clientRoles, ...ghostRoles].filter(r => 
+        r.name.toLowerCase().includes(q)
+    );
+    
+    const filteredApps = apps.filter(a => 
+        a.name.toLowerCase().includes(q)
+    );
+
+    if (!filteredPeople.length && !filteredRoles.length && !filteredApps.length) {
+        resultsOverlay.innerHTML = `<div class="p-10 tiny muted">No matches found.</div>`;
+        resultsOverlay.style.display = 'block';
+        return;
+    }
+
+    // 3. RENDER HTML
+    let html = '';
+
+    if (filteredPeople.length) {
+        html += `<div class="search-category-label">Team Members</div>`;
+        html += filteredPeople.map(m => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${m.id}', '${esc(m.name)}', 'person')">
+                👤 ${esc(m.name)}
+            </div>`).join('');
+    }
+
+    if (filteredRoles.length) {
+        html += `<div class="search-category-label">Roles & Clients</div>`;
+        html += filteredRoles.map(r => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${r.id}', '${esc(r.name)}', 'role')">
+                👥 ${esc(r.name)}
+            </div>`).join('');
+    }
+
+    if (filteredApps.length) {
+        html += `<div class="search-category-label">Applications</div>`;
+        html += filteredApps.map(a => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${a.id}', '${esc(a.name)}', 'app')">
+                📱 ${esc(a.name)}
+            </div>`).join('');
+    }
+
+    resultsOverlay.innerHTML = html;
+    resultsOverlay.style.display = 'block';
+};
+
+window.OL.executeAssignment = async function(parentId, stepId, isResource, assigneeId, assigneeName, type) {
+    const res = OL.getResourceById(parentId);
+    if (!res) return;
+
+    const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+    if (step) {
+        // Initialize as array if it doesn't exist
+        if (!step.assignees) step.assignees = [];
+
+        // Prevent duplicate assignments
+        const exists = step.assignees.some(a => a.id === assigneeId);
+        if (!exists) {
+            step.assignees.push({
+                id: assigneeId,
+                name: assigneeName,
+                type: type
+            });
+            await OL.persist();
+        }
+        
+        // Clear search and refresh
+        const overlay = document.getElementById('assignment-search-results');
+        if (overlay) overlay.style.display = 'none';
+        OL.loadInspector(stepId, parentId);
+    }
+    // Add this line to the end of window.OL.executeAssignment
+    const searchInput = document.querySelector('.inspector-section input[placeholder*="Add Person"]');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus(); // Keep focus if you want to add multiple people quickly
+    }
+};
+
+window.OL.removeAssignee = async function(parentId, stepId, index) {
+    const res = OL.getResourceById(parentId);
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (step && step.assignees) {
+        step.assignees.splice(index, 1);
+        await OL.persist();
+        OL.loadInspector(stepId, parentId);
+    }
+};
+
+state.filterMatches = [];
+state.canvasMatches = [];
+state.currentCanvasMatchIdx = -1;
+
+// Add this inside your toolbar initialization or global scope
+document.addEventListener('keydown', (e) => {
+    const searchInput = document.getElementById('canvas-filter-input');
+    
+    // If the user hits 'Enter' while inside the search box...
+    if (e.key === 'Enter' && document.activeElement === searchInput) {
+        e.preventDefault();
+        OL.centerNextCanvasMatch(); // The cycling function we built earlier
+    }
+});
+
+OL.filterResourceSearch = function(resId, stepId, query) {
+    const resultsOverlay = document.getElementById(`resource-results-${stepId}`);
+    if (!resultsOverlay) return;
+
+    const q = (query || "").toLowerCase().trim();
+    if (!q) {
+        resultsOverlay.style.display = 'none';
+        return;
+    }
+
+    const client = getActiveClient();
+    
+    // 1. GATHER DATA
+    // All project resources (excluding the one we are currently editing)
+    const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
+    const filteredRes = allResources.filter(r => r.id !== resId && r.name.toLowerCase().includes(q));
+
+    // All How-To Guides
+    const allHowTos = [...(state.master.howTos || []), ...(client?.projectData?.localHowTos || [])];
+    const filteredHowTos = allHowTos.filter(h => h.name.toLowerCase().includes(q));
+
+    if (!filteredRes.length && !filteredHowTos.length) {
+        resultsOverlay.innerHTML = `<div class="p-10 tiny muted">No matches found.</div>`;
+        resultsOverlay.style.display = 'block';
+        return;
+    }
+
+    // 2. RENDER HTML
+    let html = '';
+
+    // Assets/Resources Section
+    if (filteredRes.length) {
+        html += `<div class="search-category-label">Project Assets</div>`;
+        html += filteredRes.map(r => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.addLinkToStep('${resId}', '${stepId}', '${r.id}', '${esc(r.name)}', 'resource')">
+                📱 ${esc(r.name)}
+            </div>`).join('');
+    }
+
+    // How-To Guides Section
+    if (filteredHowTos.length) {
+        html += `<div class="search-category-label">How-To Guides (SOPs)</div>`;
+        html += filteredHowTos.map(h => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.addLinkToStep('${resId}', '${stepId}', '${h.id}', '${esc(h.name)}', 'sop')">
+                📖 ${esc(h.name)}
+            </div>`).join('');
+    }
+
+    resultsOverlay.innerHTML = html;
+    resultsOverlay.style.display = 'block';
+};
+
+OL.toggleFilterMenu = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('v2-filter-submenu');
+    const btn = document.getElementById('filter-menu-btn');
+    
+    const isShowing = menu.style.display === 'flex';
+    
+    menu.style.display = isShowing ? 'none' : 'flex';
+    btn.classList.toggle('active', !isShowing);
+};
+
+OL.syncCanvasFilters = function() {
+    // 1. Get all current values
+    const query = document.getElementById('canvas-filter-input')?.value.toLowerCase().trim() || "";
+    const typeF = document.getElementById('filter-type')?.value || "";
+    const appF = document.getElementById('filter-app')?.value || "";
+    const assigneeF = document.getElementById('filter-assignee')?.value || "";
+
+    // 2. Reset the Match Array for Navigation
+    state.canvasMatches = [];
+
+    const nodes = document.querySelectorAll('.v2-node-card');
+    
+    nodes.forEach(node => {
+        const resId = node.id.replace('v2-node-', '');
+        const res = OL.getResourceById(resId);
+        if (!res) return;
+
+        // --- THE CRITERIA CHECK ---
+        const matchesQuery = !query || res.name.toLowerCase().includes(query);
+        const matchesType = !typeF || res.type === typeF;
+        
+        // Deep check steps for Apps/Assignees
+        const matchesApp = !appF || (res.steps || []).some(s => s.appName === appF);
+        const matchesAssignee = !assigneeF || (res.steps || []).some(s => 
+            (s.assignees || []).some(a => a.name === assigneeF)
+        );
+
+        // 3. Final Decision
+        if (matchesQuery && matchesType && matchesApp && matchesAssignee) {
+            node.classList.remove('node-dimmed');
+            node.classList.add('search-match');
+            state.canvasMatches.push(node.id);
+        } else {
+            node.classList.add('node-dimmed');
+            node.classList.remove('search-match', 'search-active');
+        }
+    });
+
+    // 4. Update Navigation UI Visibility & Counter
+    const nav = document.getElementById('search-nav-controls');
+    const countLabel = document.getElementById('canvas-match-count');
+
+    if (state.canvasMatches.length > 0 && (query || typeF || appF || assigneeF)) {
+        nav.classList.add('is-visible');
+        state.currentCanvasMatchIdx = 0; // Reset to first match
+        countLabel.innerText = `1/${state.canvasMatches.length}`;
+    } else {
+        nav.classList.remove('is-visible');
+        state.currentCanvasMatchIdx = -1;
+    }
+
+    // Optional: Re-render lines if any nodes were hidden
+    if (window.OL.renderConnections) OL.renderConnections();
+};
+
+OL.centerNextCanvasMatch = function() {
+    if (state.canvasMatches.length === 0) return;
+
+    // Cycle through indices
+    state.currentCanvasMatchIdx = (state.currentCanvasMatchIdx + 1) % state.canvasMatches.length;
+    const targetId = state.canvasMatches[state.currentCanvasMatchIdx];
+    
+    document.getElementById('canvas-match-count').innerText = 
+        `${state.currentCanvasMatchIdx + 1}/${state.canvasMatches.length}`;
+
+    OL.centerCanvasNode(targetId);
+};
+
+OL.centerPrevCanvasMatch = function() {
+    if (!state.canvasMatches || state.canvasMatches.length === 0) return;
+
+    state.currentCanvasMatchIdx--;
+    if (state.currentCanvasMatchIdx < 0) {
+        state.currentCanvasMatchIdx = state.canvasMatches.length - 1;
+    }
+    
+    const targetId = state.canvasMatches[state.currentCanvasMatchIdx];
+    
+    // Update UI Counter
+    const countLabel = document.getElementById('canvas-match-count');
+    if (countLabel) {
+        countLabel.innerText = `${state.currentCanvasMatchIdx + 1}/${state.canvasMatches.length}`;
+    }
+
+    OL.centerCanvasNode(targetId);
+};
+
+OL.centerCanvasNode = function(nodeId) {
+    const nodeEl = document.getElementById(nodeId);
+    if (!nodeEl) return;
+
+    // 1. 🔍 THE AUTO-OPEN CHECK
+    // Check if the node is inside a tray/sidebar
+    const workbench = document.getElementById('v2-workbench-sidebar');
+    const shelf = document.getElementById('global-shelf');
+
+    // 1. 🔍 THE AUTO-OPEN CHECK
+    const viewport = document.getElementById('v2-viewport');
+
+    // Workbench Check
+    if (nodeEl.closest('#v2-workbench-sidebar')) {
+        if (viewport.classList.contains('tray-closed')) {
+            OL.toggleWorkbenchTray();
+        }
+    }
+
+    // 🚀 ADDED: Global Shelf Check
+    if (nodeEl.closest('#global-shelf')) {
+        const shelf = document.getElementById('global-shelf');
+        // If you have a specific class or style that hides the shelf, toggle it here
+        // Example: if (shelf.style.display === 'none') shelf.style.display = 'block';
+        
+        // Smooth scroll to the item in the shelf list
+        nodeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // If it's in the workbench, make sure the workbench is open
+    if (nodeEl.closest('#v2-workbench-sidebar')) {
+        if (viewport.classList.contains('tray-closed')) {
+            console.log("📂 Auto-opening Workbench for search match...");
+            OL.toggleWorkbenchTray(); // Use your existing toggle function
+        }
+    }
+    
+    // 2. 🎯 SNAP TO CENTER (Only if it's on the Canvas)
+    if (nodeEl.closest('#v2-node-layer')) {
+        const nodeX = parseFloat(nodeEl.style.left) || 0;
+        const nodeY = parseFloat(nodeEl.style.top) || 0;
+        const viewW = window.innerWidth;
+        const viewH = window.innerHeight;
+
+        const moveX = (viewW / 2) - (nodeX + (nodeEl.offsetWidth / 2));
+        const moveY = (viewH / 2) - (nodeY + (nodeEl.offsetHeight / 2));
+
+        const layer = document.getElementById('v2-node-layer');
+        if (layer) {
+            layer.style.transition = "transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)";
+            layer.style.transform = `translate(${moveX}px, ${moveY}px)`;
+        }
+    } else {
+        // 💫 If it's in a sidebar, just wiggle/highlight it since we can't "center" it
+        nodeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // 3. ✨ VISUAL FOCUS
+    document.querySelectorAll('.v2-node-card').forEach(n => n.classList.remove('search-focus'));
+    nodeEl.classList.add('search-focus');
+};
+
+OL.refreshFilterDropdowns = function() {
+    const client = getActiveClient();
+    const apps = client?.projectData?.localApps || [];
+    const team = [
+        ...(state.master.teamMembers || []), 
+        ...(client?.projectData?.teamMembers || []),
+        { name: 'Client 1' }, { name: 'Client 2' } // Include your Ghost Roles
+    ];
+
+    const appSelect = document.getElementById('filter-app');
+    const assigneeSelect = document.getElementById('filter-assignee');
+
+    if (appSelect) {
+        appSelect.innerHTML = `<option value="">All Apps</option>` + 
+            apps.map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+    }
+
+    if (assigneeSelect) {
+        assigneeSelect.innerHTML = `<option value="">All Owners</option>` + 
+            team.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+    }
+};
+
+OL.clearAllFilters = function() {
+    // 1. 📝 CLEAR THE INPUTS
+    const searchInput = document.getElementById('canvas-filter-input');
+    if (searchInput) searchInput.value = "";
+    
+    // Reset all Select dropdowns in the submenu
+    const selects = document.querySelectorAll('#v2-filter-submenu select');
+    selects.forEach(select => {
+        select.selectedIndex = 0;
+    });
+
+    // 2. 🚀 REMOVE ALL CSS CLASSES
+    // We target every node to ensure no "ghost" highlights remain
+    const allNodes = document.querySelectorAll('.v2-node-card');
+    allNodes.forEach(node => {
+        node.classList.remove(
+            'search-match',    // The gold border
+            'search-active',   // The focused/scaled state
+            'filter-hidden',   // The display:none state
+            'node-dimmed'      // Any transparency effects
+        );
+    });
+
+    // 3. 🗺️ RESET NAVIGATION & UI
+    state.canvasMatches = [];
+    state.currentCanvasMatchIdx = -1;
+    
+    // Hide the Back/Next navigation buttons
+    const nav = document.getElementById('search-nav-controls');
+    if (nav) nav.classList.remove('is-visible');
+
+    // Reset the "active filter" count pill on the main button
+    const countPill = document.getElementById('active-filter-count');
+    if (countPill) {
+        countPill.innerText = "0";
+        countPill.style.display = 'none';
+    }
+
+    // 4. 🔗 RESTORE CONNECTIONS
+    // Reset SVG line opacity to default
+    document.querySelectorAll('#v2-connections path').forEach(path => {
+        path.style.opacity = "0.7";
+    });
+
+    // 5. 🔄 FINAL SYNC
+    // This tells the logic that filters are empty, restoring the map
+    OL.syncCanvasFilters();
+    
+    console.log("✨ Canvas and Search Bar fully reset.");
+};
+
+window.OL.addLinkToStep = async function(resId, stepId, linkId, linkName, type) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+    if (step) {
+        if (!step.links) step.links = [];
+
+        // Avoid duplicate links
+        if (!step.links.some(l => l.id === linkId)) {
+            step.links.push({
+                id: linkId,
+                name: linkName,
+                type: type
+            });
+            await OL.persist();
+        }
+        
+        // Hide overlay and clear input
+        const overlay = document.getElementById(`resource-results-${stepId}`);
+        if (overlay) overlay.style.display = 'none';
+        
+        // 🔄 Force refresh to show the new pill
+        OL.loadInspector(stepId, resId);
+    }
+};
+
+window.OL.removeStepLink = async function(resId, stepId, linkIdx) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    // Find the specific step
+    const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+    
+    if (step && step.links) {
+        // Remove the item at the specific index
+        step.links.splice(linkIdx, 1);
+        
+        // Save state
+        await OL.persist();
+        
+        // 🔄 Immediate UI Refresh
+        console.log("🗑️ Attachment removed from step:", stepId);
+        OL.loadInspector(stepId, resId);
+    }
+};
+
 OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
     const myFullId = `${resId}-${stepIdx}`;
     const targetId = dir === 'out' ? (logic.targetId || "") : (logic.sourceId || "");
@@ -8521,7 +9254,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                 
                 ${targetId ? `
                     <button class="logic-jump-btn" 
-                            onclick="OL.focusCardOnCanvas('${targetId.split('-')[0]}')"
+                            onclick="OL.centerCanvasNode('${targetId.split('-')[0]}')"
                             title="Jump to Card">
                         🎯
                     </button>
@@ -8563,19 +9296,6 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
             ` : ''}
         </div>
     `;
-};
-
-OL.focusCardOnCanvas = function(resId) {
-    const el = document.getElementById(`v2-node-${resId}`);
-    if (!el) return;
-
-    // 1. Highlight the card briefly
-    el.style.outline = "4px solid var(--warning)";
-    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    
-    setTimeout(() => {
-        el.style.outline = "none";
-    }, 2000);
 };
 
 OL.getAllStepOptions = function() {
@@ -8634,8 +9354,6 @@ OL.filterLogicOptions = function(query) {
     });
 };
 
-// Helper to make the dropdown readable
-// Helper to make the dropdown readable
 OL.getPartNumber = function(res) {
     // 1. If it was never split, it's the only part
     if (!res.originId) return "1/1";
@@ -8705,33 +9423,6 @@ OL.updateStepLogic = async function(resId, stepIdx, direction, logicIdx, field, 
         // 🎨 4. REPAINT LINES
         OL.drawConnections();
     }
-};
-
-OL.removeStepLogic = function(resId, stepIdx, direction, logicIdx) {
-    // 🎯 1. Get the current project context
-    const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-
-    const res = resources.find(r => String(r.id) === String(resId));
-    const step = res?.steps?.[stepIdx];
-    if (!step || !step.logic) return;
-
-    const itemToRemove = step.logic[direction][logicIdx];
-    const partnerId = direction === 'out' ? itemToRemove.targetId : itemToRemove.sourceId;
-
-    // 🚀 THE MIRROR DELETE: Use the same project context
-    if (partnerId) {
-        this.clearMirrorLink(`${resId}-${stepIdx}`, partnerId);
-    }
-
-    // Remove the item from the current card
-    step.logic[direction].splice(logicIdx, 1);
-    
-    // 💾 Save to Project/Vault
-    OL.save(); 
-    
-    this.drawConnections();
-    this.openInspector(resId, stepIdx); // Refresh UI
 };
 
 OL.removeStepLogic = function(resId, stepIdx, direction, logicIdx) {
@@ -8969,8 +9660,15 @@ OL.drawConnections = function() {
     const resources = data.resources || [];
     let lineCount = 0;
 
+    const isSearchActive = !!document.getElementById('canvas-filter-input')?.value.trim() || 
+                           state.canvasMatches.length > 0;
+
     resources.forEach(sourceRes => {
-        if (!sourceRes || !sourceRes.steps || !Array.isArray(sourceRes.steps)) return;
+        if (!sourceRes || !sourceRes.steps) return;
+
+        // 🚀 1. NEW: Check if the Source Card is hidden by a filter
+        const sourceEl = document.getElementById(`v2-node-${sourceRes.id}`);
+        if (sourceEl && sourceEl.classList.contains('filter-hidden')) return;
 
         sourceRes.steps.forEach((step, sIdx) => {
             if (!step || !step.logic || !step.logic.out) return;
@@ -8982,8 +9680,10 @@ OL.drawConnections = function() {
                 const tStepIdx = parseInt(parts.pop()); 
                 const tResId = parts.join('-'); 
 
-                const targetRes = resources.find(r => String(r.id) === String(tResId));
+                const targetEl = document.getElementById(`v2-node-${tResId}`);
+                if (targetEl && targetEl.classList.contains('filter-hidden')) return;
 
+                const targetRes = resources.find(r => String(r.id) === String(tResId));
                 if (!targetRes || !targetRes.steps || !targetRes.steps[tStepIdx]) return;
 
                 if (targetRes.coords && sourceRes.coords) {
@@ -9076,12 +9776,28 @@ OL.drawConnections = function() {
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('d', d);
 
+                        const isSourceFocused = sourceEl.classList.contains('search-active');
+                        const isTargetFocused = targetEl.classList.contains('search-active');
+
+                        if (isSourceFocused || isTargetFocused) {
+                            // Focus State: Highlight the path
+                            path.setAttribute('stroke-width', '3');
+                            path.style.opacity = '1';
+                            path.style.filter = 'drop-shadow(0 0 5px var(--accent))';
+                        } else if (isSearchActive) {
+                            // Search State: Dim irrelevant paths
+                            path.setAttribute('stroke-width', '1.5');
+                            path.style.opacity = '0.15'; 
+                        } else {
+                            // Normal State: Default look
+                            path.setAttribute('stroke-width', '2.5');
+                            path.style.opacity = '0.7';
+                        }
+
                         path.setAttribute('stroke', outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
-                        path.setAttribute('stroke-width', '2.5');
                         path.setAttribute('fill', 'none');
                         path.setAttribute('marker-end', 'url(#arrowhead)');
                         path.setAttribute('class', 'path-flow');
-                        path.style.opacity = '0.7';
                         
                         lineGroup.appendChild(path);
                         lineCount++;
@@ -9170,131 +9886,6 @@ OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
     g.appendChild(circle);
     g.appendChild(iconText);
     group.appendChild(g);
-};
-
-OL.toggleFilterMenu = function(e) {
-    if (e) e.stopPropagation();
-    const menu = document.getElementById('v2-filter-submenu');
-    const btn = document.getElementById('filter-menu-btn');
-    
-    const isShowing = menu.style.display === 'flex';
-    
-    menu.style.display = isShowing ? 'none' : 'flex';
-    btn.classList.toggle('active', !isShowing);
-};
-
-// Reset function to clear the highlights
-OL.clearAllCanvasFilters = function() {
-    const filters = ['canvas-filter-input', 'filter-type', 'filter-app', 'filter-assignee', 'filter-logic'];
-    filters.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = "";
-    });
-    
-    OL.runCanvasFilters(); // Run once more to reset the visual dimming
-    document.getElementById('v2-filter-submenu').style.display = 'none';
-    document.getElementById('filter-menu-btn').classList.remove('active');
-};
-
-// 🔍 Filter by Text (Search Bar)
-OL.filterCanvasNodes = function(query) {
-    // 1. Store the query in state so the renderer can see it
-    state.v2.currentSearchQuery = query.toLowerCase().trim();
-    
-    // 2. Don't full render (it's too slow). Just apply classes to what's already there.
-    const cards = document.querySelectorAll('.v2-node-card');
-    const q = state.v2.currentSearchQuery;
-
-    cards.forEach(card => {
-        if (!q) {
-            card.classList.remove('node-dimmed', 'node-matched');
-            return;
-        }
-        
-        // Check text content of the card
-        const text = card.innerText.toLowerCase();
-        if (text.includes(q)) {
-            card.classList.remove('node-dimmed');
-            card.classList.add('node-matched');
-        } else {
-            card.classList.add('node-dimmed');
-            card.classList.remove('node-matched');
-        }
-    });
-    
-    // 3. Dim the lines
-    document.querySelectorAll('#v2-connections path').forEach(p => {
-        p.style.opacity = q ? "0.05" : "0.7";
-    });
-};
-
-// 🎯 Filter by Attributes (Dropdowns)
-OL.runCanvasFilters = function() {
-    const typeF = document.getElementById('filter-type')?.value;
-    const appF = document.getElementById('filter-app')?.value;
-    const ownerF = document.getElementById('filter-assignee')?.value;
-    const logicF = document.getElementById('filter-logic')?.value;
-
-    const cards = document.querySelectorAll('.v2-node-card');
-    const data = OL.getCurrentProjectData().resources;
-    
-    let activeFilters = 0;
-    if (typeF) activeFilters++;
-    if (appF) activeFilters++;
-    if (ownerF) activeFilters++;
-    if (logicF) activeFilters++;
-
-    document.getElementById('active-filter-count').innerText = activeFilters;
-    document.getElementById('active-filter-count').style.display = activeFilters > 0 ? 'inline-block' : 'none';
-
-    cards.forEach(card => {
-        const resId = card.id.replace('v2-node-', '');
-        const res = data.find(r => String(r.id) === String(resId));
-        if (!res) return;
-
-        let match = true;
-        if (typeF && res.type !== typeF) match = false;
-        if (appF && res.integration?.app !== appF) match = false;
-        if (ownerF && res.assigneeName !== ownerF) match = false;
-        if (logicF === 'has' && (!res.steps || !res.steps.some(s => s.logic?.out?.length > 0))) match = false;
-
-        if (match) {
-            card.classList.remove('node-dimmed');
-            card.classList.add('node-matched');
-        } else {
-            card.classList.add('node-dimmed');
-            card.classList.remove('node-matched');
-        }
-    });
-};
-
-OL.clearAllFilters = function() {
-    // 1. Clear the text search
-    const searchInput = document.getElementById('canvas-filter-input');
-    if (searchInput) searchInput.value = "";
-    
-    // 2. Reset all dropdowns in the submenu
-    const selects = document.querySelectorAll('#v2-filter-submenu select');
-    selects.forEach(select => {
-        select.selectedIndex = 0;
-    });
-
-    // 3. Reset the counter pill
-    const countEl = document.getElementById('active-filter-count');
-    if (countEl) {
-        countEl.innerText = "0";
-        countEl.style.display = 'none';
-    }
-
-    // 4. Force a re-render to remove all 'node-dimmed' classes
-    OL.renderVisualizer();
-    
-    // 5. Restore line opacity
-    document.querySelectorAll('#v2-connections path').forEach(p => {
-        p.style.opacity = "0.7";
-    });
-
-    console.log("🧹 Filters cleared and visualizer reset.");
 };
 
 OL.openBrainDump = function() {
