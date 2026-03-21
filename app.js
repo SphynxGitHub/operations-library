@@ -598,6 +598,10 @@ window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
     const viewParam = urlParams.get('view');
+    const main = document.getElementById("mainContent");
+    const client = getActiveClient();
+    const isScoping = hash.includes('scoping-sheet');
+    const isVault = hash.includes('vault');
 
     // --- 🚦 ROUTE DEBUG ---
     console.group("🚦 ROUTE DEBUG");
@@ -613,19 +617,14 @@ window.handleRoute = function () {
     // 1. Force the Skeleton 🏗️
     window.buildLayout(); 
 
-    const main = document.getElementById("mainContent");
     if (!main) return; 
 
     // 2. Identify Context 🔍
-    const client = getActiveClient();
     if (client) {
         console.log("✅ Verified Client Access:", client.meta.name);
     } else {
         console.warn("❌ Access Token invalid or Data not loaded yet.");
     }
-
-    const isVault = hash.includes('vault');
-
     // 3. The "Loading" Safety Net 🛡️
     if (!isVault && hash !== "#/" && !client) {
         main.innerHTML = `
@@ -636,7 +635,25 @@ window.handleRoute = function () {
             </div>`;
         return; 
     }
-
+    // 3. SCOPING ROUTE
+    if (isScoping) {
+        state.viewMode = 'scoping';
+        // Remove visualizer classes if they exist
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        
+        // 🎯 Check for a focus param in the hash
+        const urlParts = hash.split('?');
+        if (urlParts[1]) {
+            const params = new URLSearchParams(urlParts[1]);
+            if (params.has('focus')) {
+                state.scopingTargetId = params.get('focus');
+                state.scopingFilterActive = true;
+            }
+        }
+        
+        renderScopingSheet();
+        return;
+    }
     // 4. VISUALIZER ROUTE 🕸️
     if (hash.includes('visualizer')) {
         state.viewMode = 'graph'; 
@@ -7946,7 +7963,7 @@ OL.renderVisualizer = function() {
         const isInScope = !!OL.isResourceInScope(res.id);
         const scopeBadge = isInScope ? `
             <div class="v2-scope-badge" 
-                onclick="event.stopPropagation(); OL.navigateToScoping('${res.id}')"
+                onclick="event.stopPropagation(); event.preventDefault(); OL.navigateToScoping('${res.id}')"
                 title="View in Scoping Sheet">
                 $
             </div>
@@ -9583,49 +9600,54 @@ OL.duplicateResourceV2 = async function(resourceId) {
     if (OL.renderVisualizer) OL.renderVisualizer(isVault);
 };
 
-OL.navigateToScoping = function(resourceId) {
-    const idStr = String(resourceId);
-    
-    // 1. Lock the state first
-    state.viewMode = 'scoping';
-    state.scopingTargetId = idStr;
-    state.scopingFilterActive = true; 
+OL.navigateToScoping = function(resId) {
+    console.log("🎯 Navigating to Scoping for Resource:", resId);
 
-    // 2. Switch Hash (Triggers page switch)
-    window.location.hash = `#/scoping-sheet?focus=${resourceId}`;
+    // 1. Switch the App Mode to Scoping
+    // This assumes you have a central 'switchMode' or similar
+    if (typeof OL.setMode === 'function') {
+        OL.setMode('scoping'); 
+    } else {
+        // Fallback: Manually trigger whatever shows your scoping table
+        state.ui.currentMode = 'scoping';
+        OL.render(); 
+    }
 
-    // 3. ⚡ FORCE RENDER: Explicitly call the function to ensure it uses the NEW state
-    // Use a small timeout to let the hash-change settle
+    // 2. Wait for the table to actually render (DOM isn't instant)
     setTimeout(() => {
-        if (typeof renderScopingSheet === 'function') {
-            console.log("⚡ Executing Surgical Render for ID:", idStr);
-            renderScopingSheet();
+        const targetRow = document.querySelector(`[data-res-id="${resId}"]`);
+        
+        if (targetRow) {
+            // Highlight it so the user sees it
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetRow.classList.add('highlight-flash');
+            
+            // Clean up the highlight after a second
+            setTimeout(() => targetRow.classList.remove('highlight-flash'), 2000);
+        } else {
+            console.warn("📍 Scoping row not found for ID:", resId);
+            OL.notify("Resource not found in Scoping Sheet", "warning");
         }
-    }, 50);
+    }, 300); // 300ms is usually enough for a table render
 };
 
 OL.jumpToScopingItem = function(nodeId) {
-    console.log("🧨 KILLING VISUALIZER CONTEXT for:", nodeId);
+    console.log("🧨 JUMPING TO SCOPING FOR:", nodeId);
 
-    // 1. Wipe the state that triggers the visualizer branches
+    // 1. SET NAVIGATION FLAGS
     state.viewMode = 'scoping';
-    state.focusedResourceId = null;
-    state.focusedWorkflowId = null;
     state.scopingTargetId = nodeId;
     state.scopingFilterActive = true;
+    
+    // 2. CLEAR VISUALIZER DEPTH (Crucial to prevent handleRoute "Auto-Resume")
+    state.focusedResourceId = null;
+    state.focusedWorkflowId = null;
+    sessionStorage.removeItem('active_resource_id');
+    sessionStorage.removeItem('active_workflow_id');
 
-    // 2. 🛑 THE KILL SWITCH: Overwrite the view registry immediately
-    // This stops any background sync from calling renderVisualizer
-    OL.registerView(() => renderScopingSheet());
-
-    // 3. Update the URL
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', 'scoping');
-    url.hash = "#/scoping-sheet"; 
-    window.history.pushState({}, '', url.toString());
-
-    // 4. Force Render
-    window.renderScopingSheet();
+    // 3. FORCE THE HASH CHANGE
+    // We add the focus param to the URL so if the page refreshes, it stays filtered
+    window.location.hash = `#/scoping-sheet?focus=${nodeId}`;
 };
 
 OL.toggleMasterExpand = async function() {
