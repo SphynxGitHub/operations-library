@@ -4314,6 +4314,18 @@ body.light-mode {
     transform: translateY(-2px);
 }
 
+.v2-node-card.node-dimmed {
+    opacity: 0.15 !important;
+    filter: grayscale(1);
+    pointer-events: none;
+}
+
+.v2-node-card.node-matched {
+    opacity: 1 !important;
+    border: 2px solid var(--accent) !important;
+    box-shadow: 0 0 15px var(--accent-glow) !important;
+}
+
 /*=================Card Drag */
 
 .is-dragging-node { cursor: grabbing !important; }
@@ -4591,17 +4603,27 @@ path.is-loop-path {
 
 /* 🛠️ 2. THE MASTER TOOLBAR BAR */
 .v2-master-toolbar {
-    display: flex; align-items: center; justify-content: flex-start; pointer-events: auto;
+    align-items: center; justify-content: flex-start; pointer-events: auto;
 }
 
 .v2-toolbar {
-    display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel); border: 1px solid var(--panel-border);
+    align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel); border: 1px solid var(--panel-border);
     border-radius: 10px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); backdrop-filter: blur(10px);
 }
 
+.v2-master-toolbar, .v2-toolbar, .context-menu {
+    pointer-events: auto !important; /* 🔥 RESTORES CLICKABILITY to buttons/selects */
+    display: flex;
+    gap: 10px;
+}
 /* 🔍 THE SEARCH INPUT INSIDE TOOLBAR */
 .canvas-search-wrap {
     display: flex; align-items: center; gap: 10px; padding-right: 12px; margin-right: 4px;  border-right: 1px solid var(--line);
+}
+
+.canvas-select, .tiny-select {
+    cursor: pointer;
+    z-index: 5001;
 }
 
 .divider-v {
