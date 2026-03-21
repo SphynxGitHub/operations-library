@@ -7977,11 +7977,14 @@ OL.renderVisualizer = function() {
 
         const isInScope = !!OL.isResourceInScope(res.id);
         const scopeBadge = isInScope ? `
-            <div class="v2-scope-badge" 
-                onclick="event.stopPropagation();window.location.hash = '#/scoping-sheet?focus=${res.id}';"
-                title="View in Scoping Sheet">
+            <a href="#/scoping-sheet?focus=${res.id}" 
+              class="v2-scope-badge" 
+              onmousedown="event.stopPropagation();" 
+              onclick="event.stopPropagation(); sessionStorage.removeItem('active_resource_id'); state.focusedResourceId = null;"
+              title="View in Scoping Sheet"
+              style="pointer-events: auto !important;">
                 $
-            </div>
+            </a>
         ` : '';
         const duplicateBadge = `
             <div class="v2-duplicate-badge" 
