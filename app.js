@@ -7942,6 +7942,22 @@ OL.renderVisualizer = function() {
     // --- 📇 4. RENDER RESOURCES ---
     resources.forEach(res => {
         const isExpanded = res.isExpanded || false;
+
+        const isInScope = !!OL.isResourceInScope(res.id);
+        const scopeBadge = isInScope ? `
+            <div class="v2-scope-badge" 
+                onclick="event.stopPropagation(); OL.navigateToScoping('${res.id}')"
+                title="View in Scoping Sheet">
+                $
+            </div>
+        ` : '';
+        const duplicateBadge = `
+            <div class="v2-duplicate-badge" 
+                onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}')"
+                title="Duplicate Resource">
+                ⿻
+            </div>
+        `;
         
         // Handle Tray Filtering
         if (res.isGlobal && !res.isTopShelf && traySearch && !res.name.toLowerCase().includes(traySearch)) return;
@@ -7962,6 +7978,10 @@ OL.renderVisualizer = function() {
                 <div class="step-row-content">
                     <b class="res-name-text">${esc(res.name)}</b>
                     ${numberingHtml}
+                    <div class="header-badges-wrap">
+                        ${scopeBadge}
+                        ${duplicateBadge}
+                    </div>
                 </div>
                 <small class="tiny muted uppercase">${esc(res.type || 'Resource')}</small>
             </div>
