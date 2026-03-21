@@ -7540,20 +7540,13 @@ document.addEventListener('mousedown', (e) => {
 OL.initWBMotion = function(e, id) {
     const canvas = document.getElementById('v2-canvas');
     const zoom = OL.state.v2.zoom || 1;
-
-    // 🎯 1. Get the correct context (Project vs Vault)
     const data = OL.getCurrentProjectData(); 
-    const resources = data.resources; // The active array
+    const resources = data.resources; 
     const stages = data.stages;
     
     const res = resources.find(r => String(r.id) === String(id));
-    
-    if (!res) {
-        console.error("❌ Drag failed: Resource not found in current context", id);
-        return;
-    }
+    if (!res) return;
 
-    // Indicator Setup
     let indicator = document.getElementById('drag-indicator');
     if (!indicator) {
         indicator = document.createElement('div');
@@ -7566,31 +7559,17 @@ OL.initWBMotion = function(e, id) {
     if (el) el.classList.add('is-dragging-ghost');
 
     const onMove = (mE) => {
-        const viewport = document.getElementById('v2-viewport');
-        const vRect = viewport.getBoundingClientRect();
-
-        // 🚀 THE FIX: Calculate mouse position relative to the viewport'S Top-Left
-        // This negates the impact of the sidebar width and top toolbar height
-        const relativeX = mE.clientX - vRect.left;
-        const relativeY = mE.clientY - vRect.top;
-
-        // Use transform translate instead of left/top for smoother 60fps performance
-        // We subtract 7 to center the 14px dot on the tip of the cursor
         indicator.style.transform = `translate(${mE.clientX - 7}px, ${mE.clientY - 7}px)`;
-        indicator.style.left = '0';
-        indicator.style.top = '0';
         indicator.style.position = 'fixed';
 
         const rect = canvas.getBoundingClientRect();
         const mouseCanvasX = (mE.clientX - rect.left) / zoom;
 
-        // 🚀 Dynamic "Shove" logic using the current stages
         let accX = 0;
         document.querySelectorAll('.v2-lane-section').forEach((laneEl, idx) => {
             const stage = stages[idx];
             if (!stage) return;
             const w = stage.width || 320;
-            
             const isNearLine = mouseCanvasX > accX + w - 30 && mouseCanvasX < accX + w + 30;
             if (isNearLine && mE.clientY > 150) { 
                 laneEl.style.width = `${Math.max(300, mouseCanvasX - accX + 20)}px`;
@@ -7609,65 +7588,90 @@ OL.initWBMotion = function(e, id) {
         if (el) el.classList.remove('is-dragging-ghost');
 
         const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+        
+        // 🚀 1. THE MERGE LOGIC (Collision Check)
+        const dropTargetCard = dropPointEl?.closest('.v2-node-card');
+        const targetId = dropTargetCard?.id.replace('v2-node-', '');
+
+        if (dropTargetCard && targetId !== String(res.id)) {
+            const targetRes = resources.find(r => String(r.id) === targetId);
+            
+            // Only merge if they belong to the same origin family
+            if (targetRes && targetRes.originId === res.originId) {
+                console.log(`🔗 Merging family pieces: ${res.id} -> ${targetRes.id}`);
+                
+                await OL.updateAndSync(() => {
+                    const currentTargetStepCount = targetRes.steps?.length || 0;
+                    const repairMap = {};
+
+                    // Map old step IDs to their new positions in the target card
+                    res.steps?.forEach((step, i) => {
+                        const oldFullId = `${res.id}-${i}`;
+                        const newFullId = `${targetRes.id}-${currentTargetStepCount + i}`;
+                        repairMap[oldFullId] = newFullId;
+                    });
+
+                    // Update all connections in the project to point to the new merged indices
+                    resources.forEach(r => {
+                        r.steps?.forEach(s => {
+                            s.logic?.out?.forEach(link => {
+                                if (repairMap[link.targetId]) link.targetId = repairMap[link.targetId];
+                            });
+                            // No need to map 'in' links as syncLogicPorts() will rebuild them
+                        });
+                    });
+
+                    // Transfer steps and delete the old card
+                    targetRes.steps = [...(targetRes.steps || []), ...(res.steps || [])];
+                    const resIdx = resources.findIndex(r => r.id === res.id);
+                    if (resIdx > -1) resources.splice(resIdx, 1);
+                    
+                    // Re-calculate family naming (1/2, 2/2, etc)
+                    OL.refreshFamilyNaming(targetRes, resources);
+                    OL.syncLogicPorts();
+                });
+
+                OL.autoAlignNodes(false);
+                OL.renderVisualizer();
+                return; // Exit early, merge complete
+            }
+        }
+
+        // 🗄️ 2. BENCH/SHELF LOGIC
         const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
         const isOverTopShelf = dropPointEl?.closest('#global-shelf');
 
-        if (isOverWorkbench) {
+        if (isOverWorkbench || isOverTopShelf) {
             res.isGlobal = true;
-            res.isTopShelf = false; 
+            res.isTopShelf = !!isOverTopShelf;
             res.stageId = null;
             delete res.coords;
         } 
-        else if (isOverTopShelf) {
-            res.isGlobal = true;
-            res.isTopShelf = true;
-            res.stageId = null;
-            delete res.coords;
-        }
         else {
+            // 🗺️ 3. CANVAS DROP LOGIC
             const rect = canvas.getBoundingClientRect();
-            const zoom = OL.state.v2.zoom || 1;
-            
-            // Calculate coordinates relative to the canvas
             const canvasX = (uE.clientX - rect.left) / zoom;
             const canvasY = (uE.clientY - rect.top) / zoom;
 
             res.isGlobal = false;
-            res.isTopShelf = false;
-            res.coords = { 
-                x: Math.round(canvasX - 40), 
-                y: Math.round(canvasY) 
-            };
+            res.coords = { x: Math.round(canvasX - 40), y: Math.round(canvasY) };
             
-            // Identify Stage (Lane) AND Column
             let accX = 0;
-            const COLUMN_WIDTH = 300; // Ensure this matches your autoAlignNodes constant
+            const COLUMN_WIDTH = 300; 
 
             for (let s of stages) {
                 const w = s.width || 320;
-                // Check if mouse is within this lane
                 if (canvasX >= accX && canvasX <= accX + w) {
                     res.stageId = s.id;
-
-                    // 🚀 THE FIX: Calculate the intended column based on local X position
                     const localXInLane = canvasX - accX;
-                    // We subtract a small buffer (40px) and divide by column width
                     res._col = Math.floor(Math.max(0, localXInLane - 40) / COLUMN_WIDTH);
-                    
                     break;
                 }
                 accX += w;
             }
         }
 
-        // 💾 Trigger the Cloud Save
-        await OL.updateAndSync(() => {
-            console.log("☁️ Syncing position and column...");
-        });
-
-        // 🎨 Run autoAlign with 'false' so it respects the _col we just calculated
-        // but still tidies the Y (vertical) axis.
-        OL.autoAlignNodes(false);
+        await OL.updateAndSync(() => { OL.autoAlignNodes(false); });
         OL.renderVisualizer();
     };
 
@@ -7776,16 +7780,31 @@ OL.renderVisualizer = function() {
     const mainArea = document.getElementById('mainContent');
     if (!mainArea) return;
 
+    const client = getActiveClient();
+    if (!client) return; // Guard against null client
+
     const data = OL.getCurrentProjectData();
     const stages = data.stages || [];
     const resources = data.resources || [];
 
-    const isAnyExpanded = state.v2.expandedNodes.size > 0;
+    // 🏷️ Extract Unique Values for Filter Dropdowns
+    const types = [...new Set(resources.map(r => r.type))].filter(Boolean).sort();
+    const apps = [...new Set(resources.map(r => r.integration?.app))].filter(Boolean).sort();
+    const objects = [...new Set(resources.map(r => r.integration?.object))].filter(Boolean).sort();
+    const verbs = [...new Set(resources.map(r => r.integration?.verb))].filter(Boolean).sort();
+    const assignees = [...new Set([
+        ...resources.map(r => r.assigneeName),
+        ...resources.flatMap(r => (r.steps || []).map(s => s.assigneeName))
+    ])].filter(Boolean).sort();
+
+    const isAnyExpanded = resources.some(r => r.isExpanded);
     const trayOpen = state.ui.sidebarOpen;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
     const toggleIcon = trayOpen ? '🔳' : '⬜';
+    const tidyIcon = '🧹';
+    const filterIcon = '📶';
 
-    // 1. 🏗️ BUILD THE UI SHELL (Simplified)
+    // 1. 🏗️ BUILD THE UI SHELL
     if (!document.getElementById('v2-viewport')) {
         mainArea.innerHTML = `
             <div class="v2-ui-overlay" style="position: absolute; top: 20px; left: 20px; z-index: 5000; pointer-events: none;">
@@ -7795,8 +7814,11 @@ OL.renderVisualizer = function() {
                             <span>🔍</span>
                             <input type="text" id="canvas-filter-input" placeholder="Search map..." oninput="OL.filterCanvasNodes(this.value)">
                         </div>
+                        <button id="filter-menu-btn" class="btn tiny soft" onclick="OL.toggleFilterMenu(event)">
+                            ${filterIcon} Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
+                        </button>
                         <button class="btn primary tiny" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
-                        <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy">🪄</button>
+                        <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy">${tidyIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
                         <div class="divider-v"></div>
@@ -7804,10 +7826,46 @@ OL.renderVisualizer = function() {
                         <button class="btn soft tiny" onclick="OL.zoom(-0.1)">-</button>
                     </div>
                 </div>
+                <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+                    <button class="btn tiny danger soft" onclick="OL.clearAllFilters()" style="margin-right: 5px;">
+                        ✕ Clear
+                    </button>
+                    <select id="filter-type" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">All Types</option>
+                        ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
+                    </select>
+                    <select id="filter-app" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">All Apps</option>
+                        ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
+                    </select>
+                    <select id="filter-assignee" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">All Owners</option>
+                        ${assignees.map(a => `<option value="${a}">${a}</option>`).join('')}
+                    </select>
+                    <select id="filter-logic" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">Any Logic</option>
+                        <option value="has">With λ Logic</option>
+                    </select>
+                    
+                    <select id="filter-delay" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">Any Timing</option>
+                        <option value="has">With ⏱ Delay</option>
+                    </select>
+
+                    <select id="filter-loop" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">Any Repeat</option>
+                        <option value="has">With ⟳ Loop</option>
+                    </select>
+
+                    <select id="filter-scoped" class="tiny-select" onchange="OL.runCanvasFilters()">
+                        <option value="">All Status</option>
+                        <option value="priced">Scoped ($)</option>
+                        <option value="unpriced">Unscoped</option>
+                    </select>
+                </div>
             </div>
 
             <div id="v2-viewport" class="${trayOpen ? '' : 'tray-closed'}">
-
               <aside id="global-shelf" class="global-shelf-container">
                   <div class="global-shelf-label">GLOBAL RESOURCES</div>
                   <div id="shelf-contents"></div>
@@ -7820,26 +7878,18 @@ OL.renderVisualizer = function() {
                           <input type="text" id="tray-search-input" placeholder="Search unmapped..." oninput="OL.renderVisualizer()" class="modal-input tiny">
                       </div>
                       <div id="workbench-contents" class="workbench-contents"></div>
-                      <div id="unmap-zone">
-                          ↓ DROP HERE TO UNMAP
-                      </div>
+                      <div id="unmap-zone">↓ DROP HERE TO UNMAP</div>
                   </aside>
 
                   <div id="v2-workspace">
                       <div id="v2-canvas-scroll-wrap">
-                          <div id="v2-canvas">                    
+                          <div id="v2-canvas">                     
                               <div id="v2-stage-layer"></div>
                               <div id="v2-node-layer"></div>
                               <svg id="v2-connections">
                                   <defs>
-                                      <marker id="arrowhead" 
-                                              markerWidth="10" 
-                                              markerHeight="15" 
-                                              refX="5" 
-                                              refY="5" 
-                                              orient="auto-start-reverse" 
-                                              markerUnits="userSpaceOnUse">
-                                          <path d="M0,0 L10,5 L0,10 L2,5 Z" fill="var(--accent)" />
+                                      <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+                                          <path d="M0,0 L10,3.5 L0,7 Z" fill="var(--accent)" />
                                       </marker>
                                   </defs>
                                   <g id="line-group"></g>
@@ -7849,39 +7899,26 @@ OL.renderVisualizer = function() {
                   </div>
 
                   <aside id="v2-inspector-panel">
-                      <div id="inspector-content">
-                          <div class="empty-state">Select a step to inspect</div>
-                      </div>
+                      <div id="inspector-content"><div class="empty-state">Select a step to inspect</div></div>
                   </aside>
               </div>
-          </div>
-          <div id="drag-indicator"></div>
+            </div>
         `;
-        // ❌ OL.initV2Panning() is REMOVED
     }
 
-    const searchTerm = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
     const shelfContents = document.getElementById('shelf-contents');
     const workbenchContents = document.getElementById('workbench-contents');
     const nodeLayer = document.getElementById('v2-node-layer');
-    const shelfLayer = document.getElementById('shelf-contents');
     const stageLayer = document.getElementById('v2-stage-layer');
     const canvas = document.getElementById('v2-canvas');
+    const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
     
-    nodeLayer.innerHTML = '';
-    shelfLayer.innerHTML = '';
-    stageLayer.innerHTML = '';
-
-
-    // Clear all layers
     [shelfContents, workbenchContents, nodeLayer, stageLayer].forEach(el => { if(el) el.innerHTML = ''; });
 
     // 🎯 2. CANVAS WIDTH MATH
     const totalCanvasWidth = stages.reduce((acc, s) => acc + (s.width || 320), 0) + 600;
-  
     if (canvas) {
         canvas.style.width = `${totalCanvasWidth}px`;
-        // Apply ONLY zoom, no more pan translation
         canvas.style.transform = `scale(${OL.state.v2.zoom})`;
     }
 
@@ -7892,9 +7929,7 @@ OL.renderVisualizer = function() {
         div.style.width = `${s.width || 320}px`;
         div.innerHTML = `
             <div class="lane-label">
-                <span contenteditable="true" spellcheck="false" onblur="OL.renameStage(${idx}, this.innerText)">
-                    ${esc(s.name)}
-                </span>
+                <span contenteditable="true" spellcheck="false" onblur="OL.renameStage(${idx}, this.innerText)">${esc(s.name)}</span>
                 <button class="delete-lane-btn" onclick="event.stopPropagation(); OL.deleteStage(${idx})">×</button>
             </div>
             <div class="lane-insert-trigger" onclick="event.stopPropagation(); OL.addStageBetween(${idx + 1})">
@@ -7906,122 +7941,74 @@ OL.renderVisualizer = function() {
 
     // --- 📇 4. RENDER RESOURCES ---
     resources.forEach(res => {
-        const div = document.createElement('div');
-        div.id = `v2-node-${res.id}`;
         const isExpanded = res.isExpanded || false;
         
-        // 🎨 1. Assign classes (No inline styles)
+        // Handle Tray Filtering
+        if (res.isGlobal && !res.isTopShelf && traySearch && !res.name.toLowerCase().includes(traySearch)) return;
+
+        const div = document.createElement('div');
+        div.id = `v2-node-${res.id}`;
         div.className = `v2-node-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''}`;
         
-        // 📍 2. Position for Canvas only
         if (!res.isGlobal && res.coords) {
             div.style.left = `${res.coords.x}px`;
             div.style.top = `${res.coords.y}px`;
         }
 
-        // 🔢 3. Part Numbering (1/2, etc)
         const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
 
-        // 🏗️ 4. Build Content
         div.innerHTML = `
             <div class="v2-node-header">
                 <div class="step-row-content">
-                    <b>${esc(res.name)}</b>
+                    <b class="res-name-text">${esc(res.name)}</b>
                     ${numberingHtml}
                 </div>
                 <small class="tiny muted uppercase">${esc(res.type || 'Resource')}</small>
             </div>
-        `;
-
-        // 📝 5. Render Steps Preview
-        const preview = document.createElement('div');
-        preview.className = 'v2-steps-preview';
-        preview.style.display = isExpanded ? 'flex' : 'none'; // Only inline needed for toggle
-
-        (res.steps || []).forEach((s, i) => {
-            const item = document.createElement('div');
-            item.className = 'v2-step-item';
-            item.setAttribute('data-step-id', `${res.id}-${i}`);
-            
-            const selfLoop = s.logic?.out?.find(l => l.targetId === `${res.id}-${i}` && l.type === 'loop');
-            const loopHtml = selfLoop ? `<span class="v2-loop-pill">↺ ${esc(selfLoop.loopLimit || '')}</span>` : '';
-
-            item.innerHTML = `
-                <div class="step-row-content">
-                    <span>• ${esc(s.name || 'New Step')} ${loopHtml}</span>
-                    <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+            <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
+                ${(res.steps || []).map((s, i) => `
+                    <div class="v2-step-item" data-step-id="${res.id}-${i}" onclick="event.stopPropagation(); OL.openInspector('${res.id}', ${i})">
+                        <div class="step-row-content">
+                            <span>• ${esc(s.name || 'New Step')}</span>
+                            <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                        </div>
+                    </div>
+                    ${i < res.steps.length - 1 ? `<div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})"><div class="split-icon">✂️</div></div>` : ''}
+                `).join('')}
+            </div>
+            <div class="v2-card-footer">
+                <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
+                <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">
+                    ${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}
                 </div>
-            `;
-
-            item.onclick = (e) => { e.stopPropagation(); OL.openInspector(res.id, i); };
-            item.onmousedown = (e) => e.stopPropagation();
-            preview.appendChild(item);
-
-            // Scissor Divider
-            if (i < res.steps.length - 1) {
-                const divider = document.createElement('div');
-                divider.className = 'v2-step-divider';
-                divider.innerHTML = `<div class="split-icon">✂️</div>`;
-                divider.onclick = (e) => {
-                    e.stopPropagation();
-                    OL.splitCardAtStep(res.id, i);
-                };
-                divider.onmousedown = (e) => e.stopPropagation();
-                preview.appendChild(divider);
-            }
-        });
-        div.appendChild(preview);
-
-        // 🏷️ 6. Footer (Add Button & Step Badge)
-        const footer = document.createElement('div');
-        footer.className = 'v2-card-footer';
-        footer.innerHTML = `
-            <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
-            <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">
-                ${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}
             </div>
         `;
-        div.appendChild(footer);
 
-        // 🖱️ 7. Drag Logic
         div.onmousedown = (e) => {
-            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-step-item, .v2-add-step-btn')) return;
+            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-step-item, .v2-add-step-btn, .delete-step-btn')) return;
             e.stopPropagation();
             OL.initWBMotion(e, res.id);
         };
 
-        // 🚀 8. THE ROUTER (The actual fix)
         if (res.isGlobal) {
-            if (res.isTopShelf) {
-                // 📌 Pinned Top Shelf
-                shelfContents.appendChild(div);
-            } else {
-                // 🗄️ Left Workbench (Tray)
-                const searchTerm = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
-                if (searchTerm && !res.name.toLowerCase().includes(searchTerm)) return;
-                
-                workbenchContents.appendChild(div);
-            }
+            if (res.isTopShelf) shelfContents.appendChild(div);
+            else workbenchContents.appendChild(div);
         } else {
-            // 🗺️ Center Canvas
             nodeLayer.appendChild(div);
         }
     });
 
-    // --- 🚀 5. VIEWPORT SYNC ---
+    // --- 🚀 5. FINAL PASS ---
     if (OL.state.v2.pan) {
         const { x, y } = OL.state.v2.pan;
         canvas.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${OL.state.v2.zoom})`;
     }
 
-    // 1. Instant attempt
+    // Refresh connections and run any active filters
     OL.drawConnections();
-
-    // 2. Delayed attempt (after images and layouts settle)
-    setTimeout(() => {
-        console.log("🔄 [System] Final Connection Pass...");
-        OL.drawConnections();
-    }, 500);
+    if (document.getElementById('canvas-filter-input')?.value) {
+        OL.filterCanvasNodes(document.getElementById('canvas-filter-input').value);
+    }
 };
 
 window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
@@ -9137,9 +9124,6 @@ OL.toggleFilterMenu = function(e) {
     
     const isShowing = menu.style.display === 'flex';
     
-    // Hide context menu if open
-    document.getElementById('v2-context-toolbar').style.display = 'none';
-    
     menu.style.display = isShowing ? 'none' : 'flex';
     btn.classList.toggle('active', !isShowing);
 };
@@ -9157,28 +9141,24 @@ OL.clearAllCanvasFilters = function() {
     document.getElementById('filter-menu-btn').classList.remove('active');
 };
 
+// 🔍 Filter by Text (Search Bar)
 OL.filterCanvasNodes = function(query) {
-    const q = query.toLowerCase().trim();
+    // 1. Store the query in state so the renderer can see it
+    state.v2.currentSearchQuery = query.toLowerCase().trim();
+    
+    // 2. Don't full render (it's too slow). Just apply classes to what's already there.
     const cards = document.querySelectorAll('.v2-node-card');
-    const connections = document.querySelectorAll('.v2-connection-group');
-
-    if (!q) {
-        // Reset everything if search is empty
-        cards.forEach(c => c.classList.remove('node-dimmed', 'node-matched'));
-        connections.forEach(l => l.style.opacity = "1");
-        return;
-    }
+    const q = state.v2.currentSearchQuery;
 
     cards.forEach(card => {
-        const id = card.id.replace('v2-node-', '');
-        const res = OL.getResourceById(id);
-        if (!res) return;
-
-        // 🔍 Deep Search: Check name OR internal steps
-        const nameMatch = (res.name || "").toLowerCase().includes(q);
-        const stepMatch = (res.steps || []).some(s => (s.name || s.text || "").toLowerCase().includes(q));
-
-        if (nameMatch || stepMatch) {
+        if (!q) {
+            card.classList.remove('node-dimmed', 'node-matched');
+            return;
+        }
+        
+        // Check text content of the card
+        const text = card.innerText.toLowerCase();
+        if (text.includes(q)) {
             card.classList.remove('node-dimmed');
             card.classList.add('node-matched');
         } else {
@@ -9186,65 +9166,44 @@ OL.filterCanvasNodes = function(query) {
             card.classList.remove('node-matched');
         }
     });
-
-    // 🕸️ Optional: Dim connections that don't lead to a match
-    connections.forEach(line => {
-        line.style.opacity = "0.1";
+    
+    // 3. Dim the lines
+    document.querySelectorAll('#v2-connections path').forEach(p => {
+        p.style.opacity = q ? "0.05" : "0.7";
     });
 };
 
+// 🎯 Filter by Attributes (Dropdowns)
 OL.runCanvasFilters = function() {
-    const query = document.getElementById('canvas-filter-input')?.value.toLowerCase().trim();
     const typeF = document.getElementById('filter-type')?.value;
     const appF = document.getElementById('filter-app')?.value;
-    const objF = document.getElementById('filter-object')?.value;
-    const verbF = document.getElementById('filter-verb')?.value;
-    const assigneeF = document.getElementById('filter-assignee')?.value;
+    const ownerF = document.getElementById('filter-assignee')?.value;
     const logicF = document.getElementById('filter-logic')?.value;
-    const delayF = document.getElementById('filter-delay')?.value;
-    const loopF = document.getElementById('filter-loop')?.value;
-    const scopedF = document.getElementById('filter-scoped')?.value;
 
     const cards = document.querySelectorAll('.v2-node-card');
-    const connections = document.querySelectorAll('.v2-connection-group');
+    const data = OL.getCurrentProjectData().resources;
+    
+    let activeFilters = 0;
+    if (typeF) activeFilters++;
+    if (appF) activeFilters++;
+    if (ownerF) activeFilters++;
+    if (logicF) activeFilters++;
+
+    document.getElementById('active-filter-count').innerText = activeFilters;
+    document.getElementById('active-filter-count').style.display = activeFilters > 0 ? 'inline-block' : 'none';
 
     cards.forEach(card => {
-        const id = card.id.replace('v2-node-', '');
-        const res = OL.getResourceById(id);
+        const resId = card.id.replace('v2-node-', '');
+        const res = data.find(r => String(r.id) === String(resId));
         if (!res) return;
 
-        // 🔍 1. Metadata Checks
-        const matchesSearch = !query || 
-            (res.name || "").toLowerCase().includes(query) || 
-            (res.steps || []).some(s => (s.name || s.text || "").toLowerCase().includes(query));
-        
-        const matchesType = !typeF || res.type === typeF;
-        const matchesApp = !appF || res.integration?.app === appF;
-        const matchesObj = !objF || res.integration?.object === objF;
-        const matchesVerb = !verbF || res.integration?.verb === verbF;
-        
-        // 🔍 2. Assignee (Check root or any sub-step)
-        const matchesAssignee = !assigneeF || 
-            res.assigneeName === assigneeF || 
-            (res.steps || []).some(s => s.assigneeName === assigneeF);
+        let match = true;
+        if (typeF && res.type !== typeF) match = false;
+        if (appF && res.integration?.app !== appF) match = false;
+        if (ownerF && res.assigneeName !== ownerF) match = false;
+        if (logicF === 'has' && (!res.steps || !res.steps.some(s => s.logic?.out?.length > 0))) match = false;
 
-        // 🔍 3. Conditional Presence (Check Leash root OR Outcomes array)
-        const hasLogic = !!(res.logic || (res.outcomes || []).some(o => o.logic));
-        const matchesLogic = !logicF || (logicF === 'has' ? hasLogic : !hasLogic);
-
-        const hasDelay = !!(res.delay || (res.outcomes || []).some(o => o.delay));
-        const matchesDelay = !delayF || (delayF === 'has' ? hasDelay : !hasDelay);
-
-        const hasLoop = !!(res.isLoop || res.loop || (res.outcomes || []).some(o => o.isLoop || o.loop));
-        const matchesLoop = !loopF || (loopF === 'has' ? hasLoop : !hasLoop);
-
-        // 🔍 4. Scoped Status
-        const isScoped = OL.isResourceInScope(res.id);
-        const matchesScoped = !scopedF || (scopedF === 'priced' ? isScoped : !isScoped);
-
-        // 🏁 Result
-        if (matchesSearch && matchesType && matchesApp && matchesObj && matchesVerb && 
-            matchesAssignee && matchesLogic && matchesDelay && matchesLoop && matchesScoped) {
+        if (match) {
             card.classList.remove('node-dimmed');
             card.classList.add('node-matched');
         } else {
@@ -9252,10 +9211,35 @@ OL.runCanvasFilters = function() {
             card.classList.remove('node-matched');
         }
     });
+};
 
-    // Dim connections if any filter is active
-    const isFiltered = query || typeF || appF || objF || verbF || assigneeF || logicF || delayF || loopF || scopedF;
-    connections.forEach(l => l.style.opacity = isFiltered ? "0.1" : "1");
+OL.clearAllFilters = function() {
+    // 1. Clear the text search
+    const searchInput = document.getElementById('canvas-filter-input');
+    if (searchInput) searchInput.value = "";
+    
+    // 2. Reset all dropdowns in the submenu
+    const selects = document.querySelectorAll('#v2-filter-submenu select');
+    selects.forEach(select => {
+        select.selectedIndex = 0;
+    });
+
+    // 3. Reset the counter pill
+    const countEl = document.getElementById('active-filter-count');
+    if (countEl) {
+        countEl.innerText = "0";
+        countEl.style.display = 'none';
+    }
+
+    // 4. Force a re-render to remove all 'node-dimmed' classes
+    OL.renderVisualizer();
+    
+    // 5. Restore line opacity
+    document.querySelectorAll('#v2-connections path').forEach(p => {
+        p.style.opacity = "0.7";
+    });
+
+    console.log("🧹 Filters cleared and visualizer reset.");
 };
 
 OL.openBrainDump = function() {
@@ -9624,73 +9608,48 @@ OL.jumpToScopingItem = function(nodeId) {
     window.renderScopingSheet();
 };
 
-OL.toggleMasterExpand = function() {
-    const isVault = window.location.hash.includes('vault');
-    const client = getActiveClient();
-    const source = isVault ? state.master.resources : client.projectData.localResources;
+OL.toggleMasterExpand = async function() {
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
     
-    const hasExpanded = state.v2.expandedNodes.size > 0;
-    const stepHeight = 32; 
-    const laneBuffer = 150; // Nodes within 150px horizontally are considered in the same "lane"
+    // 1. Check current state: If any card with steps is currently expanded, 
+    // our goal is to COLLAPSE ALL. Otherwise, EXPAND ALL.
+    const isAnyExpanded = resources.some(r => r.isExpanded && r.steps?.length > 0);
+    const newState = !isAnyExpanded;
 
-    // 1. Get all nodes currently on the canvas
-    const activeNodes = [...source].filter(n => n.coords);
-    const padding = 20;
+    console.log(newState ? "📂 Global Action: Expand All" : "📁 Global Action: Collapse All");
 
-    // 2. Identify unique vertical lanes
-    const lanes = [];
-    activeNodes.forEach(node => {
-        let foundLane = lanes.find(l => Math.abs(l.x - node.coords.x) < laneBuffer);
-        if (foundLane) {
-            foundLane.nodes.push(node);
-        } else {
-            lanes.push({ x: node.coords.x, nodes: [node] });
+    // 2. Update the data model for EVERY resource
+    resources.forEach(node => {
+        if (node.steps && node.steps.length > 0) {
+            node.isExpanded = newState;
+            
+            // Sync the tracking Set for the inspector/other UI logic
+            if (newState) {
+                state.v2.expandedNodes.add(node.id);
+            } else {
+                state.v2.expandedNodes.delete(node.id);
+            }
         }
     });
 
-    // 3. Process each lane independently
-    lanes.forEach(lane => {
-        // Sort nodes in THIS lane top-to-bottom
-        lane.nodes.sort((a, b) => a.coords.y - b.coords.y);
-
-        let runningOffset = 0;
-
-        lane.nodes.forEach(node => {
-            if (hasExpanded) {
-                // 🚀 COLLAPSE LOGIC (Pull up)
-                node.coords.y -= runningOffset;
-                if (state.v2.expandedNodes.has(node.id)) {
-                    runningOffset += (node.steps?.length || 0) * stepHeight + padding;
-                }
-            } else {
-                // 🚀 EXPAND LOGIC (Push down)
-                node.coords.y += runningOffset;
-                if (node.steps && node.steps.length > 0) {
-                    runningOffset += node.steps.length * stepHeight + padding;
-                }
-            }
-        });
+    // 3. Save to Cloud & Tidy the Layout
+    // Wrapping in updateAndSync ensures the 'bounce-back' doesn't ruin the alignment
+    await OL.updateAndSync(() => {
+        // Tidy the Y-axis gaps now that card heights have changed
+        if (typeof OL.autoAlignNodes === 'function') {
+            OL.autoAlignNodes(false); 
+        }
     });
 
-    // 4. Update the expanded state set
-    if (hasExpanded) {
-        state.v2.expandedNodes.clear();
-    } else {
-        activeNodes.forEach(n => {
-            if (n.steps?.length > 0) state.v2.expandedNodes.add(n.id);
-        });
-    }
-
-    // 5. Align, Persist and Paint
-    OL.renderVisualizer(isVault);
-
-    // 3. Then we wait 50ms for the DOM to calculate the new heights, then tidy
+    // 4. Repaint the Canvas
+    OL.renderVisualizer();
+    
+    // 5. Urgent Connection Pass
+    // Wait for the DOM to settle so anchor points are accurate
     setTimeout(() => {
-        OL.autoAlignNodes();
-        OL.persist(); // Save positions once they are correct
-    }, 50);
-
-    setTimeout(() => OL.drawConnections(), 150);
+        if (typeof OL.drawConnections === 'function') OL.drawConnections();
+    }, 150);
 };
 
 OL.toggleWorkbenchTray = function() {
