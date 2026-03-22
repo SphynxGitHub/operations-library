@@ -8665,36 +8665,49 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
 };
 
 OL.updateAtomicStep = async function(resId, stepId, field, value) {
-    const client = getActiveClient();
-    const projectResources = client?.projectData?.resources || [];
+    // 1. Get the current project data directly
+    const data = OL.getCurrentProjectData(); 
+    const projectResources = data.resources || [];
     
-    // 1. Find the resource
-    let res = projectResources.find(r => String(r.id) === String(resId));
-    if (!res) res = (state.master?.resources || []).find(r => String(r.id) === String(resId));
+    // 2. 🔍 Find the specific instance on the map
+    // We use String() to avoid Type mismatches (Number vs String)
+    const res = projectResources.find(r => String(r.id) === String(resId));
 
-    if (!res || !res.steps) {
-        console.error("❌ Resource not found:", resId);
+    if (!res) {
+        console.error("❌ Resource not found in Project Data:", resId);
+        // Fallback: Check if it's a Master resource being edited in the Library
+        const masterRes = (state.master?.resources || []).find(r => String(r.id) === String(resId));
+        if (!masterRes) return;
+        
+        // If editing a master, point 'res' to that
+        var targetRes = masterRes;
+    } else {
+        var targetRes = res;
+    }
+
+    if (!targetRes.steps) {
+        console.error("❌ This resource has no steps array:", resId);
         return;
     }
 
-    // 2. 🚀 THE FIX: Find the step by its ID string, not index
-    const step = res.steps.find(s => String(s.id) === String(stepId));
+    // 3. 🎯 Find the Step by ID
+    const step = targetRes.steps.find(s => String(s.id) === String(stepId));
     
     if (!step) {
-        console.error("❌ Step ID not found in resource:", stepId);
+        console.error("❌ Step ID not found in this resource:", stepId);
         return;
     }
 
-    // 3. Apply the update
+    // 4. Update the value
     step[field] = value;
-    console.log(`✅ Saved ${field}: "${value}" to Step ${stepId}`);
+    console.log(`✅ ${field} updated to: ${value}`);
 
-    // 4. Persist to Firebase
+    // 5. Persist & Refresh
     await OL.persist();
-
-    // 5. Refresh Map if visible
+    
+    // If we are on the map, redraw to show the new name/desc
     if (window.location.hash.includes('visualizer')) {
-        OL.renderVisualizer(); 
+        OL.renderVisualizer();
     }
 };
 
