@@ -9362,10 +9362,10 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                    ${isReadOnly ? 'readonly' : ''}
                    placeholder="${isReadOnly ? 'No condition' : 'Condition (e.g. If Approved)'}" 
                    style="width: 100%; margin-bottom: 8px; font-size: 11px; ${isReadOnly ? 'border-color: transparent; background: transparent; pointer-events: none; opacity: 0.6;' : ''}"
-                   onblur="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'rule', this.value)">
+                   onblur="OL.updateStepLogic('${resId}', '${stepIdx}', '${dir}', ${i}, 'rule', this.value)">
             
             ${!isReadOnly ? `
-                <select onchange="OL.updateStepTarget('${resId}', ${stepIdx}, '${dir}', ${i}, this.value)" 
+                <select onchange="OL.updateStepTarget('${resId}', '${stepIdx}', '${dir}', ${i}, this.value)" 
                         style="width:100%; background:var(--bg-panel); color:var(--text-muted); border:1px solid var(--border); border-radius:4px; font-size: 11px;">
                     <option value="">-- Change Target --</option>
                     <option value="${myFullId}" ${String(targetId) === String(myFullId) ? 'selected' : ''}>[Current Step / Loopback]</option>
