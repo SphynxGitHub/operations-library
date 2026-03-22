@@ -8171,7 +8171,10 @@ OL.addNewStepToCard = async function(resId) {
     if (!res.steps) res.steps = [];
     res.isExpanded = true; // Force visibility
 
+    const newStepId = 'step-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  
     res.steps.push({
+        id: newStepId,
         name: 'New Step',
         notes: '',
         logic: { in: [], out: [] }
