@@ -9772,17 +9772,14 @@ OL.drawConnections = function() {
     const lineGroup = document.getElementById('line-group');
     const shelfLineGroup = document.getElementById('shelf-line-group');
     const shelfEl = document.getElementById('global-shelf');
-    
     if (!svg || !lineGroup) return;
 
-    // 1. Clear both groups
+    // 1. Reset
     lineGroup.innerHTML = ''; 
     if (shelfLineGroup) shelfLineGroup.innerHTML = '';
 
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
-    let lineCount = 0;
-
     const canvas = document.getElementById('v2-canvas');
     const canvasRect = canvas?.getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
@@ -9813,53 +9810,40 @@ OL.drawConnections = function() {
 
                 let start, end, sSide, tSide;
 
-               // 📐 2. THE BRIDGE LOGIC (Strict Centering)
+                // 📐 2. COORDINATE CALCULATION
                 if (isSourceGlobal && !isTargetGlobal) {
                     tSide = 'top';
-                    const targetPoint = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
+                    end = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
                     
-                    const sRect = sourceEl.getBoundingClientRect(); // The card in the blue bar
-                    const shelfRect = shelfEl.getBoundingClientRect(); // The blue bar itself
-                    const connectionsRect = svg.getBoundingClientRect(); // The canvas SVG
-                    
-                    // 🎯 STEP 1: Find the exact horizontal center of the card on the SCREEN
-                    const viewportCenterX = sRect.left + (sRect.width / 2);
+                    const sRect = sourceEl.getBoundingClientRect();
+                    const shelfRect = shelfEl.getBoundingClientRect();
+                    const visualMidX = sRect.left + (sRect.width / 2);
 
-                    // 🎯 STEP 2: Align the SHELF line (Top Blue Bar)
-                    if (shelfLineGroup && shelfEl) {
-                        // Position relative to the blue bar's left edge
-                        const shelfStartX = viewportCenterX - shelfRect.left;
-                        const shelfStartY = sRect.bottom - shelfRect.top - 10; 
-                        const shelfEndY = shelfRect.height;
-
+                    // Shelf Line
+                    if (shelfLineGroup) {
+                        const shelfStartX = visualMidX - shelfRect.left;
                         const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        shelfPath.setAttribute('d', `M ${shelfStartX} ${shelfStartY} L ${shelfStartX} ${shelfEndY}`);
+                        shelfPath.setAttribute('d', `M ${shelfStartX} ${sRect.bottom - shelfRect.top - 5} L ${shelfStartX} ${shelfRect.height}`);
                         shelfPath.setAttribute('stroke', 'var(--text-dim)');
                         shelfPath.setAttribute('stroke-width', '2');
                         shelfPath.setAttribute('stroke-dasharray', '5,5');
                         shelfLineGroup.appendChild(shelfPath);
                     }
-
-                    // 🎯 STEP 3: Align the CANVAS line (White Area)
-                    // Position relative to the canvas SVG's left edge, then adjusted for zoom
-                    const canvasStartX = (viewportCenterX - connectionsRect.left) / zoom;
-                    
+                    // Canvas Line
+                    const canvasStartX = (visualMidX - svg.getBoundingClientRect().left) / zoom;
                     start = { x: canvasStartX, y: 0 };
-                    end = targetPoint;
-                }
+                } 
                 else if (!isSourceGlobal && isTargetGlobal) {
-                    // ⬆️ Canvas -> Global
                     sSide = 'top';
                     start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                    
                     const tRect = targetEl.getBoundingClientRect();
-                    const endX = (tRect.left - canvasRect.left + (tRect.width / 2)) / zoom;
-                    end = { x: endX, y: 0 };
-                    tSide = 'top';
+                    const shelfRect = shelfEl.getBoundingClientRect();
+                    const visualMidX = tRect.left + (tRect.width / 2);
 
-                    if (shelfLineGroup && shelfEl) {
-                        const shelfRect = shelfEl.getBoundingClientRect();
-                        const shelfEndX = tRect.left - shelfRect.left + (tRect.width / 2);
-                        // Start at shelf bottom, end at bottom of target card
+                    // Shelf Line
+                    if (shelfLineGroup) {
+                        const shelfEndX = visualMidX - shelfRect.left;
                         const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         shelfPath.setAttribute('d', `M ${shelfEndX} ${shelfRect.height} L ${shelfEndX} ${tRect.bottom - shelfRect.top}`);
                         shelfPath.setAttribute('stroke', 'var(--text-dim)');
@@ -9867,9 +9851,12 @@ OL.drawConnections = function() {
                         shelfPath.setAttribute('stroke-dasharray', '5,5');
                         shelfLineGroup.appendChild(shelfPath);
                     }
+                    // Canvas Line
+                    const canvasEndX = (visualMidX - svg.getBoundingClientRect().left) / zoom;
+                    end = { x: canvasEndX, y: 0 };
+                    tSide = 'top';
                 } 
                 else if (targetRes.coords && sourceRes.coords) {
-                    // ↔️ Standard Canvas Logic
                     const dx = targetRes.coords.x - sourceRes.coords.x;
                     const dy = targetRes.coords.y - sourceRes.coords.y;
                     const isVertical = Math.abs(dx) < 100;
@@ -9893,16 +9880,15 @@ OL.drawConnections = function() {
                     if (tSide === 'top') targetY -= gap;
                     if (tSide === 'bottom') targetY += gap;
 
+                    // 📐 3. PATH CONSTRUCTION
                     let d;
+                    const dx = targetX - start.x;
+                    const dy = targetY - start.y;
                     if (isSourceGlobal || isTargetGlobal) {
                         const midY = (start.y + targetY) / 2;
                         d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
                     } else {
-                        const dx = targetX - start.x;
-                        const dy = targetY - start.y;
-                        const absDx = Math.abs(dx);
-                        const absDy = Math.abs(dy);
-                        
+                        const absDx = Math.abs(dx), absDy = Math.abs(dy);
                         if (sSide === 'right' && tSide === 'right') {
                             const sweep = Math.min(80, absDy * 0.4 + 30);
                             d = `M ${start.x} ${start.y} C ${start.x + sweep} ${start.y}, ${targetX + sweep} ${targetY}, ${targetX} ${targetY}`;
@@ -9920,28 +9906,52 @@ OL.drawConnections = function() {
 
                     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                     path.setAttribute('d', d);
-                    const isFocused = sourceEl.classList.contains('search-active') || (targetEl && targetEl.classList.contains('search-active'));
-                    path.setAttribute('stroke-width', isFocused ? '3' : '2.5');
-                    path.style.opacity = isSearchActive && !isFocused ? '0.15' : '0.7';
-
-                    if (isSourceGlobal || isTargetGlobal) {
-                        path.setAttribute('stroke-dasharray', '5,5');
-                        path.setAttribute('stroke', 'var(--text-dim)'); 
-                    } else {
-                        path.setAttribute('stroke', outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
-                    }
-
                     path.setAttribute('fill', 'none');
                     path.setAttribute('marker-end', 'url(#arrowhead)');
                     path.setAttribute('class', 'path-flow');
+                    
+                    const isFocused = sourceEl.classList.contains('search-active') || (targetEl && targetEl.classList.contains('search-active'));
+                    path.setAttribute('stroke-width', isFocused ? '3' : '2.5');
+                    path.style.opacity = isSearchActive && !isFocused ? '0.15' : '0.7';
+                    path.setAttribute('stroke', (isSourceGlobal || isTargetGlobal) ? 'var(--text-dim)' : (outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)'));
+                    if (isSourceGlobal || isTargetGlobal) path.setAttribute('stroke-dasharray', '5,5');
+
                     lineGroup.appendChild(path);
-                    lineCount++;
+                    console.log('Checking rules for:', outLogic.targetId, outLogic);
+
+                    // 🧩 4. INTEGRATED LOGIC ICON (Guaranteed Rendering)
+                    // 🔍 Find the rules (Checking multiple common locations)
+                    if (outLogic.rule && outLogic.rule.trim() !== "") {
+                        let midX, midY;
+                        
+                        try {
+                            // Essential: Path must be in DOM for this to work
+                            const pathLength = path.getTotalLength();
+                            if (pathLength > 0) {
+                                const pt = path.getPointAtLength(pathLength / 2);
+                                midX = pt.x;
+                                midY = pt.y;
+                            } else {
+                                // Manual Midpoint Fallback
+                                midX = (start.x + targetX) / 2;
+                                midY = (start.y + targetY) / 2;
+                            }
+                        } catch (e) {
+                            midX = (start.x + targetX) / 2;
+                            midY = (start.y + targetY) / 2;
+                        }
+
+                        const isLoop = outLogic.type === 'loop';
+                        const limit = outLogic.limit || '';
+
+                        // Pass outLogic.rule (the string) to your function
+                        this.drawLogicIcon(lineGroup, midX, midY, outLogic.rule, isLoop, limit);
+                    }
                 }
             });
         });
     });
 };
-
 // 🚀 THE FIX: Attach to document so it works even if the element is rendered later
 document.addEventListener('scroll', (e) => {
     if (e.target && e.target.id === 'v2-canvas-scroll-wrap') {
@@ -9957,6 +9967,8 @@ document.addEventListener('scroll', (e) => {
 OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', `logic-gate-container ${isLoop ? 'is-loop-gate' : ''}`);
+    g.setAttribute('pointer-events', 'all'); // 🎯 Force hover detection
+    g.style.cursor = 'pointer';
     
     // 1. The Rule Label (Hover Reveal)
     const labelGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
