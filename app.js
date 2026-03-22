@@ -9475,29 +9475,37 @@ OL.getPartNumber = function(res) {
 };
 
 // ➕ Add Logic to a Step
-OL.addStepLogic = function(resId, stepIdx, direction) {
-    //Get the current project and return all resources
-    const resources = OL.getCurrentProjectData().resources || [];
-    //Find the current resource by resId (passed via step clicked)
+OL.addStepLogic = async function(resId, stepId, direction) {
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
     const res = resources.find(r => String(r.id) === String(resId));
-    //Find the current step by stepId (passed via step clicked)
-    const step = res?.steps?.[stepIdx];
-    //Check if step has logic holder; otherwise, add logic object
-    if (!step.logic) step.logic = { in: [], out: [] };
     
-    // Initialize with empty IDs so the dropdowns are ready
+    if (!res) return console.error("❌ Resource not found:", resId);
+
+    // Find the step by ID
+    const step = res.steps.find(s => String(s.id) === String(stepId));
+    
+    if (!step) {
+        console.error("❌ Step not found:", stepId);
+        return;
+    }
+
+    // 🛡️ Safety: Initialize objects if they are missing
+    if (!step.logic) step.logic = { in: [], out: [] };
+    if (!step.logic[direction]) step.logic[direction] = [];
+
+    // Create the new logic block
     const newItem = direction === 'out' 
-        ? { rule: '', targetId: '', type: 'link' } // Added default 'link' type
+        ? { rule: '', targetId: '', type: 'link' } 
         : { rule: '', sourceId: '', type: 'link' };
 
     step.logic[direction].push(newItem);
     
-    // 💾 2. Save to the database/localStorage
-    OL.save(); 
-    console.log(step.logic)
-    // 🔍 3. Refresh the Inspector UI
-    // This triggers the re-render so the user sees the new logic block immediately
-    this.openInspector(resId, stepIdx); 
+    // Save to Firebase
+    await OL.persist(); 
+    
+    // Refresh the Inspector to show the new rule row
+    this.openInspector(resId, step.id); 
 };
 
 // 💾 Update Logic Value (Rule or Target)
