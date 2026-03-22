@@ -7931,6 +7931,9 @@ OL.renderVisualizer = function() {
 
             <div id="v2-viewport" class="${trayOpen ? '' : 'tray-closed'}">
               <aside id="global-shelf" class="global-shelf-container">
+                  <svg id="v2-shelf-connections" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:-1;">
+                      <g id="shelf-line-group"></g>
+                  </svg>
                   <div class="global-shelf-label">GLOBAL RESOURCES</div>
                   <div id="shelf-contents"></div>
               </aside>
@@ -9719,53 +9722,74 @@ OL.closeInspector = function() {
 };
 
 // Helper to find the X/Y of a card's edge
-OL.getCardConnectionPoint = function(resId, stepIdx, side) {
-    // Attempt to find the specific step row
-    let el = document.querySelector(`[data-step-id="${resId}-${stepIdx}"]`);
+OL.getCardConnectionPoint = function(resId, stepTarget, side) {
+    // 1. Resolve Element: Handle both Step IDs and Step Indices
+    let el = document.querySelector(`[data-step-id="${resId}-${stepTarget}"]`);
     
-    // Fallback to the card shell if step is hidden, card is collapsed, or connecting to top/bottom
+    // 🎯 FALLBACK: Use main card if step is missing, hidden, or we want Top/Bottom flow
     if (!el || el.offsetParent === null || side === 'top' || side === 'bottom') {
         el = document.getElementById(`v2-node-${resId}`);
     }
+    
     if (!el) return null;
 
+    // 📐 2. COORDINATE MAPPING
     const canvas = document.getElementById('v2-canvas');
+    if (!canvas) return null;
+
     const rect = el.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
-    const zoom = OL.state.v2.zoom || 1;
+    const zoom = state.v2.zoom || 1;
 
+    // Normalize coordinates relative to the canvas origin
     const x = (rect.left - canvasRect.left) / zoom;
     const y = (rect.top - canvasRect.top) / zoom;
     const w = rect.width / zoom;
     const h = rect.height / zoom;
 
-    const buffer = 15; // Distance from the card edge
+    // 📏 3. SIDE OFFSETS
+    // Buffer is the distance the line "hovers" from the edge before the arrowhead
+    const buffer = 8; 
 
-    if (side === 'right')  return { x: x + w + buffer, y: y + (h / 2) };
-    if (side === 'left')   return { x: x - buffer,     y: y + (h / 2) };
-    if (side === 'top')    return { x: x + (w / 2),    y: y - buffer };
-    if (side === 'bottom') return { x: x + (w / 2),    y: y + h + buffer };
-    
-    return { x: x + w, y: y + h / 2 }; // Default right
+    switch (side) {
+        case 'right':  
+            return { x: x + w + buffer, y: y + (h / 2) };
+        case 'left':   
+            return { x: x - buffer,     y: y + (h / 2) };
+        case 'top':    
+            // Centered horizontally on the card top
+            return { x: x + (w / 2),    y: y - buffer };
+        case 'bottom': 
+            // Centered horizontally on the card bottom
+            return { x: x + (w / 2),    y: y + h + buffer };
+        default:
+            return { x: x + w, y: y + h / 2 };
+    }
 };
 
 OL.drawConnections = function() {
     const svg = document.getElementById('v2-connections');
     const lineGroup = document.getElementById('line-group');
+    const shelfLineGroup = document.getElementById('shelf-line-group');
+    const shelfEl = document.getElementById('global-shelf');
+    
     if (!svg || !lineGroup) return;
 
+    // 1. Clear both groups
     lineGroup.innerHTML = ''; 
+    if (shelfLineGroup) shelfLineGroup.innerHTML = '';
+
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
     let lineCount = 0;
 
-    const isSearchActive = !!document.getElementById('canvas-filter-input')?.value.trim() || 
-                           state.canvasMatches.length > 0;
+    const canvas = document.getElementById('v2-canvas');
+    const canvasRect = canvas?.getBoundingClientRect();
+    const zoom = state.v2.zoom || 1;
+    const isSearchActive = !!document.getElementById('canvas-filter-input')?.value.trim() || state.canvasMatches.length > 0;
 
     resources.forEach(sourceRes => {
         if (!sourceRes || !sourceRes.steps) return;
-
-        // 🚀 1. NEW: Check if the Source Card is hidden by a filter
         const sourceEl = document.getElementById(`v2-node-${sourceRes.id}`);
         if (sourceEl && sourceEl.classList.contains('filter-hidden')) return;
 
@@ -9774,7 +9798,6 @@ OL.drawConnections = function() {
 
             step.logic.out.forEach(outLogic => {
                 if (!outLogic || !outLogic.targetId) return;
-
                 const parts = outLogic.targetId.split('-');
                 const tStepIdx = parseInt(parts.pop()); 
                 const tResId = parts.join('-'); 
@@ -9785,127 +9808,151 @@ OL.drawConnections = function() {
                 const targetRes = resources.find(r => String(r.id) === String(tResId));
                 if (!targetRes || !targetRes.steps || !targetRes.steps[tStepIdx]) return;
 
-                if (targetRes.coords && sourceRes.coords) {
-                    // 📐 1. Calculate relative positions
+                const isSourceGlobal = !!sourceRes.isGlobal || !!sourceRes.isTopShelf;
+                const isTargetGlobal = !!targetRes.isGlobal || !!targetRes.isTopShelf;
+
+                let start, end, sSide, tSide;
+
+               // 📐 2. THE BRIDGE LOGIC (Strict Centering)
+                if (isSourceGlobal && !isTargetGlobal) {
+                    tSide = 'top';
+                    const targetPoint = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
+                    
+                    const sRect = sourceEl.getBoundingClientRect(); // The card in the blue bar
+                    const shelfRect = shelfEl.getBoundingClientRect(); // The blue bar itself
+                    const connectionsRect = svg.getBoundingClientRect(); // The canvas SVG
+                    
+                    // 🎯 STEP 1: Find the exact horizontal center of the card on the SCREEN
+                    const viewportCenterX = sRect.left + (sRect.width / 2);
+
+                    // 🎯 STEP 2: Align the SHELF line (Top Blue Bar)
+                    if (shelfLineGroup && shelfEl) {
+                        // Position relative to the blue bar's left edge
+                        const shelfStartX = viewportCenterX - shelfRect.left;
+                        const shelfStartY = sRect.bottom - shelfRect.top - 10; 
+                        const shelfEndY = shelfRect.height;
+
+                        const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        shelfPath.setAttribute('d', `M ${shelfStartX} ${shelfStartY} L ${shelfStartX} ${shelfEndY}`);
+                        shelfPath.setAttribute('stroke', 'var(--text-dim)');
+                        shelfPath.setAttribute('stroke-width', '2');
+                        shelfPath.setAttribute('stroke-dasharray', '5,5');
+                        shelfLineGroup.appendChild(shelfPath);
+                    }
+
+                    // 🎯 STEP 3: Align the CANVAS line (White Area)
+                    // Position relative to the canvas SVG's left edge, then adjusted for zoom
+                    const canvasStartX = (viewportCenterX - connectionsRect.left) / zoom;
+                    
+                    start = { x: canvasStartX, y: 0 };
+                    end = targetPoint;
+                }
+                else if (!isSourceGlobal && isTargetGlobal) {
+                    // ⬆️ Canvas -> Global
+                    sSide = 'top';
+                    start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                    const tRect = targetEl.getBoundingClientRect();
+                    const endX = (tRect.left - canvasRect.left + (tRect.width / 2)) / zoom;
+                    end = { x: endX, y: 0 };
+                    tSide = 'top';
+
+                    if (shelfLineGroup && shelfEl) {
+                        const shelfRect = shelfEl.getBoundingClientRect();
+                        const shelfEndX = tRect.left - shelfRect.left + (tRect.width / 2);
+                        // Start at shelf bottom, end at bottom of target card
+                        const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        shelfPath.setAttribute('d', `M ${shelfEndX} ${shelfRect.height} L ${shelfEndX} ${tRect.bottom - shelfRect.top}`);
+                        shelfPath.setAttribute('stroke', 'var(--text-dim)');
+                        shelfPath.setAttribute('stroke-width', '2');
+                        shelfPath.setAttribute('stroke-dasharray', '5,5');
+                        shelfLineGroup.appendChild(shelfPath);
+                    }
+                } 
+                else if (targetRes.coords && sourceRes.coords) {
+                    // ↔️ Standard Canvas Logic
                     const dx = targetRes.coords.x - sourceRes.coords.x;
                     const dy = targetRes.coords.y - sourceRes.coords.y;
-
-                    // 🚀 THE TIGHTENED CHECK
-                    // Only consider it a "Vertical Stack" if they are within 100px of each other horizontally
-                    // AND they are in the same Lane (Stage)
-                    const isVertical = Math.abs(dx) < 100; 
-                    const isExpandedView = sourceRes.isExpanded || targetRes.isExpanded;
-                    const bothClosed = !sourceRes.isExpanded && !targetRes.isExpanded;
-
-                    let sSide, tSide;
-
-                    if (isVertical) {
-                        if (bothClosed) {
-                            // Top/Bottom flow for same-column closed cards
-                            sSide = dy > 0 ? 'bottom' : 'top';
-                            tSide = dy > 0 ? 'top' : 'bottom';
-                        } else {
-                            // Right-to-Right loop for same-column open cards
-                            sSide = 'right';
-                            tSide = 'right';
-                        }
+                    const isVertical = Math.abs(dx) < 100;
+                    if (isVertical && !sourceRes.isExpanded && !targetRes.isExpanded) {
+                        sSide = dy > 0 ? 'bottom' : 'top';
+                        tSide = dy > 0 ? 'top' : 'bottom';
                     } else {
-                        // ➡️ FORCE HORIZONTAL: This handles the Lane 1 to Lane 2 flow
-                        // If target is right of source, use Right -> Left
-                        // If target is left of source, use Left -> Right
                         sSide = dx > 0 ? 'right' : 'left';
                         tSide = dx > 0 ? 'left' : 'right';
                     }
+                    start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                    end = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
+                }
 
-                    // 📍 2. Get the points
-                    const start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
-                    const end = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
-                    
-                    if (start && end) {
-                        let adjustedEnd = { x: end.x, y: end.y };
-                        const arrowGap = 10;
-                        if (tSide === 'right') adjustedEnd.x += arrowGap;
-                        if (tSide === 'left')  adjustedEnd.x -= arrowGap;
-                        if (tSide === 'top')   adjustedEnd.y -= arrowGap;
-                        if (tSide === 'bottom') adjustedEnd.y += arrowGap;
+                if (start && end) {
+                    let targetX = end.x;
+                    let targetY = end.y;
+                    const gap = 8; 
+                    if (tSide === 'left') targetX -= gap;
+                    if (tSide === 'right') targetX += gap;
+                    if (tSide === 'top') targetY -= gap;
+                    if (tSide === 'bottom') targetY += gap;
 
-                        let d;
-                        const absDx = Math.abs(end.x - start.x);
-                        const absDy = Math.abs(end.y - start.y);
-                        const snapThreshold = 30; // 🚀 Distance to trigger perfectly straight lines
-
-                        // 1. Calculate the final landing point with a gap for the arrowhead
-                        let targetX = end.x;
-                        let targetY = end.y;
-                        const gap = 6; 
-
-                        if (tSide === 'left') targetX -= gap;
-                        if (tSide === 'right') targetX += gap;
-                        if (tSide === 'top') targetY -= gap;
-                        if (tSide === 'bottom') targetY += gap;
-
-                        // 2. Determine Path String (The "D" Attribute)
+                    let d;
+                    if (isSourceGlobal || isTargetGlobal) {
+                        const midY = (start.y + targetY) / 2;
+                        d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
+                    } else {
+                        const dx = targetX - start.x;
+                        const dy = targetY - start.y;
+                        const absDx = Math.abs(dx);
+                        const absDy = Math.abs(dy);
+                        
                         if (sSide === 'right' && tSide === 'right') {
-                            // 🔄 Vertical Loop (Open Cards)
-                            const sweep = Math.min(80, Math.abs(dy) * 0.4 + 30);
+                            const sweep = Math.min(80, absDy * 0.4 + 30);
                             d = `M ${start.x} ${start.y} C ${start.x + sweep} ${start.y}, ${targetX + sweep} ${targetY}, ${targetX} ${targetY}`;
-                        } 
-                        else if (absDy < snapThreshold && (sSide === 'right' || sSide === 'left')) {
-                            // 📏 HORIZONTAL SNAP: Force a perfectly straight line
-                            // We use the start Y to ensure it is a laser-flat horizontal line
+                        } else if (absDy < 30 && (sSide === 'right' || sSide === 'left')) {
                             d = `M ${start.x} ${start.y} L ${targetX} ${start.y}`;
-                        } 
-                        else if (absDx < snapThreshold && (sSide === 'top' || sSide === 'bottom')) {
-                            // 📏 VERTICAL SNAP: Force a perfectly vertical plunge
+                        } else if (absDx < 30 && (sSide === 'top' || sSide === 'bottom')) {
                             d = `M ${start.x} ${start.y} L ${start.x} ${targetY}`;
-                        }
-                        else if (sSide === 'right' || sSide === 'left') {
-                            // ➡️ Standard Horizontal S-Curve
+                        } else {
                             const tension = Math.min(absDx * 0.4, 100);
                             const cp1x = start.x + (sSide === 'right' ? tension : -tension);
                             const cp2x = targetX + (tSide === 'right' ? tension : -tension);
                             d = `M ${start.x} ${start.y} C ${cp1x} ${start.y}, ${cp2x} ${targetY}, ${targetX} ${targetY}`;
-                        } 
-                        else {
-                            // ⬇️ Standard Vertical Elbow
-                            const midY = (start.y + targetY) / 2;
-                            d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
                         }
-
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        path.setAttribute('d', d);
-
-                        const isSourceFocused = sourceEl.classList.contains('search-active');
-                        const isTargetFocused = targetEl.classList.contains('search-active');
-
-                        if (isSourceFocused || isTargetFocused) {
-                            // Focus State: Highlight the path
-                            path.setAttribute('stroke-width', '3');
-                            path.style.opacity = '1';
-                            path.style.filter = 'drop-shadow(0 0 5px var(--accent))';
-                        } else if (isSearchActive) {
-                            // Search State: Dim irrelevant paths
-                            path.setAttribute('stroke-width', '1.5');
-                            path.style.opacity = '0.15'; 
-                        } else {
-                            // Normal State: Default look
-                            path.setAttribute('stroke-width', '2.5');
-                            path.style.opacity = '0.7';
-                        }
-
-                        path.setAttribute('stroke', outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
-                        path.setAttribute('fill', 'none');
-                        path.setAttribute('marker-end', 'url(#arrowhead)');
-                        path.setAttribute('class', 'path-flow');
-                        
-                        lineGroup.appendChild(path);
-                        lineCount++;
                     }
+
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', d);
+                    const isFocused = sourceEl.classList.contains('search-active') || (targetEl && targetEl.classList.contains('search-active'));
+                    path.setAttribute('stroke-width', isFocused ? '3' : '2.5');
+                    path.style.opacity = isSearchActive && !isFocused ? '0.15' : '0.7';
+
+                    if (isSourceGlobal || isTargetGlobal) {
+                        path.setAttribute('stroke-dasharray', '5,5');
+                        path.setAttribute('stroke', 'var(--text-dim)'); 
+                    } else {
+                        path.setAttribute('stroke', outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
+                    }
+
+                    path.setAttribute('fill', 'none');
+                    path.setAttribute('marker-end', 'url(#arrowhead)');
+                    path.setAttribute('class', 'path-flow');
+                    lineGroup.appendChild(path);
+                    lineCount++;
                 }
             });
         });
     });
 };
+
+// 🚀 THE FIX: Attach to document so it works even if the element is rendered later
+document.addEventListener('scroll', (e) => {
+    if (e.target && e.target.id === 'v2-canvas-scroll-wrap') {
+        // Use requestAnimationFrame to keep the lines buttery smooth during scroll
+        requestAnimationFrame(() => {
+            if (typeof OL.drawConnections === 'function') {
+                OL.drawConnections();
+            }
+        });
+    }
+}, true); // 'true' enables Capture mode, which is required for scroll events to bubble up
 
 OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
