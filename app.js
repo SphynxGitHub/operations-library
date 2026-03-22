@@ -8561,7 +8561,7 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
             <div class="inspector-body">
                 <div class="inspector-section">
                     <div class="section-label">📥 INPUT CONDITIONS (From where?)</div>
-                    ${step.logic.in.map((l, i) => renderLogicBlock(resId, stepIdx, 'in', i, l, allOptions)).join('')}
+                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, stepIdx, 'in', i, l, allOptions)).join('')}
                 </div>
 
                 <div class="inspector-section">
@@ -8652,7 +8652,7 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
 
                 <div class="inspector-section">
                     <div class="section-label">📤 OUTPUT CONDITIONS (To where?)</div>
-                    ${step.logic.out.map((l, i) => renderLogicBlock(resId, stepIdx, 'out', i, l, allOptions)).join('')}
+                    ${step.logic.out.map((l, i) => OL.renderLogicBlock(resId, stepIdx, 'out', i, l, allOptions)).join('')}
                     <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', ${stepIdx}, 'out')">+ Add Output Rule</button>
                 </div>
             </div>
