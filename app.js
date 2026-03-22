@@ -8800,7 +8800,7 @@ window.OL.selectAppForStep = async function(parentId, stepId, appId, appName) {
         if (resultsOverlay) resultsOverlay.style.display = 'none';
         
         // 5. Re-render the whole panel string
-        OL.openInspector(stepId, parentId);
+        OL.openInspector(parentId, stepId);
     }
 };
 
@@ -8818,7 +8818,7 @@ window.OL.removeAppFromStep = async function(resId, stepId) {
         
         // 🔄 Force re-render of the inspector to hide the pill and show the search box
         console.log("🔄 App removed. Re-rendering inspector.");
-        OL.openInspector(stepId, resId);
+        OL.openInspector(resId, stepId);
     }
 };
 
@@ -8921,7 +8921,7 @@ window.OL.executeAssignment = async function(parentId, stepId, isResource, assig
         // Clear search and refresh
         const overlay = document.getElementById('assignment-search-results');
         if (overlay) overlay.style.display = 'none';
-        OL.openInspector(stepId, parentId);
+        OL.openInspector(parentId, stepId);
     }
     // Add this line to the end of window.OL.executeAssignment
     const searchInput = document.querySelector('.inspector-section input[placeholder*="Add Person"]');
@@ -8937,7 +8937,7 @@ window.OL.removeAssignee = async function(parentId, stepId, index) {
     if (step && step.assignees) {
         step.assignees.splice(index, 1);
         await OL.persist();
-        OL.openInspector(stepId, parentId);
+        OL.openInspector(parentId, stepId);
     }
 };
 
