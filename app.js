@@ -8521,7 +8521,7 @@ OL.toggleScopingStatus = async function(resId) {
 };
 
 // 🔍 Open Inspector
-OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
+OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     const panel = document.getElementById('v2-inspector-panel');
     const content = document.getElementById('inspector-content');
     if (!panel || !content) return;
@@ -8532,16 +8532,27 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
     panel.classList.add('open');
 
     // 📑 2. STEP DETAIL MODE
-    if (resId && stepIdx !== null && isFinite(stepIdx)) {
+    // 🚀 THE FIX: Use 'stepTarget' to check for both IDs and Indexes
+    if (resId && stepTarget !== null) { 
         const res = resources.find(r => String(r.id) === String(resId));
-        const step = res?.steps?.[stepIdx];
-        
-        if (!step) {
-            console.error("❌ Inspector Error: Step not found", resId, stepIdx);
-            return;
+        if (!res) return;
+
+        // 🧠 HYBRID LOOKUP: Hunt by ID first, fallback to Index if numeric
+        let step = res.steps.find(s => String(s.id) === String(stepTarget));
+        if (!step && isFinite(stepTarget)) {
+            step = res.steps[stepTarget];
         }
         
-        // 🛡️ Data Safety: Initialize missing objects
+        if (!step) {
+            console.error("❌ Inspector Error: Step not found", resId, stepTarget);
+            content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Step not found: ${stepTarget}</div>`;
+            return;
+        }
+
+        // 🔢 CALCULATE THE DYNAMIC INDEX
+        const currentIdx = res.steps.indexOf(step);
+        
+        // 🛡️ Data Safety
         if (!step.logic) step.logic = { in: [], out: [] };
         if (!step.assignees) step.assignees = [];
         
@@ -8551,7 +8562,7 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
             <div class="breadcrumb" onclick="OL.openInspector('${resId}', null, 'cards')">« Back to Steps</div>
             
             <div class="inspector-header">
-                <div class="section-label">EDIT STEP ${stepIdx + 1}</div>
+                <div class="section-label">EDIT STEP ${currentIdx + 1}</div>
                 <input type="text" class="inspector-name-input" 
                       value="${esc(step.name)}" 
                       onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)"
@@ -8561,7 +8572,7 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
             <div class="inspector-body">
                 <div class="inspector-section">
                     <div class="section-label">📥 INPUT CONDITIONS (From where?)</div>
-                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, stepIdx, 'in', i, l, allOptions)).join('')}
+                    ${step.logic.in.map((l, i) => renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
                 </div>
 
                 <div class="inspector-section">
@@ -8590,7 +8601,6 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
 
                 <div class="inspector-section">
                     <label class="section-label">📱 PRIMARY APPLICATION (TOOL)</label>
-                    
                     ${step.appId ? `
                         <div class="pill-display" style="margin-bottom:8px;">
                             <div class="pill primary is-clickable" 
@@ -8598,23 +8608,17 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
                                 onclick="OL.openAppModal('${step.appId}')">
                                 <span style="font-size:10px;">📱 ${esc(step.appName)}</span>
                                 <b class="pill-remove-x" style="opacity:0.5; margin-left: 8px;" 
-                                  onmouseover="this.style.opacity='1'; this.style.color='var(--danger)';"
-                                  onmouseout="this.style.opacity='0.5'; this.style.color='inherit';"
                                   onclick="event.stopPropagation(); OL.removeAppFromStep('${resId}', '${step.id}')">×</b>
                             </div>
                         </div>
-                    ` : ''}
-
-                    ${!step.appId ? `
+                    ` : `
                         <div class="search-map-container">
-                            <input type="text" class="modal-input tiny" 
-                                  value="" 
-                                  placeholder="Link Application..." 
+                            <input type="text" class="modal-input tiny" placeholder="Link Application..." 
                                   onfocus="OL.filterAppSearch('${resId}', '${step.id}', '')"
                                   oninput="OL.filterAppSearch('${resId}', '${step.id}', this.value)">
                             <div id="app-search-results" class="search-results-overlay"></div>
                         </div>
-                    ` : ''}
+                    `}
                 </div>
 
                 <div class="inspector-section">
@@ -8652,8 +8656,8 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
 
                 <div class="inspector-section">
                     <div class="section-label">📤 OUTPUT CONDITIONS (To where?)</div>
-                    ${step.logic.out.map((l, i) => OL.renderLogicBlock(resId, stepIdx, 'out', i, l, allOptions)).join('')}
-                    <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', ${stepIdx}, 'out')">+ Add Output Rule</button>
+                    ${step.logic.out.map((l, i) => renderLogicBlock(resId, step.id, 'out', i, l, allOptions)).join('')}
+                    <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')">+ Add Output Rule</button>
                 </div>
             </div>
         `;
@@ -8796,7 +8800,7 @@ window.OL.selectAppForStep = async function(parentId, stepId, appId, appName) {
         if (resultsOverlay) resultsOverlay.style.display = 'none';
         
         // 5. Re-render the whole panel string
-        OL.loadInspector(stepId, parentId);
+        OL.openInspector(stepId, parentId);
     }
 };
 
@@ -8814,7 +8818,7 @@ window.OL.removeAppFromStep = async function(resId, stepId) {
         
         // 🔄 Force re-render of the inspector to hide the pill and show the search box
         console.log("🔄 App removed. Re-rendering inspector.");
-        OL.loadInspector(stepId, resId);
+        OL.openInspector(stepId, resId);
     }
 };
 
@@ -8917,7 +8921,7 @@ window.OL.executeAssignment = async function(parentId, stepId, isResource, assig
         // Clear search and refresh
         const overlay = document.getElementById('assignment-search-results');
         if (overlay) overlay.style.display = 'none';
-        OL.loadInspector(stepId, parentId);
+        OL.openInspector(stepId, parentId);
     }
     // Add this line to the end of window.OL.executeAssignment
     const searchInput = document.querySelector('.inspector-section input[placeholder*="Add Person"]');
@@ -8933,7 +8937,7 @@ window.OL.removeAssignee = async function(parentId, stepId, index) {
     if (step && step.assignees) {
         step.assignees.splice(index, 1);
         await OL.persist();
-        OL.loadInspector(stepId, parentId);
+        OL.openInspector(stepId, parentId);
     }
 };
 
@@ -9276,7 +9280,7 @@ window.OL.addLinkToStep = async function(resId, stepId, linkId, linkName, type) 
         if (overlay) overlay.style.display = 'none';
         
         // 🔄 Force refresh to show the new pill
-        OL.loadInspector(stepId, resId);
+        OL.openInspector(stepId, resId);
     }
 };
 
@@ -9296,7 +9300,7 @@ window.OL.removeStepLink = async function(resId, stepId, linkIdx) {
         
         // 🔄 Immediate UI Refresh
         console.log("🗑️ Attachment removed from step:", stepId);
-        OL.loadInspector(stepId, resId);
+        OL.openInspector(stepId, resId);
     }
 };
 
