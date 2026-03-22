@@ -8664,39 +8664,38 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
     content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a step to view details.</div>`;
 };
 
-OL.updateAtomicStep = async function(resId, stepIdx, field, value) {
-    console.log(`📡 Updating Step: Res ${resId}, Step ${stepIdx}, Field [${field}] to:`, value);
-
+OL.updateAtomicStep = async function(resId, stepId, field, value) {
     const client = getActiveClient();
-    if (!client || !client.projectData.resources) return;
+    const projectResources = client?.projectData?.resources || [];
+    
+    // 1. Find the resource
+    let res = projectResources.find(r => String(r.id) === String(resId));
+    if (!res) res = (state.master?.resources || []).find(r => String(r.id) === String(resId));
 
-    // 1. Find the resource in the project data
-    const res = client.projectData.resources.find(r => String(r.id) === String(resId));
-    if (!res || !res.steps || !res.steps[stepIdx]) {
-        console.error("❌ Could not find resource or step to update.");
+    if (!res || !res.steps) {
+        console.error("❌ Resource not found:", resId);
         return;
     }
 
-    // 2. Update the specific field
-    // Supports nested updates if you pass 'logic.type', etc.
-    if (field.includes('.')) {
-        const parts = field.split('.');
-        res.steps[stepIdx][parts[0]][parts[1]] = value;
-    } else {
-        res.steps[stepIdx][field] = value;
+    // 2. 🚀 THE FIX: Find the step by its ID string, not index
+    const step = res.steps.find(s => String(s.id) === String(stepId));
+    
+    if (!step) {
+        console.error("❌ Step ID not found in resource:", stepId);
+        return;
     }
 
-    // 3. Persist to Firebase
+    // 3. Apply the update
+    step[field] = value;
+    console.log(`✅ Saved ${field}: "${value}" to Step ${stepId}`);
+
+    // 4. Persist to Firebase
     await OL.persist();
 
-    // 4. UI Refresh
-    // If we are on the map, redraw the connections/cards
+    // 5. Refresh Map if visible
     if (window.location.hash.includes('visualizer')) {
-        OL.renderVisualizer();
-    } 
-    
-    // If we have an open modal for this resource, you might want to refresh it
-    // OL.openResourceModal(resId);
+        OL.renderVisualizer(); 
+    }
 };
 
 window.renderStepResources = function(resId, step) {
