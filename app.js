@@ -8696,7 +8696,7 @@ OL.updateAtomicStep = async function(resId, stepIdx, field, value) {
     } 
     
     // If we have an open modal for this resource, you might want to refresh it
-    // OL.refreshResourceModal(resId);
+    // OL.openResourceModal(resId);
 };
 
 window.renderStepResources = function(resId, step) {
