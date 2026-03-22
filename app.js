@@ -7893,9 +7893,9 @@ OL.renderVisualizer = function() {
                     </select>
 
                     <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Status</option>
-                        <option value="priced">Scoped ($)</option>
-                        <option value="unpriced">Unscoped</option>
+                        <option value="">All Scoped Status</option>
+                        <option value="scoped">Scoped ($)</option>
+                        <option value="unscoped">Unscoped</option>
                     </select>
                 </div>
             </div>
@@ -8468,28 +8468,56 @@ OL.highlightFamily = function(originId) {
     window.addEventListener('mousedown', clearFocus);
 };
 
-OL.toggleScopingStatus = async function(resId, currentlyInScope) {
+OL.toggleScopingStatus = async function(resId) {
     const client = getActiveClient();
-    if (!client.projectData.scopingItems) client.projectData.scopingItems = [];
+    if (!client || !client.projectData) return;
 
-    if (currentlyInScope) {
-        // 🗑️ Remove from data
-        client.projectData.scopingItems = client.projectData.scopingItems.filter(item => item.id !== resId);
+    // 1. Prepare the Sheet structure
+    if (!client.projectData.scopingSheets) {
+        client.projectData.scopingSheets = [{ id: 'default', lineItems: [] }];
+    }
+    const sheet = client.projectData.scopingSheets[0];
+    if (!sheet.lineItems) sheet.lineItems = [];
+
+    const targetId = String(resId);
+    const existingItem = OL.isResourceInScope(targetId);
+
+    // 🚀 2. INSTANT UI FLIP (Before the Wait)
+    // Find the badge in the DOM and swap classes immediately
+    const badgeEl = document.querySelector(`.v2-scope-badge[oncontextmenu*="${targetId}"]`);
+    if (badgeEl) {
+        if (existingItem) {
+            badgeEl.classList.remove('is-on');
+            badgeEl.classList.add('is-off');
+        } else {
+            badgeEl.classList.remove('is-off');
+            badgeEl.classList.add('is-on');
+        }
+    }
+
+    // 3. DATA LOGIC
+    if (existingItem) {
+        sheet.lineItems = sheet.lineItems.filter(item => String(item.resourceId) !== targetId);
     } else {
-        // ➕ Add to data
-        const res = OL.getResourceById(resId);
-        client.projectData.scopingItems.push({
-            id: resId,
+        const res = OL.getResourceById(targetId);
+        sheet.lineItems.push({
+            id: `li-${Date.now()}`,
+            resourceId: targetId,
             name: res?.name || "New Resource",
-            cost: 0,
-            hours: 0
+            rate: 0, units: 0, total: 0
         });
     }
 
-    await OL.persist();
+    // 4. PERSIST
+    // We don't necessarily need to wait for the cloud to finish 
+    // to keep the UI snappy, but we do need to save.
+    await OL.persist(); 
     
-    // 🔄 Refresh the UI so the $ changes color
-    OL.renderVisualizer(); 
+    // 5. RE-RENDER (Optional but good for total sync)
+    // Ensure this function actually exists and is named correctly!
+    if (typeof OL.renderVisualizer === 'function') {
+        OL.renderVisualizer(); 
+    }
 };
 
 // 🔍 Open Inspector
@@ -8941,58 +8969,73 @@ OL.toggleFilterMenu = function(e) {
 };
 
 OL.syncCanvasFilters = function() {
-    // 1. Get all current values
     const query = document.getElementById('canvas-filter-input')?.value.toLowerCase().trim() || "";
+    const statusF = document.getElementById('filter-scoped')?.value || ""; 
     const typeF = document.getElementById('filter-type')?.value || "";
     const appF = document.getElementById('filter-app')?.value || "";
     const assigneeF = document.getElementById('filter-assignee')?.value || "";
 
-    // 2. Reset the Match Array for Navigation
     state.canvasMatches = [];
-
     const nodes = document.querySelectorAll('.v2-node-card');
     
+    // 💡 Determine if we are actively filtering right now
+    const isFiltering = !!(query || statusF || typeF || appF || assigneeF);
+
     nodes.forEach(node => {
         const resId = node.id.replace('v2-node-', '');
         const res = OL.getResourceById(resId);
         if (!res) return;
 
-        // --- THE CRITERIA CHECK ---
+        // --- CRITERIA CHECKS ---
         const matchesQuery = !query || res.name.toLowerCase().includes(query);
         const matchesType = !typeF || res.type === typeF;
-        
-        // Deep check steps for Apps/Assignees
         const matchesApp = !appF || (res.steps || []).some(s => s.appName === appF);
         const matchesAssignee = !assigneeF || (res.steps || []).some(s => 
-            (s.assignees || []).some(a => a.name === assigneeF)
+            (s.assignees || []).some(a => (a.name || a) === assigneeF)
         );
 
-        // 3. Final Decision
-        if (matchesQuery && matchesType && matchesApp && matchesAssignee) {
-            node.classList.remove('node-dimmed');
+        // 🚀 STATUS CHECK (Scoped vs Unscoped)
+        let matchesStatus = true;
+        const isInScope = !!OL.isResourceInScope(resId);
+        if (statusF === "scoped") matchesStatus = isInScope;
+        if (statusF === "unscoped") matchesStatus = !isInScope;
+
+        // --- FINAL DECISION ---
+        const isMatch = matchesQuery && matchesType && matchesApp && matchesAssignee && matchesStatus;
+
+        if (isMatch) {
+            node.classList.remove('node-dimmed', 'filter-hidden'); // Ensure it's visible
             node.classList.add('search-match');
-            state.canvasMatches.push(node.id);
+            
+            // Only add to navigation if it's on the canvas
+            if (node.closest('#v2-node-layer')) {
+                state.canvasMatches.push(node.id);
+            }
         } else {
-            node.classList.add('node-dimmed');
             node.classList.remove('search-match', 'search-active');
+            // 🚀 If we are filtering, DIM the non-matches. If not, reset them.
+            if (isFiltering) {
+                node.classList.add('node-dimmed');
+            } else {
+                node.classList.remove('node-dimmed');
+            }
         }
     });
 
-    // 4. Update Navigation UI Visibility & Counter
+    // --- UI COUNTER & NAV ---
     const nav = document.getElementById('search-nav-controls');
     const countLabel = document.getElementById('canvas-match-count');
 
-    if (state.canvasMatches.length > 0 && (query || typeF || appF || assigneeF)) {
+    if (isFiltering && state.canvasMatches.length > 0) {
         nav.classList.add('is-visible');
-        state.currentCanvasMatchIdx = 0; // Reset to first match
-        countLabel.innerText = `1/${state.canvasMatches.length}`;
+        if (state.currentCanvasMatchIdx === -1) state.currentCanvasMatchIdx = 0;
+        countLabel.innerText = `${state.currentCanvasMatchIdx + 1}/${state.canvasMatches.length}`;
     } else {
         nav.classList.remove('is-visible');
-        state.currentCanvasMatchIdx = -1;
     }
 
-    // Optional: Re-render lines if any nodes were hidden
-    if (window.OL.renderConnections) OL.renderConnections();
+    // Update lines (which now handle dimming internally)
+    if (window.OL.drawConnections) OL.drawConnections();
 };
 
 OL.centerNextCanvasMatch = function() {
