@@ -8664,6 +8664,41 @@ OL.openInspector = function(resId = null, stepIdx = null, mode = 'steps') {
     content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a step to view details.</div>`;
 };
 
+OL.updateAtomicStep = async function(resId, stepIdx, field, value) {
+    console.log(`📡 Updating Step: Res ${resId}, Step ${stepIdx}, Field [${field}] to:`, value);
+
+    const client = getActiveClient();
+    if (!client || !client.projectData.resources) return;
+
+    // 1. Find the resource in the project data
+    const res = client.projectData.resources.find(r => String(r.id) === String(resId));
+    if (!res || !res.steps || !res.steps[stepIdx]) {
+        console.error("❌ Could not find resource or step to update.");
+        return;
+    }
+
+    // 2. Update the specific field
+    // Supports nested updates if you pass 'logic.type', etc.
+    if (field.includes('.')) {
+        const parts = field.split('.');
+        res.steps[stepIdx][parts[0]][parts[1]] = value;
+    } else {
+        res.steps[stepIdx][field] = value;
+    }
+
+    // 3. Persist to Firebase
+    await OL.persist();
+
+    // 4. UI Refresh
+    // If we are on the map, redraw the connections/cards
+    if (window.location.hash.includes('visualizer')) {
+        OL.renderVisualizer();
+    } 
+    
+    // If we have an open modal for this resource, you might want to refresh it
+    // OL.refreshResourceModal(resId);
+};
+
 window.renderStepResources = function(resId, step) {
     const links = step.links || [];
     if (links.length === 0) return '<div class="tiny muted" style="padding: 5px; opacity:0.6;">No linked items.</div>';
