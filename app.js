@@ -3874,7 +3874,7 @@ OL.universalCreate = async function(type, options = {}) {
     // 5. UI Orcherstration
     if (linkToWfId) {
         OL.refreshMap();
-        setTimeout(() => OL.loadInspector(newId, linkToWfId), 100);
+        setTimeout(() => OL.openInspector(newId, linkToWfId), 100);
     } else {
         renderResourceManager();
         OL.openResourceModal(newId);
@@ -4240,47 +4240,78 @@ OL.closeResourceTypeManager = function() {
 window.renderResourceCard = function (res) {
     if (!res) return "";
     
-    // 1. Determine Identity & Permissions
+    // 1. Identity & Status
     const isAdmin = state.adminMode === true;
-    const isVaultItem = String(res.id || "").startsWith("res-vlt-");
-    const isLinkedToMaster = !!res.masterRefId;
-    const isMaster = isVaultItem || isLinkedToMaster;
-
-    // 2. Logic: Admins can delete anything. 
-    // Clients can ONLY delete if it's not a Master/Synced item.
-    const canDelete = isAdmin || !isMaster;
-
-    const scopingItem = OL.isResourceInScope(res.id);
-    const isInScope = !!scopingItem;
+    const isMaster = String(res.id || "").startsWith("res-vlt-") || !!res.masterRefId;
+    const isInScope = !!OL.isResourceInScope(res.id);
     
-    const tagLabel = isMaster ? "MASTER" : "LOCAL";
+    // 2. 👨‍👩‍👧‍👦 Family Number: Count instances specifically on the Canvas layer
+    const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
+
+    // 3. ✨ Selection Logic: Highlight if this is the active resource
+    const isActive = state.focusedResourceId === res.id;
+
     const tagStyle = isMaster 
-        ? "background: var(--accent); border: none;" 
+        ? "background: var(--accent); color: #000;" 
         : "background: var(--panel-border); color: var(--text-dim); border: 1px solid var(--line);";
 
     return `
-        <div class="card is-clickable ${isInScope ? 'is-priced' : ''}" 
-             onclick="OL.openResourceModal('${res.id}')"
-             style="${isInScope ? 'border-left: 3px solid #10b981 !important;' : ''}">
-            <div class="card-header">
-                <div class="card-title">${esc(res.name || "Unnamed")}</div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    ${isInScope ? `
-                        <button class="btn tiny" style="background:#10b981; color:white; padding:2px 6px; font-size:10px; border:none;" 
-                                onclick="event.stopPropagation(); OL.jumpToScopingItem('${res.id}')">$</button>
-                    ` : ''}
-                    <span class="vault-tag" style="${tagStyle}">${tagLabel}</span>
+        <div class="card is-clickable ${isInScope ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
+             id="res-card-${res.id}"
+             onclick="OL.selectResourceCard('${res.id}')"
+             style="${isInScope ? 'border-left: 3px solid var(--color-scoping) !important;' : ''}">
+            
+            <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start;">
+                <div class="card-title" style="flex:1; font-weight:600;">${esc(res.name || "Unnamed")}</div>
+                
+                <div class="card-controls" style="display:flex; align-items:center; gap:6px;">
+                    
+                    ${numberingHtml}
+
+                    <a href="#/scoping-sheet?focus=${res.id}" 
+                       id="badge-${res.id}"
+                       class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
+                       onclick="if(!OL.isResourceInScope('${res.id}')) { event.preventDefault(); } event.stopPropagation();"
+                       oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${res.id}'); return false;">
+                        $
+                    </a>
+                    
+                    <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 9px; border-radius: 3px; font-weight: bold;">
+                        ${isMaster ? 'MASTER' : 'LOCAL'}
+                    </span>
+
                     <button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>
                 </div>
             </div>
-            <div class="card-body">
-                <div class="tiny accent bold uppercase">${esc(res.archetype || "Base")}</div>
-                <div class="tiny muted">${esc(res.type || "General")}</div>
+
+            <div class="card-body" style="margin-top: 6px;">
+                <div class="tiny accent bold uppercase" style="font-size: 9px; letter-spacing: 0.5px;">
+                    ${esc(res.archetype || "Base")}
+                </div>
+                <div class="tiny muted" style="font-size: 10px; opacity: 0.6;">
+                    ${esc(res.type || "General")}
+                </div>
             </div>
         </div>
     `;
 };
 
+OL.selectResourceCard = function(resId) {
+    // 1. Update Global State
+    state.focusedResourceId = resId;
+
+    // 2. Clear previous active states in the DOM
+    document.querySelectorAll('.card.is-active').forEach(card => card.classList.remove('is-active'));
+
+    // 3. Add active state to the clicked card
+    const selectedCard = document.getElementById(`res-card-${resId}`);
+    if (selectedCard) {
+        selectedCard.classList.add('is-active');
+    }
+
+    // 4. Trigger your existing Modal or Inspector
+    OL.openResourceModal(resId);
+};
 // 3. CREATE DRAFT RESOURCE MODAL
 
 // 3a. HANDLE THE FIRST UPDATE / SAVE DRAFT
@@ -4569,7 +4600,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         </button>
     ` : '';
    
-    // --- Inside OL.openResourceModal ---
     const resType = (res.type || "General").toLowerCase();
         let typeSpecificHtml = "";
 
@@ -4809,7 +4839,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                         const isScopingEnv = window.location.hash.includes('scoping-sheet');
                         const navAction = isScopingEnv 
                             ? `OL.openResourceModal('${conn.id}')` 
-                            : `OL.loadInspector('${conn.id}')`;
+                            : `OL.openInspector('${conn.id}')`;
 
                         return ` 
                             <div class="pill accent is-clickable" 
@@ -7109,7 +7139,6 @@ OL.updateLocalLibraryFeature = async function(featId, property, newValue) {
 };
 
 // --- 2. THE EDITORS ---
-
 OL.editFeatureModal = function(anlyId, featId, isMaster) {
     const analyses = OL.getScopedAnalyses();
     const anly = analyses.find(a => a.id === anlyId);
@@ -8033,7 +8062,7 @@ OL.renderVisualizer = function() {
                       ondragover="OL.handleStepDragOver(event)"
                       ondragleave="OL.handleStepDragLeave(event)"
                       ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
-                      onclick="event.stopPropagation(); OL.openInspector('${res.id}', ${i})">
+                      onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${i}')">
                       
                       <div class="step-row-content">
                           <span class="drag-handle" style="cursor: grab; opacity: 0.3; margin-right: 4px;">⋮</span>
@@ -8133,29 +8162,46 @@ OL.save = function() {
 };
 
 OL.getPartNumberHtml = function(res) {
-    if (!res.originId) return '';
+    // 🎯 THE FIX: If res.originId doesn't exist (it's the Master), use its own ID
+    const searchId = res.originId || res.id;
+    if (!searchId) return '';
 
-    // 🎯 THE FIX: Fetch the resources for the current project context
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
 
-    // Filter to find the "family" (split parts) of this resource
-    const family = resources
-        .filter(r => r.originId === res.originId)
-        .sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+    // Filter map resources that point back to this Master/Origin
+    const family = resources.filter(r => 
+        String(r.originId) === String(searchId) || 
+        String(r.masterRefId) === String(searchId)
+    );
     
-    // If it hasn't been split (only 1 card exists), don't show "1/1"
-    if (family.length <= 1) return '';
+    // If it hasn't been placed on the map, don't show the badge
+    if (family.length === 0) return '';
 
-    const index = family.findIndex(r => r.id === res.id) + 1;
+    // If we are on the map, show "1/3". If we are in the List, just show the Total "3"
+    const isMapNode = !!res.originId; 
 
-    return `
-        <span class="v2-card-part" 
-              onclick="event.stopPropagation(); OL.highlightFamily('${res.originId}')"
-              title="Part ${index} of ${family.length}">
-            ${index}/${family.length}
-        </span>
-    `;
+    if (isMapNode) {
+        const sortedFamily = family.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+        const index = sortedFamily.findIndex(r => r.id === res.id) + 1;
+        return `
+            <span class="v2-card-part" 
+                  onclick="event.stopPropagation(); OL.highlightFamily('${searchId}')"
+                  title="Part ${index} of ${family.length}">
+                ${index}/${family.length}
+            </span>
+        `;
+    } else {
+        // 🏠 List View: Just show the family total count (the "Family Number")
+        return `
+            <span class="v2-card-part family-badge" 
+                  onclick="event.stopPropagation(); OL.highlightFamily('${res.id}')"
+                  style="cursor: pointer; background: rgba(var(--accent-rgb), 0.1); border: 1px solid var(--accent); color: var(--accent);"
+                  title="Total instances on map. Click to highlight.">
+                ${family.length}
+            </span>
+        `;
+    }
 };
 
 OL.addNewStepToCard = async function(resId) {
@@ -8171,13 +8217,11 @@ OL.addNewStepToCard = async function(resId) {
     if (!res.steps) res.steps = [];
     res.isExpanded = true; // Force visibility
 
-    const newStepId = 'step-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-  
     res.steps.push({
-        id: newStepId,
         name: 'New Step',
         notes: '',
-        logic: { in: [], out: [] }
+        logic: { in: [], out: [] },
+        id: 'step-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
     });
 
     // 💾 3. Persist and Re-align
@@ -8190,7 +8234,7 @@ OL.addNewStepToCard = async function(resId) {
     OL.renderVisualizer(); 
     
     // 🔍 5. Open Inspector for immediate editing
-    OL.openInspector(resId, res.steps.length - 1);
+    OL.openInspector(resId, res.steps.id);
 };
 
 OL.updateStepName = function(resId, stepIdx, newName) {
@@ -8432,39 +8476,44 @@ OL.splitCardAtStep = function(resourceId, stepIndex) {
 };
 
 OL.highlightFamily = function(originId) {
-    const nodeLayer = document.getElementById('v2-node-layer');
-    if (!nodeLayer) return;
-
-    // 🎯 1. Use the context-aware helper
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
-    
-    // 🚦 TOGGLE OFF: If already dimmed, clear it and stop
-    if (nodeLayer.classList.contains('canvas-dimmed')) {
-        nodeLayer.classList.remove('canvas-dimmed');
-        document.querySelectorAll('.v2-node-card').forEach(el => el.classList.remove('family-focus'));
+
+    const nodeLayer = document.getElementById('v2-node-layer');
+    const mainContent = document.getElementById('mainContent');
+    const activeLayer = nodeLayer || mainContent;
+
+    if (!activeLayer) return;
+
+    // Toggle Off
+    if (activeLayer.classList.contains('canvas-dimmed')) {
+        activeLayer.classList.remove('canvas-dimmed');
+        document.querySelectorAll('.family-focus').forEach(el => el.classList.remove('family-focus'));
         return;
     }
 
-    // 🔦 TOGGLE ON: Dim the canvas
-    nodeLayer.classList.add('canvas-dimmed');
+    // Toggle On
+    activeLayer.classList.add('canvas-dimmed');
     
-    // 🔍 Find and highlight the family
+    // 🔍 Find the Family
     resources.forEach(res => {
-        if (res.originId === originId) {
-            const el = document.getElementById(`v2-node-${res.id}`);
+        const isMatch = String(res.originId) === String(originId) || 
+                        String(res.masterRefId) === String(originId) || 
+                        String(res.id) === String(originId);
+
+        if (isMatch) {
+            // Check for Map Node OR Resource Card
+            const el = document.getElementById(`v2-node-${res.id}`) || 
+                       document.getElementById(`res-card-${res.id}`); // 👈 Matches your renderResourceCard ID
+            
             if (el) el.classList.add('family-focus');
         }
     });
 
-    // 🖱️ BACKGROUND CLICK LISTENER
-    // We add this to clear the focus when the user clicks empty space
     const clearFocus = (e) => {
-        // 🚀 THE FIX: Check for the canvas, node-layer, OR the new scroll-wrap
-        const bgIds = ['v2-canvas', 'v2-node-layer', 'v2-canvas-scroll-wrap'];
-        if (bgIds.includes(e.target.id)) {
-            nodeLayer.classList.remove('canvas-dimmed');
-            document.querySelectorAll('.v2-node-card').forEach(el => el.classList.remove('family-focus'));
+        if (['v2-canvas', 'v2-node-layer', 'mainContent'].includes(e.target.id)) {
+            activeLayer.classList.remove('canvas-dimmed');
+            document.querySelectorAll('.family-focus').forEach(el => el.classList.remove('family-focus'));
             window.removeEventListener('mousedown', clearFocus);
         }
     };
@@ -8475,35 +8524,27 @@ OL.toggleScopingStatus = async function(resId) {
     const client = getActiveClient();
     if (!client || !client.projectData) return;
 
-    // 1. Prepare the Sheet structure
-    if (!client.projectData.scopingSheets) {
-        client.projectData.scopingSheets = [{ id: 'default', lineItems: [] }];
-    }
-    const sheet = client.projectData.scopingSheets[0];
-    if (!sheet.lineItems) sheet.lineItems = [];
-
+    // 1. Data Logic (Same as before)
+    const sheet = client.projectData.scopingSheets?.[0] || { lineItems: [] };
     const targetId = String(resId);
     const existingItem = OL.isResourceInScope(targetId);
 
-    // 🚀 2. INSTANT UI FLIP (Before the Wait)
-    // Find the badge in the DOM and swap classes immediately
-    const badgeEl = document.querySelector(`.v2-scope-badge[oncontextmenu*="${targetId}"]`);
-    if (badgeEl) {
+    // 🚀 2. Instant UI Flip (Detects badge on ANY page)
+    const badges = document.querySelectorAll(`[id="badge-${targetId}"], [oncontextmenu*="${targetId}"]`);
+    badges.forEach(badgeEl => {
         if (existingItem) {
-            badgeEl.classList.remove('is-on');
-            badgeEl.classList.add('is-off');
+            badgeEl.classList.replace('is-on', 'is-off');
         } else {
-            badgeEl.classList.remove('is-off');
-            badgeEl.classList.add('is-on');
+            badgeEl.classList.replace('is-off', 'is-on');
         }
-    }
+    });
 
-    // 3. DATA LOGIC
+    // 3. Update the Array
     if (existingItem) {
-        sheet.lineItems = sheet.lineItems.filter(item => String(item.resourceId) !== targetId);
+        client.projectData.scopingSheets[0].lineItems = sheet.lineItems.filter(item => String(item.resourceId) !== targetId);
     } else {
         const res = OL.getResourceById(targetId);
-        sheet.lineItems.push({
+        client.projectData.scopingSheets[0].lineItems.push({
             id: `li-${Date.now()}`,
             resourceId: targetId,
             name: res?.name || "New Resource",
@@ -8511,15 +8552,16 @@ OL.toggleScopingStatus = async function(resId) {
         });
     }
 
-    // 4. PERSIST
-    // We don't necessarily need to wait for the cloud to finish 
-    // to keep the UI snappy, but we do need to save.
+    // 4. Persist
     await OL.persist(); 
     
-    // 5. RE-RENDER (Optional but good for total sync)
-    // Ensure this function actually exists and is named correctly!
-    if (typeof OL.renderVisualizer === 'function') {
+    // 5. Smart Refresh: Only re-render the heavy stuff if we are on that page
+    const currentHash = window.location.hash;
+    if (currentHash.includes('visualizer')) {
         OL.renderVisualizer(); 
+    } else if (currentHash.includes('resources')) {
+        // If you have a specific refresh for the resources table, call it here
+        // OL.renderResourcesPage(); 
     }
 };
 
@@ -8535,7 +8577,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     panel.classList.add('open');
 
     // 📑 2. STEP DETAIL MODE
-    // 🚀 THE FIX: Use 'stepTarget' to check for both IDs and Indexes
+    // 🚀 FIX: Using stepTarget to check against null
     if (resId && stepTarget !== null) { 
         const res = resources.find(r => String(r.id) === String(resId));
         if (!res) return;
@@ -8552,7 +8594,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
             return;
         }
 
-        // 🔢 CALCULATE THE DYNAMIC INDEX
+        // 🔢 CALCULATE THE DYNAMIC INDEX (For the UI Label)
         const currentIdx = res.steps.indexOf(step);
         
         // 🛡️ Data Safety
@@ -8671,6 +8713,36 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a step to view details.</div>`;
 };
 
+window.renderStepResources = function(resId, step) {
+    const links = step.links || [];
+    if (links.length === 0) return '<div class="tiny muted" style="padding: 5px; opacity:0.6;">No linked items.</div>';
+    
+    return links.map((link, idx) => {
+        // Determine Icon based on type
+        const isSOP = link.type === 'sop' || link.type === 'guide';
+        const icon = isSOP ? '📖' : '📱';
+        
+        // Navigation Logic
+        const openAction = isSOP ? `OL.openHowToModal('${link.id}')` : `OL.openResourceModal('${link.id}')`;
+        const deleteAction = `event.stopPropagation(); OL.removeStepLink('${resId}', '${step.id}', ${idx})`;
+
+        return `
+            <div class="pill soft is-clickable" 
+                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:6px 10px; background: rgba(255,255,255,0.05); border-radius: 4px;"
+                 onclick="${openAction}">
+                <span style="font-size:10px;">${icon}</span>
+                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${esc(link.name)}
+                </span>
+                <b class="pill-remove-x" 
+                   style="cursor:pointer; opacity: 0.4; padding: 2px 5px;" 
+                   onmouseover="this.style.opacity='1'; this.style.color='var(--danger)'"
+                   onmouseout="this.style.opacity='0.4'; this.style.color='inherit'"
+                   onclick="${deleteAction}">×</b>
+            </div>`;
+    }).join('');
+};
+
 OL.updateAtomicStep = async function(resId, stepId, field, value) {
     // 1. Get the current project data directly
     const data = OL.getCurrentProjectData(); 
@@ -8716,36 +8788,6 @@ OL.updateAtomicStep = async function(resId, stepId, field, value) {
     if (window.location.hash.includes('visualizer')) {
         OL.renderVisualizer();
     }
-};
-
-window.renderStepResources = function(resId, step) {
-    const links = step.links || [];
-    if (links.length === 0) return '<div class="tiny muted" style="padding: 5px; opacity:0.6;">No linked items.</div>';
-    
-    return links.map((link, idx) => {
-        // Determine Icon based on type
-        const isSOP = link.type === 'sop' || link.type === 'guide';
-        const icon = isSOP ? '📖' : '📱';
-        
-        // Navigation Logic
-        const openAction = isSOP ? `OL.openHowToModal('${link.id}')` : `OL.openResourceModal('${link.id}')`;
-        const deleteAction = `event.stopPropagation(); OL.removeStepLink('${resId}', '${step.id}', ${idx})`;
-
-        return `
-            <div class="pill soft is-clickable" 
-                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:6px 10px; background: rgba(255,255,255,0.05); border-radius: 4px;"
-                 onclick="${openAction}">
-                <span style="font-size:10px;">${icon}</span>
-                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    ${esc(link.name)}
-                </span>
-                <b class="pill-remove-x" 
-                   style="cursor:pointer; opacity: 0.4; padding: 2px 5px;" 
-                   onmouseover="this.style.opacity='1'; this.style.color='var(--danger)'"
-                   onmouseout="this.style.opacity='0.4'; this.style.color='inherit'"
-                   onclick="${deleteAction}">×</b>
-            </div>`;
-    }).join('');
 };
 
 OL.filterAppSearch = function(parentId, stepId, query) {
@@ -8803,7 +8845,7 @@ window.OL.selectAppForStep = async function(parentId, stepId, appId, appName) {
         if (resultsOverlay) resultsOverlay.style.display = 'none';
         
         // 5. Re-render the whole panel string
-        OL.openInspector(parentId, stepId);
+        OL.openInspector(stepId, parentId);
     }
 };
 
@@ -9283,7 +9325,7 @@ window.OL.addLinkToStep = async function(resId, stepId, linkId, linkName, type) 
         if (overlay) overlay.style.display = 'none';
         
         // 🔄 Force refresh to show the new pill
-        OL.openInspector(stepId, resId);
+        OL.openInspector(resId, stepId);
     }
 };
 
@@ -9303,20 +9345,19 @@ window.OL.removeStepLink = async function(resId, stepId, linkIdx) {
         
         // 🔄 Immediate UI Refresh
         console.log("🗑️ Attachment removed from step:", stepId);
-        OL.openInspector(stepId, resId);
+        OL.openInspector(resId, stepId);
     }
 };
 
-OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
-    const myFullId = `${resId}-${stepIdx}`;
+OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
+    // 🚀 THE FIX: Use stepId (the unique string) instead of stepIdx
+    const myFullId = `${resId}-${stepId}`; 
     const targetId = dir === 'out' ? (logic.targetId || "") : (logic.sourceId || "");
     const isReadOnly = dir === 'in';
     
-    // 🔍 Find the searchable label for display (handles the wrapping issue)
     const selectedOption = allOptions.find(opt => String(opt.id) === String(targetId));
     const displayLabel = selectedOption ? selectedOption.label : (targetId === myFullId ? '[Current Step / Loopback]' : '-- Select Step --');
     
-    // 🔄 Loop logic
     const isLoop = (logic.type === 'loop') || (String(targetId) === String(myFullId));
     const filteredOptions = allOptions.filter(opt => opt.id !== myFullId);
 
@@ -9332,7 +9373,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                     </div>
 
                     ${dir === 'out' ? `
-                        <select onchange="OL.updateStepLogic('${resId}','${stepId}', '${dir}', ${i}, 'type', this.value)">
+                        <select onchange="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'type', this.value)">
                             <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
                             <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
                         </select>
@@ -9347,11 +9388,11 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
             </div>
 
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 5px;">
-                <span style="flex-grow: 1;">${esc(displayLabel)}</span>
+                <span style="flex-grow: 1; font-size: 11px;">${esc(displayLabel)}</span>
                 
                 ${targetId ? `
                     <button class="logic-jump-btn" 
-                            onclick="OL.centerCanvasNode('${targetId.split('-')[0]}')"
+                            onclick="OL.centerCanvasNode('${String(targetId).split('-')[0]}')"
                             title="Jump to Card">
                         🎯
                     </button>
@@ -9365,7 +9406,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                    onblur="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'rule', this.value)">
             
             ${!isReadOnly ? `
-                <select onchange="OL.updateStepTarget('${resId}', '${stepIdx}', '${dir}', ${i}, this.value)" 
+                <select onchange="OL.updateStepTarget('${resId}', '${stepId}', '${dir}', ${i}, this.value)" 
                         style="width:100%; background:var(--bg-panel); color:var(--text-muted); border:1px solid var(--border); border-radius:4px; font-size: 11px;">
                     <option value="">-- Change Target --</option>
                     <option value="${myFullId}" ${String(targetId) === String(myFullId) ? 'selected' : ''}>[Current Step / Loopback]</option>
@@ -9388,7 +9429,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                     <input value="${esc(logic.loopLimit || '')}" 
                            placeholder="e.g. 3 times or 'Until Signed'..." 
                            style="font-size:11px; border-style:dashed; color: var(--warning); border-color: var(--warning);"
-                           onblur="OL.updateStepLogic('${resId}', ${stepId}, '${dir}', ${i}, 'loopLimit', this.value)">
+                           onblur="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'loopLimit', this.value)">
                 </div>
             ` : ''}
         </div>
@@ -9451,155 +9492,108 @@ OL.filterLogicOptions = function(query) {
     });
 };
 
-OL.getPartNumber = function(res) {
-    // 1. If it was never split, it's the only part
-    if (!res.originId) return "1/1";
-
-    // 🎯 2. Get the correct data context (Project vs Vault)
-    const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-
-    // 🔍 3. Find all cards that belong to the same "Original" resource
-    const family = resources
-        .filter(r => r.originId === res.originId)
-        // Sort by vertical position so the top-most card is #1
-        .sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
-
-    // 4. Find where this specific card sits in the vertical stack
-    const index = family.findIndex(r => r.id === res.id);
-
-    // 5. If for some reason it's not found in its own family, fallback to 1/1
-    if (index === -1) return "1/1";
-
-    return `${index + 1}/${family.length}`;
-};
-
 // ➕ Add Logic to a Step
-OL.addStepLogic = async function(resId, stepId, direction) {
+OL.addStepLogic = async function(resId, stepTarget, direction) {
     const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-    const res = resources.find(r => String(r.id) === String(resId));
-    
+    const res = data.resources.find(r => String(r.id) === String(resId));
     if (!res) return console.error("❌ Resource not found:", resId);
 
-    // Find the step by ID
-    const step = res.steps.find(s => String(s.id) === String(stepId));
+    // Find step by ID or Index
+    let step = res.steps.find(s => String(s.id) === String(stepTarget));
+    if (!step && isFinite(stepTarget)) step = res.steps[stepTarget];
     
-    if (!step) {
-        console.error("❌ Step not found:", stepId);
-        return;
-    }
+    if (!step) return console.error("❌ Step not found:", stepTarget);
 
-    // 🛡️ Safety: Initialize objects if they are missing
     if (!step.logic) step.logic = { in: [], out: [] };
     if (!step.logic[direction]) step.logic[direction] = [];
 
-    // Create the new logic block
     const newItem = direction === 'out' 
         ? { rule: '', targetId: '', type: 'link' } 
         : { rule: '', sourceId: '', type: 'link' };
 
     step.logic[direction].push(newItem);
     
-    // Save to Firebase
     await OL.persist(); 
-    
-    // Refresh the Inspector to show the new rule row
     this.openInspector(resId, step.id); 
 };
 
 // 💾 Update Logic Value (Rule or Target)
-OL.updateStepLogic = async function(resId, stepIdx, direction, logicIdx, field, value) {
+OL.updateStepLogic = async function(resId, stepTarget, direction, logicIdx, field, value) {
     const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-    const res = resources.find(r => String(r.id) === String(resId));
-    const step = res?.steps?.[parseInt(stepIdx)];
+    const res = data.resources.find(r => String(r.id) === String(resId));
     
-    if (step && step.logic && step.logic[direction][parseInt(logicIdx)]) {
-        // 1. Update the local value
+    // 🎯 FIX: ID-Aware lookup
+    let step = res?.steps.find(s => String(s.id) === String(stepTarget));
+    if (!step && isFinite(stepTarget)) step = res?.steps[stepTarget];
+    
+    if (step && step.logic?.[direction]?.[parseInt(logicIdx)]) {
         step.logic[direction][parseInt(logicIdx)][field] = value;
 
-        // 🚀 2. REBUILD HANDSHAKES: This mirrors the text to the other card
         OL.syncLogicPorts();
-
-        // 💾 3. SAVE
         await OL.persist(); 
         
-        // 🎨 4. REPAINT LINES
-        OL.drawConnections();
+        // Use requestAnimationFrame for smooth line updates
+        requestAnimationFrame(() => {
+            if (typeof OL.drawConnections === 'function') OL.drawConnections();
+        });
     }
 };
 
-OL.removeStepLogic = function(resId, stepIdx, direction, logicIdx) {
-    // 🎯 1. Get the current project context
+OL.removeStepLogic = async function(resId, stepTarget, direction, logicIdx) {
     const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    
+    // 🎯 FIX: ID-Aware lookup
+    let step = res?.steps.find(s => String(s.id) === String(stepTarget));
+    if (!step && isFinite(stepTarget)) step = res?.steps[stepTarget];
 
-    const res = resources.find(r => String(r.id) === String(resId));
-    const step = res?.steps?.[stepIdx];
     if (!step || !step.logic) return;
 
     const itemToRemove = step.logic[direction][logicIdx];
     const partnerId = direction === 'out' ? itemToRemove.targetId : itemToRemove.sourceId;
 
-    // 🚀 THE MIRROR DELETE: Use the same project context
     if (partnerId) {
-        this.clearMirrorLink(`${resId}-${stepIdx}`, partnerId);
+        this.clearMirrorLink(`${resId}-${res.steps.indexOf(step)}`, partnerId);
     }
 
-    // Remove the item from the current card
     step.logic[direction].splice(logicIdx, 1);
     
-    // 💾 Save to Project/Vault
-    OL.save(); 
-    
+    await OL.persist(); 
     this.drawConnections();
-    this.openInspector(resId, stepIdx); // Refresh UI
+    this.openInspector(resId, step.id); 
 };
 
-OL.updateStepTarget = async function(resId, stepIdx, direction, logicIdx, newPartnerId) {
-    const sIdx = parseInt(stepIdx);
-    const lIdx = parseInt(logicIdx);
+OL.updateStepTarget = async function(resId, stepTarget, direction, logicIdx, newPartnerId) {
     const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
+    const res = data.resources.find(r => String(r.id) === String(resId));
     
-    const res = resources.find(r => String(r.id) === String(resId));
-    if (!res || !res.steps[sIdx]) return;
+    // 🎯 FIX: ID-Aware lookup
+    let step = res?.steps.find(s => String(s.id) === String(stepTarget));
+    if (!step && isFinite(stepTarget)) step = res?.steps[stepTarget];
 
-    const item = res.steps[sIdx].logic[direction][lIdx];
-    const selfId = `${resId}-${sIdx}`;
+    if (step) {
+        const item = step.logic[direction][parseInt(logicIdx)];
+        // Use the actual ID for the handshake
+        const selfId = `${res.id}-${res.steps.indexOf(step)}`;
 
-    // 1. Update the local source object
-    if (direction === 'out') {
-        item.targetId = newPartnerId;
-        item.type = (newPartnerId === selfId) ? 'loop' : 'link';
-    } else {
-        item.sourceId = newPartnerId;
+        if (direction === 'out') {
+            item.targetId = newPartnerId;
+            item.type = (newPartnerId === selfId) ? 'loop' : 'link';
+        } else {
+            item.sourceId = newPartnerId;
+        }
+
+        OL.syncLogicPorts(); 
+        await OL.persist();
+        
+        // UI Refresh
+        if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
+        this.openInspector(resId, step.id); 
+
+        requestAnimationFrame(() => {
+            setTimeout(() => { OL.drawConnections(); }, 50); 
+        });
     }
-
-    // 🚀 THE CRITICAL STEP: Rebuild the reciprocal links locally 
-    // so the "Input" exists in the data before it hits Firebase.
-    OL.syncLogicPorts(); 
-    OL.save();
-    OL.drawConnections();
-
-    // 💾 2. Sync to Cloud
-    // We don't wrap the mutation because it's already done; we just trigger the push.
-    await OL.updateAndSync(() => {
-        console.log(`📡 Syncing Handshake: ${selfId} <-> ${newPartnerId}`);
-    });
-
-    // 🎨 3. UI Refresh
-    this.renderVisualizer(); 
-    this.openInspector(resId, sIdx); 
-
-    // Replace your drawConnections() calls with this pattern:
-    requestAnimationFrame(() => {
-        // This waits for the next browser 'paint'
-        setTimeout(() => {
-            OL.drawConnections();
-        }, 50); 
-    });
 };
 
 OL.syncLogicPorts = function() {
@@ -10312,87 +10306,6 @@ OL.duplicateResourceV2 = async function(resourceId) {
         source.push(clone);
     });
     if (OL.renderVisualizer) OL.renderVisualizer(isVault);
-};
-
-OL.navigateToScoping = function(resId) {
-    console.log("🎯 Navigating to Scoping for Resource:", resId);
-
-    // 1. Switch the App Mode to Scoping
-    // This assumes you have a central 'switchMode' or similar
-    if (typeof OL.setMode === 'function') {
-        OL.setMode('scoping'); 
-    } else {
-        // Fallback: Manually trigger whatever shows your scoping table
-        state.ui.currentMode = 'scoping';
-        OL.render(); 
-    }
-
-    // 2. Wait for the table to actually render (DOM isn't instant)
-    setTimeout(() => {
-        const targetRow = document.querySelector(`[data-res-id="${resId}"]`);
-        
-        if (targetRow) {
-            // Highlight it so the user sees it
-            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetRow.classList.add('highlight-flash');
-            
-            // Clean up the highlight after a second
-            setTimeout(() => targetRow.classList.remove('highlight-flash'), 2000);
-        } else {
-            console.warn("📍 Scoping row not found for ID:", resId);
-            OL.notify("Resource not found in Scoping Sheet", "warning");
-        }
-    }, 300); // 300ms is usually enough for a table render
-};
-
-OL.jumpToScopingItem = function(nodeId) {
-    console.log("🔗 Navigating via filtered link for:", nodeId);
-    // This is the "old way" that worked: just point the browser to the new hash
-    window.location.hash = `#/scoping-sheet?focus=${nodeId}`;
-};
-
-OL.toggleMasterExpand = async function() {
-    const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-    
-    // 1. Check current state: If any card with steps is currently expanded, 
-    // our goal is to COLLAPSE ALL. Otherwise, EXPAND ALL.
-    const isAnyExpanded = resources.some(r => r.isExpanded && r.steps?.length > 0);
-    const newState = !isAnyExpanded;
-
-    console.log(newState ? "📂 Global Action: Expand All" : "📁 Global Action: Collapse All");
-
-    // 2. Update the data model for EVERY resource
-    resources.forEach(node => {
-        if (node.steps && node.steps.length > 0) {
-            node.isExpanded = newState;
-            
-            // Sync the tracking Set for the inspector/other UI logic
-            if (newState) {
-                state.v2.expandedNodes.add(node.id);
-            } else {
-                state.v2.expandedNodes.delete(node.id);
-            }
-        }
-    });
-
-    // 3. Save to Cloud & Tidy the Layout
-    // Wrapping in updateAndSync ensures the 'bounce-back' doesn't ruin the alignment
-    await OL.updateAndSync(() => {
-        // Tidy the Y-axis gaps now that card heights have changed
-        if (typeof OL.autoAlignNodes === 'function') {
-            OL.autoAlignNodes(false); 
-        }
-    });
-
-    // 4. Repaint the Canvas
-    OL.renderVisualizer();
-    
-    // 5. Urgent Connection Pass
-    // Wait for the DOM to settle so anchor points are accurate
-    setTimeout(() => {
-        if (typeof OL.drawConnections === 'function') OL.drawConnections();
-    }, 150);
 };
 
 OL.toggleWorkbenchTray = function() {
@@ -11902,7 +11815,6 @@ OL.removeTeamMember = function (memberId) {
 };
 
 // 3. OPEN TEAM MEMBER MODAL
-
 OL.openTeamMemberModal = function (memberId, draftObj = null) {
     const client = getActiveClient();
     
@@ -12307,7 +12219,6 @@ OL.removeAccess = function (accessId, ownerId, type) {
 };
 
 // 2. RENDER CREDENTIALS SECTION ON APP CARDS
-
 function renderCredentialRow(clientId, cred, idx, perm) {
   const app = state.master.apps.find((a) => a.id === cred.appId);
   const isFull = perm === "full";
