@@ -9332,7 +9332,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                     </div>
 
                     ${dir === 'out' ? `
-                        <select onchange="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'type', this.value)">
+                        <select onchange="OL.updateStepLogic('${resId}','${stepId}', '${dir}', ${i}, 'type', this.value)">
                             <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
                             <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
                         </select>
@@ -9341,7 +9341,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
 
                 ${!isReadOnly ? `
                     <button class="logic-delete-btn" 
-                            onclick="OL.removeStepLogic('${resId}', ${stepIdx}, '${dir}', ${i})"
+                            onclick="OL.removeStepLogic('${resId}', '${stepId}', '${dir}', ${i})"
                             title="Remove Rule">×</button>
                 ` : ''}
             </div>
@@ -9362,7 +9362,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                    ${isReadOnly ? 'readonly' : ''}
                    placeholder="${isReadOnly ? 'No condition' : 'Condition (e.g. If Approved)'}" 
                    style="width: 100%; margin-bottom: 8px; font-size: 11px; ${isReadOnly ? 'border-color: transparent; background: transparent; pointer-events: none; opacity: 0.6;' : ''}"
-                   onblur="OL.updateStepLogic('${resId}', '${stepIdx}', '${dir}', ${i}, 'rule', this.value)">
+                   onblur="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'rule', this.value)">
             
             ${!isReadOnly ? `
                 <select onchange="OL.updateStepTarget('${resId}', '${stepIdx}', '${dir}', ${i}, this.value)" 
@@ -9388,7 +9388,7 @@ OL.renderLogicBlock = function(resId, stepIdx, dir, i, logic, allOptions) {
                     <input value="${esc(logic.loopLimit || '')}" 
                            placeholder="e.g. 3 times or 'Until Signed'..." 
                            style="font-size:11px; border-style:dashed; color: var(--warning); border-color: var(--warning);"
-                           onblur="OL.updateStepLogic('${resId}', ${stepIdx}, '${dir}', ${i}, 'loopLimit', this.value)">
+                           onblur="OL.updateStepLogic('${resId}', ${stepId}, '${dir}', ${i}, 'loopLimit', this.value)">
                 </div>
             ` : ''}
         </div>
