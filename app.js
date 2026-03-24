@@ -989,7 +989,7 @@ window.renderClientDashboard = function() {
         </div>
 
         <div class="filter-bar">
-            ${['All', 'Discovery', 'Active', 'On Hold', 'Review', 'Completed'].map(f => `
+            ${['All', 'Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'].map(f => `
                 <span class="pill tiny ${activeFilter === f ? 'accent' : 'soft'}" 
                       style="border: 1px solid ${activeFilter === f ? 'var(--accent)' : 'transparent'}; padding: 4px 12px; border-radius: 20px;"
                       onclick="OL.setDashboardFilter('${f}')">
@@ -1036,7 +1036,7 @@ window.renderClientDashboard = function() {
                                 onclick="event.stopPropagation()" 
                                 onchange="OL.updateClientStatus('${client.id}', this.value)"
                                 style="background: var(--bg-card); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; cursor: pointer; outline: none;">
-                            ${['Discovery', 'Active', 'On Hold', 'Review', 'Completed'].map(status => `
+                            ${['Discovery', 'White Glove', 'Coaching', 'Ongoing Maintenance', 'Ad Hoc Maintenance', 'Former Client', 'Former Prospect', 'Partner'].map(status => `
                                 <option value="${status}" ${client.meta.status === status ? 'selected' : ''}>${status}</option>
                             `).join('')}
                         </select>
@@ -1045,8 +1045,8 @@ window.renderClientDashboard = function() {
                         <div class="hover-preview-zone" style="position:relative; display:inline-block;">
                             <div class="small muted">Onboarded: ${client.meta.onboarded}</div>
                             <div class="task-preview-tooltip">
-                                <div class="bold tiny accent" style="margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:3px;">Recent Activity</div>
-                                ${recentTasks.length ? recentTasks.map(t => `<div class="tiny muted" style="margin-bottom:2px;">• ${esc(t.task)}</div>`).join('') : '<div class="tiny muted">No recent tasks</div>'}
+                                <div class="bold tiny accent" style="margin-bottom:5px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:3px;">Open Tasks</div>
+                                ${recentTasks.length ? recentTasks.map(t => `<div class="tiny muted" style="margin-bottom:2px;">• ${esc(t.name)}</div>`).join('') : '<div class="tiny muted">No recent tasks</div>'}
                             </div>
                         </div>
 
