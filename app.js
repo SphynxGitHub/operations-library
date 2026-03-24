@@ -393,7 +393,7 @@ window.buildLayout = function () {
     {
       key: "functions",
       label: "Master Functions",
-      icon: "🔨",
+      icon: "⚒",
       href: "#/vault/functions",
     },
     {
@@ -445,7 +445,7 @@ window.buildLayout = function () {
     {
       key: "functions",
       label: "Functions",
-      icon: "🔨",
+      icon: "⚒",
       href: "#/functions",
     },
     {
@@ -7608,98 +7608,84 @@ OL.initWBMotion = function(e, id) {
     const res = resources.find(r => String(r.id) === String(id));
     if (!res) return;
 
+    // 🚩 1. SHARED STATE (Top of scope)
+    let isResizingLane = false; 
+    let activeResizingStage = null;
+
     let indicator = document.getElementById('drag-indicator');
     if (!indicator) {
         indicator = document.createElement('div');
         indicator.id = 'drag-indicator';
         document.body.appendChild(indicator);
     }
+    
     indicator.style.display = 'block';
+    indicator.style.zIndex = '99999'; 
     indicator.style.opacity = '1';
 
     const el = document.getElementById(`v2-node-${id}`);
     if (el) el.classList.add('is-dragging-ghost');
 
     const onMove = (mE) => {
-        indicator.style.transform = `translate(${mE.clientX - 7}px, ${mE.clientY - 7}px)`;
+        // Move the Dot Guide
+        indicator.style.left = `${mE.clientX - 7}px`;
+        indicator.style.top = `${mE.clientY - 7}px`;
         indicator.style.position = 'fixed';
 
         const rect = canvas.getBoundingClientRect();
         const mouseCanvasX = (mE.clientX - rect.left) / zoom;
 
-        let accX = 0;
-        document.querySelectorAll('.v2-lane-section').forEach((laneEl, idx) => {
-            const stage = stages[idx];
-            if (!stage) return;
-            const w = stage.width || 320;
-            const isNearLine = mouseCanvasX > accX + w - 30 && mouseCanvasX < accX + w + 30;
-            if (isNearLine && mE.clientY > 150) { 
-                laneEl.style.width = `${Math.max(300, mouseCanvasX - accX + 20)}px`;
-            } else {
-                laneEl.style.width = `${w}px`;
-            }
-            accX += w;
-        });
-        OL.drawConnections();
+        // 🛡️ 2. LANE RESIZING LOGIC
+        // Only trigger if we aren't "in the middle" of a card move (Y < 150)
+        // AND only if the click originated in the header area.
+        if (mE.clientY < 150) { 
+            let accX = 40; // Start after the first "+" button
+            const laneElements = document.querySelectorAll('.v2-lane-section:not(.start-trigger)');
+            
+            laneElements.forEach((laneEl, idx) => {
+                const stage = stages[idx];
+                if (!stage) return;
+                const w = stage.width || 320;
+                
+                // Edge detection (within 30px of the line)
+                const isNearLine = mouseCanvasX > (accX + w - 30) && mouseCanvasX < (accX + w + 30);
+                
+                if (isNearLine) {
+                    isResizingLane = true;
+                    activeResizingStage = stage;
+                    const newWidth = Math.max(300, mouseCanvasX - accX);
+                    laneEl.style.width = `${newWidth}px`;
+                    stage.width = newWidth; 
+                }
+                accX += w;
+            });
+        }
+
+        if (isResizingLane) {
+            OL.drawConnections();
+        }
     };
 
     const onUp = async (uE) => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        
         indicator.style.display = 'none';
         if (el) el.classList.remove('is-dragging-ghost');
 
-        const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
-        
-        // 🚀 1. THE MERGE LOGIC (Collision Check)
-        const dropTargetCard = dropPointEl?.closest('.v2-node-card');
-        const targetId = dropTargetCard?.id.replace('v2-node-', '');
-
-        if (dropTargetCard && targetId !== String(res.id)) {
-            const targetRes = resources.find(r => String(r.id) === targetId);
-            
-            // Only merge if they belong to the same origin family
-            if (targetRes && targetRes.originId === res.originId) {
-                console.log(`🔗 Merging family pieces: ${res.id} -> ${targetRes.id}`);
-                
-                await OL.updateAndSync(() => {
-                    const currentTargetStepCount = targetRes.steps?.length || 0;
-                    const repairMap = {};
-
-                    // Map old step IDs to their new positions in the target card
-                    res.steps?.forEach((step, i) => {
-                        const oldFullId = `${res.id}-${i}`;
-                        const newFullId = `${targetRes.id}-${currentTargetStepCount + i}`;
-                        repairMap[oldFullId] = newFullId;
-                    });
-
-                    // Update all connections in the project to point to the new merged indices
-                    resources.forEach(r => {
-                        r.steps?.forEach(s => {
-                            s.logic?.out?.forEach(link => {
-                                if (repairMap[link.targetId]) link.targetId = repairMap[link.targetId];
-                            });
-                            // No need to map 'in' links as syncLogicPorts() will rebuild them
-                        });
-                    });
-
-                    // Transfer steps and delete the old card
-                    targetRes.steps = [...(targetRes.steps || []), ...(res.steps || [])];
-                    const resIdx = resources.findIndex(r => r.id === res.id);
-                    if (resIdx > -1) resources.splice(resIdx, 1);
-                    
-                    // Re-calculate family naming (1/2, 2/2, etc)
-                    OL.refreshFamilyNaming(targetRes, resources);
-                    OL.syncLogicPorts();
-                });
-
-                OL.autoAlignNodes(false);
-                OL.renderVisualizer();
-                return; // Exit early, merge complete
-            }
+        // 🏁 3. SAVE RESIZING
+        if (isResizingLane) {
+            await OL.persist();
+            OL.renderVisualizer();
+            return;
         }
 
-        // 🗄️ 2. BENCH/SHELF LOGIC
+        // 🏁 4. STANDARD CARD DROP
+        const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = (uE.clientX - rect.left) / zoom;
+        const canvasY = (uE.clientY - rect.top) / zoom;
+
         const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
         const isOverTopShelf = dropPointEl?.closest('#global-shelf');
 
@@ -7710,32 +7696,38 @@ OL.initWBMotion = function(e, id) {
             delete res.coords;
         } 
         else {
-            // 🗺️ 3. CANVAS DROP LOGIC
-            const rect = canvas.getBoundingClientRect();
-            const canvasX = (uE.clientX - rect.left) / zoom;
-            const canvasY = (uE.clientY - rect.top) / zoom;
-
             res.isGlobal = false;
             res.isTopShelf = false;
-            res.coords = { x: Math.round(canvasX - 40), y: Math.round(canvasY) };
-            
-            let accX = 0;
+
+            // 1. Calculate drop coordinates (account for center-offset)
+            const dropX = canvasX - 110; // Use 110 (half of 220px card)
+            const dropY = canvasY - 20;
+
+            let accX = 40; 
             const COLUMN_WIDTH = 300; 
 
             for (let s of stages) {
                 const w = s.width || 320;
                 if (canvasX >= accX && canvasX <= accX + w) {
                     res.stageId = s.id;
+                    
+                    // 🎯 THE FIX: Calculate the Column BEFORE updating coords
+                    // This ensures the intent (where you let go) is saved as data
                     const localXInLane = canvasX - accX;
-                    res._col = Math.floor(Math.max(0, localXInLane - 40) / COLUMN_WIDTH);
+                    res._col = Math.floor(Math.max(0, localXInLane) / COLUMN_WIDTH);
+                    
+                    // 📍 Update coordinates with the logic-aware position
+                    res.coords = { x: Math.round(dropX), y: Math.round(dropY) };
                     break;
                 }
                 accX += w;
             }
         }
 
-        await OL.updateAndSync(() => { OL.autoAlignNodes(false);
-        OL.drawConnections();});
+        await OL.updateAndSync(() => { 
+            OL.autoAlignNodes(false);
+            OL.drawConnections();
+        });
         OL.renderVisualizer();
     };
 
@@ -7743,81 +7735,53 @@ OL.initWBMotion = function(e, id) {
     window.addEventListener('mouseup', onUp);
 };
 
-OL.autoAlignNodes = async function(isManualDrag = false) {
-    const data = OL.getCurrentProjectData(); // Use our new context-aware helper
-    const resources = data.resources;
-    const stages = data.stages;
+OL.autoAlignNodes = async function() {
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
+    const stages = data.stages || [];
     
-    const VERTICAL_GAP = 60; 
+    const VERTICAL_GAP = 40;  
     const COLUMN_WIDTH = 300; 
     const START_Y = 120;
-    let currentXOffset = 0;
+    let currentXOffset = 40; 
 
     stages.forEach((stage) => {
-        // Filter for cards in this lane that aren't on the global shelf
-        const laneNodes = resources.filter(r => r.stageId === stage.id && r.coords && !r.isGlobal);
+        // Find cards in this lane
+        const laneNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
         
-        // Sort by Y so we maintain the intended vertical order
-        laneNodes.sort((a, b) => a.coords.y - b.coords.y);
+        // Sort by Y so we maintain the relative vertical order you dropped them in
+        laneNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
 
+        // 📔 Create a Y-cursor for every possible column
         const columnCursors = {}; 
-        const laneStartX = currentXOffset;
 
         laneNodes.forEach(node => {
-            // Handle column assignment (keep existing logic)
-            if (isManualDrag || node._col === undefined) {
-                const relX = node.coords.x - laneStartX;
-                node._col = relX > 140 ? Math.floor((relX - 40 + 100) / COLUMN_WIDTH) : 0;
-            }
-            
-            const col = node._col;
-            if (!columnCursors[col]) columnCursors[col] = START_Y;
+            // Respect the saved column from the Drop Logic
+            const col = node._col || 0;
+            if (columnCursors[col] === undefined) columnCursors[col] = START_Y;
 
-            // 📍 APPLY POSITION
-            node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
-            node.coords.y = columnCursors[col];
+            // 📍 SNAP TO GRID: Apply X based on column, Y based on vertical cursor
+            node.coords = {
+                x: currentXOffset + (col * COLUMN_WIDTH),
+                y: columnCursors[col]
+            };
 
-            // 📏 DYNAMIC HEIGHT CALCULATION
-            // Base card height is ~100px. If expanded, we add ~22px per step.
-            const baseCardShell = 80;
-            const footerArea = 40;
-            const lineClearance = 10;
-            const charPerLine =10;
+            // 📏 Dynamic height calculation for the next item in THIS column
+            const stepHeight = node.isExpanded ? (node.steps?.length || 0) * 35 : 0;
+            const totalNodeHeight = 80 + stepHeight + 40;
 
-            let estimatedContentHeight = 0;
-            
-            if (node.isExpanded && node.steps) {
-                node.steps.forEach(s => {
-                    const text = s.name || s.text || "";
-                    // Calculate how many lines this specific step takes
-                    const lines = Math.max(1, Math.ceil(text.length / charPerLine));
-                    // Add 12px for vertical padding/gap between steps
-                    estimatedContentHeight += (lines * lineClearance) + 12;
-                    
-                    // Add extra space for the Scissor Divider if not the last step
-                    estimatedContentHeight += 6; 
-                });
-            }
-
-            const totalNodeHeight = baseCardShell + estimatedContentHeight + footerArea;
-
-            // 📍 APPLY POSITION
-            node.coords.x = laneStartX + 40 + (col * COLUMN_WIDTH);
-            node.coords.y = columnCursors[col];
-
-            // Move the cursor down for the NEXT card in this column
-            // We add VERTICAL_GAP (e.g., 60px) as the buffer between cards
+            // Move the cursor down for just this column
             columnCursors[col] += (totalNodeHeight + VERTICAL_GAP);
         });
 
-        // Update stage width to accommodate columns
-        const maxCol = Math.max(0, ...Object.keys(columnCursors).map(Number));
-        stage.width = Math.max(320, (maxCol * COLUMN_WIDTH) + 340);
+        // Update stage width to fit the widest column count
+        const maxColIndex = Math.max(-1, ...Object.keys(columnCursors).map(Number));
+        stage.width = Math.max(320, ((maxColIndex + 1) * COLUMN_WIDTH) + 60);
+        
         currentXOffset += stage.width;
     });
 
-    // Save and Re-render
-    OL.persist();
+    await OL.persist();
     OL.renderVisualizer();
 };
 
@@ -7826,16 +7790,22 @@ OL.getCurrentProjectData = function() {
     const isVault = hash.startsWith('#/vault');
     
     if (isVault) {
-        return {
-            stages: OL.state.master.stages || [],
-            resources: OL.state.master.resources || []
-        };
+        if (!state.master.stages) state.master.stages = [];
+        return state.master; // Already has .stages and .resources
     } else {
-        // Find the client project data via our global helper
-        const client = getActiveClient(); 
+        const client = getActiveClient();
+        if (!client) return { stages: [], resources: [] };
+
+        // Ensure stages exists
+        if (!client.projectData.stages) client.projectData.stages = [];
+        
+        // 🎯 THE MAPPING FIX: 
+        // We point .resources to .localResources so the visualizer 
+        // sees the cards it's looking for.
         return {
-            stages: client?.projectData?.stages || [],
-            resources: client?.projectData?.localResources || []
+            ...client.projectData,
+            stages: client.projectData.stages,
+            resources: client.projectData.localResources || []
         };
     }
 };
@@ -8000,6 +7970,15 @@ OL.renderVisualizer = function() {
         canvas.style.width = `${totalCanvasWidth}px`;
         canvas.style.transform = `scale(${OL.state.v2.zoom})`;
     }
+    const startTrigger = document.createElement('div');
+        startTrigger.className = 'v2-lane-section start-trigger';
+        startTrigger.style.width = '40px';
+        startTrigger.innerHTML = `
+            <div class="lane-insert-trigger" onclick="OL.addStageBetween(0)">
+                <div class="insert-btn" title="Add First Stage">+</div>
+            </div>
+        `;
+        stageLayer.appendChild(startTrigger);
 
     // --- 📁 3. RENDER STAGES ---
     stages.forEach((s, idx) => {
@@ -8008,10 +7987,10 @@ OL.renderVisualizer = function() {
         div.style.width = `${s.width || 320}px`;
         div.innerHTML = `
             <div class="lane-label">
-                <span contenteditable="true" spellcheck="false" onblur="OL.renameStage(${idx}, this.innerText)">${esc(s.name)}</span>
-                <button class="delete-lane-btn" onclick="event.stopPropagation(); OL.deleteStage(${idx})">×</button>
+                <span contenteditable="true" onblur="OL.renameStage(${idx}, this.innerText)">${esc(s.name)}</span>
+                <button class="delete-lane-btn" onclick="OL.deleteStage(${idx})">×</button>
             </div>
-            <div class="lane-insert-trigger" onclick="event.stopPropagation(); OL.addStageBetween(${idx + 1})">
+            <div class="lane-insert-trigger" onclick="OL.addStageBetween(${idx + 1})">
                 <div class="insert-btn">+</div>
             </div>
         `;
@@ -8643,32 +8622,30 @@ OL.renameStage = function(index, newName) {
 };
 
 // ➕ THE INSERTION LOGIC
-OL.addStageBetween = function(index) {
-    const newName = prompt("New Stage Name:", "New Phase");
-    if (!newName) return;
+OL.addStageBetween = async function(index) {
+    const name = prompt("Enter Stage Name:", "New Stage");
+    if (!name) return;
 
-    // 🎯 1. Get the correct project context
-    const data = OL.getCurrentProjectData();
-    const stages = data.stages || [];
+    const client = getActiveClient();
+    const isVault = window.location.hash.startsWith('#/vault');
 
-    const newStage = {
-        id: 's' + Date.now(),
-        name: newName,
-        width: 320
-    };
+    await OL.updateAndSync(() => {
+        const newStage = {
+            id: 'stage-' + Date.now(),
+            name: name,
+            width: 400
+        };
 
-    // 🚀 2. Inject at the specific index in the array
-    stages.splice(index, 0, newStage);
-    
-    // 💾 3. Persist the new stage order
-    OL.save(); 
+        if (isVault) {
+            if (!state.master.stages) state.master.stages = [];
+            state.master.stages.splice(index, 0, newStage);
+        } else if (client) {
+            if (!client.projectData.stages) client.projectData.stages = [];
+            // Target the REAL array inside the client object
+            client.projectData.stages.splice(index, 0, newStage);
+        }
+    });
 
-    // 📏 4. Refresh the board
-    // We run autoAlign because shifting stages changes the X-coordinates 
-    // where cards need to snap.
-    OL.autoAlignNodes(false); 
-    
-    // 🎨 5. Full Re-render to show the new lane divider
     OL.renderVisualizer();
 };
 
