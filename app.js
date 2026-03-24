@@ -393,7 +393,7 @@ window.buildLayout = function () {
     {
       key: "functions",
       label: "Master Functions",
-      icon: "⚒",
+      icon: "🔨",
       href: "#/vault/functions",
     },
     {
