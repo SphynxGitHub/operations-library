@@ -4378,29 +4378,22 @@ body.light-mode {
 .v2-node-card {
     position: absolute; width: 220px; background: var(--bg-card); color: var(--text-main); overflow: visible; z-index: 10;
     border: 1px solid var(--border); border-radius: 8px; padding: 15px; cursor: grab;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    user-select: none; /* Prevents text selection during drag */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3); user-select: none; /* Prevents text selection during drag */
     transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
                 top 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
                 width 0.3s ease;
 }
 
 .v2-node-card:hover {
-    border-color: var(--accent);
-    background: var(--bg-card-hover);
-    transform: translateY(-2px);
+    border-color: var(--accent); background: var(--bg-card-hover); transform: translateY(-2px);
 }
 
-.v2-node-card.node-dimmed {
-    opacity: 0.15 !important;
-    filter: grayscale(1);
-    pointer-events: none;
+.v2-node-card.node-dimmed, #mainContent.canvas-dimmed .card:not(.family-focus) {
+    opacity: 0.15 !important; filter: grayscale(1); pointer-events: none;
 }
 
-.v2-node-card.node-matched {
-    opacity: 1 !important;
-    border: 2px solid var(--accent) !important;
-    box-shadow: 0 0 15px var(--accent-glow) !important;
+.v2-node-card.node-matched, #mainContent.canvas-dimmed .card.family-focus {
+    opacity: 1 !important; border: 2px solid var(--accent) !important; box-shadow: 0 0 15px var(--accent-glow) !important;
 }
 
 .v2-node-card.filter-hidden {
@@ -4411,16 +4404,27 @@ body.light-mode {
 
 /* Ensure the search-match highlight is visible */
 .v2-node-card.search-match {
-    border: 2px solid var(--accent) !important;
-    box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.3);
+    border: 2px solid var(--accent) !important; box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.3);
 }
+
+/* The Selection Glow */
+.card.is-active {
+    border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.3), var(--shadow-lg);
+    background: rgba(var(--accent-rgb), 0.05); transform: translateY(-2px);
+}
+
+/* Family Badge Polish */
+.family-badge {
+    display: flex; align-items: center; justify-content: center; min-width: 16px; height: 14px;
+}
+
 /*==================Node Card Badges */
 
 .header-badges-wrap {
     display: flex; gap: 8px; margin-left: auto; padding-left: 10px; flex-direction: row; margin-top: 10px;
 }
 
-.v2-scope-badge, .v2-duplicate-badge {
+.v2-scope-badge, .v2-duplicate-badge, .v2-logic-badge {
    width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
     border-radius: 4px; font-size: 10px; cursor: pointer; transition: all 0.2s;
     background: rgba(255,255,255,0.05);  border: 1px solid rgba(255,255,255,0.1);
@@ -4451,6 +4455,14 @@ body.light-mode {
     transform: scale(1.1); filter: brightness(1.15); /* Get slightly brighter */ box-shadow: 0 5px 15px rgba(var(--color-scoping-rgb), 0.4);
 }
 
+.v2-logic-badge {
+  background: var(--bg-main); color: var(--text-main); border: 1px solid var (--text-main);
+}
+
+.v2-logic-badge:hover {
+    transform: scale(1.1); filter: brightness(1.15); /* Get slightly brighter */ box-shadow: 0 5px 15px var(--vault-gold);
+}
+
 .v2-duplicate-badge {
     color: var(--accent); border: 1px solid var(--accent); opacity: 0.6;
 }
@@ -4460,6 +4472,35 @@ body.light-mode {
 }
 
 .type-badge {border: 1px solid var(--vault-gold); opacity: 0.5; border-radius: 4px; padding-left: 3%; padding-right: 3%;}
+
+/* ================ Logic Menu */
+
+/* Ensure the wrapper allows absolute positioning */
+.v2-logic-trigger-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+/* The actual dropdown content */
+.v2-logic-menu {
+    display: none; /* Hidden by default */
+    position: absolute; top: 50%; right: 0; width: 160px; background: var(--bg-card, #1e293b); border: 1px solid var(--accent, #38bdf8);
+    border-radius: 6px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); z-index: 11000; /* Must be higher than the node cards */
+    padding: 5px 0; color: var(--text-main);
+}
+
+.v2-logic-menu .dropdown-item {
+    padding: 8px 12px;  font-size: 11px; cursor: pointer;  white-space: nowrap;
+}
+
+.v2-logic-menu .dropdown-item:hover {
+    background: rgba(56, 189, 248, 0.2);
+}
+
+.v2-logic-menu .divider {
+    height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0;
+}
+
 /*=================Card Drag */
 
 .is-dragging-node { cursor: grabbing !important; }
@@ -4470,8 +4511,8 @@ body.light-mode {
 
 /* The ghost that shows where the card WILL land */
 #drag-indicator {
-    position: absolute;  width: 8px;  height: 8px;   background: var(--accent);  border-radius: 50%;  pointer-events: none;
-    z-index: 10000;   box-shadow: 0 0 10px var(--accent-glow);   transition: transform 0.1s ease-out;   display: none;
+    position: fixed;  width: 8px;  height: 8px;   background: var(--accent);  border-radius: 50%;  pointer-events: none;
+    z-index: 9999;   box-shadow: 0 0 10px var(--accent-glow);   transition: transform 0.1s ease-out;   display: none;
 }
 
 /* Hide the actual card being dragged */
