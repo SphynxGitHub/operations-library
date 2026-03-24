@@ -4484,7 +4484,7 @@ body.light-mode {
 /* The actual dropdown content */
 .v2-logic-menu {
     display: none; /* Hidden by default */
-    position: absolute; top: 50%; right: 0; width: 160px; background: var(--bg-card, #1e293b); border: 1px solid var(--accent, #38bdf8);
+    position: absolute; top: 50%; right: 0; width: 160px; background: var(--bg-card); border: 1px solid var(--accent, #38bdf8);
     border-radius: 6px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); z-index: 11000; /* Must be higher than the node cards */
     padding: 5px 0; color: var(--text-main);
 }
