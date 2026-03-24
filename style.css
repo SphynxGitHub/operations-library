@@ -4485,8 +4485,12 @@ body.light-mode {
 .v2-logic-menu {
     display: none; /* Hidden by default */
     position: absolute; top: 50%; right: 0; width: 160px; background: var(--bg-card); border: 1px solid var(--accent, #38bdf8);
-    border-radius: 6px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); z-index: 1100; /* Must be higher than the node cards */
-    padding: 5px 0; color: var(--text-main);
+    border-radius: 6px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); z-index: 99999 !important; /* Must be higher than the node cards */
+    padding: 5px 0; color: var(--text-main); pointer-events: auto !important;
+}
+
+.v2-node-card:has(.v2-logic-menu[style*="display: block"]) {
+    z-index: 99998; /* Make the parent card slightly higher than others */
 }
 
 .v2-logic-menu .dropdown-item {
