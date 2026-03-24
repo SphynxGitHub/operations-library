@@ -7615,6 +7615,7 @@ OL.initWBMotion = function(e, id) {
         document.body.appendChild(indicator);
     }
     indicator.style.display = 'block';
+    indicator.style.opacity = '1';
 
     const el = document.getElementById(`v2-node-${id}`);
     if (el) el.classList.add('is-dragging-ghost');
@@ -7839,6 +7840,14 @@ OL.getCurrentProjectData = function() {
     }
 };
 
+// 🛡️ Global Logic Menu Closer
+document.addEventListener('mousedown', (e) => {
+    // If the click is NOT on a logic badge or inside a logic menu, hide all menus
+    if (!e.target.closest('.v2-logic-badge') && !e.target.closest('.v2-logic-menu')) {
+        document.querySelectorAll('.v2-logic-menu').forEach(m => m.style.display = 'none');
+    }
+});
+
 OL.renderVisualizer = function() {
     const mainArea = document.getElementById('mainContent');
     if (!mainArea) return;
@@ -8023,7 +8032,23 @@ OL.renderVisualizer = function() {
               title="Left Click: View in Sheet | Right Click: Toggle Status"
               >
                 $
-            </a>`;
+            </a>`;        
+        const logicMenu = `
+            <div class="v2-logic-trigger-wrap" style="position: relative; display: inline-block;">
+                <button class="v2-logic-badge" onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">
+                    λ
+                </button>
+                <div id="logic-menu-${res.id}" class="v2-logic-menu dropdown-plus-menu">
+                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'in')">📥 Show Inputs</div>
+                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'out')">📤 Show Outputs</div>
+                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'both')">↔️ Show Both</div>
+                    <div class="divider"></div>
+                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'trace-start')">⏪ Flow to Start</div>
+                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'trace-end')">⏩ Flow to End</div>
+                    <div class="dropdown-item danger" onclick="OL.setTraceMode(null, null)">🚫 Hide All</div>
+                </div>
+            </div>
+        `;
         const duplicateBadge = `
             <div class="v2-duplicate-badge" 
                 onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}')"
@@ -8054,6 +8079,7 @@ OL.renderVisualizer = function() {
                         <small class="tiny muted uppercase type-badge">${esc(res.type || 'Resource')}</small>
                         ${numberingHtml}
                         ${scopeBadge}
+                        ${logicMenu}
                         ${duplicateBadge}
                     </div>
                 </div>
@@ -8090,7 +8116,7 @@ OL.renderVisualizer = function() {
         `;
 
         div.onmousedown = (e) => {
-            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-step-item, .v2-add-step-btn, .delete-step-btn')) return;
+            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-logic-trigger-wrap, .v2-logic-badge, .v2-step-item, .v2-add-step-btn, .delete-step-btn')) return;
             e.stopPropagation();
             OL.initWBMotion(e, res.id);
         };
@@ -8122,6 +8148,25 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
 
 // Global to track the dragged index
 state.draggingStepIdx = null;
+
+OL.toggleLogicMenu = function(id) {
+    const target = document.getElementById(`logic-menu-${id}`);
+    const isAlreadyOpen = target.style.display === 'block';
+
+    // Close all other open menus
+    document.querySelectorAll('.v2-logic-menu').forEach(m => m.style.display = 'none');
+
+    // Toggle the clicked one
+    if (target) {
+        target.style.display = isAlreadyOpen ? 'none' : 'block';
+    }
+};
+
+OL.setTraceMode = function(resId, mode) {
+    state.v2.activeTrace = { resId, mode };
+    document.querySelectorAll('.v2-logic-menu').forEach(m => m.style.display = 'none');
+    OL.drawConnections(); // Trigger the filtered redraw
+};
 
 OL.handleStepDragStart = function(e, index) {
     state.draggingStepIdx = index;
@@ -9802,175 +9847,207 @@ OL.drawConnections = function() {
     if (!svg || !lineGroup) return;
 
     // 🧹 1. RESET & CLEANUP
-    // Clear the SVG groups to prevent "ghost lines" from stacking up during drags
+    // Clear all existing SVG elements so we start with a blank canvas for this frame.
     lineGroup.innerHTML = ''; 
     if (shelfLineGroup) shelfLineGroup.innerHTML = '';
-    // Remove any stray path elements or logic icon containers from previous renders
     svg.querySelectorAll('.path-flow, .logic-gate-container').forEach(el => el.remove());
+
+    // 🕵️ 2. TRACE LOGIC INITIALIZATION
+    // Check the global state to see if the user has requested to hide lines or trace a specific path.
+    const trace = state.v2.activeTrace;
+    if (!trace || (!trace.resId && !trace.mode)) return; // 🚀 HIDE BY DEFAULT logic
 
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
     const zoom = state.v2.zoom || 1;
-    const isSearchActive = !!document.getElementById('canvas-filter-input')?.value.trim() || state.canvasMatches.length > 0;
 
-    // 🔄 2. ITERATION: Loop through every resource in the project
+    // 🧬 RECURSIVE TRACE HELPER: Used for "Flow to Start" and "Flow to End"
+    const getDeepLinkedResources = (resId, dir, visited = new Set()) => {
+        if (visited.has(resId)) return visited;
+        visited.add(resId);
+        const res = resources.find(r => String(r.id) === String(resId));
+        if (!res) return visited;
+        
+        const nextLinks = [];
+        res.steps?.forEach(s => {
+            // If tracing 'out', look at 'out' logic. If tracing 'in', look at 'in' logic.
+            const pool = dir === 'out' ? (s.logic?.out || []) : (s.logic?.in || []);
+            pool.forEach(l => {
+                const partnerId = (dir === 'out' ? l.targetId : l.sourceId).split('-')[0];
+                nextLinks.push(partnerId);
+            });
+        });
+        
+        nextLinks.forEach(id => getDeepLinkedResources(id, dir, visited));
+        return visited;
+    };
+
+    // Pre-calculate allowed IDs if we are in a deep trace mode
+    let allowedResources = new Set();
+    if (trace.mode === 'trace-start') allowedResources = getDeepLinkedResources(trace.resId, 'in');
+    if (trace.mode === 'trace-end') allowedResources = getDeepLinkedResources(trace.resId, 'out');
+
+    // 🔄 3. MAIN LOOP: Iterate through all resources to find connections
     resources.forEach(sourceRes => {
         if (!sourceRes || !sourceRes.steps) return;
         const sourceEl = document.getElementById(`v2-node-${sourceRes.id}`);
-        // Skip hidden nodes (filtered out by search)
         if (sourceEl && sourceEl.classList.contains('filter-hidden')) return;
 
-        // Iterate through each step within the resource to check for outbound logic
         sourceRes.steps.forEach((step, sIdx) => {
             if (!step.logic?.out) return;
 
             step.logic.out.forEach(outLogic => {
                 if (!outLogic?.targetId) return;
+                
+                const targetResId = outLogic.targetId.split('-')[0];
+                let shouldDraw = false;
 
-                // Parse target ID (Format: "resourceID-stepIndex")
-                const parts = outLogic.targetId.split('-');
-                const tStepIdx = parseInt(parts.pop()); 
-                const tResId = parts.join('-'); 
+                // 🚦 TRACE FILTERING RULES
+                // Decide if this specific line should be drawn based on user selection
+                if (trace.mode === 'both' && (sourceRes.id === trace.resId || targetResId === trace.resId)) shouldDraw = true;
+                if (trace.mode === 'in' && targetResId === trace.resId) shouldDraw = true;
+                if (trace.mode === 'out' && sourceRes.id === trace.resId) shouldDraw = true;
+                if (trace.mode === 'trace-start' && allowedResources.has(sourceRes.id) && allowedResources.has(targetResId)) shouldDraw = true;
+                if (trace.mode === 'trace-end' && allowedResources.has(sourceRes.id) && allowedResources.has(targetResId)) shouldDraw = true;
 
-                const targetRes = resources.find(r => String(r.id) === String(tResId));
-                const targetEl = document.getElementById(`v2-node-${tResId}`);
-                if (!targetRes || (targetEl && targetEl.classList.contains('filter-hidden'))) return;
+                if (shouldDraw) {
+                    // PARSE TARGET METADATA
+                    const parts = outLogic.targetId.split('-');
+                    const tStepIdx = parseInt(parts.pop()); 
+                    const tResId = parts.join('-'); 
 
-                let start, end, sSide, tSide;
+                    const targetRes = resources.find(r => String(r.id) === String(tResId));
+                    const targetEl = document.getElementById(`v2-node-${tResId}`);
+                    if (!targetRes || (targetEl && targetEl.classList.contains('filter-hidden'))) return;
 
-                // 📐 3. PORT SELECTION LOGIC (Where does the line attach?)
-                // Hardened check: Truly Global requires the flag AND no physical canvas coordinates
-                const isSourceTrulyGlobal = (!!sourceRes.isGlobal || !!sourceRes.isTopShelf) && !sourceRes.coords;
-                const isTargetTrulyGlobal = (!!targetRes.isGlobal || !!targetRes.isTopShelf) && !targetRes.coords;
+                    let start, end, sSide, tSide;
 
-                if (isSourceTrulyGlobal && !isTargetTrulyGlobal) {
-                    // ⬇️ GLOBAL SHELF -> CANVAS (Ceiling Drop)
-                    tSide = 'top';
-                    end = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
-                    const sRect = sourceEl.getBoundingClientRect();
-                    const shelfRect = shelfEl.getBoundingClientRect();
-                    const visualMidX = sRect.left + (sRect.width / 2);
+                    // 📐 4. PORT SELECTION (SIDE LOGIC)
+                    // Priority Truth: If a card has coords, it is NOT Global, even if flags are true.
+                    const isSourceTrulyGlobal = (!!sourceRes.isGlobal || !!sourceRes.isTopShelf) && !sourceRes.coords;
+                    const isTargetTrulyGlobal = (!!targetRes.isGlobal || !!targetRes.isTopShelf) && !targetRes.coords;
 
-                    // Draw the dashed vertical line inside the blue shelf area
-                    if (shelfLineGroup) {
-                        const shelfStartX = visualMidX - shelfRect.left;
-                        const shelfStartY = Math.max(0, sRect.bottom - shelfRect.top);
-                        const shelfEndY = shelfRect.height;
-                        if (shelfStartY < shelfEndY) {
-                            const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                            shelfPath.setAttribute('d', `M ${shelfStartX} ${shelfStartY} L ${shelfStartX} ${shelfEndY}`);
-                            shelfPath.setAttribute('stroke', 'var(--text-dim)');
-                            shelfPath.setAttribute('stroke-width', '2');
-                            shelfPath.setAttribute('stroke-dasharray', '5,5');
-                            shelfLineGroup.appendChild(shelfPath);
+                    if (isSourceTrulyGlobal && !isTargetTrulyGlobal) {
+                        // ⬇️ GLOBAL -> CANVAS (Ceiling Drop)
+                        tSide = 'top';
+                        end = OL.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
+                        const sRect = sourceEl.getBoundingClientRect();
+                        const shelfRect = shelfEl.getBoundingClientRect();
+                        const visualMidX = sRect.left + (sRect.width / 2);
+
+                        // Draw dashed line inside the blue shelf area
+                        if (shelfLineGroup) {
+                            const shelfStartX = visualMidX - shelfRect.left;
+                            const shelfStartY = Math.max(0, sRect.bottom - shelfRect.top);
+                            const shelfEndY = shelfRect.height;
+                            if (shelfStartY < shelfEndY) {
+                                const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                                shelfPath.setAttribute('d', `M ${shelfStartX} ${shelfStartY} L ${shelfStartX} ${shelfEndY}`);
+                                shelfPath.setAttribute('stroke', 'var(--text-dim)');
+                                shelfPath.setAttribute('stroke-width', '2');
+                                shelfPath.setAttribute('stroke-dasharray', '5,5');
+                                shelfLineGroup.appendChild(shelfPath);
+                            }
                         }
-                    }
-                    // Start point on the main canvas is the "ceiling" (y=0)
-                    start = { x: (visualMidX - svg.getBoundingClientRect().left) / zoom, y: 0 };
-                } 
-                else if (!isSourceTrulyGlobal && isTargetTrulyGlobal) {
-                    // ⬆️ CANVAS -> GLOBAL SHELF (Workbench Upload)
-                    sSide = 'top';
-                    start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
-                    const tRect = targetEl.getBoundingClientRect();
-                    const visualMidX = tRect.left + (tRect.width / 2);
-                    // End point on main canvas is the "ceiling" (y=0)
-                    end = { x: (visualMidX - svg.getBoundingClientRect().left) / zoom, y: 0 };
-                    tSide = 'top';
-                } 
-                else if (targetRes.coords && sourceRes.coords) {
-                    // ↔️ STANDARD CANVAS RULES (Card-to-Card)
-                    const dx = targetRes.coords.x - sourceRes.coords.x;
-                    const dy = targetRes.coords.y - sourceRes.coords.y;
-                    
-                    // Force side-loops (Right-to-Right) for vertical stacks to prevent text overlap
-                    const isVerticalStack = Math.abs(dx) < 150; 
-
-                    if (isVerticalStack) {
-                        sSide = 'right';
-                        tSide = 'right';
-                    } else {
-                        // Use shortest path (Left vs Right) for horizontal separation
-                        sSide = dx > 0 ? 'right' : 'left';
-                        tSide = dx > 0 ? 'left' : 'right';
-                    }
-
-                    start = this.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
-                    end = this.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
-                }
-
-                // 🎢 4. PATH CONSTRUCTION (The Math of the Curve)
-                if (start && end) {
-                    let targetX = end.x;
-                    let targetY = end.y;
-
-                    // Apply a small buffer (8px) so arrowheads don't touch the card border
-                    const gap = 15; 
-                    if (tSide === 'left') targetX -= gap;
-                    if (tSide === 'right') targetX += gap;
-                    if (tSide === 'top') targetY -= gap;
-                    if (tSide === 'bottom') targetY += gap;
-
-                    let d;
-                    const absDy = Math.abs(targetY - start.y);
-
-                    if (isSourceTrulyGlobal || isTargetTrulyGlobal) {
-                        // Standard Bezier for Ceiling connections
-                        const midY = (start.y + targetY) / 2;
-                        d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
+                        start = { x: (visualMidX - svg.getBoundingClientRect().left) / zoom, y: 0 };
                     } 
-                    else if (sSide === tSide) {
-                        // 🔄 C-CURVE (Same-Side Loop)
-                        // This handles vertical stacks. The "Sweep" determines how far the line bows out.
-                        const sweep = Math.min(80, absDy * 0.5 + 20); 
-                        const multiplier = (sSide === 'right') ? 1 : -1;
+                    else if (!isSourceTrulyGlobal && isTargetTrulyGlobal) {
+                        // ⬆️ CANVAS -> GLOBAL (Workbench Upload)
+                        sSide = 'top';
+                        start = OL.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                        const tRect = targetEl.getBoundingClientRect();
+                        const visualMidX = tRect.left + (tRect.width / 2);
+                        end = { x: (visualMidX - svg.getBoundingClientRect().left) / zoom, y: 0 };
+                        tSide = 'top';
+                    } 
+                    else if (targetRes.coords && sourceRes.coords) {
+                        // ↔️ SHORTEST PATH LOGIC (Canvas to Canvas)
+                        const dx = targetRes.coords.x - sourceRes.coords.x;
+                        const dy = targetRes.coords.y - sourceRes.coords.y;
                         
-                        d = `M ${start.x} ${start.y} 
-                             C ${start.x + (sweep * multiplier)} ${start.y}, 
-                               ${targetX + (sweep * multiplier)} ${targetY}, 
-                               ${targetX} ${targetY}`;
-                    }
-                    else if (absDy < 20 && sSide !== tSide) {
-                        // 📏 STRAIGHT LINE: Use "L" instead of "C" for perfectly aligned horizontal cards
-                        d = `M ${start.x} ${start.y} L ${targetX} ${targetY}`;
-                    } 
-                    else {
-                        // 🌊 STANDARD BEZIER: For diagonal / standard horizontal paths
-                        const absDx = Math.abs(targetX - start.x);
-                        const tension = Math.max(30, Math.min(absDx * 0.5, 150));
-                        const cp1x = start.x + (sSide === 'right' ? tension : (sSide === 'left' ? -tension : 0));
-                        const cp2x = targetX + (tSide === 'right' ? tension : (tSide === 'left' ? -tension : 0));
-                        const cp1y = start.y + (sSide === 'bottom' ? tension : (sSide === 'top' ? -tension : 0));
-                        const cp2y = targetY + (tSide === 'bottom' ? tension : (tSide === 'top' ? -tension : 0));
-                        d = `M ${start.x} ${start.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`;
+                        // Force Right-to-Right for vertical stacks (prevents line-over-text)
+                        const isVerticalStack = Math.abs(dx) < 150; 
+
+                        if (isVerticalStack) {
+                            sSide = 'right';
+                            tSide = 'right';
+                        } else {
+                            sSide = dx > 0 ? 'right' : 'left';
+                            tSide = dx > 0 ? 'left' : 'right';
+                        }
+
+                        start = OL.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                        end = OL.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
                     }
 
-                    // 🎨 5. SVG ATTRIBUTES & STYLING
-                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    path.setAttribute('d', d);
-                    path.setAttribute('class', 'path-flow');
-                    path.setAttribute('fill', 'none');
-                    path.setAttribute('marker-end', 'url(#arrowhead)');
-                    
-                    // Determine color: Dim for global, Warning for loops, Accent for standard
-                    const isGlobal = isSourceTrulyGlobal || isTargetTrulyGlobal;
-                    const strokeColor = isGlobal ? 'var(--text-dim)' : (outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
-                    
-                    path.setAttribute('stroke', strokeColor);
-                    if (isGlobal) path.setAttribute('stroke-dasharray', '5,5');
-                    
-                    lineGroup.appendChild(path);
+                    // 🎢 5. PATH CONSTRUCTION (SHAPE MATH)
+                    if (start && end) {
+                        let targetX = end.x;
+                        let targetY = end.y;
 
-                    // 🧩 6. LOGIC ICON (λ or ↺)
-                    // We calculate the midpoint of the physical path to place the icon perfectly
-                    if (outLogic.rule?.trim()) {
-                        try {
-                            const pathLength = path.getTotalLength();
-                            // Find the x,y coordinates at exactly 50% of the path's length
-                            const pt = pathLength > 0 ? path.getPointAtLength(pathLength / 2) : { x: (start.x + targetX) / 2, y: (start.y + targetY) / 2 };
-                            this.drawLogicIcon(lineGroup, pt.x, pt.y, outLogic.rule, outLogic.type === 'loop', outLogic.limit || '');
-                        } catch (e) { 
-                            console.error("Icon render failed", e); 
+                        // Create 15px gap for the arrowhead
+                        const gap = 15; 
+                        if (tSide === 'left') targetX -= gap;
+                        if (tSide === 'right') targetX += gap;
+                        if (tSide === 'top') targetY -= gap;
+                        if (tSide === 'bottom') targetY += gap;
+
+                        let d;
+                        const absDy = Math.abs(targetY - start.y);
+
+                        if (isSourceTrulyGlobal || isTargetTrulyGlobal) {
+                            // Ceiling curves
+                            const midY = (start.y + targetY) / 2;
+                            d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
+                        } 
+                        else if (sSide === tSide) {
+                            // 🔄 C-CURVE: Bow out to the side for vertical connections
+                            const sweep = Math.min(80, absDy * 0.5 + 20); 
+                            const multiplier = (sSide === 'right') ? 1 : -1;
+                            d = `M ${start.x} ${start.y} C ${start.x + (sweep * multiplier)} ${start.y}, ${targetX + (sweep * multiplier)} ${targetY}, ${targetX} ${targetY}`;
+                        }
+                        else if (absDy < 20 && sSide !== tSide) {
+                            // 📏 STRAIGHT: Perfect horizontal paths
+                            d = `M ${start.x} ${start.y} L ${targetX} ${targetY}`;
+                        } 
+                        else {
+                            // 🌊 STANDARD BEZIER: Shortest path diagonal
+                            const absDx = Math.abs(targetX - start.x);
+                            const tension = Math.max(30, Math.min(absDx * 0.5, 150));
+                            const cp1x = start.x + (sSide === 'right' ? tension : (sSide === 'left' ? -tension : 0));
+                            const cp2x = targetX + (tSide === 'right' ? tension : (tSide === 'left' ? -tension : 0));
+                            const cp1y = start.y + (sSide === 'bottom' ? tension : (sSide === 'top' ? -tension : 0));
+                            const cp2y = targetY + (tSide === 'bottom' ? tension : (tSide === 'top' ? -tension : 0));
+                            d = `M ${start.x} ${start.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`;
+                        }
+
+                        // 🎨 6. STYLING & DRAWING
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('d', d);
+                        path.setAttribute('class', 'path-flow');
+                        path.setAttribute('fill', 'none');
+                        path.setAttribute('marker-end', 'url(#arrowhead)');
+                        
+                        const isGlobal = isSourceTrulyGlobal || isTargetTrulyGlobal;
+                        const strokeColor = isGlobal ? 'var(--text-dim)' : (outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
+                        
+                        path.setAttribute('stroke', strokeColor);
+                        if (isGlobal) path.setAttribute('stroke-dasharray', '5,5');
+                        
+                        lineGroup.appendChild(path);
+
+                        // 🧩 7. LOGIC ICON PLACEMENT
+                        if (outLogic.rule?.trim()) {
+                            try {
+                                const pathLength = path.getTotalLength();
+                                // Geometric midpoint placement
+                                const pt = pathLength > 0 ? path.getPointAtLength(pathLength / 2) : { x: (start.x + targetX) / 2, y: (start.y + targetY) / 2 };
+                                OL.drawLogicIcon(lineGroup, pt.x, pt.y, outLogic.rule, outLogic.type === 'loop', outLogic.limit || '');
+                            } catch (e) { 
+                                // Fallback midpoint calculation if SVG not yet rendered
+                                const fallbackPt = { x: (start.x + targetX) / 2, y: (start.y + targetY) / 2 };
+                                OL.drawLogicIcon(lineGroup, fallbackPt.x, fallbackPt.y, outLogic.rule, outLogic.type === 'loop', outLogic.limit || '');
+                            }
                         }
                     }
                 }
