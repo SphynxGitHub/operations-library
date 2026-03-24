@@ -1782,7 +1782,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
 /* Fullscreen Shell */
 #workflow-fs-overlay {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    background: #0b0e14; z-index: 99999; display: flex; flex-direction: column;
+    background: #0b0e14; z-index: 999; display: flex; flex-direction: column;
     animation: fadeIn 0.2s ease-out;
 }
 
@@ -2232,7 +2232,7 @@ body.fs-mode-active {
     width: 100vw !important;
     height: 100vh !important;
     background: #050816 !important; /* Unified background */
-    z-index: 5000 !important; /* Reduced from 999,999 */
+    z-index: 999 !important; /* Reduced from 999,999 */
     display: block;
     flex-direction: column;
 }
@@ -2271,7 +2271,7 @@ body.fs-mode-active {
   width: 100%;
   height: 100%;
   pointer-events: none !important;
-  z-index: 10000 !important;
+  z-index: 1000 !important;
 } 
 
 /* Ensure the link layer is physically above the cards */
@@ -2283,7 +2283,7 @@ body.fs-mode-active {
     width: 100%;
     height: 100%;
     pointer-events: none; /* 🚀 CRITICAL: Let clicks pass through to cards */
-    z-index: 9999 !important; /* Sit above every card and container */
+    z-index: 999 !important; /* Sit above every card and container */
     overflow: visible;
 }
 
@@ -2717,7 +2717,7 @@ body.fs-mode-active {
         height: auto !important;
         background: white !important;
         box-shadow: none !important;
-        z-index: 99999 !important;
+        z-index: 9999 !important;
     }
 
     /* 🚀 3. HIDE ALL ARROWS */
@@ -4250,7 +4250,7 @@ body.light-mode {
 
 #canvas-filter-input {
   align-items: center; gap: 5px; margin-left: 5px; border-left: 1px solid var(--line); padding-left: 5px;
-  z-index: 9999; pointer-events: auto; cursor: text;
+  z-index: 999; pointer-events: auto; cursor: text;
 }
 
 #canvas-match-count {
@@ -4258,7 +4258,7 @@ body.light-mode {
 }
 
 .v2-node-card.search-active {
-    z-index: 10000 !important; outline: 4px solid var(--accent); box-shadow: 0 0 50px rgba(var(--accent-rgb), 0.5); transform: scale(1.05);
+    outline: 4px solid var(--accent); box-shadow: 0 0 50px rgba(var(--accent-rgb), 0.5); transform: scale(1.05);
     transition: transform 0.3s, box-shadow 0.3s, outline 0.3s;
 }
 
@@ -4357,9 +4357,9 @@ body.light-mode {
 }
 
 .lane-label { 
-    color: var(--accent); font-weight: bold; background: color-mix(in srgb, var(--bg-panel), transparent 40%);
+    color: var(--accent); font-weight: bold; background: color-mix(in srgb, var(--bg-panel), transparent 10%);
      padding: 5px 15px; border-radius: 20px; position: sticky; top: 20px; cursor: text; transition: border-color 0.2s, box-shadow 0.2s; 
-     min-width: 120px; text-align: center; pointer-events: all; user-select: text; z-index: 100; display: flex; 
+     min-width: 120px; text-align: center; pointer-events: all; user-select: text; z-index: 1000; display: flex; 
      flex-direction: row; gap: 8px;
 }
 
@@ -4431,7 +4431,7 @@ body.light-mode {
 }
 
 .v2-scope-badge {
-    color: #10b981; pointer-events: auto; z-index: 9999; text-decoration: none;
+    color: #10b981; pointer-events: auto; text-decoration: none;
 }
 
 /* 2. 🟢 State: IS OFF (Hollow, Green Text/Border) */
@@ -4485,7 +4485,7 @@ body.light-mode {
 .v2-logic-menu {
     display: none; /* Hidden by default */
     position: absolute; top: 50%; right: 0; width: 160px; background: var(--bg-card); border: 1px solid var(--accent, #38bdf8);
-    border-radius: 6px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); z-index: 11000; /* Must be higher than the node cards */
+    border-radius: 6px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); z-index: 1100; /* Must be higher than the node cards */
     padding: 5px 0; color: var(--text-main);
 }
 
@@ -4512,7 +4512,7 @@ body.light-mode {
 /* The ghost that shows where the card WILL land */
 #drag-indicator {
     position: fixed;  width: 8px;  height: 8px;   background: var(--accent);  border-radius: 50%;  pointer-events: none;
-    z-index: 9999;   box-shadow: 0 0 10px var(--accent-glow);   transition: transform 0.1s ease-out;   display: none;
+    z-index: 999;   box-shadow: 0 0 10px var(--accent-glow);   transition: transform 0.1s ease-out;   display: none;
 }
 
 /* Hide the actual card being dragged */
@@ -4654,7 +4654,7 @@ body.light-mode {
 
 /* When a family is highlighted */
 .v2-node-card.family-focus {
-    box-shadow: 0 0 25px var(--accent-glow); border-color: var(--accent); z-index: 1000 !important;
+    box-shadow: 0 0 25px var(--accent-glow); border-color: var(--accent); z-index: 100 !important;
 }
 
 /* Dimming effect for everything else */
@@ -4832,7 +4832,7 @@ path.is-loop-path {
 
 /* 📦 3. THE GLOBAL SHELF FIX (Prevents Overlap) */
 .global-shelf-container {
-    flex-shrink: 0;  z-index: 1001; margin: 70px 20px 10px 20px !important;  background: var(--bg); 
+    flex-shrink: 0;  z-index: 101; margin: 70px 20px 10px 20px !important;  background: var(--bg); 
     border: 2px dashed var(--accent-glow);
 }
 
