@@ -445,7 +445,7 @@ window.buildLayout = function () {
     {
       key: "functions",
       label: "Functions",
-      icon: "⚒",
+      icon: "🔨",
       href: "#/functions",
     },
     {
