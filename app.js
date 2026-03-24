@@ -7895,7 +7895,7 @@ OL.renderVisualizer = function() {
                         <button id="filter-menu-btn" class="btn tiny soft" onclick="OL.toggleFilterMenu(event)">
                             ${filterIcon} Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
                         </button>
-                        <button class="btn primary tiny" onclick="OL.openBrainDump()">🧠 Brain Dump</button>
+                        <button class="btn primary tiny" onclick="OL.addNewResourceToCanvas()">+ Add Resource</button>
                         <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy">${tidyIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
@@ -8072,7 +8072,7 @@ OL.renderVisualizer = function() {
         const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
 
         div.innerHTML = `
-            <div class="v2-node-header">
+            <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${res.id}', null, 'cards')">
                 <div class="step-row-content">
                     <b class="res-name-text">${esc(res.name)}</b>
                     <div class="header-badges-wrap">
@@ -8116,8 +8116,32 @@ OL.renderVisualizer = function() {
         `;
 
         div.onmousedown = (e) => {
-            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-logic-trigger-wrap, .v2-logic-badge, .v2-step-item, .v2-add-step-btn, .delete-step-btn')) return;
+            // Keep your existing guards
+            if (e.target.closest('.v2-logic-trigger-wrap, .v2-logic-badge, .v2-logic-menu')) return;
+            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-step-item, .v2-add-step-btn, .delete-step-btn')) return;
+            
             e.stopPropagation();
+
+            // 💡 ADD THIS: Track mouse position to distinguish between a click and a drag
+            const startX = e.clientX;
+            const startY = e.clientY;
+
+            const onMouseUp = (upE) => {
+                const diffX = Math.abs(upE.clientX - startX);
+                const diffY = Math.abs(upE.clientY - startY);
+
+                // If the mouse barely moved (less than 5px), treat it as a click
+                if (diffX < 5 && diffY < 5) {
+                    if (e.target.closest('.v2-node-header')) {
+                        OL.openInspector(res.id, null, 'cards');
+                    }
+                }
+                window.removeEventListener('mouseup', onMouseUp);
+            };
+
+            window.addEventListener('mouseup', onMouseUp);
+
+            // Call your existing motion logic
             OL.initWBMotion(e, res.id);
         };
 
@@ -8148,6 +8172,82 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
 
 // Global to track the dragged index
 state.draggingStepIdx = null;
+
+OL.addNewResourceToCanvas = async function() {
+    const data = OL.getCurrentProjectData();
+    const stages = data.stages || [];
+    if (stages.length === 0) return alert("Please create a stage first.");
+
+    // 1. Calculate Viewport Center
+    const scrollWrap = document.getElementById('v2-canvas-scroll-wrap');
+    const zoom = state.v2.zoom || 1;
+    
+    const centerX = (scrollWrap.scrollLeft + (scrollWrap.offsetWidth / 2)) / zoom;
+    const centerY = (scrollWrap.scrollTop + (scrollWrap.offsetHeight / 2)) / zoom;
+
+    // 2. Identify the target Stage (Lane) based on centerX
+    let targetStage = stages[0];
+    let accX = 0;
+    for (let s of stages) {
+        const w = s.width || 320;
+        if (centerX >= accX && centerX <= accX + w) {
+            targetStage = s;
+            break;
+        }
+        accX += w;
+    }
+
+    // 3. Define Step ID and Resource ID
+    const newResId = 'res-' + Date.now();
+    const initialStepId = uid();
+
+    // 4. Create the Resource Object
+    const newRes = {
+        id: newResId,
+        name: "New Resource", // Default placeholder
+        type: "General",
+        stageId: targetStage.id,
+        isGlobal: false,
+        isExpanded: true,
+        coords: { x: centerX - 140, y: centerY - 50 },
+        steps: [{ 
+            id: initialStepId, 
+            name: "Initial Step", 
+            logic: { in: [], out: [] } 
+        }],
+        createdDate: new Date().toISOString()
+    };
+
+    // 5. Save and Prep the UI
+    await OL.updateAndSync(() => {
+        data.resources.push(newRes);
+        // Clear old highlights and set this as the single active match
+        state.canvasMatches = [newResId];
+        state.currentCanvasMatchIdx = 0;
+    });
+
+    // 6. Refresh the Canvas
+    OL.renderVisualizer();
+    
+    // 7. SURGICAL HANDOFF: Scroll, Pulse, and Inspect
+    setTimeout(() => {
+        const el = document.getElementById(`v2-node-${newResId}`);
+        if (el) {
+            el.classList.add('search-focus');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+            
+            // 🚀 OPEN INSPECTOR IMMEDIATELY
+            // We pass the newResId and null to open the card-level metadata inspector
+            OL.openInspector(newResId, null, 'cards');
+
+            // ⌨️ BONUS: Auto-focus the name field in the inspector if it exists
+            const nameInput = document.getElementById('modal-res-name');
+            if (nameInput) {
+                nameInput.select(); // Select the "New Resource" text so they can just type over it
+            }
+        }
+    }, 150);
+};
 
 OL.toggleLogicMenu = function(id) {
     const target = document.getElementById(`logic-menu-${id}`);
@@ -8279,37 +8379,169 @@ OL.toggleMasterExpand = function(forceExpand = null) {
 };
 
 
-OL.addNewStepToCard = async function(resId) {
-    console.log('⚡ Adding step to:', resId);
-    
-    // 🎯 1. Get correct context (Project vs Vault)
-    const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
-    
-    if (!res) return console.error("Resource not found:", resId);
+OL.addNewStepToCard = function(resId) {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">⚡ Quick Add Step</div>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="tiny-label">COMMAND LINE</label>
+                <input type="text" id="quick-step-input" class="modal-input" 
+                       placeholder="Stripe create customer | Assign: Sarah | Delay: 2"
+                       oninput="OL.updateStepPreview(this.value)"
+                       onkeydown="if(event.key==='Enter') OL.commitQuickStep('${resId}')"
+                       style="font-size: 16px; padding: 15px; border: 2px solid var(--accent);">
+            </div>
+            
+            <div class="shortcut-legend" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; opacity: 0.8;">
+                <div class="tiny muted"><b class="accent">| Assign:</b> Name</div>
+                <div class="tiny muted"><b class="accent">| Delay:</b> Days</div>
+                <div class="tiny muted"><b class="accent">| Rule:</b> Logic Condition</div>
+                <div class="tiny muted"><b class="accent">| Note:</b> Description</div>
+            </div>
 
-    // 🏗️ 2. Update Data
-    if (!res.steps) res.steps = [];
-    res.isExpanded = true; // Force visibility
+            <div id="step-preview-zone" style="display:none; background: rgba(0,0,0,0.2); border: 1px solid var(--line); padding: 15px; border-radius: 8px;">
+                </div>
 
-    res.steps.push({
-        name: 'New Step',
-        notes: '',
-        logic: { in: [], out: [] },
-        id: 'step-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn soft flex-1" onclick="OL.closeModal()">Cancel</button>
+                <button class="btn primary flex-2" id="quick-commit-btn" onclick="OL.commitQuickStep('${resId}')">Drop to Card (Enter)</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+    // Force focus and select all text if any
+    setTimeout(() => {
+        const input = document.getElementById('quick-step-input');
+        if (input) input.focus();
+    }, 100);
+};
+
+OL.parseStepInput = function(rawText) {
+    const text = rawText.trim();
+    const parts = text.split('|');
+    const mainCommand = parts[0].trim();
+    
+    // Check for App/Verb match (your existing smart logic)
+    let base = OL.parseSmartInput(mainCommand); 
+    
+    let result = {
+        name: base.matched ? `${base.verb} ${base.object}` : mainCommand,
+        appName: base.matched ? base.app : null,
+        assigneeName: null,
+        timingValue: 0,
+        timingType: 'after_prev',
+        rule: "",
+        notes: ""
+    };
+
+    parts.forEach((part, idx) => {
+        if (idx === 0) return; 
+        const lowerPart = part.trim().toLowerCase();
+        const content = part.split(':')[1]?.trim() || "";
+        
+        // 🕵️ Robust Prefix Checking
+        if (lowerPart.startsWith('assign')) result.assigneeName = content;
+        if (lowerPart.startsWith('delay'))  result.timingValue = parseInt(content.replace(/[^0-9]/g, '')) || 0;
+        if (lowerPart.startsWith('rule'))   result.rule = content;
+        if (lowerPart.startsWith('note'))   result.notes = content;
     });
 
-    // 💾 3. Persist and Re-align
-    // We run autoAlign because the card height just changed
-    await OL.updateAndSync(() => {
-        OL.autoAlignNodes(false); 
-    });
+    return result;
+};
 
-    // 🎨 4. Refresh UI
-    OL.renderVisualizer(); 
+OL.updateStepPreview = function(val) {
+    const previewZone = document.getElementById('step-preview-zone');
+    const commitBtn = document.getElementById('quick-commit-btn');
     
-    // 🔍 5. Open Inspector for immediate editing
-    OL.openInspector(resId, res.steps.id);
+    if (!val || val.length < 2) { 
+        previewZone.style.display = 'none'; 
+        commitBtn.disabled = true;
+        return; 
+    }
+    
+    const data = OL.parseStepInput(val);
+    previewZone.style.display = 'block';
+    previewZone.dataset.parsed = JSON.stringify(data);
+    commitBtn.disabled = false;
+
+    previewZone.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between;">
+                <span class="tiny muted bold uppercase">Action</span>
+                <span class="tiny accent bold">${data.name}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span class="tiny muted bold uppercase">Tool</span>
+                <span class="tiny white">${data.appName || 'Manual Process'}</span>
+            </div>
+            ${data.assigneeName ? `
+            <div style="display: flex; justify-content: space-between;">
+                <span class="tiny muted bold uppercase">Owner</span>
+                <span class="tiny white">👤 ${data.assigneeName}</span>
+            </div>` : ''}
+            ${data.timingValue ? `
+            <div style="display: flex; justify-content: space-between;">
+                <span class="tiny muted bold uppercase">Schedule</span>
+                <span class="tiny warning">⏱ ${data.timingValue} Day Delay</span>
+            </div>` : ''}
+            ${data.rule ? `
+            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 10px;">
+                <span class="accent">λ Rule:</span> ${data.rule}
+            </div>` : ''}
+        </div>
+    `;
+};
+
+OL.commitQuickStep = async function(resId) {
+    const previewZone = document.getElementById('step-preview-zone');
+    if (!previewZone.dataset.parsed) return;
+
+    const data = JSON.parse(previewZone.dataset.parsed);
+    const projectData = OL.getCurrentProjectData();
+    const res = projectData.resources.find(r => String(r.id) === String(resId));
+
+    if (res) {
+        if (!res.steps) res.steps = [];
+        
+        // 🏗️ BUILD THE ACTUAL STEP OBJECT
+        const newStep = {
+            id: uid(),
+            name: data.name,
+            appName: data.appName || "",
+            // Assignees must be an ARRAY of objects for your inspector to loop through them
+            assignees: data.assigneeName ? [{ id: uid(), name: data.assigneeName, type: 'person' }] : [],
+            // Notes field usually maps to 'description' in your system
+            description: data.notes || "",
+            timingValue: data.timingValue || 0,
+            timingType: 'after_prev',
+            logic: { in: [], out: [] }
+        };
+
+        // Handle the Logic Rule
+        if (data.rule) {
+            newStep.logic.out.push({ 
+                targetId: "", // Empty for now, user links it in inspector
+                rule: data.rule, 
+                type: 'link' 
+            });
+        }
+
+        // 💾 Save to Data Model
+        res.steps.push(newStep);
+
+        await OL.updateAndSync(() => {
+            // Re-align nodes and refresh the global UI
+            if (OL.autoAlignNodes) OL.autoAlignNodes(false);
+        });
+
+        OL.closeModal();
+        OL.renderVisualizer();
+        
+        // 🔎 Focus the new step immediately
+        OL.openInspector(resId, newStep.id, 'steps');
+    }
 };
 
 OL.updateStepName = function(resId, stepIdx, newName) {
@@ -8784,8 +9016,62 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         return;
     }
 
-    // 🏁 3. DEFAULT / FALLBACK
-    content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a step to view details.</div>`;
+    // 📑 3. RESOURCE (CARD) DETAIL MODE (New Logic)
+    if (mode === 'cards' && resId) {
+        const res = resources.find(r => String(r.id) === String(resId));
+        if (!res) return;
+
+        content.innerHTML = `
+            <div class="inspector-header">
+                <div class="section-label">EDIT RESOURCE</div>
+                <textarea id="modal-res-name" class="inspector-name-input" 
+                          style="height: auto; min-height: 40px; resize: none; overflow: hidden;"
+                          oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                          onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
+            </div>
+
+            <div class="inspector-body">
+                <div class="inspector-section">
+                    <label class="section-label">📂 RESOURCE CLASSIFICATION</label>
+                    <select class="modal-input tiny" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
+                        <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
+                        ${(state.master.resourceTypes || []).map(t => `
+                            <option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>
+                        `).join('')}
+                    </select>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">📝 GLOBAL DESCRIPTION</label>
+                    <textarea class="modal-textarea" style="min-height:100px;"
+                              placeholder="Enter login details, account purpose, or specific access instructions..."
+                              onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">📋 STEP OVERVIEW (${(res.steps || []).length})</label>
+                    <div class="inspector-step-list" style="display:flex; flex-direction:column; gap:5px;">
+                        ${(res.steps || []).map((s, i) => `
+                            <div class="pill soft is-clickable" style="font-size:11px; padding: 8px;" onclick="OL.openInspector('${res.id}', '${s.id}', 'steps')">
+                                ${i + 1}. ${esc(s.name)}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button class="add-logic-btn" style="margin-top:10px;" onclick="OL.addNewStepToCard('${res.id}')">+ Add New Step</button>
+                </div>
+            </div>
+        `;
+
+        // Auto-resize the name textarea
+        setTimeout(() => {
+            const nameEl = document.getElementById('modal-res-name');
+            if (nameEl) nameEl.style.height = nameEl.scrollHeight + 'px';
+        }, 10);
+        return;
+    }
+
+    // 🏁 4. DEFAULT / FALLBACK
+    content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a card or step to inspect.</div>`;
 };
 
 window.renderStepResources = function(resId, step) {
