@@ -4418,6 +4418,19 @@ body.light-mode {
     display: flex; align-items: center; justify-content: center; min-width: 16px; height: 14px;
 }
 
+@keyframes pulse-gold {
+    0% { box-shadow: 0 0 0 0px rgba(56, 189, 248, 0.7); }
+    100% { box-shadow: 0 0 0 20px rgba(56, 189, 248, 0); }
+}
+
+.search-focus {
+    border: 2px solid var(--accent) !important;  animation: pulse-gold 1.5s ease-out;  z-index: 5001; /* Ensure it's above other cards */
+}
+
+.res-name-text:hover {
+    color: var(--accent); /* Turn text blue on hover to signal link */cursor: pointer;
+}
+
 /*==================Node Card Badges */
 
 .header-badges-wrap {
