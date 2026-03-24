@@ -4376,7 +4376,7 @@ body.light-mode {
 .step-row-content { width:100%; align-items:center;}
 
 .v2-node-card {
-    position: absolute; width: 220px; background: var(--bg-card); color: var(--text-main); overflow: visible; z-index: 10;
+    position: absolute; width: 220px; background: var(--bg-card); color: var(--text-main); overflow: visible;
     border: 1px solid var(--border); border-radius: 8px; padding: 15px; cursor: grab;
     box-shadow: 0 4px 6px rgba(0,0,0,0.3); user-select: none; /* Prevents text selection during drag */
     transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
