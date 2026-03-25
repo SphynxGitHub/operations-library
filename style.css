@@ -4233,7 +4233,7 @@ body.light-mode {
 }
 /*==============================================Main Body*/
 #v2-viewport { display: flex; flex-direction: column; height: 99vh; overflow: hidden; 
-              position: relative; width: calc(100vw - 240px);
+              position: relative}
 
 #v2-main-content {display: flex; flex-direction: row; flex: 1; overflow: hidden; background: var(--bg-main); }
 
@@ -4880,7 +4880,7 @@ path.is-loop-path {
 
 /* B. If Menu is COLLAPSED (Body has .collapsed class) */
 body:has(.sidebar.collapsed) #v2-viewport {
-    width: calc(100vw - 65px); height: 99vh;
+    width: calc(100vw - 65px);
 }
 
 /* C. If Menu is COLLAPSED and Workbench is OPEN */
