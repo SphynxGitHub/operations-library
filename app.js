@@ -7742,49 +7742,78 @@ OL.autoAlignNodes = async function() {
     const resources = data.resources || [];
     const stages = data.stages || [];
     
-    const VERTICAL_GAP = 40;  
-    const COLUMN_WIDTH = 300; 
-    const START_Y = 120;
+    const VERTICAL_GAP = 40;        
+    const COLUMN_WIDTH = 300;       
+    const START_Y = 120;            
+    const SHELL_MARGINS = 45;       // Card padding + Footer height
+    const CHARS_PER_LINE = 26;      
+    const LINE_HEIGHT_TITLE = 22;   
+    const LINE_HEIGHT_STEP = 18;    
+    const STEP_PADDING = 12;        
+    const DIVIDER_HEIGHT = 15;
+    const EMPTY_STATE_HEIGHT = 40;  // Height allocated for the "Add Step" area when empty
+
     let currentXOffset = 40; 
 
     stages.forEach((stage) => {
-        // Find cards in this lane
         const laneNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
-        
-        // Sort by Y so we maintain the relative vertical order you dropped them in
         laneNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
 
-        // 📔 Create a Y-cursor for every possible column
-        const columnCursors = {}; 
+        const columnYCursors = {}; 
 
         laneNodes.forEach(node => {
-            // Respect the saved column from the Drop Logic
             const col = node._col || 0;
-            if (columnCursors[col] === undefined) columnCursors[col] = START_Y;
+            if (columnYCursors[col] === undefined) columnYCursors[col] = START_Y;
 
-            // 📍 SNAP TO GRID: Apply X based on column, Y based on vertical cursor
             node.coords = {
                 x: currentXOffset + (col * COLUMN_WIDTH),
-                y: columnCursors[col]
+                y: columnYCursors[col]
             };
 
-            // 📏 Dynamic height calculation for the next item in THIS column
-            const stepHeight = node.isExpanded ? (node.steps?.length || 0) * 35 : 0;
-            const totalNodeHeight = 80 + stepHeight + 40;
+            // 1. Header Calculation (Title wrapping)
+            const title = node.name || "Untitled Resource";
+            const titleLineCount = Math.max(1, Math.ceil(title.length / CHARS_PER_LINE));
+            const headerHeight = (titleLineCount * LINE_HEIGHT_TITLE) + 20; 
 
-            // Move the cursor down for just this column
-            columnCursors[col] += (totalNodeHeight + VERTICAL_GAP);
+            let dynamicCardBodyHeight = 0;
+
+            // 2. Body Calculation
+            if (node.isExpanded) {
+                if (node.steps && node.steps.length > 0) {
+                    node.steps.forEach((step, idx) => {
+                        const stepName = step.name || "New Step";
+                        const stepLineCount = Math.max(1, Math.ceil(stepName.length / CHARS_PER_LINE));
+                        const stepVisualHeight = (stepLineCount * LINE_HEIGHT_STEP) + STEP_PADDING;
+                        
+                        dynamicCardBodyHeight += stepVisualHeight;
+
+                        // Add divider height for all but the last step
+                        if (idx < node.steps.length - 1) {
+                            dynamicCardBodyHeight += DIVIDER_HEIGHT;
+                        }
+                    });
+                } else {
+                    // 🚀 THE FIX: If expanded but NO steps, add placeholder height 
+                    // for the "Add Step" button zone
+                    dynamicCardBodyHeight = EMPTY_STATE_HEIGHT;
+                }
+            }
+
+            const totalNodeHeight = headerHeight + dynamicCardBodyHeight + SHELL_MARGINS;
+
+            // 3. Increment Cursor for this column
+            columnYCursors[col] += (totalNodeHeight + VERTICAL_GAP);
         });
 
-        // Update stage width to fit the widest column count
-        const maxColIndex = Math.max(-1, ...Object.keys(columnCursors).map(Number));
+        // Lane width logic
+        const maxColIndex = Math.max(-1, ...Object.keys(columnYCursors).map(Number));
         stage.width = Math.max(320, ((maxColIndex + 1) * COLUMN_WIDTH) + 60);
-        
         currentXOffset += stage.width;
     });
 
     await OL.persist();
     OL.renderVisualizer();
+    setTimeout(() => { if (OL.drawConnections) OL.drawConnections(); }, 150);
 };
 
 OL.getCurrentProjectData = function() {
