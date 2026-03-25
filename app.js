@@ -805,20 +805,23 @@ document.addEventListener('keydown', (e) => {
     // 1. ESCAPE: Clear overlays
     if (e.key === 'Escape') {
         document.querySelectorAll('.search-results-overlay').forEach(ov => ov.innerHTML = "");
-        console.log("⌨️ Overlays cleared");
     }
 
     // 2. ENTER: Save and Refresh
     if (e.key === 'Enter') {
-        // 🛑 THE SHIELD: If we are in the Power Add input, STOP this global listener
+        // 🛡️ THE SHIELD: If we are in the Power Add input, STOP
         if (e.target.id === 'quick-step-input' || document.getElementById('slash-menu')?.style.display === 'block') {
             return; 
         }
 
+        // 🚀 THE FIX: If the user is in a TEXTAREA, allow the default "New Line" behavior
+        if (e.target.tagName === 'TEXTAREA') {
+            return; // Exit here and let the browser add the line break
+        }
+
         const isInput = e.target.classList.contains('modal-input') || 
                         e.target.classList.contains('header-editable-input') ||
-                        e.target.tagName === 'INPUT' || 
-                        e.target.tagName === 'TEXTAREA';
+                        e.target.tagName === 'INPUT';
         
         if (isInput) {
             e.target.blur(); 
