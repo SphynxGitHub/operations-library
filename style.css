@@ -4748,7 +4748,7 @@ body.light-mode {
 
 #v2-connections {
     width: 100% !important; height: 100% !important; pointer-events: none;
-    overflow: visible; z-index: 5; /* Sits behind nodes (z-index 10) but above stages */
+    overflow: visible; z-index: 5; position: relative;
 }
 
 #line-group, marker {
