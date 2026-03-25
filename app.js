@@ -7746,7 +7746,7 @@ OL.autoAlignNodes = async function() {
     const COLUMN_WIDTH = 300;       
     const START_Y = 120;            
     const SHELL_MARGINS = 45;       // Card padding + Footer height
-    const CHARS_PER_LINE = 26;      
+    const CHARS_PER_LINE = 24;      
     const LINE_HEIGHT_TITLE = 22;   
     const LINE_HEIGHT_STEP = 18;    
     const STEP_PADDING = 12;        
@@ -9211,7 +9211,7 @@ OL.splitCardAtStep = function(resourceId, stepIndex) {
     if (!originalRes.originId) originalRes.originId = originalRes.id;
 
     // ✂️ 2. IDENTIFY AND MOVE STEPS
-    const movedSteps = originalRes.steps.splice(stepIndex + 1);
+    const movedSteps = originalRes.steps.splice(stepIndex + 1).filter(s => s !== null);
     if (movedSteps.length === 0) return;
     const newId = 'r' + Date.now();
 
@@ -9997,14 +9997,18 @@ OL.syncCanvasFilters = function() {
         const matchesType = !typeF || res.type === typeF;
         const matchesApp = !appF || (res.steps || []).some(s => s.appName === appF);
         // Update this specific block inside OL.syncCanvasFilters
+
         const matchesAssignee = !assigneeF || (res.steps || []).some(s => {
-            // 🛡️ THE SHIELD: Ensure 's' exists before checking properties
+            // 🛡️ THE SHIELD: If step is null or undefined, skip it safely
             if (!s) return false; 
 
-            // Check the new 'assignees' array (Multi-select)
-            const inArray = (s.assignees || []).some(a => (a.name || a) === assigneeF);
+            // 1. Check the new 'assignees' array (Multi-select)
+            const inArray = Array.isArray(s.assignees) && s.assignees.some(a => {
+                if (!a) return false;
+                return (a.name || a) === assigneeF;
+            });
             
-            // Check the legacy 'assigneeName' string (Just in case)
+            // 2. Check the legacy 'assigneeName' string (as a fallback)
             const isLegacyMatch = s.assigneeName === assigneeF;
 
             return inArray || isLegacyMatch;
