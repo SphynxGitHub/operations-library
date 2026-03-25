@@ -62,6 +62,7 @@ OL.persist = async function() {
 
     try {
         // 1. Create a clean clone
+        const liveState = typeof OL.getFullState === 'function' ? OL.getFullState() : state;
         const rawState = JSON.parse(JSON.stringify(state));
         delete rawState.isSaving;
         delete rawState.adminMode;
@@ -809,12 +810,18 @@ document.addEventListener('keydown', (e) => {
 
     // 2. ENTER: Save and Refresh
     if (e.key === 'Enter') {
+        // 🛑 THE SHIELD: If we are in the Power Add input, STOP this global listener
+        if (e.target.id === 'quick-step-input' || document.getElementById('slash-menu')?.style.display === 'block') {
+            return; 
+        }
+
         const isInput = e.target.classList.contains('modal-input') || 
                         e.target.classList.contains('header-editable-input') ||
-                        e.target.tagName === 'INPUT';
+                        e.target.tagName === 'INPUT' || 
+                        e.target.tagName === 'TEXTAREA';
         
         if (isInput) {
-            e.target.blur(); // This triggers your 'onblur' save functions
+            e.target.blur(); 
             console.log("⌨️ Entry saved via Enter");
         }
     }
@@ -890,20 +897,15 @@ window.openModal = function (contentHTML) {
   `;
   layer.style.display = "flex";
 
+  // 🎯 ENSURE THIS CALLS OL.closeModal() specifically
   const overlay = document.getElementById("modal-overlay");
-  overlay.onclick = () => OL.closeModal();
-};
-
-OL.closeModal = function () {
-    const layer = document.getElementById("modal-layer");
-    if (layer) {
-        layer.style.display = "none";
-        layer.innerHTML = "";
-    }
-    // 🚀 NEW: Wipe history on close
-    OL.clearNavHistory();
-    
-    if (typeof activeOnClose === "function") activeOnClose();
+  overlay.onclick = () => {
+      if (typeof OL.closeModal === 'function') OL.closeModal();
+      else {
+          layer.style.display = "none";
+          layer.innerHTML = "";
+      }
+  };
 };
 
 OL.handlePillInteraction = function(event, appId, fnId) {
@@ -8064,27 +8066,32 @@ OL.renderVisualizer = function() {
                 </div>
             </div>
             <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
-                ${(res.steps || []).map((s, i) => `
-                  <div class="v2-step-item" 
-                      data-step-id="${res.id}-${i}" 
-                      draggable="true"
-                      ondragstart="OL.handleStepDragStart(event, ${i})"
-                      ondragover="OL.handleStepDragOver(event)"
-                      ondragleave="OL.handleStepDragLeave(event)"
-                      ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
-                      onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${i}')">
-                      
-                      <div class="step-row-content">
-                          <span class="drag-handle" style="cursor: grab; opacity: 0.3; margin-right: 4px;">⋮</span>
-                          <span style="flex: 1;">• ${esc(s.name || 'New Step')}</span>
-                          <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
-                      </div>
-                  </div>
-                  ${i < res.steps.length - 1 ? `
-                      <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
-                          <div class="split-icon">✂️</div>
-                      </div>` : ''}
-              `).join('')}
+                ${(res.steps || []).map((s, i) => {
+                    // Use the actual persistent ID if it exists, fallback to index for legacy
+                    const stepId = s.id || i; 
+                    
+                    return `
+                        <div class="v2-step-item" 
+                            data-step-id="${res.id}-${stepId}" 
+                            draggable="true"
+                            ondragstart="OL.handleStepDragStart(event, ${i})"
+                            ondragover="OL.handleStepDragOver(event)"
+                            ondragleave="OL.handleStepDragLeave(event)"
+                            ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
+                            onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')">
+                            
+                            <div class="step-row-content">
+                                <span class="drag-handle" style="cursor: grab; opacity: 0.3; margin-right: 4px;">⋮</span>
+                                <span style="flex: 1;">• ${esc(s.name || 'New Step')}</span>
+                                <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                            </div>
+                        </div>
+                        ${i < res.steps.length - 1 ? `
+                            <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
+                                <div class="split-icon">✂️</div>
+                            </div>` : ''}
+                    `;
+                }).join('')}
             </div>
             <div class="v2-card-footer">
                 <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
@@ -8357,169 +8364,646 @@ OL.toggleMasterExpand = function(forceExpand = null) {
     }, 50); 
 };
 
+OL.closeModal = function() {
+    const quickInput = document.getElementById('quick-step-input');
+    
+    // 1. 🤖 AUTO-SAVE CHECK
+    // If the input has text (more than 2 chars), save it before vanishing
+    if (quickInput && quickInput.value.trim().length > 2) {
+        const resId = quickInput.getAttribute('data-res-id');
+        console.log("💾 Auto-saving draft before close...");
+        
+        // We call commit but don't 'await' it here to keep the UI snappy, 
+        // the function itself handles the close after the save is done.
+        OL.commitQuickStep(resId);
+        return; // Exit here; commitQuickStep will call closeModal again when done
+    }
+
+    // 2. 🧹 STANDARD CLOSE & CLEANUP
+    const layer = document.getElementById('modal-layer');
+    if (layer) {
+        layer.style.display = 'none';
+        layer.innerHTML = '';
+    }
+
+    // 3. RESET STATE
+    OL.isSavingStep = false;
+    OL.quickAddState = { name: "", app: "", assignee: "", delay: 0, note: "", due: "", rule: "" };
+    OL.clearNavHistory();
+    
+    // 🔄 Refresh the map to show any new items
+    if (typeof OL.renderVisualizer === "function") OL.renderVisualizer();
+};
 
 OL.addNewStepToCard = function(resId) {
+    OL.quickAddState = { name: "", app: "", appId: null, assignee: "", links: [], target: null, 
+      delay: 0, note: "", rule: "" };
     const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚡ Quick Add Step</div>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom: 15px;">
-                <label class="tiny-label">COMMAND LINE</label>
-                <input type="text" id="quick-step-input" class="modal-input" 
-                       placeholder="Stripe create customer | Assign: Sarah | Delay: 2"
-                       oninput="OL.updateStepPreview(this.value)"
-                       onkeydown="if(event.key==='Enter') OL.commitQuickStep('${resId}')"
-                       style="font-size: 16px; padding: 15px; border: 2px solid var(--accent);">
-            </div>
-            
-            <div class="shortcut-legend" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; opacity: 0.8;">
-                <div class="tiny muted"><b class="accent">| Assign:</b> Name</div>
-                <div class="tiny muted"><b class="accent">| Delay:</b> Days</div>
-                <div class="tiny muted"><b class="accent">| Rule:</b> Logic Condition</div>
-                <div class="tiny muted"><b class="accent">| Note:</b> Description</div>
-            </div>
-
-            <div id="step-preview-zone" style="display:none; background: rgba(0,0,0,0.2); border: 1px solid var(--line); padding: 15px; border-radius: 8px;">
+        <div id="quick-add-modal"> 
+            <div class="modal-head"><div class="modal-title-text">⚡ Power Add Step</div></div>
+            <div class="modal-body" style="position:relative;">
+                <div id="quick-add-container">
+                    <input type="text" id="quick-step-input" data-res-id="${resId}" class="modal-input" 
+                           placeholder="Task Name /..."
+                           autocomplete="off"
+                           oninput="OL.handleQuickAddInput(event, '${resId}')"
+                           onkeydown="OL.handleQuickAddKeys(event, '${resId}')"
+                           style="font-size: 16px; padding: 15px; border: 2px solid var(--accent); width:100%;">
+                    
+                    <div id="slash-menu" class="slash-menu"></div>
                 </div>
-
-            <div style="margin-top: 20px; display: flex; gap: 10px;">
-                <button class="btn soft flex-1" onclick="OL.closeModal()">Cancel</button>
-                <button class="btn primary flex-2" id="quick-commit-btn" onclick="OL.commitQuickStep('${resId}')">Drop to Card (Enter)</button>
+                <div id="step-preview-zone" style="margin-top:15px; display:none; background: rgba(0,0,0,0.2); border: 1px solid var(--line); padding: 15px; border-radius: 8px;"></div>
             </div>
         </div>
     `;
     openModal(html);
-    // Force focus and select all text if any
-    setTimeout(() => {
-        const input = document.getElementById('quick-step-input');
-        if (input) input.focus();
-    }, 100);
+    setTimeout(() => document.getElementById('quick-step-input').focus(), 100);
 };
 
 OL.parseStepInput = function(rawText) {
-    const text = rawText.trim();
-    const parts = text.split('|');
-    const mainCommand = parts[0].trim();
-    
-    // Check for App/Verb match (your existing smart logic)
-    let base = OL.parseSmartInput(mainCommand); 
-    
-    let result = {
-        name: base.matched ? `${base.verb} ${base.object}` : mainCommand,
-        appName: base.matched ? base.app : null,
-        assigneeName: null,
-        timingValue: 0,
-        timingType: 'after_prev',
-        rule: "",
-        notes: ""
+    // 🏷️ Mapping Synonyms to Fields
+    const config = {
+        assignee: ['assign', 'who', 'owner', '@'],
+        delay:    ['delay', 'wait', 'after', 'pause'],
+        dueDate:  ['due', 'date', 'by', 'deadline'],
+        app:      ['app', 'tool', 'via', 'using'],
+        note:     ['note', 'desc', 'info', 'details'],
+        rule:     ['rule', 'if', 'logic', 'when']
     };
 
-    parts.forEach((part, idx) => {
-        if (idx === 0) return; 
-        const lowerPart = part.trim().toLowerCase();
-        const content = part.split(':')[1]?.trim() || "";
+    const parts = rawText.split('/');
+    const taskName = parts[0].trim();
+    
+    let result = {
+        name: taskName || "New Step",
+        appName: null,
+        assigneeName: null,
+        timingValue: 0,
+        dueDate: null,
+        notes: "",
+        rule: ""
+    };
+
+    parts.slice(1).forEach(part => {
+        const lowerPart = part.toLowerCase().trim();
         
-        // 🕵️ Robust Prefix Checking
-        if (lowerPart.startsWith('assign')) result.assigneeName = content;
-        if (lowerPart.startsWith('delay'))  result.timingValue = parseInt(content.replace(/[^0-9]/g, '')) || 0;
-        if (lowerPart.startsWith('rule'))   result.rule = content;
-        if (lowerPart.startsWith('note'))   result.notes = content;
+        // Check which field this "shortcut" belongs to
+        for (const [field, keywords] of Object.entries(config)) {
+            const match = keywords.find(k => lowerPart.startsWith(k));
+            if (match) {
+                const content = part.substring(part.indexOf(':') + 1).trim();
+                if (field === 'assignee') result.assigneeName = content;
+                if (field === 'delay')    result.timingValue = parseInt(content) || 0;
+                if (field === 'dueDate')  result.dueDate = content;
+                if (field === 'app')      result.appName = content;
+                if (field === 'note')     result.notes = content;
+                if (field === 'rule')     result.rule = content;
+            }
+        }
     });
 
     return result;
 };
 
-OL.updateStepPreview = function(val) {
-    const previewZone = document.getElementById('step-preview-zone');
-    const commitBtn = document.getElementById('quick-commit-btn');
+OL.handleQuickAddInput = function(e, resId) {
+    const input = e.target;
+    const val = input.value;
+    const menu = document.getElementById('slash-menu');
+    const lastSlashIndex = val.lastIndexOf('/');
     
-    if (!val || val.length < 2) { 
-        previewZone.style.display = 'none'; 
-        commitBtn.disabled = true;
-        return; 
+    if (lastSlashIndex !== -1) {
+        const fullQuery = val.substring(lastSlashIndex + 1);
+        
+        if (fullQuery.includes(':')) {
+            const parts = fullQuery.split(':');
+            const command = parts[0].toLowerCase().trim();
+            const paramQuery = parts[1].trim(); 
+            
+            const subTypeMap = {
+                'assign': 'team', 'who': 'team', 'owner': 'team', '@': 'team',
+                'app': 'apps', 'tool': 'apps', 'via': 'apps',
+                'rule': 'logic', 'if': 'logic',
+                'due': 'due', 'date': 'due',
+                'link': 'links', 'asset': 'links', 'sop': 'links',
+                'target': 'target', 'milestone': 'target'
+            };
+            
+            const subType = subTypeMap[command];
+
+            if (subType) {
+                // Dropdown mode: still filter the list
+                OL.showSubMenu(subType, paramQuery.toLowerCase()); 
+            } else {
+                // ✍️ Manual mode: Just hide the menu and let the user type freely
+                menu.style.display = 'none';
+            }
+        } else {
+            OL.showSlashMenu(fullQuery.toLowerCase().trim(), resId);
+        }
+    } else {
+        menu.style.display = 'none';
     }
     
-    const data = OL.parseStepInput(val);
-    previewZone.style.display = 'block';
-    previewZone.dataset.parsed = JSON.stringify(data);
-    commitBtn.disabled = false;
+    OL.updateStepPreview(val);
+};
 
+OL.showSlashMenu = function(query, resId) {
+    const menu = document.getElementById('slash-menu');
+    const options = [
+        { label: 'Assignee', key: 'Assign:', icon: '👤', sub: 'team' },
+        { label: 'Application', key: 'App:', icon: '📱', sub: 'apps' },
+        { label: 'Delay', key: 'Delay:', icon: '⏱', sub: null },
+        { label: 'Note', key: 'Note:', icon: '📝', sub: null },
+        { label: 'Due Date', key: 'Due:', icon: '📅', sub: 'due' }, // ✨ New Option
+        { label: 'Rules', key: 'Rule:', icon: 'λ', sub: 'logic' },
+        { label: 'Link Assets', key: 'Link:', icon: '🔗', sub: 'links' },
+        { label: 'Target Resource', key: 'Target:', icon: '🎯', sub: 'target' }
+    ];
+
+    const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+    
+    if (filtered.length > 0) {
+        menu.innerHTML = filtered.map((o, i) => `
+            <div class="slash-option ${i === 0 ? 'selected' : ''}" 
+                 data-label="${o.key}" 
+                 data-sub="${o.sub || ''}"
+                 onmousedown="event.preventDefault(); OL.selectMenuOption('${o.key}', '${o.sub || ''}')">
+                <span>${o.icon} ${o.label}</span>
+            </div>
+        `).join('');
+        menu.style.display = 'block';
+    } else {
+        menu.style.display = 'none';
+    }
+};
+
+OL.insertCommand = function(key, subType) {
+    const input = document.getElementById('quick-step-input');
+    if (!input) return;
+
+    const val = input.value;
+    const lastSlash = val.lastIndexOf('/');
+    
+    // Insert the command (e.g., /App:)
+    input.value = val.substring(0, lastSlash + 1) + key + " ";
+    
+    // Hide the level-1 menu
+    document.getElementById('slash-menu').style.display = 'none';
+    input.focus();
+
+    // 🚀 FORCE RE-SCAN: This triggers handleQuickAddInput again immediately
+    const inputEvent = new Event('input', { bubbles: true });
+    input.dispatchEvent(inputEvent);
+};
+
+OL.handleQuickAddKeys = function(e, resId) {
+    const menu = document.getElementById('slash-menu');
+    const isMenuVisible = menu && menu.style.display === 'block';
+    const input = e.target;
+    
+    if (isMenuVisible) {
+        const options = menu.querySelectorAll('.slash-option');
+        if (options.length === 0) return; // Nothing to select
+
+        let activeIdx = Array.from(options).findIndex(opt => opt.classList.contains('selected'));
+
+        if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            e.stopImmediatePropagation(); // 🛑 Stop modal from saving
+            
+            // Default to first option if none highlighted
+            const selectedIdx = activeIdx >= 0 ? activeIdx : 0;
+            const selectedEl = options[selectedIdx];
+
+            if (selectedEl) {
+                // 🕵️ Instead of firing the mouse event, we look at the data we stored
+                const label = selectedEl.getAttribute('data-label');
+                const sub = selectedEl.getAttribute('data-sub');
+                OL.selectMenuOption(label, sub);
+            }
+            return false;
+        }
+
+        // 1. Navigation
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            
+            if (activeIdx >= 0) options[activeIdx].classList.remove('selected');
+            
+            if (e.key === 'ArrowDown') activeIdx = (activeIdx + 1) % options.length;
+            else activeIdx = (activeIdx - 1 + options.length) % options.length;
+            
+            options[activeIdx].classList.add('selected');
+            options[activeIdx].scrollIntoView({ block: 'nearest' });
+            return false;
+        }
+
+        // 2. 🎯 THE FIX: Enter / Tab / Right Arrow
+        if (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            
+            // If nothing is highlighted, grab the first available option
+            const selected = (activeIdx >= 0) ? options[activeIdx] : options[0];
+            
+            if (selected) {
+                // Trigger the mousedown logic
+                selected.onmousedown(); 
+            }
+            return false;
+        }
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            menu.style.display = 'none';
+            return false;
+        }
+    }
+
+    // 🏁 3. Standard Step Commit (Only if menu is hidden)
+    if (e.key === 'Enter' && !e.shiftKey) {
+        const val = input.value;
+        const lastSlash = val.lastIndexOf('/');
+
+        if (lastSlash !== -1) {
+            const cmdPart = val.substring(lastSlash + 1);
+            if (cmdPart.includes(':')) {
+                // We are mid-command! 
+                e.preventDefault();
+                e.stopImmediatePropagation();
+
+                const parts = cmdPart.split(':');
+                const cmd = parts[0].toLowerCase().trim();
+                const content = parts.slice(1).join(':').trim(); // Join in case they typed colons in a note
+
+                if (content.length > 0) {
+                    // 💾 Save to state (Mapping synonyms)
+                    if (cmd === 'delay' || cmd === 'wait') OL.quickAddState.delay = content;
+                    if (cmd === 'note' || cmd === 'desc' || cmd === 'description') OL.quickAddState.note = content;
+                    if (cmd === 'due' || cmd === 'date') OL.quickAddState.due = content;
+                    if (cmd === 'rule' || cmd === 'if') OL.quickAddState.rule = content;
+                    
+                    // 🧹 Clear the command from input, keep the base task name
+                    input.value = val.substring(0, lastSlash).trim() + " ";
+                    
+                    // 🔄 FORCE REFRESH PREVIEW
+                    OL.updateStepPreview(input.value);
+                    return false;
+                }
+            }
+        }
+        
+        // Final Save Step (Only if no slash command was found above)
+        OL.commitQuickStep(resId);
+    }
+};
+
+OL.updateStepPreview = function(val) {
+    const previewZone = document.getElementById('step-preview-zone');
+    if (!previewZone) return;
+
+    const taskName = (val || "").split('/')[0].trim();
+    const s = OL.quickAddState;
+
+    // 1. Check if we have anything to show
+    const hasData = taskName || s.app || s.assignee || s.delay || s.note || s.rule || s.due;
+    
+    if (!hasData) {
+        previewZone.style.display = 'none';
+        return;
+    }
+
+    previewZone.style.display = 'block';
     previewZone.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; justify-content: space-between;">
-                <span class="tiny muted bold uppercase">Action</span>
-                <span class="tiny accent bold">${data.name}</span>
+            <div style="font-size: 13px; color: var(--accent); font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">
+                ${taskName || '<span style="opacity:0.5">Untitled Action...</span>'}
             </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span class="tiny muted bold uppercase">Tool</span>
-                <span class="tiny white">${data.appName || 'Manual Process'}</span>
+            
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                ${s.app ? `<span class="pill status-primary">📱 ${s.app}</span>` : ''}
+                ${(s.assignee || []).map(a => `
+                    <span class="pill vault-gold" style="font-size: 10px;">👤 ${a.name}</span> `).join('')}
+                ${s.delay ? `<span class="pill">⏱ ${s.delay}</span>` : ''}
+                ${s.due ? `<span class="pill" style="border: 1px solid #ff4757; color: #ff4757;">📅 ${s.due}</span>` : ''}
+                ${s.rule ? `<span class="pill" style="border: 1px solid var(--warning); color: var(--warning);">λ ${s.rule}</span>` : ''}
             </div>
-            ${data.assigneeName ? `
-            <div style="display: flex; justify-content: space-between;">
-                <span class="tiny muted bold uppercase">Owner</span>
-                <span class="tiny white">👤 ${data.assigneeName}</span>
-            </div>` : ''}
-            ${data.timingValue ? `
-            <div style="display: flex; justify-content: space-between;">
-                <span class="tiny muted bold uppercase">Schedule</span>
-                <span class="tiny warning">⏱ ${data.timingValue} Day Delay</span>
-            </div>` : ''}
-            ${data.rule ? `
-            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 10px;">
-                <span class="accent">λ Rule:</span> ${data.rule}
-            </div>` : ''}
+
+            ${s.note ? `
+                <div style="font-size: 11px; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; color: #000; font-style: italic; border-left: 2px solid var(--accent);">
+                    " ${s.note} "
+                </div>
+            ` : ''}
         </div>
     `;
 };
 
-OL.commitQuickStep = async function(resId) {
-    const previewZone = document.getElementById('step-preview-zone');
-    if (!previewZone.dataset.parsed) return;
+OL.showSubMenu = function(subType, filterQuery = "") {
+    const menu = document.getElementById('slash-menu');
+    if (!menu) return;
 
-    const data = JSON.parse(previewZone.dataset.parsed);
-    const projectData = OL.getCurrentProjectData();
-    const res = projectData.resources.find(r => String(r.id) === String(resId));
+    const q = (filterQuery || "").toLowerCase().trim();
+    let menuHtml = "";
 
-    if (res) {
-        if (!res.steps) res.steps = [];
+    // 1. SELECT DATA BASED ON TYPE
+    switch (subType) {
+        case 'team':
+            const matches = OL.getFilteredAssigneeOptions(q);
+            menuHtml = `<div class="search-category-label">Assign to... (Multi-select)</div>`;
+            menuHtml += `
+                <div class="slash-option exit-option" style="border-bottom: 1px solid var(--line); color: var(--accent); font-weight:bold;" 
+                     onmousedown="event.preventDefault(); OL.exitSubMenu()">
+                    <span>✅ Done Selecting</span>
+                </div>
+            `;
+            menuHtml += matches.map((item) => {
+                const isSelected = (OL.quickAddState.assignee || []).some(a => a.id === item.id);
+                return `
+                    <div class="slash-option ${isSelected ? 'active' : ''}" 
+                         onmousedown="event.preventDefault(); OL.selectMultiAssignee('${item.id}', '${esc(item.name)}', '${item.type}')">
+                        <span>${item.icon} ${esc(item.name)}</span>
+                        ${isSelected ? '<span class="tiny" style="margin-left:auto;">✅</span>' : ''}
+                    </div>
+                `;
+            }).join('');
+            break;
+
+        case 'due':
+            const dueOptions = [
+                { label: 'Same Day', icon: '⚡' },
+                { label: '+1 Day', icon: '🌅' },
+                { label: '+2 Days', icon: '📅' },
+                { label: '+1 Week', icon: '🗓️' },
+                { label: 'Immediate', icon: '🚀' }
+            ];
+            menuHtml = `<div class="search-category-label">Select Due Offset...</div>`;
+            menuHtml += dueOptions.filter(o => o.label.toLowerCase().includes(q)).map(o => `
+                <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${o.label}')">
+                    <span>${o.icon} ${o.label}</span>
+                </div>
+            `).join('');
+            break;
+
+        case 'apps':
+            const client = getActiveClient();
+            const apps = (client?.projectData?.localApps || []).filter(a => a.name.toLowerCase().includes(q));
+            menuHtml = `<div class="search-category-label">Select Application...</div>`;
+            menuHtml += apps.map(a => `
+                <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${esc(a.name)}', null, '${a.id}')">
+                    <span>📱 ${esc(a.name)}</span>
+                </div>
+            `).join('');
+            break;
+
+        case 'logic':
+            const logicOptions = [
+                { label: 'If Approved', icon: 'λ' }, 
+                { label: 'If Rejected', icon: 'λ' }, 
+                { label: 'On Success', icon: 'λ' }
+            ];
+            menuHtml = `<div class="search-category-label">Select Logic Rule...</div>`;
+            menuHtml += logicOptions.filter(o => o.label.toLowerCase().includes(q)).map(o => `
+                <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${o.label}')">
+                    <span>${o.icon} ${o.label}</span>
+                </div>
+            `).join('');
+            break;
         
-        // 🏗️ BUILD THE ACTUAL STEP OBJECT
+        // Inside OL.showSubMenu switch statement:
+
+        case 'links': // 📖 Guides & Assets
+            const clientData = getActiveClient();
+            const allRes = [...(state.master.resources || []), ...(clientData?.projectData?.localResources || [])];
+            const allSOPs = [...(state.master.howToLibrary || []), ...(clientData?.projectData?.localHowTo || [])];
+            
+            // Combine and filter
+            const linkMatches = [...allRes, ...allSOPs].filter(item => item.name.toLowerCase().includes(q));
+
+            menuHtml = `<div class="search-category-label">Link Assets/SOPs (Multi)</div>`;
+            menuHtml += linkMatches.map(item => {
+                const isSelected = (OL.quickAddState.links || []).some(l => l.id === item.id);
+                const icon = item.type === 'SOP' || item.content !== undefined ? '📖' : '📱';
+                return `
+                    <div class="slash-option ${isSelected ? 'active' : ''}" 
+                        onmousedown="event.preventDefault(); OL.selectMultiLink('${item.id}', '${esc(item.name)}', '${item.type || 'sop'}')">
+                        <span>${icon} ${esc(item.name)}</span>
+                        ${isSelected ? '<span class="tiny">✅</span>' : ''}
+                    </div>
+                `;
+            }).join('');
+            break;
+
+        case 'target': // 🎯 The "Milestone" Resource
+            const data = OL.getCurrentProjectData();
+            const targetMatches = (data.resources || []).filter(r => r.name.toLowerCase().includes(q));
+
+            menuHtml = `<div class="search-category-label">Set Target Resource (Milestone)</div>`;
+            menuHtml += targetMatches.map(r => `
+                <div class="slash-option" onmousedown="event.preventDefault(); OL.selectTargetResource('${r.id}', '${esc(r.name)}')">
+                    <span>🎯 ${esc(r.name)}</span>
+                </div>
+            `).join('');
+            break;
+    }
+
+    // 2. RENDER OR HIDE
+    if (menuHtml && menuHtml.length > 50) { // Safety check to ensure we didn't just render a label
+        menu.innerHTML = menuHtml;
+        menu.style.display = 'block';
+    } else {
+        menu.style.display = 'none';
+    }
+};
+
+OL.selectMultiLink = function(id, name, type) {
+    if (!OL.quickAddState.links) OL.quickAddState.links = [];
+    const idx = OL.quickAddState.links.findIndex(l => l.id === id);
+    if (idx === -1) OL.quickAddState.links.push({ id, name, type });
+    else OL.quickAddState.links.splice(idx, 1);
+    
+    OL.updateStepPreview(document.getElementById('quick-step-input').value);
+    OL.showSubMenu('links', ''); 
+};
+
+OL.selectTargetResource = function(id, name) {
+    OL.quickAddState.target = { id, name };
+    OL.exitSubMenu(); // Targets are usually single-select, so we auto-exit
+};
+
+OL.selectMultiAssignee = function(id, name, type) {
+    if (!Array.isArray(OL.quickAddState.assignee)) OL.quickAddState.assignee = [];
+    
+    const idx = OL.quickAddState.assignee.findIndex(a => a.id === id);
+    if (idx === -1) {
+        OL.quickAddState.assignee.push({ id, name, type });
+    } else {
+        OL.quickAddState.assignee.splice(idx, 1);
+    }
+
+    const input = document.getElementById('quick-step-input');
+    
+    // 🛡️ Guard against the null error
+    if (input) {
+        OL.updateStepPreview(input.value);
+        
+        // Use a tiny timeout or animation frame to let the click event finish
+        // before forcing focus back into the box.
+        requestAnimationFrame(() => {
+            if (input) input.focus();
+        });
+    }
+
+    // Refresh the submenu so checkmarks appear/disappear instantly
+    OL.showSubMenu('team', ''); 
+};
+
+OL.exitSubMenu = function() {
+    const input = document.getElementById('quick-step-input');
+    const menu = document.getElementById('slash-menu');
+    if (!input) return;
+
+    const val = input.value;
+    const lastSlash = val.lastIndexOf('/');
+
+    // 🧹 Strip the command part but keep the base task name
+    // e.g., "Send Invoice /Assign: " -> "Send Invoice "
+    if (lastSlash !== -1) {
+        input.value = val.substring(0, lastSlash).trim() + " ";
+    }
+
+    if (menu) menu.style.display = 'none';
+    input.focus();
+    
+    // Refresh the preview one last time
+    OL.updateStepPreview(input.value);
+};
+
+OL.completeSubMenuValue = function(value) {
+    const input = document.getElementById('quick-step-input');
+    const val = input.value;
+    
+    // Find where the last command started
+    const lastColon = val.lastIndexOf(':');
+    
+    // Construct new value: Everything up to the colon + the selected value
+    input.value = val.substring(0, lastColon + 1) + " " + value + " ";
+    
+    document.getElementById('slash-menu').style.display = 'none';
+    input.focus();
+    OL.updateStepPreview(input.value);
+};
+
+// 📦 A temporary object to hold our draft step data
+OL.quickAddState = { name: "", app: "", assignee: "", delay: 0 };
+
+OL.selectMenuOption = function(label, subType = null, appId = null) {
+    const input = document.getElementById('quick-step-input');
+    if (!input) return;
+
+    const val = input.value;
+    const lastSlash = val.lastIndexOf('/');
+    const isCommandStart = label.endsWith(':');
+
+    if (isCommandStart) {
+        input.value = val.substring(0, lastSlash).trim() + " /" + label + " ";
+        document.getElementById('slash-menu').style.display = 'none';
+        input.focus();
+        if (subType && subType !== 'null' && subType !== '') {
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+            OL.updateStepPreview(input.value);
+        }
+    } 
+    else {
+        const commandText = val.substring(lastSlash); 
+        
+        // 🎯 THE FIX: Capture the ID for the Inspector
+        if (commandText.includes('App:')) {
+            OL.quickAddState.app = label;
+            OL.quickAddState.appId = appId; 
+        }
+        
+        // Existing mappings...
+        if (commandText.includes('Assign:')) OL.quickAddState.assignee = label; // Handled by selectMultiAssignee usually
+        if (commandText.includes('Delay:')) OL.quickAddState.delay = label;
+        if (commandText.includes('Due:')) OL.quickAddState.due = label;
+        if (commandText.includes('Note:')) OL.quickAddState.note = label;
+        if (commandText.includes('Rule:')) OL.quickAddState.rule = label;
+
+        input.value = val.substring(0, lastSlash).trim() + " ";
+        document.getElementById('slash-menu').style.display = 'none';
+        input.focus();
+        OL.updateStepPreview(input.value);
+    }
+};
+
+OL.isSavingStep = false; // Global flag
+
+OL.commitQuickStep = async function(resId) {
+    if (OL.isSavingStep) return;
+    
+    const input = document.getElementById('quick-step-input');
+    if (!input) return;
+
+    const taskName = input.value.split('/')[0].trim();
+    const s = OL.quickAddState; // Shortcut to our draft state
+
+    if (!taskName && !s.note) {
+        OL.isSavingStep = false;
+        OL.closeModal(); 
+        return;
+    }
+
+    OL.isSavingStep = true;
+    input.value = ""; 
+
+    try {
         const newStep = {
-            id: uid(),
-            name: data.name,
-            appName: data.appName || "",
-            // Assignees must be an ARRAY of objects for your inspector to loop through them
-            assignees: data.assigneeName ? [{ id: uid(), name: data.assigneeName, type: 'person' }] : [],
-            // Notes field usually maps to 'description' in your system
-            description: data.notes || "",
-            timingValue: data.timingValue || 0,
-            timingType: 'after_prev',
-            logic: { in: [], out: [] }
+            id: "step_" + Date.now(),
+            name: taskName || "Untitled Action",
+            
+            // 📱 App Alignment: Inspector uses .appId
+            appId: s.appId || null, 
+            appName: s.app || null,
+
+            // 👤 Assignee Alignment: Inspector uses .assignees (Array)
+            assignees: Array.isArray(s.assignee) ? s.assignee : [], 
+
+            // 📝 Note Alignment: Inspector uses .description
+            description: s.note || "", 
+            
+            // ⏱ Timing & Logic
+            timingValue: parseInt(s.delay) || 0,
+            timingType: 'after_prev', 
+            dueDate: s.due || null,
+            rule: s.rule || "",
+            logic: { in: [], out: [] },
+            links: [],
+            links: s.links || [],         // 📖 Attached Guides/Assets Array
+            targetResourceId: s.target?.id || null, // 🎯 The Milestone ID
+            targetResourceName: s.target?.name || null,
         };
 
-        // Handle the Logic Rule
-        if (data.rule) {
-            newStep.logic.out.push({ 
-                targetId: "", // Empty for now, user links it in inspector
-                rule: data.rule, 
-                type: 'link' 
-            });
+        const client = getActiveClient();
+        const isVault = window.location.hash.includes('vault');
+        const resourcePool = isVault ? state.master.resources : client.projectData.localResources;
+        const resource = resourcePool.find(r => String(r.id) === String(resId));
+
+        if (resource) {
+            if (!resource.steps) resource.steps = [];
+            resource.steps.push(newStep);
+            resource.isExpanded = true;
+
+            await OL.persist(); 
+            if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
         }
-
-        // 💾 Save to Data Model
-        res.steps.push(newStep);
-
-        await OL.updateAndSync(() => {
-            // Re-align nodes and refresh the global UI
-            if (OL.autoAlignNodes) OL.autoAlignNodes(false);
-        });
-
+    } catch (err) {
+        console.error("❌ Power Add Sync Failure:", err);
+    } finally {
+        OL.isSavingStep = false;
         OL.closeModal();
-        OL.renderVisualizer();
-        
-        // 🔎 Focus the new step immediately
-        OL.openInspector(resId, newStep.id, 'steps');
     }
 };
 
@@ -8911,6 +9395,23 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
+                    <label class="section-label">🎯 RELATIONAL TARGET (MILESTONE)</label>
+                    ${step.targetResourceId ? `
+                        <div class="pill accent" style="display:flex; justify-content:space-between; align-items:center; background:rgba(var(--accent-rgb), 0.1); border:1px solid var(--accent);">
+                            <span>🎯 ${esc(step.targetResourceName)}</span>
+                            <b class="is-clickable" style="opacity:0.5;" onclick="OL.setStepTargetResource('${resId}', '${step.id}', null, null)">×</b>
+                        </div>
+                    ` : `
+                        <div class="search-map-container">
+                            <input type="text" class="modal-input tiny" placeholder="Search Milestones..." 
+                                  onfocus="OL.filterTargetSearch('${resId}', '${step.id}', '')"
+                                  oninput="OL.filterTargetSearch('${resId}', '${step.id}', this.value)">
+                            <div id="target-search-results" class="search-results-overlay"></div>
+                        </div>
+                    `}
+                </div>
+
+                <div class="inspector-section">
                     <label class="section-label">👤 ASSIGNEES (WHO?)</label>
                     <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
                         ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
@@ -9205,77 +9706,75 @@ window.OL.removeAppFromStep = async function(resId, stepId) {
     }
 };
 
+OL.getFilteredAssigneeOptions = function(query) {
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    
+    // 1. Define Virtual & Global Options
+    const virtualOptions = [
+        { id: 'any-team', name: 'Any Team Member', type: 'role', icon: '👥' },
+        { id: 'all-client', name: 'Any Client', type: 'role', icon: '🏠' },
+        { id: 'role-client-1', name: 'Client 1', type: 'role', icon: '👤' },
+        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: '👤' }
+    ];
+
+    // 2. Gather Dynamic Data
+    const masterRoles = (state.master.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: '🎭' }));
+    const clientRoles = (client?.projectData?.roles || []).map(r => ({ id: r.id, name: r.name, type: 'role', icon: '🎭' }));
+    
+    // Extract roles defined within the team member objects themselves
+    const teamList = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || [])];
+    const inlineRoles = [...new Set(teamList.flatMap(m => m.roles || []))].map(r => ({ id: `role-${r}`, name: r, type: 'role', icon: '🎭' }));
+
+    const people = teamList.map(m => ({ id: m.id, name: m.name, type: 'person', icon: '👤' }));
+    const apps = (client?.projectData?.localApps || []).map(a => ({ id: a.id, name: a.name, type: 'app', icon: '📱' }));
+
+    // 3. Combine and Filter
+    const all = [...virtualOptions, ...masterRoles, ...clientRoles, ...inlineRoles, ...people, ...apps];
+    
+    // Deduplicate by name (in case a role is in multiple lists)
+    const unique = Array.from(new Map(all.map(item => [item.name.toLowerCase(), item])).values());
+
+    return unique.filter(item => item.name.toLowerCase().includes(q));
+};
+
 OL.filterAssignmentSearch = function(parentId, stepId, isResource, query) {
     const resultsOverlay = document.getElementById('assignment-search-results');
     if (!resultsOverlay) return;
 
     const q = (query || "").toLowerCase().trim();
-    if (!q) {
+    if (!q && !document.activeElement.matches(':focus')) {
         resultsOverlay.style.display = 'none';
         return;
     }
 
-    const client = getActiveClient();
-    
-    // 1. GATHER DATA
-    const masterTeam = state.master.teamMembers || [];
-    const masterRoles = state.master.roles || [];
-    const clientPersonnel = client?.projectData?.teamMembers || [];
-    const clientRoles = client?.projectData?.roles || [];
-    const apps = client?.projectData?.localApps || [];
+    const matches = OL.getFilteredAssigneeOptions(q);
 
-    // 🚀 THE GHOST ROLES: Pre-defined for assignment only
-    const ghostRoles = [
-        { id: 'role-client-1', name: 'Client 1', type: 'role' },
-        { id: 'role-client-2', name: 'Client 2', type: 'role' }
-    ];
-
-    // 2. FILTER MATCHES
-    const filteredPeople = [...masterTeam, ...clientPersonnel].filter(m => 
-        m.name.toLowerCase().includes(q)
-    );
-    
-    // Combine real roles with our predefined ghost roles
-    const filteredRoles = [...masterRoles, ...clientRoles, ...ghostRoles].filter(r => 
-        r.name.toLowerCase().includes(q)
-    );
-    
-    const filteredApps = apps.filter(a => 
-        a.name.toLowerCase().includes(q)
-    );
-
-    if (!filteredPeople.length && !filteredRoles.length && !filteredApps.length) {
+    if (matches.length === 0) {
         resultsOverlay.innerHTML = `<div class="p-10 tiny muted">No matches found.</div>`;
         resultsOverlay.style.display = 'block';
         return;
     }
 
-    // 3. RENDER HTML
+    // Group by type for the labels
+    const groups = {
+        role: { label: 'Roles & Clients', items: [] },
+        person: { label: 'Team Members', items: [] },
+        app: { label: 'Applications', items: [] }
+    };
+
+    matches.forEach(opt => groups[opt.type].items.push(opt));
+
     let html = '';
-
-    if (filteredPeople.length) {
-        html += `<div class="search-category-label">Team Members</div>`;
-        html += filteredPeople.map(m => `
-            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${m.id}', '${esc(m.name)}', 'person')">
-                👤 ${esc(m.name)}
-            </div>`).join('');
-    }
-
-    if (filteredRoles.length) {
-        html += `<div class="search-category-label">Roles & Clients</div>`;
-        html += filteredRoles.map(r => `
-            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${r.id}', '${esc(r.name)}', 'role')">
-                👥 ${esc(r.name)}
-            </div>`).join('');
-    }
-
-    if (filteredApps.length) {
-        html += `<div class="search-category-label">Applications</div>`;
-        html += filteredApps.map(a => `
-            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${a.id}', '${esc(a.name)}', 'app')">
-                📱 ${esc(a.name)}
-            </div>`).join('');
-    }
+    Object.values(groups).forEach(g => {
+        if (g.items.length === 0) return;
+        html += `<div class="search-category-label">${g.label}</div>`;
+        html += g.items.map(item => `
+            <div class="search-result-item" onmousedown="event.preventDefault(); OL.executeAssignment('${parentId}', '${stepId}', false, '${item.id}', '${esc(item.name)}', '${item.type}')">
+                ${item.icon} ${esc(item.name)}
+            </div>
+        `).join('');
+    });
 
     resultsOverlay.innerHTML = html;
     resultsOverlay.style.display = 'block';
@@ -9338,6 +9837,50 @@ document.addEventListener('keydown', (e) => {
         OL.centerNextCanvasMatch(); // The cycling function we built earlier
     }
 });
+
+// 1. Filter Resources for the Target/Milestone search
+OL.filterTargetSearch = function(resId, stepId, query) {
+    const resultsOverlay = document.getElementById('target-search-results');
+    if (!resultsOverlay) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const data = OL.getCurrentProjectData();
+    // Show all resources except the one we are currently inside
+    const matches = (data.resources || []).filter(r => 
+        String(r.id) !== String(resId) && r.name.toLowerCase().includes(q)
+    );
+
+    if (matches.length === 0) {
+        resultsOverlay.innerHTML = `<div class="p-10 tiny muted">No matching resources found.</div>`;
+        resultsOverlay.style.display = 'block';
+        return;
+    }
+
+    resultsOverlay.innerHTML = matches.map(r => `
+        <div class="search-result-item" onmousedown="event.preventDefault(); OL.setStepTargetResource('${resId}', '${stepId}', '${r.id}', '${esc(r.name)}')">
+            🎯 ${esc(r.name)}
+        </div>
+    `).join('');
+    
+    resultsOverlay.style.display = 'block';
+};
+
+// 2. Set the Milestone Target
+OL.setStepTargetResource = async function(resId, stepId, targetId, targetName) {
+    const res = OL.getResourceById(resId);
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    
+    if (step) {
+        step.targetResourceId = targetId;
+        step.targetResourceName = targetName;
+        await OL.persist();
+        
+        // Hide overlay and refresh inspector
+        const overlay = document.getElementById('target-search-results');
+        if (overlay) overlay.style.display = 'none';
+        OL.openInspector(resId, stepId);
+    }
+};
 
 OL.filterResourceSearch = function(resId, stepId, query) {
     const resultsOverlay = document.getElementById(`resource-results-${stepId}`);
