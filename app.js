@@ -10297,6 +10297,7 @@ OL.clearAllFilters = function() {
     OL.syncCanvasFilters();
     
     console.log("✨ Canvas and Search Bar fully reset.");
+    OL.renderVisualizer();
 };
 
 window.OL.addLinkToStep = async function(resId, stepId, linkId, linkName, type) {
