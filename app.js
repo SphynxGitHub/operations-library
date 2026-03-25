@@ -7746,11 +7746,11 @@ OL.autoAlignNodes = async function() {
     const COLUMN_WIDTH = 300;       
     const START_Y = 120;            
     const SHELL_MARGINS = 45;       // Card padding + Footer height
-    const CHARS_PER_LINE = 24;      
+    const CHARS_PER_LINE = 26;      
     const LINE_HEIGHT_TITLE = 22;   
-    const LINE_HEIGHT_STEP = 20;    
+    const LINE_HEIGHT_STEP = 18;    
     const STEP_PADDING = 12;        
-    const DIVIDER_HEIGHT = 25;
+    const DIVIDER_HEIGHT = 15;
     const EMPTY_STATE_HEIGHT = 40;  // Height allocated for the "Add Step" area when empty
 
     let currentXOffset = 40; 
@@ -8446,7 +8446,6 @@ OL.addNewStepToCard = function(resId) {
         </div>
     `;
     openModal(html);
-    OL.autoAlignNodes();
     setTimeout(() => document.getElementById('quick-step-input').focus(), 100);
 };
 
@@ -9997,9 +9996,20 @@ OL.syncCanvasFilters = function() {
         const matchesQuery = !query || res.name.toLowerCase().includes(query);
         const matchesType = !typeF || res.type === typeF;
         const matchesApp = !appF || (res.steps || []).some(s => s.appName === appF);
-        const matchesAssignee = !assigneeF || (res.steps || []).some(s => 
-            (s.assignees || []).some(a => (a.name || a) === assigneeF)
-        );
+        // Update this specific block inside OL.syncCanvasFilters
+        const matchesAssignee = !assigneeF || (res.steps || []).some(s => {
+            // 🛡️ THE SHIELD: Ensure 's' exists before checking properties
+            if (!s) return false; 
+
+            // Check the new 'assignees' array (Multi-select)
+            const inArray = (s.assignees || []).some(a => (a.name || a) === assigneeF);
+            
+            // Check the legacy 'assigneeName' string (Just in case)
+            const isLegacyMatch = s.assigneeName === assigneeF;
+
+            return inArray || isLegacyMatch;
+        });
+         
 
         // 🚀 STATUS CHECK (Scoped vs Unscoped)
         let matchesStatus = true;
