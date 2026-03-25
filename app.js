@@ -394,7 +394,7 @@ window.buildLayout = function () {
     {
       key: "functions",
       label: "Master Functions",
-      icon: "⚒",
+      icon: "🔨",
       href: "#/vault/functions",
     },
     {
@@ -446,7 +446,7 @@ window.buildLayout = function () {
     {
       key: "functions",
       label: "Functions",
-      icon: "⚒",
+      icon: "🔨",
       href: "#/functions",
     },
     {
@@ -7614,6 +7614,9 @@ OL.initWBMotion = function(e, id) {
     let isResizingLane = false; 
     let activeResizingStage = null;
 
+    let pendingWidthChange = null;
+    let pendingStageIdx = null;
+
     let indicator = document.getElementById('drag-indicator');
     if (!indicator) {
         indicator = document.createElement('div');
@@ -7629,7 +7632,7 @@ OL.initWBMotion = function(e, id) {
     if (el) el.classList.add('is-dragging-ghost');
 
     const onMove = (mE) => {
-        // Move the Dot Guide
+        // 1. Move the Dot (DOM only)
         indicator.style.left = `${mE.clientX - 7}px`;
         indicator.style.top = `${mE.clientY - 7}px`;
         indicator.style.position = 'fixed';
@@ -7637,34 +7640,25 @@ OL.initWBMotion = function(e, id) {
         const rect = canvas.getBoundingClientRect();
         const mouseCanvasX = (mE.clientX - rect.left) / zoom;
 
-        // 🛡️ 2. LANE RESIZING LOGIC
-        // Only trigger if we aren't "in the middle" of a card move (Y < 150)
-        // AND only if the click originated in the header area.
+        // 2. Visual-only Lane Resizing
         if (mE.clientY < 150) { 
-            let accX = 40; // Start after the first "+" button
+            let accX = 40; 
             const laneElements = document.querySelectorAll('.v2-lane-section:not(.start-trigger)');
             
             laneElements.forEach((laneEl, idx) => {
                 const stage = stages[idx];
                 if (!stage) return;
                 const w = stage.width || 320;
-                
-                // Edge detection (within 30px of the line)
                 const isNearLine = mouseCanvasX > (accX + w - 30) && mouseCanvasX < (accX + w + 30);
                 
                 if (isNearLine) {
                     isResizingLane = true;
-                    activeResizingStage = stage;
                     const newWidth = Math.max(300, mouseCanvasX - accX);
-                    laneEl.style.width = `${newWidth}px`;
-                    stage.width = newWidth; 
+                    laneEl.style.width = `${newWidth}px`; // Visual update
+                    // NO SYNC HERE
                 }
                 accX += w;
             });
-        }
-
-        if (isResizingLane) {
-            OL.drawConnections();
         }
     };
 
@@ -7675,37 +7669,43 @@ OL.initWBMotion = function(e, id) {
     indicator.style.display = 'none';
     if (el) el.classList.remove('is-dragging-ghost');
 
-    if (isResizingLane) {
-        await OL.persist();
+    // 💾 COMMIT LANE RESIZE
+    if (isResizingLane && pendingStageIdx !== null) {
+        await OL.updateAndSync(() => {
+            // ONLY touch the data object here, once.
+            stages[pendingStageIdx].width = pendingWidthChange;
+        });
+        
+        // Reset trackers
+        pendingWidthChange = null;
+        pendingStageIdx = null;
+        isResizingLane = false;
         OL.renderVisualizer();
         return;
     }
-
-    // 1. Identify what we dropped ON
-    // We hide the dragged element for a millisecond to see what is underneath it
+    // 🎯 1. UNIFIED HIT DETECTION
     el.style.display = 'none';
     const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
     el.style.display = 'block';
 
     const targetCardEl = dropPointEl?.closest('.v2-node-card');
-    const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
     const isOverTopShelf = dropPointEl?.closest('#global-shelf');
+    const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
 
-    // 🚀 SCENARIO A: MERGE CARDS (Dropped Card A onto Card B)
+    // 🚀 2. SCENARIO A: THE MERGE (Dropped directly ON a card)
     if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
         const targetId = targetCardEl.id.replace('v2-node-', '');
         const targetRes = resources.find(r => String(r.id) === String(targetId));
 
         if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
             await OL.updateAndSync(() => {
-                // Combine steps and filter any nulls
-                targetRes.steps = [...(targetRes.steps || []), ...(res.steps || [])].filter(Boolean);
+                // deep clone steps to avoid circular references
+                const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
+                targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
                 
-                // Remove the old card from the library
-                const resIdx = resources.findIndex(r => r.id === res.id);
+                const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
                 if (resIdx > -1) resources.splice(resIdx, 1);
                 
-                // Recalculate family names (1/1, etc)
                 OL.refreshFamilyNaming(targetRes, resources);
                 OL.syncLogicPorts();
             });
@@ -7714,39 +7714,90 @@ OL.initWBMotion = function(e, id) {
         }
     }
 
-    // 📥 SCENARIO B: WORKBENCH / SHELF (Existing Logic)
-    if (isOverWorkbench || isOverTopShelf) {
-        res.isGlobal = true;
-        res.isTopShelf = !!isOverTopShelf;
-        res.stageId = null;
-        delete res.coords;
-    } 
-    // 📍 SCENARIO C: CANVAS MOVE (Existing Logic)
+    // 📥 SCENARIO B: SHELF / WORKBENCH REORDERING
+    if (isOverTopShelf || isOverWorkbench) {
+        console.log("📍 Drop detected over Shelf/Workbench");
+
+        // 🚀 THE FIX: Re-resolve these elements because they might not be in scope
+        const shelfContents = document.getElementById('shelf-contents');
+        const workbenchContents = document.getElementById('workbench-contents');
+        
+        const container = isOverTopShelf ? shelfContents : workbenchContents;
+        
+        if (!container) {
+            console.error("❌ Drop Container not found in DOM");
+            return;
+        }
+
+        const siblings = Array.from(container.querySelectorAll('.v2-node-card:not(.is-dragging-ghost)'));
+
+        let targetResId = null;
+
+        for (let i = 0; i < siblings.length; i++) {
+            const rect = siblings[i].getBoundingClientRect();
+            // X check for shelf, Y check for workbench
+            const isBefore = isOverTopShelf 
+                ? (uE.clientX < rect.left + rect.width / 2)
+                : (uE.clientY < rect.top + rect.height / 2);
+
+            if (isBefore) {
+                targetResId = siblings[i].id.replace('v2-node-', '');
+                break;
+            }
+        }
+
+        // 🚀 THE FIX: Re-resolve the actual live array inside the sync block
+        await OL.updateAndSync(() => {
+            const currentData = OL.getCurrentProjectData();
+            // Use currentData.resources to ensure we have the live pointer
+            const liveResources = currentData.resources; 
+
+            const draggedIdx = liveResources.findIndex(r => String(r.id) === String(res.id));
+            if (draggedIdx === -1) return;
+
+            const [movedItem] = liveResources.splice(draggedIdx, 1);
+            
+            movedItem.isGlobal = true;
+            movedItem.isTopShelf = !!isOverTopShelf;
+            movedItem.stageId = null;
+            delete movedItem.coords;
+
+            if (targetResId) {
+                const insertIdx = liveResources.findIndex(r => String(r.id) === String(targetResId));
+                liveResources.splice(insertIdx, 0, movedItem);
+                console.log(`♻️ Reordered: Moved before ${targetResId} at index ${insertIdx}`);
+            } else {
+                liveResources.push(movedItem);
+                console.log("♻️ Reordered: Appended to end");
+            }
+        });
+
+        OL.renderVisualizer();
+        return;
+    }
+    // 📍 4. SCENARIO C: STANDARD CANVAS MOVE
     else {
         res.isGlobal = false;
         res.isTopShelf = false;
         const rect = canvas.getBoundingClientRect();
         const canvasX = (uE.clientX - rect.left) / zoom;
         const canvasY = (uE.clientY - rect.top) / zoom;
-        const dropX = canvasX - 110;
-        const dropY = canvasY - 20;
+        
+        res.coords = { x: Math.round(canvasX - 110), y: Math.round(canvasY - 20) };
 
         let accX = 40; 
-        const COLUMN_WIDTH = 300; 
-
         for (let s of stages) {
             const w = s.width || 320;
             if (canvasX >= accX && canvasX <= accX + w) {
                 res.stageId = s.id;
-                const localXInLane = canvasX - accX;
-                res._col = Math.floor(Math.max(0, localXInLane) / COLUMN_WIDTH);
-                res.coords = { x: Math.round(dropX), y: Math.round(dropY) };
+                res._col = Math.floor(Math.max(0, canvasX - accX) / 300);
                 break;
             }
             accX += w;
         }
     }
 
+    // 💾 5. FINAL PERSIST
     await OL.updateAndSync(() => { 
         OL.autoAlignNodes(false);
         OL.drawConnections();
