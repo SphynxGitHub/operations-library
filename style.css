@@ -4293,7 +4293,7 @@ body.light-mode {
 /*===========================================Global Shelf*/
 
 #global-shelf { 
-    min-height: 150px; background: var(--bg-panel); border-bottom: 2px solid var(--accent); transition: background 0.2s, border-color 0.2s;
+    min-height: 150px; max-height: 25%; background: var(--bg-panel); border-bottom: 2px solid var(--accent); transition: background 0.2s, border-color 0.2s;
     padding: 10px; display: flex; flex-wrap: wrap; gap: 10px; overflow-y: auto; z-index: 100; box-sizing: border-box;
 }
 
