@@ -7669,69 +7669,90 @@ OL.initWBMotion = function(e, id) {
     };
 
     const onUp = async (uE) => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        
-        indicator.style.display = 'none';
-        if (el) el.classList.remove('is-dragging-ghost');
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    
+    indicator.style.display = 'none';
+    if (el) el.classList.remove('is-dragging-ghost');
 
-        // 🏁 3. SAVE RESIZING
-        if (isResizingLane) {
-            await OL.persist();
+    if (isResizingLane) {
+        await OL.persist();
+        OL.renderVisualizer();
+        return;
+    }
+
+    // 1. Identify what we dropped ON
+    // We hide the dragged element for a millisecond to see what is underneath it
+    el.style.display = 'none';
+    const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+    el.style.display = 'block';
+
+    const targetCardEl = dropPointEl?.closest('.v2-node-card');
+    const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
+    const isOverTopShelf = dropPointEl?.closest('#global-shelf');
+
+    // 🚀 SCENARIO A: MERGE CARDS (Dropped Card A onto Card B)
+    if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
+        const targetId = targetCardEl.id.replace('v2-node-', '');
+        const targetRes = resources.find(r => String(r.id) === String(targetId));
+
+        if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
+            await OL.updateAndSync(() => {
+                // Combine steps and filter any nulls
+                targetRes.steps = [...(targetRes.steps || []), ...(res.steps || [])].filter(Boolean);
+                
+                // Remove the old card from the library
+                const resIdx = resources.findIndex(r => r.id === res.id);
+                if (resIdx > -1) resources.splice(resIdx, 1);
+                
+                // Recalculate family names (1/1, etc)
+                OL.refreshFamilyNaming(targetRes, resources);
+                OL.syncLogicPorts();
+            });
             OL.renderVisualizer();
             return;
         }
+    }
 
-        // 🏁 4. STANDARD CARD DROP
-        const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+    // 📥 SCENARIO B: WORKBENCH / SHELF (Existing Logic)
+    if (isOverWorkbench || isOverTopShelf) {
+        res.isGlobal = true;
+        res.isTopShelf = !!isOverTopShelf;
+        res.stageId = null;
+        delete res.coords;
+    } 
+    // 📍 SCENARIO C: CANVAS MOVE (Existing Logic)
+    else {
+        res.isGlobal = false;
+        res.isTopShelf = false;
         const rect = canvas.getBoundingClientRect();
         const canvasX = (uE.clientX - rect.left) / zoom;
         const canvasY = (uE.clientY - rect.top) / zoom;
+        const dropX = canvasX - 110;
+        const dropY = canvasY - 20;
 
-        const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
-        const isOverTopShelf = dropPointEl?.closest('#global-shelf');
+        let accX = 40; 
+        const COLUMN_WIDTH = 300; 
 
-        if (isOverWorkbench || isOverTopShelf) {
-            res.isGlobal = true;
-            res.isTopShelf = !!isOverTopShelf;
-            res.stageId = null;
-            delete res.coords;
-        } 
-        else {
-            res.isGlobal = false;
-            res.isTopShelf = false;
-
-            // 1. Calculate drop coordinates (account for center-offset)
-            const dropX = canvasX - 110; // Use 110 (half of 220px card)
-            const dropY = canvasY - 20;
-
-            let accX = 40; 
-            const COLUMN_WIDTH = 300; 
-
-            for (let s of stages) {
-                const w = s.width || 320;
-                if (canvasX >= accX && canvasX <= accX + w) {
-                    res.stageId = s.id;
-                    
-                    // 🎯 THE FIX: Calculate the Column BEFORE updating coords
-                    // This ensures the intent (where you let go) is saved as data
-                    const localXInLane = canvasX - accX;
-                    res._col = Math.floor(Math.max(0, localXInLane) / COLUMN_WIDTH);
-                    
-                    // 📍 Update coordinates with the logic-aware position
-                    res.coords = { x: Math.round(dropX), y: Math.round(dropY) };
-                    break;
-                }
-                accX += w;
+        for (let s of stages) {
+            const w = s.width || 320;
+            if (canvasX >= accX && canvasX <= accX + w) {
+                res.stageId = s.id;
+                const localXInLane = canvasX - accX;
+                res._col = Math.floor(Math.max(0, localXInLane) / COLUMN_WIDTH);
+                res.coords = { x: Math.round(dropX), y: Math.round(dropY) };
+                break;
             }
+            accX += w;
         }
+    }
 
-        await OL.updateAndSync(() => { 
-            OL.autoAlignNodes(false);
-            OL.drawConnections();
-        });
-        OL.renderVisualizer();
-    };
+    await OL.updateAndSync(() => { 
+        OL.autoAlignNodes(false);
+        OL.drawConnections();
+    });
+    OL.renderVisualizer();
+};
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
