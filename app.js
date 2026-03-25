@@ -7750,7 +7750,7 @@ OL.autoAlignNodes = async function() {
     const LINE_HEIGHT_TITLE = 22;   
     const LINE_HEIGHT_STEP = 20;    
     const STEP_PADDING = 12;        
-    const DIVIDER_HEIGHT = 15;
+    const DIVIDER_HEIGHT = 25;
     const EMPTY_STATE_HEIGHT = 40;  // Height allocated for the "Add Step" area when empty
 
     let currentXOffset = 40; 
