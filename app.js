@@ -8446,6 +8446,7 @@ OL.addNewStepToCard = function(resId) {
         </div>
     `;
     openModal(html);
+    OL.autoAlignNodes();
     setTimeout(() => document.getElementById('quick-step-input').focus(), 100);
 };
 
