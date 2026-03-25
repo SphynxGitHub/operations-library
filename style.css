@@ -4233,7 +4233,7 @@ body.light-mode {
 }
 /*==============================================Main Body*/
 #v2-viewport { display: flex; flex-direction: column; height: 99vh; overflow: hidden; 
-              position: relative; width: calc(100vw - 240px};
+              position: relative; width: calc(100vw - 240px);
 
 #v2-main-content {display: flex; flex-direction: row; flex: 1; overflow: hidden; background: var(--bg-main); }
 
