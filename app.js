@@ -7596,7 +7596,7 @@ state.v2 = {
 
 // Simple global listener to clear selection when clicking the background
 document.addEventListener('mousedown', (e) => {
-    if (e.target.id === 'v2-canvas' || e.target.id === 'v2-node-layer') {
+    if (e.target.id === 'v2-canvas' || e.target.id === 'v2-node-layer'|| e.target.id === 'v2-canvas-scroll-wrap') {
         state.v2.selectedNodes.clear();
         OL.renderVisualizer(); // Re-render to clear blue borders
         OL.closeInspector();
