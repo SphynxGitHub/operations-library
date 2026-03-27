@@ -7817,21 +7817,18 @@ OL.autoAlignNodes = async function() {
     const resources = data.resources || [];
     const stages = data.stages || [];
     
-    const VERTICAL_GAP = 40;        
+    const VERTICAL_GAP = 35;         
     const COLUMN_WIDTH = 300;       
     const START_Y = 120;            
-    const SHELL_MARGINS = 45;       // Card padding + Footer height
-    const CHARS_PER_LINE = 24;      
-    const LINE_HEIGHT_TITLE = 22;   
-    const LINE_HEIGHT_STEP = 18;    
-    const STEP_PADDING = 12;        
-    const DIVIDER_HEIGHT = 15;
-    const EMPTY_STATE_HEIGHT = 40;  // Height allocated for the "Add Step" area when empty
+    const LANE_LEFT_PADDING = 40; // 🚀 Keeps cards from touching the left divider
 
-    let currentXOffset = 40; 
+    // Start at the very beginning of the "World"
+    let currentXOffset = 0; 
 
     stages.forEach((stage) => {
         const laneNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
+        
+        // Sort by current Y to preserve the sequence
         laneNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
 
         const columnYCursors = {}; 
@@ -7840,55 +7837,49 @@ OL.autoAlignNodes = async function() {
             const col = node._col || 0;
             if (columnYCursors[col] === undefined) columnYCursors[col] = START_Y;
 
+            const element = document.getElementById(`v2-node-${node.id}`);
+            let measuredHeight = 100; 
+
+            if (element) {
+                measuredHeight = element.offsetHeight;
+            }
+
+            // 🚀 THE HORIZONTAL FIX:
+            // currentXOffset (previous stages) + Padding + (Column Index * Width)
             node.coords = {
-                x: currentXOffset + (col * COLUMN_WIDTH),
+                x: currentXOffset + LANE_LEFT_PADDING + (col * COLUMN_WIDTH),
                 y: columnYCursors[col]
             };
 
-            // 1. Header Calculation (Title wrapping)
-            const title = node.name || "Untitled Resource";
-            const titleLineCount = Math.max(1, Math.ceil(title.length / CHARS_PER_LINE));
-            const headerHeight = (titleLineCount * LINE_HEIGHT_TITLE) + 20; 
-
-            let dynamicCardBodyHeight = 0;
-
-            // 2. Body Calculation
-            if (node.isExpanded) {
-                if (node.steps && node.steps.length > 0) {
-                    node.steps.forEach((step, idx) => {
-                        const stepName = step.name || "New Step";
-                        const stepLineCount = Math.max(1, Math.ceil(stepName.length / CHARS_PER_LINE));
-                        const stepVisualHeight = (stepLineCount * LINE_HEIGHT_STEP) + STEP_PADDING;
-                        
-                        dynamicCardBodyHeight += stepVisualHeight;
-
-                        // Add divider height for all but the last step
-                        if (idx < node.steps.length - 1) {
-                            dynamicCardBodyHeight += DIVIDER_HEIGHT;
-                        }
-                    });
-                } else {
-                    // 🚀 THE FIX: If expanded but NO steps, add placeholder height 
-                    // for the "Add Step" button zone
-                    dynamicCardBodyHeight = EMPTY_STATE_HEIGHT;
-                }
-            }
-
-            const totalNodeHeight = headerHeight + dynamicCardBodyHeight + SHELL_MARGINS;
-
-            // 3. Increment Cursor for this column
-            columnYCursors[col] += (totalNodeHeight + VERTICAL_GAP);
+            columnYCursors[col] += (measuredHeight + VERTICAL_GAP);
         });
 
-        // Lane width logic
+        // Calculate how wide this stage actually needs to be based on how many columns are in it
         const maxColIndex = Math.max(-1, ...Object.keys(columnYCursors).map(Number));
-        stage.width = Math.max(320, ((maxColIndex + 1) * COLUMN_WIDTH) + 60);
+        const calculatedStageWidth = ((maxColIndex + 1) * COLUMN_WIDTH) + (LANE_LEFT_PADDING * 2);
+        
+        // Update stage width (minimum 400px)
+        stage.width = Math.max(400, calculatedStageWidth);
+        
+        // 🚀 THE ANCHOR: Move the starting point for the NEXT stage
         currentXOffset += stage.width;
     });
 
+    // Save coordinates to Firebase
     await OL.persist();
-    OL.renderVisualizer();
-    setTimeout(() => { if (OL.drawConnections) OL.drawConnections(); }, 150);
+    
+    // Apply visual positions immediately
+    resources.forEach(node => {
+        const el = document.getElementById(`v2-node-${node.id}`);
+        if (el && node.coords) {
+            el.style.left = `${node.coords.x}px`;
+            el.style.top = `${node.coords.y}px`;
+        }
+    });
+
+    // Refresh lane backgrounds and connection lines
+    OL.renderVisualizer(); 
+    if (OL.drawConnections) OL.drawConnections();
 };
 
 OL.getCurrentProjectData = function() {
@@ -8118,9 +8109,15 @@ OL.renderVisualizer = function() {
               >
                 $
             </a>`;        
+            // 🔍 Check if ANY step in this resource has incoming or outgoing logic
+        const hasLogic = (res.steps || []).some(s => 
+            (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0)
+        );
+
         const logicMenu = `
             <div class="v2-logic-trigger-wrap" style="position: relative; display: inline-block;">
-                <button class="v2-logic-badge" onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">
+                <button class="v2-logic-badge ${hasLogic ? 'has-logic': ''}"
+                  onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">
                     λ
                 </button>
                 <div id="logic-menu-${res.id}" class="v2-logic-menu dropdown-plus-menu">
@@ -8158,7 +8155,7 @@ OL.renderVisualizer = function() {
 
         div.innerHTML = `
             <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${res.id}', null, 'cards')">
-                <div class="step-row-content">
+                <div class="header-row-content">
                     <b class="res-name-text">${esc(res.name)}</b>
                     <div class="header-badges-wrap">
                         <small class="tiny muted uppercase type-badge">${esc(res.type || 'Resource')}</small>
@@ -8171,23 +8168,64 @@ OL.renderVisualizer = function() {
             </div>
             <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
                 ${(res.steps || []).map((s, i) => {
-                    // Use the actual persistent ID if it exists, fallback to index for legacy
                     const stepId = s.id || i; 
                     
+                    // 🔍 LOGIC GATHERING
+                    const hasIncoming = s.logic?.in?.length > 0;
+                    const inRuleList = (s.logic?.in || []).map(l => l.rule).filter(Boolean).join(', ') || 'Incoming Logic';
+                    
+                    const loopRules = (s.logic?.out || []).filter(l => l.type === 'loop');
+                    const hasOutgoing = (s.logic?.out || []).some(l => l.type !== 'loop');
+                    // 🚀 THE CONSOLIDATION: Combine all non-loop rules into one string
+                    const outRuleList = (s.logic?.out || [])
+                        .filter(l => l.type !== 'loop' && l.rule)
+                        .map(l => l.rule)
+                        .join(', ') || 'Outgoing Logic';
+
                     return `
                         <div class="v2-step-item" 
                             data-step-id="${res.id}-${stepId}" 
                             draggable="true"
+                            onmousedown="event.stopPropagation()"
                             ondragstart="OL.handleStepDragStart(event, ${i})"
                             ondragover="OL.handleStepDragOver(event)"
-                            ondragleave="OL.handleStepDragLeave(event)"
                             ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
                             onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')">
                             
-                            <div class="step-row-content">
-                                <span class="drag-handle" style="cursor: grab; opacity: 0.3; margin-right: 4px;">⋮</span>
-                                <span style="flex: 1;">• ${esc(s.name || 'New Step')}</span>
-                                <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                            <div class="step-row-content" style="display:flex; align-items:flex-start; width:100%; gap:6px; padding: 6px 0;">
+                                
+                                <span class="drag-handle" style="cursor: grab; opacity: 0.3; flex-shrink: 0; margin-top: 2px;">⋮</span>
+                                
+                                ${hasIncoming ? `
+                                    <span class="step-logic-icon" 
+                                          style="flex-shrink: 0; margin-top: 2px;"
+                                          onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')"
+                                          title="${esc(inRuleList)}">λ</span>
+                                ` : ''} 
+
+                                <span style="flex: 1; white-space: normal; word-break: break-word; font-size: 11px; line-height: 1.3;">
+                                    • ${esc(s.name || 'New Step')}
+                                </span>
+
+                                <div style="display:flex; gap:4px; flex-shrink: 0; margin-top: 2px;">
+                                    ${loopRules.map(l => `
+                                        <span class="step-logic-icon loop" 
+                                              onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')"
+                                              title="Loop: ${esc(l.rule || 'Repeat')}">
+                                            ⟳
+                                        </span>
+                                    `).join('')}
+                                    
+                                    ${hasOutgoing ? `
+                                        <span class="step-logic-icon" 
+                                              onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')"
+                                              title="${esc(outRuleList)}">λ</span>
+                                    ` : ''} 
+                                </div>
+
+                                <span class="delete-step-btn" 
+                                      style="flex-shrink: 0; opacity: 0.3; cursor: pointer; margin-top: 2px;"
+                                      onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
                             </div>
                         </div>
                         ${i < res.steps.length - 1 ? `
@@ -8352,10 +8390,71 @@ OL.toggleLogicMenu = function(id) {
     }
 };
 
-OL.setTraceMode = function(resId, mode) {
-    state.v2.activeTrace = { resId, mode };
-    document.querySelectorAll('.v2-logic-menu').forEach(m => m.style.display = 'none');
-    OL.drawConnections(); // Trigger the filtered redraw
+OL.setTraceMode = function(startId, direction) {
+    if (!startId) {
+        state.v2.activeTrace = null;
+        state.v2.highlightedIds = [];
+        OL.renderVisualizer();
+        return;
+    }
+
+    // 🚀 THE FIX: Get the freshest data directly from the state
+    const currentData = OL.getCurrentProjectData();
+    const resources = currentData.resources || [];
+    
+    const highlighted = new Set();
+    const rootId = String(startId);
+    highlighted.add(rootId);
+
+    console.log(`🚀 STARTING CRAWL: ${direction} from ${rootId}`);
+    console.log(`Total resources in pool: ${resources.length}`);
+
+    function crawl(currentId) {
+        // Force string comparison for the ID
+        const res = resources.find(r => String(r.id) === String(currentId));
+        
+        if (!res) {
+            console.warn(`⚠️ Crawler lost: Could not find ${currentId} among ${resources.length} resources.`);
+            // Debug: Log the first resource ID to see the format difference
+            if (resources.length > 0) console.log("Sample Resource ID in data:", resources[0].id);
+            return;
+        }
+
+        const steps = res.steps || [];
+        steps.forEach((step, sIdx) => {
+            // Check 'out' for trace-end, 'in' for trace-start
+            const logicPool = (direction === 'trace-end') ? (step.logic?.out || []) : (step.logic?.in || []);
+            
+            logicPool.forEach(link => {
+                // Determine property name based on direction
+                const rawTarget = (direction === 'trace-end') ? link.targetId : link.sourceId;
+                
+                if (rawTarget) {
+                    // Standardize ID: "local-prj-123-step_0" -> "local-prj-123"
+                    const idParts = String(rawTarget).split('-');
+                    if (idParts.length > 1) idParts.pop();
+                    const cleanedId = idParts.join('-');
+
+                    if (cleanedId && !highlighted.has(cleanedId)) {
+                        console.log(`✅ Connection found: ${currentId} -> ${cleanedId}`);
+                        highlighted.add(cleanedId);
+                        crawl(cleanedId); // Recurse
+                    }
+                }
+            });
+        });
+    }
+
+    crawl(rootId);
+
+    // Update global state
+    state.v2.activeTrace = { resId: rootId, mode: direction };
+    state.v2.highlightedIds = Array.from(highlighted);
+
+    console.log("🏁 FINAL HIGHLIGHTED SET:", state.v2.highlightedIds);
+
+    OL.renderVisualizer();
+    if (OL.drawConnections) OL.drawConnections();
 };
 
 OL.handleStepDragStart = function(e, index) {
@@ -8500,11 +8599,62 @@ OL.closeModal = function() {
 };
 
 OL.addNewStepToCard = function(resId) {
-    OL.quickAddState = { name: "", app: "", appId: null, assignee: "", links: [], target: null, 
-      delay: 0, note: "", rule: "" };
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const functionMappings = data.functions || {};
+    
+    // 🚀 1. PRE-DETERMINE THE ASSIGNEE
+    let autoAssigneeObj = null; 
+
+    if (res) {
+        const rawType = typeof res.type === 'object' ? res.type.label : res.type;
+        const resType = String(rawType || '').toLowerCase();
+        const functionMappings = data.functions || {};
+
+        let foundName = null;
+
+        // 1. Determine the Name
+        if (resType.includes('zap')) {
+            foundName = "Zapier";
+        } else if (resType.includes('scheduler') || resType.includes('scheduling')) {
+            foundName = functionMappings["Scheduling"];
+        } else if (resType.includes('form') || resType.includes('gathering')) {
+            foundName = functionMappings["Data Gathering"];
+        } else if (resType.includes('database')) {
+            foundName = functionMappings["Database"];
+        } else if (resType.includes('email')) {
+            foundName = functionMappings["Email Marketing"];
+        }
+
+        // 2. Wrap the Name in the required Object Structure
+        if (foundName) {
+            autoAssigneeObj = { 
+                name: String(foundName), 
+                type: "app", 
+                id: `auto-${Date.now()}` // Gives it a unique key for React/Lists
+            };
+        }
+    }
+
+    // 🚀 2. INITIALIZE STATE WITH THE AUTO-ASSIGNEE
+    OL.quickAddState = { 
+        name: "", 
+        app: "", 
+        appId: null, 
+        assignee: autoAssigneeObj ? [autoAssigneeObj] : [],
+        links: [], 
+        target: null, 
+        delay: 0, 
+        note: "", 
+        rule: "" 
+    };
+
     const html = `
         <div id="quick-add-modal"> 
-            <div class="modal-head"><div class="modal-title-text">⚡ Power Add Step</div></div>
+            <div class="modal-head">
+                <div class="modal-title-text">⚡ Power Add Step</div>
+                ${autoAssigneeObj ? `<div style="font-size:10px; color:var(--accent); margin-top:4px;">Auto-assigning to: ${autoAssigneeObj.name}</div>` : ''}
+            </div>
             <div class="modal-body" style="position:relative;">
                 <div id="quick-add-container">
                     <input type="text" id="quick-step-input" data-res-id="${resId}" class="modal-input" 
@@ -8570,16 +8720,49 @@ OL.parseStepInput = function(rawText) {
 };
 
 OL.handleQuickAddInput = function(e, resId) {
-    const input = e.target;
-    const val = input.value;
-    const menu = document.getElementById('slash-menu');
-    const lastSlashIndex = val.lastIndexOf('/');
+    const inputEl = e.target;
+    const val = inputEl.value; 
+    const data = OL.getCurrentProjectData();
     
+    // 🚀 FIX 1: Define 'menu' at the top so it's globally available in this function
+    const menu = document.getElementById('slash-menu');
+
+    // 1. Sync State Name
+    OL.quickAddState.name = val;
+
+    // 🔍 2. DYNAMIC APP SCANNING
+    // We check data.apps OR data.libraryApps (common fallback)
+    const projectApps = data.apps || data.libraryApps || [];
+    let detectedApp = null;
+
+    if (val.trim().length > 2) {
+        projectApps.forEach(app => {
+            const appName = (typeof app === 'object' ? app.name : app) || "";
+            if (!appName) return;
+
+            const searchStr = val.toLowerCase();
+            const targetApp = appName.toLowerCase();
+
+            // Check for match
+            if (searchStr.includes(targetApp)) {
+                detectedApp = app;
+            }
+        });
+    }
+
+    if (detectedApp) {
+        OL.quickAddState.app = typeof detectedApp === 'object' ? detectedApp.name : detectedApp;
+        OL.quickAddState.appId = detectedApp.id || null;
+        console.log("✅ App Found:", OL.quickAddState.app);
+    }
+
+    // ⚡ 3. SLASH MENU LOGIC
+    const lastSlashIndex = val.lastIndexOf('/');
     if (lastSlashIndex !== -1) {
-        const fullQuery = val.substring(lastSlashIndex + 1);
+        const query = val.substring(lastSlashIndex + 1);
         
-        if (fullQuery.includes(':')) {
-            const parts = fullQuery.split(':');
+        if (query.includes(':')) {
+            const parts = query.split(':');
             const command = parts[0].toLowerCase().trim();
             const paramQuery = parts[1].trim(); 
             
@@ -8593,22 +8776,55 @@ OL.handleQuickAddInput = function(e, resId) {
             };
             
             const subType = subTypeMap[command];
-
-            if (subType) {
-                // Dropdown mode: still filter the list
+            if (subType && typeof OL.showSubMenu === 'function') {
                 OL.showSubMenu(subType, paramQuery.toLowerCase()); 
-            } else {
-                // ✍️ Manual mode: Just hide the menu and let the user type freely
+            } else if (menu) {
                 menu.style.display = 'none';
             }
-        } else {
-            OL.showSlashMenu(fullQuery.toLowerCase().trim(), resId);
+        } else if (typeof OL.showSlashMenu === 'function') {
+            OL.showSlashMenu(query.toLowerCase().trim(), resId);
         }
     } else {
-        menu.style.display = 'none';
+        // 🚀 FIX 2: 'menu' is now safely defined for this block
+        if (menu) menu.style.display = 'none';
     }
+
+    // 🚀 4. THE UI REFRESH
+    if (typeof OL.updateQuickAddPreview === 'function') {
+        OL.updateQuickAddPreview();
+    }
+};
+
+OL.updateQuickAddPreview = function() {
+    const preview = document.getElementById('step-preview-zone');
+    if (!preview) return;
+
+    const state = OL.quickAddState;
+    const data = OL.getCurrentProjectData();
     
-    OL.updateStepPreview(val);
+    // 🔍 Find the actual app object to get its icon
+    const appObj = (data.apps || []).find(a => a.name === state.app || a.id === state.appId);
+    const iconHtml = appObj?.icon ? `<img src="${appObj.icon}" style="width:16px; height:16px; margin-right:8px;">` : '🛠️';
+
+    if (state.name || state.app || state.assignee.length > 0) {
+        preview.style.display = 'block';
+        
+        // Build the Preview HTML
+        preview.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="flex-shrink:0;">${iconHtml}</div>
+                <div style="flex-grow:1;">
+                    <div style="font-weight:bold; color:white;">${state.name || 'Untitled Task'}</div>
+                    <div style="font-size:11px; color:var(--text-dim);">
+                        App: <span style="color:var(--accent);">${state.app || 'Auto'}</span> | 
+                        Who: <span style="color:var(--accent);">${state.assignee.map(a => a.name).join(', ') || 'Unassigned'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        preview.style.display = 'none';
+    }
 };
 
 OL.showSlashMenu = function(query, resId) {
@@ -10720,49 +10936,38 @@ OL.closeInspector = function() {
 };
 
 // Helper to find the X/Y of a card's edge
-OL.getCardConnectionPoint = function(resId, stepTarget, side) {
-    // 1. Resolve Element: Handle both Step IDs and Step Indices
-    let el = document.querySelector(`[data-step-id="${resId}-${stepTarget}"]`);
+OL.getCardConnectionPoint = function(resId, stepIdx, side) {
+    const nodeEl = document.getElementById(`v2-node-${resId}`);
+    if (!nodeEl) return { x: 0, y: 0 };
+
+    // 🚀 THE KEY: Find the specific step item inside the card
+    const stepEls = nodeEl.querySelectorAll('.v2-step-item');
+    const stepEl = stepEls[stepIdx];
     
-    // 🎯 FALLBACK: Use main card if step is missing, hidden, or we want Top/Bottom flow
-    if (!el || el.offsetParent === null || side === 'top' || side === 'bottom') {
-        el = document.getElementById(`v2-node-${resId}`);
+    // Fallback to card center if step element isn't found
+    if (!stepEl) {
+        const rect = nodeEl.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     }
-    
-    if (!el) return null;
 
-    // 📐 2. COORDINATE MAPPING
-    const canvas = document.getElementById('v2-canvas');
-    if (!canvas) return null;
-
-    const rect = el.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
+    const sRect = stepEl.getBoundingClientRect();
+    const svgRect = document.getElementById('v2-connections').getBoundingClientRect();
     const zoom = state.v2.zoom || 1;
 
-    // Normalize coordinates relative to the canvas origin
-    const x = (rect.left - canvasRect.left) / zoom;
-    const y = (rect.top - canvasRect.top) / zoom;
-    const w = rect.width / zoom;
-    const h = rect.height / zoom;
-
-    // 📏 3. SIDE OFFSETS
-    // Buffer is the distance the line "hovers" from the edge before the arrowhead
-    const buffer = 8; 
-
-    switch (side) {
-        case 'right':  
-            return { x: x + w + buffer, y: y + (h / 2) };
-        case 'left':   
-            return { x: x - buffer,     y: y + (h / 2) };
-        case 'top':    
-            // Centered horizontally on the card top
-            return { x: x + (w / 2),    y: y - buffer };
-        case 'bottom': 
-            // Centered horizontally on the card bottom
-            return { x: x + (w / 2),    y: y + h + buffer };
-        default:
-            return { x: x + w, y: y + h / 2 };
+    // Calculate center Y of the actual step <div>
+    const centerY = (sRect.top + sRect.height / 2 - svgRect.top) / zoom;
+    
+    let x;
+    if (side === 'left') {
+        x = (sRect.left - svgRect.left) / zoom;
+    } else if (side === 'right') {
+        x = (sRect.right - svgRect.left) / zoom;
+    } else {
+        // Top/Bottom fallback
+        x = (sRect.left + sRect.width / 2 - svgRect.left) / zoom;
     }
+
+    return { x, y: centerY };
 };
 
 OL.drawConnections = function() {
@@ -10772,51 +10977,28 @@ OL.drawConnections = function() {
     const shelfEl = document.getElementById('global-shelf');
     if (!svg || !lineGroup) return;
 
-    // 🧹 1. RESET & CLEANUP
-    // Clear all existing SVG elements so we start with a blank canvas for this frame.
+    // 🧹 1. RESET
     lineGroup.innerHTML = ''; 
-    if (shelfLineGroup) shelfLineGroup.innerHTML = '';
-    svg.querySelectorAll('.path-flow, .logic-gate-container').forEach(el => el.remove());
 
-    // 🕵️ 2. TRACE LOGIC INITIALIZATION
-    // Check the global state to see if the user has requested to hide lines or trace a specific path.
-    const trace = state.v2.activeTrace;
-    if (!trace || (!trace.resId && !trace.mode)) return; // 🚀 HIDE BY DEFAULT logic
-
+    // 🕵️ 2. INITIALIZE DATA & TRACE (🚀 THE FIX IS HERE)
     const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
+    const resources = data?.resources || []; // Define 'resources' once, right here
+    
+    const trace = state.v2?.activeTrace;
+    const highlightedIds = (state.v2?.highlightedIds || []).map(id => String(id));
     const zoom = state.v2.zoom || 1;
 
-    // 🧬 RECURSIVE TRACE HELPER: Used for "Flow to Start" and "Flow to End"
-    const getDeepLinkedResources = (resId, dir, visited = new Set()) => {
-        if (visited.has(resId)) return visited;
-        visited.add(resId);
-        const res = resources.find(r => String(r.id) === String(resId));
-        if (!res) return visited;
-        
-        const nextLinks = [];
-        res.steps?.forEach(s => {
-            // If tracing 'out', look at 'out' logic. If tracing 'in', look at 'in' logic.
-            const pool = dir === 'out' ? (s.logic?.out || []) : (s.logic?.in || []);
-            pool.forEach(l => {
-                const partnerId = (dir === 'out' ? l.targetId : l.sourceId).split('-')[0];
-                nextLinks.push(partnerId);
-            });
-        });
-        
-        nextLinks.forEach(id => getDeepLinkedResources(id, dir, visited));
-        return visited;
-    };
+    // If we're in a trace mode but have no target, hide everything
+    if (trace && !trace.resId && !trace.mode) return;
 
-    // Pre-calculate allowed IDs if we are in a deep trace mode
-    let allowedResources = new Set();
-    if (trace.mode === 'trace-start') allowedResources = getDeepLinkedResources(trace.resId, 'in');
-    if (trace.mode === 'trace-end') allowedResources = getDeepLinkedResources(trace.resId, 'out');
-
-    // 🔄 3. MAIN LOOP: Iterate through all resources to find connections
+    // 🔄 3. MAIN LOOP
     resources.forEach(sourceRes => {
         if (!sourceRes || !sourceRes.steps) return;
-        const sourceEl = document.getElementById(`v2-node-${sourceRes.id}`);
+        
+        const sourceResId = String(sourceRes.id); 
+        const sourceEl = document.getElementById(`v2-node-${sourceResId}`);
+        
+        // Skip hidden nodes
         if (sourceEl && sourceEl.classList.contains('filter-hidden')) return;
 
         sourceRes.steps.forEach((step, sIdx) => {
@@ -10824,25 +11006,43 @@ OL.drawConnections = function() {
 
             step.logic.out.forEach(outLogic => {
                 if (!outLogic?.targetId) return;
-                
-                const targetResId = outLogic.targetId.split('-')[0];
+
+                // Parse target ID
+                const parts = outLogic.targetId.split('-');
+                parts.pop(); 
+                const targetResId = String(parts.join('-'));
+
                 let shouldDraw = false;
 
-                // 🚦 TRACE FILTERING RULES
-                // Decide if this specific line should be drawn based on user selection
-                if (trace.mode === 'both' && (sourceRes.id === trace.resId || targetResId === trace.resId)) shouldDraw = true;
-                if (trace.mode === 'in' && targetResId === trace.resId) shouldDraw = true;
-                if (trace.mode === 'out' && sourceRes.id === trace.resId) shouldDraw = true;
-                if (trace.mode === 'trace-start' && allowedResources.has(sourceRes.id) && allowedResources.has(targetResId)) shouldDraw = true;
-                if (trace.mode === 'trace-end' && allowedResources.has(sourceRes.id) && allowedResources.has(targetResId)) shouldDraw = true;
+                // --- 🚦 TRACE FILTERING RULES ---
+                if (trace && trace.mode) {
+                    const mode = trace.mode;
+                    const focusId = String(trace.resId);
+
+                    // A. Direct Neighbor
+                    if (mode === 'both' && (sourceResId === focusId || targetResId === focusId)) shouldDraw = true;
+                    if (mode === 'in' && targetResId === focusId) shouldDraw = true;
+                    if (mode === 'out' && sourceResId === focusId) shouldDraw = true;
+
+                    // B. Recursive Flow (trace-start / trace-end)
+                    if (mode === 'trace-start' || mode === 'trace-end') {
+                        if (highlightedIds.includes(sourceResId) && highlightedIds.includes(targetResId)) {
+                            shouldDraw = true;
+                        }
+                    }
+                } else {
+                    shouldDraw = true; // No trace active? Draw everything.
+                }
 
                 if (shouldDraw) {
+                    // 🚀 Now 'resources' is defined so 'find' will work:
+                    const targetRes = resources.find(r => String(r.id) === targetResId);
+                    if (!targetRes) return;
                     // PARSE TARGET METADATA
                     const parts = outLogic.targetId.split('-');
                     const tStepIdx = parseInt(parts.pop()); 
                     const tResId = parts.join('-'); 
 
-                    const targetRes = resources.find(r => String(r.id) === String(tResId));
                     const targetEl = document.getElementById(`v2-node-${tResId}`);
                     if (!targetRes || (targetEl && targetEl.classList.contains('filter-hidden'))) return;
 
