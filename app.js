@@ -4701,10 +4701,18 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     console.log("💎 Active Resource:", typeof activeData !== 'undefined' ? activeData.name : "Missing activeData");
 
     const pricingRows = (relevantVars || []).map(([varKey, v]) => {
-        // 🚀 1. THE RE-FETCH
-        // Use the main project array to ensure we have the 'steps' data
-        const projectResources = getActiveClient()?.projectData?.resources || [];
-        const projectRes = projectResources.find(r => r.id === activeData.id) || activeData;
+        // 🚀 1. THE DEEP SEARCH
+        // We look in the main list AND inside any workflows to find the "Full" version
+        const project = getActiveClient()?.projectData || {};
+        const allProjectResources = [
+            ...(project.resources || []),
+            ...(project.workflows || []).flatMap(w => w.resources || [])
+        ];
+        
+        // Find the version of this resource that HAS steps
+        const projectRes = allProjectResources.find(r => r.id === activeData.id && r.steps?.length > 0) 
+                          || allProjectResources.find(r => r.id === activeData.id) 
+                          || activeData;
 
         const isZap = projectRes.type?.toLowerCase() === 'zap' || 
                       v.label?.toLowerCase().includes('zap');
@@ -4715,22 +4723,16 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         let badge = "";
 
         if (isZap && isStepVar) {
-            // 🚀 2. USE THE PROJECT-LEVEL STEPS
+            // 🚀 2. THE TALLY
             const actualStepCount = (projectRes.steps || []).length;
             displayVal = actualStepCount;
             
             inputProps = "readonly style='background:rgba(255,159,67,0.1); color:#ff9f43; border-color:#ff9f43; cursor:not-allowed;'";
             badge = `<span style="color:#ff9f43; font-size:9px; margin-left:5px; font-weight:bold;">⚡ AUTO</span>`;
 
-            // Debugging: If it shows 0 but you know there are steps, check this log:
-            if (actualStepCount === 0) {
-                console.warn(`🔍 Tally is 0 for ${projectRes.name}. Steps in projectData:`, projectRes.steps);
-            }
-
-            // 🚀 3. SYNC
+            // 🚀 3. THE SYNC
             if (num(projectRes.data?.[varKey]) !== actualStepCount) {
                 OL.updateResourcePricingData(projectRes.id, varKey, actualStepCount);
-                // Update local ref for immediate UI feedback
                 if (!projectRes.data) projectRes.data = {};
                 projectRes.data[varKey] = actualStepCount;
             }
