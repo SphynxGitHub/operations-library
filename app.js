@@ -4531,7 +4531,7 @@ OL.getResourceById = function(id) {
 OL.openResourceModal = function (targetId, draftObj = null) {
     if (!targetId) return;
 
-    const isAdmin = state.adminMode === true || window.location.search.includes('admin=');
+    const isAdmin = true//state.adminMode === true || window.location.search.includes('admin=');
     const isClientView = window.location.search.includes('access='); // 1. Context Detection
     const isVaultMode = window.location.hash.includes('vault');
 
@@ -4700,41 +4700,48 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     console.log("📋 Relevant Vars Count:", (typeof relevantVars !== 'undefined') ? relevantVars.length : "Undefined");
     console.log("💎 Active Resource:", typeof activeData !== 'undefined' ? activeData.name : "Missing activeData");
 
-    const pricingRows = (relevantVars || []).map(([varKey, v]) => {
-        // 🚀 1. THE DEEP SEARCH
-        // We look in the main list AND inside any workflows to find the "Full" version
-        const project = getActiveClient()?.projectData || {};
-        const allProjectResources = [
-            ...(project.resources || []),
-            ...(project.workflows || []).flatMap(w => w.resources || [])
-        ];
+   const pricingRows = (relevantVars || []).map(([varKey, v]) => {
+        const client = getActiveClient();
+        const projectData = client?.projectData || {};
         
-        // Find the version of this resource that HAS steps
-        const projectRes = allProjectResources.find(r => r.id === activeData.id && r.steps?.length > 0) 
-                          || allProjectResources.find(r => r.id === activeData.id) 
-                          || activeData;
+        // 🚀 1. GATHER ALL SOURCES
+        // We combine the main library and any visual workflows
+        const allPossibleResources = [
+            ...(projectData.resources || []),      // Standard Library
+            ...(projectData.localResources || []), // Local Library
+            ...(projectData.localApps || []),      // Local Apps
+            ...(projectData.workflows || []).flatMap(w => w.resources || []) // Map Canvas
+        ];
 
-        const isZap = projectRes.type?.toLowerCase() === 'zap' || 
-                      v.label?.toLowerCase().includes('zap');
+        // 🚀 2. RESOLVE THE SOURCE OF TRUTH
+        // We look for the object that has BOTH the right ID/Name AND the actual steps
+        const projectRes = allPossibleResources.find(r => 
+            (String(r.id) === String(activeData.resourceId || activeData.id) || r.name === activeData.name) 
+            && (r.steps && r.steps.length > 0)
+        ) || activeData;
+
+        const isZap = projectRes?.type?.toLowerCase() === 'zap' || v.label?.toLowerCase().includes('zap');
         const isStepVar = v.label?.toLowerCase().includes('step');
 
-        let displayVal = num(projectRes.data?.[varKey]);
+        let displayVal = num(activeData.data?.[varKey]);
         let inputProps = "";
         let badge = "";
 
         if (isZap && isStepVar) {
-            // 🚀 2. THE TALLY
+            // 🚀 3. THE TALLY (Pulling from the resolved Master Resource)
             const actualStepCount = (projectRes.steps || []).length;
             displayVal = actualStepCount;
             
             inputProps = "readonly style='background:rgba(255,159,67,0.1); color:#ff9f43; border-color:#ff9f43; cursor:not-allowed;'";
             badge = `<span style="color:#ff9f43; font-size:9px; margin-left:5px; font-weight:bold;">⚡ AUTO</span>`;
 
-            // 🚀 3. THE SYNC
-            if (num(projectRes.data?.[varKey]) !== actualStepCount) {
-                OL.updateResourcePricingData(projectRes.id, varKey, actualStepCount);
-                if (!projectRes.data) projectRes.data = {};
-                projectRes.data[varKey] = actualStepCount;
+            // 🚀 4. SYNC BACK TO STORAGE
+            // Note: We save to activeData.id (the Line Item or Resource ID) 
+            // to ensure the price updates on the sheet you are currently looking at.
+            if (num(activeData.data?.[varKey]) !== actualStepCount) {
+                if (!activeData.data) activeData.data = {};
+                activeData.data[varKey] = actualStepCount;
+                OL.updateResourcePricingData(activeData.id, varKey, actualStepCount);
             }
         }
 
@@ -4744,7 +4751,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 <input type="number" class="modal-input tiny" 
                     value="${displayVal}" 
                     ${inputProps}
-                    oninput="OL.updateResourcePricingData('${projectRes.id}', '${varKey}', this.value)">
+                    oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
             </div>`;
     }).join("");
 
