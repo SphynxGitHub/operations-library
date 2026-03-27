@@ -2838,8 +2838,7 @@ body.fs-mode-active {
 }
 
 body.is-visualizer #mainContent {
-    padding: 10px 10px 40px 0 !important;
-    height: 100%; width: 100%; overflow: hidden;
+    padding: 10px 10px 40px 0 !important; height: 100%; width: 100%; overflow: hidden;
 }
 
 /* Ensure the scoping grid itself doesn't trap the scroll */
@@ -4231,6 +4230,7 @@ body.light-mode {
 .theme-toggle-btn:hover {
     background: var(--accent); color: var(--bg-main); border-color: var(--accent);
 }
+
 /*==============================================Main Body*/
 #v2-viewport { display: flex; flex-direction: column; height: 99vh; overflow: hidden; 
               position: relative}
@@ -4246,6 +4246,34 @@ body.light-mode {
 #v2-stage-layer { position: absolute; top: 0; left: 0; display: flex; height: 100vh; pointer-events: none; }
 
 #v2-workspace {display: flex; flex-direction: column; flex: 1; position: relative; overflow: hidden;}
+
+#map-focus-controls {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000;
+    animation: slideDown 0.3s ease-out;
+}
+
+.btn-scope-back {
+    background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 30px;
+    font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex;
+    align-items: center; gap: 8px;
+}
+
+.btn-scope-back:hover {
+    background: var(--accent-hover); transform: translateY(-2px);
+}
+
+@keyframes slideDown {
+    from { top: -50px; opacity: 0; }
+    to { top: 20px; opacity: 1; }
+}
+
+#exit-focus-btn {
+    position: fixed !important; top: 30px !important; left: 50% !important;
+    transform: translateX(-50%); display: block !important; z-index: 999999 !important; /* Over everything */
+    background: #ff4757; /* Bright Red/Coral */ color: white; padding: 14px 28px;
+    border-radius: 50px; border: none; font-weight: 800; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    cursor: pointer;
+}
 
 /*====================================Toolbar */
 
@@ -4389,6 +4417,11 @@ body.light-mode {
 
 .v2-node-card:hover {
     border-color: var(--accent); background: var(--bg-card-hover); transform: translateY(-2px);
+}
+
+.v2-node-card.focused-node {
+    z-index: 9999 !important; box-shadow: 0 0 30px var(--accent); border: 2px solid var(--accent);
+    transform: scale(1.05); transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .v2-node-card.node-dimmed, #mainContent.canvas-dimmed .card:not(.family-focus) {
