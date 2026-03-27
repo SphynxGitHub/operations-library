@@ -4694,20 +4694,55 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         String(v.applyTo).toLowerCase() === String(res.type).toLowerCase()
     );
     
-    const adminPricingHtml = isAdmin ? `
-        <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px;">
+    // 1. Pre-calculate the rows to avoid template nesting errors
+    // 🔍 DEBUG LOGS - Check your console (F12) to see these!
+    console.log("🛠️ Admin Check:", typeof isAdmin !== 'undefined' ? isAdmin : "Undefined");
+    console.log("📋 Relevant Vars Count:", (typeof relevantVars !== 'undefined') ? relevantVars.length : "Undefined");
+    console.log("💎 Active Resource:", typeof activeData !== 'undefined' ? activeData.name : "Missing activeData");
+
+    let pricingRows = "";
+
+    if (typeof relevantVars !== 'undefined' && relevantVars.length > 0) {
+        pricingRows = relevantVars.map(([varKey, v]) => {
+            const isZapType = activeData?.type?.toLowerCase() === 'zap';
+            const isStepVar = v.label?.toLowerCase().includes('step');
+            
+            let displayVal = num(activeData?.data?.[varKey]);
+            let inputProps = "";
+            let badge = "";
+
+            if (isZapType && isStepVar) {
+                const actualStepCount = (activeData.steps || []).length;
+                displayVal = actualStepCount;
+                inputProps = "readonly style='background:rgba(255,159,67,0.1); color:#ff9f43; border-color:#ff9f43; opacity:1;'";
+                badge = `<span style="color:#ff9f43; font-size:9px; margin-left:5px; font-weight:bold;">⚡ AUTO</span>`;
+
+                // Sync logic
+                if (num(activeData.data?.[varKey]) !== actualStepCount) {
+                    OL.updateResourcePricingData(activeData.id, varKey, actualStepCount);
+                }
+            }
+
+            return `
+                <div class="modal-column">
+                    <label class="tiny muted">${esc(v.label)} ($${v.value})${badge}</label>
+                    <input type="number" class="modal-input tiny" 
+                        value="${displayVal}" 
+                        ${inputProps}
+                        oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
+                </div>`;
+        }).join("");
+    }
+
+    // 🚀 FORCE VISIBLE FOR TESTING: Remove "isAdmin &&" to show regardless of permissions
+    const adminPricingHtml = (isAdmin && relevantVars?.length > 0) ? `
+        <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px; display:block !important;">
             <label class="modal-section-label">⚙️ PRICING CONFIG</label>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
-                ${relevantVars.length > 0 ? relevantVars.map(([varKey, v]) => `
-                    <div class="modal-column">
-                        <label class="tiny muted">${esc(v.label)} ($${v.value})</label>
-                        <input type="number" class="modal-input tiny" 
-                            value="${num(activeData.data?.[varKey])}" 
-                            oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
-                    </div>`).join("") : '<div class="tiny muted italic" style="grid-column: 1/-1;">No pricing variables found for this type.</div>'}
+                ${pricingRows}
             </div>
         </div>` : '';
-
+        
     // --- 📝 SECTION: LINKED MASTER GUIDES ---
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
@@ -8103,11 +8138,20 @@ OL.renderVisualizer = function() {
         stageLayer.appendChild(div);
     });
 
+    let totalZapSteps = 0;
+
     // --- 📇 4. RENDER RESOURCES ---
     resources.forEach(res => {
         const isExpanded = res.isExpanded || false;
         const isFocused = OL.focusedResourceId === String(res.id);
         const hasActiveFocus = !!OL.focusedResourceId;
+
+        const stepCount = (res.steps || []).length;
+
+    // 🚀 THE TALLY LOGIC
+        if (res.type?.toLowerCase() === 'zap') {
+            totalZapSteps += stepCount;
+        }
 
         let cardClass = "resource-card";
         if (hasActiveFocus) {
