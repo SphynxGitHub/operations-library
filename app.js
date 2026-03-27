@@ -8571,15 +8571,19 @@ OL.closeModal = function() {
     const quickInput = document.getElementById('quick-step-input');
     
     // 1. 🤖 AUTO-SAVE CHECK
-    // If the input has text (more than 2 chars), save it before vanishing
     if (quickInput && quickInput.value.trim().length > 2) {
         const resId = quickInput.getAttribute('data-res-id');
+        
+        // 🚀 THE FIX: Clear the value NOW so the next call 
+        // to closeModal doesn't trigger this 'if' block again.
+        const valToSave = quickInput.value;
+        quickInput.value = ""; 
+        
         console.log("💾 Auto-saving draft before close...");
         
-        // We call commit but don't 'await' it here to keep the UI snappy, 
-        // the function itself handles the close after the save is done.
-        OL.commitQuickStep(resId);
-        return; // Exit here; commitQuickStep will call closeModal again when done
+        // Pass the value directly to ensure it saves even if the DOM element is gone
+        OL.commitQuickStep(resId, valToSave);
+        return; 
     }
 
     // 2. 🧹 STANDARD CLOSE & CLEANUP
@@ -8589,12 +8593,20 @@ OL.closeModal = function() {
         layer.innerHTML = '';
     }
 
-    // 3. RESET STATE
+    // 3. RESET STATE (Crucial to clear the app detection too)
     OL.isSavingStep = false;
-    OL.quickAddState = { name: "", app: "", assignee: "", delay: 0, note: "", due: "", rule: "" };
-    OL.clearNavHistory();
-    
-    // 🔄 Refresh the map to show any new items
+    OL.quickAddState = { 
+        name: "", 
+        app: "", 
+        appId: null, 
+        assignee: [], // Ensure this is an array to match our previous work
+        links: [], 
+        target: null, 
+        delay: 0, 
+        note: "", 
+        rule: "" 
+    };
+
     if (typeof OL.renderVisualizer === "function") OL.renderVisualizer();
 };
 
@@ -8722,28 +8734,27 @@ OL.parseStepInput = function(rawText) {
 OL.handleQuickAddInput = function(e, resId) {
     const inputEl = e.target;
     const val = inputEl.value; 
-    const data = OL.getCurrentProjectData();
-    
-    // 🚀 FIX 1: Define 'menu' at the top so it's globally available in this function
     const menu = document.getElementById('slash-menu');
+    
+    // 1. Get the Apps from the REAL source
+    const client = getActiveClient();
+    const projectApps = client?.projectData?.localApps || [];
 
-    // 1. Sync State Name
+    // 2. Sync State Name
     OL.quickAddState.name = val;
 
-    // 🔍 2. DYNAMIC APP SCANNING
-    // We check data.apps OR data.libraryApps (common fallback)
-    const projectApps = data.apps || data.libraryApps || [];
+    // 🔍 3. DYNAMIC APP SCANNING (Using localApps)
     let detectedApp = null;
 
     if (val.trim().length > 2) {
         projectApps.forEach(app => {
-            const appName = (typeof app === 'object' ? app.name : app) || "";
+            const appName = app.name || "";
             if (!appName) return;
 
             const searchStr = val.toLowerCase();
             const targetApp = appName.toLowerCase();
 
-            // Check for match
+            // Match if the typed text contains the app name
             if (searchStr.includes(targetApp)) {
                 detectedApp = app;
             }
@@ -8751,45 +8762,43 @@ OL.handleQuickAddInput = function(e, resId) {
     }
 
     if (detectedApp) {
-        OL.quickAddState.app = typeof detectedApp === 'object' ? detectedApp.name : detectedApp;
+        OL.quickAddState.app = detectedApp.name;
         OL.quickAddState.appId = detectedApp.id || null;
-        console.log("✅ App Found:", OL.quickAddState.app);
+        console.log("✅ Sync Match Found:", detectedApp.name);
+    } else {
+        // Only clear if no slash command or previous detection is active
+        // This prevents flickering while typing
+        if (!val.includes('/app:')) {
+            OL.quickAddState.app = "";
+            OL.quickAddState.appId = null;
+        }
     }
 
-    // ⚡ 3. SLASH MENU LOGIC
+    // ⚡ 4. SLASH MENU LOGIC
     const lastSlashIndex = val.lastIndexOf('/');
     if (lastSlashIndex !== -1) {
         const query = val.substring(lastSlashIndex + 1);
-        
         if (query.includes(':')) {
             const parts = query.split(':');
             const command = parts[0].toLowerCase().trim();
-            const paramQuery = parts[1].trim(); 
+            const paramQuery = parts[1] ? parts[1].trim() : ""; 
             
             const subTypeMap = {
-                'assign': 'team', 'who': 'team', 'owner': 'team', '@': 'team',
-                'app': 'apps', 'tool': 'apps', 'via': 'apps',
-                'rule': 'logic', 'if': 'logic',
-                'due': 'due', 'date': 'due',
-                'link': 'links', 'asset': 'links', 'sop': 'links',
-                'target': 'target', 'milestone': 'target'
+                'assign': 'team', 'who': 'team', 'app': 'apps', 'tool': 'apps'
             };
             
             const subType = subTypeMap[command];
             if (subType && typeof OL.showSubMenu === 'function') {
                 OL.showSubMenu(subType, paramQuery.toLowerCase()); 
-            } else if (menu) {
-                menu.style.display = 'none';
             }
         } else if (typeof OL.showSlashMenu === 'function') {
             OL.showSlashMenu(query.toLowerCase().trim(), resId);
         }
-    } else {
-        // 🚀 FIX 2: 'menu' is now safely defined for this block
-        if (menu) menu.style.display = 'none';
+    } else if (menu) {
+        menu.style.display = 'none';
     }
 
-    // 🚀 4. THE UI REFRESH
+    // 🚀 5. THE UI REFRESH
     if (typeof OL.updateQuickAddPreview === 'function') {
         OL.updateQuickAddPreview();
     }
