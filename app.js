@@ -4700,39 +4700,51 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     console.log("📋 Relevant Vars Count:", (typeof relevantVars !== 'undefined') ? relevantVars.length : "Undefined");
     console.log("💎 Active Resource:", typeof activeData !== 'undefined' ? activeData.name : "Missing activeData");
 
-    let pricingRows = "";
+    const pricingRows = (relevantVars || []).map(([varKey, v]) => {
+        // 🚀 1. THE RE-FETCH
+        // Use the main project array to ensure we have the 'steps' data
+        const projectResources = getActiveClient()?.projectData?.resources || [];
+        const projectRes = projectResources.find(r => r.id === activeData.id) || activeData;
 
-    if (typeof relevantVars !== 'undefined' && relevantVars.length > 0) {
-        pricingRows = relevantVars.map(([varKey, v]) => {
-            const isZapType = activeData?.type?.toLowerCase() === 'zap';
-            const isStepVar = v.label?.toLowerCase().includes('step');
+        const isZap = projectRes.type?.toLowerCase() === 'zap' || 
+                      v.label?.toLowerCase().includes('zap');
+        const isStepVar = v.label?.toLowerCase().includes('step');
+
+        let displayVal = num(projectRes.data?.[varKey]);
+        let inputProps = "";
+        let badge = "";
+
+        if (isZap && isStepVar) {
+            // 🚀 2. USE THE PROJECT-LEVEL STEPS
+            const actualStepCount = (projectRes.steps || []).length;
+            displayVal = actualStepCount;
             
-            let displayVal = num(activeData?.data?.[varKey]);
-            let inputProps = "";
-            let badge = "";
+            inputProps = "readonly style='background:rgba(255,159,67,0.1); color:#ff9f43; border-color:#ff9f43; cursor:not-allowed;'";
+            badge = `<span style="color:#ff9f43; font-size:9px; margin-left:5px; font-weight:bold;">⚡ AUTO</span>`;
 
-            if (isZapType && isStepVar) {
-                const actualStepCount = (activeData.steps || []).length;
-                displayVal = actualStepCount;
-                inputProps = "readonly style='background:rgba(255,159,67,0.1); color:#ff9f43; border-color:#ff9f43; opacity:1;'";
-                badge = `<span style="color:#ff9f43; font-size:9px; margin-left:5px; font-weight:bold;">⚡ AUTO</span>`;
-
-                // Sync logic
-                if (num(activeData.data?.[varKey]) !== actualStepCount) {
-                    OL.updateResourcePricingData(activeData.id, varKey, actualStepCount);
-                }
+            // Debugging: If it shows 0 but you know there are steps, check this log:
+            if (actualStepCount === 0) {
+                console.warn(`🔍 Tally is 0 for ${projectRes.name}. Steps in projectData:`, projectRes.steps);
             }
 
-            return `
-                <div class="modal-column">
-                    <label class="tiny muted">${esc(v.label)} ($${v.value})${badge}</label>
-                    <input type="number" class="modal-input tiny" 
-                        value="${displayVal}" 
-                        ${inputProps}
-                        oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
-                </div>`;
-        }).join("");
-    }
+            // 🚀 3. SYNC
+            if (num(projectRes.data?.[varKey]) !== actualStepCount) {
+                OL.updateResourcePricingData(projectRes.id, varKey, actualStepCount);
+                // Update local ref for immediate UI feedback
+                if (!projectRes.data) projectRes.data = {};
+                projectRes.data[varKey] = actualStepCount;
+            }
+        }
+
+        return `
+            <div class="modal-column">
+                <label class="tiny muted">${esc(v.label)} ($${v.value})${badge}</label>
+                <input type="number" class="modal-input tiny" 
+                    value="${displayVal}" 
+                    ${inputProps}
+                    oninput="OL.updateResourcePricingData('${projectRes.id}', '${varKey}', this.value)">
+            </div>`;
+    }).join("");
 
     // 🚀 FORCE VISIBLE FOR TESTING: Remove "isAdmin &&" to show regardless of permissions
     const adminPricingHtml = (isAdmin && relevantVars?.length > 0) ? `
@@ -4742,7 +4754,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 ${pricingRows}
             </div>
         </div>` : '';
-        
+
     // --- 📝 SECTION: LINKED MASTER GUIDES ---
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
