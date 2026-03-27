@@ -4374,7 +4374,9 @@ body.light-mode {
 
 /*====================== Node Cards */
 
-.step-row-content { width:100%; align-items:center;}
+.header-row-content { width:100%; align-items:center;}
+
+.step-row-content { width:100%; align-items:center; display: flex; flex-direction: row; min-height: 24px;}
 
 .v2-node-card {
     position: absolute; width: 220px; background: var(--bg-card); color: var(--text-main); overflow: visible;
@@ -4477,6 +4479,16 @@ body.light-mode {
     transform: scale(1.1); filter: brightness(1.15); /* Get slightly brighter */ box-shadow: 0 5px 15px var(--vault-gold);
 }
 
+.v2-logic-badge.has-logic {
+    background: var(--accent) !important; color: #000 !important;  border: 1px solid var(--accent);
+    box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.3); opacity: 1 !important;
+}
+
+/* Optional: Pulse effect for high-priority logic */
+.v2-logic-badge.has-logic:hover {
+    filter: brightness(1.2);   transform: scale(1.1);
+}
+
 .v2-duplicate-badge {
     color: var(--accent); border: 1px solid var(--accent); opacity: 0.6;
 }
@@ -4519,6 +4531,16 @@ body.light-mode {
     height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0;
 }
 
+.step-logic-icon {
+    font-size: 10px; font-weight: bold;  color: var(--accent); background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.2); border-radius: 3px; padding: 0px 4px; line-height: 1.2;
+    display: inline-block; vertical-align: middle; flex-shrink: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Specific Loop Icon Style */
+.step-logic-icon.loop {
+    color: var(--warning);  background: rgba(255, 191, 0, 0.1); border-color: rgba(255, 191, 0, 0.3); font-size: 11px;
+}
 /*=================Card Drag */
 
 .is-dragging-node { cursor: grabbing !important; }
@@ -4575,8 +4597,8 @@ body.light-mode {
 }
 
 .v2-steps-preview {
-    margin-top: 15px;  border-top: 1px solid var(--border); display: none; /* Hidden by default */
-    min-height: 10px;
+    margin-top: 25px;  border-top: 1px solid var(--border); display: none; /* Hidden by default */
+    min-height: 10px; padding-top: 25px;
 }
 
 .is-expanded .v2-steps-preview {
@@ -4584,9 +4606,9 @@ body.light-mode {
 }
 
 .v2-step-item {
-    font-size: 11px; color: var(--text-muted); padding: 10px 0; 
-    overflow: hidden; text-overflow: ellipsis; transition: background 0.2s; position: relative; background: transparent;
-    box-sizing: border-box; pointer-events: all; cursor: pointer; min-height: 32px; width: 100%;
+    font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; transition: background 0.2s; 
+    position: relative; background: transparent; box-sizing: border-box; pointer-events: all; cursor: pointer; min-height: 32px; 
+    width: 100%;
 }
 
 .v2-step-item span {white-space: normal; word-break: break-word;}
