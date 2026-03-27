@@ -4794,7 +4794,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                    <button class="btn tiny primary" onclick="OL.launchDirectToVisual('${res.id}')">🎨 Visual Editor</button>
+                    <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
                 </div>
                 <div id="sop-step-list">
                     ${renderSopStepList(res)}
@@ -5015,21 +5015,30 @@ OL.expandFlowMap = function(wfId, activeIdx) {
 
 // HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
 // Global Workspace Logic
-OL.launchDirectToVisual = function(resId) {
-    console.log("🚀 Launching Level 3 Visualizer for Resource:", resId);
+OL.goToResourceInMap = function(resId) {
+    // 1. Detect where we are right now before we switch to the map
+    const currentHash = window.location.hash;
+    let returnPath = "/scoping-sheet"; // Default fallback
+
+    if (currentHash.includes('resources')) {
+        returnPath = "/resources";
+    } else if (currentHash.includes('scoping-sheet')) {
+        returnPath = "/scoping-sheet";
+    }
+
+    // 2. Save it to session storage so it survives the view change
+    sessionStorage.setItem('map_return_path', returnPath);
+
+    // 3. Proceed with existing logic
+    OL.closeModal(); 
+    OL.focusedResourceId = String(resId);
     
-    // 1. Close the current modal layer
-    OL.closeModal();
+    if (typeof OL.setView === 'function') OL.setView('map');
+    OL.renderVisualizer();
     
-    // 2. Set the Level 3 Focus
-    state.focusedResourceId = resId; 
-    
-    // 3. Ensure we have a Level 2 parent context if possible
-    // (If we came from the library, focusedWorkflowId might be null, which is fine)
-    
-    // 4. Trigger the unified visualizer
-    const isVaultMode = location.hash.includes('vault');
-    OL.renderVisualizer(isVaultMode);
+    setTimeout(() => {
+        if (typeof OL.centerCanvasNode === 'function') OL.centerCanvasNode(resId);
+    }, 150);
 };
 
 OL.navigateBack = function() {
@@ -8097,6 +8106,13 @@ OL.renderVisualizer = function() {
     // --- 📇 4. RENDER RESOURCES ---
     resources.forEach(res => {
         const isExpanded = res.isExpanded || false;
+        const isFocused = OL.focusedResourceId === String(res.id);
+        const hasActiveFocus = !!OL.focusedResourceId;
+
+        let cardClass = "resource-card";
+        if (hasActiveFocus) {
+            cardClass += isFocused ? " focused-node" : " node-dimmed";
+        }
 
         const isInScope = !!OL.isResourceInScope(res.id);
         const scopeBadge = `
@@ -8144,7 +8160,7 @@ OL.renderVisualizer = function() {
 
         const div = document.createElement('div');
         div.id = `v2-node-${res.id}`;
-        div.className = `v2-node-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''}`;
+        div.className = `v2-node-card ${cardClass} ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''}`;
         
         if (!res.isGlobal && res.coords) {
             div.style.left = `${res.coords.x}px`;
@@ -8280,7 +8296,7 @@ OL.renderVisualizer = function() {
             nodeLayer.appendChild(div);
         }
     });
-
+    OL.renderFocusControls();
     // --- 🚀 5. FINAL PASS ---
     if (OL.state.v2.pan) {
         const { x, y } = OL.state.v2.pan;
@@ -8300,6 +8316,85 @@ window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
 
 // Global to track the dragged index
 state.draggingStepIdx = null;
+
+OL.renderFocusControls = function() {
+    let scopeBtn = document.getElementById('exit-focus-btn');
+    
+    // 1. If no focus, remove the button and stop
+    if (!OL.focusedResourceId) {
+        if (scopeBtn) scopeBtn.remove();
+        return;
+    }
+
+    // 2. Determine destination text
+    const savedPath = sessionStorage.getItem('map_return_path') || "/scoping-sheet";
+    const destinationName = savedPath.includes('resources') ? 'Library' : 'Scope';
+
+    // 3. Create button if it doesn't exist
+    if (!scopeBtn) {
+        scopeBtn = document.createElement('button');
+        scopeBtn.id = 'exit-focus-btn';
+        document.body.appendChild(scopeBtn);
+    }
+
+    // 4. Update Button Content & Action
+    scopeBtn.innerHTML = `⬅️ Back to ${destinationName}`;
+    scopeBtn.style.display = 'block';
+    
+    scopeBtn.onclick = () => {
+        const savedPath = sessionStorage.getItem('map_return_path') || "/scoping-sheet";
+        
+        // 1. Reset Focus State
+        OL.focusedResourceId = null;
+        sessionStorage.removeItem('active_resource_id');
+        sessionStorage.removeItem('map_return_path');
+
+        // 2. Nuke the Map Container (Instant)
+        const mainArea = document.getElementById('mainContent');
+        if (mainArea) mainArea.innerHTML = ''; 
+
+        // 3. Update the URL (Silent)
+        window.location.hash = savedPath;
+
+        // 4. 🚀 THE "INSTANT SWAP"
+        // We check the path and call the specific "Render" function for that page
+        if (savedPath.includes('scoping-sheet')) {
+            if (typeof OL.renderScopingSheet === 'function') {
+                OL.renderScopingSheet(); 
+            } else if (typeof OL.renderScope === 'function') {
+                OL.renderScope();
+            } else {
+                window.location.reload(); // Fallback if name is unknown
+            }
+        } else if (savedPath.includes('resources')) {
+            if (typeof OL.renderResources === 'function') {
+                OL.renderResources();
+            } else if (typeof OL.showResources === 'function') {
+                OL.showResources();
+            } else {
+                window.location.reload();
+            }
+        }
+
+        scopeBtn.remove();
+    };
+        
+    // 🛑 REMOVED: The self-calling line that was causing the crash
+};
+
+OL.exitVisualFocus = function() {
+    // 1. Clear the focus variable
+    OL.focusedResourceId = null;
+
+    // 2. Re-render the map (this removes the .node-dimmed classes)
+    OL.renderVisualizer();
+
+    // 3. Hide the focus controls
+    OL.renderFocusControls();
+
+    // 4. Optional: If you want to literally switch 'Views' back to a list
+    // if (typeof OL.setView === 'function') OL.setView('scope');
+};
 
 OL.addNewResourceToCanvas = async function() {
     const data = OL.getCurrentProjectData();
@@ -10392,9 +10487,12 @@ OL.centerPrevCanvasMatch = function() {
 };
 
 OL.centerCanvasNode = function(nodeId) {
-    const nodeEl = document.getElementById(nodeId);
-    if (!nodeEl) return;
-
+    let nodeEl = document.getElementById(nodeId) || document.getElementById(`v2-node-${nodeId}`);
+    
+    if (!nodeEl) {
+        console.warn("❌ Centering failed: Could not find element with ID", nodeId);
+        return;
+    }
     // 1. 🔍 THE AUTO-OPEN CHECK
     // Check if the node is inside a tray/sidebar
     const workbench = document.getElementById('v2-workbench-sidebar');
@@ -10432,8 +10530,8 @@ OL.centerCanvasNode = function(nodeId) {
     if (nodeEl.closest('#v2-node-layer')) {
         const nodeX = parseFloat(nodeEl.style.left) || 0;
         const nodeY = parseFloat(nodeEl.style.top) || 0;
-        const viewW = window.innerWidth;
-        const viewH = window.innerHeight;
+        const viewW = viewport ? viewport.offsetWidth : window.innerWidth;
+        const viewH = viewport ? viewport.offsetHeight : window.innerHeight;
 
         const moveX = (viewW / 2) - (nodeX + (nodeEl.offsetWidth / 2));
         const moveY = (viewH / 2) - (nodeY + (nodeEl.offsetHeight / 2));
