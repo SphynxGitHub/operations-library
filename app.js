@@ -4938,91 +4938,89 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     }, 10);
 };
 
-OL.renderResourceMiniMaps = function(targetResId, specificStepId = null) {
-    const client = getActiveClient();
-    const allResources = (client?.projectData?.localResources || []);
-    let html = `<div class="card-section"><label class="modal-section-label">🕸️ FLOW CONTEXT</label><div style="display: flex; flex-direction: column; gap: 24px; margin-top: 15px;">`;
+OL.renderResourceMiniMaps = function(targetResId) {
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
+    const currentRes = resources.find(r => String(r.id) === String(targetResId));
+    if (!currentRes) return "";
 
-    let instances = [];
-    allResources.forEach(container => {
-        const steps = container.steps || container.proceduralSteps || [];
-        steps.forEach((step, idx) => {
-            if (String(step.resourceLinkId) === String(targetResId)) {
-                instances.push({ container, step, idx });
-            }
+    const incomingLinks = new Set();
+    const outgoingLinks = new Set();
+
+    // 🕵️ 1. CRAWL FOR CONNECTIONS
+    resources.forEach(res => {
+        (res.steps || []).forEach(step => {
+            (step.logic?.out || []).forEach(link => {
+                const parts = link.targetId?.split('-');
+                if (!parts) return;
+                parts.pop(); // Remove step index
+                const tResId = parts.join('-');
+
+                // If this resource points TO our current resource
+                if (String(tResId) === String(targetResId)) {
+                    incomingLinks.add(res.id);
+                }
+                // If our current resource points TO this resource
+                if (String(res.id) === String(targetResId)) {
+                    outgoingLinks.add(tResId);
+                }
+            });
         });
     });
 
-    if (instances.length === 0) {
-        return `
-            <div class="card-section">
-                <label class="modal-section-label">🕸️ FLOW CONTEXT</label>
-                <div class="mini-map-container" style="text-align:center; padding: 20px; opacity: 0.6;">
-                    <div class="tiny muted">Standalone resource: No preceding or following steps found.</div>
+    // 2. Resolve objects for rendering
+    const leftNodes = Array.from(incomingLinks).map(id => resources.find(r => r.id === id)).filter(Boolean);
+    const rightNodes = Array.from(outgoingLinks).map(id => resources.find(r => r.id === id)).filter(Boolean);
+
+    // 3. Build the Grid HTML...
+    return `
+        <div class="card-section" style="margin-top:20px; border-top:1px solid var(--line); padding-top:20px;">
+            <label class="modal-section-label">🕸️ RELATIONSHIP MAP</label>
+            <div class="mini-map-grid" style="display: grid; grid-template-columns: 1fr 30px 1.2fr 30px 1fr; align-items: center; gap: 5px; margin-top: 15px;">
+                
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${leftNodes.length > 0 ? leftNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<div class="tiny muted center italic">No Inputs</div>'}
                 </div>
-            </div>`;
-    }
 
-    html += instances.map(inst => {
-        const stepsArray = inst.container.steps || inst.container.proceduralSteps || [];
-        
-        // 🟢 FIXED VARIABLE NAMES
-        const preceding = stepsArray[inst.idx - 1] ? [stepsArray[inst.idx - 1]] : [];
-        const following = stepsArray[inst.idx + 1] ? [stepsArray[inst.idx + 1]] : [];
+                <div class="mini-arrow">${leftNodes.length > 0 ? '→' : ''}</div>
 
-        // Logic Bridge for Start/End of containers
-        if (preceding.length === 0) {
-            const triggers = allResources.filter(r => (r.logicLinks || []).some(l => String(l.targetId) === String(inst.container.id)));
-            preceding.push(...triggers);
-        }
-        if (following.length === 0) {
-            const outcomes = (inst.container.logicLinks || []).map(l => OL.getResourceById(l.targetId)).filter(Boolean);
-            following.push(...outcomes);
-        }
-
-        return `
-            <div class="mini-map-container" style="background: rgba(0,0,0,0.2); padding: 20px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
-                <div class="tiny muted uppercase bold" style="margin-bottom: 15px; font-size: 8px; text-align: center; opacity: 0.5;">
-                    Instance in: ${esc(inst.container.name)}
+                <div style="display: flex; justify-content: center;">
+                    ${renderMiniNode(currentRes, 'active')}
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 40px 1.2fr 40px 1fr; align-items: center; gap: 5px;">
-                    <div style="display: flex; flex-direction: column; gap: 5px; align-items: flex-end;">
-                        ${preceding.length > 0 ? preceding.map(p => renderMiniNode(p, 'muted')).join('') : '<span class="tiny muted">Start</span>'}
-                    </div>
-                    <div class="mini-arrow">→</div>
-                    <div style="display: flex; justify-content: center;">
-                        ${renderMiniNode(inst.step, 'active')}
-                    </div>
-                    <div class="mini-arrow">→</div>
-                    <div style="display: flex; flex-direction: column; gap: 5px; align-items: flex-start;">
-                        ${following.length > 0 ? following.map(f => renderMiniNode(f, 'muted')).join('') : '<span class="tiny muted">End</span>'}
-                    </div>
+
+                <div class="mini-arrow">${rightNodes.length > 0 ? '→' : ''}</div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${rightNodes.length > 0 ? rightNodes.map(n => renderMiniNode(n, 'muted')).join('') : '<div class="tiny muted center italic">No Outputs</div>'}
                 </div>
             </div>
-        `;
-    }).join('');
-
-    return html + `</div></div>`;
+        </div>`;
 };
 
 // Helper to render the individual blocks
-function renderMiniNode(item, status) {
-    if (!item) return "";
-    
-    // Resolve Resource ID: Could be item.resourceLinkId (a step) or item.id (a full resource)
-    const resId = item.resourceLinkId || item.id;
-    const res = OL.getResourceById(resId);
-    
-    const icon = OL.getRegistryIcon(res?.type || item.type || 'SOP');
+function renderMiniNode(res, status) {
+    if (!res) return "";
     const isActive = status === 'active';
-    const name = item.name || res?.name || "Unnamed Step";
+    const icon = OL.getRegistryIcon(res.type);
     
+    // Milestone Check
+    const isMilestone = (res.steps || []).some(s => s.targetResourceId); 
+
+    // Use RGBA for the tint so it adapts to Light/Dark backgrounds
+    const bgTint = isActive ? 'rgba(251, 191, 36, 0.15)' : 'rgba(var(--text-rgb), 0.05)';
+    const borderColor = isMilestone ? '#fbbf24' : (isActive ? 'var(--accent)' : 'var(--line)');
+
     return `
-        <div class="mini-node ${status}" style="${isActive ? 'border: 2px solid #fbbf24; background: rgba(251, 191, 36, 0.15); box-shadow: 0 0 15px rgba(251, 191, 36, 0.1);' : ''}">
-            <div class="mini-node-content">
-                <div class="mini-icon-circle" style="${isActive ? 'color: #fbbf24;' : ''}">${icon}</div>
-                <div style="font-weight: ${isActive ? 'bold' : 'normal'}; color: ${isActive ? '#fff' : '#cbd5e1'};">
-                    ${esc(name)}
+        <div class="mini-node ${status} ${isMilestone ? 'is-milestone' : ''}" 
+             onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')"
+             style="cursor:pointer; padding:8px; border-radius:8px; background:${bgTint}; border:1px solid ${borderColor}; min-width:120px; position:relative;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                <span style="font-size:14px; color:var(--text-main);">${icon}</span>
+                <div class="mini-node-text" title="${esc(res.name)}">
+                    ${esc(res.name)}
+                </div>
+                <div style="font-size:8px; text-transform:uppercase; color:var(--text-muted); font-weight:bold;">
+                    ${res.type}
                 </div>
             </div>
         </div>
@@ -8162,9 +8160,17 @@ OL.renderVisualizer = function() {
     let totalZapSteps = 0;
 
     // --- 📇 4. RENDER RESOURCES ---
+    const milestoneIds = new Set();
+    resources.forEach(r => {
+        (r.steps || []).forEach(s => {
+            if (s.targetResourceId) milestoneIds.add(String(s.targetResourceId));
+        });
+    });
+
     resources.forEach(res => {
         const isExpanded = res.isExpanded || false;
         const isFocused = OL.focusedResourceId === String(res.id);
+        const isMilestone = milestoneIds.has(String(res.id));
         const hasActiveFocus = !!OL.focusedResourceId;
 
         const stepCount = (res.steps || []).length;
@@ -8225,7 +8231,7 @@ OL.renderVisualizer = function() {
 
         const div = document.createElement('div');
         div.id = `v2-node-${res.id}`;
-        div.className = `v2-node-card ${cardClass} ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''}`;
+        div.className = `v2-node-card ${cardClass} ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''}`;
         
         if (!res.isGlobal && res.coords) {
             div.style.left = `${res.coords.x}px`;
@@ -9516,31 +9522,64 @@ OL.updateStepName = function(resId, stepIdx, newName) {
 
 OL.deleteStep = async function(resId, stepIdx) {
     const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
+    const resources = data.resources || [];
+    const res = resources.find(r => String(r.id) === String(resId));
     
     if (res && res.steps && res.steps[stepIdx]) {
-        if (!confirm(`Delete step "${res.steps[stepIdx].name}"?`)) return;
-
-        // 🚀 THE FIX: Before deleting, clear any logic links pointing to this specific step
+        const stepToDelete = res.steps[stepIdx];
         const stepFullId = `${resId}-${stepIdx}`;
-        data.resources.forEach(r => {
-            r.steps?.forEach(s => {
-                if (s.logic?.out) {
-                    s.logic.out = s.logic.out.filter(l => l.targetId !== stepFullId);
+
+        if (!confirm(`Delete step "${stepToDelete.name}"? This will also remove any logic links connected to it.`)) return;
+
+        // 🚀 1. THE CLEANUP CRAWL
+        // Scan every single step in every resource to find links to THIS step
+        resources.forEach(r => {
+            (r.steps || []).forEach(otherStep => {
+                if (otherStep.logic) {
+                    // Remove 'out' links pointing to our deleted step
+                    if (otherStep.logic.out) {
+                        otherStep.logic.out = otherStep.logic.out.filter(link => String(link.targetId) !== stepFullId);
+                    }
+                    // Remove 'in' links coming from our deleted step
+                    if (otherStep.logic.in) {
+                        otherStep.logic.in = otherStep.logic.in.filter(link => String(link.sourceId) !== stepFullId);
+                    }
                 }
             });
         });
 
-        // Remove the step
+        // 🚀 2. RE-INDEX PROTECTOR
+        // Because steps are stored in an array by index, deleting Step 1 makes Step 2 become the new Step 1.
+        // We must update any logic links that pointed to higher indices in this specific resource.
+        resources.forEach(r => {
+            (r.steps || []).forEach(otherStep => {
+                ['in', 'out'].forEach(dir => {
+                    const key = dir === 'in' ? 'sourceId' : 'targetId';
+                    (otherStep.logic?.[dir] || []).forEach(link => {
+                        const parts = String(link[key]).split('-');
+                        const targetResId = parts.slice(0, -1).join('-');
+                        const targetIdx = parseInt(parts.pop());
+
+                        if (targetResId === String(resId) && targetIdx > stepIdx) {
+                            // Shift the index down by 1 to match the new array position
+                            link[key] = `${targetResId}-${targetIdx - 1}`;
+                        }
+                    });
+                });
+            });
+        });
+
+        // 🚀 3. PERFORM THE DELETE
         res.steps.splice(stepIdx, 1);
 
-        // 💾 Save and tidy up the vertical gaps
+        // 💾 4. PERSIST & REFRESH
         await OL.updateAndSync(() => {
-            OL.autoAlignNodes(false);
+            OL.autoAlignNodes(false); // Fix vertical gaps
         });
 
         OL.renderVisualizer();
-        OL.closeInspector(); // Close if we just deleted what we were looking at
+        OL.closeInspector(); 
+        console.log(`🧹 Step ${stepIdx} deleted and all logic links scrubbed.`);
     }
 };
 
@@ -10989,43 +11028,35 @@ OL.syncLogicPorts = function() {
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
 
-    // 1. Wipe all current 'In' arrays
+    // 1. HARD RESET: Wipe all 'In' arrays first 
+    // This ensures we only see incoming links that have a valid 'Out' parent
     resources.forEach(res => {
-        if (res.steps) {
-            res.steps.forEach(step => {
-                if (!step.logic) step.logic = { in: [], out: [] };
-                step.logic.in = []; 
-            });
-        }
+        (res.steps || []).forEach(step => {
+            if (step.logic) step.logic.in = []; 
+        });
     });
 
-    // 2. Build the mirrors
+    // 2. REBUILD: Only add 'In' links if the source still exists
     resources.forEach(sourceRes => {
-        if (!sourceRes.steps) return;
-
-        sourceRes.steps.forEach((step, sIdx) => {
+        sourceRes.steps?.forEach((step, sIdx) => {
             const sourceFullId = `${sourceRes.id}-${sIdx}`;
-
+            
+            // Only process if the target step actually exists
             step.logic?.out?.forEach(outRule => {
-                if (!outRule.targetId) return;
-
-                // Split ID and Index
                 const parts = outRule.targetId.split('-');
-                const tStepIdx = parseInt(parts.pop()); // Last part is index
-                const tResId = parts.join('-');         // Everything else is ID
-
-                // 🎯 FIND TARGET: Use String conversion to be safe
-                const targetRes = resources.find(r => String(r.id) === String(tResId));
+                const tStepIdx = parseInt(parts.pop());
+                const tResId = parts.join('-');
+                const targetRes = resources.find(r => String(r.id) === tResId);
                 
-                if (targetRes && targetRes.steps && targetRes.steps[tStepIdx]) {
-                    const targetStep = targetRes.steps[tStepIdx];
-                    if (!targetStep.logic) targetStep.logic = { in: [], out: [] };
-                    
-                    targetStep.logic.in.push({
+                if (targetRes && targetRes.steps?.[tStepIdx]) {
+                    targetRes.steps[tStepIdx].logic.in.push({
                         sourceId: sourceFullId,
                         rule: outRule.rule || "",
                         type: outRule.type || "link"
                     });
+                } else {
+                    // 🗑️ Surgical Strike: If target doesn't exist, remove the 'out' link too!
+                    step.logic.out = step.logic.out.filter(l => l !== outRule);
                 }
             });
         });
