@@ -5041,3 +5041,28 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
      border: 1px solid var(--accent); width: max-content; max-width: 300px;  left: 50%; transform: translateX(-50%);
     top: 100%;
 }
+
+/*==================== Resource Type */
+.type-editor-row {
+    margin-bottom: 8px;   background: var(--panel-soft);   padding: 10px;  border-radius: 6px;   display: flex; 
+    gap: 12px;   align-items: center;
+}
+
+.type-name-edit {
+    font-weight: 600;   flex: 1;   cursor: text;  font-size: 12px;
+}
+
+.func-match-select {   background: var(--input-bg);  border-color: var(--line-alt);
+}
+
+.manager-footer-add {
+    margin-top: 20px;   padding-top: 20px;   border-top: 1px solid var(--panel-border);
+}
+
+.add-type-form {
+    display: flex;   gap: 8px;   margin-bottom: 12px;
+}
+
+.emoji-quick-grid {
+    display: grid;  grid-template-columns: repeat(12, 1fr);   gap: 5px;
+}
