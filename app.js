@@ -3917,23 +3917,23 @@ OL.promptBulkReclassify = function(oldType) {
 
 OL.openResourceTypeManager = function () {
     const registry = state.master.resourceTypes || [];
+    const masterFunctions = state.master.functions || [];
     const quickIcons = ["⚡", "📄", "📧", "📅", "🔌", "📖", "🏠", "💬", "🛠️", "🎯", "🤖", "📈"];
 
     let html = `
         <div class="modal-head">
             <div class="modal-title-text">⚙️ Manage Resource Types</div>
-            <div class="spacer"></div>
         </div>
         <div class="modal-body">
-            <p class="tiny muted" style="margin-bottom:20px;">
-                Define categories and icons. Every resource assigned to these types will inherit the icon automatically.
+            <p class="tiny muted mb-20">
+                Define categories, icons, and link them to Master Functions to enable auto-locking of primary apps.
             </p>
             
-            <div class="dp-manager-list" style="max-height: 300px; overflow-y: auto; padding-right: 5px;">
+            <div class="dp-manager-list custom-scrollbar">
                 ${registry.map(t => {
                     const encType = btoa(t.type);
                     return `
-                    <div class="dp-manager-row" style="margin-bottom: 8px; background: var(--panel-soft); padding: 10px; border-radius: 6px; display:flex; gap:12px; align-items:center;">
+                    <div class="dp-manager-row type-editor-row">
                         <span contenteditable="true" 
                               class="icon-edit-box"
                               onblur="OL.updateResourceTypeProp('${t.typeKey}', 'icon', this.innerText)">
@@ -3941,25 +3941,35 @@ OL.openResourceTypeManager = function () {
                         </span>
 
                         <span contenteditable="true" 
-                              style="font-weight:600; flex:1; cursor: text;"
+                              class="type-name-edit"
                               onblur="OL.renameResourceTypeFlat('${encType}', this.innerText)">
                             ${esc(t.type)}
                         </span>
                         
-                        <button class="card-delete-btn" style="position:static" onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">×</button>
+                        <select class="modal-input tiny func-match-select" 
+                                onchange="OL.updateResourceTypeProp('${t.typeKey}', 'matchedFunctionId', this.value)">
+                            <option value="">-- No Auto-Lock --</option>
+                            ${masterFunctions.map(f => `
+                                <option value="${f.id}" ${t.matchedFunctionId === f.id ? 'selected' : ''}>
+                                    Map to: ${esc(f.name)}
+                                </option>
+                            `).join('')}
+                        </select>
+
+                        <button class="card-delete-btn" onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">×</button>
                     </div>`;
                 }).join('')}
             </div>
 
-            <div style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--panel-border);">
+            <div class="manager-footer-add">
                 <label class="modal-section-label">Quick Add New Type</label>
-                <div style="display:flex; gap:8px; margin-bottom: 12px;">
-                    <input type="text" id="new-type-icon" class="modal-input" style="width:50px; text-align:center; font-size: 18px;" placeholder="⚙️" maxlength="2">
-                    <input type="text" id="new-type-input" class="modal-input" style="flex:1;" placeholder="New Type Name...">
+                <div class="add-type-form">
+                    <input type="text" id="new-type-icon" class="modal-input icon-input" placeholder="⚙️" maxlength="2">
+                    <input type="text" id="new-type-input" class="modal-input name-input" placeholder="New Type Name...">
                     <button class="btn primary" onclick="OL.addNewResourceTypeFlat()">Add Type</button>
                 </div>
                 
-                <div class="emoji-quick-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px;">
+                <div class="emoji-quick-grid">
                     ${quickIcons.map(icon => `
                         <div class="emoji-option" onclick="document.getElementById('new-type-icon').value='${icon}'">${icon}</div>
                     `).join('')}
@@ -4562,6 +4572,26 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
     if (!res) return;
     const activeData = lineItem || res;
+
+    // 🧠 2. AUTO-MAPPING LOGIC (The New Brain)
+    const rawType = String(res.type || 'General');
+    const typeDef = (state.master.resourceTypes || []).find(t => t.type.toLowerCase() === rawType.toLowerCase());
+    
+    // Check if locked by Type or by specific manual Function ID
+    const isLockedByType = !!(typeDef && typeDef.matchedFunctionId);
+    const isLockedByManual = !!res.matchedFunctionId;
+    const isZap = rawType.toLowerCase() === 'zap';
+
+    // Get the tool (Helper handles the priority: Manual ID > Type Mapping)
+    const autoApp = (isLockedByType || isLockedByManual) && !isZap ? OL.getAppByFunction(rawType, res.matchedFunctionId) : null;
+
+    // Sync back to data
+    if (autoApp && res.appId !== autoApp.id) {
+        res.appId = autoApp.id;
+        res.appName = autoApp.name;
+        OL.handleResourceSave(res.id, 'appId', autoApp.id);
+        OL.handleResourceSave(res.id, 'appName', autoApp.name);
+    }
     
         // 🚀 THE SIMPLIFIED CHECK
     // 1. Is the user an admin? (Checks both state and URL)
@@ -4597,6 +4627,37 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 `).join("")}
             </select>
         </div>`;
+
+    // 🎯 NEW: AUTO-MAPPING SECTION
+    const appMappingHtml = `
+        <div class="card-section" style="margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <label class="modal-section-label">📱 PRIMARY APPLICATION</label>
+                    <div id="modal-app-pill-container">
+                        ${isZap ? `<div class="pill soft tiny muted" style="width:100%; border-style:dashed;">⚡ Multi-App Automation</div>` : 
+                          autoApp ? `
+                            <div class="pill primary locked-pill" style="width:100%; justify-content:center;">
+                                <span class="pill-text">${OL.getResourceIcon(rawType)} ${esc(autoApp.name)}</span>
+                            </div>
+                        ` : res.appId ? `
+                            <div class="pill primary" style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>📱 ${esc(res.appName)}</span>
+                                <b class="is-clickable" onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.openResourceModal('${res.id}')">×</b>
+                            </div>
+                        ` : `
+                            <div class="search-map-container">
+                                <input type="text" class="modal-input tiny" placeholder="Search Apps..." 
+                                       onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
+                                       oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
+                                <div id="modal-app-results" class="search-results-overlay"></div>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 
     // Back button to go back to flow map if jumped from scope button
     const backBtn = state.v2.returnTo ? `
@@ -4837,6 +4898,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             ${roundInputHtml}
             ${hierarchyHtml}
             ${adminPricingHtml}
+            ${appMappingHtml}
 
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label">📝 Description & Access Notes</label>
@@ -9861,6 +9923,35 @@ OL.toggleScopingStatus = async function(resId) {
     }
 };
 
+OL.getAppByFunction = function(resourceType) {
+    const data = OL.getCurrentProjectData();
+    const master = state.master || {};
+    const apps = (data.localApps && data.localApps.length > 0) ? data.localApps : (master.apps || []);
+    
+    // 🔍 Find the Type Definition in your registry
+    const typeDef = (master.resourceTypes || []).find(t => t.type.toLowerCase() === String(resourceType).toLowerCase());
+    
+    // If there's no mapping set in the Resource Manager, we stop here
+    const targetFunctionId = typeDef ? typeDef.matchedFunctionId : null;
+    if (!targetFunctionId) return null;
+
+    // 🎯 Find the app that is PRIMARY for this specific Function ID
+    return apps.find(a => {
+        return (a.functionIds || []).some(f => 
+            String(f.id || f) === targetFunctionId && f.status === 'primary'
+        );
+    }) || apps.find(a => {
+        // Fallback: Just any app that has this function mapped
+        return (a.functionIds || []).some(f => String(f.id || f) === targetFunctionId);
+    });
+};
+
+OL.getResourceIcon = function(type) {
+    const registry = (state.master && state.master.resourceTypes) ? state.master.resourceTypes : [];
+    const match = registry.find(t => t.type.toLowerCase() === String(type).toLowerCase());
+    return match ? match.icon : '📄'; // Fallback to a page icon
+};
+
 // 🔍 Open Inspector
 OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     const panel = document.getElementById('v2-inspector-panel');
@@ -10021,63 +10112,120 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         `;
         return;
     }
-
-    // 📑 3. RESOURCE (CARD) DETAIL MODE (New Logic)
+    // 📑 3. RESOURCE (CARD) DETAIL MODE
     if (mode === 'cards' && resId) {
         const res = resources.find(r => String(r.id) === String(resId));
         if (!res) return;
 
+        const rawType = String(res.type || 'General');
+        const resTypeLower = rawType.toLowerCase();
+        
+        // 1. Get the Type Definition from the Registry
+        const typeDef = (state.master.resourceTypes || []).find(t => t.type.toLowerCase() === resTypeLower);
+        
+        // 2. Logic: It's a "Locked" type IF it has a matchedFunctionId and isn't a Zap
+        const isLockedType = !!(typeDef && typeDef.matchedFunctionId);
+        const isZap = resTypeLower === 'zap';
+
+        // 3. Run the Lookup (Returns Google Sheets, Calendly, etc.)
+        let autoApp = (isLockedType && !isZap) ? OL.getAppByFunction(rawType) : null;
+
+        // 4. Auto-Sync Data
+        if (autoApp && res.appId !== autoApp.id) {
+            res.appId = autoApp.id;
+            res.appName = autoApp.name;
+            OL.handleResourceSave(res.id, 'appId', autoApp.id);
+            OL.handleResourceSave(res.id, 'appName', autoApp.name);
+        }
         content.innerHTML = `
             <div class="inspector-header">
                 <div class="section-label">EDIT RESOURCE</div>
-                <textarea id="modal-res-name" class="inspector-name-input" 
-                          style="height: auto; min-height: 40px; resize: none; overflow: hidden;"
-                          oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
-                          onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
+                <textarea id="modal-res-name" class="inspector-name-input res-name-auto" onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
             </div>
 
             <div class="inspector-body">
+
+            <div class="inspector-section no-border">
+                <label class="section-label">📱 PRIMARY APPLICATION</label>
+                <div id="res-app-pill-${res.id}" class="pill-display">
+                    ${isZap ? `
+                        <div class="tiny muted italic">Multi-app automation; link via External Link.</div>
+                    ` : (autoApp ? `
+                        <div class="pill primary locked-pill">
+                            <span class="pill-text">
+                                ${OL.getResourceIcon(rawType)} ${esc(autoApp.name)}
+                            </span>
+                        </div>
+                    ` : (res.appId ? `
+                        <div class="pill primary">
+                            <span class="pill-text">📱 ${esc(res.appName)}</span>
+                            <b class="is-clickable pill-remove" onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.openInspector('${res.id}', null, 'cards');">×</b>
+                        </div>
+                    ` : `
+                        <div class="search-map-container">
+                            <input type="text" class="modal-input tiny" placeholder="Search App Registry..."
+                                  onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
+                                  oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
+                            <div id="res-app-results" class="search-results-overlay"></div>
+                        </div>
+                    `))}
+                </div>
+            </div>
+
+            ${isLockedType && !autoApp && !isZap ? `
+                <div class="inspector-section no-border">
+                    <div class="pill warning">
+                        <span class="pill-text">⚠️ No Primary tool found for this function in the Registry.</span>
+                    </div>
+                </div>
+            ` : ''}
+
+                <div class="inspector-section no-border">
+                    <label class="section-label">🔗 EXTERNAL LINK (${isZap ? 'ZAPIER' : 'DASHBOARD'})</label>
+                    <input type="url" class="modal-input tiny" placeholder="https://..." value="${esc(res.externalLink || '')}" onblur="OL.handleResourceSave('${res.id}', 'externalLink', this.value)">
+                </div>
+
+                ${!isZap ? `
+                <div class="inspector-section no-border">
+                    <label class="section-label">👤 RESOURCE ASSIGNEE(S)</label>
+                    <div id="res-assignee-pills-${res.id}" class="pill-display assignee-row">
+                        ${(res.assignees || []).length > 0 ? res.assignees.map((a, idx) => `
+                            <div class="pill accent">
+                                <span class="pill-text">${a.type === 'person' ? '👤' : '👥'} ${esc(a.name)}</span>
+                                <b class="is-clickable pill-remove" onclick="OL.removeResourceAssignee('${res.id}', ${idx})">×</b>
+                            </div>
+                        `).join('') : '<div class="tiny muted italic">Unassigned</div>'}
+                    </div>
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" placeholder="Search People or Roles..." onfocus="OL.filterAssignmentSearch('${res.id}', null, true, '')" oninput="OL.filterAssignmentSearch('${res.id}', null, true, this.value)">
+                        <div id="res-assignment-results" class="search-results-overlay"></div>
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="inspector-section no-border">
+                    <label class="section-label">📅 ${isZap ? 'GO-LIVE DATE' : 'DUE DATE'}</label>
+                    <input type="date" class="modal-input tiny" value="${res.dueDate || ''}" onchange="OL.handleResourceSave('${res.id}', 'dueDate', this.value)">
+                </div>
+
                 <div class="inspector-section">
-                    <label class="section-label">📂 RESOURCE CLASSIFICATION</label>
-                    <select class="modal-input tiny" onchange="OL.updateResourceMeta('${res.id}', 'type', this.value)">
+                    <label class="section-label">📂 CLASSIFICATION</label>
+                    <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'type', this.value); OL.openInspector('${res.id}', null, 'cards');">
                         <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
-                        ${(state.master.resourceTypes || []).map(t => `
-                            <option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>
-                        `).join('')}
+                        ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>`).join('')}
                     </select>
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📝 GLOBAL DESCRIPTION</label>
-                    <textarea class="modal-textarea" style="min-height:100px;"
-                              placeholder="Enter login details, account purpose, or specific access instructions..."
-                              onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">📋 STEP OVERVIEW (${(res.steps || []).length})</label>
-                    <div class="inspector-step-list" style="display:flex; flex-direction:column; gap:5px;">
-                        ${(res.steps || []).map((s, i) => `
-                            <div class="pill soft is-clickable" style="font-size:11px; padding: 8px;" onclick="OL.openInspector('${res.id}', '${s.id}', 'steps')">
-                                ${i + 1}. ${esc(s.name)}
-                            </div>
-                        `).join('')}
-                    </div>
-                    <button class="add-logic-btn" style="margin-top:10px;" onclick="OL.addNewStepToCard('${res.id}')">+ Add New Step</button>
+                    <label class="section-label">📝 DESCRIPTION</label>
+                    <textarea class="modal-textarea res-desc-input" placeholder="Notes..." onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
                 </div>
             </div>
         `;
-
-        // Auto-resize the name textarea
-        setTimeout(() => {
-            const nameEl = document.getElementById('modal-res-name');
-            if (nameEl) nameEl.style.height = nameEl.scrollHeight + 'px';
-        }, 10);
         return;
     }
 
-    // 🏁 4. DEFAULT / FALLBACK
-    content.innerHTML = `<div class="muted-notice" style="padding:40px; text-align:center; opacity:0.5;">Select a card or step to inspect.</div>`;
+    content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
 };
 
 window.renderStepResources = function(resId, step) {
