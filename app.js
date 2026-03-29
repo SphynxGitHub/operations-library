@@ -5266,33 +5266,30 @@ OL.copyToClipboard = function(text, btn) {
     });
 };
 
-OL.handleResourceSave = async function(id, field, value) {
-    const client = getActiveClient();
-    const isVaultMode = window.location.hash.includes('vault');
+OL.handleResourceSave = function(id, field, value) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(id));
     
-    // 1. Resolve Target
-    let res = state.master.resources.find(r => r.id === id);
-    if (!res && client) {
-        res = (client.projectData.localResources || []).find(r => r.id === id);
-    }
-
-    // 🚀 THE PERSISTENCE FIX: If it's a new draft, commit it immediately
-    if (!res && id.startsWith('draft-')) {
-        console.log("📝 Auto-committing draft...");
-        await OL.handleModalSave(id, document.getElementById('modal-res-name')?.value || "New Resource");
-        // Re-fetch res after commit
-        res = isVaultMode 
-            ? state.master.resources.find(r => r.id.includes(id.split('-').pop()))
-            : client.projectData.localResources.find(r => r.id.includes(id.split('-').pop()));
-    }
-
     if (res) {
         res[field] = value;
-        await OL.persist(); // ⚡ Push to Cloud
         
-        if (field === 'name') {
-            document.querySelectorAll(`.res-card-title-${id}`).forEach(el => el.innerText = value || "Untitled");
-        }
+        // 💾 Persist to Firebase/DB
+        OL.persist().then(() => {
+            // 🚩 THE FIX: Check where we are before redirecting
+            const modalOpen = document.getElementById('active-modal-box');
+            const inspectorOpen = document.getElementById('v2-inspector-panel')?.classList.contains('open');
+
+            if (modalOpen) {
+                // If the main modal is open, just refresh its content
+                OL.openResourceModal(id);
+            } else if (inspectorOpen) {
+                // If inspector is open, refresh the inspector
+                OL.openInspector(id, null, 'cards');
+            } else {
+                // Only go back to the map if no detail view is active
+                OL.renderMap(); 
+            }
+        });
     }
 };
 
@@ -8801,15 +8798,9 @@ OL.closeModal = function() {
     // 1. 🤖 AUTO-SAVE CHECK
     if (quickInput && quickInput.value.trim().length > 2) {
         const resId = quickInput.getAttribute('data-res-id');
-        
-        // 🚀 THE FIX: Clear the value NOW so the next call 
-        // to closeModal doesn't trigger this 'if' block again.
         const valToSave = quickInput.value;
         quickInput.value = ""; 
-        
         console.log("💾 Auto-saving draft before close...");
-        
-        // Pass the value directly to ensure it saves even if the DOM element is gone
         OL.commitQuickStep(resId, valToSave);
         return; 
     }
@@ -8821,21 +8812,29 @@ OL.closeModal = function() {
         layer.innerHTML = '';
     }
 
-    // 3. RESET STATE (Crucial to clear the app detection too)
+    // 3. RESET STATE
     OL.isSavingStep = false;
     OL.quickAddState = { 
-        name: "", 
-        app: "", 
-        appId: null, 
-        assignee: [], // Ensure this is an array to match our previous work
-        links: [], 
-        target: null, 
-        delay: 0, 
-        note: "", 
-        rule: "" 
+        name: "", app: "", appId: null, 
+        assignee: [], links: [], target: null, 
+        delay: 0, note: "", rule: "" 
     };
 
-    if (typeof OL.renderVisualizer === "function") OL.renderVisualizer();
+    // 🚩 THE FIX: Context-Aware Refresh
+    const hash = window.location.hash;
+
+    if (hash.includes('resources')) {
+        // Stay on Resources tab and refresh the list
+        if (typeof OL.renderResourceList === "function") OL.renderResourceList();
+    } 
+    else if (hash.includes('vault')) {
+        // Stay in Vault (usually doesn't need a full re-render of the list)
+        console.log("📍 Closed modal from Vault");
+    } 
+    else if (typeof OL.renderVisualizer === "function") {
+        // ONLY render the Flow Map if we are actually on a flow/map route
+        OL.renderVisualizer();
+    }
 };
 
 OL.addNewStepToCard = function(resId) {
@@ -11069,28 +11068,29 @@ OL.filterLogicOptions = function(query) {
 };
 
 // ➕ Add Logic to a Step
-OL.addStepLogic = async function(resId, stepTarget, direction) {
+OL.addStepLogic = function(resId, stepId, direction) {
     const data = OL.getCurrentProjectData();
     const res = data.resources.find(r => String(r.id) === String(resId));
-    if (!res) return console.error("❌ Resource not found:", resId);
+    if (!res) return;
 
-    // Find step by ID or Index
-    let step = res.steps.find(s => String(s.id) === String(stepTarget));
-    if (!step && isFinite(stepTarget)) step = res.steps[stepTarget];
-    
-    if (!step) return console.error("❌ Step not found:", stepTarget);
+    const step = res.steps.find(s => String(s.id) === String(stepId));
+    if (!step) return;
 
+    // 1. Initialize logic if it doesn't exist
     if (!step.logic) step.logic = { in: [], out: [] };
-    if (!step.logic[direction]) step.logic[direction] = [];
-
-    const newItem = direction === 'out' 
-        ? { rule: '', targetId: '', type: 'link' } 
-        : { rule: '', sourceId: '', type: 'link' };
-
-    step.logic[direction].push(newItem);
     
-    await OL.persist(); 
-    this.openInspector(resId, step.id); 
+    // 2. Push a clean new logic object
+    step.logic[direction].push({
+        condition: "If...",
+        targetId: null,
+        action: "Go to Step"
+    });
+
+    // 3. CRITICAL: Persist the change and then re-open the inspector to show it
+    OL.persist().then(() => {
+        OL.openInspector(resId, stepId, 'steps');
+        console.log(`✅ Logic added to ${direction} for step ${stepId}`);
+    });
 };
 
 // 💾 Update Logic Value (Rule or Target)
