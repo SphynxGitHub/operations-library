@@ -8583,50 +8583,37 @@ OL.renderVisualizer = function() {
                     return `
                         <div class="v2-step-item" 
                             data-step-id="${res.id}-${stepId}" 
-                            draggable="true"
-                            onmousedown="event.stopPropagation()"
-                            ondragstart="OL.handleStepDragStart(event, ${i})"
-                            ondragover="OL.handleStepDragOver(event)"
-                            ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
                             onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')"
-                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0;">
+                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0; position: relative;">
                             
-                            <div class="step-row-content" style="display:flex; align-items:flex-start; width:100%; gap:6px; padding: 6px 0;">
-                                
+                            <span class="step-port port-in"></span>
+                            <span class="step-port port-out"></span>
+
+                            <div class="step-row-content">
                                 <span class="drag-handle" style="cursor: grab; opacity: 0.3; flex-shrink: 0; margin-top: 2px;">⋮</span>
                                 
-                                ${hasIncoming ? `
-                                    <span class="step-logic-icon" 
-                                          style="flex-shrink: 0; margin-top: 2px;"
-                                          onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')"
-                                          title="${esc(inRuleList)}">λ</span>
-                                ` : ''} 
+                                <span class="step-logic-icon ${hasIncoming ? 'active' : 'hidden'}" 
+                                      style="flex-shrink: 0; margin-top: 2px; color: ${hasIncoming ? 'var(--accent)' : 'transparent'}"
+                                      onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')"
+                                      title="${esc(inRuleList)}">λ</span>
 
-                                <span style="flex: 1; white-space: normal; word-break: break-word; font-size: 11px; line-height: 1.3;">
+                                <span style="flex: 1; font-size: 11px; line-height: 1.3;">
                                     • ${esc(s.name || 'New Step')}
                                 </span>
 
                                 <div style="display:flex; gap:4px; flex-shrink: 0; margin-top: 2px;">
-                                    ${loopRules.map(l => `
-                                        <span class="step-logic-icon loop" 
-                                              onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')"
-                                              title="Loop: ${esc(l.rule || 'Repeat')}">
-                                            ⟳
-                                        </span>
-                                    `).join('')}
+                                    ${loopRules.map(l => `<span class="step-logic-icon loop" title="Loop: ${esc(l.rule || 'Repeat')}">⟳</span>`).join('')}
                                     
-                                    ${hasOutgoing ? `
-                                        <span class="step-logic-icon" 
-                                              onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')"
-                                              title="${esc(outRuleList)}">λ</span>
-                                    ` : ''} 
+                                    <span class="step-logic-icon ${hasOutgoing ? 'active' : 'hidden'}" 
+                                          style="color: ${hasOutgoing ? 'var(--accent)' : 'transparent'}"
+                                          onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')"
+                                          title="${esc(outRuleList)}">λ</span>
                                 </div>
 
-                                <span class="delete-step-btn" 
-                                      style="flex-shrink: 0; opacity: 0.3; cursor: pointer; margin-top: 2px;"
-                                      onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                                <span class="delete-step-btn" style="flex-shrink: 0; opacity: 0.3;" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
                             </div>
                         </div>
+
                         ${i < res.steps.length - 1 ? `
                             <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
                                 <div class="split-icon">✂️</div>
@@ -11217,35 +11204,40 @@ window.OL.removeStepLink = async function(resId, stepId, linkIdx) {
 };
 
 OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
-    // 🚀 THE FIX: Use stepId (the unique string) instead of stepIdx
     const myFullId = `${resId}-${stepId}`; 
     const targetId = dir === 'out' ? (logic.targetId || "") : (logic.sourceId || "");
     const isReadOnly = dir === 'in';
-        
-    let displayLabel = '-- None --';
+    
+    let displayLabel = '-- Select Step --';
+
     if (targetId) {
         if (targetId === myFullId) {
             displayLabel = '[Current Step / Loopback]';
         } else {
-            // Split the targetId (e.g., "res-123-0") into Resource ID and Step Index
-            const parts = String(targetId).split('-');
-            const tStepIdx = parseInt(parts.pop());
-            const tResId = parts.join('-');
+            // 🚀 THE FIX: Robust Parsing for IDs with multiple hyphens
+            // This finds the LAST hyphen to separate Resource ID from Step ID
+            const lastHyphenIdx = String(targetId).lastIndexOf('-');
+            const tResId = targetId.substring(0, lastHyphenIdx);
+            const tStepId = targetId.substring(lastHyphenIdx + 1);
             
-            // Look up the resource across ALL project data
             const data = OL.getCurrentProjectData();
-            const targetRes = data.resources.find(r => String(r.id) === tResId);
+            const targetRes = data.resources.find(r => String(r.id) === String(tResId));
             
             if (targetRes) {
-                const targetStep = targetRes.steps?.[tStepIdx];
+                // Find by unique ID string
+                const targetStep = (targetRes.steps || []).find(s => String(s.id) === String(tStepId));
+                
+                // Fallback: If it's old index-based data
+                const finalStep = targetStep || targetRes.steps[parseInt(tStepId)];
+                
                 const locationPrefix = targetRes.isTopShelf ? '🏛️ ' : (targetRes.isGlobal ? '🛠️ ' : '📍 ');
-                displayLabel = `${locationPrefix}${targetRes.name} > ${targetStep?.name || 'Step ' + (tStepIdx + 1)}`;
+                displayLabel = `${locationPrefix}${targetRes.name} > ${finalStep?.name || 'Unnamed Step'}`;
             } else {
                 displayLabel = '⚠️ Missing Resource';
             }
         }
     }
-    
+
     const isLoop = (logic.type === 'loop') || (String(targetId) === String(myFullId));
 
     return `
@@ -11331,18 +11323,19 @@ OL.filterLogicTargetSearch = function(resId, stepId, dir, logicIdx, query) {
 
         if (matchedSteps.length > 0) {
             html += `<div class="search-category-label" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 4px 8px; font-size: 10px; margin-top: 5px; border-radius: 4px; font-weight:bold;">${familyPrefix}${esc(res.name)}</div>`;
-            
-            matchedSteps.forEach((s, idx) => {
-                const targetFullId = `${res.id}-${idx}`;
-                const stepName = s.name || `Step ${idx + 1}`;
+
+            matchedSteps.forEach((s) => {
+                // Construct the ID: [ResourceID]-[StepID]
+                const targetFullId = `${res.id}-${s.id}`; 
+                const stepName = s.name || `Unnamed Step`;
                 const isSelf = targetFullId === myFullId;
 
                 html += `
                     <div class="search-result-item" 
-                         style="padding-left: 20px; font-size: 11px; display: flex; justify-content: space-between; align-items:center;"
-                         onmousedown="OL.updateStepTarget('${resId}', '${stepId}', '${dir}', ${logicIdx}, '${targetFullId}')">
+                        style="padding-left: 20px; font-size: 11px; display: flex; justify-content: space-between; align-items:center;"
+                        onmousedown="event.preventDefault(); OL.updateStepTarget('${resId}', '${stepId}', '${dir}', ${logicIdx}, '${targetFullId}')">
                         <span>• ${esc(stepName)}</span>
-                        ${isSelf ? '<span style="font-size:8px; background:var(--warning); color:black; padding:1px 4px; border-radius:3px; font-weight:bold;">LOOP</span>' : ''}
+                        ${isSelf ? '<span style="font-size:8px; background:var(--warning); color:black; padding:1px 4px; border-radius:3px;">LOOP</span>' : ''}
                     </div>
                 `;
             });
@@ -11473,36 +11466,47 @@ OL.removeStepLogic = async function(resId, stepTarget, direction, logicIdx) {
     this.openInspector(resId, step.id); 
 };
 
-OL.updateStepTarget = async function(resId, stepTarget, direction, logicIdx, newPartnerId) {
+OL.updateStepTarget = async function(resId, stepId, direction, logicIdx, newPartnerFullId) {
     const data = OL.getCurrentProjectData();
     const res = data.resources.find(r => String(r.id) === String(resId));
+    if (!res) return;
+
+    // 🎯 1. FIND THE STEP BY ID (Not Index)
+    // This ensures we are saving to the correct step even if the list order changed
+    const step = res.steps.find(s => String(s.id) === String(stepId));
+    if (!step || !step.logic) {
+        console.error("❌ Step logic block not found for stepId:", stepId);
+        return;
+    }
+
+    const item = step.logic[direction][parseInt(logicIdx)];
+    const myFullId = `${res.id}-${stepId}`;
+
+    console.log(`🔗 Saving Logic: [${direction}] at index ${logicIdx} set to target ${newPartnerFullId}`);
+
+    if (direction === 'out') {
+        item.targetId = String(newPartnerFullId);
+        // Automatic Loop Detection
+        item.type = (newPartnerFullId === myFullId) ? 'loop' : 'link';
+    } else {
+        item.sourceId = String(newPartnerFullId);
+    }
+
+    // 💾 2. PERSIST
+    OL.syncLogicPorts(); 
+    await OL.persist();
     
-    let step = res?.steps.find(s => String(s.id) === String(stepTarget));
-    if (!step && isFinite(stepTarget)) step = res?.steps[stepTarget];
+    // 🧹 3. UI CLEANUP
+    // Close the specific search overlay
+    const overlay = document.getElementById(`logic-search-results-${resId}-${stepId}-${logicIdx}`);
+    if (overlay) overlay.style.display = 'none';
 
-    if (step) {
-        const item = step.logic[direction][parseInt(logicIdx)];
-        const selfFullId = `${res.id}-${res.steps.indexOf(step)}`;
-
-        if (direction === 'out') {
-            item.targetId = newPartnerId;
-            item.type = (newPartnerId === selfFullId) ? 'loop' : 'link';
-        } else {
-            item.sourceId = newPartnerId;
-        }
-
-        // 💾 Clear search UI
-        const overlay = document.getElementById(`logic-search-results-${resId}-${stepTarget}-${logicIdx}`);
-        if (overlay) overlay.style.display = 'none';
-
-        OL.syncLogicPorts(); 
-        await OL.persist();
-        
-        // Refresh
-        OL.openInspector(resId, step.id, 'steps');
-        if (window.location.hash.includes('visualizer')) {
-            OL.drawConnections();
-        }
+    // 🔄 4. REFRESH
+    // Pass the unique stepId back to the inspector
+    OL.openInspector(resId, stepId, 'steps');
+    
+    if (window.location.hash.includes('visualizer')) {
+        OL.drawConnections();
     }
 };
 
@@ -11510,36 +11514,48 @@ OL.syncLogicPorts = function() {
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
 
-    // 1. HARD RESET: Wipe all 'In' arrays first 
-    // This ensures we only see incoming links that have a valid 'Out' parent
+    // 1. Wipe all 'In' arrays to rebuild from 'Out' rules
     resources.forEach(res => {
         (res.steps || []).forEach(step => {
             if (step.logic) step.logic.in = []; 
         });
     });
 
-    // 2. REBUILD: Only add 'In' links if the source still exists
+    // 2. Rebuild 'In' links based on 'Out' rules
     resources.forEach(sourceRes => {
-        sourceRes.steps?.forEach((step, sIdx) => {
-            const sourceFullId = `${sourceRes.id}-${sIdx}`;
-            
-            // Only process if the target step actually exists
-            step.logic?.out?.forEach(outRule => {
-                const parts = outRule.targetId.split('-');
-                const tStepIdx = parseInt(parts.pop());
-                const tResId = parts.join('-');
-                const targetRes = resources.find(r => String(r.id) === tResId);
+        sourceRes.steps?.forEach((step) => {
+            if (!step.logic?.out) return;
+
+            // Filter out rules that might have become invalid
+            step.logic.out = step.logic.out.filter(outRule => {
+                if (!outRule.targetId) return true; // Keep empty rules for editing
+
+                // 🚀 ROBUST PARSING (Matches renderLogicBlock)
+                const lastHyphenIdx = String(outRule.targetId).lastIndexOf('-');
+                if (lastHyphenIdx === -1) return false; // Invalid format
+
+                const tResId = outRule.targetId.substring(0, lastHyphenIdx);
+                const tStepId = outRule.targetId.substring(lastHyphenIdx + 1);
                 
-                if (targetRes && targetRes.steps?.[tStepIdx]) {
-                    targetRes.steps[tStepIdx].logic.in.push({
-                        sourceId: sourceFullId,
+                const targetRes = resources.find(r => String(r.id) === String(tResId));
+                if (!targetRes) return false; // Resource deleted? Drop the link.
+
+                // Find step by ID or Index
+                const targetStep = (targetRes.steps || []).find(s => String(s.id) === String(tStepId)) 
+                                   || targetRes.steps[parseInt(tStepId)];
+
+                if (targetStep) {
+                    // It exists! Create the mirrored 'In' rule
+                    if (!targetStep.logic) targetStep.logic = { in: [], out: [] };
+                    targetStep.logic.in.push({
+                        sourceId: `${sourceRes.id}-${step.id}`,
                         rule: outRule.rule || "",
                         type: outRule.type || "link"
                     });
-                } else {
-                    // 🗑️ Surgical Strike: If target doesn't exist, remove the 'out' link too!
-                    step.logic.out = step.logic.out.filter(l => l !== outRule);
+                    return true;
                 }
+                
+                return false; // Step deleted? Drop the link.
             });
         });
     });
@@ -11621,38 +11637,49 @@ OL.closeInspector = function() {
 };
 
 // Helper to find the X/Y of a card's edge
-OL.getCardConnectionPoint = function(resId, stepIdx, side) {
+OL.getCardConnectionPoint = function(resId, stepId, side) {
     const nodeEl = document.getElementById(`v2-node-${resId}`);
-    if (!nodeEl) return { x: 0, y: 0 };
+    const svgEl = document.getElementById('v2-connections');
+    if (!nodeEl || !svgEl) return { x: 0, y: 0 };
 
-    // 🚀 THE KEY: Find the specific step item inside the card
-    const stepEls = nodeEl.querySelectorAll('.v2-step-item');
-    const stepEl = stepEls[stepIdx];
+    const stepFullId = String(stepId).includes(resId) ? stepId : `${resId}-${stepId}`;
     
-    // Fallback to card center if step element isn't found
-    if (!stepEl) {
-        const rect = nodeEl.getBoundingClientRect();
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    }
-
-    const sRect = stepEl.getBoundingClientRect();
-    const svgRect = document.getElementById('v2-connections').getBoundingClientRect();
-    const zoom = state.v2.zoom || 1;
-
-    // Calculate center Y of the actual step <div>
-    const centerY = (sRect.top + sRect.height / 2 - svgRect.top) / zoom;
+    // 1. Identify specific port
+    const isIntake = (side === 'left' || side === 'top');
+    const portId = isIntake ? `port-in-${stepFullId}` : `port-out-${stepFullId}`;
     
+    // 🔍 Try Icon -> then Step Row -> then Card Node
+    let targetEl = document.getElementById(portId) || 
+                   document.querySelector(`[data-step-id="${stepFullId}"]`) || 
+                   nodeEl;
+
+    const isIcon = targetEl.classList.contains('step-logic-icon');
+    const isStaticShelf = !!targetEl.closest('#global-shelf');
+    
+    // 2. Get Geometry
+    const rect = targetEl.getBoundingClientRect();
+    const svgRect = svgEl.getBoundingClientRect();
+    const zoom = isStaticShelf ? 1 : (OL.state.v2.zoom || 1);
+
+    // 📐 THE PRECISION MATH
+    // Calculate Y: Always the vertical center of the element
+    const y = (rect.top - svgRect.top + (rect.height / 2)) / zoom;
+    
+    // Calculate X: 
     let x;
-    if (side === 'left') {
-        x = (sRect.left - svgRect.left) / zoom;
-    } else if (side === 'right') {
-        x = (sRect.right - svgRect.left) / zoom;
+    if (isIcon) {
+        // If it's the λ icon, we DO want the center of that tiny circle
+        x = (rect.left - svgRect.left + (rect.width / 2)) / zoom;
     } else {
-        // Top/Bottom fallback
-        x = (sRect.left + sRect.width / 2 - svgRect.left) / zoom;
+        // 🎯 THE FIX: If we fell back to the Row or Card, use the EXTERIOR EDGES
+        if (side === 'left' || side === 'top') {
+            x = (rect.left - svgRect.left) / zoom; // Flush Left
+        } else {
+            x = (rect.right - svgRect.left) / zoom; // Flush Right
+        }
     }
 
-    return { x, y: centerY };
+    return { x, y };
 };
 
 OL.drawConnections = function() {
@@ -11664,139 +11691,111 @@ OL.drawConnections = function() {
 
     // 🧹 1. RESET
     lineGroup.innerHTML = ''; 
+    if (shelfLineGroup) shelfLineGroup.innerHTML = '';
 
-    // 🕵️ 2. INITIALIZE DATA & TRACE (🚀 THE FIX IS HERE)
+    // 🕵️ 2. DATA LOAD
     const data = OL.getCurrentProjectData();
-    const resources = data?.resources || []; // Define 'resources' once, right here
-    
+    const resources = data?.resources || []; 
     const trace = state.v2?.activeTrace;
     const highlightedIds = (state.v2?.highlightedIds || []).map(id => String(id));
     const zoom = state.v2.zoom || 1;
 
-    // If we're in a trace mode but have no target, hide everything
     if (trace && !trace.resId && !trace.mode) return;
 
     // 🔄 3. MAIN LOOP
     resources.forEach(sourceRes => {
         if (!sourceRes || !sourceRes.steps) return;
-        
         const sourceResId = String(sourceRes.id); 
         const sourceEl = document.getElementById(`v2-node-${sourceResId}`);
-        
-        // Skip hidden nodes
         if (sourceEl && sourceEl.classList.contains('filter-hidden')) return;
 
-        sourceRes.steps.forEach((step, sIdx) => {
+        sourceRes.steps.forEach((step) => {
             if (!step.logic?.out) return;
 
             step.logic.out.forEach(outLogic => {
                 if (!outLogic?.targetId) return;
 
-                // Parse target ID
-                const parts = outLogic.targetId.split('-');
-                parts.pop(); 
-                const targetResId = String(parts.join('-'));
+                // 🚀 ROBUST PARSER (Correctly handles multiple hyphens)
+                const targetFullId = String(outLogic.targetId);
+                const lastHyphen = targetFullId.lastIndexOf('-');
+                if (lastHyphen === -1) return; // Malformed ID
+
+                const targetResId = targetFullId.substring(0, lastHyphen);
+                const targetStepId = targetFullId.substring(lastHyphen + 1);
 
                 let shouldDraw = false;
 
-                // --- 🚦 TRACE FILTERING RULES ---
-                if (trace && trace.mode) {
+                // --- 🚦 TRACE RULES ---
+                const hasTrace = !!(trace && trace.mode && trace.resId);
+
+                if (hasTrace) {
                     const mode = trace.mode;
                     const focusId = String(trace.resId);
 
-                    // A. Direct Neighbor
-                    if (mode === 'both' && (sourceResId === focusId || targetResId === focusId)) shouldDraw = true;
-                    if (mode === 'in' && targetResId === focusId) shouldDraw = true;
-                    if (mode === 'out' && sourceResId === focusId) shouldDraw = true;
-
-                    // B. Recursive Flow (trace-start / trace-end)
-                    if (mode === 'trace-start' || mode === 'trace-end') {
-                        if (highlightedIds.includes(sourceResId) && highlightedIds.includes(targetResId)) {
-                            shouldDraw = true;
-                        }
+                    // 📥 INPUTS: Draw if the target is our focused card
+                    if (mode === 'in' && targetResId === focusId) {
+                        shouldDraw = true;
+                    }
+                    // 📤 OUTPUTS: Draw if the source is our focused card
+                    else if (mode === 'out' && sourceResId === focusId) {
+                        shouldDraw = true;
+                    }
+                    // ↔️ BOTH: Draw if either side matches
+                    else if (mode === 'both' && (sourceResId === focusId || targetResId === focusId)) {
+                        shouldDraw = true;
+                    }
+                    // ⏪⏩ RECURSIVE FLOWS: Draw if both IDs are in the pre-calculated highlight list
+                    else if ((mode === 'trace-start' || mode === 'trace-end') && 
+                            highlightedIds.includes(sourceResId) && 
+                            highlightedIds.includes(targetResId)) {
+                        shouldDraw = true;
                     }
                 } else {
-                    shouldDraw = true; // No trace active? Draw everything.
+                    // Keep it clean if no trace is active
+                    shouldDraw = false;
                 }
 
                 if (shouldDraw) {
-                    // 🚀 Now 'resources' is defined so 'find' will work:
                     const targetRes = resources.find(r => String(r.id) === targetResId);
-                    if (!targetRes) return;
-                    // PARSE TARGET METADATA
-                    const parts = outLogic.targetId.split('-');
-                    const tStepIdx = parseInt(parts.pop()); 
-                    const tResId = parts.join('-'); 
-
-                    const targetEl = document.getElementById(`v2-node-${tResId}`);
+                    const targetEl = document.getElementById(`v2-node-${targetResId}`);
+                    
                     if (!targetRes || (targetEl && targetEl.classList.contains('filter-hidden'))) return;
 
                     let start, end, sSide, tSide;
 
-                    // 📐 4. PORT SELECTION (SIDE LOGIC)
-                    // Priority Truth: If a card has coords, it is NOT Global, even if flags are true.
+                    // 📐 4. PORT LOGIC
                     const isSourceTrulyGlobal = (!!sourceRes.isGlobal || !!sourceRes.isTopShelf) && !sourceRes.coords;
                     const isTargetTrulyGlobal = (!!targetRes.isGlobal || !!targetRes.isTopShelf) && !targetRes.coords;
 
                     if (isSourceTrulyGlobal && !isTargetTrulyGlobal) {
-                        // ⬇️ GLOBAL -> CANVAS (Ceiling Drop)
                         tSide = 'top';
-                        end = OL.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
+                        end = OL.getCardConnectionPoint(targetRes.id, targetStepId, tSide);
                         const sRect = sourceEl.getBoundingClientRect();
-                        const shelfRect = shelfEl.getBoundingClientRect();
+                        const svgRect = svg.getBoundingClientRect();
                         const visualMidX = sRect.left + (sRect.width / 2);
-
-                        // Draw dashed line inside the blue shelf area
-                        if (shelfLineGroup) {
-                            const shelfStartX = visualMidX - shelfRect.left;
-                            const shelfStartY = Math.max(0, sRect.bottom - shelfRect.top);
-                            const shelfEndY = shelfRect.height;
-                            if (shelfStartY < shelfEndY) {
-                                const shelfPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                                shelfPath.setAttribute('d', `M ${shelfStartX} ${shelfStartY} L ${shelfStartX} ${shelfEndY}`);
-                                shelfPath.setAttribute('stroke', 'var(--text-dim)');
-                                shelfPath.setAttribute('stroke-width', '2');
-                                shelfPath.setAttribute('stroke-dasharray', '5,5');
-                                shelfLineGroup.appendChild(shelfPath);
-                            }
-                        }
-                        start = { x: (visualMidX - svg.getBoundingClientRect().left) / zoom, y: 0 };
+                        start = { x: (visualMidX - svgRect.left) / zoom, y: 0 };
                     } 
                     else if (!isSourceTrulyGlobal && isTargetTrulyGlobal) {
-                        // ⬆️ CANVAS -> GLOBAL (Workbench Upload)
                         sSide = 'top';
-                        start = OL.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
+                        start = OL.getCardConnectionPoint(sourceRes.id, step.id, sSide);
                         const tRect = targetEl.getBoundingClientRect();
+                        const svgRect = svg.getBoundingClientRect();
                         const visualMidX = tRect.left + (tRect.width / 2);
-                        end = { x: (visualMidX - svg.getBoundingClientRect().left) / zoom, y: 0 };
-                        tSide = 'top';
+                        end = { x: (visualMidX - svgRect.left) / zoom, y: 0 };
                     } 
                     else if (targetRes.coords && sourceRes.coords) {
-                        // ↔️ SHORTEST PATH LOGIC (Canvas to Canvas)
                         const dx = targetRes.coords.x - sourceRes.coords.x;
-                        const dy = targetRes.coords.y - sourceRes.coords.y;
-                        
-                        // Force Right-to-Right for vertical stacks (prevents line-over-text)
-                        const isVerticalStack = Math.abs(dx) < 150; 
+                        const isVertical = Math.abs(dx) < 150; 
+                        sSide = isVertical ? 'right' : (dx > 0 ? 'right' : 'left');
+                        tSide = isVertical ? 'right' : (dx > 0 ? 'left' : 'right');
 
-                        if (isVerticalStack) {
-                            sSide = 'right';
-                            tSide = 'right';
-                        } else {
-                            sSide = dx > 0 ? 'right' : 'left';
-                            tSide = dx > 0 ? 'left' : 'right';
-                        }
-
-                        start = OL.getCardConnectionPoint(sourceRes.id, sIdx, sSide);
-                        end = OL.getCardConnectionPoint(targetRes.id, tStepIdx, tSide);
+                        start = OL.getCardConnectionPoint(sourceRes.id, step.id, sSide);
+                        end = OL.getCardConnectionPoint(targetResId, targetStepId, tSide);
                     }
 
-                    // 🎢 5. PATH CONSTRUCTION (SHAPE MATH)
+                    // 🎢 5. DRAW PATH
                     if (start && end) {
-                        let targetX = end.x;
-                        let targetY = end.y;
-
-                        // Create 15px gap for the arrowhead
+                        let targetX = end.x, targetY = end.y;
                         const gap = 15; 
                         if (tSide === 'left') targetX -= gap;
                         if (tSide === 'right') targetX += gap;
@@ -11804,60 +11803,56 @@ OL.drawConnections = function() {
                         if (tSide === 'bottom') targetY += gap;
 
                         let d;
+                        const absDx = Math.abs(targetX - start.x);
                         const absDy = Math.abs(targetY - start.y);
 
                         if (isSourceTrulyGlobal || isTargetTrulyGlobal) {
-                            // Ceiling curves
+                            // Shelf curves: Horizontal start, vertical drop
                             const midY = (start.y + targetY) / 2;
                             d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
                         } 
                         else if (sSide === tSide) {
-                            // 🔄 C-CURVE: Bow out to the side for vertical connections
-                            const sweep = Math.min(80, absDy * 0.5 + 20); 
-                            const multiplier = (sSide === 'right') ? 1 : -1;
-                            d = `M ${start.x} ${start.y} C ${start.x + (sweep * multiplier)} ${start.y}, ${targetX + (sweep * multiplier)} ${targetY}, ${targetX} ${targetY}`;
-                        }
-                        else if (absDy < 20 && sSide !== tSide) {
-                            // 📏 STRAIGHT: Perfect horizontal paths
-                            d = `M ${start.x} ${start.y} L ${targetX} ${targetY}`;
+                            // Same-side "C" curve (e.g. Loop)
+                            const sweep = Math.min(100, absDy * 0.4 + 40); 
+                            const direction = (sSide === 'right') ? 1 : -1;
+                            d = `M ${start.x} ${start.y} C ${start.x + (sweep * direction)} ${start.y}, ${targetX + (sweep * direction)} ${targetY}, ${targetX} ${targetY}`;
                         } 
                         else {
-                            // 🌊 STANDARD BEZIER: Shortest path diagonal
-                            const absDx = Math.abs(targetX - start.x);
-                            const tension = Math.max(30, Math.min(absDx * 0.5, 150));
-                            const cp1x = start.x + (sSide === 'right' ? tension : (sSide === 'left' ? -tension : 0));
-                            const cp2x = targetX + (tSide === 'right' ? tension : (tSide === 'left' ? -tension : 0));
-                            const cp1y = start.y + (sSide === 'bottom' ? tension : (sSide === 'top' ? -tension : 0));
-                            const cp2y = targetY + (tSide === 'bottom' ? tension : (tSide === 'top' ? -tension : 0));
-                            d = `M ${start.x} ${start.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`;
+                            // 🌊 Standard S-Curve (The one in your screenshot)
+                            // 🎯 THE FIX: Force CP1.y to match start.y and CP2.y to match targetY
+                            // This makes the line "plug in" horizontally to the icon.
+                            const tension = Math.max(50, Math.min(absDx * 0.7, 180));
+                            
+                            const cp1x = start.x + (sSide === 'right' ? tension : -tension);
+                            const cp2x = targetX + (tSide === 'right' ? tension : -tension);
+                            
+                            // We use start.y for CP1 and targetY for CP2 to prevent the "diagonal dive"
+                            d = `M ${start.x} ${start.y} 
+                                C ${cp1x} ${start.y}, 
+                                  ${cp2x} ${targetY}, 
+                                  ${targetX} ${targetY}`;
                         }
-
-                        // 🎨 6. STYLING & DRAWING
                         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                         path.setAttribute('d', d);
-                        path.setAttribute('class', 'path-flow');
                         path.setAttribute('fill', 'none');
                         path.setAttribute('marker-end', 'url(#arrowhead)');
                         
-                        const isGlobal = isSourceTrulyGlobal || isTargetTrulyGlobal;
-                        const strokeColor = isGlobal ? 'var(--text-dim)' : (outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)');
-                        
-                        path.setAttribute('stroke', strokeColor);
-                        if (isGlobal) path.setAttribute('stroke-dasharray', '5,5');
+                        const isGlobalLink = isSourceTrulyGlobal || isTargetTrulyGlobal;
+                        path.setAttribute('stroke', isGlobalLink ? 'var(--text-dim)' : (outLogic.type === 'loop' ? 'var(--warning)' : 'var(--accent)'));
+                        if (isGlobalLink) path.setAttribute('stroke-dasharray', '5,5');
                         
                         lineGroup.appendChild(path);
 
-                        // 🧩 7. LOGIC ICON PLACEMENT
                         if (outLogic.rule?.trim()) {
                             try {
+                                // 📏 Calculate the actual midpoint of the curved path
                                 const pathLength = path.getTotalLength();
-                                // Geometric midpoint placement
-                                const pt = pathLength > 0 ? path.getPointAtLength(pathLength / 2) : { x: (start.x + targetX) / 2, y: (start.y + targetY) / 2 };
-                                OL.drawLogicIcon(lineGroup, pt.x, pt.y, outLogic.rule, outLogic.type === 'loop', outLogic.limit || '');
-                            } catch (e) { 
-                                // Fallback midpoint calculation if SVG not yet rendered
-                                const fallbackPt = { x: (start.x + targetX) / 2, y: (start.y + targetY) / 2 };
-                                OL.drawLogicIcon(lineGroup, fallbackPt.x, fallbackPt.y, outLogic.rule, outLogic.type === 'loop', outLogic.limit || '');
+                                const midPoint = path.getPointAtLength(pathLength / 2);
+                                
+                                OL.drawLogicIcon(lineGroup, midPoint.x, midPoint.y, outLogic.rule, outLogic.type === 'loop', outLogic.loopLimit || '');
+                            } catch (e) {
+                                // Fallback for non-rendered paths
+                                OL.drawLogicIcon(lineGroup, (start.x + targetX)/2, (start.y + targetY)/2, outLogic.rule, outLogic.type === 'loop', outLogic.loopLimit || '');
                             }
                         }
                     }
