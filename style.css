@@ -5066,3 +5066,21 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 .emoji-quick-grid {
     display: grid;  grid-template-columns: repeat(12, 1fr);   gap: 5px;
 }
+
+/*=============================== App Card */
+.subscription-grid {
+    display: flex; align-items: flex-end;  gap: 20px; margin-top: 10px;
+}
+
+.input-group {
+    display: flex; flex-direction: column; gap: 6px; flex: 1;}
+
+.fee-input-wrapper { display: flex; align-items: center;
+    gap: 5px; background: var(--input-bg);  border: 1px solid var(--line); border-radius: 4px;
+    padding: 0 8px; height: 27px; font-size: 12px;
+}
+
+.fee-input-wrapper input {
+    border: none !important; padding: 0 !important; background: transparent !important;
+    height: 100%; width: 100%;
+}
