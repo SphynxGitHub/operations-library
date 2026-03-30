@@ -1565,33 +1565,90 @@ function renderAppModalInnerContent(app, client) {
     const isVaultRoute = window.location.hash.startsWith('#/vault');
     const isLinkedToMaster = !!app.masterRefId;
     const linkedGuides = (state.master.howToLibrary || []).filter(ht => (ht.appIds || []).includes(app.id));
-    
+
+    const isMasterCard = isVaultRoute || app.id.startsWith('master-');
     const showAddButton = !isVaultRoute || (isVaultRoute && app.id.startsWith('master-'));
 
     const allFunctions = client 
     ? [...(state.master.functions || []), ...(client.projectData.localFunctions || [])]
     : (state.master.functions || []);
 
-    // 🚀 THE FIX: Filter out functions that aren't shared with this project
     const projectSharedIds = client ? (client.sharedMasterIds || []) : [];
     const projectLocalIds = client ? (client.projectData.localFunctions || []).map(f => String(f.id)) : [];
 
     const sortedMappings = OL.sortMappings(app.functionIds || []);
-
-    // 2. 🚀 THE FINAL FILTER: Deduplicate the sorted list immediately before rendering
     const seenIds = new Set();
     const finalUniqueMappings = sortedMappings.filter(m => {
         const id = String(m.id || m);
-
         if (client && !isVaultRoute) {
             const isVisibleInProject = projectSharedIds.includes(id) || projectLocalIds.includes(id);
             if (!isVisibleInProject) return false;
         }
-
         if (seenIds.has(id)) return false;
         seenIds.add(id);
         return true;
     });
+
+    const source = isVaultRoute ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+
+    // 📊 NEW: Find Analyses this app is part of
+    const linkedAnalyses = (state.master.analyses || []).filter(anly => 
+        (anly.apps || []).some(a => a.id === app.id || a.name === app.name)
+    );
+
+    // 💰 TIER RESOLUTION ENGINE
+    // 1. Check if the app itself has tiers (Direct Registry Data)
+    // 🔍 DIAGNOSTIC LOGGING
+    console.group(`🕵️ Modal QA: ${app.name} (${app.id})`);
+    console.log("1. Object Passed to Function:", app);
+    console.log("2. Is Vault Route?", isVaultRoute);
+    console.log("3. App.pricingTiers length:", (app.pricingTiers || []).length);
+
+    // Identify the Registry Entry (Source of Truth)
+    const masterRegistryApp = state.master.apps.find(a => 
+        String(a.id) === String(app.id) || 
+        String(a.id) === String(app.masterRefId) || 
+        a.name === app.name
+    );
+    console.log("4. Found in Master Registry?:", masterRegistryApp ? "✅ Yes" : "❌ No");
+
+    // 🔍 UNIVERSAL SYNC LOOKUP
+    const masterAnlyWithApp = (state.master.analyses || []).find(anly => {
+        return (anly.apps || []).some(a => {
+            const matrixAppId = String(a.appId || "");
+            const currentAppId = String(app.id || "");
+            const currentRefId = String(app.masterRefId || "");
+            const searchName = String(app.name || "").toLowerCase().trim();
+            const matrixName = String(a.name || "").toLowerCase().trim();
+
+            // Match if ID matches OR Name matches
+            return (matrixAppId.length > 0 && (matrixAppId === currentAppId || matrixAppId === currentRefId)) ||
+                   (matrixName.length > 0 && matrixName === searchName);
+        });
+    });
+
+    // 🎯 TIER RESOLUTION
+    let availableTiers = app.pricingTiers || [];
+    
+    if (availableTiers.length === 0 && masterAnlyWithApp) {
+        const matrixApp = masterAnlyWithApp.apps.find(a => 
+            String(a.appId) === String(app.id) || 
+            String(a.appId) === String(app.masterRefId) ||
+            String(a.name || "").toLowerCase().trim() === String(app.name).toLowerCase().trim()
+        );
+        
+        availableTiers = matrixApp?.pricingTiers || [];
+        
+        // 🚑 AUTO-REPAIR: Save these tiers to the Master App Registry Card
+        if (availableTiers.length > 0 && isVaultRoute) {
+            app.pricingTiers = JSON.parse(JSON.stringify(availableTiers));
+            OL.persist();
+        }
+    }
+
+    console.log("6. Final Tiers used for Render:", availableTiers);
+    console.log("7. Final Source:", source);
+    console.groupEnd();
 
     return `
         ${isLinkedToMaster && !isVaultRoute ? `
@@ -1600,13 +1657,69 @@ function renderAppModalInnerContent(app, client) {
             </div>
         ` : ''}
 
+        <div class="card-section" style="background: var(--panel-soft); padding: 15px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 20px;">
+            <label class="modal-section-label">${isMasterCard ? '🏛️ MASTER VAULT TIER DEFINITIONS' : '💳 CLIENT SUBSCRIPTION'}</label>
+            
+            ${isMasterCard ? `
+                <div class="stacked-tiers-list" style="margin-top:10px;">
+                    ${availableTiers.length > 0 ? availableTiers.map((t, idx) => `
+                        <div class="subscription-grid" style="margin-bottom:8px; display: flex; align-items: center; gap: 10px;">
+                            <div class="input-group" style="flex: 2; display: flex; flex-direction: column; gap: 4px;">
+                                <input type="text" class="modal-input tiny" value="${esc(t.name)}" placeholder="Tier Name (e.g. Pro)"
+                                       onblur="OL.updateMasterAppTier('${app.id}', ${idx}, 'name', this.value)">
+                            </div>
+                            <div class="input-group" style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                <div class="fee-input-wrapper" style="display: flex; align-items: center; gap: 5px; border: 1px solid var(--line); padding: 0 8px; border-radius: 4px; height: 32px; background: rgba(255,255,255,0.05);">
+                                    <span class="tiny muted">$</span>
+                                    <input type="number" class="modal-input tiny" value="${t.price}" 
+                                           style="border:none; background:transparent; width:100%;"
+                                           onblur="OL.updateMasterAppTier('${app.id}', ${idx}, 'price', this.value)">
+                                </div>
+                            </div>
+                            <button class="card-delete-btn" style="position:static; margin-left: 5px;" onclick="OL.removeMasterAppTier('${app.id}', ${idx})">×</button>
+                        </div>
+                    `).join('') : '<div class="tiny muted italic p-10">No tiers defined yet. Click below to add.</div>'}
+                    
+                    <button class="btn tiny soft full-width" style="border-style:dashed; margin-top: 10px;" onclick="OL.addMasterAppTier('${app.id}')">
+                        + Add Tier Definition
+                    </button>
+                </div>
+            ` : `
+                <div class="subscription-grid" style="display: flex; align-items: flex-end; gap: 15px; margin-top: 10px; width: 100%;">
+                    <div class="input-group" style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+                        <label class="tiny muted bold uppercase" style="font-size: 9px; margin:0; line-height:1;">Selected Tier / Plan</label>
+                        <select class="modal-input tiny" style="width: 100%; height: 32px; margin: 0;" onchange="OL.handleAppTierSelection('${app.id}', this.value)">
+                            <option value="">-- Select Plan --</option>
+                            ${availableTiers.map(t => `
+                                <option value="${t.name}|${t.price}" ${app.clientTier === t.name ? 'selected' : ''}>
+                                    ${esc(t.name)} ($${t.price}/mo)
+                                </option>
+                            `).join('')}
+                            <option value="Custom" ${app.clientTier === 'Custom' ? 'selected' : ''}>⚠️ Custom / Other</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+                        <label class="tiny muted bold uppercase" style="font-size: 9px; margin:0; line-height:1;">Actual Monthly Fee</label>
+                        <div class="fee-input-wrapper" style="display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; ${app.clientTier && app.clientTier !== 'Custom' ? 'opacity:0.6; background:rgba(255,255,255,0.03);' : 'background:rgba(0,0,0,0.2);'}">
+                            <span class="tiny muted" style="font-weight: bold; opacity: 0.5;">$</span>
+                            <input type="number" id="app-cost-input-${app.id}" 
+                                   style="border:none; background:transparent; width:100%; outline:none; font-size:12px; padding:0;"
+                                   value="${app.monthlyCost || 0}" 
+                                   ${app.clientTier && app.clientTier !== 'Custom' ? 'readonly' : ''}
+                                   onblur="OL.handleAppSave('${app.id}', this.value, 'monthlyCost')">
+                        </div>
+                    </div>
+                </div>
+            `}
+        </div>
+
         <div class="card-section">
             <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:10px;">
                 <label class="modal-section-label">Functional Categories</label>
                 ${renderStatusLegendHTML()}
             </div>
             <div class="pills-row">
-                ${finalUniqueMappings.map(mapping => { // 👈 Use the finalUniqueMappings here
+                ${finalUniqueMappings.map(mapping => {
                     const targetId = mapping.id || mapping;
                     const fn = allFunctions.find(f => String(f.id) === String(targetId));
                     if (!fn) return '';
@@ -1631,9 +1744,20 @@ function renderAppModalInnerContent(app, client) {
         </div>
 
         <div class="card-section" style="margin-top: 20px;">
-                    <label class="modal-section-label">App Notes & Project Instructions</label>
-                                <textarea class="modal-textarea" rows="3" onblur="OL.handleAppSave('${app.id}', this.value, 'notes')">${esc(app.notes || '')}</textarea>
-                                        </div>
+            <label class="modal-section-label">📊 Featured In Analysis Matrices</label>
+            <div class="pills-row" style="margin-top:10px;">
+                ${linkedAnalyses.length > 0 ? linkedAnalyses.map(anly => `
+                    <span class="pill tiny soft is-clickable" onclick="OL.openAnalysisMatrix('${anly.id}')">
+                        📈 ${esc(anly.name)}
+                    </span>
+                `).join('') : '<span class="tiny muted italic">No linked analyses found.</span>'}
+            </div>
+        </div>
+
+        <div class="card-section" style="margin-top: 20px;">
+            <label class="modal-section-label">App Notes & Project Instructions</label>
+            <textarea class="modal-textarea" rows="3" onblur="OL.handleAppSave('${app.id}', this.value, 'notes')">${esc(app.notes || '')}</textarea>
+        </div>
 
         <div class="card-section" style="margin-top: 20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -1749,6 +1873,75 @@ OL.openAppModal = function(appId, draftObj = null) {
         const input = document.getElementById('modal-app-name-input');
         if (input) input.focus();
     }, 100);
+};
+
+OL.handleAppTierSelection = function(appId, value) {
+    const [tierName, tierPrice] = value.split('|');
+    const client = getActiveClient();
+    if (!client) return;
+
+    const appCard = client.projectData.localApps.find(a => String(a.id) === String(appId));
+    if (!appCard) return;
+
+    // 1. Update the data
+    if (value === "Custom") {
+        appCard.clientTier = "Custom";
+    } else {
+        appCard.clientTier = tierName;
+        appCard.monthlyCost = parseFloat(tierPrice) || 0;
+    }
+
+    // 2. Persist to Cloud
+    OL.persist().then(() => {
+        console.log(`✅ Tier updated for ${appCard.name}. Refreshing modal...`);
+        
+        // 🚀 THE FIX: Re-open the modal with the current client context
+        // This ensures the modal renderer finds the local app object again.
+        OL.openAppModal(appId); 
+    });
+};
+
+OL.addMasterAppTier = function(appId) {
+    // Force finding the app in the MASTER registry
+    let app = state.master.apps.find(a => String(a.id) === String(appId));
+    
+    // Fallback: If we passed a local ID, find the master it points to
+    if (!app) {
+        const client = getActiveClient();
+        const localApp = client?.projectData?.localApps.find(la => la.id === appId);
+        if (localApp?.masterRefId) {
+            app = state.master.apps.find(ma => ma.id === localApp.masterRefId);
+        }
+    }
+
+    if (app) {
+        if (!app.pricingTiers) app.pricingTiers = [];
+        app.pricingTiers.push({ name: "New Tier", price: 0 });
+        
+        OL.persist().then(() => {
+            // Re-open with the resolved app object to ensure the UI sees the new array
+            OL.openAppModal(app.id); 
+        });
+    } else {
+        console.error("❌ Could not find Master App to add tier to.");
+    }
+};
+
+OL.updateMasterAppTier = function(appId, idx, field, value) {
+    const app = state.master.apps.find(a => String(a.id) === String(appId));
+    if (app && app.pricingTiers[idx]) {
+        app.pricingTiers[idx][field] = (field === 'price') ? parseFloat(value) || 0 : value;
+        OL.persist(); 
+        // No modal refresh here to keep focus while typing name
+    }
+};
+
+OL.removeMasterAppTier = function(appId, idx) {
+    const app = state.master.apps.find(a => String(a.id) === String(appId));
+    if (app && app.pricingTiers) {
+        app.pricingTiers.splice(idx, 1);
+        OL.persist().then(() => OL.openAppModal(appId));
+    }
 };
 
 OL.pushLocalAppToMaster = function(appId) {
@@ -5864,15 +6057,54 @@ OL.executeAnalysisImportById = function(templateId) {
     const client = getActiveClient();
     if (!template || !client) return;
 
+    // 1. Deep Clone the template
     const newAnalysis = JSON.parse(JSON.stringify(template));
-    newAnalysis.id = "anly-" + Date.now();
     
+    // 2. Localize and Link
+    newAnalysis.id = "anly-" + Date.now();
+    newAnalysis.masterRefId = templateId;
+    newAnalysis.isMaster = false;
+    
+    // 3. 🧠 THE SYNC BRIDGE: Clear scores but push Prices to Registry
+    if (newAnalysis.apps) {
+        newAnalysis.apps = newAnalysis.apps.map(app => {
+            // Find the corresponding App Card in the project library
+            // (Matching by either strict ID or by Name)
+            const appCard = client.projectData.localApps?.find(a => 
+                a.id === app.appId || a.masterRefId === app.appId || a.name === app.name
+            );
+
+            // 🚀 If the template has price research, update the App Card billing info
+            if (appCard) {
+                // If the app card doesn't have a price yet, or it's 0, adopt the research price
+                if (!appCard.monthlyCost || appCard.monthlyCost === 0) {
+                    appCard.monthlyCost = app.monthlyCost || 0;
+                    appCard.clientTier = app.clientTier || "Standard";
+                    console.log(`📡 Auto-synced price for ${appCard.name}: $${appCard.monthlyCost}`);
+                }
+                
+                // Ensure the ID in the Matrix matches the ID in the project library
+                app.appId = appCard.id; 
+            }
+
+            return {
+                ...app,
+                scores: {} // 🧼 Always wipe evaluative scores for new projects
+            };
+        });
+    }
+    
+    // 4. Save to Project
     if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
     client.projectData.localAnalyses.push(newAnalysis);
 
     OL.persist();
     OL.closeModal();
-    renderAnalysisModule(false);
+    
+    // 5. Refresh UI
+    if (typeof renderAnalysisModule === "function") {
+        renderAnalysisModule(false);
+    }
 };
 
 OL.pushMatrixToMasterLibrary = function(anlyId) {
@@ -5881,43 +6113,36 @@ OL.pushMatrixToMasterLibrary = function(anlyId) {
 
     if (!anly) return;
 
-    if (!confirm(`This will save "${anly.name}" as a standard template in your Master Library for use with all future clients. Proceed?`)) return;
+    if (!confirm(`Push "${anly.name}" to Master Vault? This will include pricing and features for ${anly.apps?.length || 0} tools.`)) return;
 
-    // 1. Create a Master-standard copy of the analysis
+    // 1. Create a deep clone
     const masterCopy = JSON.parse(JSON.stringify(anly));
     masterCopy.id = 'master-anly-' + Date.now();
     masterCopy.isMaster = true;
     
-    // Optional: Templates usually start with blank scores, though they keep feature weights
-    masterCopy.apps = []; 
-
-    // 2. Sync Local Categories to Global Registry
-    if (anly.categories) {
-        if (!state.master.categories) state.master.categories = [];
-        anly.categories.forEach(cat => {
-            if (!state.master.categories.includes(cat)) {
-                state.master.categories.push(cat);
-            }
+    // 🚀 THE FIX: Keep the apps but clear the client-specific scores
+    if (masterCopy.apps) {
+        masterCopy.apps = masterCopy.apps.map(app => {
+            // Ensure we capture the name from the project app if it's missing in the matrix
+            const appCard = client.projectData.localApps.find(la => la.id === app.appId);
+            return {
+                ...app,
+                name: app.name || appCard?.name || "Unknown Tool",
+                scores: {}, 
+                featureScores: {} 
+            };
         });
     }
 
-    // 3. Sync Local Features to Global Registry
-    if (anly.features) {
-        anly.features.forEach(feat => {
-            // Logic to ensure these names appear in future searchable dropdowns
-            // (Assumes you have a master features list or rely on getGlobalFeatures)
-        });
-    }
-
-    // 4. Save to Master State
+    // 2. Save to Master State
     if (!state.master.analyses) state.master.analyses = [];
     state.master.analyses.push(masterCopy);
 
-    OL.persist();
-    alert(`✅ Matrix "${anly.name}" is now a Master Template.`);
-    
-    // Redirect to the Vault Library to see the new template
-    window.location.hash = '#/vault/analyses';
+    OL.persist().then(() => {
+        alert(`✅ "${anly.name}" saved to Vault with app data.`);
+        window.location.hash = '#/vault/analyses';
+        renderAnalysisModule(true);
+    });
 };
 
 OL.deleteMasterAnalysis = function(anlyId) {
@@ -6420,30 +6645,38 @@ OL.calculateAppTotalCost = function(appObj) {
 // 🎯 Refined Dropdown Logic
 OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
     await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const appObj = anly?.apps.find(a => a.appId === appId);
+        const client = getActiveClient();
+        const analyses = OL.getScopedAnalyses();
+        const anly = analyses.find(a => a.id === anlyId);
+        const appInMatrix = anly?.apps.find(a => a.appId === appId);
         
-        if (!appObj) return;
-        if (!appObj.featPricing) appObj.featPricing = {};
-        if (!appObj.scores) appObj.scores = {};
+        if (!appInMatrix) return;
         
         const [type, tierName] = value.split('|');
 
-        if (type === 'not_included') {
-            appObj.scores[featId] = 0;
-        }
-        
-        // We preserve the addonPrice so it's not lost if they toggle back and forth
-        const existingAddon = appObj.featPricing[featId]?.addonPrice || 0;
-        
-        appObj.featPricing[featId] = {
-            type: type, // 'not_included', 'tier', or 'addon'
+        // 1. Update the Matrix Data
+        if (!appInMatrix.featPricing) appInMatrix.featPricing = {};
+        appInMatrix.featPricing[featId] = {
+            type: type,
             tierName: tierName || null,
-            addonPrice: appObj.featPricing[featId]?.addonPrice || 0
+            addonPrice: appInMatrix.featPricing[featId]?.addonPrice || 0
         };
+
+        // 🚀 2. THE SYNC BRIDGE: Update the App Card
+        if (type === 'tier' && tierName && client) {
+            const appCard = client.projectData.localApps.find(a => a.id === appId || a.masterRefId === appId);
+            if (appCard) {
+                // Find the price of this tier from the matrix app's pricingTiers
+                const tierObj = appInMatrix.pricingTiers?.find(t => t.name === tierName);
+                if (tierObj) {
+                    appCard.monthlyCost = parseFloat(tierObj.price) || 0;
+                    appCard.clientTier = tierName;
+                    console.log(`📡 Syncing ${appCard.name} to Tier: ${tierName} ($${tierObj.price})`);
+                }
+            }
+        }
     });
 
-    // Full refresh to update all Totals and UI states
     OL.openAnalysisMatrix(anlyId);
 };
 
@@ -8315,6 +8548,25 @@ OL.renderVisualizer = function() {
             <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
                 ${(res.steps || []).map((s, i) => {
                     const stepId = s.id || i; 
+                    const stepAssignees = s.assignees || [];
+
+                    const hasTeamAssignee = stepAssignees.some(a => 
+                        a.name === "Any Team Member" || a.type === "person" || a.type === "role" && !["Client 1", "Client 2", "Any Client"].includes(a.name)
+                    );
+                    const hasClientAssignee = stepAssignees.some(a => 
+                        ["Client 1", "Client 2", "Any Client"].includes(a.name)
+                    );
+
+                    let borderColor = "transparent"; // Default
+                    let borderWidth = "1px";
+                    
+                    if (hasTeamAssignee) {
+                        borderColor = "#22c55e"; // Green (Success)
+                        borderWidth = "2px";
+                    } else if (hasClientAssignee) {
+                        borderColor = "#fbbf24"; // Gold (Accent)
+                        borderWidth = "2px";
+                    }
                     
                     // 🔍 LOGIC GATHERING
                     const hasIncoming = s.logic?.in?.length > 0;
@@ -8336,7 +8588,8 @@ OL.renderVisualizer = function() {
                             ondragstart="OL.handleStepDragStart(event, ${i})"
                             ondragover="OL.handleStepDragOver(event)"
                             ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
-                            onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')">
+                            onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')"
+                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0;">
                             
                             <div class="step-row-content" style="display:flex; align-items:flex-start; width:100%; gap:6px; padding: 6px 0;">
                                 
@@ -8795,7 +9048,7 @@ OL.toggleMasterExpand = function(forceExpand = null) {
 OL.closeModal = function() {
     const quickInput = document.getElementById('quick-step-input');
     
-    // 1. 🤖 AUTO-SAVE CHECK
+    // 1. 🤖 AUTO-SAVE CHECK (Keep your existing logic)
     if (quickInput && quickInput.value.trim().length > 2) {
         const resId = quickInput.getAttribute('data-res-id');
         const valToSave = quickInput.value;
@@ -8824,16 +9077,24 @@ OL.closeModal = function() {
     const hash = window.location.hash;
 
     if (hash.includes('resources')) {
-        // Stay on Resources tab and refresh the list
-        if (typeof OL.renderResourceList === "function") OL.renderResourceList();
+        // If on Project Resources or Vault Resources, stay there and refresh the list
+        if (typeof renderResourceManager === "function") renderResourceManager();
     } 
-    else if (hash.includes('vault')) {
-        // Stay in Vault (usually doesn't need a full re-render of the list)
-        console.log("📍 Closed modal from Vault");
-    } 
-    else if (typeof OL.renderVisualizer === "function") {
-        // ONLY render the Flow Map if we are actually on a flow/map route
-        OL.renderVisualizer();
+    else if (hash.includes('applications') || hash.includes('apps')) {
+        // If on Project Apps or Vault Apps, stay there and refresh the grid
+        if (typeof renderAppsGrid === "function") renderAppsGrid();
+    }
+    else if (hash.includes('analyze')) {
+        // If in Analysis tab, refresh the cards
+        if (typeof renderAnalysisModule === "function") renderAnalysisModule();
+    }
+    else if (hash.includes('visualizer')) {
+        // ONLY render the Flow Map if we are actually ON the visualizer route
+        if (typeof OL.renderVisualizer === "function") OL.renderVisualizer();
+    }
+    else {
+        // Fallback for dashboard or other views
+        window.handleRoute();
     }
 };
 
@@ -10051,8 +10312,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                     <label class="section-label">📱 PRIMARY APPLICATION (TOOL)</label>
                     ${step.appId ? `
                         <div class="pill-display" style="margin-bottom:8px;">
-                            <div class="pill primary is-clickable" 
-                                style="display:flex; justify-content:space-between; align-items:center; background: rgba(var(--accent-rgb), 0.1); border: 1px solid var(--accent); padding: 5px 8px; border-radius: 6px;"
+                            <div class="pill primary" 
+                                style="display:flex; justify-content:space-between; align-items:center; background: rgba(var(--accent-rgb), 0.1); 
+                                border: 1px solid var(--accent); padding: 5px 8px; border-radius: 6px;"
                                 onclick="OL.openAppModal('${step.appId}')">
                                 <span style="font-size:10px;">📱 ${esc(step.appName)}</span>
                                 <b class="pill-remove-x" style="opacity:0.5; margin-left: 8px;" 
@@ -10325,7 +10587,7 @@ OL.filterAppSearch = function(parentId, stepId, query) {
              onmousedown="event.preventDefault(); event.stopPropagation(); OL.selectAppForStep('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
             <div style="display:flex; align-items:center; gap:8px;">
                 <span>📱</span>
-                <div style="font-size:11px; font-weight:bold; color: white;">${esc(app.name)}</div>
+                <div>${esc(app.name)}</div>
             </div>
         </div>
     `).join('');
