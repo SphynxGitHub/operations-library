@@ -11092,29 +11092,24 @@ OL.clearAllFilters = function() {
     const searchInput = document.getElementById('canvas-filter-input');
     if (searchInput) searchInput.value = "";
     
-    // Reset all Select dropdowns in the submenu
     const selects = document.querySelectorAll('#v2-filter-submenu select');
-    selects.forEach(select => {
-        select.selectedIndex = 0;
-    });
+    selects.forEach(select => { select.selectedIndex = 0; });
 
     // 2. 🚀 REMOVE ALL CSS CLASSES
-    // We target every node to ensure no "ghost" highlights remain
     const allNodes = document.querySelectorAll('.v2-node-card');
     allNodes.forEach(node => {
-        node.classList.remove(
-            'search-match',    // The gold border
-            'search-active',   // The focused/scaled state
-            'filter-hidden',   // The display:none state
-            'node-dimmed'      // Any transparency effects
-        );
+        node.classList.remove('search-match', 'search-active', 'filter-hidden', 'node-dimmed', 'search-focus');
     });
 
     // 3. 🗺️ RESET NAVIGATION & UI
     state.canvasMatches = [];
     state.currentCanvasMatchIdx = -1;
     
-    // Hide the Back/Next navigation buttons
+    // Reset the "1/5" counter text
+    const countLabel = document.getElementById('canvas-match-count');
+    if (countLabel) countLabel.innerText = "0/0";
+
+    // Hide the navigation row
     const nav = document.getElementById('search-nav-controls');
     if (nav) nav.classList.remove('is-visible');
 
@@ -11125,17 +11120,52 @@ OL.clearAllFilters = function() {
         countPill.style.display = 'none';
     }
 
+    // Close the submenu if open
+    const filterMenu = document.getElementById('v2-filter-submenu');
+    if (filterMenu) filterMenu.style.display = 'none';
+    const filterBtn = document.getElementById('filter-menu-btn');
+    if (filterBtn) filterBtn.classList.remove('active');
+
     // 4. 🔗 RESTORE CONNECTIONS
-    // Reset SVG line opacity to default
     document.querySelectorAll('#v2-connections path').forEach(path => {
         path.style.opacity = "0.7";
     });
 
     // 5. 🔄 FINAL SYNC
-    // This tells the logic that filters are empty, restoring the map
-    OL.syncCanvasFilters();
-    
+    OL.syncCanvasFilters(); 
     console.log("✨ Canvas and Search Bar fully reset.");
+
+    // 6. 🚀 RESET SCROLL & VIEWPORT POSITION
+    const nodeLayer = document.getElementById('v2-node-layer');
+    const stageLayer = document.getElementById('v2-stage-layer');
+    const lineGroup = document.getElementById('line-group');
+
+    if (nodeLayer) {
+        nodeLayer.classList.remove('canvas-dimmed');
+        // Reset the CSS translation (centering) applied during search
+        nodeLayer.style.transform = "translate(0, 0)"; 
+        nodeLayer.style.transition = "transform 0.3s ease"; // Smooth snap back
+    }
+
+    if (stageLayer) {
+        stageLayer.style.transform = "translate(0, 0)";
+        stageLayer.style.transition = "transform 0.3s ease";
+    }
+
+    // 🔗 Restore all connection lines to full visibility
+    if (lineGroup) {
+        const paths = lineGroup.querySelectorAll('path');
+        paths.forEach(p => {
+            p.style.opacity = "0.7"; // Your default opacity
+            p.style.strokeWidth = "2px";
+        });
+    }
+
+    // Reset the "active trace" logic so highlight flows disappear
+    state.v2.activeTrace = null;
+    state.v2.highlightedIds = [];
+
+    // Trigger one final redraw of the visualizer to snap everything into place
     OL.renderVisualizer();
 };
 
@@ -11191,12 +11221,32 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
     const myFullId = `${resId}-${stepId}`; 
     const targetId = dir === 'out' ? (logic.targetId || "") : (logic.sourceId || "");
     const isReadOnly = dir === 'in';
-    
-    const selectedOption = allOptions.find(opt => String(opt.id) === String(targetId));
-    const displayLabel = selectedOption ? selectedOption.label : (targetId === myFullId ? '[Current Step / Loopback]' : '-- Select Step --');
+        
+    let displayLabel = '-- None --';
+    if (targetId) {
+        if (targetId === myFullId) {
+            displayLabel = '[Current Step / Loopback]';
+        } else {
+            // Split the targetId (e.g., "res-123-0") into Resource ID and Step Index
+            const parts = String(targetId).split('-');
+            const tStepIdx = parseInt(parts.pop());
+            const tResId = parts.join('-');
+            
+            // Look up the resource across ALL project data
+            const data = OL.getCurrentProjectData();
+            const targetRes = data.resources.find(r => String(r.id) === tResId);
+            
+            if (targetRes) {
+                const targetStep = targetRes.steps?.[tStepIdx];
+                const locationPrefix = targetRes.isTopShelf ? '🏛️ ' : (targetRes.isGlobal ? '🛠️ ' : '📍 ');
+                displayLabel = `${locationPrefix}${targetRes.name} > ${targetStep?.name || 'Step ' + (tStepIdx + 1)}`;
+            } else {
+                displayLabel = '⚠️ Missing Resource';
+            }
+        }
+    }
     
     const isLoop = (logic.type === 'loop') || (String(targetId) === String(myFullId));
-    const filteredOptions = allOptions.filter(opt => opt.id !== myFullId);
 
     return `
         <div class="logic-item ${isReadOnly ? 'is-readonly' : ''}" 
@@ -11210,7 +11260,7 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
                     </div>
 
                     ${dir === 'out' ? `
-                        <select onchange="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'type', this.value)">
+                        <select class="modal-input tiny" style="margin:0; height:24px;" onchange="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'type', this.value)">
                             <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
                             <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
                         </select>
@@ -11218,59 +11268,98 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
                 </div>
 
                 ${!isReadOnly ? `
-                    <button class="logic-delete-btn" 
-                            onclick="OL.removeStepLogic('${resId}', '${stepId}', '${dir}', ${i})"
-                            title="Remove Rule">×</button>
+                    <button class="logic-delete-btn" onclick="OL.removeStepLogic('${resId}', '${stepId}', '${dir}', ${i})" title="Remove Rule">×</button>
                 ` : ''}
             </div>
 
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 5px;">
-                <span style="flex-grow: 1; font-size: 11px;">${esc(displayLabel)}</span>
-                
-                ${targetId ? `
-                    <button class="logic-jump-btn" 
-                            onclick="OL.centerCanvasNode('${String(targetId).split('-')[0]}')"
-                            title="Jump to Card">
-                        🎯
-                    </button>
-                ` : ''}
+            <div style="background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line);">
+                <span style="font-size: 10px; color: var(--text-main);">${esc(displayLabel)}</span>
+                ${targetId ? `<button class="logic-jump-btn" onclick="OL.centerCanvasNode('${String(targetId).split('-')[0]}')" title="Jump to Card">🎯</button>` : ''}
             </div>
 
-            <input value="${esc(logic.rule || '')}" 
+            <input class="modal-input tiny" value="${esc(logic.rule || '')}" 
                    ${isReadOnly ? 'readonly' : ''}
                    placeholder="${isReadOnly ? 'No condition' : 'Condition (e.g. If Approved)'}" 
-                   style="width: 100%; margin-bottom: 8px; font-size: 11px; ${isReadOnly ? 'border-color: transparent; background: transparent; pointer-events: none; opacity: 0.6;' : ''}"
+                   style="width: 100%; margin-bottom: 8px; ${isReadOnly ? 'border-color: transparent; background: transparent; pointer-events: none; opacity: 0.6;' : ''}"
                    onblur="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'rule', this.value)">
             
             ${!isReadOnly ? `
-                <select onchange="OL.updateStepTarget('${resId}', '${stepId}', '${dir}', ${i}, this.value)" 
-                        style="width:100%; background:var(--bg-panel); color:var(--text-muted); border:1px solid var(--border); border-radius:4px; font-size: 11px;">
-                    <option value="">-- Change Target --</option>
-                    <option value="${myFullId}" ${String(targetId) === String(myFullId) ? 'selected' : ''}>[Current Step / Loopback]</option>
-                    ${filteredOptions.map(opt => {
-                        const isHeader = opt.isHeader === true;
-                        return `
-                            <option value="${isHeader ? '' : opt.id}" 
-                                    ${isHeader ? 'disabled style="font-weight:bold; color:var(--accent);"' : ''} 
-                                    ${String(targetId) === String(opt.id) ? 'selected' : ''}>
-                                ${esc(opt.label)}
-                            </option>
-                        `;
-                    }).join('')}
-                </select>
+                <div class="search-map-container" style="position:relative;">
+                    <input type="text" class="modal-input tiny" 
+                           placeholder="🔍 Search target resource/step..." 
+                           onfocus="OL.filterLogicTargetSearch('${resId}', '${stepId}', '${dir}', ${i}, '')"
+                           oninput="OL.filterLogicTargetSearch('${resId}', '${stepId}', '${dir}', ${i}, this.value)">
+                    <div id="logic-search-results-${resId}-${stepId}-${i}" class="search-results-overlay" style="max-height: 200px; overflow-y: auto;"></div>
+                </div>
             ` : ''}
 
             ${isLoop && dir === 'out' ? `
                 <div style="margin-top:10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1);">
                     <div class="section-label" style="font-size:8px; color: var(--warning);">LOOP LIMIT / EXIT CRITERIA</div>
-                    <input value="${esc(logic.loopLimit || '')}" 
-                           placeholder="e.g. 3 times or 'Until Signed'..." 
-                           style="font-size:11px; border-style:dashed; color: var(--warning); border-color: var(--warning);"
+                    <input class="modal-input tiny" value="${esc(logic.loopLimit || '')}" 
+                           placeholder="e.g. 3 times..." 
+                           style="border-style:dashed; color: var(--warning); border-color: var(--warning);"
                            onblur="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'loopLimit', this.value)">
                 </div>
             ` : ''}
         </div>
     `;
+};
+
+OL.filterLogicTargetSearch = function(resId, stepId, dir, logicIdx, query) {
+    const listEl = document.getElementById(`logic-search-results-${resId}-${stepId}-${logicIdx}`);
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
+    const myFullId = `${resId}-${stepId}`;
+
+    // 1. Get all resources that actually have steps defined
+    const activeResources = resources.filter(res => (res.steps || []).length > 0);
+
+    let html = "";
+
+    activeResources.forEach(res => {
+        // Identify physical location
+        const familyPrefix = res.isTopShelf ? '🏛️ [SHELF] ' : (res.isGlobal ? '🛠️ [WORKBENCH] ' : '📍 [CANVAS] ');
+        
+        // Filter steps within this resource
+        const matchedSteps = res.steps.filter((s, idx) => {
+            return res.name.toLowerCase().includes(q) || (s.name || "").toLowerCase().includes(q);
+        });
+
+        if (matchedSteps.length > 0) {
+            html += `<div class="search-category-label" style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); padding: 4px 8px; font-size: 10px; margin-top: 5px; border-radius: 4px; font-weight:bold;">${familyPrefix}${esc(res.name)}</div>`;
+            
+            matchedSteps.forEach((s, idx) => {
+                const targetFullId = `${res.id}-${idx}`;
+                const stepName = s.name || `Step ${idx + 1}`;
+                const isSelf = targetFullId === myFullId;
+
+                html += `
+                    <div class="search-result-item" 
+                         style="padding-left: 20px; font-size: 11px; display: flex; justify-content: space-between; align-items:center;"
+                         onmousedown="OL.updateStepTarget('${resId}', '${stepId}', '${dir}', ${logicIdx}, '${targetFullId}')">
+                        <span>• ${esc(stepName)}</span>
+                        ${isSelf ? '<span style="font-size:8px; background:var(--warning); color:black; padding:1px 4px; border-radius:3px; font-weight:bold;">LOOP</span>' : ''}
+                    </div>
+                `;
+            });
+        }
+    });
+
+    listEl.innerHTML = html || '<div class="search-result-item muted">No matches found.</div>';
+    listEl.style.display = 'block';
+
+    // Auto-close overlay when clicking elsewhere
+    const closeListener = (e) => {
+        if (!listEl.contains(e.target) && e.target.tagName !== 'INPUT') {
+            listEl.style.display = 'none';
+            document.removeEventListener('mousedown', closeListener);
+        }
+    };
+    document.addEventListener('mousedown', closeListener);
 };
 
 OL.getAllStepOptions = function() {
@@ -11310,23 +11399,6 @@ OL.getAllStepOptions = function() {
     });
 
     return options;
-};
-
-OL.filterLogicOptions = function(query) {
-    const q = query.toLowerCase().trim();
-    const selects = document.querySelectorAll('.logic-target-select');
-    
-    selects.forEach(select => {
-        const options = select.options;
-        for (let i = 0; i < options.length; i++) {
-            const opt = options[i];
-            if (opt.value === "" || opt.text.includes('[Current')) continue; // Don't hide defaults
-            
-            // Show if match, hide if not
-            const isMatch = opt.text.toLowerCase().includes(q);
-            opt.style.display = isMatch ? 'block' : 'none';
-        }
-    });
 };
 
 // ➕ Add Logic to a Step
@@ -11405,32 +11477,32 @@ OL.updateStepTarget = async function(resId, stepTarget, direction, logicIdx, new
     const data = OL.getCurrentProjectData();
     const res = data.resources.find(r => String(r.id) === String(resId));
     
-    // 🎯 FIX: ID-Aware lookup
     let step = res?.steps.find(s => String(s.id) === String(stepTarget));
     if (!step && isFinite(stepTarget)) step = res?.steps[stepTarget];
 
     if (step) {
         const item = step.logic[direction][parseInt(logicIdx)];
-        // Use the actual ID for the handshake
-        const selfId = `${res.id}-${res.steps.indexOf(step)}`;
+        const selfFullId = `${res.id}-${res.steps.indexOf(step)}`;
 
         if (direction === 'out') {
             item.targetId = newPartnerId;
-            item.type = (newPartnerId === selfId) ? 'loop' : 'link';
+            item.type = (newPartnerId === selfFullId) ? 'loop' : 'link';
         } else {
             item.sourceId = newPartnerId;
         }
 
+        // 💾 Clear search UI
+        const overlay = document.getElementById(`logic-search-results-${resId}-${stepTarget}-${logicIdx}`);
+        if (overlay) overlay.style.display = 'none';
+
         OL.syncLogicPorts(); 
         await OL.persist();
         
-        // UI Refresh
-        if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
-        this.openInspector(resId, step.id); 
-
-        requestAnimationFrame(() => {
-            setTimeout(() => { OL.drawConnections(); }, 50); 
-        });
+        // Refresh
+        OL.openInspector(resId, step.id, 'steps');
+        if (window.location.hash.includes('visualizer')) {
+            OL.drawConnections();
+        }
     }
 };
 
@@ -11889,124 +11961,6 @@ OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
     group.appendChild(g);
 };
 
-OL.openBrainDump = function() {
-    const html = `
-        <div class="modal-head"><div class="modal-title-text">🧠 Smart Brain Dump</div></div>
-        <div class="modal-body">
-            <div class="smart-dump-container" style="display:flex; flex-direction:column; gap:15px;">
-                <label class="tiny-label">WHAT DO YOU WANT TO AUTOMATE?</label>
-                <input type="text" id="smart-dump-input" class="modal-input" 
-                       placeholder="e.g. Stripe create customer or New HubSpot contact"
-                       oninput="OL.updateSmartPreview(this.value)"
-                       style="font-size: 16px; padding: 15px;">
-
-                <div id="smart-preview-zone" class="smart-preview-card" 
-                     style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); padding: 15px; border-radius: 8px; display:none;">
-                    </div>
-            </div>
-            <button class="btn primary full-width" id="smart-commit-btn" disabled onclick="OL.commitBrainDump()">Drop on Canvas</button>
-        </div>
-    `;
-    openModal(html);
-};
-
-OL.updateSmartPreview = function(val) {
-    const previewZone = document.getElementById('smart-preview-zone');
-    const commitBtn = document.getElementById('smart-commit-btn');
-    
-    if (!val || val.length < 3) {
-        previewZone.style.display = 'none';
-        commitBtn.disabled = true;
-        return;
-    }
-
-    const data = OL.parseSmartInput(val);
-    previewZone.style.display = 'block';
-    
-    // Store data on the element for the commit function to grab
-    previewZone.dataset.parsed = JSON.stringify(data);
-
-    previewZone.innerHTML = `
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-            <div><label class="tiny muted bold">APP</label><div class="accent">${data.app}</div></div>
-            <div><label class="tiny muted bold">TYPE</label><div style="color: ${data.type === 'triggers' ? '#ffbf00' : '#38bdf8'}">${data.type.toUpperCase()}</div></div>
-            <div><label class="tiny muted bold">VERB</label><div>${data.verb || '---'}</div></div>
-            <div><label class="tiny muted bold">OBJECT</label><div>${data.object || '---'}</div></div>
-        </div>
-        ${!data.verb ? '<div class="tiny muted italic" style="margin-top:10px; color:#ef4444;">No exact event match found... checking keywords.</div>' : ''}
-    `;
-
-    commitBtn.disabled = false;
-};
-
-OL.parseSmartInput = function(rawText) {
-    const lib = state.master.automationLibrary || {};
-    const text = rawText.toLowerCase().trim();
-    
-    let result = { app: 'Manual', type: 'actions', verb: '', object: '', matched: false };
-
-    // 1. Identify the App first
-    const appNames = Object.keys(lib);
-    const matchedApp = appNames.find(a => text.includes(a.toLowerCase()));
-    
-    if (matchedApp) {
-        result.app = matchedApp;
-        result.matched = true;
-        const appData = lib[matchedApp];
-
-        // 2. Identify the specific Event within that App
-        const allEvents = [
-            ...appData.triggers.map(t => ({...t, group: 'triggers'})),
-            ...appData.actions.map(a => ({...a, group: 'actions'}))
-        ];
-
-        // Sort by length to catch specific matches first
-        allEvents.sort((a, b) => b.full.length - a.full.length);
-
-        const matchedEvent = allEvents.find(e => text.includes(e.full.toLowerCase()));
-
-        if (matchedEvent) {
-            result.type = matchedEvent.group;
-            
-            // 🚀 THE LOGIC FIX: 
-            // We use the pre-split verb/object from our database loader
-            // which already handled the "Invitee Created" vs "Create Invitee" logic.
-            result.verb = matchedEvent.verb;
-            result.object = matchedEvent.object;
-        }
-    }
-    return result;
-};
-
-// 2. Fetch Verb/Object from DB when App is selected
-OL.syncZapLogic = function(selectEl) {
-    const row = selectEl.closest('.bd-draft-item');
-    const appName = selectEl.value;
-    const eventSelect = row.querySelector('.bd-verb');
-    
-    // Clear the verbs immediately
-    eventSelect.innerHTML = `<option value="">Select Event...</option>`;
-
-    const library = state.master.automationLibrary || {};
-    const appData = library[appName];
-    
-    if (!appData) return;
-
-    let html = `<option value="">Select Event...</option>`;
-    
-    // Build the triggers and actions list
-    const format = (entry) => `<option value="${entry.full}" data-verb="${entry.verb}" data-obj="${entry.object}">${entry.verb} [${entry.object}]</option>`;
-
-    if (appData.triggers?.length) {
-        html += `<optgroup label="⚡ Triggers">${appData.triggers.map(format).join('')}</optgroup>`;
-    }
-    if (appData.actions?.length) {
-        html += `<optgroup label="🛠️ Actions">${appData.actions.map(format).join('')}</optgroup>`;
-    }
-
-    eventSelect.innerHTML = html;
-};
-
 OL.zoom = function(delta) {
     const canvas = document.getElementById('v2-canvas');
     if (!canvas) return;
@@ -12049,145 +12003,6 @@ OL.refreshFamilyNaming = function(targetRes, resources) {
             member.name = `${baseName} (${i + 1}/${family.length})`;
         });
     }
-};
-
-OL.syncDumpOptions = function() {
-    const appVal = document.getElementById('dump-app').value;
-    const typeVal = document.getElementById('dump-type').value; // 'triggers' or 'actions'
-    const objEl = document.getElementById('dump-obj');
-    const library = state.master.automationLibrary || {};
-    const appData = library[appVal];
-
-    if (appVal === 'Manual' || !appData) {
-        objEl.innerHTML = `<option value="Task">Task</option><option value="Note">Note</option>`;
-        OL.syncDumpVerbs();
-        return;
-    }
-
-    // 1. Get events filtered by the selected Type (Trigger vs Action)
-    const events = appData[typeVal] || [];
-    
-    // 2. Extract Unique Objects for this specific App + Type
-    const uniqueObjects = [...new Set(events.map(e => e.object))].sort();
-
-    // 3. Update Object Dropdown
-    objEl.innerHTML = uniqueObjects.map(o => `<option value="${o}">${o}</option>`).join('');
-
-    // 4. Cascade to update Verbs
-    OL.syncDumpVerbs();
-};
-
-OL.syncDumpVerbs = function() {
-    const appVal = document.getElementById('dump-app').value;
-    const typeVal = document.getElementById('dump-type').value;
-    const objVal = document.getElementById('dump-obj').value;
-    const verbEl = document.getElementById('dump-verb');
-    
-    const library = state.master.automationLibrary || {};
-    const appData = library[appVal];
-
-    if (appVal === 'Manual' || !appData) {
-        verbEl.innerHTML = `<option value="Create">Create</option><option value="Update">Update</option>`;
-        return;
-    }
-
-    // Filter events by both Type AND the selected Object
-    const events = appData[typeVal] || [];
-    const availableVerbs = events
-        .filter(e => e.object === objVal)
-        .map(e => e.verb);
-    
-    verbEl.innerHTML = [...new Set(availableVerbs)].map(v => `<option value="${v}">${v}</option>`).join('');
-};
-
-// 1. Convert Raw Text to Draft Rows
-OL.parseBrainDump = function() {
-    const rawInput = document.getElementById('bd-raw-input').value;
-    const lines = rawInput.split('\n').filter(line => line.trim().length > 0);
-    const listContainer = document.getElementById('bd-draft-list');
-    
-    listContainer.innerHTML = '';
-    
-    if (lines.length === 0) {
-        listContainer.innerHTML = '<div class="tiny muted italic text-center" style="margin-top: 50px;">No items parsed yet...</div>';
-        OL.updateBDCount();
-        return;
-    }
-
-    // 1. Get the Apps from your library
-    const library = state.master.automationLibrary || {};
-    const appOptions = Object.keys(library).sort().map(app => 
-        `<option value="${app}">${app}</option>`
-    ).join('');
-
-    // 2. Generate rows using a <select> for the App
-    listContainer.innerHTML = lines.map((line, i) => `
-        <div class="bd-draft-item" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid #334155;">
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" class="modal-input tiny bd-main-name" value="${esc(line)}" style="flex: 1; font-weight: bold;">
-                <button class="card-delete-btn" onclick="this.parentElement.parentElement.remove(); OL.updateBDCount();" style="position: static;">×</button>
-            </div>
-            <div style="display: flex; gap: 5px;">
-                <select class="modal-input tiny bd-app" onchange="OL.syncZapLogic(this)" style="flex: 1;">
-                    <option value="">Select App...</option>
-                    ${appOptions}
-                </select>
-                
-                <select class="modal-input tiny bd-verb" style="flex: 1.2;">
-                    <option value="">Select Event...</option>
-                </select>
-            </div>
-        </div>
-    `).join('');
-
-    OL.updateBDCount();
-};
-
-OL.updateBDCount = function() {
-    const count = document.querySelectorAll('.bd-draft-item').length;
-    const statsEl = document.getElementById('bd-stats');
-    const commitBtn = document.getElementById('bd-commit-btn');
-    
-    if (statsEl) statsEl.innerText = `${count} items drafted`;
-    if (commitBtn) commitBtn.disabled = count === 0;
-};
-
-OL.commitBrainDump = async function() {
-    const previewZone = document.getElementById('smart-preview-zone');
-    const data = JSON.parse(previewZone.dataset.parsed);
-    const isVault = window.location.hash.includes('vault');
-
-    // 🚀 THE NAMING ENGINE
-    let finalName;
-    if (data.type === 'triggers') {
-        // Triggers: "Invitee Created" (Object then Verb)
-        finalName = `${data.object} ${data.verb}`.trim();
-    } else {
-        // Actions: "Create Invitee" (Verb then Object)
-        finalName = `${data.verb} ${data.object}`.trim();
-    }
-
-    // Fallback if parsing failed
-    if (!data.verb || !data.object) {
-        finalName = document.getElementById('smart-dump-input').value;
-    }
-
-    const newNode = {
-        id: isVault ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
-        name: finalName,
-        type: data.type === 'triggers' ? "Trigger" : "Action",
-        coords: { x: 200, y: 200 },
-        integration: data,
-        createdDate: new Date().toISOString()
-    };
-
-    await OL.updateAndSync(() => {
-        const targetList = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-        targetList.push(newNode);
-    });
-
-    OL.closeModal();
-    OL.renderVisualizer(isVault);
 };
 
 OL.duplicateResourceV2 = async function(resourceId) {
