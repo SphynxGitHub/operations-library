@@ -5624,7 +5624,7 @@ OL.renameResourceType = function (oldNameEncoded, newName, archetype, isEncoded 
 };
 
 // 5. PUSH TO MASTER / IMPORT FROM MASTER
-OL.pushToMaster = async function(localResId) {
+window.OL.pushToMaster = async function(localResId) {
     const client = getActiveClient();
     const localRes = client?.projectData?.localResources?.find(r => r.id === localResId);
 
@@ -5644,22 +5644,33 @@ OL.pushToMaster = async function(localResId) {
         if (!state.master.resources) state.master.resources = [];
         state.master.resources.push(masterCopy);
 
-        // 🎯 THE FIX: Keep steps locally AND link to Master
-        // This prevents the "Blank Card" syndrome
         localRes.masterRefId = masterId;
-        localRes.isGlobal = true; 
-        
-        // Ensure steps are preserved in the local project instance
-        if (!localRes.steps || localRes.steps.length === 0) {
-            localRes.steps = JSON.parse(JSON.stringify(masterCopy.steps || []));
-        }
+        localRes.isGlobal = true;
+
+        const projectResources = OL.getCurrentProjectData().resources || [];
+        const allSources = [
+            ...(client.projectData.localHowTo || []),
+            ...(client.projectData.localResources || []),
+            ...(state.master.howToLibrary || []),
+            ...(state.master.resources || [])
+        ];
+
+        projectResources.forEach(res => {
+            if (!res.steps || res.steps.length === 0) {
+                const match = allSources.find(s => 
+                    (s.name === res.name || s.id === res.masterRefId) && 
+                    s.steps && s.steps.length > 0
+                );
+                if (match) {
+                    res.steps = JSON.parse(JSON.stringify(match.steps));
+                }
+            }
+        });
     });
 
-    // 🎯 RE-LINK SCOPING SHEET
     if (client.projectData?.scopingSheets?.[0]?.lineItems) {
         client.projectData.scopingSheets[0].lineItems.forEach(item => {
             if (String(item.resourceId) === String(localResId)) {
-                // Ensure the scoping item knows it's now pointing to a Master-backed resource
                 item.status = item.status || "Do Now";
                 item.responsibleParty = item.responsibleParty || "Sphynx";
             }
@@ -5667,10 +5678,8 @@ OL.pushToMaster = async function(localResId) {
     }
 
     OL.closeModal();
-    renderResourceManager(); 
+    if (typeof renderResourceManager === 'function') renderResourceManager(); 
     OL.renderVisualizer();
-    
-    alert("🚀 Resource promoted. Steps preserved.");
 };
 
 OL.filterMasterResourceImport = function(query) {
