@@ -5628,41 +5628,49 @@ OL.pushToMaster = async function(localResId) {
     const client = getActiveClient();
     const localRes = client?.projectData?.localResources?.find(r => r.id === localResId);
 
-    if (!localRes) return;
-    if (!state.adminMode) return alert("Admin Mode required.");
+    if (!localRes || !state.adminMode) return;
+    if (!confirm("Standardize " + localRes.name + "?")) return;
 
-    if (!confirm(`Standardize "${localRes.name}"?\n\nThis will add it to the Global Master Vault for all future projects.`)) return;
-
-    // 🚀 THE SYNC WRAPPER: Ensures both updates are pushed as one state change
     await OL.updateAndSync(() => {
-        // 1. Create Global Master Clone
         const masterId = 'res-vlt-' + Date.now();
         const masterCopy = JSON.parse(JSON.stringify(localRes));
         
         masterCopy.id = masterId;
         masterCopy.createdDate = new Date().toISOString();
         masterCopy.originProject = client.meta.name;
-        delete masterCopy.masterRefId; // Ensure the Master isn't linked to itself
+        delete masterCopy.masterRefId; 
         delete masterCopy.isScopingContext; 
 
-        // 2. Add to Master Vault
         if (!state.master.resources) state.master.resources = [];
         state.master.resources.push(masterCopy);
 
-        // 3. ✨ THE HYBRID LINK
-        // Link the local copy and empty the steps so it "Inherits" from the Vault
+        // 🎯 THE FIX: Keep steps locally AND link to Master
+        // This prevents the "Blank Card" syndrome
         localRes.masterRefId = masterId;
-        localRes.steps = []; 
+        localRes.isGlobal = true; 
+        
+        // Ensure steps are preserved in the local project instance
+        if (!localRes.steps || localRes.steps.length === 0) {
+            localRes.steps = JSON.parse(JSON.stringify(masterCopy.steps || []));
+        }
     });
 
-    // 4. UI Cleanup
+    // 🎯 RE-LINK SCOPING SHEET
+    if (client.projectData?.scopingSheets?.[0]?.lineItems) {
+        client.projectData.scopingSheets[0].lineItems.forEach(item => {
+            if (String(item.resourceId) === String(localResId)) {
+                // Ensure the scoping item knows it's now pointing to a Master-backed resource
+                item.status = item.status || "Do Now";
+                item.responsibleParty = item.responsibleParty || "Sphynx";
+            }
+        });
+    }
+
     OL.closeModal();
-    
-    // Grid refresh is handled by the Real-Time Listener, but we call it 
-    // manually here just to ensure instant local feedback.
     renderResourceManager(); 
+    OL.renderVisualizer();
     
-    alert(`🚀 Resource "${localRes.name}" is now a Master Template.`);
+    alert("🚀 Resource promoted. Steps preserved.");
 };
 
 OL.filterMasterResourceImport = function(query) {
@@ -14315,49 +14323,31 @@ window.OL.promoteLocalSOPToMaster = function(localId) {
     const localSOP = client?.projectData?.localHowTo?.find(h => h.id === localId);
 
     if (!localSOP) return;
-    if (!confirm("Standardize " + localSOP.name + "?")) return;
+    if (!confirm(`Standardize "${localSOP.name}"? This will add it to the Global Vault for all future projects.`)) return;
 
+    // 1. Create the Master Copy
     const masterId = 'ht-vlt-' + Date.now();
-    
-    // 1. DEEP COPY EVERYTHING (Including Steps)
-    const masterCopy = JSON.parse(JSON.stringify(localSOP));
-    masterCopy.id = masterId;
-    masterCopy.scope = 'global';
-    masterCopy.createdDate = new Date().toISOString();
+    const masterCopy = {
+        ...JSON.parse(JSON.stringify(localSOP)), 
+        id: masterId,
+        scope: 'global',
+        createdDate: new Date().toISOString()
+    };
 
+    // 2. Add to Global Library
     if (!state.master.howToLibrary) state.master.howToLibrary = [];
     state.master.howToLibrary.push(masterCopy);
 
-    // 2. UPDATE SCOPING LINKS
-    if (client.projectData?.scopingSheets?.[0]?.lineItems) {
-        client.projectData.scopingSheets[0].lineItems.forEach(function(item) {
-            if (String(item.resourceId) === String(localId)) {
-                item.resourceId = masterId;
-                item.status = item.status || "Do Now";
-                item.responsibleParty = item.responsibleParty || "Sphynx";
-            }
-        });
-    }
-
-    // 3. UPDATE MAP RESOURCES IN-PLACE (Prevents Step Loss)
-    const projectRes = OL.getCurrentProjectData().resources || [];
-    projectRes.forEach(function(r) {
-        if (String(r.id) === String(localId)) {
-            r.id = masterId;
-            r.isGlobal = true;
-            r.masterRefId = masterId;
-            // Steps are already here, we just updated the ID identity
-        }
-    });
-
+    // 3. Remove Local copy and replace with Shared Master link
     client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== localId);
+    if (!client.sharedMasterIds) client.sharedMasterIds = [];
+    client.sharedMasterIds.push(masterId);
 
     OL.persist();
     OL.closeModal();
-    renderHowToLibrary(); 
-    OL.renderVisualizer();
+    renderHowToLibrary(); // Refresh grid to show new status
     
-    console.log("Promotion successful: Steps and Scoping preserved.");
+    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
 };
 
 function renderHTRequirements(ht) {
