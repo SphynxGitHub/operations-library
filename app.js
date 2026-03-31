@@ -8583,14 +8583,21 @@ OL.renderVisualizer = function() {
                     return `
                         <div class="v2-step-item" 
                             data-step-id="${res.id}-${stepId}" 
+                            ondragover="OL.handleStepDragOver(event)"
+                            ondragleave="OL.handleStepDragLeave(event)"
+                            ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
                             onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')"
-                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0; position: relative;">
+                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0; position: relative;>
                             
-                            <span class="step-port port-in"></span>
-                            <span class="step-port port-out"></span>
+                            <span class="step-port port-in" style="pointer-events:none"></span>
+                            <span class="step-port port-out" style="pointer-events:none"></span>
 
                             <div class="step-row-content">
-                                <span class="drag-handle" style="cursor: grab; opacity: 0.3; flex-shrink: 0; margin-top: 2px;">⋮</span>
+                                <span class="drag-handle" 
+                                style="cursor: grab; opacity: 0.3; flex-shrink: 0; margin-top: 2px;"
+                                draggable="true"
+                                ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})"
+                            >⠿</span>
                                 
                                 <span class="step-logic-icon ${hasIncoming ? 'active' : 'hidden'}" 
                                       style="flex-shrink: 0; margin-top: 2px; color: ${hasIncoming ? 'var(--accent)' : 'transparent'}"
@@ -8922,43 +8929,55 @@ OL.setTraceMode = function(startId, direction) {
     if (OL.drawConnections) OL.drawConnections();
 };
 
-OL.handleStepDragStart = function(e, index) {
+OL.handleStepDragStart = function(e, resId, index) {
+    state.draggingStepResId = resId; // 🎯 TRACK THE CARD ID
     state.draggingStepIdx = index;
-    // Set a "ghost" image or effect
+    
     e.dataTransfer.effectAllowed = 'move';
-    e.target.classList.add('is-dragging');
+    
+    // Target the entire row, not just the handle
+    const row = e.target.closest('.v2-step-item');
+    if (row) row.classList.add('is-dragging');
 };
 
 OL.handleStepDragOver = function(e) {
-    e.preventDefault(); // Required to allow drop
-    const item = e.currentTarget;
-    item.classList.add('drag-over');
+    e.preventDefault(); 
+    const item = e.currentTarget.closest('.v2-step-item');
+    if (item && !item.classList.contains('is-dragging')) {
+        item.classList.add('drag-over');
+    }
 };
 
 OL.handleStepDragLeave = function(e) {
-    e.currentTarget.classList.remove('drag-over');
+    const item = e.currentTarget.closest('.v2-step-item');
+    if (item) item.classList.remove('drag-over');
 };
 
-OL.handleStepDrop = async function(e, resId, droppedOnIdx) {
+OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
     e.preventDefault();
+    
+    // 🧹 GLOBAL CLEANUP
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    document.querySelectorAll('.is-dragging').forEach(el => el.classList.remove('is-dragging'));
+
+    const sourceResId = state.draggingStepResId;
     const draggedIdx = state.draggingStepIdx;
-    e.currentTarget.classList.remove('drag-over');
 
-    if (draggedIdx === null || draggedIdx === droppedOnIdx) return;
+    // Safety: Only reorder if within the same card
+    if (sourceResId !== targetResId || draggedIdx === null || draggedIdx === droppedOnIdx) return;
 
-    const res = OL.getResourceById(resId);
+    const res = OL.getResourceById(targetResId);
     if (!res || !res.steps) return;
 
-    // 🚀 Splicing the array
-    const movedStep = res.steps.splice(draggedIdx, 1)[0];
+    // 🚀 THE MOVE
+    const [movedStep] = res.steps.splice(draggedIdx, 1);
     res.steps.splice(droppedOnIdx, 0, movedStep);
 
     await OL.persist();
-    
-    // Refresh the visualizer so step numbers/order update
-    OL.renderVisualizer();
+    OL.renderVisualizer(); // Re-render to show new order
+    state.draggingStepIdx = null;
+    state.draggingStepResId = null;
 };
-
 OL.save = function() {
     // 💾 Push the current master state into the browser's local cache
     localStorage.setItem('OL_FS_TEST', JSON.stringify(this.state));
@@ -12305,29 +12324,33 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
     const client = getActiveClient();
     const sheet = client.projectData.scopingSheets[0];
     
-    let roundGrossValue = 0;   // 🚀 Includes EVERYTHING (Total Value)
-    let billableSubtotal = 0;  // 💸 Only billable "Do Now" items
+    // 🚩 1. INITIALIZE ALL VARIABLES (Prevents ReferenceErrors)
+    let roundGrossValue = 0;   // Sticker Price total
+    let billableSubtotal = 0;  // Pre-discount billable total
+    let roundDeductionAmt = 0; // The discount amount for this round
+    let finalRoundNet = 0;     // The final number in the right column
+    let totalRoundSavings = 0; // The "Disc" column total
 
-    // 1. Process items with distinct logic for Gross vs Net
+    // 🔄 2. CALCULATION LOOP
     items.forEach(item => {
         const res = OL.getResourceById(item.resourceId);
         if (!res) return;
 
-        // 🟢 ALWAYS add to Gross (Regardless of status or party)
-        const itemStickerPrice = OL.calculateBaseFeeWithMultiplier(item, res);
+        // Calculate Gross (Always)
+        const itemStickerPrice = OL.calculateBaseFeeWithMultiplier(item, res) || 0;
         roundGrossValue += itemStickerPrice;
 
-        // 🔵 ONLY add to Net if 'Do Now' AND billable party
-        const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
-        if (item.status === 'Do Now' && isBillable) {
-            billableSubtotal += OL.calculateRowFee(item, res);
+        // Calculate Net (Only if Do Now + Billable Party)
+        const status = String(item.status || "").toLowerCase().trim();
+        const party = String(item.responsibleParty || "").toLowerCase().trim();
+        
+        if (status === 'do now' && (party === 'sphynx' || party === 'joint')) {
+            billableSubtotal += (OL.calculateRowFee(item, res) || 0);
         }
     });
 
-    // 2. Calculate Round Discount (applied against the Billable Subtotal)
-    let roundDeductionAmt = 0;
+    // 💸 3. ROUND DISCOUNT CALCULATION
     const rKey = String(roundNum);
-    
     if (sheet.roundDiscounts && sheet.roundDiscounts[rKey]) {
         const rDisc = sheet.roundDiscounts[rKey];
         const discVal = parseFloat(rDisc.value) || 0;
@@ -12337,13 +12360,14 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
             : discVal;
     }
 
-    // 3. Final Header Calculations
-    const finalRoundNet = billableSubtotal - roundDeductionAmt;
-    // Total Savings = (The difference between everything's sticker price and what we are charging)
-    const totalRoundSavings = roundGrossValue - finalRoundNet;
+    // 🏁 4. FINAL ROUND TOTALS
+    finalRoundNet = billableSubtotal - roundDeductionAmt;
+    totalRoundSavings = roundGrossValue - finalRoundNet;
 
+    // 🎨 5. RENDER ROWS
     const rows = items.map((item, idx) => renderScopingRow(item, idx, showUnits)).join("");
 
+    // 🖼️ 6. RETURN HTML
     return `
         <div class="round-section" style="margin-bottom: 25px; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden;">
             <div class="grid-row round-header-row" style="background: rgba(56, 189, 248, 0.1); border-bottom: 1px solid var(--accent);">
@@ -12371,7 +12395,6 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
         </div>
     `;
 };
-
 // 3. RENDER SCOPING ROW / UPDATE ROW
 function renderScopingRow (item, idx, showUnits) {
     const client = getActiveClient();
@@ -12404,13 +12427,22 @@ function renderScopingRow (item, idx, showUnits) {
 
     // 2. Financial Calculations
     // Only "Do Now" and "Sphynx/Joint" count towards the totals
-    const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
-    const isCounted = item.status === 'Do Now' && isBillable;
-
+    
     const typeIcon = OL.getRegistryIcon(res.type);
 
+    // 2. Financial Calculations
+    const status = (item.status || "").toLowerCase();
+    const party = (item.responsibleParty || "").toLowerCase();
+
+    const isBillable = party === 'sphynx' || party === 'joint';
+    const isCounted = status === 'do now' && isBillable;
+
     const gross = OL.calculateBaseFeeWithMultiplier(item, res);
-    const net = isCounted ? OL.calculateRowFee(item, res) : 0;
+
+    // 🎯 THE FIX: If it's NOT counted (e.g., "Do Later"), 
+    // we set Net to Gross so the discount stays $0, 
+    // rather than setting Net to $0 which creates a massive discount.
+    const net = isCounted ? OL.calculateRowFee(item, res) : gross; 
     const discountAmt = gross - net;
 
     const combinedData = { ...(res.data || {}), ...(item.data || {}) };
@@ -12968,22 +13000,37 @@ window.renderGrandTotals = function(lineItems, baseRate) {
         if (!res) return;
 
         // 1. Calculate Gross (Total potential value regardless of status/party)
-        totalGross += OL.calculateBaseFeeWithMultiplier(item, res);
+        const itemGross = OL.calculateBaseFeeWithMultiplier(item, res);
+        totalGross += itemGross
 
         // 2. Calculate Net (Only "Do Now" and billable parties)
-        const isBillable = item.responsibleParty === 'Sphynx' || item.responsibleParty === 'Joint';
-        if (item.status === 'Do Now' && isBillable) {
+        const status = (item.status || "").toLowerCase();
+        const party = (item.responsibleParty || "").toLowerCase();
+        
+        const isDoNow = status === 'do now';
+        const isBillable = party === 'sphynx' || party === 'joint';
+
+        // 2. Calculate Net (Only items we are actually charging for)
+        if (isDoNow && isBillable) {
             netAfterLineItems += OL.calculateRowFee(item, res);
         }
     });
 
     // 3. Subtract Adjustments/Discounts from the Net
-    let netAfterRounds = netAfterLineItems;
+   let netAfterRounds = netAfterLineItems;
     if (sheet.roundDiscounts) {
         Object.keys(sheet.roundDiscounts).forEach(rNum => {
             const rDisc = sheet.roundDiscounts[rNum];
-            const roundItems = lineItems.filter(i => i.round == rNum && i.status === 'Do Now');
-            const roundSubtotal = roundItems.reduce((s, i) => s + OL.calculateRowFee(i, OL.getResourceById(i.resourceId)), 0);
+            // Filter only "Do Now" items in this round to calculate the discount basis
+            const roundItems = lineItems.filter(i => 
+                String(i.round) === String(rNum) && 
+                (i.status || "").toLowerCase() === 'do now'
+            );
+            
+            const roundSubtotal = roundItems.reduce((s, i) => {
+                const r = OL.getResourceById(i.resourceId);
+                return s + (r ? OL.calculateRowFee(i, r) : 0);
+            }, 0);
             
             const rDeduct = rDisc.type === '%' 
                 ? Math.round(roundSubtotal * (parseFloat(rDisc.value) / 100)) 
@@ -14268,31 +14315,49 @@ window.OL.promoteLocalSOPToMaster = function(localId) {
     const localSOP = client?.projectData?.localHowTo?.find(h => h.id === localId);
 
     if (!localSOP) return;
-    if (!confirm(`Standardize "${localSOP.name}"? This will add it to the Global Vault for all future projects.`)) return;
+    if (!confirm("Standardize " + localSOP.name + "?")) return;
 
-    // 1. Create the Master Copy
     const masterId = 'ht-vlt-' + Date.now();
-    const masterCopy = {
-        ...JSON.parse(JSON.stringify(localSOP)), 
-        id: masterId,
-        scope: 'global',
-        createdDate: new Date().toISOString()
-    };
+    
+    // 1. DEEP COPY EVERYTHING (Including Steps)
+    const masterCopy = JSON.parse(JSON.stringify(localSOP));
+    masterCopy.id = masterId;
+    masterCopy.scope = 'global';
+    masterCopy.createdDate = new Date().toISOString();
 
-    // 2. Add to Global Library
     if (!state.master.howToLibrary) state.master.howToLibrary = [];
     state.master.howToLibrary.push(masterCopy);
 
-    // 3. Remove Local copy and replace with Shared Master link
+    // 2. UPDATE SCOPING LINKS
+    if (client.projectData?.scopingSheets?.[0]?.lineItems) {
+        client.projectData.scopingSheets[0].lineItems.forEach(function(item) {
+            if (String(item.resourceId) === String(localId)) {
+                item.resourceId = masterId;
+                item.status = item.status || "Do Now";
+                item.responsibleParty = item.responsibleParty || "Sphynx";
+            }
+        });
+    }
+
+    // 3. UPDATE MAP RESOURCES IN-PLACE (Prevents Step Loss)
+    const projectRes = OL.getCurrentProjectData().resources || [];
+    projectRes.forEach(function(r) {
+        if (String(r.id) === String(localId)) {
+            r.id = masterId;
+            r.isGlobal = true;
+            r.masterRefId = masterId;
+            // Steps are already here, we just updated the ID identity
+        }
+    });
+
     client.projectData.localHowTo = client.projectData.localHowTo.filter(h => h.id !== localId);
-    if (!client.sharedMasterIds) client.sharedMasterIds = [];
-    client.sharedMasterIds.push(masterId);
 
     OL.persist();
     OL.closeModal();
-    renderHowToLibrary(); // Refresh grid to show new status
+    renderHowToLibrary(); 
+    OL.renderVisualizer();
     
-    alert(`🚀 "${localSOP.name}" is now a Master Template!`);
+    console.log("Promotion successful: Steps and Scoping preserved.");
 };
 
 function renderHTRequirements(ht) {
