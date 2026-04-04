@@ -3501,6 +3501,8 @@ OL.toggleCompletedTasks = function() {
 };
 
 OL.openTaskModal = function(taskId, isVault) {
+    if (!state.v2) state.v2 = {}; 
+    if (!state.v2.activeCommentTab) state.v2.activeCommentTab = 'internal';
     const client = getActiveClient();
     let task = isVault 
         ? state.master.taskBlueprints.find(t => t.id === taskId)
@@ -3508,106 +3510,244 @@ OL.openTaskModal = function(taskId, isVault) {
 
     if (!task) return;
 
+    const activeTab = state.v2?.activeCommentTab || 'internal';
+    const isGuest = !!window.IS_GUEST;
+
     const html = `
-        <div class="modal-head">
+        <div class="modal-head" style="gap:15px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-size:18px;">📋</span>
                 <input type="text" class="header-editable-input" 
                       value="${esc(task.title || task.name)}" 
                       placeholder="Task Name..."
                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                        onblur="OL.updateTaskField('${taskId}', '${isVault ? 'title' : 'name'}', this.value, ${isVault})">
+                      onblur="OL.updateTaskField('${taskId}', '${isVault ? 'title' : 'name'}', this.value, ${isVault})">
             </div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
-        <div class="modal-body">
-            <div class="card-section" style="margin-top: 15px;">
-                <label class="modal-section-label">Internal SOP / Instructions</label>
-                <textarea class="modal-textarea" rows="4" 
-                          onblur="OL.updateTaskField('${taskId}', 'description', this.value, ${isVault})">${esc(task.description || task.notes || "")}</textarea>
-            </div>
 
-            <div class="card-section" style="margin-top: 15px;">
-                <label class="modal-section-label">🛠️ Required Tools (Apps)</label>
-                <div class="pills-row" id="task-app-pills" style="margin-bottom: 8px;">
-                    ${(task.appIds || []).map(appId => {
-                        const app = [...state.master.apps, ...(client?.projectData.localApps || [])].find(a => a.id === appId);
-                        return app ? `
-                            <span class="pill tiny soft is-clickable" onclick="OL.handleTaskAppInteraction(event, '${taskId}', '${app.id}', ${isVault})">
-                                📱 ${esc(app.name)}
-                            </span>` : '';
-                    }).join('')}
+        <div class="modal-layout-wrapper" style="display: flex; height: 75vh; overflow: hidden;">
+            
+            <div class="modal-body main-config-area" style="flex: 1.5; overflow-y: auto; padding: 20px; border-right: 1px solid var(--line);">
+                
+                <div class="card-section">
+                    <label class="modal-section-label">Internal SOP / Instructions</label>
+                    <textarea class="modal-textarea" rows="4" 
+                              onblur="OL.updateTaskField('${taskId}', 'description', this.value, ${isVault})">${esc(task.description || task.notes || "")}</textarea>
                 </div>
-                <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" placeholder="Click to link an app..." 
-                        onfocus="OL.filterTaskAppSearch('${taskId}', '', ${isVault})"
-                        oninput="OL.filterTaskAppSearch('${taskId}', this.value, ${isVault})">
-                    <div id="task-app-search-results" class="search-results-overlay"></div>
-                </div>
-            </div>
 
-            <div class="card-section" style="margin-top: 15px;">
-                <label class="modal-section-label">👩‍🏫 Linked How-To Guides</label>
-                <div class="pills-row" style="margin-bottom: 8px;">
-                    ${(task.howToIds || []).map(htId => {
-                        const guide = (state.master.howToLibrary || []).find(g => g.id === htId); 
-                        if (!guide) return ''; 
-                        return `
-                            <span class="pill tiny soft is-clickable" 
-                                  style="cursor: pointer;" 
-                                  onclick="OL.openHowToModal('${guide.id}')">
-                                📖 ${esc(guide.name)}
-                            </span>`;
-                    }).join('')}
-                </div>
-                <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" placeholder="Click to view guides..." 
-                        onfocus="OL.filterTaskHowToSearch('${taskId}', '', ${isVault})"
-                        oninput="OL.filterTaskHowToSearch('${taskId}', this.value, ${isVault})">
-                    <div id="task-howto-results" class="search-results-overlay"></div>
-                </div>
-            </div>
-
-            ${!isVault ? `
-            <div class="card-section" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <label class="modal-section-label">📅 Due Date</label>
-                        <input type="date" class="modal-input" value="${task.dueDate || ''}" 
-                               onchange="OL.updateTaskField('${taskId}', 'dueDate', this.value, false)">
+                <div class="card-section" style="margin-top: 20px;">
+                    <label class="modal-section-label">🛠️ Required Tools (Apps)</label>
+                    <div class="pills-row" id="task-app-pills" style="margin-bottom: 8px;">
+                        ${(task.appIds || []).map(appId => {
+                            const app = [...state.master.apps, ...(client?.projectData.localApps || [])].find(a => a.id === appId);
+                            return app ? `
+                                <span class="pill tiny soft is-clickable" onclick="OL.handleTaskAppInteraction(event, '${taskId}', '${app.id}', ${isVault})">
+                                    📱 ${esc(app.name)}
+                                </span>` : '';
+                        }).join('')}
                     </div>
-                    <div>
-                        <label class="modal-section-label">Status</label>
-                        <select class="modal-input" onchange="OL.updateTaskField('${taskId}', 'status', this.value, false)">
-                            <option value="Pending" ${task.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
-                            <option value="In Progress" ${task.status === 'In Progress' ? 'selected' : ''}>🚧 In Progress</option>
-                            <option value="Done" ${task.status === 'Done' ? 'selected' : ''}>✅ Done</option>
-                        </select>
+                    <div class="search-map-container">
+                        <input type="text" class="modal-input tiny" placeholder="Click to link an app..." 
+                            onfocus="OL.filterTaskAppSearch('${taskId}', '', ${isVault})"
+                            oninput="OL.filterTaskAppSearch('${taskId}', this.value, ${isVault})">
+                        <div id="task-app-search-results" class="search-results-overlay"></div>
                     </div>
                 </div>
-                <div>
-                    <label class="modal-section-label" style="margin-top:15px;">👨‍💼 Assigned Team Members</label>
-                    <div class="pills-row" id="task-assignee-pills" style="margin-bottom: 8px;">
-                        ${(task.assigneeIds || []).map(mId => {
-                            const member = client.projectData.teamMembers?.find(m => m.id === mId);
-                            if (!member) return '';
+
+                <div class="card-section" style="margin-top: 20px;">
+                    <label class="modal-section-label">👩‍🏫 Linked How-To Guides</label>
+                    <div class="pills-row" style="margin-bottom: 8px;">
+                        ${(task.howToIds || []).map(htId => {
+                            const guide = (state.master.howToLibrary || []).find(g => g.id === htId); 
+                            if (!guide) return ''; 
                             return `
-                                <span class="pill tiny accent">
-                                    👨‍💼 ${esc(member.name)}
-                                    <b class="pill-remove-x" onclick="OL.toggleTaskAssignee(event, '${taskId}', '${member.id}')">×</b>
+                                <span class="pill tiny soft is-clickable" 
+                                      style="cursor: pointer;" 
+                                      onclick="OL.openHowToModal('${guide.id}')">
+                                    📖 ${esc(guide.name)}
                                 </span>`;
                         }).join('')}
                     </div>
                     <div class="search-map-container">
-                        <input type="text" class="modal-input tiny" placeholder="Click to assign member..." 
-                            onfocus="OL.filterTaskAssigneeSearch('${taskId}', '')"
-                            oninput="OL.filterTaskAssigneeSearch('${taskId}', this.value)">
-                        <div id="task-assignee-results" class="search-results-overlay"></div>
+                        <input type="text" class="modal-input tiny" placeholder="Click to view guides..." 
+                            onfocus="OL.filterTaskHowToSearch('${taskId}', '', ${isVault})"
+                            oninput="OL.filterTaskHowToSearch('${taskId}', this.value, ${isVault})">
+                        <div id="task-howto-results" class="search-results-overlay"></div>
                     </div>
                 </div>
-            ` : ''}
+
+                ${!isVault ? `
+                <div class="card-section" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label class="modal-section-label">📅 Due Date</label>
+                            <input type="date" class="modal-input tiny" value="${task.dueDate || ''}" 
+                                   onchange="OL.updateTaskField('${taskId}', 'dueDate', this.value, false)">
+                        </div>
+                        <div>
+                            <label class="modal-section-label">Status</label>
+                            <select class="modal-input tiny" onchange="OL.updateTaskField('${taskId}', 'status', this.value, false)">
+                                <option value="Pending" ${task.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
+                                <option value="In Progress" ${task.status === 'In Progress' ? 'selected' : ''}>🚧 In Progress</option>
+                                <option value="Done" ${task.status === 'Done' ? 'selected' : ''}>✅ Done</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top:15px;">
+                        <label class="modal-section-label">👨‍💼 Assigned Team Members</label>
+                        <div class="pills-row" id="task-assignee-pills" style="margin-bottom: 8px;">
+                            ${(task.assigneeIds || []).map(mId => {
+                                const member = client.projectData.teamMembers?.find(m => m.id === mId);
+                                return member ? `
+                                    <span class="pill tiny accent">
+                                        👨‍💼 ${esc(member.name)}
+                                        <b class="pill-remove-x" style="cursor:pointer; margin-left:4px;" onclick="OL.toggleTaskAssignee(event, '${taskId}', '${member.id}')">×</b>
+                                    </span>` : '';
+                            }).join('')}
+                        </div>
+                        <div class="search-map-container">
+                            <input type="text" class="modal-input tiny" placeholder="Click to assign member..." 
+                                onfocus="OL.filterTaskAssigneeSearch('${taskId}', '')"
+                                oninput="OL.filterTaskAssigneeSearch('${taskId}', this.value)">
+                            <div id="task-assignee-results" class="search-results-overlay"></div>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+
+            <aside class="modal-sidebar" style="flex: 1; display: flex; flex-direction: column; background: rgba(0,0,0,0.05);">
+                <div style="display: flex; border-bottom: 1px solid var(--line);">
+                    ${!isGuest ? `
+                        <div onclick="state.v2.activeCommentTab='internal'; OL.openTaskModal('${taskId}', ${isVault})"
+                             style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'internal' ? 'color:var(--accent); border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                            INTERNAL
+                        </div>
+                    ` : ''}
+                    <div onclick="state.v2.activeCommentTab='client'; OL.openTaskModal('${taskId}', ${isVault})"
+                         style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'client' ? 'color:#10b981; border-bottom:2px solid #10b981;' : 'opacity:0.5'}">
+                        CLIENT FEEDBACK
+                    </div>
+                </div>
+
+                <div id="task-comments-${taskId}" style="flex: 1; overflow-y: auto; padding: 15px;">
+                    ${renderCommentsList(task, activeTab)}
+                </div>
+
+                <div class="comment-input-zone" style="padding: 15px; border-top: 1px solid var(--line); background: var(--bg-panel);">
+                    <textarea id="new-comment-task-${taskId}" class="modal-textarea" 
+                              placeholder="Type a ${activeTab === 'client' ? 'message...' : 'note...'}" 
+                              style="min-height: 60px; margin-bottom: 8px; font-size: 11px;"></textarea>
+                    <button class="btn tiny full-width" 
+                            style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'}; color:black; font-weight:bold;"
+                            onclick="OL.addTaskComment('${taskId}', ${isVault}, ${activeTab === 'client'})">
+                        Post ${activeTab === 'client' ? 'to Client' : 'Note'}
+                    </button>
+                </div>
+            </aside>
         </div>
     `;
     openModal(html);
+};
+
+OL.addTaskComment = async function(taskId, isVault, isClientFacing = false) {
+    const input = document.getElementById(`new-comment-task-${taskId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    const client = getActiveClient();
+    let task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+
+    if (!task) return;
+
+    let authorName = "Team Member";
+    if (window.FORCE_ADMIN) {
+        authorName = "Sphynx Team";
+    } else if (window.IS_GUEST && client) {
+        authorName = client.meta.name;
+    }
+
+    if (!task.comments) task.comments = [];
+    
+    task.comments.push({
+        author: authorName,
+        text: text,
+        timestamp: new Date().toISOString(),
+        isClientFacing: isClientFacing
+    });
+
+    await OL.persist();
+    input.value = "";
+    state.v2.activeCommentTab = isClientFacing ? 'client' : 'internal';
+    OL.openTaskModal(taskId, isVault);
+};
+
+// 🚀 THE FIX: Ensure this is a function, not loose code
+window.OL.deleteTaskComment = async function(taskId, idx, isVault) {
+    const client = getActiveClient();
+    let task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+        
+    if (task && task.comments) {
+        task.comments.splice(idx, 1);
+        await OL.persist();
+        OL.openTaskModal(taskId, isVault);
+    }
+};
+
+// 🚀 THE FIX: Ensure renderCommentsList handles its own logic
+function renderCommentsList(obj, activeTab = 'internal') {
+    const comments = obj.comments || [];
+    const filtered = comments.filter(c => activeTab === 'client' ? c.isClientFacing : !c.isClientFacing);
+
+    if (filtered.length === 0) {
+        return `<div class="tiny muted center italic" style="padding: 40px 20px;">No ${activeTab} notes yet.</div>`;
+    }
+
+    return filtered.map((c) => {
+        const globalIdx = comments.indexOf(c);
+        const isClientType = c.isClientFacing;
+        const isVaultMode = window.location.hash.includes('vault');
+        
+        const deleteAction = String(obj.id).startsWith('tk') || String(obj.id).startsWith('step')
+            ? `OL.deleteTaskComment('${obj.id}', ${globalIdx}, ${isVaultMode})`
+            : `OL.deleteResourceComment('${obj.id}', ${globalIdx})`;
+
+        return `
+            <div class="comment-bubble" style="margin-bottom: 12px; padding: 10px; border-radius: 6px; 
+                 background: ${isClientType ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.03)'}; 
+                 border: 1px solid ${isClientType ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'};">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <b class="tiny" style="color: ${isClientType ? '#10b981' : 'var(--accent)'}">${esc(c.author)}</b>
+                    <span class="tiny muted" style="font-size: 8px;">${new Date(c.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div class="small" style="line-height: 1.4; font-size: 12px;">${esc(c.text)}</div>
+                ${!window.IS_GUEST ? `
+                    <div style="text-align: right; margin-top: 5px;">
+                        <button class="btn-icon-tiny" style="opacity:0.3;" onclick="${deleteAction}">delete</button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// Then add the Task delete handler:
+OL.deleteTaskComment = async function(taskId, idx, isVault) {
+    const client = getActiveClient();
+    let task = isVault 
+        ? state.master.taskBlueprints.find(t => t.id === taskId)
+        : client?.projectData?.clientTasks.find(t => t.id === taskId);
+        
+    if (task && task.comments) {
+        task.comments.splice(idx, 1);
+        await OL.persist();
+        OL.openTaskModal(taskId, isVault);
+    }
 };
 
 // 3. MASTER TASK IMPORTER
@@ -4786,6 +4926,8 @@ OL.getResourceById = function(id) {
 
 // 3c. OPEN RESOURCE MODAL
 OL.openResourceModal = function (targetId, draftObj = null) {
+    if (!state.v2) state.v2 = {}; 
+    if (!state.v2.activeCommentTab) state.v2.activeCommentTab = 'internal';
     if (!targetId) return;
 
     const isAdmin = true//state.adminMode === true || window.location.search.includes('admin=');
@@ -5142,7 +5284,7 @@ const dependencyHtml = `
 `;
 
   // Inside OL.openResourceModal...
-  const activeTab = state.v2.activeCommentTab || 'internal';
+  const activeTab = state.v2?.activeCommentTab || 'internal';
   const isGuest = !!window.IS_GUEST;
 
   const sidebarHtml = `
@@ -5330,41 +5472,6 @@ const dependencyHtml = `
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
 };
-
-function renderCommentsList(res, activeTab = 'internal') {
-    const comments = res.comments || [];
-    // Filter based on the selected sidebar tab
-    const filtered = comments.filter(c => activeTab === 'client' ? c.isClientFacing : !c.isClientFacing);
-
-    if (filtered.length === 0) {
-        return `<div class="tiny muted center italic" style="padding: 40px 20px;">
-            No ${activeTab} ${activeTab === 'client' ? 'messages' : 'notes'} yet.
-        </div>`;
-    }
-
-    return filtered.map((c, idx) => {
-        // Find the global index in the original array for deletion
-        const globalIdx = comments.indexOf(c);
-        const isClientType = c.isClientFacing;
-
-        return `
-            <div class="comment-bubble" style="margin-bottom: 12px; padding: 10px; border-radius: 6px; 
-                 background: ${isClientType ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.03)'}; 
-                 border: 1px solid ${isClientType ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'};">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                    <b class="tiny" style="color: ${isClientType ? '#10b981' : 'var(--accent)'}">${esc(c.author)}</b>
-                    <span class="tiny muted" style="font-size: 8px;">${new Date(c.timestamp).toLocaleDateString()}</span>
-                </div>
-                <div class="small" style="line-height: 1.4; font-size: 12px;">${esc(c.text)}</div>
-                ${!window.IS_GUEST ? `
-                    <div style="text-align: right; margin-top: 5px;">
-                        <button class="btn-icon-tiny" style="opacity:0.3;" onclick="OL.deleteResourceComment('${res.id}', ${globalIdx})">delete</button>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }).join('');
-}
 
 OL.addResourceComment = async function(resId, isClientFacing = false) {
     const input = document.getElementById(`new-comment-input-${resId}`);
