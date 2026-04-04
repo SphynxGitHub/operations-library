@@ -8675,14 +8675,16 @@ OL.renderVisualizer = function() {
                     const inHasCond = allIn.some(l => l.type === 'link' || !l.type);
                     const inHasNext = allIn.some(l => l.type === 'next');
                     const inHasLoop = allIn.some(l => l.type === 'loop');
-                    const inTooltip = allIn.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' : 'λ'} From: ${l.rule || 'Previous'}`).join(' | ');
+                    const inHasDelay = allIn.some(l => l.type === 'delay');
+                    const inTooltip = allIn.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' :  l.type ==='delay' ? '⏱︎' : 'λ'} From: ${l.rule || 'Previous'}`).join(' | ');
 
                     // 3. 📤 OUTGOING LOGIC SUMMARY (Right Side)
                     const allOut = s.logic?.out || [];
                     const outHasCond = allOut.some(l => l.type === 'link' || !l.type);
                     const outHasNext = allOut.some(l => l.type === 'next');
                     const outHasLoop = allOut.some(l => l.type === 'loop');
-                    const outTooltip = allOut.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' : 'λ'} ${l.rule || (l.type === 'next' ? 'Next' : 'Logic')}`).join(' | ');
+                    const outHasDelay = allOut.some(l => l.type === 'delay');
+                    const outTooltip = allOut.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' : l.type ==='delay'  ? '⏱︎' : 'λ'} ${l.rule || (l.type === 'next' ? 'Next' : 'Logic')}`).join(' | ');
 
                     return `
                         <div class="v2-step-item" 
@@ -8703,6 +8705,7 @@ OL.renderVisualizer = function() {
                                     ${inHasLoop ? `<span class="step-logic-icon loop" title="${esc(inTooltip)}">⟳</span>` : ''}
                                     ${inHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">λ</span>` : ''}
                                     ${inHasNext ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">➔</span>` : ''}
+                                    ${inHasDelay ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">⏱︎</span>` : ''}
                                 </div>
 
                                 <span style="flex: 1; font-size: 11px; line-height: 1.3; padding: 0 4px;">
@@ -8713,6 +8716,7 @@ OL.renderVisualizer = function() {
                                     ${outHasLoop ? `<span class="step-logic-icon loop" title="${esc(outTooltip)}">⟳</span>` : ''}
                                     ${outHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">λ</span>` : ''}
                                     ${outHasNext ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">➔</span>` : ''}
+                                    ${outHasDelay ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">⏱︎</span>` : ''}
                                 </div>
 
                                 <span class="delete-step-btn" style="flex-shrink: 0; opacity: 0.2; margin-left: 5px;" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
@@ -11383,6 +11387,7 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
 
     const isLoop = (logic.type === 'loop') || (String(targetId) === String(myFullId));
     const isNextStep = logic.type === 'next';
+    const isDelay = logic.type === 'delay';
 
     return `
         <div class="logic-item ${isReadOnly ? 'is-readonly' : ''}" 
@@ -11400,6 +11405,7 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
                             <option value="next" ${isNextStep ? 'selected' : ''}>➔ Next Step</option>
                             <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
                             <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
+                            <option value="delay" ${isDelay ? 'selected' : ''}>⏱︎ Wait For</option>
                         </select>
                     ` : ''}
                 </div>
