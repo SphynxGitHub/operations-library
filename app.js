@@ -3283,10 +3283,38 @@ window.renderChecklistModule = function (isVaultMode = false) {
     if (!container || (!isVault && !client)) return;
 
     const allTasks = isVault ? (state.master.taskBlueprints || []) : (client.projectData.clientTasks || []);
+    const lineItems = client?.projectData?.scopingSheets?.[0]?.lineItems || [];
     const showCompleted = !!state.ui.showCompleted;
 
     // Filter logic: Always show Pending/In Progress/Blocked. Only show Done if toggled on.
-    const visibleTasks = allTasks.filter(t => showCompleted || t.status !== "Done");
+    const visibleTasks = allTasks.filter(task => {
+        // 1. Completion Filter
+        if (!showCompleted && task.status === "Done") return false;
+        if (isVaultMode) return true;
+
+        // 2. Find if this task is a dependency of ANY resource
+        // We scan all project resources to see if this task ID is in their dependencies
+        const parentResource = (client.projectData.localResources || []).find(res => 
+            (res.dependencies || []).some(dep => dep.id === task.id)
+        );
+
+        // 3. If it's NOT linked to a resource, show it (it's a standalone project task)
+        if (!parentResource) return true;
+
+        // 4. If it IS linked, check that resource's status in the Scoping Sheet
+        const scopingItem = lineItems.find(li => String(li.resourceId) === String(parentResource.id));
+        
+        if (!scopingItem) return false; // Scoped out entirely
+
+        const status = String(scopingItem.status || "").toLowerCase();
+        const party = String(scopingItem.responsibleParty || "").toLowerCase();
+
+        const isDoNow = status === 'do now';
+        const isBillable = party === 'sphynx' || party === 'joint';
+
+        return isDoNow && isBillable;
+    });
+
     const completedCount = allTasks.filter(t => t.status === "Done").length;
 
     container.innerHTML = `
@@ -3358,68 +3386,94 @@ function renderTaskList(clientId, tasks, isVault = false) {
     if (tasks.length === 0) return '<div class="empty-hint">No tasks found.</div>';
     const client = getActiveClient();
 
-    return tasks.map(task => {
+    // 🏷️ Table Header - Increased name column to 3fr
+    const headerHtml = `
+        <div class="task-grid-header" style="display: grid; grid-template-columns: 40px 3fr 1fr 1fr 100px 30px; gap: 20px; padding: 10px 15px; border-bottom: 1px solid var(--line); opacity: 0.6; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+            <div>Stat</div>
+            <div>Task Description</div>
+            <div>Assignee</div>
+            <div>Tools / SOPs</div>
+            <div style="text-align: right;">Due Date</div>
+            <div></div>
+        </div>
+    `;
+
+    const rowsHtml = tasks.map(task => {
         const statusConfig = {
-            'Pending': { color: '#94a3b8' },
-            'In Progress': { color: '#3b82f6' },
-            'Blocked': { color: '#ef4444' },
-            'Done': { color: '#22c55e' }
+            'Pending': '#94a3b8',
+            'In Progress': '#3b82f6',
+            'Blocked': '#ef4444',
+            'Done': '#22c55e'
         };
         const config = statusConfig[task.status || 'Pending'];
         const isDone = task.status === 'Done';
 
+        const parentRes = (client.projectData.localResources || []).find(r => 
+            (r.dependencies || []).some(dep => dep.id === task.id)
+        );
+
+        const blockers = (task.dependencies || []).map(depId => {
+            const depItem = client.projectData.clientTasks.find(t => t.id === depId);
+            return (depItem && depItem.status !== 'Done') ? depItem.name : null;
+        }).filter(Boolean);
+
         return `
-            <div class="task-card horizontal-row" style="
-                background: ${isDone ? 'rgba(255,255,255,0.02)' : 'var(--panel-bg)'}; 
-                ${isDone ? 'opacity: 0.6;' : ''}">
+            <div class="task-grid-row" style="display: grid; grid-template-columns: 40px 3fr 1fr 1fr 100px 30px; gap: 20px; padding: 14px 15px; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: start; transition: background 0.2s; ${isDone ? 'opacity: 0.5;' : ''}">
                 
-                <div style="width: 24px; display: flex; justify-content: center; flex-shrink: 0;">
-                    ${!isVault ? `
-                        <div onclick="OL.cycleTaskStatus('${clientId}', '${task.id}', event)" 
-                             title="Status: ${task.status}"
-                             style="width: 12px; height: 12px; border-radius: 50%; background: ${config.color}; cursor: pointer; border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 0 5px ${config.color}33;">
-                        </div>
-                    ` : '<i style="font-size:12px; opacity:0.4;">📋</i>'}
-                </div>
-
-                <div class="task-name is-clickable ${isDone ? 'muted italic line-through' : ''}" 
-                     onclick="OL.openTaskModal('${task.id}', ${isVault})"
-                     overflow: hidden; text-overflow: ellipsis;">
-                    ${esc(task.title || task.name)}
-                </div>
-
-                <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-                    ${!isVault && task.dueDate ? `
-                        <span class="tiny muted" style="font-size: 10px; white-space: nowrap;">
-                            📅 ${new Date(task.dueDate).toLocaleDateString([], {month:'short', day:'numeric'})}
-                        </span>
-                    ` : ''}
-
-                    <div style="display: flex; gap: -4px;"> ${!isVault && (task.assigneeIds || []).map(mId => {
-                            const m = client.projectData.teamMembers?.find(mem => mem.id === mId);
-                            return m ? `<span class="pill tiny accent" style="font-size: 9px; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); background: rgba(var(--accent-rgb), 0.1); margin-left: -4px;">${esc(m.name.substring(0,1))}</span>` : '';
-                        }).join('')}
+                <div style="padding-top: 4px;">
+                    <div onclick="OL.cycleTaskStatus('${clientId}', '${task.id}', event)" 
+                         style="width: 12px; height: 12px; border-radius: 50%; background: ${config}; cursor: pointer; border: 2px solid rgba(255,255,255,0.1);">
                     </div>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 8px; min-width: 120px; justify-content: flex-end; flex-shrink: 0;">
-                    ${(task.appIds || []).length > 0 ? `
-                        <span class="pill tiny soft" title="${(task.appIds || []).length} Tools Linked" style="font-size: 10px; padding: 2px 6px; background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border);">
-                            📱 ${(task.appIds || []).length}
-                        </span>` : ''}
-                    ${(task.howToIds || []).length > 0 ? `
-                        <span class="pill tiny soft" title="${(task.howToIds || []).length} SOPs Linked" style="font-size: 10px; padding: 2px 6px; background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border);">
-                            📖 ${(task.howToIds || []).length}
-                        </span>` : ''}
+                <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+                    <div class="is-clickable bold ${isDone ? 'line-through' : ''}" 
+                         style="font-size: 14px; color: var(--text-main); line-height: 1.4; word-wrap: break-word;"
+                         onclick="OL.openTaskModal('${task.id}', ${isVault})">
+                        ${esc(task.title || task.name)}
+                        ${parentRes ? `<span style="font-weight: normal; opacity: 0.3; font-size: 11px; margin-left: 8px; display: inline-block;">→ ${esc(parentRes.name)}</span>` : ''}
+                    </div>
+                    
+                    ${blockers.length > 0 ? `
+                        <div style="display: block; width: 100%; margin-top: 4px;">
+                            <div style="color: #ef4444; font-size: 10px; font-weight: bold; background: rgba(239, 68, 68, 0.08); padding: 4px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                                <span>🛑 WAITING ON:</span>
+                                <span style="font-weight: 500; opacity: 0.9;">${blockers.join(', ')}</span>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
 
-                <div style="width: 20px; display: flex; justify-content: flex-end;">
-                    <button class="card-close" style="font-size: 14px; opacity: 0.3; cursor: pointer; background: none; border: none; color: inherit;"
+                <div style="display: flex; flex-wrap: wrap; gap: 4px; padding-top: 2px;">
+                    ${(task.assigneeIds || []).length > 0 ? task.assigneeIds.map(id => {
+                        const m = client.projectData.teamMembers?.find(mem => mem.id === id);
+                        return m ? `<span class="pill tiny accent" style="font-size: 9px; padding: 2px 6px; border-radius: 4px;">${esc(m.name)}</span>` : '';
+                    }).join('') : '<span class="tiny muted" style="opacity:0.2;">—</span>'}
+                </div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px;">
+                    ${(task.appIds || []).length > 0 ? `<span class="pill tiny soft" style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); font-size: 9px;">📱 ${(task.appIds || []).length}</span>` : ''}
+                    ${(task.howToIds || []).length > 0 ? `<span class="pill tiny soft" style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); font-size: 9px;">📖 ${(task.howToIds || []).length}</span>` : ''}
+                    ${(!task.appIds?.length && !task.howToIds?.length) ? '<span class="tiny muted" style="opacity:0.2;">—</span>' : ''}
+                </div>
+
+                <div style="text-align: right; padding-top: 4px;">
+                    ${task.dueDate ? `
+                        <span class="tiny ${new Date(task.dueDate) < new Date() && !isDone ? 'text-danger' : 'muted'}" style="font-size: 10px; font-weight: bold; font-family: monospace;">
+                            ${new Date(task.dueDate).toLocaleDateString([], {month:'short', day:'numeric'}).toUpperCase()}
+                        </span>` : '<span class="tiny muted" style="opacity: 0.2;">TBD</span>'}
+                </div>
+
+                <div style="text-align: right; padding-top: 2px;">
+                    <button class="card-close" style="opacity: 0.2; font-size: 16px; cursor: pointer; transition: opacity 0.2s;" 
+                            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.2"
                             onclick="event.stopPropagation(); ${isVault ? `OL.removeMasterTask('${task.id}')` : `OL.removeClientTask('${clientId}', '${task.id}')`}">×</button>
                 </div>
             </div>
         `;
     }).join("");
+
+    return headerHtml + `<div class="task-grid-body">${rowsHtml}</div>`;
 }
 
 OL.cycleTaskStatus = function(clientId, taskId, event) {
@@ -5045,6 +5099,38 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         ? ['All', ...new Set(allConnections.map(c => c.type))] 
         : [];
 
+  // --- 🔗 SPLIT DEPENDENCIES ---
+const allDeps = res.dependencies || [];
+const taskDeps = allDeps.filter(d => d.type === 'task');
+const resDeps = allDeps.filter(d => d.type === 'resource');
+
+const dependencyHtml = `
+    <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
+        <label class="modal-section-label">📋 TASK DEPENDENCIES (PROJECT-SPECIFIC)</label>
+        <div class="dp-manager-list" id="task-dependency-list">
+            ${taskDeps.map((dep, idx) => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No tasks linked.</div>'}
+        </div>
+        <div class="search-map-container" style="margin-top:8px;">
+            <input type="text" class="modal-input tiny" placeholder="Search or Create Task..." 
+                   onfocus="OL.filterDependencySearch('${res.id}', 'task', '')"
+                   oninput="OL.filterDependencySearch('${res.id}', 'task', this.value)">
+            <div id="task-dep-results" class="search-results-overlay"></div>
+        </div>
+    </div>
+
+    <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
+        <label class="modal-section-label">🛠️ RESOURCE DEPENDENCIES (INFRASTRUCTURE)</label>
+        <div class="dp-manager-list" id="res-dependency-list">
+            ${resDeps.map((dep, idx) => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No resources linked.</div>'}
+        </div>
+        <div class="search-map-container" style="margin-top:8px;">
+            <input type="text" class="modal-input tiny" placeholder="Search Project Library..." 
+                   onfocus="OL.filterDependencySearch('${res.id}', 'resource', '')"
+                   oninput="OL.filterDependencySearch('${res.id}', 'resource', this.value)">
+            <div id="res-dep-results" class="search-results-overlay"></div>
+        </div>
+    </div>
+`;
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
         <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
@@ -5091,6 +5177,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             ${roundInputHtml}
             ${hierarchyHtml}
             ${adminPricingHtml}
+            ${dependencyHtml}
             ${appMappingHtml}
 
             <div class="card-section" style="margin-top:20px;">
@@ -8528,12 +8615,12 @@ OL.renderVisualizer = function() {
             </div>
         `;
         const duplicateBadge = `
-            <div class="v2-duplicate-badge" 
-                onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}')"
-                title="Duplicate Resource">
-                ⿻
-            </div>
-        `;
+          <div class="v2-duplicate-badge action-duplicate" 
+              data-id="${res.id}"
+              title="Duplicate Resource">
+              ⿻
+          </div>
+      `;
         
         // Handle Tray Filtering
         if (res.isGlobal && !res.isTopShelf && traySearch && !res.name.toLowerCase().includes(traySearch)) return;
@@ -8707,6 +8794,22 @@ OL.renderVisualizer = function() {
 
 window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
 };
+
+document.addEventListener('mousedown', function(e) {
+    const badge = e.target.closest('.action-duplicate');
+    if (badge) {
+        // 🛑 KILL THE EVENT IMMEDIATELY
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const resId = badge.getAttribute('data-id');
+        console.log("🚀 Manual Intercept: Duplicating", resId);
+        
+        // Trigger the duplicate function
+        OL.duplicateResourceV2(resId);
+    }
+}, true); // 🎯 The 'true' is critical: it uses 'Capture' phase to catch the click first
 
 // Global to track the dragged index
 state.draggingStepIdx = null;
@@ -10675,7 +10778,9 @@ OL.getFilteredAssigneeOptions = function(query) {
         { id: 'any-team', name: 'Any Team Member', type: 'role', icon: '👥' },
         { id: 'all-client', name: 'Any Client', type: 'role', icon: '🏠' },
         { id: 'role-client-1', name: 'Client 1', type: 'role', icon: '👤' },
-        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: '👤' }
+        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: '👤' },
+        { id: 'role-coi', name: 'COI', type: 'role', icon: '👨‍💼' },
+        { id: 'role-sphynx', name: 'Sphynx', type: 'role', icon: '👩‍🎤' }
     ];
 
     // 2. Gather Dynamic Data
@@ -12036,24 +12141,47 @@ OL.refreshFamilyNaming = function(targetRes, resources) {
     }
 };
 
-OL.duplicateResourceV2 = async function(resourceId) {
-    const isVault = location.hash.includes('vault');
-    const source = isVault ? state.master.resources : getActiveClient().projectData.localResources;
-    const original = source.find(r => r.id === resourceId);
-    if (!original) return;
+window.OL.duplicateResourceV2 = async function(resourceId) {
+    // 🛡️ Secondary shield against bubbling
+    if (window.event) {
+        window.event.stopPropagation();
+        window.event.preventDefault();
+    }
 
+    const isVault = window.location.hash.includes('vault');
+    const client = getActiveClient();
+    
+    // 1. Resolve Data Source
+    let source = isVault ? state.master.resources : client?.projectData?.localResources;
+    if (!source) return console.error("❌ Source array not found");
+
+    // 2. Find Original
+    const original = source.find(r => String(r.id) === String(resourceId));
+    if (!original) return console.error("❌ Original not found");
+
+    // 3. Clone and Save
     await OL.updateAndSync(() => {
         const clone = JSON.parse(JSON.stringify(original));
-        clone.id = 'res-' + Date.now();
-        clone.coords.x += 30; // Slight offset so it's visible
-        clone.coords.y += 30;
+        const timestamp = Date.now();
         
-        // Remove counter if duplicating a split part, or keep base name
-        clone.name = original.name.replace(/\s\(\d+\/\d+\)$/, "") + " (Copy)";
+        clone.id = (isVault ? 'res-vlt-' : 'local-prj-') + timestamp;
+        clone.name = original.name.replace(/\s\(\d+\/\d+\)$/, "").replace(" (Copy)", "") + " (Copy)";
+        
+        // Offset so it's not hidden behind the original
+        if (clone.coords) {
+            clone.coords.x += 50;
+            clone.coords.y += 50;
+        }
+
+        // Wipe instance-specific flags
+        delete clone.masterRefId; 
         
         source.push(clone);
+        console.log("✅ Duplicated to:", clone.id);
     });
-    if (OL.renderVisualizer) OL.renderVisualizer(isVault);
+
+    // 4. Force UI to Draw
+    OL.renderVisualizer();
 };
 
 OL.toggleWorkbenchTray = function() {
@@ -12885,7 +13013,8 @@ OL.executeScopeAdd = async function (resId) {
         teamMode: "everyone", 
         teamIds: [],
         data: {},
-        manualHours: 0
+        manualHours: 0,
+        dependencies: [],
     };
 
     if (!client.projectData.scopingSheets) client.projectData.scopingSheets = [{id: 'initial', lineItems: []}];
@@ -13456,6 +13585,207 @@ OL.removeScopingVariable = function(varKey, typeKey) {
 };
 
 //======================= SCOPING-TASKS OVERLAP ========================//
+
+function renderDependencyRow(dep, parentId) {
+    const client = getActiveClient();
+    const isTask = dep.type === 'task';
+    
+    // 🎯 Resolve the object
+    let obj = isTask 
+        ? (client?.projectData?.clientTasks || []).find(t => t.id === dep.id)
+        : OL.getResourceById(dep.id);
+
+    const icon = isTask ? '📋' : OL.getRegistryIcon(obj?.type);
+    
+    // 🎯 Navigation Logic
+    const clickAction = isTask 
+        ? `OL.openTaskModal('${dep.id}', false)` 
+        : `OL.openResourceModal('${dep.id}')`;
+
+    return `
+        <div class="dp-manager-row" style="display:flex; justify-content:space-between; align-items:center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">
+            <div style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1;" onclick="${clickAction}">
+                <span style="font-size:12px;">${icon}</span>
+                <div style="display:flex; flex-direction:column;">
+                    <span style="font-size:11px; font-weight:bold; color: ${isTask ? 'var(--text-main)' : 'var(--accent)'}">${esc(obj?.name || "Deleted Item")}</span>
+                    <span style="font-size:8px; opacity:0.5; text-transform:uppercase;">${isTask ? (obj?.status || 'Pending') : (obj?.type || 'Resource')}</span>
+                </div>
+            </div>
+            <button class="card-delete-btn" style="position:static; opacity:0.4;" onclick="OL.removeDependencyById('${parentId}', '${dep.id}')">×</button>
+        </div>
+    `;
+}
+
+OL.getDependencyStatus = function(item, allItems) {
+    if (!item.dependencies || item.dependencies.length === 0) return 'ready';
+    
+    const blockedBy = [];
+    item.dependencies.forEach(depId => {
+        const depItem = allItems.find(i => i.id === depId);
+        if (depItem && depItem.status !== 'Done') {
+            const res = OL.getResourceById(depItem.resourceId);
+            blockedBy.push(res?.name || "Required Task");
+        }
+    });
+
+    return blockedBy.length > 0 ? { status: 'blocked', list: blockedBy } : { status: 'ready' };
+};
+
+OL.openDependencyManager = function(lineItemId) {
+    const client = getActiveClient();
+    const sheet = client.projectData.scopingSheets[0];
+    const targetItem = sheet.lineItems.find(i => i.id === lineItemId);
+    const targetRes = OL.getResourceById(targetItem.resourceId);
+
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔗 Manage Dependencies for: ${esc(targetRes?.name)}</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <label class="modal-section-label">Active Dependencies</label>
+            <div class="dp-manager-list" style="margin-bottom: 20px;">
+                ${(targetItem.dependencies || []).map(depId => {
+                    const depItem = sheet.lineItems.find(i => i.id === depId);
+                    const depRes = OL.getResourceById(depItem?.resourceId);
+                    return `
+                        <div class="dp-manager-row" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>🎯 ${esc(depRes?.name || "Unknown Item")}</span>
+                            <button class="btn-icon-tiny" onclick="OL.toggleDependency('${lineItemId}', '${depId}')">×</button>
+                        </div>
+                    `;
+                }).join('') || '<div class="tiny muted">No dependencies set.</div>'}
+            </div>
+
+            <label class="modal-section-label">Add Dependency (Search project items)</label>
+            <div class="search-map-container">
+                <input type="text" class="modal-input" placeholder="Search other scoped items..."
+                       oninput="OL.filterDependencySearch('${lineItemId}', this.value)">
+                <div id="dep-search-results" class="search-results-overlay"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterDependencySearch = function(currentResId, mode, query) {
+    const targetElId = mode === 'task' ? "task-dep-results" : "res-dep-results";
+    const listEl = document.getElementById(targetElId);
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const currentRes = OL.getResourceById(currentResId);
+    const existingIds = (currentRes.dependencies || []).map(d => d.id);
+
+    let matches = [];
+    let html = "";
+
+    if (mode === 'task') {
+        // --- TASK MODE ---
+        matches = (client?.projectData?.clientTasks || []).filter(t => 
+            !existingIds.includes(t.id) && t.name.toLowerCase().includes(q)
+        );
+        html = matches.map(t => `
+            <div class="search-result-item" onmousedown="OL.addDependency('${currentResId}', '${t.id}', 'task')">
+                <span>📋 ${esc(t.name)}</span>
+            </div>
+        `).join('');
+
+        // Quick Create Task only
+        if (q.length > 0 && !matches.some(m => m.name.toLowerCase() === q)) {
+            html += `<div class="search-result-item create-action" onmousedown="OL.createAndLinkTaskDependency('${currentResId}', '${esc(query)}')">
+                <span class="pill tiny accent">+ CREATE TASK</span> "${esc(query)}"
+            </div>`;
+        }
+    } else {
+        // --- RESOURCE MODE ---
+        const data = OL.getCurrentProjectData();
+        matches = (data.resources || []).filter(r => 
+            String(r.id) !== String(currentResId) && !existingIds.includes(r.id) && r.name.toLowerCase().includes(q)
+        );
+        html = matches.map(r => `
+            <div class="search-result-item" onmousedown="OL.addDependency('${currentResId}', '${r.id}', 'resource')">
+                <span>${OL.getRegistryIcon(r.type)} ${esc(r.name)}</span>
+            </div>
+        `).join('');
+    }
+
+    listEl.innerHTML = html || '<div class="search-result-item muted">No matches found.</div>';
+    listEl.style.display = 'block';
+};
+
+OL.createAndLinkTaskDependency = async function(resId, taskName) {
+    const client = getActiveClient();
+    if (!client) return;
+
+    const taskId = 'tk-' + Date.now(); // Use your task prefix
+    const newTask = {
+        id: taskId,
+        name: taskName,
+        status: "Pending", // 🎯 Critical for showing up in "Active" lists
+        description: "",
+        appIds: [],
+        howToIds: [],
+        assigneeIds: [],
+        createdDate: new Date().toISOString()
+    };
+
+    await OL.updateAndSync(() => {
+        // 🎯 SAVE TO THE CORRECT ARRAY
+        if (!client.projectData.clientTasks) client.projectData.clientTasks = [];
+        client.projectData.clientTasks.push(newTask);
+
+        // Link to the current resource
+        const res = OL.getResourceById(resId);
+        if (res) {
+            if (!res.dependencies) res.dependencies = [];
+            res.dependencies.push({
+                id: taskId,
+                type: 'task',
+                addedDate: new Date().toISOString()
+            });
+        }
+    });
+
+    // 🚀 AUTO-OPEN: Open the task immediately for editing
+    OL.openTaskModal(taskId, false); 
+    
+    // Refresh background if needed
+    if (typeof renderChecklistModule === 'function') renderChecklistModule();
+};
+
+OL.addDependency = async function(resId, depId, type) {
+    const res = OL.getResourceById(resId);
+    if (!res) return;
+
+    if (!res.dependencies) res.dependencies = [];
+    
+    // Check for circular dependency (simple 1-level check)
+    const depTarget = OL.getResourceById(depId);
+    if (depTarget?.dependencies?.some(d => d.id === resId)) {
+        alert("🚫 Circular Dependency detected! This item already depends on the current one.");
+        return;
+    }
+
+    res.dependencies.push({
+        id: depId,
+        type: type, // 'resource' or 'step'
+        addedDate: new Date().toISOString()
+    });
+
+    await OL.persist();
+    OL.openResourceModal(resId); // Refresh modal
+};
+
+OL.removeDependencyById = async function(resId, depId) {
+    const res = OL.getResourceById(resId);
+    if (res && res.dependencies) {
+        res.dependencies = res.dependencies.filter(d => d.id !== depId);
+        await OL.persist();
+        OL.openResourceModal(resId);
+    }
+};
 
 //======================= TEAM MANAGEMENT SECTION =======================//
 
