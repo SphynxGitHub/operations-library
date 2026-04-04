@@ -5140,6 +5140,45 @@ const dependencyHtml = `
         </div>
     </div>
 `;
+
+  // Inside OL.openResourceModal...
+  const activeTab = state.v2.activeCommentTab || 'internal';
+  const isGuest = !!window.IS_GUEST;
+
+  const sidebarHtml = `
+      <aside class="modal-sidebar" style="flex: 1; display: flex; flex-direction: column; background: rgba(0,0,0,0.05); border-left: 1px solid var(--line);">
+          
+          <div style="display: flex; border-bottom: 1px solid var(--line);">
+              ${!isGuest ? `
+                  <div class="comment-tab ${activeTab === 'internal' ? 'active' : ''}" 
+                      onclick="state.v2.activeCommentTab='internal'; OL.openResourceModal('${res.id}')"
+                      style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'internal' ? 'color:var(--accent); border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                      INTERNAL NOTES
+                  </div>
+              ` : ''}
+              <div class="comment-tab ${activeTab === 'client' ? 'active' : ''}" 
+                  onclick="state.v2.activeCommentTab='client'; OL.openResourceModal('${res.id}')"
+                  style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'client' ? 'color:#10b981; border-bottom:2px solid #10b981;' : 'opacity:0.5'}">
+                  CLIENT FEEDBACK
+              </div>
+          </div>
+
+          <div id="comments-list-${res.id}" style="flex: 1; overflow-y: auto; padding: 15px;">
+              ${renderCommentsList(res, activeTab)}
+          </div>
+
+          <div class="comment-input-zone" style="padding: 15px; border-top: 1px solid var(--line);">
+              <textarea id="new-comment-input-${res.id}" class="modal-textarea" 
+                        placeholder="Type a ${activeTab === 'client' ? 'message to the team' : 'private note'}..." 
+                        style="min-height: 60px; margin-bottom: 8px; font-size: 11px;"></textarea>
+              <button class="btn tiny full-width ${activeTab === 'client' ? 'primary' : 'soft'}" 
+                      style="${activeTab === 'client' ? 'background:#10b981; color:white;' : ''}"
+                      onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">
+                  Post to ${activeTab === 'client' ? 'Client Thread' : 'Internal Stack'}
+              </button>
+          </div>
+      </aside>
+  `;
     // --- 🚀 FINAL ASSEMBLY ---
     const html = `
         <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
@@ -5182,104 +5221,107 @@ const dependencyHtml = `
             </div>
         </div>
 
-        <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
-            ${roundInputHtml}
-            ${hierarchyHtml}
-            ${adminPricingHtml}
-            ${dependencyHtml}
-            ${appMappingHtml}
+        <div class="modal-layout-wrapper" style="display: flex; height: 75vh; overflow: hidden;">
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
+              ${roundInputHtml}
+              ${hierarchyHtml}
+              ${adminPricingHtml}
+              ${dependencyHtml}
+              ${appMappingHtml}
 
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">📝 Description & Access Notes</label>
-                <textarea class="modal-textarea" 
-                        placeholder="Enter login details, account purpose, or specific access instructions..." 
-                        style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
-                        onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-            </div>
+              <div class="card-section" style="margin-top:20px;">
+                  <label class="modal-section-label">📝 Description & Access Notes</label>
+                  <textarea class="modal-textarea" 
+                          placeholder="Enter login details, account purpose, or specific access instructions..." 
+                          style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
+                          onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+              </div>
 
-            ${miniMapsHtml}
-            <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                <label class="modal-section-label">📋 WORKFLOW STEPS</label>
-                <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                    <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
-                </div>
-                <div id="sop-step-list">
-                    ${renderSopStepList(res)}
-                </div>
-            </div>
-            ${sopLibraryHtml}
-            
-            <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label">🌐 External Link & Source</label>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" class="modal-input tiny" 
-                        style="flex: 1;"
-                        placeholder="https://app.example.com" 
-                        value="${esc(res.externalUrl || '')}" 
-                        onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
-                    
-                    ${res.externalUrl ? `
-                        <button class="btn soft tiny" style="color: black !important; padding: 0 12px;" 
-                                onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" title="Copy Link">
-                            📋 Copy
-                        </button>
-                        <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
-                           style="display: flex; align-items: center; gap: 4px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
-                            ↗️ Open
-                        </a>
-                    ` : ''}
-                </div>
-                ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
-            </div>
+              ${miniMapsHtml}
+              <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
+                  <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+                  <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
+                      <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
+                  </div>
+                  <div id="sop-step-list">
+                      ${renderSopStepList(res)}
+                  </div>
+              </div>
+              ${sopLibraryHtml}
+              
+              <div class="card-section" style="margin-top:20px;">
+                  <label class="modal-section-label">🌐 External Link & Source</label>
+                  <div style="display:flex; gap:10px; margin-bottom:10px;">
+                      <input type="text" class="modal-input tiny" 
+                          style="flex: 1;"
+                          placeholder="https://app.example.com" 
+                          value="${esc(res.externalUrl || '')}" 
+                          onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
+                      
+                      ${res.externalUrl ? `
+                          <button class="btn soft tiny" style="color: black !important; padding: 0 12px;" 
+                                  onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" title="Copy Link">
+                              📋 Copy
+                          </button>
+                          <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
+                            style="display: flex; align-items: center; gap: 4px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
+                              ↗️ Open
+                          </a>
+                      ` : ''}
+                  </div>
+                  ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
+              </div>
 
-            <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
-                <label class="modal-section-label">🔗 Connected Relationships</label>
-                
-                <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
-                    ${types.map(t => `
-                        <span onclick="state.ui.relationshipFilter = '${t}'; OL.openResourceModal('${targetId}')" 
-                              style="font-size: 9px; padding: 2px 8px; border-radius: 100px; cursor: pointer; 
-                              background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
-                              color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
-                            ${t.toUpperCase()}
-                        </span>
-                    `).join('')}
-                </div>
-            
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
-                        const isScopingEnv = window.location.hash.includes('scoping-sheet');
-                        const navAction = isScopingEnv 
-                            ? `OL.openResourceModal('${conn.id}')` 
-                            : `OL.openInspector('${conn.id}')`;
+              <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
+                  <label class="modal-section-label">🔗 Connected Relationships</label>
+                  
+                  <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
+                      ${types.map(t => `
+                          <span onclick="state.ui.relationshipFilter = '${t}'; OL.openResourceModal('${targetId}')" 
+                                style="font-size: 9px; padding: 2px 8px; border-radius: 100px; cursor: pointer; 
+                                background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
+                                color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
+                              ${t.toUpperCase()}
+                          </span>
+                      `).join('')}
+                  </div>
+              
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                      ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
+                          const isScopingEnv = window.location.hash.includes('scoping-sheet');
+                          const navAction = isScopingEnv 
+                              ? `OL.openResourceModal('${conn.id}')` 
+                              : `OL.openInspector('${conn.id}')`;
 
-                        return ` 
-                            <div class="pill accent is-clickable" 
-                                style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); cursor: pointer !important; position: relative; z-index: 9999;"
-                                onmousedown="event.preventDefault(); event.stopPropagation(); if(window.OL.closeModal) OL.closeModal(); ${navAction}">
+                          return ` 
+                              <div class="pill accent is-clickable" 
+                                  style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); cursor: pointer !important; position: relative; z-index: 9999;"
+                                  onmousedown="event.preventDefault(); event.stopPropagation(); if(window.OL.closeModal) OL.closeModal(); ${navAction}">
 
-                                <div style="display: flex; align-items: center; gap: 8px; pointer-events: none;">
-                                    <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
-                                    <div style="display:flex; flex-direction:column;">
-                                        <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
-                                        <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
-                                    </div>
-                                </div>
-                                <span style="font-size: 9px; opacity: 0.5; pointer-events: none;">
-                                    ${isScopingEnv ? 'Open Modal ↗' : 'Inspect ➔'}
-                                </span>
-                            </div>
-                        `;
-                    }).join('') : `
-                        <div class="tiny muted" style="padding: 10px; text-align: center;">
-                            ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}
-                        </div>
-                    `}
-                </div>
-            </div>
+                                  <div style="display: flex; align-items: center; gap: 8px; pointer-events: none;">
+                                      <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
+                                      <div style="display:flex; flex-direction:column;">
+                                          <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
+                                          <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
+                                      </div>
+                                  </div>
+                                  <span style="font-size: 9px; opacity: 0.5; pointer-events: none;">
+                                      ${isScopingEnv ? 'Open Modal ↗' : 'Inspect ➔'}
+                                  </span>
+                              </div>
+                          `;
+                      }).join('') : `
+                          <div class="tiny muted" style="padding: 10px; text-align: center;">
+                              ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}
+                          </div>
+                      `}
+                  </div>
+              </div>
 
-            ${typeSpecificHtml}
-        </div>
+              ${typeSpecificHtml}
+          </div>
+          ${sidebarHtml}
+    </div>
     `;
     
     openModal(html);
@@ -5287,6 +5329,83 @@ const dependencyHtml = `
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+function renderCommentsList(res, activeTab = 'internal') {
+    const comments = res.comments || [];
+    // Filter based on the selected sidebar tab
+    const filtered = comments.filter(c => activeTab === 'client' ? c.isClientFacing : !c.isClientFacing);
+
+    if (filtered.length === 0) {
+        return `<div class="tiny muted center italic" style="padding: 40px 20px;">
+            No ${activeTab} ${activeTab === 'client' ? 'messages' : 'notes'} yet.
+        </div>`;
+    }
+
+    return filtered.map((c, idx) => {
+        // Find the global index in the original array for deletion
+        const globalIdx = comments.indexOf(c);
+        const isClientType = c.isClientFacing;
+
+        return `
+            <div class="comment-bubble" style="margin-bottom: 12px; padding: 10px; border-radius: 6px; 
+                 background: ${isClientType ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.03)'}; 
+                 border: 1px solid ${isClientType ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'};">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <b class="tiny" style="color: ${isClientType ? '#10b981' : 'var(--accent)'}">${esc(c.author)}</b>
+                    <span class="tiny muted" style="font-size: 8px;">${new Date(c.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div class="small" style="line-height: 1.4; font-size: 12px;">${esc(c.text)}</div>
+                ${!window.IS_GUEST ? `
+                    <div style="text-align: right; margin-top: 5px;">
+                        <button class="btn-icon-tiny" style="opacity:0.3;" onclick="OL.deleteResourceComment('${res.id}', ${globalIdx})">delete</button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+OL.addResourceComment = async function(resId, isClientFacing = false) {
+    const input = document.getElementById(`new-comment-input-${resId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    const res = OL.getResourceById(resId);
+    const client = getActiveClient();
+    if (!res) return;
+
+    // 🕵️ AUTHOR RESOLUTION
+    let authorName = "Team Member";
+    if (window.FORCE_ADMIN) {
+        authorName = "Sphynx Team";
+    } else if (window.IS_GUEST && client) {
+        authorName = client.meta.name; // Uses the Company Name from Registry
+    }
+
+    if (!res.comments) res.comments = [];
+    
+    res.comments.push({
+        author: authorName,
+        text: text,
+        timestamp: new Date().toISOString(),
+        isClientFacing: isClientFacing // 🔒 Visibility Flag
+    });
+
+    await OL.persist();
+    input.value = "";
+    // Save current tab preference to state so it doesn't flip back on refresh
+    state.v2.activeCommentTab = isClientFacing ? 'client' : 'internal';
+    OL.openResourceModal(resId);
+};
+
+OL.deleteResourceComment = async function(resId, idx) {
+    const res = OL.getResourceById(resId);
+    if (res && res.comments) {
+        res.comments.splice(idx, 1);
+        await OL.persist();
+        OL.openResourceModal(resId);
+    }
 };
 
 OL.renderResourceMiniMaps = function(targetResId) {
