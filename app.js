@@ -4823,23 +4823,30 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     // 🧠 2. AUTO-MAPPING LOGIC (The New Brain)
     const rawType = String(res.type || 'General');
     const typeDef = (state.master.resourceTypes || []).find(t => t.type.toLowerCase() === rawType.toLowerCase());
-    
-    // Check if locked by Type or by specific manual Function ID
+
     const isLockedByType = !!(typeDef && typeDef.matchedFunctionId);
     const isLockedByManual = !!res.matchedFunctionId;
     const isZap = rawType.toLowerCase() === 'zap';
 
-    // Get the tool (Helper handles the priority: Manual ID > Type Mapping)
+    // 1. Identify what the "Standard" tool should be
     const autoApp = (isLockedByType || isLockedByManual) && !isZap ? OL.getAppByFunction(rawType, res.matchedFunctionId) : null;
 
-    // Sync back to data
-    if (autoApp && res.appId !== autoApp.id) {
+    // 🎯 2. THE OVERRIDE PROTECTION
+    // We ONLY auto-assign if the field is currently EMPTY. 
+    // If you manually picked an app, res.appId is no longer null, so this block is skipped.
+    if (autoApp && !res.appId) {
+        console.log(`🤖 Auto-assigning ${autoApp.name} to ${res.name}`);
         res.appId = autoApp.id;
         res.appName = autoApp.name;
+        
+        // Silent save to persist the auto-suggestion
         OL.handleResourceSave(res.id, 'appId', autoApp.id);
         OL.handleResourceSave(res.id, 'appName', autoApp.name);
     }
-    
+
+    // 3. Determine UI state for the pill
+    const isManualOverride = res.appId && autoApp && String(res.appId) !== String(autoApp.id);
+        
         // 🚀 THE SIMPLIFIED CHECK
     // 1. Is the user an admin? (Checks both state and URL)
     const userIsAdmin = state.adminMode || window.location.search.includes('admin=');
@@ -4875,36 +4882,38 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </select>
         </div>`;
 
-    // 🎯 NEW: AUTO-MAPPING SECTION
-    const appMappingHtml = `
-        <div class="card-section" style="margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div>
-                    <label class="modal-section-label">📱 PRIMARY APPLICATION</label>
-                    <div id="modal-app-pill-container">
-                        ${isZap ? `<div class="pill soft tiny muted" style="width:100%; border-style:dashed;">⚡ Multi-App Automation</div>` : 
-                          autoApp ? `
-                            <div class="pill primary locked-pill" style="width:100%; justify-content:center;">
-                                <span class="pill-text">${OL.getResourceIcon(rawType)} ${esc(autoApp.name)}</span>
-                            </div>
-                        ` : res.appId ? `
-                            <div class="pill primary" style="display:flex; justify-content:space-between; align-items:center;">
-                                <span>📱 ${esc(res.appName)}</span>
-                                <b class="is-clickable" onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.openResourceModal('${res.id}')">×</b>
-                            </div>
-                        ` : `
-                            <div class="search-map-container">
-                                <input type="text" class="modal-input tiny" placeholder="Search Apps..." 
-                                       onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
-                                       oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
-                                <div id="modal-app-results" class="search-results-overlay"></div>
-                            </div>
-                        `}
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+      // 🎯 NEW: AUTO-MAPPING SECTION
+      const appMappingHtml = `
+      <div class="card-section" style="margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label class="modal-section-label" style="margin:0;">📱 PRIMARY APPLICATION</label>
+              ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px;">CUSTOM OVERRIDE</span>' : ''}
+          </div>
+
+          <div id="modal-app-pill-container">
+              ${isZap ? `<div class="pill soft tiny muted" style="width:100%; border-style:dashed; justify-content:center;">⚡ Multi-App Automation</div>` : 
+                res.appId ? `
+                  <div class="pill ${isManualOverride ? 'accent' : 'primary'}" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                          <span>${isManualOverride ? '✏️' : '🤖'}</span>
+                          <span style="font-weight:bold;">${esc(res.appName)}</span>
+                      </div>
+                      <b class="is-clickable" style="padding: 2px 6px; opacity: 0.5;" 
+                        onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.handleResourceSave('${res.id}', 'appName', null); OL.openResourceModal('${res.id}')">
+                        ×
+                      </b>
+                  </div>
+              ` : `
+                  <div class="search-map-container">
+                      <input type="text" class="modal-input tiny" placeholder="Search Apps to Override..." 
+                            onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
+                            oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
+                      <div id="res-app-results" class="search-results-overlay"></div>
+                  </div>
+              `}
+          </div>
+      </div>
+  `;
 
     // Back button to go back to flow map if jumped from scope button
     const backBtn = state.v2.returnTo ? `
@@ -8654,35 +8663,26 @@ OL.renderVisualizer = function() {
                     const stepId = s.id || i; 
                     const stepAssignees = s.assignees || [];
 
-                    const hasTeamAssignee = stepAssignees.some(a => 
-                        a.name === "Any Team Member" || a.type === "person" || a.type === "role" && !["Client 1", "Client 2", "Any Client"].includes(a.name)
-                    );
-                    const hasClientAssignee = stepAssignees.some(a => 
-                        ["Client 1", "Client 2", "Any Client"].includes(a.name)
-                    );
+                    // 1. Assignee Border Logic
+                    const hasTeamAssignee = stepAssignees.some(a => a.name === "Any Team Member" || a.type === "person" || (a.type === "role" && !["Client 1", "Client 2", "Any Client"].includes(a.name)));
+                    const hasClientAssignee = stepAssignees.some(a => ["Client 1", "Client 2", "Any Client"].includes(a.name));
+                    let borderColor = "transparent"; let borderWidth = "1px";
+                    if (hasTeamAssignee) { borderColor = "#22c55e"; borderWidth = "2px"; }
+                    else if (hasClientAssignee) { borderColor = "#fbbf24"; borderWidth = "2px"; }
+                    
+                    // 2. 📥 INCOMING LOGIC SUMMARY (Left Side)
+                    const allIn = s.logic?.in || [];
+                    const inHasCond = allIn.some(l => l.type === 'link' || !l.type);
+                    const inHasNext = allIn.some(l => l.type === 'next');
+                    const inHasLoop = allIn.some(l => l.type === 'loop');
+                    const inTooltip = allIn.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' : 'λ'} From: ${l.rule || 'Previous'}`).join(' | ');
 
-                    let borderColor = "transparent"; // Default
-                    let borderWidth = "1px";
-                    
-                    if (hasTeamAssignee) {
-                        borderColor = "#22c55e"; // Green (Success)
-                        borderWidth = "2px";
-                    } else if (hasClientAssignee) {
-                        borderColor = "#fbbf24"; // Gold (Accent)
-                        borderWidth = "2px";
-                    }
-                    
-                    // 🔍 LOGIC GATHERING
-                    const hasIncoming = s.logic?.in?.length > 0;
-                    const inRuleList = (s.logic?.in || []).map(l => l.rule).filter(Boolean).join(', ') || 'Incoming Logic';
-                    
-                    const loopRules = (s.logic?.out || []).filter(l => l.type === 'loop');
-                    const hasOutgoing = (s.logic?.out || []).some(l => l.type !== 'loop');
-                    // 🚀 THE CONSOLIDATION: Combine all non-loop rules into one string
-                    const outRuleList = (s.logic?.out || [])
-                        .filter(l => l.type !== 'loop' && l.rule)
-                        .map(l => l.rule)
-                        .join(', ') || 'Outgoing Logic';
+                    // 3. 📤 OUTGOING LOGIC SUMMARY (Right Side)
+                    const allOut = s.logic?.out || [];
+                    const outHasCond = allOut.some(l => l.type === 'link' || !l.type);
+                    const outHasNext = allOut.some(l => l.type === 'next');
+                    const outHasLoop = allOut.some(l => l.type === 'loop');
+                    const outTooltip = allOut.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' : 'λ'} ${l.rule || (l.type === 'next' ? 'Next' : 'Logic')}`).join(' | ');
 
                     return `
                         <div class="v2-step-item" 
@@ -8691,37 +8691,31 @@ OL.renderVisualizer = function() {
                             ondragleave="OL.handleStepDragLeave(event)"
                             ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
                             onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')"
-                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0; position: relative;>
+                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0; position: relative;">
                             
                             <span class="step-port port-in" style="pointer-events:none"></span>
                             <span class="step-port port-out" style="pointer-events:none"></span>
 
                             <div class="step-row-content">
-                                <span class="drag-handle" 
-                                style="cursor: grab; opacity: 0.3; flex-shrink: 0; margin-top: 2px;"
-                                draggable="true"
-                                ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})"
-                            >⠿</span>
+                                <span class="drag-handle" style="cursor: grab; opacity: 0.3; flex-shrink: 0;" draggable="true" ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})">⠿</span>
                                 
-                                <span class="step-logic-icon ${hasIncoming ? 'active' : 'hidden'}" 
-                                      style="flex-shrink: 0; margin-top: 2px; color: ${hasIncoming ? 'var(--accent)' : 'transparent'}"
-                                      onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')"
-                                      title="${esc(inRuleList)}">λ</span>
+                                <div style="display:flex; gap:3px; flex-direction: column; flex-shrink: 0; min-width: 15px;">
+                                    ${inHasLoop ? `<span class="step-logic-icon loop" title="${esc(inTooltip)}">⟳</span>` : ''}
+                                    ${inHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">λ</span>` : ''}
+                                    ${inHasNext ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">➔</span>` : ''}
+                                </div>
 
-                                <span style="flex: 1; font-size: 11px; line-height: 1.3;">
+                                <span style="flex: 1; font-size: 11px; line-height: 1.3; padding: 0 4px;">
                                     • ${esc(s.name || 'New Step')}
                                 </span>
 
-                                <div style="display:flex; gap:4px; flex-shrink: 0; margin-top: 2px;">
-                                    ${loopRules.map(l => `<span class="step-logic-icon loop" title="Loop: ${esc(l.rule || 'Repeat')}">⟳</span>`).join('')}
-                                    
-                                    <span class="step-logic-icon ${hasOutgoing ? 'active' : 'hidden'}" 
-                                          style="color: ${hasOutgoing ? 'var(--accent)' : 'transparent'}"
-                                          onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')"
-                                          title="${esc(outRuleList)}">λ</span>
+                                <div style="display:flex; gap:3px; flex-direction: column; flex-shrink: 0; justify-content: flex-end;">
+                                    ${outHasLoop ? `<span class="step-logic-icon loop" title="${esc(outTooltip)}">⟳</span>` : ''}
+                                    ${outHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">λ</span>` : ''}
+                                    ${outHasNext ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">➔</span>` : ''}
                                 </div>
 
-                                <span class="delete-step-btn" style="flex-shrink: 0; opacity: 0.3;" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                                <span class="delete-step-btn" style="flex-shrink: 0; opacity: 0.2; margin-left: 5px;" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
                             </div>
                         </div>
 
@@ -10500,62 +10494,70 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         return;
     }
     // 📑 3. RESOURCE (CARD) DETAIL MODE
-    if (mode === 'cards' && resId) {
-        const res = resources.find(r => String(r.id) === String(resId));
-        if (!res) return;
+if (mode === 'cards' && resId) {
+    const res = resources.find(r => String(r.id) === String(resId));
+    if (!res) return;
 
-        const rawType = String(res.type || 'General');
-        const resTypeLower = rawType.toLowerCase();
-        
-        // 1. Get the Type Definition from the Registry
-        const typeDef = (state.master.resourceTypes || []).find(t => t.type.toLowerCase() === resTypeLower);
-        
-        // 2. Logic: It's a "Locked" type IF it has a matchedFunctionId and isn't a Zap
-        const isLockedType = !!(typeDef && typeDef.matchedFunctionId);
-        const isZap = resTypeLower === 'zap';
+    const rawType = String(res.type || 'General');
+    const resTypeLower = rawType.toLowerCase();
+    
+    // 1. Resolve Auto-Mapping from Registry
+    const typeDef = (state.master.resourceTypes || []).find(t => t.type.toLowerCase() === resTypeLower);
+    const isLockedType = !!(typeDef && typeDef.matchedFunctionId);
+    const isZap = resTypeLower === 'zap';
+    const autoApp = (isLockedType && !isZap) ? OL.getAppByFunction(rawType, res.matchedFunctionId) : null;
 
-        // 3. Run the Lookup (Returns Google Sheets, Calendly, etc.)
-        let autoApp = (isLockedType && !isZap) ? OL.getAppByFunction(rawType) : null;
+    // 🎯 2. THE OVERRIDE PROTECTION
+    // Only auto-assign if the field is currently EMPTY.
+    if (autoApp && !res.appId) {
+        console.log(`🤖 Inspector auto-assigning ${autoApp.name}`);
+        res.appId = autoApp.id;
+        res.appName = autoApp.name;
+        OL.handleResourceSave(res.id, 'appId', autoApp.id);
+        OL.handleResourceSave(res.id, 'appName', autoApp.name);
+    }
 
-        // 4. Auto-Sync Data
-        if (autoApp && res.appId !== autoApp.id) {
-            res.appId = autoApp.id;
-            res.appName = autoApp.name;
-            OL.handleResourceSave(res.id, 'appId', autoApp.id);
-            OL.handleResourceSave(res.id, 'appName', autoApp.name);
-        }
-        content.innerHTML = `
-            <div class="inspector-header">
-                <div class="section-label">EDIT RESOURCE</div>
-                <textarea id="modal-res-name" class="inspector-name-input res-name-auto" onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
-            </div>
+    // 3. Determine UI state for the override badge
+    const isManualOverride = res.appId && autoApp && String(res.appId) !== String(autoApp.id);
 
-            <div class="inspector-body">
+    content.innerHTML = `
+        <div class="inspector-header">
+            <div class="section-label">EDIT RESOURCE</div>
+            <textarea id="modal-res-name" class="inspector-name-input res-name-auto" 
+                onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
+        </div>
 
+        <div class="inspector-body">
             <div class="inspector-section no-border">
-                <label class="section-label">📱 PRIMARY APPLICATION</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label class="section-label" style="margin:0;">📱 PRIMARY APPLICATION</label>
+                    ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px; letter-spacing:0.5px;">CUSTOM OVERRIDE</span>' : ''}
+                </div>
+
                 <div id="res-app-pill-${res.id}" class="pill-display">
                     ${isZap ? `
-                        <div class="tiny muted italic">Multi-app automation; link via External Link.</div>
-                    ` : (autoApp ? `
-                        <div class="pill primary locked-pill">
-                            <span class="pill-text">
-                                ${OL.getResourceIcon(rawType)} ${esc(autoApp.name)}
-                            </span>
-                        </div>
+                        <div class="tiny muted italic">Multi-app automation.</div>
                     ` : (res.appId ? `
-                        <div class="pill primary">
-                            <span class="pill-text">📱 ${esc(res.appName)}</span>
-                            <b class="is-clickable pill-remove" onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.openInspector('${res.id}', null, 'cards');">×</b>
+                        <div class="pill ${isManualOverride ? 'accent' : 'primary'}" 
+                             style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                            <span class="pill-text">
+                                ${isManualOverride ? '✏️' : '🤖'} ${esc(res.appName)}
+                            </span>
+                            <b class="is-clickable pill-remove" 
+                               title="Clear and Revert"
+                               style="padding: 2px 6px; opacity: 0.5;"
+                               onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.handleResourceSave('${res.id}', 'appName', null); OL.openInspector('${res.id}', null, 'cards');">
+                               ×
+                            </b>
                         </div>
                     ` : `
                         <div class="search-map-container">
                             <input type="text" class="modal-input tiny" placeholder="Search App Registry..."
-                                  onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
-                                  oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
+                                   onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
+                                   oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
                             <div id="res-app-results" class="search-results-overlay"></div>
                         </div>
-                    `))}
+                    `)}
                 </div>
             </div>
 
@@ -11380,6 +11382,7 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
     }
 
     const isLoop = (logic.type === 'loop') || (String(targetId) === String(myFullId));
+    const isNextStep = logic.type === 'next';
 
     return `
         <div class="logic-item ${isReadOnly ? 'is-readonly' : ''}" 
@@ -11394,6 +11397,7 @@ OL.renderLogicBlock = function(resId, stepId, dir, i, logic, allOptions) {
 
                     ${dir === 'out' ? `
                         <select class="modal-input tiny" style="margin:0; height:24px;" onchange="OL.updateStepLogic('${resId}', '${stepId}', '${dir}', ${i}, 'type', this.value)">
+                            <option value="next" ${isNextStep ? 'selected' : ''}>➔ Next Step</option>
                             <option value="link" ${!isLoop ? 'selected' : ''}>Standard Link</option>
                             <option value="loop" ${isLoop ? 'selected' : ''}>🔄 Loop/Repeat</option>
                         </select>
@@ -12016,6 +12020,8 @@ document.addEventListener('scroll', (e) => {
 }, true); // 'true' enables Capture mode, which is required for scroll events to bubble up
 
 OL.drawLogicIcon = function(group, x, y, rule, isLoop = false, limit = '') {
+    if (type === 'next' && !rule) return; // Don't draw bubbles for plain arrows
+
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', `logic-gate-container ${isLoop ? 'is-loop-gate' : ''}`);
     g.setAttribute('pointer-events', 'all'); // 🎯 Force hover detection
