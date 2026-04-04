@@ -3529,6 +3529,24 @@ OL.openTaskModal = function(taskId, isVault) {
         <div class="modal-layout-wrapper" style="display: flex; height: 75vh; overflow: hidden;">
             
             <div class="modal-body main-config-area" style="flex: 1.5; overflow-y: auto; padding: 20px; border-right: 1px solid var(--line);">
+
+                <div class="card-section" style="margin-top: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label class="modal-section-label">📅 Due Date</label>
+                            <input type="date" class="modal-input tiny" value="${task.dueDate || ''}" 
+                                   onchange="OL.updateTaskField('${taskId}', 'dueDate', this.value, false)">
+                        </div>
+                        <div>
+                            <label class="modal-section-label">Status</label>
+                            <select class="modal-input tiny" onchange="OL.updateTaskField('${taskId}', 'status', this.value, false)">
+                                <option value="Pending" ${task.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
+                                <option value="In Progress" ${task.status === 'In Progress' ? 'selected' : ''}>🚧 In Progress</option>
+                                <option value="Done" ${task.status === 'Done' ? 'selected' : ''}>✅ Done</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="card-section">
                     <label class="modal-section-label">Internal SOP / Instructions</label>
@@ -3579,21 +3597,6 @@ OL.openTaskModal = function(taskId, isVault) {
 
                 ${!isVault ? `
                 <div class="card-section" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <label class="modal-section-label">📅 Due Date</label>
-                            <input type="date" class="modal-input tiny" value="${task.dueDate || ''}" 
-                                   onchange="OL.updateTaskField('${taskId}', 'dueDate', this.value, false)">
-                        </div>
-                        <div>
-                            <label class="modal-section-label">Status</label>
-                            <select class="modal-input tiny" onchange="OL.updateTaskField('${taskId}', 'status', this.value, false)">
-                                <option value="Pending" ${task.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
-                                <option value="In Progress" ${task.status === 'In Progress' ? 'selected' : ''}>🚧 In Progress</option>
-                                <option value="Done" ${task.status === 'Done' ? 'selected' : ''}>✅ Done</option>
-                            </select>
-                        </div>
-                    </div>
                     <div style="margin-top:15px;">
                         <label class="modal-section-label">👨‍💼 Assigned Team Members</label>
                         <div class="pills-row" id="task-assignee-pills" style="margin-bottom: 8px;">
@@ -3685,21 +3688,7 @@ OL.addTaskComment = async function(taskId, isVault, isClientFacing = false) {
     OL.openTaskModal(taskId, isVault);
 };
 
-// 🚀 THE FIX: Ensure this is a function, not loose code
-window.OL.deleteTaskComment = async function(taskId, idx, isVault) {
-    const client = getActiveClient();
-    let task = isVault 
-        ? state.master.taskBlueprints.find(t => t.id === taskId)
-        : client?.projectData?.clientTasks.find(t => t.id === taskId);
-        
-    if (task && task.comments) {
-        task.comments.splice(idx, 1);
-        await OL.persist();
-        OL.openTaskModal(taskId, isVault);
-    }
-};
-
-// 🚀 THE FIX: Ensure renderCommentsList handles its own logic
+// 📑 UPDATED RENDERER (Ensures the onclick strings are perfectly formed)
 function renderCommentsList(obj, activeTab = 'internal') {
     const comments = obj.comments || [];
     const filtered = comments.filter(c => activeTab === 'client' ? c.isClientFacing : !c.isClientFacing);
@@ -3713,9 +3702,8 @@ function renderCommentsList(obj, activeTab = 'internal') {
         const isClientType = c.isClientFacing;
         const isVaultMode = window.location.hash.includes('vault');
         
-        const deleteAction = String(obj.id).startsWith('tk') || String(obj.id).startsWith('step')
-            ? `OL.deleteTaskComment('${obj.id}', ${globalIdx}, ${isVaultMode})`
-            : `OL.deleteResourceComment('${obj.id}', ${globalIdx})`;
+        // 🚀 THE FIX: Use explicit global window calls in the string
+        const deleteCall = `window.OL.deleteComment('${obj.id}', ${globalIdx})`;
 
         return `
             <div class="comment-bubble" style="margin-bottom: 12px; padding: 10px; border-radius: 6px; 
@@ -3728,7 +3716,7 @@ function renderCommentsList(obj, activeTab = 'internal') {
                 <div class="small" style="line-height: 1.4; font-size: 12px;">${esc(c.text)}</div>
                 ${!window.IS_GUEST ? `
                     <div style="text-align: right; margin-top: 5px;">
-                        <button class="btn-icon-tiny" style="opacity:0.3;" onclick="${deleteAction}">delete</button>
+                        <button class="btn-icon-tiny" style="opacity:0.3; cursor:pointer;" onclick="${deleteCall}">delete</button>
                     </div>
                 ` : ''}
             </div>
@@ -3736,17 +3724,48 @@ function renderCommentsList(obj, activeTab = 'internal') {
     }).join('');
 }
 
-// Then add the Task delete handler:
-OL.deleteTaskComment = async function(taskId, idx, isVault) {
+window.OL.deleteComment = async function(id, idx) {
+    console.log("🗑️ Attempting to delete comment from ID:", id);
     const client = getActiveClient();
-    let task = isVault 
-        ? state.master.taskBlueprints.find(t => t.id === taskId)
-        : client?.projectData?.clientTasks.find(t => t.id === taskId);
-        
-    if (task && task.comments) {
-        task.comments.splice(idx, 1);
+    const isVault = window.location.hash.includes('vault');
+    const data = isVault ? state.master : client?.projectData;
+
+    if (!data) return;
+
+    // 🕵️ 1. SEARCH TASKS (Checklist Module)
+    let owner = (data.clientTasks || []).find(t => String(t.id) === String(id));
+
+    // 🕵️ 2. SEARCH RESOURCES (Flow Map Cards)
+    if (!owner) {
+        owner = (data.localResources || data.resources || []).find(r => String(r.id) === String(id));
+    }
+
+    // 🕵️ 3. SEARCH STEPS (Inside Cards)
+    if (!owner) {
+        const pool = (data.localResources || data.resources || []);
+        for (const res of pool) {
+            const stepMatch = (res.steps || []).find(s => String(s.id) === String(id));
+            if (stepMatch) {
+                owner = stepMatch;
+                break;
+            }
+        }
+    }
+
+    // 🗑️ EXECUTE DELETE
+    if (owner && owner.comments) {
+        owner.comments.splice(idx, 1);
         await OL.persist();
-        OL.openTaskModal(taskId, isVault);
+        console.log("✅ Comment removed.");
+
+        // 🔄 REFRESH: Re-open the correct modal
+        if (id.startsWith('id_') || (owner.hasOwnProperty('status'))) {
+            OL.openTaskModal(id, isVault);
+        } else {
+            OL.openResourceModal(id);
+        }
+    } else {
+        console.error("❌ Could not find the object or comments for ID:", id);
     }
 };
 
@@ -5504,15 +5523,6 @@ OL.addResourceComment = async function(resId, isClientFacing = false) {
     // Save current tab preference to state so it doesn't flip back on refresh
     state.v2.activeCommentTab = isClientFacing ? 'client' : 'internal';
     OL.openResourceModal(resId);
-};
-
-OL.deleteResourceComment = async function(resId, idx) {
-    const res = OL.getResourceById(resId);
-    if (res && res.comments) {
-        res.comments.splice(idx, 1);
-        await OL.persist();
-        OL.openResourceModal(resId);
-    }
 };
 
 OL.renderResourceMiniMaps = function(targetResId) {
