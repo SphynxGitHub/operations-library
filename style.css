@@ -5095,3 +5095,17 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
     border: none !important; padding: 0 !important; background: transparent !important;
     height: 100%; width: 100%;
 }
+
+/*======= Resource Comments */
+/* Ensure the modal box is wide enough for a sidebar */
+.modal-box {
+    max-width: 900px !important; width: 90vw !important;
+}
+
+.comment-bubble {
+    transition: transform 0.2s ease;
+}
+
+.comment-bubble:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+}
