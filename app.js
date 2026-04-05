@@ -459,56 +459,36 @@ OL.partnerCreateClient = function(partnerKey) {
     });
 };
 
-OL.assignClientToPartner = function(clientNameOrId, partnerKey) {
-    const client = Object.values(state.clients).find(c => c.id === clientNameOrId || c.meta.name === clientNameOrId);
-    
-    if (client) {
-        client.meta.partnerOwner = partnerKey;
-        OL.persist().then(() => {
-            console.log(`✅ ${client.meta.name} is now owned by ${partnerKey}`);
-        });
-    } else {
-        console.error("❌ Client not found.");
+// 🤝 THE PARTNER ASSIGNMENT HANDLER
+OL.handlePartnerAssignment = function(clientId, partnerKey) {
+    const client = state.clients[clientId];
+    if (!client) {
+        console.error("❌ Assignment Failed: Client ID not found.");
+        return;
     }
-};
 
-OL.initPartnerGuard = function() {
-    const params = new URLSearchParams(window.location.search);
-    const partnerKey = params.get('partner');
-    
-    // If we are in a project but the partner key is missing, 
-    // and the project IS owned by a partner, force the key back in.
-    const currentClientId = new URLSearchParams(window.location.hash.split('?')[1]).get('id');
-    if (currentClientId) {
-        const client = state.clients[currentClientId];
-        if (client?.meta?.partnerOwner && !partnerKey) {
-            window.location.search = `?partner=${client.meta.partnerOwner}`;
+    // 1. Update the metadata
+    client.meta.partnerOwner = partnerKey;
+
+    // 2. Add an activity log entry for history
+    if (!client.meta.activityLog) client.meta.activityLog = [];
+    client.meta.activityLog.push({
+        action: partnerKey ? `Assigned to Partner: ${partnerKey}` : "Set to Internal Project",
+        timestamp: new Date().toISOString()
+    });
+
+    console.log(`🎯 Client "${client.meta.name}" ownership updated to: ${partnerKey || 'None'}`);
+
+    // 3. Persist and Refresh
+    OL.persist().then(() => {
+        // If you have a specific modal refresh function, call it here
+        if (typeof OL.openClientProfileModal === 'function') {
+            OL.openClientProfileModal(clientId);
+        } else {
+            // Fallback: Refresh the whole route to update UI
+            window.handleRoute();
         }
-    }
-};
-
-OL.nav = function(hash, clientId = null) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const partnerId = urlParams.get('partner');
-    
-    // Base URL
-    let newUrl = `index.html`;
-    
-    // Add Partner Context if it exists
-    if (partnerId) {
-        newUrl += `?partner=${partnerId}`;
-    }
-    
-    // Add the Hash (e.g., #/client-tasks)
-    newUrl += hash;
-    
-    // Append Client ID if provided
-    if (clientId) {
-        const separator = hash.includes('?') ? '&' : '?';
-        newUrl += `${separator}id=${clientId}`;
-    }
-    
-    window.location.href = newUrl;
+    });
 };
 
 window.buildLayout = function () {
