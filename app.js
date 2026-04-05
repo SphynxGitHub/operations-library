@@ -356,6 +356,143 @@ OL.toggleTheme = function() {
     }
 })();
 
+
+/*===================== PARTNER ACCESS ==================*/
+OL.getPartnerContext = function() {
+    const params = new URLSearchParams(window.location.search);
+    const partnerKey = params.get('partner');
+    return state.registry.partners[partnerKey] || null;
+};
+
+OL.renderPartnerDashboard = function() {
+    const partner = OL.getPartnerContext();
+    if (!partner) return OL.renderGlobalDashboard(); // Fallback if URL is wrong
+
+    const partnerKey = new URLSearchParams(window.location.search).get('partner');
+    
+    // 🔍 Filter: Only show clients owned by this partner
+    const partnerClients = Object.values(state.clients).filter(c => 
+        c.meta.partnerOwner === partnerKey
+    );
+
+    const html = `
+        <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 1px solid var(--line);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h1 style="margin:0;">${partner.logo} ${partner.name} Portal</h1>
+                    <p class="muted tiny">Managing ${partnerClients.length} active client projects</p>
+                </div>
+                <button class="btn primary" onclick="OL.partnerCreateClient('${partnerKey}')">+ Onboard New Client</button>
+            </div>
+        </div>
+
+        <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
+            ${partnerClients.length > 0 ? partnerClients.map(c => `
+                <div class="card is-clickable" onclick="location.hash='#/client-tasks?id=${c.id}&partner=${partnerKey}'">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <h3 style="margin:0; font-size:16px;">${esc(c.meta.name)}</h3>
+                        <span class="pill tiny soft">${esc(c.meta.status)}</span>
+                    </div>
+                    <div class="tiny muted" style="margin-top:10px;">Created: ${new Date(c.meta.createdDate).toLocaleDateString()}</div>
+                    <div style="margin-top:15px; height:4px; background:rgba(255,255,255,0.05); border-radius:10px; overflow:hidden;">
+                        <div style="width:${OL.calculateProgress(c)}%; height:100%; background:var(--accent);"></div>
+                    </div>
+                </div>
+            `).join('') : `
+                <div class="empty-state" style="grid-column: 1/-1; text-align:center; padding:100px; opacity:0.5;">
+                    <h3>No clients yet.</h3>
+                    <p>Click the button above to start your first onboarding.</p>
+                </div>
+            `}
+        </div>
+    `;
+    
+    document.getElementById('main-layout').innerHTML = html;
+};
+
+OL.partnerCreateClient = function(partnerKey) {
+    const name = prompt("Enter Client Name (Family or Business):");
+    if (!name) return;
+
+    const clientId = 'c-' + Math.random().toString(36).slice(2, 9);
+    
+    const newClient = {
+        id: clientId,
+        meta: {
+            name: name,
+            status: "Discovery",
+            partnerOwner: partnerKey, // 🔒 Mandatory link
+            createdDate: new Date().toISOString()
+        },
+        projectData: {
+            localResources: [],
+            localApps: [],
+            scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }]
+        }
+    };
+
+    state.clients[clientId] = newClient;
+    
+    // 🚀 Auto-Provision Agreement, Naming, Hierarchy, and Compliance
+    OL.provisionSphynxTemplates(clientId);
+
+    OL.persist().then(() => {
+        OL.renderPartnerDashboard();
+    });
+};
+
+OL.assignClientToPartner = function(clientNameOrId, partnerKey) {
+    const client = Object.values(state.clients).find(c => c.id === clientNameOrId || c.meta.name === clientNameOrId);
+    
+    if (client) {
+        client.meta.partnerOwner = partnerKey;
+        OL.persist().then(() => {
+            console.log(`✅ ${client.meta.name} is now owned by ${partnerKey}`);
+        });
+    } else {
+        console.error("❌ Client not found.");
+    }
+};
+
+OL.initPartnerGuard = function() {
+    const params = new URLSearchParams(window.location.search);
+    const partnerKey = params.get('partner');
+    
+    // If we are in a project but the partner key is missing, 
+    // and the project IS owned by a partner, force the key back in.
+    const currentClientId = new URLSearchParams(window.location.hash.split('?')[1]).get('id');
+    if (currentClientId) {
+        const client = state.clients[currentClientId];
+        if (client?.meta?.partnerOwner && !partnerKey) {
+            window.location.search = `?partner=${client.meta.partnerOwner}`;
+        }
+    }
+};
+
+OL.nav = function(hash, clientId = null) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const partnerId = urlParams.get('partner');
+    
+    // Base URL
+    let newUrl = `index.html`;
+    
+    // Add Partner Context if it exists
+    if (partnerId) {
+        newUrl += `?partner=${partnerId}`;
+    }
+    
+    // Add the Hash (e.g., #/client-tasks)
+    newUrl += hash;
+    
+    // Append Client ID if provided
+    if (clientId) {
+        const separator = hash.includes('?') ? '&' : '?';
+        newUrl += `${separator}id=${clientId}`;
+    }
+    
+    window.location.href = newUrl;
+};
+
 window.buildLayout = function () {
   const root = document.getElementById("app-root");
   if (!root) {
@@ -16048,139 +16185,3 @@ window.addEventListener("hashchange", window.handleRoute);
         e.stopPropagation();
     }, false);
 });
-
-/*===================== PARTNER ACCESS ==================*/
-OL.getPartnerContext = function() {
-    const params = new URLSearchParams(window.location.search);
-    const partnerKey = params.get('partner');
-    return state.registry.partners[partnerKey] || null;
-};
-
-OL.renderPartnerDashboard = function() {
-    const partner = OL.getPartnerContext();
-    if (!partner) return OL.renderGlobalDashboard(); // Fallback if URL is wrong
-
-    const partnerKey = new URLSearchParams(window.location.search).get('partner');
-    
-    // 🔍 Filter: Only show clients owned by this partner
-    const partnerClients = Object.values(state.clients).filter(c => 
-        c.meta.partnerOwner === partnerKey
-    );
-
-    const html = `
-        <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 1px solid var(--line);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <h1 style="margin:0;">${partner.logo} ${partner.name} Portal</h1>
-                    <p class="muted tiny">Managing ${partnerClients.length} active client projects</p>
-                </div>
-                <button class="btn primary" onclick="OL.partnerCreateClient('${partnerKey}')">+ Onboard New Client</button>
-            </div>
-        </div>
-
-        <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
-            ${partnerClients.length > 0 ? partnerClients.map(c => `
-                <div class="card is-clickable" onclick="location.hash='#/client-tasks?id=${c.id}&partner=${partnerKey}'">
-                    <div style="display:flex; justify-content:space-between; align-items:start;">
-                        <h3 style="margin:0; font-size:16px;">${esc(c.meta.name)}</h3>
-                        <span class="pill tiny soft">${esc(c.meta.status)}</span>
-                    </div>
-                    <div class="tiny muted" style="margin-top:10px;">Created: ${new Date(c.meta.createdDate).toLocaleDateString()}</div>
-                    <div style="margin-top:15px; height:4px; background:rgba(255,255,255,0.05); border-radius:10px; overflow:hidden;">
-                        <div style="width:${OL.calculateProgress(c)}%; height:100%; background:var(--accent);"></div>
-                    </div>
-                </div>
-            `).join('') : `
-                <div class="empty-state" style="grid-column: 1/-1; text-align:center; padding:100px; opacity:0.5;">
-                    <h3>No clients yet.</h3>
-                    <p>Click the button above to start your first onboarding.</p>
-                </div>
-            `}
-        </div>
-    `;
-    
-    document.getElementById('main-layout').innerHTML = html;
-};
-
-OL.partnerCreateClient = function(partnerKey) {
-    const name = prompt("Enter Client Name (Family or Business):");
-    if (!name) return;
-
-    const clientId = 'c-' + Math.random().toString(36).slice(2, 9);
-    
-    const newClient = {
-        id: clientId,
-        meta: {
-            name: name,
-            status: "Discovery",
-            partnerOwner: partnerKey, // 🔒 Mandatory link
-            createdDate: new Date().toISOString()
-        },
-        projectData: {
-            localResources: [],
-            localApps: [],
-            scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }]
-        }
-    };
-
-    state.clients[clientId] = newClient;
-    
-    // 🚀 Auto-Provision Agreement, Naming, Hierarchy, and Compliance
-    OL.provisionSphynxTemplates(clientId);
-
-    OL.persist().then(() => {
-        OL.renderPartnerDashboard();
-    });
-};
-
-OL.assignClientToPartner = function(clientNameOrId, partnerKey) {
-    const client = Object.values(state.clients).find(c => c.id === clientNameOrId || c.meta.name === clientNameOrId);
-    
-    if (client) {
-        client.meta.partnerOwner = partnerKey;
-        OL.persist().then(() => {
-            console.log(`✅ ${client.meta.name} is now owned by ${partnerKey}`);
-        });
-    } else {
-        console.error("❌ Client not found.");
-    }
-};
-
-OL.initPartnerGuard = function() {
-    const params = new URLSearchParams(window.location.search);
-    const partnerKey = params.get('partner');
-    
-    // If we are in a project but the partner key is missing, 
-    // and the project IS owned by a partner, force the key back in.
-    const currentClientId = new URLSearchParams(window.location.hash.split('?')[1]).get('id');
-    if (currentClientId) {
-        const client = state.clients[currentClientId];
-        if (client?.meta?.partnerOwner && !partnerKey) {
-            window.location.search = `?partner=${client.meta.partnerOwner}`;
-        }
-    }
-};
-
-OL.nav = function(hash, clientId = null) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const partnerId = urlParams.get('partner');
-    
-    // Base URL
-    let newUrl = `index.html`;
-    
-    // Add Partner Context if it exists
-    if (partnerId) {
-        newUrl += `?partner=${partnerId}`;
-    }
-    
-    // Add the Hash (e.g., #/client-tasks)
-    newUrl += hash;
-    
-    // Append Client ID if provided
-    if (clientId) {
-        const separator = hash.includes('?') ? '&' : '?';
-        newUrl += `${separator}id=${clientId}`;
-    }
-    
-    window.location.href = newUrl;
-};
