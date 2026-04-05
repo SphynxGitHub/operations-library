@@ -359,6 +359,20 @@ OL.toggleTheme = function() {
 
 /*===================== PARTNER ACCESS ==================*/
 
+// 🔑 THE TOKEN GENERATOR
+OL.getAccessToken = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return "guest";
+
+    // 1. If the client already has a dedicated access code, use it
+    if (client.meta.accessCode) return client.meta.accessCode;
+
+    // 2. Fallback: Generate a clean 'slug' from their name or ID
+    // We'll use this if no specific code exists.
+    const slug = client.meta.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `${slug}-${clientId.split('-').pop()}`;
+};
+
 OL.getHomeUrl = function() {
     const client = getActiveClient();
     if (!client) return "index.html#/";
@@ -781,12 +795,21 @@ window.handleRoute = function () {
             </div>
 
             <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
-                ${subClients.map(c => `
-                    <div class="card is-clickable" onclick="window.location.href='index.html?access=${OL.getAccessToken(c.id)}#/'">
-                        <h3 style="margin:0;">${esc(c.meta.name)}</h3>
-                        <div class="pill tiny soft" style="margin-top:10px;">${esc(c.meta.status)}</div>
-                    </div>
-                `).join('')}
+                ${subClients.map(c => {
+                    const token = OL.getAccessToken(c.id); // 🚀 Now this will work!
+                    return `
+                        <div class="card is-clickable" 
+                            onclick="window.location.href='index.html?access=${token}#/'"
+                            style="padding: 20px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 8px;">
+                            <div style="font-size: 10px; color: var(--accent); font-weight: bold; margin-bottom: 5px;">PROJECT</div>
+                            <h3 style="margin:0; font-size: 16px;">${esc(c.meta.name)}</h3>
+                            <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                                <span class="pill tiny soft">${esc(c.meta.status)}</span>
+                                <span style="font-size: 10px; opacity: 0.5;">Open Project ➔</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
                 
                 <div class="card add-new-card" onclick="OL.partnerCreateClient('${leadProject.id}')" 
                     style="border: 2px dashed var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.6;">
