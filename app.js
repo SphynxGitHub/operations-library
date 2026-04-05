@@ -432,30 +432,41 @@ OL.getPartnerContext = function() {
 };
 
 OL.renderPartnerDashboard = function(leadProject, container) {
-    if (!container) return;
+    if (!container || !leadProject) return;
 
+    // 🔍 THE FIX: Ensure we are comparing strings and checking the partnerOwner metadata
     const subClients = Object.values(state.clients).filter(c => 
-        c.meta.partnerOwner === leadProject.id
+        String(c.meta?.partnerOwner) === String(leadProject.id)
     );
 
     container.innerHTML = `
         <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 2px solid var(--accent);">
-            <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
-            <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
+                    <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
+                </div>
+                ${!window.IS_GUEST ? `<button class="btn primary" onclick="OL.partnerCreateClient('${leadProject.id}')">+ Onboard New Client</button>` : ''}
+            </div>
         </div>
 
         <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
             ${subClients.length > 0 ? subClients.map(c => `
-                <div class="card is-clickable" onclick="window.location.href='index.html?access=${OL.getAccessToken(c.id)}#/'">
-                    <h3 style="margin:0;">${esc(c.meta.name)}</h3>
-                    <div class="pill tiny soft" style="margin-top:10px;">${esc(c.meta.status)}</div>
+                <div class="card is-clickable" onclick="OL.switchClient('${c.id}')">
+                    <div style="font-size: 10px; color: var(--accent); font-weight: bold; margin-bottom: 5px;">SUB-CLIENT</div>
+                    <h3 style="margin:0; font-size: 16px;">${esc(c.meta.name)}</h3>
+                    <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="pill tiny soft">${esc(c.meta.status)}</span>
+                        <span style="font-size: 10px; opacity: 0.5;">Open Project ➔</span>
+                    </div>
                 </div>
-            `).join('') : '<div class="empty-state tiny muted">No clients assigned to this portfolio yet.</div>'}
-            
-            <div class="card add-new-card" onclick="OL.partnerCreateClient('${leadProject.id}')" 
-                 style="border: 2px dashed var(--line); height: 100px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.6;">
-                <b>+ Add New Project</b>
-            </div>
+            `).join('') : `
+                <div style="grid-column: 1/-1; padding: 100px; text-align: center; opacity: 0.5;">
+                    <div style="font-size: 40px; margin-bottom: 20px;">📂</div>
+                    <h3>No clients assigned yet.</h3>
+                    <p class="small">Assign clients to this partner in their Profile Settings.</p>
+                </div>
+            `}
         </div>
     `;
 };
@@ -541,25 +552,25 @@ window.buildLayout = function () {
   const isMaster = hash.startsWith("#/vault");
 
   let homeLabel = "Dashboard";
-    let homeAction = "";
-    let showHome = true;
+  let homeAction = "";
+  let showHome = true;
 
-    if (isAdmin) {
-        // Master Admin always goes to Global Registry
-        homeLabel = "Global Registry";
-        homeAction = `window.location.href='index.html${OL.getAdminQuery()}#/'`;
-    } else if (client && client.meta.status === "Partner") {
-        // Partner goes to their Portfolio
-        homeLabel = "My Portfolio";
-        homeAction = `window.location.hash='#/partner-dashboard'`;
-    } else if (client && client.meta.partnerOwner) {
-        // Sub-client of a partner goes back to the Portfolio
-        homeLabel = "Partner Home";
-        homeAction = `window.location.hash='#/partner-dashboard'`;
-    } else if (isPublic) {
-        // Direct Clients see no Home button (keeps them in their project)
-        showHome = false;
-    }
+  if (isAdmin) {
+      // Master Admin always goes to Global Registry
+      homeLabel = "Global Registry";
+      homeAction = `window.location.hash = '#/'`;
+  } else if (client && client.meta.status === "Partner") {
+      // Partner goes to their Portfolio
+      homeLabel = "My Portfolio";
+      homeAction = `window.location.hash='#/partner-dashboard'`;
+  } else if (client && client.meta.partnerOwner) {
+      // Sub-client of a partner goes back to the Portfolio
+      homeLabel = "Partner Home";
+      homeAction = `window.location.hash='#/partner-dashboard'`;
+  } else if (isPublic) {
+      // Direct Clients see no Home button (keeps them in their project)
+      showHome = false;
+  }
 
   // 1. Dashboard/Non-Context View
   if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
@@ -744,13 +755,21 @@ window.buildLayout = function () {
             <div class="client-nav-zone">
                 <div class="menu-category-label">Project Workspace</div>
                 <div class="client-profile-trigger" 
-                     ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                    ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
                     <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                     <div class="client-info">
                         <div class="client-name">${esc(client.meta.name)}</div>
                         <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
                     </div>
                 </div>
+
+                ${isAdmin && isPartnerProject ? `
+                    <button class="btn tiny primary" 
+                            style="margin: 10px; width: calc(100% - 20px); background: #fbbf24; color: black; font-weight: bold; border: none;"
+                            onclick="window.location.hash='#/partner-dashboard'">
+                        👁️ VIEW AS PORTFOLIO
+                    </button>
+                ` : ''}
                 ${themeSection}
                 <nav class="menu">
                     ${clientTabs.map(item => {
@@ -823,29 +842,28 @@ window.handleRoute = function () {
     const client = getActiveClient();
     const isVault = hash.includes('vault');
 
-   // 7. DASHBOARD ROUTE (Admin vs Partner) 🏠
-    if (hash === "#/" || hash === "#/clients") {
+   // 🏠 DASHBOARD ROUTE (Admin vs Partner)
+    if (hash === "#/" || hash === "#/clients" || hash.includes("partner-dashboard")) {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
         
-        // 👑 1. ADMIN PRIORITY
-        if (window.FORCE_ADMIN) {
+        // 👑 1. ADMIN PRIORITY: If you are an admin and at the root, show full Registry
+        if (window.FORCE_ADMIN && hash === "#/") {
             renderClientDashboard();
             return;
         }
         
-        // 🤝 2. PARTNER PRIORITY
-        if (client && (client.meta.status === "Partner" || client.meta.partnerOwner)) {
-            // If they are a sub-client, we might need to find the Partner project object
-            const leadProject = (client.meta.status === "Partner") ? client : state.clients[client.meta.partnerOwner];
+        // 🤝 2. PARTNER RESOLUTION: Find the Portfolio owner
+        // Check if current client IS a partner, OR if we are visiting a partner sub-client
+        const leadProject = (client?.meta?.status === "Partner") ? client : state.clients[client?.meta?.partnerOwner];
+
+        if (leadProject) {
             OL.renderPartnerDashboard(leadProject, main);
             return;
         }
 
-        // 👤 3. PUBLIC CLIENT FALLBACK
-        if (isPublic) {
-            renderChecklistModule(); // Clients never see a dashboard
-            return;
-        }
+        // 👤 3. FALLBACK: If no partner context found
+        if (isPublic) renderChecklistModule();
+        else renderClientDashboard();
     }
 
     // 4. Standard Project Routes
