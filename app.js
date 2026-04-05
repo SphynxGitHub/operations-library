@@ -9421,6 +9421,12 @@ OL.renderVisualizer = function() {
     const workbenchContents = document.getElementById('workbench-contents');
     const nodeLayer = document.getElementById('v2-node-layer');
     const stageLayer = document.getElementById('v2-stage-layer');
+
+    if (!workbenchContents || !shelfContents) {
+        console.warn("⏳ Workbench containers missing. Aborting render pass.");
+        return; 
+    }
+
     const canvas = document.getElementById('v2-canvas');
     const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
     
@@ -9470,7 +9476,11 @@ OL.renderVisualizer = function() {
                 </div>
             `;
         }
-        if (workbenchContents) workbenchContents.appendChild(div);
+        if (activeTab === 'flows' || activeTab === 'assets' || activeTab === 'guides' || activeTab === 'data') {
+             if (workbenchContents) {
+                 workbenchContents.appendChild(div);
+             }
+        }
     });
 
     // 🎯 2. CANVAS WIDTH MATH
