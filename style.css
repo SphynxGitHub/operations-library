@@ -5109,3 +5109,16 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 .comment-bubble:hover {
     background: rgba(255, 255, 255, 0.06) !important;
 }
+
+/*================= Folder Tree Card ================= */
+.tree-drop-zone {
+    height: 6px; margin: 2px 0; transition: all 0.2s; border-radius: 4px;
+}
+
+.tree-drop-zone.drag-over {
+    background: var(--accent); height: 12px;
+}
+
+.hierarchy-item-row.drag-over {
+    background: rgba(var(--accent-rgb), 0.3) !important; border: 1px dashed var(--accent) !important;
+}
