@@ -9770,6 +9770,7 @@ OL.renderVisualizer = function() {
     }
 
     // Refresh connections and run any active filters
+    OL.renderWorkbenchItemsOnly();
     OL.drawConnections();
     OL.refreshFilterDropdowns();
     if (document.getElementById('canvas-filter-input')?.value) {
@@ -9897,25 +9898,42 @@ OL.renderWorkbenchItemsOnly = function() {
         const div = document.createElement('div');
         
         if (activeTab === 'data') {
-            div.className = 'data-tag-draggable';
-            div.draggable = true;
-            div.ondragstart = (e) => OL.handleDataDragStart(e, item.id);
-            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; color:white;`;
-            div.innerHTML = `${item.isBundle ? '📦' : '🏷️'} <b>${item.name}</b>`;
+            // (Keep your Data Tag logic here)
         } else {
             const isGuide = activeTab === 'guides';
+            const isInScope = !!OL.isResourceInScope(item.id);
+            
             div.id = `v2-node-${item.id}`;
             div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
-            
-            div.onmousedown = (e) => {
-                if (activeTab === 'flows') OL.initWBMotion(e, item.id);
-                else OL.handleAssetDragStart(e, item.id, activeTab === 'assets' ? 'asset' : 'guide');
+            div.draggable = true;
+
+            // 🖱️ DRAG START: Ensure dataTransfer is set
+            div.ondragstart = (e) => {
+                const dragData = { id: item.id, name: item.name, type: item.type };
+                e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+                state.draggingResourceId = item.id;
             };
 
+            // 🎨 RENDER THE SIDEBAR CARD (With Type & Scope)
             div.innerHTML = `
                 <div class="v2-node-header">
                     <div class="header-row-content">
-                        <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
+                        </div>
+                        
+                        <div class="header-badges-wrap" style="display: flex; flex-direction: row; margin-left: auto;">
+                            <small class="tiny muted uppercase type-badge">
+                                    ${esc(item.type || 'Resource')}
+                            </small>
+                            <div class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
+                                 title="Right Click: Toggle Scoping"
+                                 onmousedown="event.stopPropagation();" 
+                                 oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${item.id}', ${isInScope}); OL.renderWorkbenchItemsOnly();"
+                                 style="cursor: pointer; user-select: none;">
+                                $
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -10249,22 +10267,26 @@ OL.handleStepDragLeave = function(e) {
 
 OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
     e.preventDefault();
-    e.stopPropagation();
+    e.stopPropagation(); // 🛡️ Stop the event from hitting parent containers
     
-    // 🧹 GLOBAL CLEANUP
+    // 🧹 Clean up visual indicators
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    
-    // 1. Identify what is being dragged
-    // Check for internal Step Reorder first
+
+    // 1. Identify Drag Source
     const sourceStepResId = state.draggingStepResId;
     const draggedStepIdx = state.draggingStepIdx;
+    
+    // Get external resource data (from Sidebar/Canvas)
+    let sourceResId = null;
+    try {
+        const resourceData = JSON.parse(e.dataTransfer.getData('application/json') || '{}');
+        sourceResId = resourceData.id;
+    } catch(err) {
+        sourceResId = e.dataTransfer.getData('text/plain');
+    }
 
-    // Check for external Resource Drag (from Sidebar or Canvas)
-    const resourceDataJSON = e.dataTransfer.getData('application/json');
-    const resourceData = resourceDataJSON ? JSON.parse(resourceDataJSON) : null;
-    const sourceResId = resourceData?.id || e.dataTransfer.getData('text/plain');
-
-    // --- 🟢 CASE A: INTERNAL STEP REORDER ---
+    // --- 🟢 CASE 1: INTERNAL STEP REORDER ---
+    // (Triggered when dragging a step handle within the same card)
     if (sourceStepResId === targetResId && draggedStepIdx !== null) {
         if (draggedStepIdx === droppedOnIdx) return;
         
@@ -10274,48 +10296,37 @@ OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
         
         await OL.persist();
         OL.renderVisualizer();
-        state.draggingStepIdx = null;
-        state.draggingStepResId = null;
         return;
     }
 
-    // --- 🔵 CASE B: EXTERNAL RESOURCE DROP (Merge or Link) ---
+    // --- 🔵 CASE 2: EXTERNAL RESOURCE DROP ---
     if (sourceResId && sourceResId !== targetResId) {
-        const isHeaderDrop = e.target.closest('.v2-node-header');
-        const sourceRes = OL.getResourceById(sourceResId);
-        const targetRes = OL.getResourceById(targetResId);
-
-        if (!sourceRes || !targetRes) return;
-
-        if (isHeaderDrop) {
-            // 🏛️ MERGE: Dropped on the top area
-            if (confirm(`Merge "${sourceRes.name}" into "${targetRes.name}"?`)) {
-                // Combine steps
-                targetRes.steps = [...(targetRes.steps || []), ...(sourceRes.steps || [])];
-                // Mark source for deletion or clear its coords to send back to tray
-                sourceRes.coords = null; 
-                sourceRes.isDeleted = true; // Or your specific delete logic
-            }
-        } else if (droppedOnIdx !== null) {
-            // 🔗 LINK: Dropped on a specific step
+        
+        // 🎯 LOGIC SPLIT: Did they drop on a STEP or the HEADER?
+        if (droppedOnIdx !== null) {
+            // 🔗 LINK LOGIC (Dropped specifically on a step row)
+            const sourceRes = OL.getResourceById(sourceResId);
+            const targetRes = OL.getResourceById(targetResId);
             const step = targetRes.steps[droppedOnIdx];
-            if (!step.links) step.links = [];
-            
-            const alreadyLinked = step.links.some(l => l.id === sourceResId);
-            if (!alreadyLinked) {
-                step.links.push({
-                    id: sourceRes.id,
-                    name: sourceRes.name,
-                    type: sourceRes.type
-                });
-            } else {
-                alert("Resource is already linked to this step.");
-                return;
+
+            if (confirm(`Link "${sourceRes.name}" to step: "${step.name}"?`)) {
+                if (!step.links) step.links = [];
+                step.links.push({ id: sourceRes.id, name: sourceRes.name, type: sourceRes.type });
+                await OL.persist();
+                OL.renderVisualizer();
+            }
+        } else {
+            // 🏛️ MERGE LOGIC (Dropped on the card header/empty space)
+            const sourceRes = OL.getResourceById(sourceResId);
+            const targetRes = OL.getResourceById(targetResId);
+
+            if (confirm(`MERGE: Move all steps from "${sourceRes.name}" into "${targetRes.name}"?`)) {
+                targetRes.steps = [...(targetRes.steps || []), ...(sourceRes.steps || [])];
+                sourceRes.coords = null; // Send back to tray or delete
+                await OL.persist();
+                OL.renderVisualizer();
             }
         }
-
-        await OL.persist();
-        OL.renderVisualizer();
     }
 };
 
@@ -13420,24 +13431,28 @@ window.OL.duplicateResourceV2 = async function(resourceId) {
 };
 
 OL.toggleWorkbenchTray = function() {
-    // 1. Toggle State
-    state.ui.sidebarOpen = !state.ui.sidebarOpen;
-    localStorage.setItem('ol_tray_open', state.ui.sidebarOpen);
-
-    // 2. 🚀 THE FIX: Directly update the CSS class for instant feedback
     const viewport = document.getElementById('v2-viewport');
-    if (viewport) {
-        if (state.ui.sidebarOpen) {
-            viewport.classList.remove('tray-closed');
-        } else {
-            viewport.classList.add('tray-closed');
-        }
+    if (!viewport) return;
+
+    // 1. Force a boolean check. If it's undefined, assume it's currently OPEN (true)
+    if (state.ui.sidebarOpen === undefined) {
+        state.ui.sidebarOpen = true;
     }
 
-    // 3. Re-render to update the button icon (🔳 vs ⬜) and populate contents
-    OL.renderVisualizer();
-};
+    // 2. Flip the state
+    state.ui.sidebarOpen = !state.ui.sidebarOpen;
 
+    // 3. Update the DOM immediately
+    if (state.ui.sidebarOpen) {
+        viewport.classList.remove('tray-closed');
+    } else {
+        viewport.classList.add('tray-closed');
+    }
+
+    // 4. Update the Button Icon if you have one
+    const btn = document.querySelector('.v2-tray-toggle-btn');
+    if (btn) btn.innerHTML = state.ui.sidebarOpen ? '🔳' : '⬜';
+};
 // ===========================TASK RESOURCE OVERLAP===========================
 
 // Filter SOPs that aren't already linked to this resource
