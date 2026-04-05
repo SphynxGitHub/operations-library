@@ -3,10 +3,18 @@
 // 1. MUST BE LINE 1: Define the namespace immediately
 const OL = window.OL = {};
 
-// 🚀 THE ANCHOR: Lock the security context at the absolute start
+// 🚀 THE ANCHOR: Context-Aware Security Lock
 const params = new URLSearchParams(window.location.search);
-window.FORCE_ADMIN = params.get('admin') === 'pizza123'; 
-console.log("🛠️ Global Admin Lock:", window.FORCE_ADMIN);
+const isFiddle = window.location.hostname.includes('jsfiddle.net') || window.location.hostname.includes('fiddle.jshell.net');
+
+// Force admin if the secret key is present OR if we are running in JSFiddle
+window.FORCE_ADMIN = params.get('admin') === 'pizza123' || isFiddle; 
+
+if (isFiddle) {
+    console.log("🛠️ JSFiddle Detected: Master Admin Privileges Auto-Granted.");
+} else {
+    console.log("🛠️ Global Admin Lock:", window.FORCE_ADMIN);
+}
 
 // 2. Define standard helpers next (so functions can use them)
 
@@ -331,10 +339,25 @@ OL.getAdminQuery = function() {
 
 OL.toggleSidebar = function() {
     const sidebar = document.querySelector('.sidebar');
+    const innerContent = document.querySelector('.sidebar-inner-content');
+    const toggleIcon = document.querySelector('.toggle-icon');
+    
+    if (!sidebar) return;
+
     const isCollapsed = sidebar.classList.toggle('collapsed');
     
-    // Save to memory so it sticks on refresh
+    // Toggle the inner visibility
+    if (innerContent) {
+        innerContent.style.display = isCollapsed ? 'none' : 'block';
+    }
+
+    // Flip the arrow
+    if (toggleIcon) {
+        toggleIcon.innerText = isCollapsed ? '▶' : '◀';
+    }
+    
     localStorage.setItem('sidebarCollapsed', isCollapsed);
+    window.dispatchEvent(new Event('resize'));
 };
 
 // Run this on page load to restore state
@@ -509,35 +532,37 @@ window.buildLayout = function () {
   const client = getActiveClient();
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
-
-  //🤝 PARTNER CONTEXT DETECTION
+  const isAdmin = window.FORCE_ADMIN === true;
+  const isPublic = new URLSearchParams(window.location.search).has("access");
   const isPartnerProject = client && client.meta.status === "Partner";
-  const hasPartnerOwner = client && client.meta.partnerOwner;
-  const isPartnerMode = isPartnerProject || hasPartnerOwner; // This fixes the ReferenceError
-
-  const homeAction = isPartnerMode 
-      ? `window.location.hash = '#/partner-dashboard'` 
-      : `window.location.href = 'index.html${OL.getAdminQuery()}#/'`;
-
-  const isAdmin = OL.isAdmin();
-    const adminQuery = OL.getAdminQuery();
-
-    // 🚀 THE MASTER ADMIN ESCAPE BUTTON
-    const adminEscapeBtn = isAdmin ? `
-        <div class="admin-escape-zone" style="margin-bottom: 15px;">
-            <a href="index.html${adminQuery}#/" 
-              style="display: block; padding: 12px; background: #991b1b; color: white; border-radius: 6px; text-decoration: none; text-align: center; font-weight: bold; font-size: 10px; border: 1px solid rgba(255,255,255,0.2);">
-              🛡️ EXIT TO MASTER ADMIN
-            </a>
-        </div>
-    ` : '';
-
-  const isPublic = urlParams.has("access");
+  const isPartnerMode = isPartnerProject || (client && !!client.meta.partnerOwner);
+  
   const token = urlParams.get("access");
   const isMaster = hash.startsWith("#/vault");
 
+  let homeLabel = "Dashboard";
+    let homeAction = "";
+    let showHome = true;
+
+    if (isAdmin) {
+        // Master Admin always goes to Global Registry
+        homeLabel = "Global Registry";
+        homeAction = `window.location.href='index.html${OL.getAdminQuery()}#/'`;
+    } else if (client && client.meta.status === "Partner") {
+        // Partner goes to their Portfolio
+        homeLabel = "My Portfolio";
+        homeAction = `window.location.hash='#/partner-dashboard'`;
+    } else if (client && client.meta.partnerOwner) {
+        // Sub-client of a partner goes back to the Portfolio
+        homeLabel = "Partner Home";
+        homeAction = `window.location.hash='#/partner-dashboard'`;
+    } else if (isPublic) {
+        // Direct Clients see no Home button (keeps them in their project)
+        showHome = false;
+    }
+
   // 1. Dashboard/Non-Context View
-  if (!client && !isMaster && !isPublic && !isPartnerMode) {
+  if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
         // Only render the Dashboard link if no client context exists
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
@@ -662,20 +687,33 @@ window.buildLayout = function () {
         </div>
     `;
 
+    const isSidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    const toggleArrow = isSidebarCollapsed ? '▶' : '◀'; // Flip based on state
+
     const sidebarContent = `
-        <button class="sidebar-toggle" onclick="OL.toggleSidebar()">◀</button>
-        
-        <div class="sidebar-padding" style="padding: 10px;">
-            ${adminEscapeBtn} 
-            
-            <div class="admin-nav-zone">
-                <nav class="menu">
-                    <a href="javascript:void(0)" onclick="${homeAction}" 
-                      class="${hash.includes('partner-dashboard') ? 'active' : ''}"
-                      style="${isPartnerProject ? 'background:var(--accent); color:black; font-weight:bold; border-radius:4px; display:block; padding:10px;' : ''}">
-                        <i>🏠</i> <span>${isPartnerProject ? 'PORTFOLIO' : 'HOME'}</span>
-                    </a>
-                </nav>
+        <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
+            <span class="toggle-icon">${toggleArrow}</span>
+        </button>        
+        <div class="sidebar-inner-content" style="${isSidebarCollapsed ? 'display:none;' : ''}">
+            <div class="sidebar-padding" style="padding: 10px;">
+                ${showHome ? `
+                    <div class="admin-nav-zone">
+                        <nav class="menu">
+                            <a href="javascript:void(0)" 
+                                onclick="${homeAction}" 
+                                class="${(hash === '#/' || hash === '#/partner-dashboard') ? 'active' : ''}"
+                                style="${isAdmin ? 'border-left: 3px solid var(--accent);' : 'background: rgba(var(--accent-rgb), 0.1); font-weight: bold;'}">
+                                <i>🏠</i> <span>${homeLabel.toUpperCase()}</span>
+                            </a>
+                        </nav>
+                    </div>
+                    <div class="divider"></div>
+                ` : ''}
+
+                ${client ? `
+                    <div class="client-nav-zone">
+                        </div>
+                ` : ''}
             </div>
         </div>
 
@@ -721,7 +759,7 @@ window.buildLayout = function () {
                         const isActive = hash.startsWith(item.href);
                         return `
                             <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                <i>${item.icon}</i> <span>${item.label}</span>
+                                <i>${item.icon}</i> <span class="menu-item">${item.label}</span>
                                 ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                             </a>
                         `;
@@ -783,21 +821,29 @@ window.handleRoute = function () {
     const client = getActiveClient();
     const isVault = hash.includes('vault');
 
-    // 2. 👑 MASTER ADMIN OVERRIDE
-    if (isAdminQuery && (hash === "#/" || hash === "#/clients")) {
-        renderClientDashboard();
-        return;
-    }
-
-    // 3. 🤝 PARTNER / PORTFOLIO DASHBOARD
-    if (hash.includes("partner-dashboard") || (client?.meta?.status === "Partner" && hash === "#/")) {
-        if (client && client.meta.status === "Partner") {
-            OL.renderPartnerDashboard(client, main);
-        } else {
-            console.warn("🚫 Not authorized as Partner. Falling back to Tasks.");
-            renderChecklistModule(); 
+   // 7. DASHBOARD ROUTE (Admin vs Partner) 🏠
+    if (hash === "#/" || hash === "#/clients") {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        
+        // 👑 1. ADMIN PRIORITY
+        if (window.FORCE_ADMIN) {
+            renderClientDashboard();
+            return;
         }
-        return;
+        
+        // 🤝 2. PARTNER PRIORITY
+        if (client && (client.meta.status === "Partner" || client.meta.partnerOwner)) {
+            // If they are a sub-client, we might need to find the Partner project object
+            const leadProject = (client.meta.status === "Partner") ? client : state.clients[client.meta.partnerOwner];
+            OL.renderPartnerDashboard(leadProject, main);
+            return;
+        }
+
+        // 👤 3. PUBLIC CLIENT FALLBACK
+        if (isPublic) {
+            renderChecklistModule(); // Clients never see a dashboard
+            return;
+        }
     }
 
     // 4. Standard Project Routes
