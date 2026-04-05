@@ -9316,6 +9316,7 @@ OL.renderVisualizer = function() {
     const filterIcon = '📶';
 
     if (!document.getElementById('v2-viewport')) {
+        const trayOpen = state.ui.sidebarOpen !== false; // Default to open
         mainArea.innerHTML = `
             <div class="v2-ui-overlay" style="position: absolute; top: 20px; left: 20px; z-index: 5000; pointer-events: none;">
                 <div class="v2-master-toolbar" style="display: flex; align-items: center; gap: 10px; pointer-events: auto;">
@@ -9381,15 +9382,15 @@ OL.renderVisualizer = function() {
 
             <div id="v2-viewport" class="${trayOpen ? '' : 'tray-closed'}">
               <aside id="global-shelf" class="global-shelf-container">
-                  <svg id="v2-shelf-connections" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:-1;">
-                      <g id="shelf-line-group"></g>
-                  </svg>
                   <div class="global-shelf-label">GLOBAL RESOURCES</div>
                   <div id="shelf-contents"></div>
               </aside>
               
               <div id="v2-main-content">
-                  ${OL.renderWorkbenchTabs()}
+                  <aside id="v2-workbench-sidebar">
+                      ${OL.renderWorkbenchTabs()}
+                      <div id="workbench-contents" class="workbench-contents"></div>
+                  </aside>
 
                   <div id="v2-workspace">
                       <div id="v2-canvas-scroll-wrap">
@@ -9416,7 +9417,6 @@ OL.renderVisualizer = function() {
         `;
     }    // 1. 🏗️ BUILD THE UI SHELL
 
-
     const shelfContents = document.getElementById('shelf-contents');
     const workbenchContents = document.getElementById('workbench-contents');
     const nodeLayer = document.getElementById('v2-node-layer');
@@ -9433,18 +9433,33 @@ OL.renderVisualizer = function() {
     // 1. Clear everything
     [shelfContents, workbenchContents, nodeLayer, stageLayer].forEach(el => { if(el) el.innerHTML = ''; });
 
-    // 2. 🗂️ WORKBENCH DATA RESOLUTION
+    // 🗂️ 2. Resolve what goes in the Workbench
     const activeTab = state.ui.activeWorkbenchTab || 'flows';
+    const sidebarSearch = document.getElementById('sidebar-search-input')?.value.toLowerCase() || "";
     let workbenchItems = [];
 
     if (activeTab === 'flows') {
-        workbenchItems = resources.filter(r => ['Workflow', 'Zap', 'Email Campaign'].includes(r.type));
+        // Only show Flows that are NOT yet on the map
+        workbenchItems = resources.filter(r => 
+            ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords
+        );
     } else if (activeTab === 'assets') {
-        workbenchItems = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type));
+        // Only show Assets that are NOT yet on the map
+        workbenchItems = resources.filter(r => 
+            !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords
+        );
     } else if (activeTab === 'guides') {
         workbenchItems = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
     } else if (activeTab === 'data') {
         workbenchItems = state.master.datapoints || [];
+    }
+
+    // 🔍 NEW: Filter the resulting list by the Sidebar-specific search string
+    if (sidebarSearch) {
+        workbenchItems = workbenchItems.filter(item => 
+            item.name.toLowerCase().includes(sidebarSearch) || 
+            (item.key && item.key.toLowerCase().includes(sidebarSearch))
+        );
     }
 
     // 3. 🎨 RENDER THE WORKBENCH CONTENT
@@ -9730,12 +9745,19 @@ OL.renderVisualizer = function() {
         };
 
         if (res.isGlobal) {
-            if (res.isTopShelf) shelfContents.appendChild(div);
-            else workbenchContents.appendChild(div);
+            // ✅ ONLY handle the Top Shelf here.
+            // We ignore the 'else' because OL.renderWorkbenchItemsOnly handles the sidebar.
+            if (res.isTopShelf) {
+                shelfContents.appendChild(div);
+            }
         } else {
-            nodeLayer.appendChild(div);
+            // 📍 Handle the active project resources on the Canvas
+            if (res.coords) {
+                nodeLayer.appendChild(div);
+            }
         }
     });
+
     OL.renderFocusControls();
     // --- 🚀 5. FINAL PASS ---
     if (OL.state.v2.pan) {
@@ -9749,6 +9771,20 @@ OL.renderVisualizer = function() {
     if (document.getElementById('canvas-filter-input')?.value) {
         OL.syncCanvasFilters(document.getElementById('canvas-filter-input').value);
     }
+};
+
+OL.handleSidebarSearch = function(e) {
+    const val = e.target.value;
+    
+    // 1. Update the global state immediately
+    state.ui.sidebarSearchQuery = val;
+    
+    // 2. ONLY render the items, do NOT call OL.renderVisualizer()
+    // This prevents the map, stages, and toolbar from flashing/resetting
+    OL.renderWorkbenchItemsOnly();
+    
+    // 3. Force focus back just in case the browser tried to blur it
+    e.target.focus();
 };
 
 OL.getStepIcon = function(step) {
@@ -9776,19 +9812,112 @@ OL.renderWorkbenchTabs = function() {
         { id: 'data', label: '🏷️ Data', color: '#a78bfa' }
     ];
 
+    const currentSearch = document.getElementById('sidebar-search-input')?.value || "";
+
     return `
-        <div class="workbench-tab-bar" style="display: flex; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--line);">
-            ${tabs.map(t => `
-                <div class="wb-tab ${state.ui.activeWorkbenchTab === t.id ? 'active' : ''}" 
-                     onclick="state.ui.activeWorkbenchTab = '${t.id}'; OL.renderVisualizer();"
-                     style="flex:1; padding: 10px 5px; text-align:center; font-size:9px; font-weight:bold; cursor:pointer; 
-                            border-bottom: 2px solid ${state.ui.activeWorkbenchTab === t.id ? t.color : 'transparent'};
-                            color: ${state.ui.activeWorkbenchTab === t.id ? t.color : 'var(--text-dim)'};">
-                    ${t.label.toUpperCase()}
-                </div>
-            `).join('')}
+        <div class="workbench-header" style="background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--line);">
+            <div class="workbench-tab-bar" style="display: flex;">
+                ${tabs.map(t => `
+                    <div class="wb-tab ${state.ui.activeWorkbenchTab === t.id ? 'active' : ''}" 
+                        onclick="OL.switchWorkbenchTab('${t.id}')" 
+                        style="flex:1; padding: 10px 5px; text-align:center; font-size:9px; font-weight:bold; cursor:pointer; 
+                                border-bottom: 2px solid ${state.ui.activeWorkbenchTab === t.id ? t.color : 'transparent'};
+                                color: ${state.ui.activeWorkbenchTab === t.id ? t.color : 'var(--text-dim)'};">
+                        ${t.label.toUpperCase()}
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="sidebar-search-wrap" style="padding: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+                <input type="text" id="sidebar-search-input" 
+                  placeholder="Filter ${state.ui.activeWorkbenchTab}..." 
+                  value="${state.ui.sidebarSearchQuery || ''}"
+                  oninput="OL.handleSidebarSearch(event)"
+                  autocomplete="off"
+                  style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); color: white; padding: 5px 10px; border-radius: 4px; font-size: 11px;">
+            </div>
         </div>
     `;
+};
+
+OL.switchWorkbenchTab = function(tabId) {
+    // 1. Update State
+    state.ui.activeWorkbenchTab = tabId;
+    
+    // 2. Re-render the Tabs (to move the highlight/underline)
+    const header = document.querySelector('.workbench-header');
+    if (header) {
+        // We replace the header's outerHTML with a fresh version of itself
+        header.outerHTML = OL.renderWorkbenchTabs();
+    }
+    
+    // 3. Re-render the Items (to show the new list)
+    OL.renderWorkbenchItemsOnly();
+};
+
+OL.renderWorkbenchItemsOnly = function() {
+    const workbenchContents = document.getElementById('workbench-contents');
+    if (!workbenchContents) return;
+
+    const activeTab = state.ui.activeWorkbenchTab || 'flows';
+    const query = (state.ui.sidebarSearchQuery || "").toLowerCase();
+    const data = OL.getCurrentProjectData();
+    const resources = (data.resources || []).filter(r => !r.isLocked);
+
+    // 1. FILTER: Tab + "Not on Canvas" + Search Query
+    let items = [];
+    if (activeTab === 'flows') {
+        items = resources.filter(r => 
+            ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords && !r.isTopShelf
+        );
+    } else if (activeTab === 'assets') {
+        items = resources.filter(r => 
+            !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords && !r.isTopShelf
+        );
+    } else if (activeTab === 'guides') {
+        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])];
+    } else if (activeTab === 'data') {
+        items = state.master.datapoints || [];
+    }
+
+    if (query.trim()) {
+        items = items.filter(i => 
+            i.name.toLowerCase().includes(query.trim()) || 
+            (i.key && i.key.toLowerCase().includes(query.trim()))
+        );
+    }
+
+    // 2. RENDER
+    workbenchContents.innerHTML = '';
+    items.forEach(item => {
+        const div = document.createElement('div');
+        
+        if (activeTab === 'data') {
+            div.className = 'data-tag-draggable';
+            div.draggable = true;
+            div.ondragstart = (e) => OL.handleDataDragStart(e, item.id);
+            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; color:white;`;
+            div.innerHTML = `${item.isBundle ? '📦' : '🏷️'} <b>${item.name}</b>`;
+        } else {
+            const isGuide = activeTab === 'guides';
+            div.id = `v2-node-${item.id}`;
+            div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
+            
+            div.onmousedown = (e) => {
+                if (activeTab === 'flows') OL.initWBMotion(e, item.id);
+                else OL.handleAssetDragStart(e, item.id, activeTab === 'assets' ? 'asset' : 'guide');
+            };
+
+            div.innerHTML = `
+                <div class="v2-node-header">
+                    <div class="header-row-content">
+                        <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
+                    </div>
+                </div>
+            `;
+        }
+        workbenchContents.appendChild(div);
+    });
 };
 
 // DRAG ASSET/GUIDE
