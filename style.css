@@ -227,7 +227,7 @@ body {
 }
 
 /* Hide text labels and metadata when collapsed */
-.sidebar.collapsed span, 
+.sidebar.collapsed .menu-item, 
 .sidebar.collapsed .client-info, 
 .sidebar.collapsed .menu-category-label,
 .sidebar.collapsed .client-meta,
@@ -5122,3 +5122,5 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 .hierarchy-item-row.drag-over {
     background: rgba(var(--accent-rgb), 0.3) !important; border: 1px dashed var(--accent) !important;
 }
+
+/*===================Sidebar Menu ===============*/
