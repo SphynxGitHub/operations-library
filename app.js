@@ -1114,9 +1114,77 @@ OL.onboardNewClient = function () {
     },
     sharedMasterIds: [],
   };
+  OL.provisionSphynxTemplates(clientId);
   state.activeClientId = clientId;
   OL.persist();
   location.hash = "#/client-tasks";
+};
+
+OL.provisionSphynxTemplates = function(clientId) {
+    const client = state.clients[clientId];
+    if (!client) return;
+
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+    const currentResources = client.projectData.localResources;
+
+    // 🏛️ System Level
+    const systemTemplates = [
+        { name: "Sphynx Client Agreement", type: "Legal", systemPinned: true },
+    ];
+
+    if (client.meta.status === 'Ongoing Maintenance') {
+        systemTemplates.push({ name: "Maintenance Time Tracker and Zapier Error Log", type: "Admin", systemPinned: true });
+    }
+
+    // 📂 Admin Level
+    const adminTemplates = [
+        { name: "Folder Hierarchy", type: "Admin", adminPinned: true },
+        { name: "Naming Conventions", type: "Admin", adminPinned: true,
+          isContainer: true,
+            tree: [
+                { 
+                    id: "root-clients", 
+                    name: "Clients", 
+                    children: [
+                        { 
+                            id: "naming-bridge", 
+                            name: "{folderNamingConventions}", 
+                            children: [
+                                { id: "tax-" + Date.now(), name: "Tax", children: [] },
+                                { id: "estate-" + Date.now(), name: "Estate", children: [] },
+                                { id: "ins-" + Date.now(), name: "Insurance", children: [] }
+                            ] 
+                        }
+                    ] 
+                }
+            ]
+        },
+        { name: "Compliance Documents", type: "Compliance", systemPinned: true, 
+          isContainer: true, // 🚀 Custom flag for specific UI
+          files: [
+              { name: "ADV", url: "", id: uid() },
+              { name: "CRS", url: "", id: uid() },
+              { name: "Privacy Policy", url: "", id: uid() }
+          ] 
+        }
+    ];
+
+    const allToProvision = [...systemTemplates, ...adminTemplates];
+
+    allToProvision.forEach(temp => {
+        const exists = currentResources.some(r => r.name === temp.name);
+        if (!exists) {
+            currentResources.push({
+                ...temp,
+                id: 'sys-' + uid(),
+                isLocked: true,
+                description: "Standard Sphynx Asset.",
+                createdDate: new Date().toISOString(),
+                steps: [],
+                data: {}
+            });
+        }
+    });
 };
 
 //=======BUILD CLIENT PROFILE SETTINGS / LINK / DELETE PROFILE ===========//
@@ -1216,8 +1284,10 @@ OL.updateClientStatus = function(clientId, newStatus) {
 
     client.meta.status = newStatus;
     
-    // Save to Firestore
-    OL.persist();
+    OL.provisionSphynxTemplates(clientId);
+    OL.persist().then(() => {
+        window.handleRoute();
+    });
     
     console.log(`📡 Status updated for ${client.meta.name}: ${newStatus}`);
     
@@ -1650,12 +1720,37 @@ function renderAppModalInnerContent(app, client) {
     console.log("7. Final Source:", source);
     console.groupEnd();
 
+    const externalLinkHtml = `
+        <div class="card-section" style="margin-bottom: 20px;">
+            <label class="modal-section-label">🌐 APP ACCESS LINK</label>
+            <div style="display: flex; gap: 10px; margin-top: 8px;">
+                <input type="text" class="modal-input tiny" 
+                      style="flex: 1;"
+                      placeholder="https://app.slack.com..." 
+                      value="${esc(app.loginUrl || '')}" 
+                      onblur="OL.updateAppMeta('${app.id}', 'loginUrl', this.value)">
+                
+                ${app.loginUrl ? `
+                    <a href="${app.loginUrl}" target="_blank" class="btn primary tiny" 
+                      style="display: flex; align-items: center; gap: 6px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 15px;">
+                      🚀 LAUNCH
+                    </a>
+                ` : `
+                    <button class="btn tiny soft" disabled style="opacity: 0.5; cursor: not-allowed;">🚀 LAUNCH</button>
+                `}
+            </div>
+            <div class="tiny muted" style="margin-top: 5px;">Direct link to the application login or dashboard.</div>
+        </div>
+    `;
+
     return `
         ${isLinkedToMaster && !isVaultRoute ? `
             <div class="banner info" style="margin-bottom:20px; padding:10px; background:rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius:6px; font-size:11px;">
                 💠 This app is linked to the <b>Master Vault</b>. Automation capabilities are synced globally, while notes and categories remain private to this project.
             </div>
         ` : ''}
+
+        ${externalLinkHtml}
 
         <div class="card-section" style="background: var(--panel-soft); padding: 15px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 20px;">
             <label class="modal-section-label">${isMasterCard ? '🏛️ MASTER VAULT TIER DEFINITIONS' : '💳 CLIENT SUBSCRIPTION'}</label>
@@ -4155,8 +4250,13 @@ window.renderResourceManager = function () {
 
     const uniqueTypes = [...new Set(displayRes.map(r => r.type).filter(t => t && t !== 'Workflow'))].sort();
 
-    // Grouping logic
-    const grouped = filtered.reduce((acc, res) => {
+   // 1. Filter out the specific pinned groups
+    const sphynxPinned = filtered.filter(res => res.systemPinned);
+    const adminPinned = filtered.filter(res => res.adminPinned);
+    // Standard items are anything not pinned
+    const standardItems = filtered.filter(res => !res.systemPinned && !res.adminPinned);
+
+    const grouped = standardItems.reduce((acc, res) => {
         const type = res.type || "General";
         if (!acc[type]) acc[type] = [];
         acc[type].push(res);
@@ -4207,6 +4307,23 @@ window.renderResourceManager = function () {
         </div>
 
         <div class="resource-sections-wrapper">
+            ${sphynxPinned.length > 0 ? `
+                <div class="resource-group" style="margin-bottom: 30px;">
+                    <div style="border-bottom: 2px solid var(--accent); padding: 8px; background: rgba(var(--accent-rgb), 0.05); margin-bottom:12px;">
+                        <h3 style="margin:0; font-size:12px; color: var(--accent);">💎 SPHYNX RESOURCES</h3>
+                    </div>
+                    <div class="cards-grid">${sphynxPinned.map(res => renderResourceCard(res)).join("")}</div>
+                </div>
+            ` : ''}
+
+            ${adminPinned.length > 0 ? `
+                <div class="resource-group" style="margin-bottom: 30px;">
+                    <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px;">
+                        <h3 style="margin:0; font-size:12px; color: #94a3b8;">📁 ADMIN</h3>
+                    </div>
+                    <div class="cards-grid">${adminPinned.map(res => renderResourceCard(res)).join("")}</div>
+                </div>
+            ` : ''}
             ${sortedTypes.length > 0 ? sortedTypes.map(type => `
                 <div class="resource-group" style="margin-bottom: 40px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
@@ -4701,7 +4818,7 @@ window.renderResourceCard = function (res) {
                         ${isMaster ? 'MASTER' : 'LOCAL'}
                     </span>
 
-                    <button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>
+                    ${res.isLocked ? '' : `<button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
                 </div>
             </div>
 
@@ -4988,6 +5105,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const isLockedByType = !!(typeDef && typeDef.matchedFunctionId);
     const isLockedByManual = !!res.matchedFunctionId;
     const isZap = rawType.toLowerCase() === 'zap';
+    const isCompliance = res.name === "Compliance Documents" || res.isContainer;
+    const isNaming = res.name === "Naming Conventions";
+    const isHierarchy = res.name === "Folder Hierarchy";
 
     // 1. Identify what the "Standard" tool should be
     const autoApp = (isLockedByType || isLockedByManual) && !isZap ? OL.getAppByFunction(rawType, res.matchedFunctionId) : null;
@@ -5340,149 +5460,274 @@ const dependencyHtml = `
           </div>
       </aside>
   `;
+
+    let containerHtml = "";
+    if (res.isContainer) {
+        containerHtml = `
+            <div class="card-section" style="margin-top:20px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
+                <label class="modal-section-label">📋 DOCUMENT COLLECTION</label>
+                <div id="file-list-container" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+                    ${(res.files || []).map((file, idx) => `
+                        <div class="file-row" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div style="flex: 1;">
+                                <input type="text" class="modal-input tiny" value="${esc(file.name)}" 
+                                      style="font-weight:bold; border:none; background:transparent; padding:0;"
+                                      onblur="OL.updateContainerFile('${res.id}', ${idx}, 'name', this.value)">
+                            </div>
+                            
+                            <div style="flex: 2; display:flex; gap:5px;">
+                                <input type="text" class="modal-input tiny" placeholder="Paste link or URL..." 
+                                      value="${esc(file.url || '')}" 
+                                      onblur="OL.updateContainerFile('${res.id}', ${idx}, 'url', this.value)">
+                                
+                                ${file.url ? `
+                                    <a href="${file.url}" target="_blank" class="btn primary tiny" style="padding:0 10px;">🚀</a>
+                                ` : `
+                                    <button class="btn tiny soft" onclick="OL.simulateUpload('${res.id}', ${idx})" title="Upload PDF">📁</button>
+                                `}
+                            </div>
+                            <button class="card-delete-btn" style="position:static;" onclick="OL.removeFileFromContainer('${res.id}', ${idx})">×</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <button class="btn tiny soft full-width" style="margin-top:10px; border-style:dashed;" 
+                        onclick="OL.addFileToContainer('${res.id}')">+ Add Document Entry</button>
+            </div>
+        `;
+    }
+
     // --- 🚀 FINAL ASSEMBLY ---
+    let bodyContent = "";
+    if (isHierarchy) {
+        // --- MODE A: DRAGGABLE HIERARCHY HUB ---
+        if (!res.tree) res.tree = [{ id: uid(), name: "Clients", children: [] }];
+
+        bodyContent = `
+            <div class="card-section" style="background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
+                <label class="modal-section-label" style="color: var(--accent);">📁 FOLDER ARCHITECTURE</label>
+                <p class="tiny muted" style="margin-bottom: 15px;">Drag handles ⠿ to reorder. Root 'Clients' is protected.</p>
+                
+                <div id="hierarchy-tree-root" class="hierarchy-container">
+                    ${OL.renderHierarchyTree(res.id, res.tree)}
+                </div>
+                
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
+                    <button class="btn tiny primary" onclick="OL.addFolderNode('${res.id}')">+ Add Root Folder</button>
+                </div>
+            </div>
+        `;
+    }
+    else if (isCompliance) {
+        // --- MODE B: COMPLIANCE DOCS---
+        bodyContent = `
+            <div class="card-section" style="margin-top:10px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
+                <label class="modal-section-label">📋 DOCUMENT COLLECTION</label>
+                <div id="file-list-container" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+                    ${(res.files || []).map((file, idx) => `
+                        <div class="file-row" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div style="flex: 1.5;">
+                                <input type="text" class="modal-input tiny" value="${esc(file.name)}" 
+                                       style="font-weight:bold; border:none; background:transparent; padding:0; color:var(--accent);"
+                                       onblur="OL.updateContainerFile('${res.id}', ${idx}, 'name', this.value)">
+                            </div>
+                            <div style="flex: 2.5; display:flex; gap:5px;">
+                                <input type="text" class="modal-input tiny" placeholder="Paste link or URL..." 
+                                       value="${esc(file.url || '')}" 
+                                       onblur="OL.updateContainerFile('${res.id}', ${idx}, 'url', this.value)">
+                                ${file.url ? `
+                                    <a href="${file.url}" target="_blank" class="btn primary tiny" style="padding:0 12px; height: 32px; display:flex; align-items:center; background:var(--accent); color:black; font-weight:bold; text-decoration:none;">🚀 OPEN</a>
+                                ` : `
+                                    <button class="btn tiny soft" onclick="OL.simulateUpload('${res.id}', ${idx})" style="height:32px;">📁</button>
+                                `}
+                            </div>
+                            <button class="card-delete-btn" style="position:static; opacity:0.3;" onclick="OL.removeFileFromContainer('${res.id}', ${idx})">×</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <button class="btn tiny soft full-width" style="margin-top:15px; border-style:dashed; padding: 10px;" 
+                        onclick="OL.addFileToContainer('${res.id}')">+ Add Document Entry</button>
+            </div>
+        `;
+    }
+    else if (isNaming) {
+        // --- MODE C: NAMING CONVENTIONS HUB ---
+        const hierarchyRes = (client?.projectData?.localResources || []).find(r => r.name === "Folder Hierarchy");
+        const sections = [
+            { id: 'household', label: '🏠 HOUSEHOLD NAMING' },
+            { id: 'folders', label: '📁 FOLDER NAMING' }
+        ];
+        const fields = [
+            { key: 'individual', label: 'Individual' },
+            { key: 'jointSame', label: 'Joint - Same Last' },
+            { key: 'jointDiff', label: 'Joint - Different Last' }
+        ];
+
+        bodyContent = sections.map(sec => `
+            <div class="card-section" style="margin-bottom: 20px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                    <label class="modal-section-label" style="color: var(--accent); margin:0;">${sec.label}</label>
+                    
+                    ${sec.id === 'folders' && hierarchyRes ? `
+                        <button class="btn tiny primary" style="font-size: 9px; padding: 4px 10px;" 
+                                onclick="OL.openResourceModal('${hierarchyRes.id}')">
+                            VIEW HIERARCHY ➔
+                        </button>
+                    ` : ''}
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${fields.map(f => `
+                        <div class="input-group">
+                            <label class="tiny muted bold uppercase" style="font-size: 9px; display: block; margin-bottom: 5px;">${f.label}</label>
+                            <input type="text" class="modal-input tiny" 
+                                   placeholder="e.g. Lastname, Firstname..."
+                                   value="${esc(res.data?.[sec.id]?.[f.key] || '')}"
+                                   onblur="OL.handleConventionUpdate('${res.id}', '${sec.id}', '${f.key}', this.value)">
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+    else {
+        // --- MODE D: STANDARD FULL RESOURCE VIEW ---
+       bodyContent =`${roundInputHtml}
+          ${hierarchyHtml}
+          ${adminPricingHtml}
+          ${dependencyHtml}
+          ${appMappingHtml}
+          ${containerHtml}
+
+          <div class="card-section" style="margin-top:20px;">
+              <label class="modal-section-label">📝 Description & Access Notes</label>
+              <textarea class="modal-textarea" 
+                      placeholder="Enter login details, account purpose, or specific access instructions..." 
+                      style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
+                      onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+          </div>
+
+          ${miniMapsHtml}
+          <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
+              <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+              <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
+                  <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
+              </div>
+              <div id="sop-step-list">
+                  ${renderSopStepList(res)}
+              </div>
+          </div>
+          ${sopLibraryHtml}
+          
+          <div class="card-section" style="margin-top:20px;">
+              <label class="modal-section-label">🌐 External Link & Source</label>
+              <div style="display:flex; gap:10px; margin-bottom:10px;">
+                  <input type="text" class="modal-input tiny" 
+                      style="flex: 1;"
+                      placeholder="https://app.example.com" 
+                      value="${esc(res.externalUrl || '')}" 
+                      onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
+                  
+                  ${res.externalUrl ? `
+                      <button class="btn soft tiny" style="color: black !important; padding: 0 12px;" 
+                              onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" title="Copy Link">
+                          📋 Copy
+                      </button>
+                      <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
+                        style="display: flex; align-items: center; gap: 4px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
+                          ↗️ Open
+                      </a>
+                  ` : ''}
+              </div>
+              ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
+          </div>
+
+          <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
+              <label class="modal-section-label">🔗 Connected Relationships</label>
+              
+              <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
+                  ${types.map(t => `
+                      <span onclick="state.ui.relationshipFilter = '${t}'; OL.openResourceModal('${targetId}')" 
+                            style="font-size: 9px; padding: 2px 8px; border-radius: 100px; cursor: pointer; 
+                            background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
+                            color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
+                          ${t.toUpperCase()}
+                      </span>
+                  `).join('')}
+              </div>
+          
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                  ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
+                      const isScopingEnv = window.location.hash.includes('scoping-sheet');
+                      const navAction = isScopingEnv 
+                          ? `OL.openResourceModal('${conn.id}')` 
+                          : `OL.openInspector('${conn.id}')`;
+
+                      return ` 
+                          <div class="pill accent is-clickable" 
+                              style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); cursor: pointer !important; position: relative; z-index: 9999;"
+                              onmousedown="event.preventDefault(); event.stopPropagation(); if(window.OL.closeModal) OL.closeModal(); ${navAction}">
+
+                              <div style="display: flex; align-items: center; gap: 8px; pointer-events: none;">
+                                  <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
+                                  <div style="display:flex; flex-direction:column;">
+                                      <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
+                                      <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
+                                  </div>
+                              </div>
+                              <span style="font-size: 9px; opacity: 0.5; pointer-events: none;">
+                                  ${isScopingEnv ? 'Open Modal ↗' : 'Inspect ➔'}
+                              </span>
+                          </div>
+                      `;
+                  }).join('') : `
+                      <div class="tiny muted" style="padding: 10px; text-align: center;">
+                          ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}
+                      </div>
+                  `}
+              </div>
+          </div>
+
+          ${typeSpecificHtml}`
+      }
+      // --- 🧱 FINAL RENDER ---
     const html = `
         <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
-                
                 <div style="display: flex; align-items: flex-start; gap: 12px; width: 100%;">
-                    <span style="font-size: 24px; margin-top: 2px; flex-shrink: 0;">🛠️</span>
+                    <span style="font-size: 24px; margin-top: 2px;">${isCompliance ? '📋' : '🛠️'}</span>
                     <div style="flex-grow: 1;">
                         <textarea class="header-editable-input" id="modal-res-name"
-                            placeholder="Resource Name..."
-                            style="background: transparent; border: none; color: inherit; 
-                                font-size: 22px; font-weight: bold; width: 100%; 
-                                outline: none; resize: none; overflow: hidden; 
-                                padding: 0; line-height: 1.2; display: block;"
-                            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
-                            onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name || '')}</textarea>
+                            style="background: transparent; border: none; color: inherit; font-size: 22px; font-weight: bold; width: 100%; outline: none; resize: none; overflow: hidden;"
+                            onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
                     </div>
                 </div>
-
                 <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
-                    ${originPill}
-                    ${typePill}
-                    ${backBtn}
-
-                    ${hasHistory ? `
-                        <button class="btn tiny soft" style="color: black !important; background: #fff !important; font-weight:bold;" 
-                                onclick="OL.navigateBack()">
-                            ⬅️ Back
-                        </button>
-                    ` : ''}
-                    
-                    ${canPromote ? `
-                    <button class="btn tiny primary" 
-                            style="background: #fbbf24 !important; color: black !important; font-weight: bold; border: none;"
-                            onclick="OL.pushToMaster('${res.id}')">
-                        ⭐ Promote to Master
-                    </button>
-                ` : ''}
+                    ${originPill} ${typePill} ${backBtn}
+                    ${hasHistory ? `<button class="btn tiny soft" style="color:black!important; background:#fff!important;" onclick="OL.navigateBack()">⬅️ Back</button>` : ''}
+                    ${canPromote ? `<button class="btn tiny primary" style="background:#fbbf24!important; color:black!important;" onclick="OL.pushToMaster('${res.id}')">⭐ Promote to Master</button>` : ''}
                 </div>
             </div>
         </div>
 
         <div class="modal-layout-wrapper" style="display: flex; height: 75vh; overflow: hidden;">
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 20px;">
-              ${roundInputHtml}
-              ${hierarchyHtml}
-              ${adminPricingHtml}
-              ${dependencyHtml}
-              ${appMappingHtml}
+            <div class="modal-body" style="flex: 1.5; overflow-y: auto; padding: 20px;">
+                ${bodyContent}
+            </div>
 
-              <div class="card-section" style="margin-top:20px;">
-                  <label class="modal-section-label">📝 Description & Access Notes</label>
-                  <textarea class="modal-textarea" 
-                          placeholder="Enter login details, account purpose, or specific access instructions..." 
-                          style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
-                          onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-              </div>
-
-              ${miniMapsHtml}
-              <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                  <label class="modal-section-label">📋 WORKFLOW STEPS</label>
-                  <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                      <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
-                  </div>
-                  <div id="sop-step-list">
-                      ${renderSopStepList(res)}
-                  </div>
-              </div>
-              ${sopLibraryHtml}
-              
-              <div class="card-section" style="margin-top:20px;">
-                  <label class="modal-section-label">🌐 External Link & Source</label>
-                  <div style="display:flex; gap:10px; margin-bottom:10px;">
-                      <input type="text" class="modal-input tiny" 
-                          style="flex: 1;"
-                          placeholder="https://app.example.com" 
-                          value="${esc(res.externalUrl || '')}" 
-                          onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
-                      
-                      ${res.externalUrl ? `
-                          <button class="btn soft tiny" style="color: black !important; padding: 0 12px;" 
-                                  onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" title="Copy Link">
-                              📋 Copy
-                          </button>
-                          <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
-                            style="display: flex; align-items: center; gap: 4px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
-                              ↗️ Open
-                          </a>
-                      ` : ''}
-                  </div>
-                  ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
-              </div>
-
-              <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
-                  <label class="modal-section-label">🔗 Connected Relationships</label>
-                  
-                  <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
-                      ${types.map(t => `
-                          <span onclick="state.ui.relationshipFilter = '${t}'; OL.openResourceModal('${targetId}')" 
-                                style="font-size: 9px; padding: 2px 8px; border-radius: 100px; cursor: pointer; 
-                                background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
-                                color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
-                              ${t.toUpperCase()}
-                          </span>
-                      `).join('')}
-                  </div>
-              
-                  <div style="display: flex; flex-direction: column; gap: 6px;">
-                      ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
-                          const isScopingEnv = window.location.hash.includes('scoping-sheet');
-                          const navAction = isScopingEnv 
-                              ? `OL.openResourceModal('${conn.id}')` 
-                              : `OL.openInspector('${conn.id}')`;
-
-                          return ` 
-                              <div class="pill accent is-clickable" 
-                                  style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); cursor: pointer !important; position: relative; z-index: 9999;"
-                                  onmousedown="event.preventDefault(); event.stopPropagation(); if(window.OL.closeModal) OL.closeModal(); ${navAction}">
-
-                                  <div style="display: flex; align-items: center; gap: 8px; pointer-events: none;">
-                                      <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
-                                      <div style="display:flex; flex-direction:column;">
-                                          <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
-                                          <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
-                                      </div>
-                                  </div>
-                                  <span style="font-size: 9px; opacity: 0.5; pointer-events: none;">
-                                      ${isScopingEnv ? 'Open Modal ↗' : 'Inspect ➔'}
-                                  </span>
-                              </div>
-                          `;
-                      }).join('') : `
-                          <div class="tiny muted" style="padding: 10px; text-align: center;">
-                              ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}
-                          </div>
-                      `}
-                  </div>
-              </div>
-
-              ${typeSpecificHtml}
-          </div>
-          ${sidebarHtml}
-    </div>
+            <aside class="modal-sidebar" style="flex: 1; display: flex; flex-direction: column; background: rgba(0,0,0,0.05); border-left: 1px solid var(--line);">
+                <div style="display: flex; border-bottom: 1px solid var(--line);">
+                    ${!isGuest ? `<div class="comment-tab ${activeTab === 'internal' ? 'active' : ''}" onclick="state.v2.activeCommentTab='internal'; OL.openResourceModal('${res.id}')" style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'internal' ? 'color:var(--accent); border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">INTERNAL NOTES</div>` : ''}
+                    <div class="comment-tab ${activeTab === 'client' ? 'active' : ''}" onclick="state.v2.activeCommentTab='client'; OL.openResourceModal('${res.id}')" style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'client' ? 'color:#10b981; border-bottom:2px solid #10b981;' : 'opacity:0.5'}">CLIENT FEEDBACK</div>
+                </div>
+                <div id="comments-list-${res.id}" style="flex: 1; overflow-y: auto; padding: 15px;">
+                    ${renderCommentsList(res, activeTab)}
+                </div>
+                <div class="comment-input-zone" style="padding: 15px; border-top: 1px solid var(--line);">
+                    <textarea id="new-comment-input-${res.id}" class="modal-textarea" placeholder="Type a message..." style="min-height: 60px; margin-bottom: 8px; font-size: 11px;"></textarea>
+                    <button class="btn tiny full-width" style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'};" onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">Post</button>
+                </div>
+            </aside>
+        </div>
     `;
     
     openModal(html);
@@ -5490,6 +5735,235 @@ const dependencyHtml = `
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+};
+
+OL.renderHierarchyTree = function(resId, nodes, path = "") {
+    return nodes.map((node, idx) => {
+        const currentPath = path ? `${path}.${idx}` : `${idx}`;
+        const isNamingLink = node.name.includes("{folderNamingConventions}");
+        const client = getActiveClient();
+        const namingRes = (client?.projectData?.localResources || []).find(r => r.name === "Naming Conventions");
+
+        return `
+            <div class="hierarchy-node-wrapper" style="margin-left: ${path ? '25' : '0'}px;">
+                
+                <div class="tree-drop-zone" 
+                     ondragover="OL.handleTreeDragOver(event)" 
+                     ondragleave="OL.handleTreeDragLeave(event)"
+                     ondrop="OL.handleTreeDrop(event, '${resId}', '${currentPath}', 'before')"></div>
+
+                <div class="hierarchy-item-row" 
+                     draggable="true" 
+                     ondragstart="OL.handleTreeDragStart(event, '${resId}', '${currentPath}')"
+                     ondragover="OL.handleTreeDragOver(event)"
+                     ondragleave="OL.handleTreeDragLeave(event)"
+                     ondrop="OL.handleTreeDrop(event, '${resId}', '${currentPath}', 'inside')"
+                     style="display:flex; align-items:center; gap:8px; padding: 6px; background: ${isNamingLink ? 'rgba(var(--accent-rgb), 0.1)' : 'rgba(0,0,0,0.2)'}; border-radius: 4px; border: 1px solid ${isNamingLink ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};">
+                    
+                    <span class="drag-handle" style="cursor:grab; opacity:0.3;">⠿</span>
+                    <span style="font-size: 12px;">${node.children?.length > 0 ? '📂' : '📁'}</span>
+                    
+                    <input type="text" class="tiny-input" 
+                           value="${esc(node.name)}" 
+                           ${isNamingLink ? 'readonly' : ''}
+                           style="flex:1; background:transparent; border:none; color: ${isNamingLink ? 'var(--accent)' : 'white'}; font-weight: ${isNamingLink ? 'bold' : 'normal'}; outline:none;"
+                           onblur="OL.updateTreeNode('${resId}', '${currentPath}', this.value)">
+
+                    ${isNamingLink && namingRes ? `
+                        <button class="btn tiny primary" style="font-size:7px; padding: 2px 6px;" 
+                                onclick="event.stopPropagation(); OL.openResourceModal('${namingRes.id}')">
+                            VIEW RULES ➔
+                        </button>
+                    ` : ''}
+                    
+                    <div class="hierarchy-actions">
+                        <button class="btn-icon-tiny" onclick="OL.addFolderNode('${resId}', '${currentPath}')">+</button>
+                        ${!isNamingLink ? `<button class="btn-icon-tiny danger" onclick="OL.removeTreeNode('${resId}', '${currentPath}')">×</button>` : ''}
+                    </div>
+                </div>
+
+                ${idx === nodes.length - 1 ? `
+                    <div class="tree-drop-zone" 
+                         ondragover="OL.handleTreeDragOver(event)" 
+                         ondragleave="OL.handleTreeDragLeave(event)"
+                         ondrop="OL.handleTreeDrop(event, '${resId}', '${currentPath}', 'after')"></div>
+                ` : ''}
+                
+                <div class="node-children">
+                    ${node.children ? OL.renderHierarchyTree(resId, node.children, currentPath) : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+OL.addFolderNode = function(resId, path = null) {
+    const res = OL.getResourceById(resId);
+    if (!res.tree) res.tree = [];
+
+    if (path === null) {
+        res.tree.push({ id: uid(), name: "New Folder", children: [] });
+    } else {
+        // Deep find the node in the nested array
+        const keys = path.split('.');
+        let target = res.tree;
+        keys.forEach((key, i) => {
+            if (i === keys.length - 1) {
+                if (!target[key].children) target[key].children = [];
+                target[key].children.push({ id: uid(), name: "New Sub-folder", children: [] });
+            } else {
+                target = target[key].children;
+            }
+        });
+    }
+    OL.persist();
+    OL.openResourceModal(resId);
+};
+
+OL.updateTreeNode = function(resId, path, value) {
+    const res = OL.getResourceById(resId);
+    const keys = path.split('.');
+    let target = res.tree;
+    keys.forEach((key, i) => {
+        if (i === keys.length - 1) target[key].name = value;
+        else target = target[key].children;
+    });
+    OL.persist();
+};
+
+OL.removeTreeNode = function(resId, path) {
+    const res = OL.getResourceById(resId);
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    let parent = res.tree;
+    keys.forEach(key => parent = parent[key].children);
+    
+    if (confirm(`Delete "${parent[lastKey].name}" and all nested folders?`)) {
+        parent.splice(lastKey, 1);
+        OL.persist();
+        OL.openResourceModal(resId);
+    }
+};
+
+// 🚠 DRAG & DROP LOGIC
+OL.handleTreeDragStart = function(e, resId, path) {
+    e.dataTransfer.setData("text/plain", path);
+    e.stopPropagation();
+};
+
+OL.handleTreeDrop = function(e, resId, targetPath, position) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+
+    const sourcePath = e.dataTransfer.getData("text/plain");
+    if (!sourcePath || sourcePath === targetPath) return;
+
+    const res = OL.getResourceById(resId);
+    if (!res || !res.tree) return;
+
+    // 🚀 THE RESET: We deep clone the tree to manipulate it safely
+    const newTree = JSON.parse(JSON.stringify(res.tree));
+
+    const getItemByPath = (tree, path) => {
+        const parts = path.split('.').map(Number);
+        let parent = { children: tree };
+        let target = tree;
+        let index = parts[parts.length - 1];
+
+        for (let i = 0; i < parts.length; i++) {
+            parent = (i === 0) ? { children: tree } : target;
+            target = parent.children[parts[i]];
+        }
+        return { parent: parent.children, index: parts[parts.length - 1], item: target };
+    };
+
+    try {
+        // 1. Snip the source
+        const source = getItemByPath(newTree, sourcePath);
+        const movedItem = source.parent.splice(source.index, 1)[0];
+
+        // 2. Re-calculate target (indices might have shifted)
+        // We use the original path but handle the offset if moved within same parent
+        const target = getItemByPath(newTree, targetPath);
+
+        if (position === 'inside') {
+            if (!target.item.children) target.item.children = [];
+            target.item.children.push(movedItem);
+        } else {
+            const insertIdx = (position === 'after') ? target.index + 1 : target.index;
+            target.parent.splice(insertIdx, 0, movedItem);
+        }
+
+        // 3. Update State & UI
+        res.tree = newTree;
+        OL.persist();
+        OL.openResourceModal(resId);
+
+    } catch (err) {
+        console.error("📋 Hierarchy Sync Error:", err);
+        // Fallback: If logic breaks, just re-open to sync UI with data
+        OL.openResourceModal(resId);
+    }
+};
+
+// UI Feedback Helpers
+OL.handleTreeDragOver = function(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+};
+
+OL.handleTreeDragLeave = function(e) {
+    e.currentTarget.classList.remove('drag-over');
+};
+
+OL.handleConventionUpdate = function(resId, section, key, value) {
+    const res = OL.getResourceById(resId);
+    if (res) {
+        if (!res.data) res.data = {};
+        if (!res.data[section]) res.data[section] = {};
+        
+        res.data[section][key] = value.trim();
+        OL.persist();
+        console.log(`✅ Naming Convention Saved: ${section} -> ${key}`);
+    }
+};
+
+OL.updateContainerFile = function(resId, fileIdx, field, value) {
+    const res = OL.getResourceById(resId);
+    if (res && res.files && res.files[fileIdx]) {
+        res.files[fileIdx][field] = value.trim();
+        OL.persist();
+    }
+};
+
+OL.addFileToContainer = function(resId) {
+    const res = OL.getResourceById(resId);
+    if (res) {
+        if (!res.files) res.files = [];
+        res.files.push({ name: "New Document", url: "", id: uid() });
+        OL.persist();
+        OL.openResourceModal(resId);
+    }
+};
+
+OL.removeFileFromContainer = function(resId, idx) {
+    const res = OL.getResourceById(resId);
+    if (res && res.files && confirm("Remove this document entry?")) {
+        res.files.splice(idx, 1);
+        OL.persist();
+        OL.openResourceModal(resId);
+    }
+};
+
+OL.simulateUpload = function(resId, idx) {
+    // Note: Actual PDF binary upload requires Firebase Storage.
+    // For now, we prompt for a link (Google Drive/Dropbox).
+    const url = prompt("Please enter the Google Drive or Dropbox link for this PDF:");
+    if (url) {
+        OL.updateContainerFile(resId, idx, 'url', url);
+        OL.openResourceModal(resId);
+    }
 };
 
 OL.addResourceComment = async function(resId, isClientFacing = false) {
@@ -6082,6 +6556,11 @@ OL.executeResourceImport = function(masterId) {
 };
 
 OL.universalDelete = async function(id, type, options = {}) {
+    const res = OL.getResourceById(id);
+      if (res && res.isLocked) {
+          alert("🔒 This is a required Sphynx system resource and cannot be removed.");
+          return;
+      }
     const { event, isFunction, name } = options;
     if (event) event.stopPropagation();
 
@@ -8628,7 +9107,7 @@ OL.renderVisualizer = function() {
 
     const data = OL.getCurrentProjectData();
     const stages = data.stages || [];
-    const resources = data.resources || [];
+    const resources = (data.resources || []).filter(r => !r.isLocked);
 
     // 🏷️ Extract Unique Values for Filter Dropdowns
     const types = [...new Set(resources.map(r => r.type))].filter(Boolean).sort();
