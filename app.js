@@ -1188,9 +1188,44 @@ OL.provisionSphynxTemplates = function(clientId) {
 };
 
 //=======BUILD CLIENT PROFILE SETTINGS / LINK / DELETE PROFILE ===========//
+
+OL.getDynamicPartners = function() {
+    return Object.values(state.clients)
+        .filter(c => c.meta.status === "Partner")
+        .map(c => ({
+            id: c.id,
+            name: c.meta.name,
+            logo: "🤝"
+        }));
+};
+
 OL.openClientProfileModal = function(clientId) {
     const client = state.clients[clientId];
     if (!client) return;
+
+    const dynamicPartners = OL.getDynamicPartners();
+    const currentPartnerId = client.meta.partnerOwner || "";
+
+    const partnerDropdownHtml = `
+        <div class="card-section" style="margin-top: 20px; padding: 15px; background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); border-radius: 8px;">
+            <label class="modal-section-label" style="color: var(--accent);">🤝 LINK TO PARTNER PORTAL</label>
+            <div style="margin-top: 10px;">
+                <select class="modal-input tiny" 
+                        style="width: 100%; cursor: pointer;"
+                        onchange="OL.handlePartnerAssignment('${client.id}', this.value)">
+                    <option value="">-- No Partner (Direct Sphynx Client) --</option>
+                    ${dynamicPartners.map(p => `
+                        <option value="${p.id}" ${currentPartnerId === p.id ? 'selected' : ''}>
+                            ${p.logo} ${esc(p.name)}
+                        </option>
+                    `).join('')}
+                </select>
+                <p class="tiny muted" style="margin-top: 8px;">
+                    ${currentPartnerId ? `This project is managed under the <b>${state.clients[currentPartnerId]?.meta.name}</b> portfolio.` : 'This is a standalone project.'}
+                </p>
+            </div>
+        </div>
+    `;
 
     const html = `
         <div class="modal-head">
@@ -1199,6 +1234,7 @@ OL.openClientProfileModal = function(clientId) {
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
+            ${partnerDropdownHtml}
             <label class="modal-section-label">Active Modules (Client Access)</label>
             <div class="card-section">
                 ${[
@@ -5109,6 +5145,9 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const isNaming = res.name === "Naming Conventions";
     const isHierarchy = res.name === "Folder Hierarchy";
 
+    const allowedWorkflowTypes = ['workflow', 'zap', 'email campaign'];
+    const showWorkflowSteps = allowedWorkflowTypes.includes(String(res.type || '').toLowerCase());
+
     // 1. Identify what the "Standard" tool should be
     const autoApp = (isLockedByType || isLockedByManual) && !isZap ? OL.getAppByFunction(rawType, res.matchedFunctionId) : null;
 
@@ -5259,8 +5298,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             </div>
         `;
     }
-
-    const miniMapsHtml = OL.renderResourceMiniMaps(res.id);
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
@@ -5605,17 +5642,16 @@ const dependencyHtml = `
                       style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
                       onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
           </div>
-
-          ${miniMapsHtml}
-          <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-              <label class="modal-section-label">📋 WORKFLOW STEPS</label>
-              <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                  <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
-              </div>
-              <div id="sop-step-list">
-                  ${renderSopStepList(res)}
-              </div>
-          </div>
+          ${OL.renderResourceMiniMaps(res.id)}
+          ${showWorkflowSteps ? `
+            <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
+                <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+                <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
+                    <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
+                </div>
+                <div id="sop-step-list">${renderSopStepList(res)}</div>
+            </div>
+        ` : ''}
           ${sopLibraryHtml}
           
           <div class="card-section" style="margin-top:20px;">
@@ -15979,3 +16015,133 @@ window.addEventListener("hashchange", window.handleRoute);
         e.stopPropagation();
     }, false);
 });
+
+/*===================== PARTNER ACCESS ==================*/
+OL.getPartnerContext = function() {
+    const params = new URLSearchParams(window.location.search);
+    const partnerKey = params.get('partner');
+    return state.registry.partners[partnerKey] || null;
+};
+
+OL.renderPartnerDashboard = function() {
+    const partner = OL.getPartnerContext();
+    if (!partner) return OL.renderGlobalDashboard(); // Fallback if URL is wrong
+
+    const partnerKey = new URLSearchParams(window.location.search).get('partner');
+    
+    // 🔍 Filter: Only show clients owned by this partner
+    const partnerClients = Object.values(state.clients).filter(c => 
+        c.meta.partnerOwner === partnerKey
+    );
+
+    const html = `
+        <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 1px solid var(--line);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h1 style="margin:0;">${partner.logo} ${partner.name} Portal</h1>
+                    <p class="muted tiny">Managing ${partnerClients.length} active client projects</p>
+                </div>
+                <button class="btn primary" onclick="OL.partnerCreateClient('${partnerKey}')">+ Onboard New Client</button>
+            </div>
+        </div>
+
+        <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
+            ${partnerClients.length > 0 ? partnerClients.map(c => `
+                <div class="card is-clickable" onclick="location.hash='#/client-tasks?id=${c.id}&partner=${partnerKey}'">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <h3 style="margin:0; font-size:16px;">${esc(c.meta.name)}</h3>
+                        <span class="pill tiny soft">${esc(c.meta.status)}</span>
+                    </div>
+                    <div class="tiny muted" style="margin-top:10px;">Created: ${new Date(c.meta.createdDate).toLocaleDateString()}</div>
+                    <div style="margin-top:15px; height:4px; background:rgba(255,255,255,0.05); border-radius:10px; overflow:hidden;">
+                        <div style="width:${OL.calculateProgress(c)}%; height:100%; background:var(--accent);"></div>
+                    </div>
+                </div>
+            `).join('') : `
+                <div class="empty-state" style="grid-column: 1/-1; text-align:center; padding:100px; opacity:0.5;">
+                    <h3>No clients yet.</h3>
+                    <p>Click the button above to start your first onboarding.</p>
+                </div>
+            `}
+        </div>
+    `;
+    
+    document.getElementById('main-layout').innerHTML = html;
+};
+
+OL.partnerCreateClient = function(partnerKey) {
+    const name = prompt("Enter Client Name (Family or Business):");
+    if (!name) return;
+
+    const clientId = 'c-' + Math.random().toString(36).slice(2, 9);
+    
+    const newClient = {
+        id: clientId,
+        meta: {
+            name: name,
+            status: "Discovery",
+            partnerOwner: partnerKey, // 🔒 Mandatory link
+            createdDate: new Date().toISOString()
+        },
+        projectData: {
+            localResources: [],
+            localApps: [],
+            scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }]
+        }
+    };
+
+    state.clients[clientId] = newClient;
+    
+    // 🚀 Auto-Provision Agreement, Naming, Hierarchy, and Compliance
+    OL.provisionSphynxTemplates(clientId);
+
+    OL.persist().then(() => {
+        OL.renderPartnerDashboard();
+    });
+};
+
+OL.assignClientToPartner = function(clientNameOrId, partnerKey) {
+    const client = Object.values(state.clients).find(c => c.id === clientNameOrId || c.meta.name === clientNameOrId);
+    
+    if (client) {
+        client.meta.partnerOwner = partnerKey;
+        OL.persist().then(() => {
+            console.log(`✅ ${client.meta.name} is now owned by ${partnerKey}`);
+        });
+    } else {
+        console.error("❌ Client not found.");
+    }
+};
+
+// Usage Example:
+// OL.assignClientToPartner("Smith Family", "north-star");
+
+OL.renderNavHome = function() {
+    const params = new URLSearchParams(window.location.search);
+    const partnerKey = params.get('partner');
+    
+    // 🏠 Dynamic Link: Keeps the ?partner=xyz attached
+    const homeUrl = partnerKey ? `index.html?partner=${partnerKey}` : `index.html`;
+
+    return `
+        <div class="nav-item home-btn" onclick="window.location.href='${homeUrl}'" style="cursor:pointer; display:flex; align-items:center; gap:10px; padding:15px; border-bottom:1px solid var(--line);">
+            <span style="font-size:18px;">🏠</span>
+            <span style="font-weight:bold; font-size:12px; letter-spacing:1px;">HOME</span>
+        </div>
+    `;
+};
+
+OL.initPartnerGuard = function() {
+    const params = new URLSearchParams(window.location.search);
+    const partnerKey = params.get('partner');
+    
+    // If we are in a project but the partner key is missing, 
+    // and the project IS owned by a partner, force the key back in.
+    const currentClientId = new URLSearchParams(window.location.hash.split('?')[1]).get('id');
+    if (currentClientId) {
+        const client = state.clients[currentClientId];
+        if (client?.meta?.partnerOwner && !partnerKey) {
+            window.location.search = `?partner=${client.meta.partnerOwner}`;
+        }
+    }
+};
