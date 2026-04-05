@@ -601,6 +601,7 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
+    const partnerId = urlParams.get('partner'); // 🤝 New: Partner Detection
     const viewParam = urlParams.get('view');
     const main = document.getElementById("mainContent");
     const client = getActiveClient();
@@ -623,13 +624,21 @@ window.handleRoute = function () {
 
     if (!main) return; 
 
-    // 2. Identify Context 🔍
+    // 2. Partner Guard
+    if (client && client.meta.partnerOwner && !partnerId) {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('partner', client.meta.partnerOwner);
+        window.history.replaceState({}, '', newUrl);
+    }
+
+    // 3. Identify Context 🔍
     if (client) {
         console.log("✅ Verified Client Access:", client.meta.name);
     } else {
         console.warn("❌ Access Token invalid or Data not loaded yet.");
     }
-    // 3. The "Loading" Safety Net 🛡️
+
+    // 4. The "Loading" Safety Net 🛡️
     if (!isVault && hash !== "#/" && !client) {
         main.innerHTML = `
             <div>
@@ -639,7 +648,7 @@ window.handleRoute = function () {
             </div>`;
         return; 
     }
-    // 4. VISUALIZER ROUTE 🕸️
+    // 5. VISUALIZER ROUTE 🕸️
     if (hash.includes('visualizer') && !hash.includes('scoping')) {
         state.viewMode = 'graph'; 
         
@@ -656,7 +665,7 @@ window.handleRoute = function () {
         return; 
     }
 
-    // 5. SCOPING ROUTE 📊
+    // 6. SCOPING ROUTE 📊
     if (hash.includes("scoping-sheet")) {
         console.log("📊 Scoping Route Detected. Cleaning Visualizer state...");
         
@@ -687,10 +696,24 @@ window.handleRoute = function () {
         return;
     }
 
-    // 5. Standard Routes Cleanup
+    // Standard Routes Cleanup
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
 
-    // 6. DATA RENDERING
+    // 7. DASHBOARD ROUTE (Admin vs Partner) 🏠
+    if (hash === "#/" || hash === "#/clients") {
+        document.body.classList.remove('is-visualizer', 'fs-mode-active');
+        
+        if (partnerId) {
+            // 🤝 Reroute to the filtered Partner Portal
+            OL.renderPartnerDashboard(); 
+        } else {
+            // 👑 Standard Admin Global View
+            renderClientDashboard();
+        }
+        return;
+    }
+
+    // 8. DATA RENDERING
     if (isVault) {
         if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("apps")) renderAppsGrid();
