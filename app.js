@@ -9484,7 +9484,11 @@ OL.renderVisualizer = function() {
             };
 
             div.innerHTML = `
-                <div class="v2-node-header">
+                <div class="v2-node-header"
+                    ondragover="event.preventDefault(); this.classList.add('drag-over');" 
+                    ondragleave="this.classList.remove('drag-over');"
+                    ondrop="OL.handleStepDrop(event, '${item.id}', null)">
+
                     <div class="header-row-content">
                         <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
                     </div>
@@ -9658,7 +9662,7 @@ OL.renderVisualizer = function() {
                     return `
                         <div class="v2-step-item" 
                             data-step-id="${res.id}-${stepId}" 
-                            ondragover="OL.handleStepDragOver(event)"
+                            ondragover="event.preventDefault(); OL.handleStepDragOver(event)"
                             ondragleave="OL.handleStepDragLeave(event)"
                             ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
                             onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')"
@@ -10245,29 +10249,76 @@ OL.handleStepDragLeave = function(e) {
 
 OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
     e.preventDefault();
+    e.stopPropagation();
     
     // 🧹 GLOBAL CLEANUP
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    document.querySelectorAll('.is-dragging').forEach(el => el.classList.remove('is-dragging'));
+    
+    // 1. Identify what is being dragged
+    // Check for internal Step Reorder first
+    const sourceStepResId = state.draggingStepResId;
+    const draggedStepIdx = state.draggingStepIdx;
 
-    const sourceResId = state.draggingStepResId;
-    const draggedIdx = state.draggingStepIdx;
+    // Check for external Resource Drag (from Sidebar or Canvas)
+    const resourceDataJSON = e.dataTransfer.getData('application/json');
+    const resourceData = resourceDataJSON ? JSON.parse(resourceDataJSON) : null;
+    const sourceResId = resourceData?.id || e.dataTransfer.getData('text/plain');
 
-    // Safety: Only reorder if within the same card
-    if (sourceResId !== targetResId || draggedIdx === null || draggedIdx === droppedOnIdx) return;
+    // --- 🟢 CASE A: INTERNAL STEP REORDER ---
+    if (sourceStepResId === targetResId && draggedStepIdx !== null) {
+        if (draggedStepIdx === droppedOnIdx) return;
+        
+        const res = OL.getResourceById(targetResId);
+        const [movedStep] = res.steps.splice(draggedStepIdx, 1);
+        res.steps.splice(droppedOnIdx, 0, movedStep);
+        
+        await OL.persist();
+        OL.renderVisualizer();
+        state.draggingStepIdx = null;
+        state.draggingStepResId = null;
+        return;
+    }
 
-    const res = OL.getResourceById(targetResId);
-    if (!res || !res.steps) return;
+    // --- 🔵 CASE B: EXTERNAL RESOURCE DROP (Merge or Link) ---
+    if (sourceResId && sourceResId !== targetResId) {
+        const isHeaderDrop = e.target.closest('.v2-node-header');
+        const sourceRes = OL.getResourceById(sourceResId);
+        const targetRes = OL.getResourceById(targetResId);
 
-    // 🚀 THE MOVE
-    const [movedStep] = res.steps.splice(draggedIdx, 1);
-    res.steps.splice(droppedOnIdx, 0, movedStep);
+        if (!sourceRes || !targetRes) return;
 
-    await OL.persist();
-    OL.renderVisualizer(); // Re-render to show new order
-    state.draggingStepIdx = null;
-    state.draggingStepResId = null;
+        if (isHeaderDrop) {
+            // 🏛️ MERGE: Dropped on the top area
+            if (confirm(`Merge "${sourceRes.name}" into "${targetRes.name}"?`)) {
+                // Combine steps
+                targetRes.steps = [...(targetRes.steps || []), ...(sourceRes.steps || [])];
+                // Mark source for deletion or clear its coords to send back to tray
+                sourceRes.coords = null; 
+                sourceRes.isDeleted = true; // Or your specific delete logic
+            }
+        } else if (droppedOnIdx !== null) {
+            // 🔗 LINK: Dropped on a specific step
+            const step = targetRes.steps[droppedOnIdx];
+            if (!step.links) step.links = [];
+            
+            const alreadyLinked = step.links.some(l => l.id === sourceResId);
+            if (!alreadyLinked) {
+                step.links.push({
+                    id: sourceRes.id,
+                    name: sourceRes.name,
+                    type: sourceRes.type
+                });
+            } else {
+                alert("Resource is already linked to this step.");
+                return;
+            }
+        }
+
+        await OL.persist();
+        OL.renderVisualizer();
+    }
 };
+
 OL.save = function() {
     // 💾 Push the current master state into the browser's local cache
     localStorage.setItem('OL_FS_TEST', JSON.stringify(this.state));
