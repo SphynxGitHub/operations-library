@@ -317,6 +317,18 @@ OL.initializeSecurityContext = function() {
 };
 
 // 4. LAYOUT & ROUTING ENGINE
+
+OL.isAdmin = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    // This matches the "pizza123" or whatever your secret key is
+    return urlParams.has('admin'); 
+};
+
+OL.getAdminQuery = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.has('admin') ? `?admin=${urlParams.get('admin')}` : '';
+};
+
 OL.toggleSidebar = function() {
     const sidebar = document.querySelector('.sidebar');
     const isCollapsed = sidebar.classList.toggle('collapsed');
@@ -396,50 +408,33 @@ OL.getPartnerContext = function() {
     return state.registry.partners[partnerKey] || null;
 };
 
-OL.renderPartnerDashboard = function() {
-    const partner = OL.getPartnerContext();
-    if (!partner) return OL.renderGlobalDashboard(); // Fallback if URL is wrong
+OL.renderPartnerDashboard = function(leadProject, container) {
+    if (!container) return;
 
-    const partnerKey = new URLSearchParams(window.location.search).get('partner');
-    
-    // 🔍 Filter: Only show clients owned by this partner
-    const partnerClients = Object.values(state.clients).filter(c => 
-        c.meta.partnerOwner === partnerKey
+    const subClients = Object.values(state.clients).filter(c => 
+        c.meta.partnerOwner === leadProject.id
     );
 
-    const html = `
-        <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 1px solid var(--line);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <h1 style="margin:0;">${partner.logo} ${partner.name} Portal</h1>
-                    <p class="muted tiny">Managing ${partnerClients.length} active client projects</p>
-                </div>
-                <button class="btn primary" onclick="OL.partnerCreateClient('${partnerKey}')">+ Onboard New Client</button>
-            </div>
+    container.innerHTML = `
+        <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 2px solid var(--accent);">
+            <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
+            <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
         </div>
 
         <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
-            ${partnerClients.length > 0 ? partnerClients.map(c => `
-                <div class="card is-clickable" onclick="location.hash='#/client-tasks?id=${c.id}&partner=${partnerKey}'">
-                    <div style="display:flex; justify-content:space-between; align-items:start;">
-                        <h3 style="margin:0; font-size:16px;">${esc(c.meta.name)}</h3>
-                        <span class="pill tiny soft">${esc(c.meta.status)}</span>
-                    </div>
-                    <div class="tiny muted" style="margin-top:10px;">Created: ${new Date(c.meta.createdDate).toLocaleDateString()}</div>
-                    <div style="margin-top:15px; height:4px; background:rgba(255,255,255,0.05); border-radius:10px; overflow:hidden;">
-                        <div style="width:${OL.calculateProgress(c)}%; height:100%; background:var(--accent);"></div>
-                    </div>
+            ${subClients.length > 0 ? subClients.map(c => `
+                <div class="card is-clickable" onclick="window.location.href='index.html?access=${OL.getAccessToken(c.id)}#/'">
+                    <h3 style="margin:0;">${esc(c.meta.name)}</h3>
+                    <div class="pill tiny soft" style="margin-top:10px;">${esc(c.meta.status)}</div>
                 </div>
-            `).join('') : `
-                <div class="empty-state" style="grid-column: 1/-1; text-align:center; padding:100px; opacity:0.5;">
-                    <h3>No clients yet.</h3>
-                    <p>Click the button above to start your first onboarding.</p>
-                </div>
-            `}
+            `).join('') : '<div class="empty-state tiny muted">No clients assigned to this portfolio yet.</div>'}
+            
+            <div class="card add-new-card" onclick="OL.partnerCreateClient('${leadProject.id}')" 
+                 style="border: 2px dashed var(--line); height: 100px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.6;">
+                <b>+ Add New Project</b>
+            </div>
         </div>
     `;
-    
-    document.getElementById('main-layout').innerHTML = html;
 };
 
 OL.partnerCreateClient = function(partnerKey) {
@@ -522,16 +517,20 @@ window.buildLayout = function () {
 
   const homeAction = isPartnerMode 
       ? `window.location.hash = '#/partner-dashboard'` 
-      : `window.location.href = 'index.html#/'`;
+      : `window.location.href = 'index.html${OL.getAdminQuery()}#/'`;
 
-  const sidebarHome = `
-      <nav class="menu">
-          <a href="javascript:void(0)" onclick="${homeAction}" class="${hash.includes('partner-dashboard') ? 'active' : ''}"
-            style="${isPartnerProject ? 'background:var(--accent); color:black; font-weight:bold;' : ''}">
-              <i>🏠</i> <span>${isPartnerProject ? 'PORTFOLIO' : 'HOME'}</span>
-          </a>
-      </nav>
-  `;
+  const isAdmin = OL.isAdmin();
+    const adminQuery = OL.getAdminQuery();
+
+    // 🚀 THE MASTER ADMIN ESCAPE BUTTON
+    const adminEscapeBtn = isAdmin ? `
+        <div class="admin-escape-zone" style="margin-bottom: 15px;">
+            <a href="index.html${adminQuery}#/" 
+              style="display: block; padding: 12px; background: #991b1b; color: white; border-radius: 6px; text-decoration: none; text-align: center; font-weight: bold; font-size: 10px; border: 1px solid rgba(255,255,255,0.2);">
+              🛡️ EXIT TO MASTER ADMIN
+            </a>
+        </div>
+    ` : '';
 
   const isPublic = urlParams.has("access");
   const token = urlParams.get("access");
@@ -666,14 +665,18 @@ window.buildLayout = function () {
     const sidebarContent = `
         <button class="sidebar-toggle" onclick="OL.toggleSidebar()">◀</button>
         
-        <div class="admin-nav-zone">
-            <nav class="menu">
-                <a href="javascript:void(0)" onclick="${homeAction}" 
-                  class="${hash.includes('partner-dashboard') ? 'active' : ''}"
-                  style="${isPartnerProject ? 'background:var(--accent); color:black; font-weight:bold; border-radius:4px; margin:8px; display:block; padding:10px;' : ''}">
-                    <i>🏠</i> <span>${isPartnerProject ? 'PORTFOLIO' : 'HOME'}</span>
-                </a>
-            </nav>
+        <div class="sidebar-padding" style="padding: 10px;">
+            ${adminEscapeBtn} 
+            
+            <div class="admin-nav-zone">
+                <nav class="menu">
+                    <a href="javascript:void(0)" onclick="${homeAction}" 
+                      class="${hash.includes('partner-dashboard') ? 'active' : ''}"
+                      style="${isPartnerProject ? 'background:var(--accent); color:black; font-weight:bold; border-radius:4px; display:block; padding:10px;' : ''}">
+                        <i>🏠</i> <span>${isPartnerProject ? 'PORTFOLIO' : 'HOME'}</span>
+                    </a>
+                </nav>
+            </div>
         </div>
 
         <div class="divider"></div>
@@ -768,199 +771,54 @@ window.buildLayout = function () {
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
     const urlParams = new URLSearchParams(window.location.search);
-    const partnerId = urlParams.get('partner'); // 🤝 New: Partner Detection
-    const viewParam = urlParams.get('view');
-    const main = document.getElementById("mainContent"); // 🚀 THE FIX: Define 'main' here
-    // --- Inside window.handleRoute ---
-
-    if (hash.includes("partner-dashboard")) {
-        const leadProject = getActiveClient(); // The project identified by the access code
-        
-        if (!leadProject || leadProject.meta.status !== "Partner") {
-            console.warn("🚫 This project is not authorized as a Partner.");
-            renderChecklistModule(); // Fallback to standard tasks
-            return;
-        }
-
-        // 🔍 FILTER: Show only clients assigned to THIS lead project ID
-        const subClients = Object.values(state.clients).filter(c => 
-            c.meta.partnerOwner === leadProject.id
-        );
-
-        const main = document.getElementById("mainContent");
-        main.innerHTML = `
-            <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 2px solid var(--accent);">
-                <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
-                <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
-            </div>
-
-            <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
-                ${subClients.map(c => {
-                    const token = OL.getAccessToken(c.id); // 🚀 Now this will work!
-                    return `
-                        <div class="card is-clickable" 
-                            onclick="window.location.href='index.html?access=${token}#/'"
-                            style="padding: 20px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 8px;">
-                            <div style="font-size: 10px; color: var(--accent); font-weight: bold; margin-bottom: 5px;">PROJECT</div>
-                            <h3 style="margin:0; font-size: 16px;">${esc(c.meta.name)}</h3>
-                            <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                                <span class="pill tiny soft">${esc(c.meta.status)}</span>
-                                <span style="font-size: 10px; opacity: 0.5;">Open Project ➔</span>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-                
-                <div class="card add-new-card" onclick="OL.partnerCreateClient('${leadProject.id}')" 
-                    style="border: 2px dashed var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.6;">
-                    <b>+ Add New Project</b>
-                </div>
-            </div>
-        `;
-        return;
-    }
-
-    const client = getActiveClient();
-    const isScoping = hash.includes('scoping-sheet');
-    const isVault = hash.includes('vault');
-
-    // --- 🚦 ROUTE DEBUG ---
-    console.group("🚦 ROUTE DEBUG");
-    console.log("Current Hash:", window.location.hash);
-    console.log("Focus Before Route:", state.focusedResourceId);
-    console.groupEnd();
-
-    // 🚀 RESET SURGICAL FILTERS
-    // We clear these so standard navigation is always clean/unfiltered
-    state.scopingFilterActive = false;
-    state.scopingTargetId = null;
-
-    // 1. Force the Skeleton 🏗️
+    const isAdminQuery = urlParams.has('admin'); 
+    
+    // 1. Build the Shell (Sidebar/Main Wrapper)
+    // We call this first, but buildLayout is now hardened to not trigger handleRoute
     window.buildLayout(); 
 
+    const main = document.getElementById("mainContent");
     if (!main) return; 
 
-    // 2. Partner Guard
-    if (client && client.meta.partnerOwner && !partnerId) {
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('partner', client.meta.partnerOwner);
-        window.history.replaceState({}, '', newUrl);
-    }
+    const client = getActiveClient();
+    const isVault = hash.includes('vault');
 
-    // 3. Identify Context 🔍
-    if (client) {
-        console.log("✅ Verified Client Access:", client.meta.name);
-    } else {
-        console.warn("❌ Access Token invalid or Data not loaded yet.");
-    }
-
-    // 4. The "Loading" Safety Net 🛡️
-    if (!isVault && hash !== "#/" && !client) {
-        main.innerHTML = `
-            <div>
-                <div class="spinner">⏳</div>
-                <h3>Synchronizing Project Data...</h3>
-                <p class="tiny">If this persists, please return to the Dashboard.</p>
-            </div>`;
-        return; 
-    }
-    // 5. VISUALIZER ROUTE 🕸️
-    if (hash.includes('visualizer') && !hash.includes('scoping')) {
-        state.viewMode = 'graph'; 
-        
-        // Sync state with session storage for recovery
-        if (!state.focusedResourceId) {
-            state.focusedResourceId = sessionStorage.getItem('active_resource_id');
-        }
-        if (!state.focusedWorkflowId) {
-            state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-        }
-
-        document.body.classList.add('is-visualizer', 'fs-mode-active');
-        OL.renderVisualizer(isVault);
-        return; 
-    }
-
-    // 6. SCOPING ROUTE 📊
-    if (hash.includes("scoping-sheet")) {
-        console.log("📊 Scoping Route Detected. Cleaning Visualizer state...");
-        
-        // 🧹 THE JANITOR: Kill the "Resume" trap so we don't snap back to the map
-        state.focusedResourceId = null;
-        state.focusedWorkflowId = null;
-        sessionStorage.removeItem('active_resource_id');
-        sessionStorage.removeItem('active_workflow_id');
-
-        state.viewMode = 'scoping';
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-
-        // 🎯 Parse Filter from URL
-        const urlParts = hash.split('?');
-        if (urlParts[1]) {
-            const params = new URLSearchParams(urlParts[1]);
-            if (params.has('focus')) {
-                state.scopingTargetId = params.get('focus');
-                state.scopingFilterActive = true;
-                console.log("🎯 Applying Surgical Filter for ID:", state.scopingTargetId);
-            }
-        } else {
-            state.scopingFilterActive = false;
-            state.scopingTargetId = null;
-        }
-
-        renderScopingSheet();
-        return;
-    }
-
-    // Standard Routes Cleanup
-    document.body.classList.remove('is-visualizer', 'fs-mode-active');
-
-    // 7. DASHBOARD ROUTE (Admin vs Partner) 🏠
-    if (hash === "#/" || hash === "#/clients") {
-        document.body.classList.remove('is-visualizer', 'fs-mode-active');
-        
-        if (partnerId) {
-            // 🤝 Reroute to the filtered Partner Portal
-            OL.renderPartnerDashboard(); 
-        } else {
-            // 👑 Standard Admin Global View
-            renderClientDashboard();
-        }
-        return;
-    }
-
-    // 8. DATA RENDERING
-    if (isVault) {
-        if (hash.includes("resources")) renderResourceManager();
-        else if (hash.includes("apps")) renderAppsGrid();
-        else if (hash.includes("functions")) renderFunctionsGrid();
-        else if (hash.includes("rates")) renderVaultRatesPage();
-        else if (hash.includes("analyses")) renderAnalysisModule(); 
-        else if (hash.includes("how-to")) renderHowToLibrary(); 
-        else if (hash.includes("tasks")) renderBlueprintManager();
-        else renderAppsGrid(); 
-    } else if (hash === "#/" || hash === "#/clients") {
+    // 2. 👑 MASTER ADMIN OVERRIDE
+    if (isAdminQuery && (hash === "#/" || hash === "#/clients")) {
         renderClientDashboard();
-    } else if (client) {
-        console.log("🟢 Routing to Client Module:", hash);
-        
+        return;
+    }
+
+    // 3. 🤝 PARTNER / PORTFOLIO DASHBOARD
+    if (hash.includes("partner-dashboard") || (client?.meta?.status === "Partner" && hash === "#/")) {
+        if (client && client.meta.status === "Partner") {
+            OL.renderPartnerDashboard(client, main);
+        } else {
+            console.warn("🚫 Not authorized as Partner. Falling back to Tasks.");
+            renderChecklistModule(); 
+        }
+        return;
+    }
+
+    // 4. Standard Project Routes
+    if (client) {
         if (hash.includes("client-tasks")) renderChecklistModule();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
-        else if (hash.includes("functions")) renderFunctionsGrid();
-        else if (hash.includes("scoping-sheet")) {
-            state.viewMode = 'scoping';
-            renderScopingSheet();
+        else if (hash.includes("visualizer")) {
+            state.viewMode = 'graph';
+            document.body.classList.add('is-visualizer');
+            OL.renderVisualizer();
         }
-        else if (hash.includes("analyze")) renderAnalysisModule();
-        else if (hash.includes("team")) renderTeamManager();
-        else if (hash.includes("how-to")) renderHowToLibrary();
-        else {
-            console.warn("❓ Unknown client hash, defaulting to Tasks");
-            renderChecklistModule();
-        }
-    } else {
-        console.error("🔴 No client found for hash:", hash);
+        else if (hash.includes("scoping-sheet")) renderScopingSheet();
+        else renderChecklistModule(); // Default
+    } 
+    else if (isVault) {
+        if (hash.includes("apps")) renderAppsGrid();
+        else if (hash.includes("resources")) renderResourceManager();
+        else renderAppsGrid();
+    }
+    else {
         renderClientDashboard();
     }
 };
