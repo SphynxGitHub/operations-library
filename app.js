@@ -16146,24 +16146,6 @@ OL.assignClientToPartner = function(clientNameOrId, partnerKey) {
     }
 };
 
-// Usage Example:
-// OL.assignClientToPartner("Smith Family", "north-star");
-
-OL.renderNavHome = function() {
-    const params = new URLSearchParams(window.location.search);
-    const partnerKey = params.get('partner');
-    
-    // 🏠 Dynamic Link: Keeps the ?partner=xyz attached
-    const homeUrl = partnerKey ? `index.html?partner=${partnerKey}` : `index.html`;
-
-    return `
-        <div class="nav-item home-btn" onclick="window.location.href='${homeUrl}'" style="cursor:pointer; display:flex; align-items:center; gap:10px; padding:15px; border-bottom:1px solid var(--line);">
-            <span style="font-size:18px;">🏠</span>
-            <span style="font-weight:bold; font-size:12px; letter-spacing:1px;">HOME</span>
-        </div>
-    `;
-};
-
 OL.initPartnerGuard = function() {
     const params = new URLSearchParams(window.location.search);
     const partnerKey = params.get('partner');
@@ -16177,4 +16159,28 @@ OL.initPartnerGuard = function() {
             window.location.search = `?partner=${client.meta.partnerOwner}`;
         }
     }
+};
+
+OL.nav = function(hash, clientId = null) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const partnerId = urlParams.get('partner');
+    
+    // Base URL
+    let newUrl = `index.html`;
+    
+    // Add Partner Context if it exists
+    if (partnerId) {
+        newUrl += `?partner=${partnerId}`;
+    }
+    
+    // Add the Hash (e.g., #/client-tasks)
+    newUrl += hash;
+    
+    // Append Client ID if provided
+    if (clientId) {
+        const separator = hash.includes('?') ? '&' : '?';
+        newUrl += `${separator}id=${clientId}`;
+    }
+    
+    window.location.href = newUrl;
 };
