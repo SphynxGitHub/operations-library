@@ -721,8 +721,10 @@ window.buildLayout = function () {
         ${isMaster ? `
             <div class="client-nav-zone admin-workspace">
                 <div class="menu-category-label">Global Administration</div>
-                <div class="client-profile-trigger is-master">
+                
+                <div class="client-profile-trigger is-master" 
                     ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                    
                     <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                     <div class="client-info">
                         <div class="client-name">${esc(client.meta.name)}</div>
@@ -733,7 +735,7 @@ window.buildLayout = function () {
                 <nav class="menu">
                     ${masterTabs.map(item => `
                         <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
-                            <i>${item.icon}</i> <span>${item.label}</span>
+                            <i>${item.icon}</i> <span class="menu-item">${item.label}</span>
                         </a>
                     `).join('')}
                 </nav>
