@@ -366,12 +366,17 @@ window.buildLayout = function () {
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
 
+  //🤝 PARTNER CONTEXT DETECTION
+    const partnerId = urlParams.get("partner");
+    const isPartnerMode = !!partnerId;
+    const partnerData = isPartnerMode ? state.clients[partnerId] : null;
+
   const isPublic = urlParams.has("access");
   const token = urlParams.get("access");
   const isMaster = hash.startsWith("#/vault");
 
   // 1. Dashboard/Non-Context View
-  if (!client && !isMaster && !isPublic) {
+  if (!client && !isMaster && !isPublic && !isPartnerMode) {
         // Only render the Dashboard link if no client context exists
         root.innerHTML = `
             <div class="three-pane-layout zen-mode-active">
@@ -497,31 +502,36 @@ window.buildLayout = function () {
     `;
 
     // 2 Prepare the Sidebar HTML content
+    const homeHref = isPartnerMode ? `index.html?partner=${partnerId}#/` : "#/";
+
     const sidebarContent = `
-        <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
+        <button class="sidebar-toggle" onclick="OL.toggleSidebar()">
             <span class="toggle-icon">◀</span>
         </button>
-        ${!isPublic ? `
-            <div class="admin-nav-zone">
-                <nav class="menu">
-                    <a href="#/" class="${hash === '#/' ? 'active' : ''}">
-                        <i>🏠</i> <span>Dashboard</span>
-                    </a>
-                </nav>
-            </div>
-            <div class="divider"></div>
-        ` : ''}
+
+        <div class="admin-nav-zone">
+            <nav class="menu">
+                <a href="${homeHref}" class="${hash === '#/' ? 'active' : ''}" 
+                   style="${isPartnerMode ? 'background: var(--accent); color: black; font-weight: bold; margin: 10px; border-radius: 4px;' : ''}">
+                    <i>🏠</i> <span>${isPartnerMode ? (partnerData?.meta.name.toUpperCase() + ' HOME') : 'Dashboard'}</span>
+                </a>
+            </nav>
+        </div>
+
+        <div class="divider"></div>
 
         ${isMaster ? `
             <div class="client-nav-zone admin-workspace">
                 <div class="menu-category-label">Global Administration</div>
                 <div class="client-profile-trigger is-master">
-                    <div class="client-avatar">M</div>
+                    ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
+                    <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
                     <div class="client-info">
-                        <div class="client-name">Master Vault</div>
-                        <div class="client-meta">Global Standards</div>
+                        <div class="client-name">${esc(client.meta.name)}</div>
+                        <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
                     </div>
                 </div>
+
                 <nav class="menu">
                     ${masterTabs.map(item => `
                         <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
