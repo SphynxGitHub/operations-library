@@ -9333,14 +9333,7 @@ OL.renderVisualizer = function() {
               </aside>
               
               <div id="v2-main-content">
-                  <aside id="v2-workbench-sidebar">
-                      <div class="workbench-header">
-                          <div class="section-label">WORKBENCH</div>
-                          <input type="text" id="tray-search-input" placeholder="Search unmapped..." oninput="OL.renderVisualizer()" class="modal-input tiny">
-                      </div>
-                      <div id="workbench-contents" class="workbench-contents"></div>
-                      <div id="unmap-zone">↓ DROP HERE TO UNMAP</div>
-                  </aside>
+                  ${OL.renderWorkbenchTabs()}
 
                   <div id="v2-workspace">
                       <div id="v2-canvas-scroll-wrap">
@@ -9375,7 +9368,54 @@ OL.renderVisualizer = function() {
     const canvas = document.getElementById('v2-canvas');
     const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
     
+    // 1. Clear everything
     [shelfContents, workbenchContents, nodeLayer, stageLayer].forEach(el => { if(el) el.innerHTML = ''; });
+
+    // 2. 🗂️ WORKBENCH DATA RESOLUTION
+    const activeTab = state.ui.activeWorkbenchTab || 'flows';
+    let workbenchItems = [];
+
+    if (activeTab === 'flows') {
+        workbenchItems = resources.filter(r => ['Workflow', 'Zap', 'Email Campaign'].includes(r.type));
+    } else if (activeTab === 'assets') {
+        workbenchItems = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type));
+    } else if (activeTab === 'guides') {
+        workbenchItems = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+    } else if (activeTab === 'data') {
+        workbenchItems = state.master.datapoints || [];
+    }
+
+    // 3. 🎨 RENDER THE WORKBENCH CONTENT
+    workbenchItems.forEach(item => {
+        const div = document.createElement('div');
+        
+        if (activeTab === 'data') {
+            div.className = 'data-tag-draggable';
+            div.draggable = true;
+            div.ondragstart = (e) => OL.handleDataDragStart(e, item.id);
+            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; color:white;`;
+            div.innerHTML = `${item.isBundle ? '📦' : '🏷️'} <b>${item.name}</b>`;
+        } else {
+            const isGuide = activeTab === 'guides';
+            div.id = `v2-node-${item.id}`;
+            div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
+            
+            // Interaction Logic: Flows get moved to map, Assets/Guides get linked to steps
+            div.onmousedown = (e) => {
+                if (activeTab === 'flows') OL.initWBMotion(e, item.id);
+                else OL.handleAssetDragStart(e, item.id, activeTab === 'assets' ? 'asset' : 'guide');
+            };
+
+            div.innerHTML = `
+                <div class="v2-node-header">
+                    <div class="header-row-content">
+                        <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
+                    </div>
+                </div>
+            `;
+        }
+        if (workbenchContents) workbenchContents.appendChild(div);
+    });
 
     // 🎯 2. CANVAS WIDTH MATH
     const totalCanvasWidth = stages.reduce((acc, s) => acc + (s.width || 320), 0) + 600;
@@ -9557,8 +9597,15 @@ OL.renderVisualizer = function() {
                                 </div>
 
                                 <span style="flex: 1; font-size: 11px; line-height: 1.3; padding: 0 4px;">
-                                    • ${esc(s.name || 'New Step')}
+                                    <span style="color:var(--accent); margin-right:4px;">${OL.getStepIcon(s)}</span>
+                                    ${esc(s.name || 'New Step')}
                                 </span>
+
+                                <div style="display:flex; gap:4px; align-items:center;">
+                                    ${(s.links || []).length > 0 ? `<span class="tiny-badge" title="Links attached">🔗</span>` : ''}
+                                    ${(s.datapoints || []).length > 0 ? `<span class="tiny-badge purple" title="Data mapped">🏷️</span>` : ''}
+                                    <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                                </div>
 
                                 <div style="display:flex; gap:3px; flex-direction: column; flex-shrink: 0; justify-content: flex-end;">
                                     ${outHasLoop ? `<span class="step-logic-icon loop" title="${esc(outTooltip)}">⟳</span>` : ''}
@@ -9636,6 +9683,88 @@ OL.renderVisualizer = function() {
     if (document.getElementById('canvas-filter-input')?.value) {
         OL.syncCanvasFilters(document.getElementById('canvas-filter-input').value);
     }
+};
+
+OL.getStepIcon = function(step) {
+    if (!step.links || step.links.length === 0) return '•';
+    
+    // Check linked assets for types
+    const hasEmail = step.links.some(l => OL.getResourceById(l.id)?.type?.toLowerCase() === 'email');
+    const hasForm = step.links.some(l => OL.getResourceById(l.id)?.type?.toLowerCase() === 'form');
+    const hasMeeting = step.links.some(l => OL.getResourceById(l.id)?.type?.toLowerCase() === 'event');
+    const hasGuide = step.links.some(l => l.type === 'guide');
+
+    if (hasEmail) return '✉️';
+    if (hasForm) return '📄';
+    if (hasMeeting) return '📅';
+    if (hasGuide) return '📖';
+    
+    return '🔗'; // Generic link icon if none of the above match
+};
+
+OL.renderWorkbenchTabs = function() {
+    const tabs = [
+        { id: 'flows', label: '🌊 Flows', color: 'var(--accent)' },
+        { id: 'assets', label: '📦 Assets', color: '#38bdf8' },
+        { id: 'guides', label: '📖 Guides', color: '#fbbf24' },
+        { id: 'data', label: '🏷️ Data', color: '#a78bfa' }
+    ];
+
+    return `
+        <div class="workbench-tab-bar" style="display: flex; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--line);">
+            ${tabs.map(t => `
+                <div class="wb-tab ${state.ui.activeWorkbenchTab === t.id ? 'active' : ''}" 
+                     onclick="state.ui.activeWorkbenchTab = '${t.id}'; OL.renderVisualizer();"
+                     style="flex:1; padding: 10px 5px; text-align:center; font-size:9px; font-weight:bold; cursor:pointer; 
+                            border-bottom: 2px solid ${state.ui.activeWorkbenchTab === t.id ? t.color : 'transparent'};
+                            color: ${state.ui.activeWorkbenchTab === t.id ? t.color : 'var(--text-dim)'};">
+                    ${t.label.toUpperCase()}
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+// DRAG ASSET/GUIDE
+OL.handleAssetDragStart = function(e, id, type) {
+    e.dataTransfer.setData("application/sphynx-type", type); // 'asset' or 'guide'
+    e.dataTransfer.setData("application/sphynx-id", id);
+    e.dataTransfer.effectAllowed = "link";
+};
+
+// DRAG DATAPOINT
+OL.handleDataDragStart = function(e, id) {
+    e.dataTransfer.setData("application/sphynx-type", "datapoint");
+    e.dataTransfer.setData("application/sphynx-id", id);
+};
+
+// STEP DROP ZONE HANDLER (Update your existing Step HTML to include this)
+// ondrop="OL.handleUniversalDropOnStep(event, '${res.id}', '${step.id}')"
+OL.handleUniversalDropOnStep = async function(e, resId, stepId) {
+    e.preventDefault();
+    const type = e.dataTransfer.getData("application/sphynx-type");
+    const id = e.dataTransfer.getData("application/sphynx-id");
+
+    const res = OL.getResourceById(resId);
+    const step = res?.steps?.find(s => s.id === stepId);
+    if (!step) return;
+
+    await OL.updateAndSync(() => {
+        if (type === 'asset' || type === 'guide') {
+            if (!step.links) step.links = [];
+            const linkedObj = (type === 'asset') ? OL.getResourceById(id) : OL.getGuideById(id);
+            step.links.push({ id, name: linkedObj.name, type });
+        } 
+        else if (type === 'datapoint') {
+            if (!step.datapoints) step.datapoints = [];
+            const dp = state.master.datapoints.find(d => d.id === id);
+            step.datapoints.push(dp);
+            // Optionally append {key} to description
+            step.description = (step.description || "") + " " + dp.key;
+        }
+    });
+
+    OL.renderVisualizer();
 };
 
 window.renderTrayContent = function(isVault, query = "", typeFilter = "All") {
@@ -16112,3 +16241,14 @@ window.addEventListener("hashchange", window.handleRoute);
         e.stopPropagation();
     }, false);
 });
+
+
+/*======================= DATAPOINTS =============================*/
+// Add to your state.master object
+state.master.datapoints = [
+    { id: 'dp-1', name: 'First Name', key: '{firstName}', category: 'Identity' },
+    { id: 'dp-2', name: 'Email', key: '{email}', category: 'Contact' },
+    { id: 'bundle-contact', name: 'Contact Info', isBundle: true, childIds: ['dp-1', 'dp-2'], category: 'Identity' }
+];
+
+state.ui.activeWorkbenchTab = 'flows'; // Default tab
