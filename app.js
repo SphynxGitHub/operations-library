@@ -358,6 +358,24 @@ OL.toggleTheme = function() {
 
 
 /*===================== PARTNER ACCESS ==================*/
+
+OL.getHomeUrl = function() {
+    const client = getActiveClient();
+    if (!client) return "index.html#/";
+
+    // If this specific project is a Partner, Home is its own Dashboard
+    if (client.meta.status === "Partner") {
+        return `index.html?access=${OL.getAccessToken()}#/partner-dashboard`;
+    }
+
+    // If this project belongs to a partner, Home goes to that Partner's Dashboard
+    if (client.meta.partnerOwner) {
+        return `index.html?access=${OL.getPartnerAccessToken(client.meta.partnerOwner)}#/partner-dashboard`;
+    }
+
+    return "index.html#/";
+};
+
 OL.getPartnerContext = function() {
     const params = new URLSearchParams(window.location.search);
     const partnerKey = params.get('partner');
@@ -504,9 +522,22 @@ window.buildLayout = function () {
   const urlParams = new URLSearchParams(window.location.search);
 
   //🤝 PARTNER CONTEXT DETECTION
-    const partnerId = urlParams.get("partner");
-    const isPartnerMode = !!partnerId;
-    const partnerData = isPartnerMode ? state.clients[partnerId] : null;
+  const isPartnerProject = client && client.meta.status === "Partner";
+  const hasPartnerOwner = client && client.meta.partnerOwner;
+  const isPartnerMode = isPartnerProject || hasPartnerOwner; // This fixes the ReferenceError
+
+  const homeAction = isPartnerMode 
+      ? `window.location.hash = '#/partner-dashboard'` 
+      : `window.location.href = 'index.html#/'`;
+
+  const sidebarHome = `
+      <nav class="menu">
+          <a href="javascript:void(0)" onclick="${homeAction}" class="${hash.includes('partner-dashboard') ? 'active' : ''}"
+            style="${isPartnerProject ? 'background:var(--accent); color:black; font-weight:bold;' : ''}">
+              <i>🏠</i> <span>${isPartnerProject ? 'PORTFOLIO' : 'HOME'}</span>
+          </a>
+      </nav>
+  `;
 
   const isPublic = urlParams.has("access");
   const token = urlParams.get("access");
@@ -638,25 +669,20 @@ window.buildLayout = function () {
         </div>
     `;
 
-    // 2 Prepare the Sidebar HTML content
-    const homeHref = isPartnerMode ? `index.html?partner=${partnerId}#/` : "#/";
-
     const sidebarContent = `
-        <button class="sidebar-toggle" onclick="OL.toggleSidebar()">
-            <span class="toggle-icon">◀</span>
-        </button>
-
+        <button class="sidebar-toggle" onclick="OL.toggleSidebar()">◀</button>
+        
         <div class="admin-nav-zone">
             <nav class="menu">
-                <a href="${homeHref}" class="${hash === '#/' ? 'active' : ''}" 
-                   style="${isPartnerMode ? 'background: var(--accent); color: black; font-weight: bold; margin: 10px; border-radius: 4px;' : ''}">
-                    <i>🏠</i> <span>${isPartnerMode ? (partnerData?.meta.name.toUpperCase() + ' HOME') : 'Dashboard'}</span>
+                <a href="javascript:void(0)" onclick="${homeAction}" 
+                  class="${hash.includes('partner-dashboard') ? 'active' : ''}"
+                  style="${isPartnerProject ? 'background:var(--accent); color:black; font-weight:bold; border-radius:4px; margin:8px; display:block; padding:10px;' : ''}">
+                    <i>🏠</i> <span>${isPartnerProject ? 'PORTFOLIO' : 'HOME'}</span>
                 </a>
             </nav>
         </div>
 
         <div class="divider"></div>
-
         ${isMaster ? `
             <div class="client-nav-zone admin-workspace">
                 <div class="menu-category-label">Global Administration</div>
@@ -750,7 +776,47 @@ window.handleRoute = function () {
     const urlParams = new URLSearchParams(window.location.search);
     const partnerId = urlParams.get('partner'); // 🤝 New: Partner Detection
     const viewParam = urlParams.get('view');
-    const main = document.getElementById("mainContent");
+    const main = document.getElementById("mainContent"); // 🚀 THE FIX: Define 'main' here
+    // --- Inside window.handleRoute ---
+
+    if (hash.includes("partner-dashboard")) {
+        const leadProject = getActiveClient(); // The project identified by the access code
+        
+        if (!leadProject || leadProject.meta.status !== "Partner") {
+            console.warn("🚫 This project is not authorized as a Partner.");
+            renderChecklistModule(); // Fallback to standard tasks
+            return;
+        }
+
+        // 🔍 FILTER: Show only clients assigned to THIS lead project ID
+        const subClients = Object.values(state.clients).filter(c => 
+            c.meta.partnerOwner === leadProject.id
+        );
+
+        const main = document.getElementById("mainContent");
+        main.innerHTML = `
+            <div class="partner-portal-header" style="padding: 30px; background: var(--panel-dark); border-bottom: 2px solid var(--accent);">
+                <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
+                <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
+            </div>
+
+            <div class="partner-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:20px; padding:30px;">
+                ${subClients.map(c => `
+                    <div class="card is-clickable" onclick="window.location.href='index.html?access=${OL.getAccessToken(c.id)}#/'">
+                        <h3 style="margin:0;">${esc(c.meta.name)}</h3>
+                        <div class="pill tiny soft" style="margin-top:10px;">${esc(c.meta.status)}</div>
+                    </div>
+                `).join('')}
+                
+                <div class="card add-new-card" onclick="OL.partnerCreateClient('${leadProject.id}')" 
+                    style="border: 2px dashed var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.6;">
+                    <b>+ Add New Project</b>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     const client = getActiveClient();
     const isScoping = hash.includes('scoping-sheet');
     const isVault = hash.includes('vault');
