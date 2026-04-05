@@ -704,7 +704,8 @@ window.buildLayout = function () {
     const sidebarContent = `
         <button class="sidebar-toggle" onclick="OL.toggleSidebar()" title="Toggle Menu">
             <span class="toggle-icon">${toggleArrow}</span>
-        </button>        
+        </button>       
+
         <div class="sidebar-inner-content" style="${isSidebarCollapsed ? 'display:none;' : ''}">
             <div class="sidebar-padding" style="padding: 10px;">
                 ${showHome ? `
@@ -728,21 +729,10 @@ window.buildLayout = function () {
             </div>
         </div>
 
-        <div class="divider"></div>
         ${isMaster ? `
             <div class="client-nav-zone admin-workspace">
                 <div class="menu-category-label">Global Administration</div>
-                
-                <div class="client-profile-trigger is-master" 
-                    ${!isPublic ? `onclick="OL.openClientProfileModal('${client.id}')" style="cursor:pointer;"` : `style="cursor:default;"`}>
-                    
-                    <div class="client-avatar">${esc(client.meta.name.substring(0,2).toUpperCase())}</div>
-                    <div class="client-info">
-                        <div class="client-name">${esc(client.meta.name)}</div>
-                        <div class="client-meta">${!isPublic ? 'View Profile ⚙️' : 'Project Portal'}</div>
-                    </div>
-                </div>
-
+              
                 <nav class="menu">
                     ${masterTabs.map(item => `
                         <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
