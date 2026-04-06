@@ -3,6 +3,13 @@
 // 1. MUST BE LINE 1: Define the namespace immediately
 const OL = window.OL = {};
 
+OL.getScopingDataForResource = function(resId) {
+    const client = getActiveClient();
+    if (!client?.projectData?.scopingSheets?.[0]) return null;
+    const sheet = client.projectData.scopingSheets[0];
+    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
+};
+
 // 🚀 THE ANCHOR: Context-Aware Security Lock
 const params = new URLSearchParams(window.location.search);
 const isFiddle = window.location.hostname.includes('jsfiddle.net') || window.location.hostname.includes('fiddle.jshell.net');
@@ -10,20 +17,8 @@ const isFiddle = window.location.hostname.includes('jsfiddle.net') || window.loc
 // Force admin if the secret key is present OR if we are running in JSFiddle
 window.FORCE_ADMIN = params.get('admin') === 'pizza123' || isFiddle; 
 
-if (isFiddle) {
-    console.log("🛠️ JSFiddle Detected: Master Admin Privileges Auto-Granted.");
-} else {
-    console.log("🛠️ Global Admin Lock:", window.FORCE_ADMIN);
-}
-
-// 2. Define standard helpers next (so functions can use them)
-
-// val: returns empty string if missing (allows placeholder to show)
 const val = (v) => (v === undefined || v === null) ? "" : v;
-
-// num: returns empty string if missing or 0 (allows placeholder to show)
 const num = (v) => (v === undefined || v === null || v === 0) ? "" : v;
-
 const esc = (s) => String(s ?? "").replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
 const uid = () => "id_" + Math.random().toString(36).slice(2, 10);
 
@@ -51,6 +46,25 @@ let state = {
     },
     master: {
         apps: [], functions: [], resources: [], taskBlueprints: [], howToLibrary: [],
+        datapoints: [
+            { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
+            { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
+            { id: 'dp-hierarchy', name: 'Folder Location', key: '{folderPath}', category: 'Architecture', linkToResource: 'Folder Hierarchy' },
+            { id: 'dp-fname', name: 'First Name', key: '{firstName}', category: 'Identity' },
+            { id: 'dp-lname', name: 'Last Name', key: '{lastName}', category: 'Identity' },
+            { id: 'dp-email', name: 'Email Address', key: '{email}', category: 'Contact' },
+            { id: 'dp-phone', name: 'Phone Number', key: '{phone}', category: 'Contact' },
+            { id: 'dp-ptype', name: 'Phone Type', key: '{phoneType}', category: 'Contact' },
+            { id: 'dp-haddr', name: 'Home Address', key: '{homeAddress}', category: 'Location' },
+            { id: 'dp-maddr', name: 'Mailing Address', key: '{mailingAddress}', category: 'Location' },
+            { 
+                id: 'bundle-onboarding', 
+                name: 'Standard Client Info', 
+                isBundle: true, 
+                childIds: ['dp-house', 'dp-fname', 'dp-lname', 'dp-email', 'dp-phone'], 
+                category: 'Identity' 
+            }
+        ],
         rates: { baseHourlyRate: 300, teamMultiplier: 1.1, variables: {} },
         resourceTypes: [
             { type: "Zap", typeKey: "zap", archetype: "Multi-Step" },
@@ -63,101 +77,76 @@ let state = {
 };
 OL.state = state;
 
-// 2. REAL-TIME CLOUD ENGINE
 OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
-
     try {
-        // 1. Create a clean clone
-        const liveState = typeof OL.getFullState === 'function' ? OL.getFullState() : state;
         const rawState = JSON.parse(JSON.stringify(state));
         delete rawState.isSaving;
         delete rawState.adminMode;
-
-        // 📏 SIZE CHECK (Crucial for 245+ resources)
         const size = new TextEncoder().encode(JSON.stringify(rawState)).length;
-        const kb = (size / 1024).toFixed(2);
-        console.log(`📦 Outbound Data Size: ${kb} KB`);
-        
-        if (size > 1000000) {
-            console.error("❌ CRITICAL: Document exceeds 1MB limit. Firebase will reject this.");
-            if(statusEl) statusEl.innerHTML = "⚠️ DATA TOO LARGE";
-            return;
-        }
-
-        // 2. THE PUSH
-        // Using .update() instead of .set() can sometimes bypass full document overwrites
+        if (size > 1000000) return;
         await db.collection('systems').doc('main_state').set(rawState);
-        
-        console.log("☁️ Firebase Acknowledged Save");
         if(statusEl) statusEl.innerHTML = "✅ Synced";
-
     } catch (error) {
-        console.error("❌ Firebase Write ERROR:", error);
         if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
         throw error; 
     }
 };
 
-// 3. REAL-TIME SYNC ENGINE
 OL.sync = function() {
-    console.log("📡 Initializing Iron-Clad Sync...");
-    
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         const now = Date.now();
+        if (!doc.exists || state.isSaving || state.v2?.isSyncingLayout || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) return;
         
-        // 1. 🛡️ THE SHIELD
-        // Prevent refresh if document doesn't exist, we are currently saving, 
-        // or a local render just happened (prevents feedback loops).
-        if (!doc.exists || state.isSaving || state.v2?.isSyncingLayout || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) {
-            return; 
-        }
-
-        // Check the timestamp we set in Tidy
-        if (window.lastLocalRender && (now - window.lastLocalRender < 2500)) {
-            console.log("⏳ Shielding DOM from Firebase echo...");
-            return;
-        }
-
         const cloudData = doc.data();
+        
+        // 🛡️ DATA REPAIR & SEEDING LOGIC
+        if (!cloudData.master) cloudData.master = {};
+        if (!cloudData.master.datapoints || cloudData.master.datapoints.length === 0) {
+            console.log("🌱 Seed Tags missing in Cloud. Injecting defaults...");
+            cloudData.master.datapoints = [
+                { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
+                { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
+                { id: 'dp-hierarchy', name: 'Folder Location', key: '{folderPath}', category: 'Architecture', linkToResource: 'Folder Hierarchy' },
+                { id: 'dp-fname', name: 'First Name', key: '{firstName}', category: 'Identity' },
+                { id: 'dp-lname', name: 'Last Name', key: '{lastName}', category: 'Identity' },
+                { id: 'dp-email', name: 'Email Address', key: '{email}', category: 'Contact' },
+                { id: 'dp-phone', name: 'Phone Number', key: '{phone}', category: 'Contact' },
+                { id: 'dp-ptype', name: 'Phone Type', key: '{phoneType}', category: 'Contact' },
+                { id: 'dp-haddr', name: 'Home Address', key: '{homeAddress}', category: 'Location' },
+                { id: 'dp-maddr', name: 'Mailing Address', key: '{mailingAddress}', category: 'Location' },
+                { 
+                    id: 'bundle-onboarding', 
+                    name: 'Standard Client Info', 
+                    isBundle: true, 
+                    childIds: ['dp-house', 'dp-fname', 'dp-lname', 'dp-email', 'dp-phone'], 
+                    category: 'Identity' 
+                }
+            ];
+            // Push the repair to Firebase immediately so it sticks
+            state.master.datapoints = cloudData.master.datapoints;
+            OL.persist();
+        }
 
-        // 2. 🧠 SMART EQUALITY CHECK
-        // Determine if anything meaningful actually changed before triggering DOM work.
-        const isFirstLoad = !state.master || Object.keys(state.master).length === 0;
-        const hasFocusChanged = cloudData.focusedResourceId !== state.focusedResourceId;
-        const hasDataChanged = JSON.stringify(cloudData.master) !== JSON.stringify(state.master);
-        const hasClientsChanged = JSON.stringify(cloudData.clients) !== JSON.stringify(state.clients);
-
-        if (!isFirstLoad && !hasFocusChanged && !hasDataChanged && !hasClientsChanged) return; 
-
-        console.log("🔄 Valid Cloud Change Detected. Updating State...");
-
-        // 3. Update Global State
-        state.master = cloudData.master || {};
+        // Standard Sync Logic
+        state.master = cloudData.master;
         state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
         state.viewMode = cloudData.viewMode || 'global';
 
-        // 4. 🚀 THE NUDGE
-        // If the screen is currently empty or showing a spinner, boot the router.
         const main = document.getElementById('mainContent');
         if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-            console.log("📡 Data arrived. Nudging router to draw the current page...");
             window.handleRoute();
             return; 
         }
 
-        // 5. 🎨 CONTEXTUAL REFRESH
-        // If we are on the visualizer, use the debounced engine for performance.
         if (window.location.hash.includes('visualizer')) {
             clearTimeout(window.syncDebounce);
             window.syncDebounce = setTimeout(() => {
                 OL.renderVisualizer(window.location.hash.includes('vault'));
             }, 300); 
-        } 
-        // For all other views (Scoping, Tasks, Apps, etc.), run handleRoute to redraw.
-        else {
+        } else {
             window.handleRoute();
         }
     });
@@ -169,14 +158,10 @@ OL.updateAndSync = async function(mutationFn) {
     try {
         // Run your data change
         await mutationFn();
-
-        // Push to cloud
         await OL.persist();
-        
         console.log("🚀 Update & Sync Success");
     } catch (error) {
         console.error("💀 FATAL SYNC FAILURE:", error);
-        // If it fails, we HAVE to alert so you don't keep working on "fake" data
         alert("CRITICAL: Data did not save to cloud. Please refresh.");
     } finally {
         // Only release the shield after a timeout
@@ -186,9 +171,7 @@ OL.updateAndSync = async function(mutationFn) {
 
 OL.getRegistryIcon = function(type) {
     if (!type) return "📄"; // Default fallback
-    
     const registry = state.master.resourceTypes || [];
-    // Find the matching type in your global registry
     const entry = registry.find(t => 
         String(t.type).toLowerCase() === String(type).toLowerCase()
     );
@@ -206,7 +189,6 @@ OL.getRegistryIcon = function(type) {
         workflow: "🕸️",
         other: "⚙️"
     };
-
     return defaults[type.toLowerCase()] || "📄";
 };
 
@@ -237,8 +219,7 @@ window.addEventListener("load", () => {
             console.log("♻️ Resuming Flow Map depth");
             const isVault = currentHash.includes('vault');
             location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
-    }
-    
+    } 
     OL.sync(); 
 });
 
@@ -265,7 +246,6 @@ window.getActiveClient = function() {
     if (state.activeClientId && state.clients[state.activeClientId]) {
         return state.clients[state.activeClientId];
     }
-
     return null;
 };
 
@@ -821,64 +801,62 @@ window.buildLayout = function () {
 
 window.handleRoute = function () {
     const hash = window.location.hash || "#/";
-    const urlParams = new URLSearchParams(window.location.search);
-    const isAdminQuery = urlParams.has('admin'); 
-    
-    // 1. Build the Shell (Sidebar/Main Wrapper)
-    // We call this first, but buildLayout is now hardened to not trigger handleRoute
     window.buildLayout(); 
 
     const main = document.getElementById("mainContent");
     if (!main) return; 
 
     const client = getActiveClient();
-    const isVault = hash.includes('vault');
+    const isVault = hash.startsWith('#/vault');
 
-   // 🏠 DASHBOARD ROUTE (Admin vs Partner)
     if (hash === "#/" || hash === "#/clients" || hash.includes("partner-dashboard")) {
         document.body.classList.remove('is-visualizer', 'fs-mode-active');
-        
-        // 👑 1. ADMIN PRIORITY: If you are an admin and at the root, show full Registry
         if (window.FORCE_ADMIN && hash === "#/") {
             renderClientDashboard();
             return;
         }
-        
-        // 🤝 2. PARTNER RESOLUTION: Find the Portfolio owner
-        // Check if current client IS a partner, OR if we are visiting a partner sub-client
         const leadProject = (client?.meta?.status === "Partner") ? client : state.clients[client?.meta?.partnerOwner];
-
         if (leadProject) {
             OL.renderPartnerDashboard(leadProject, main);
             return;
         }
-
-        // 👤 3. FALLBACK: If no partner context found
-        if (isPublic) renderChecklistModule();
-        else renderClientDashboard();
+        renderClientDashboard();
+        return;
     }
 
-    // 4. Standard Project Routes
+    if (isVault) {
+        if (hash.includes("/apps")) renderAppsGrid();
+        else if (hash.includes("/functions")) renderFunctionsGrid();
+        else if (hash.includes("/resources")) renderResourceManager();
+        else if (hash.includes("/visualizer")) {
+            state.viewMode = 'graph';
+            document.body.classList.add('is-visualizer');
+            OL.renderVisualizer();
+        }
+        else if (hash.includes("/how-to")) renderHowToLibrary();
+        else if (hash.includes("/tasks")) renderChecklistModule(true);
+        else if (hash.includes("/analyses")) renderAnalysisModule(true);
+        else if (hash.includes("/rates")) renderVaultRatesPage();
+        else if (hash.includes("/data")) OL.renderGlobalDataManager();
+        return;
+    }
+
     if (client) {
         if (hash.includes("client-tasks")) renderChecklistModule();
         else if (hash.includes("resources")) renderResourceManager();
         else if (hash.includes("applications")) renderAppsGrid();
+        else if (hash.includes("functions")) renderFunctionsGrid();
         else if (hash.includes("visualizer")) {
             state.viewMode = 'graph';
             document.body.classList.add('is-visualizer');
             OL.renderVisualizer();
         }
         else if (hash.includes("scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("analyze")) renderAnalysisModule();
+        else if (hash.includes("how-to")) renderHowToLibrary();
+        else if (hash.includes("team")) renderTeamManager();
         else if (hash.includes("data")) OL.renderGlobalDataManager();
-        else renderChecklistModule(); // Default
-    } 
-    else if (isVault) {
-        if (hash.includes("apps")) renderAppsGrid();
-        else if (hash.includes("resources")) renderResourceManager();
-        else if (hash.includes("data")) OL.renderGlobalDataManager();
-        else renderAppsGrid();
-    }
-    else {
+    } else {
         renderClientDashboard();
     }
 };
@@ -5055,13 +5033,6 @@ OL.closeResourceTypeManager = function() {
 
 //================RESOURCE CARD AND MODAL===================//
 
-OL.getScopingDataForResource = function(resId) {
-    const client = getActiveClient();
-    if (!client?.projectData?.scopingSheets?.[0]) return null;
-    const sheet = client.projectData.scopingSheets[0];
-    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
-};
-
 // 2. RESOURCE CARD AND MODAL
 window.renderResourceCard = function (res) {
     if (!res) return "";
@@ -6626,6 +6597,10 @@ OL.handleResourceSave = function(id, field, value) {
 window.renderVaultRatesPage = function () {
   const container = document.getElementById("mainContent");
   if (!container) return;
+
+  document.body.classList.remove('is-visualizer', 'fs-mode-active');
+  document.body.style.overflow = 'auto';
+  document.documentElement.style.overflow = 'auto';
 
   const rates = state.master.rates || {};
   const registry = state.master.resourceTypes || [];
@@ -16814,50 +16789,21 @@ window.addEventListener("hashchange", window.handleRoute);
 /*======================= DATAPOINTS =============================*/
 state.ui.activeWorkbenchTab = 'flows'; // Default tab
 
-// Initialize library if missing
-if (!state.master.datapoints) {
-    state.master.datapoints = [
-        { 
-            id: 'dp-naming-house', 
-            name: 'Household Name', 
-            key: '{householdName}', 
-            category: 'Identity',
-            linkToResource: 'Naming Conventions'
-        },
-        { 
-            id: 'dp-naming-folder', 
-            name: 'Folder Name', 
-            key: '{folderName}', 
-            category: 'Architecture',
-            linkToResource: 'Naming Conventions'
-        },
-        { 
-            id: 'dp-hierarchy', 
-            name: 'Folder Location', 
-            key: '{folderPath}', 
-            category: 'Architecture',
-            linkToResource: 'Folder Hierarchy'
-        },
-        { id: 'dp-1', name: 'First Name', key: '{firstName}', category: 'Identity' },
-        { id: 'dp-2', name: 'Last Name', key: '{lastName}', category: 'Identity' },
-        { id: 'dp-3', name: 'Email', key: '{email}', category: 'Contact' },
-        { 
-            id: 'bundle-onboarding', 
-            name: 'Standard Client Info', 
-            isBundle: true, 
-            childIds: ['dp-naming-house', 'dp-1', 'dp-2', 'dp-3'], 
-            category: 'Identity' 
-        }
-    ];
-}
-
 OL.renderGlobalDataManager = function() {
     OL.registerView(OL.renderGlobalDataManager);
     const container = document.getElementById("mainContent");
     if (!container) return;
 
-    const datapoints = (state.master.datapoints || []).filter(d => !d.isBundle);
-    const bundles = (state.master.datapoints || []).filter(d => d.isBundle);
+    const isVaultMode = window.location.hash.includes('vault');
+    const client = getActiveClient();
+
+    // Determine source based on context
+    const sourcePool = (isVaultMode || !client) 
+        ? (state.master.datapoints || []) 
+        : (client.projectData.localDatapoints || []);
+
+    const datapoints = sourcePool.filter(d => !d.isBundle);
+    const bundles = sourcePool.filter(d => d.isBundle);
 
     container.innerHTML = `
         <div class="section-header" style="margin-bottom: 30px; padding-bottom: 20px;">
@@ -16866,6 +16812,7 @@ OL.renderGlobalDataManager = function() {
                 <div class="small muted" style="margin-top: 8px;">Standardize fields and drag them into bundles to organize technical requirements.</div>
             </div>
             <div class="header-actions">
+                ${!isVaultMode ? `<button class="btn primary" style="background:#38bdf8; color:black; margin-right:8px;" onclick="OL.openMasterDataImporter()">⬇️ Import Master</button>` : ''}
                 <button class="btn small soft" onclick="OL.addNewDatapoint(true)">+ New Bundle</button>
                 <button class="btn primary" onclick="OL.addNewDatapoint(false)">+ New Field</button>
             </div>
@@ -16878,21 +16825,51 @@ OL.renderGlobalDataManager = function() {
                     <b class="tiny muted uppercase" style="letter-spacing: 1px;">Individual Master Fields</b>
                 </div>
                 <div id="master-fields-list">
-                    ${datapoints.map(dp => `
-                        <div class="data-list-item draggable-field" 
-                             draggable="true"
-                             ondragstart="OL.handleFieldDragStart(event, '${dp.id}')"
-                             style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: grab;">
-                            <div style="display:flex; align-items:center; gap:12px;">
-                                <span style="opacity:0.3; font-size:10px;">⠿</span>
-                                <div>
-                                    <div class="bold" style="font-size: 13px; color: var(--text-main);">${esc(dp.name)}</div>
-                                    <div class="tiny muted" style="font-family: monospace; opacity:0.5;">${dp.key}</div>
+                    ${datapoints.map(dp => {
+                        const parentBundles = bundles.filter(b => (b.childIds || []).includes(dp.id));
+                        
+                        const protectedFields = [
+                            '{householdName}', '{folderName}', '{firstName}', '{lastName}', 
+                            '{email}', '{phone}', '{phoneType}', '{homeAddress}', '{mailingAddress}'
+                        ];
+                        const isProtected = protectedFields.includes(dp.key);
+
+                        return `
+                            <div class="data-field-card draggable-field" 
+                                draggable="true"
+                                onclick="OL.openDataDetailModal('${dp.id}')"
+                                ondragstart="OL.handleFieldDragStart(event, '${dp.id}')"
+                                style="display: flex; align-items: center; justify-content: space-between; 
+                                        padding: 10px 15px; margin-bottom: 8px; 
+                                        background: rgba(255,255,255,0.03); border: 1px solid var(--line); 
+                                        border-radius: 6px; cursor: pointer; transition: 0.2s;">
+                                
+                                <div style="display:flex; align-items:center; gap:12px; flex: 1;">
+                                    <span style="opacity:0.3; font-size:10px; cursor: grab;" onmousedown="event.stopPropagation()">⠿</span>
+                                    <div style="min-width: 0;">
+                                        <div class="bold" style="font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            ${dp.linkToResource ? '🔗' : '🏷️'} ${esc(dp.name)}
+                                        </div>
+                                        <div class="tiny muted" style="font-family: monospace; opacity:0.5; font-size: 9px;">${dp.key}</div>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <div class="pills-row" style="gap:3px;">
+                                        ${parentBundles.map(b => `<span class="pill tiny soft" style="font-size:7px; padding: 1px 4px;">📦</span>`).join('')}
+                                    </div>
+                                    
+                                    ${!isProtected ? `
+                                        <button class="card-delete-btn" 
+                                                style="position:static; font-size: 16px; opacity: 0.4;" 
+                                                onclick="event.stopPropagation(); OL.deleteMasterDatapointById('${dp.id}')">×</button>
+                                    ` : `
+                                        <span title="System Protected Field" style="font-size: 10px; opacity: 0.2; width: 22px; text-align: center;">🔒</span>
+                                    `}
                                 </div>
                             </div>
-                            <button class="btn-icon-tiny" onclick="OL.openDataDetailModal('${dp.id}')">🔍</button>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
 
@@ -16910,7 +16887,7 @@ OL.renderGlobalDataManager = function() {
                              style="margin-bottom: 15px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); transition: 0.2s;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
                                 <div>
-                                    <div class="bold" style="color: #fbbf24; font-size: 14px;">📦 ${esc(bn.name)}</div>
+                                    <div class="bold" style="color: var(--accent); font-size: 14px;">📦 ${esc(bn.name)}</div>
                                     <div class="tiny muted">${(bn.childIds || []).length} Fields Linked</div>
                                 </div>
                                 <button class="btn-icon-tiny" onclick="OL.deleteMasterDatapointById('${bn.id}')">×</button>
@@ -16928,6 +16905,97 @@ OL.renderGlobalDataManager = function() {
             </div>
         </div>
     `;
+};
+
+OL.openMasterDataImporter = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🏛️ Import Master Data Tags</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-map-container">
+                <input type="text" class="modal-input" 
+                       placeholder="Search master fields or bundles..." 
+                       onfocus="OL.filterMasterDataImport('')"
+                       oninput="OL.filterMasterDataImport(this.value)" 
+                       autofocus>
+                <div id="master-data-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.filterMasterDataImport = function(query) {
+    const listEl = document.getElementById("master-data-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    
+    // Get IDs already in the local project to prevent duplicates
+    const localIds = (client?.projectData?.localDatapoints || []).map(d => d.masterRefId || d.id);
+    
+    // Filter Master Library
+    const available = (state.master.datapoints || []).filter(dp => 
+        (dp.name.toLowerCase().includes(q) || (dp.key && dp.key.toLowerCase().includes(q))) &&
+        !localIds.includes(dp.id)
+    ).sort((a, b) => (a.isBundle === b.isBundle) ? a.name.localeCompare(b.name) : a.isBundle ? -1 : 1);
+
+    listEl.innerHTML = available.map(dp => `
+        <div class="search-result-item" onmousedown="OL.executeDataImport('${dp.id}')">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span>${dp.isBundle ? '📦' : '🏷️'}</span>
+                    <div>
+                        <div class="bold">${esc(dp.name)}</div>
+                        <div class="tiny muted">${dp.isBundle ? (dp.childIds?.length || 0) + ' Fields' : dp.key}</div>
+                    </div>
+                </div>
+                <span class="pill tiny vault">MASTER</span>
+            </div>
+        </div>
+    `).join('') || `<div class="search-result-item muted">No unlinked tags found.</div>`;
+};
+
+OL.executeDataImport = async function(masterId) {
+    const client = getActiveClient();
+    const template = state.master.datapoints.find(d => d.id === masterId);
+    if (!client || !template) return;
+
+    await OL.updateAndSync(() => {
+        // Deep clone the tag/bundle
+        const newTag = JSON.parse(JSON.stringify(template));
+        
+        // Localize it
+        newTag.masterRefId = masterId; // Link back to master
+        newTag.id = (newTag.isBundle ? 'local-bundle-' : 'local-dp-') + Date.now();
+        
+        if (!client.projectData.localDatapoints) client.projectData.localDatapoints = [];
+        client.projectData.localDatapoints.push(newTag);
+        
+        // 🚀 SMART BUNDLE IMPORT:
+        // If importing a bundle, we should also import all the individual fields within it
+        if (newTag.isBundle && template.childIds) {
+            template.childIds.forEach(childMasterId => {
+                const childTemplate = state.master.datapoints.find(d => d.id === childMasterId);
+                const alreadyLocal = client.projectData.localDatapoints.find(ld => ld.masterRefId === childMasterId);
+                
+                if (childTemplate && !alreadyLocal) {
+                    const localChild = JSON.parse(JSON.stringify(childTemplate));
+                    localChild.masterRefId = childMasterId;
+                    localChild.id = 'local-dp-' + Date.now() + Math.random();
+                    client.projectData.localDatapoints.push(localChild);
+                }
+            });
+        }
+    });
+
+    OL.closeModal();
+    OL.renderGlobalDataManager();
+    console.log(`✅ Imported Master Data: ${template.name}`);
 };
 
 // Internal Helper for Field Rows
@@ -16962,9 +17030,11 @@ function renderBundleRow(bn, allFields) {
 }
 
 OL.openDataDetailModal = function(id) {
-    const dp = state.master.datapoints.find(d => d.id === id);
     const client = getActiveClient();
-    if (!dp) return;
+    const sourcePool = [...(state.master.datapoints || []), ...(client?.projectData?.localDatapoints || [])];
+    const dp = sourcePool.find(d => String(d.id) === String(id));
+    
+    if (!dp) return console.error("❌ Data Tag not found:", id);
 
     // 🕵️ Find Project Backlinks
     const usage = [];
@@ -16976,12 +17046,24 @@ OL.openDataDetailModal = function(id) {
             }
         });
     });
+    const linkedResource = dp.linkToResource ? 
+        (client?.projectData?.localResources || []).find(r => r.name === dp.linkToResource) : null;
 
     let html = `
         <div class="modal-head">
             <div class="modal-title-text">${dp.isBundle ? '📦' : '🏷️'} ${esc(dp.name)}</div>
         </div>
         <div class="modal-body">
+            ${linkedResource ? `
+                <div class="card-section" style="background: rgba(56, 189, 248, 0.1); border: 1px solid #38bdf8; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <div class="tiny accent bold uppercase" style="margin-bottom: 5px;">Linked Logic Source</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>📖 ${esc(linkedResource.name)}</span>
+                        <button class="btn tiny primary" onclick="OL.openResourceModal('${linkedResource.id}')">View Rules ➔</button>
+                    </div>
+                </div>
+            ` : ''}
+
             <div class="card-section">
                 <label class="modal-section-label">📉 DATA USAGE & FLOW</label>
                 ${OL.renderDataFlowMiniMap(id)}
