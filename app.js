@@ -79,19 +79,30 @@ OL.state = state;
 
 OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
-    if(statusEl) statusEl.innerHTML = "⏳ Syncing...";
-    try {
-        const rawState = JSON.parse(JSON.stringify(state));
-        delete rawState.isSaving;
-        delete rawState.adminMode;
-        const size = new TextEncoder().encode(JSON.stringify(rawState)).length;
-        if (size > 1000000) return;
-        await db.collection('systems').doc('main_state').set(rawState);
-        if(statusEl) statusEl.innerHTML = "✅ Synced";
-    } catch (error) {
-        if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
-        throw error; 
-    }
+    if(statusEl) statusEl.innerHTML = "⏳ Waiting...";
+
+    // Clear the previous timer
+    clearTimeout(window.saveTimeout);
+
+    // Wait 1 second after the LAST change before actually writing to Firebase
+    return new Promise((resolve) => {
+        window.saveTimeout = setTimeout(async () => {
+            if(statusEl) statusEl.innerHTML = "☁️ Syncing...";
+            try {
+                const rawState = JSON.parse(JSON.stringify(state));
+                delete rawState.isSaving;
+                delete rawState.adminMode;
+                
+                await db.collection('systems').doc('main_state').set(rawState);
+                
+                if(statusEl) statusEl.innerHTML = "✅ Synced";
+                resolve();
+            } catch (error) {
+                console.error("Write Error:", error);
+                if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
+            }
+        }, 1000); // 1 second debounce
+    });
 };
 
 OL.sync = function() {
