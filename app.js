@@ -77,89 +77,68 @@ let state = {
 };
 OL.state = state;
 
+// 🛡️ REVERSION GUARD ENGINE
 OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = "⏳ Pending...";
 
-    // 1. Clear any existing timer to prevent multiple simultaneous writes
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
 
-    // 2. Set the delay
     window.saveTimeout = setTimeout(async () => {
-        console.log("📤 Attempting Cloud Write...");
-        
         try {
-            // Create the clean data package
             const rawState = JSON.parse(JSON.stringify(state));
             delete rawState.isSaving;
             delete rawState.adminMode;
 
-            // ⚡ THE ACTUAL WRITE
+            // 📏 SIZE CHECK
+            const size = new TextEncoder().encode(JSON.stringify(rawState)).length;
+            if (size > 1000000) {
+                if(statusEl) statusEl.innerHTML = "⚠️ DATA TOO LARGE";
+                return;
+            }
+
             await db.collection('systems').doc('main_state').set(rawState);
             
-            // ✅ SUCCESS
+            // ✅ LOCK THE TIMESTAMP to block incoming reverts for 3 seconds
             window.lastLocalSave = Date.now();
             if(statusEl) statusEl.innerHTML = "✅ Synced";
-            console.log("☁️ CLOUD ACKNOWLEDGED: Data is safe.");
+            console.log("☁️ CLOUD ACKNOWLEDGED: Data safe.");
             
         } catch (error) {
-            // ❌ FAILURE
             console.error("💀 CLOUD WRITE CRASHED:", error);
             if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
-            
-            // If we hit the rate limit, alert the user so they stop typing
-            if (error.code === 'resource-exhausted') {
-                alert("Firebase is overloaded. Please wait 30 seconds before typing again.");
-            }
         }
-    }, 1000); // 1 second buffer
+    }, 1000); 
 };
 
 OL.sync = function() {
+    console.log("📡 Initializing Reversion-Shield Sync...");
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        const now = Date.now();
-    
-        // 🛡️ THE OVERWRITE PROTECTOR
-        // 1. If we are currently in a "Waiting to Sync" state, IGNORE the cloud.
-        // 2. If we just saved in the last 5 seconds, IGNORE the cloud (prevents the bounce).
-        if (state.isSaving || (window.lastLocalSave && (now - window.lastLocalSave < 5000))) {
-            console.warn("🛡️ Sync Guard: Cloud data rejected to prevent bounce-back.");
-            return; 
-        }
-    
         if (!doc.exists) return;
         const cloudData = doc.data();
-        
-        // 🛡️ DATA REPAIR & SEEDING LOGIC
-        if (!cloudData.master) cloudData.master = {};
-        if (!cloudData.master.datapoints || cloudData.master.datapoints.length === 0) {
-            console.log("🌱 Seed Tags missing in Cloud. Injecting defaults...");
-            cloudData.master.datapoints = [
-                { id: 'dp-house', name: 'Household Name', key: '{householdName}', category: 'Identity', linkToResource: 'Naming Conventions' },
-                { id: 'dp-folder', name: 'Folder Name', key: '{folderName}', category: 'Architecture', linkToResource: 'Naming Conventions' },
-                { id: 'dp-hierarchy', name: 'Folder Location', key: '{folderPath}', category: 'Architecture', linkToResource: 'Folder Hierarchy' },
-                { id: 'dp-fname', name: 'First Name', key: '{firstName}', category: 'Identity' },
-                { id: 'dp-lname', name: 'Last Name', key: '{lastName}', category: 'Identity' },
-                { id: 'dp-email', name: 'Email Address', key: '{email}', category: 'Contact' },
-                { id: 'dp-phone', name: 'Phone Number', key: '{phone}', category: 'Contact' },
-                { id: 'dp-ptype', name: 'Phone Type', key: '{phoneType}', category: 'Contact' },
-                { id: 'dp-haddr', name: 'Home Address', key: '{homeAddress}', category: 'Location' },
-                { id: 'dp-maddr', name: 'Mailing Address', key: '{mailingAddress}', category: 'Location' },
-                { 
-                    id: 'bundle-onboarding', 
-                    name: 'Standard Client Info', 
-                    isBundle: true, 
-                    childIds: ['dp-house', 'dp-fname', 'dp-lname', 'dp-email', 'dp-phone'], 
-                    category: 'Identity' 
-                }
-            ];
-            // Push the repair to Firebase immediately so it sticks
-            state.master.datapoints = cloudData.master.datapoints;
-            OL.persist();
+        const now = Date.now();
+
+        // 🛡️ THE SHIELD: If we saved in the last 4 seconds, ignore the cloud echo
+        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) {
+            console.warn("🛡️ Sync Guard: Blocking cloud revert (Local data is newer).");
+            return; 
         }
 
-        // Standard Sync Logic
-        state.master = cloudData.master;
+        // 🛡️ EMPTY DATA GUARD: Never let the cloud wipe local data if cloud looks empty
+        const localClientCount = Object.keys(state.clients || {}).length;
+        const cloudClientCount = Object.keys(cloudData.clients || {}).length;
+        if (localClientCount > 1 && cloudClientCount === 0) {
+            console.error("🚫 Emergency Block: Cloud sent empty client list. Rejecting.");
+            return;
+        }
+
+        // 🧠 DATA REPAIR: Seeding Tags if they are missing in cloud
+        if (!cloudData.master.datapoints || cloudData.master.datapoints.length === 0) {
+            cloudData.master.datapoints = state.master.datapoints;
+        }
+
+        // 🔄 Apply Cloud State
+        state.master = cloudData.master || state.master;
         state.clients = cloudData.clients || {};
         state.focusedResourceId = cloudData.focusedResourceId;
         state.viewMode = cloudData.viewMode || 'global';
@@ -172,9 +151,7 @@ OL.sync = function() {
 
         if (window.location.hash.includes('visualizer')) {
             clearTimeout(window.syncDebounce);
-            window.syncDebounce = setTimeout(() => {
-                OL.renderVisualizer(window.location.hash.includes('vault'));
-            }, 300); 
+            window.syncDebounce = setTimeout(() => OL.renderVisualizer(), 300); 
         } else {
             window.handleRoute();
         }
