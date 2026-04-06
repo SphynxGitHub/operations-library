@@ -630,6 +630,7 @@ window.buildLayout = function () {
       href: "#/vault/analyses",
     },
     { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" },
+    { key: "data", label: "Master Data Tags", icon: "🏷️", href: "#/vault/data" },
   ];
 
   const clientTabs = [
@@ -682,6 +683,7 @@ window.buildLayout = function () {
       href: "#/how-to",
     },
     { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
+    { key: "data", label: "Data Tags", icon: "🏷️", href: "#/data" },
   ];
 
   // Inside your layout/sidebar render function:
@@ -867,11 +869,13 @@ window.handleRoute = function () {
             OL.renderVisualizer();
         }
         else if (hash.includes("scoping-sheet")) renderScopingSheet();
+        else if (hash.includes("data")) OL.renderGlobalDataManager();
         else renderChecklistModule(); // Default
     } 
     else if (isVault) {
         if (hash.includes("apps")) renderAppsGrid();
         else if (hash.includes("resources")) renderResourceManager();
+        else if (hash.includes("data")) OL.renderGlobalDataManager();
         else renderAppsGrid();
     }
     else {
@@ -1389,7 +1393,7 @@ OL.openClientProfileModal = function(clientId) {
         <div class="modal-body">
             ${partnerDropdownHtml}
             <label class="modal-section-label">Active Modules (Client Access)</label>
-            <div class="card-section">
+            <div id="module-selection" class="card-section">
                 ${[
                     { id: 'checklist', label: 'Tasks' },
                     { id: 'apps', label: 'Apps' },
@@ -1399,7 +1403,8 @@ OL.openClientProfileModal = function(clientId) {
                     { id: 'scoping', label: 'Scoping' },
                     { id: 'analysis', label: 'Analysis' },
                     { id: 'how-to', label: 'How-To' },
-                    { id: 'team', label: 'Team' }
+                    { id: 'team', label: 'Team' },
+                    { id: 'data', label: 'Data' }
                 ].map(m => `
                     <label style="display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer;">
                         <input type="checkbox" 
@@ -4417,33 +4422,157 @@ window.renderResourceManager = function () {
     OL.registerView(renderResourceManager);
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
-    const hash = window.location.hash;
+    const isVaultView = window.location.hash.startsWith('#/vault');
 
-    const isVaultView = hash.startsWith('#/vault');
-    const isAdmin = state.adminMode === true;
+    if (!container) return;
 
-    let displayRes = isVaultView ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    // 🔓 FIX: Restore standard page scrolling
+    document.body.classList.remove('is-visualizer', 'fs-mode-active');
+    document.body.style.overflow = 'auto'; 
 
-    // 🔎 SEARCH & FILTER LOGIC
-    const query = (state.libSearch || "").toLowerCase();
-    const activeType = state.libTypeFilter || 'All';
+    const source = isVaultView ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+    
+    // Data for dropdowns
+    const types = [...new Set(source.map(r => r.type).filter(t => t && t !== 'Workflow'))].sort();
+    const apps = [...new Set(source.map(r => r.appName).filter(Boolean))].sort();
+    const dataTags = state.master.datapoints?.filter(d => !d.isBundle) || [];
+    const team = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || []), { name: 'Client 1' }, { name: 'Client 2' }];
 
-    const filtered = displayRes.filter(res => {
-        const matchesSearch = (res.name || "").toLowerCase().includes(query) || 
-                             (res.description || "").toLowerCase().includes(query);
-        const matchesType = activeType === 'All' || res.type === activeType;
-        // Optional: Hide workflows from this view if you only want technical assets
-        const isNotWorkflow = res.type !== 'Workflow'; 
-        return matchesSearch && matchesType && isNotWorkflow;
+    container.innerHTML = `
+        <div class="section-header">
+            <div>
+                <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
+                <div class="small muted subheader">Full technical catalog for ${esc(client?.meta.name || 'Global')}</div>
+            </div>
+            <div class="header-actions">
+                ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
+                <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
+            </div>
+        </div>
+
+        <div class="v2-toolbar" style="margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid var(--line);">
+            <div class="canvas-search-wrap" style="flex: 2; min-width: 250px;">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="lib-filter-input" class="v2-search-input" 
+                       placeholder="Search name, description, or notes..." 
+                       value="${state.libSearch || ''}"
+                       oninput="state.libSearch = this.value; OL.syncResourceLibraryFilters()">
+            </div>
+            
+            <select id="lib-filter-type" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Types</option>
+                ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
+            </select>
+
+            <select id="lib-filter-app" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Apps</option>
+                ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
+            </select>
+
+            <select id="lib-filter-assignee" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Owners</option>
+                ${team.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
+            </select>
+
+            <select id="lib-filter-data-tag" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Data Tags</option>
+                ${dataTags.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+            </select>
+
+            <select id="lib-filter-scoped" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Scoping</option>
+                <option value="scoped">Scoped ($)</option>
+                <option value="unscoped">Unscoped</option>
+            </select>
+
+            <select id="lib-filter-scoping-status" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Statuses</option>
+                <option value="Do Now">Do Now</option>
+                <option value="Do Later">Do Later</option>
+                <option value="Don't Do">Don't Do</option>
+                <option value="Done">Done</option>
+            </select>
+
+            <select id="lib-filter-party" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">All Parties</option>
+                <option value="Sphynx">Sphynx</option>
+                <option value="Client">Client</option>
+                <option value="Joint">Joint</option>
+            </select>
+
+            <select id="lib-filter-logic" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
+                <option value="">Any Logic</option>
+                <option value="has">With λ Logic</option>
+            </select>
+
+            <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()">✕ Clear</button>
+        </div>
+
+        <div id="resource-library-results"></div>
+    `;
+
+    OL.syncResourceLibraryFilters();
+};
+
+OL.syncResourceLibraryFilters = function() {
+    const container = document.getElementById('resource-library-results');
+    if (!container) return;
+
+    const query = document.getElementById('lib-filter-input')?.value.toLowerCase().trim() || "";
+    const typeF = document.getElementById('lib-filter-type')?.value || "";
+    const appF = document.getElementById('lib-filter-app')?.value || "";
+    const dataTagF = document.getElementById('lib-filter-data-tag')?.value || "";
+    const assigneeF = document.getElementById('lib-filter-assignee')?.value || "";
+    const statusF = document.getElementById('lib-filter-scoped')?.value || "";
+    const logicF = document.getElementById('lib-filter-logic')?.value || "";
+    const scopeStatusF = document.getElementById('lib-filter-scoping-status')?.value || "";
+    const partyF = document.getElementById('lib-filter-party')?.value || "";
+
+    const client = getActiveClient();
+    const isVault = window.location.hash.includes('vault');
+    const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
+
+    const filtered = source.filter(res => {
+        if (res.type === 'Workflow') return false;
+
+        const matchesQuery = !query || res.name.toLowerCase().includes(query) || (res.description || "").toLowerCase().includes(query);
+        const matchesType = !typeF || res.type === typeF;
+        const matchesApp = !appF || res.appName === appF || (res.steps || []).some(s => s.appName === appF);
+        const matchesDataTag = !dataTagF || (res.steps || []).some(s => (s.datapoints || []).some(d => String(d.id) === String(dataTagF)));
+        
+        // Logic Filter
+        const matchesLogic = !logicF || (res.steps || []).some(s => (s.logic?.in?.length > 0 || s.logic?.out?.length > 0));
+
+        // Assignee Filter (Multi-select aware)
+        const matchesAssignee = !assigneeF || (res.steps || []).some(s => 
+            s.assigneeName === assigneeF || (s.assignees || []).some(a => (a.name || a) === assigneeF)
+        );
+
+        // Scoping Filter
+        let matchesStatus = true;
+        const isInScope = !!OL.isResourceInScope(res.id);
+        if (statusF === "scoped") matchesStatus = isInScope;
+        if (statusF === "unscoped") matchesStatus = !isInScope;
+
+        const scopeData = OL.getScopingDataForResource(res.id);
+        const matchesScopeStatus = !scopeStatusF || (scopeData && scopeData.status === scopeStatusF);
+        const matchesParty = !partyF || (scopeData && scopeData.responsibleParty === partyF);
+
+        return matchesQuery && matchesType && matchesApp && matchesDataTag && matchesAssignee && matchesStatus && matchesLogic && matchesScopeStatus && matchesParty;
     });
 
-    const uniqueTypes = [...new Set(displayRes.map(r => r.type).filter(t => t && t !== 'Workflow'))].sort();
+    OL.renderResourceGroups(container, filtered);
+};
 
-   // 1. Filter out the specific pinned groups
-    const sphynxPinned = filtered.filter(res => res.systemPinned);
-    const adminPinned = filtered.filter(res => res.adminPinned);
-    // Standard items are anything not pinned
-    const standardItems = filtered.filter(res => !res.systemPinned && !res.adminPinned);
+OL.renderResourceGroups = function(container, items) {
+    if (items.length === 0) {
+        container.innerHTML = `<div class="empty-hint" style="padding: 100px; text-align: center; opacity: 0.5;">No resources matching your filters.</div>`;
+        return;
+    }
+
+    const sphynxPinned = items.filter(res => res.systemPinned);
+    const adminPinned = items.filter(res => res.adminPinned);
+    const standardItems = items.filter(res => !res.systemPinned && !res.adminPinned);
 
     const grouped = standardItems.reduce((acc, res) => {
         const type = res.type || "General";
@@ -4455,86 +4584,49 @@ window.renderResourceManager = function () {
     const sortedTypes = Object.keys(grouped).sort();
 
     container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
-                <div class="small muted">${filtered.length} items found</div>
-            </div>
-            <div class="header-actions">
-                ${isAdmin ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
-                
-                <div class="dropdown-plus-container" style="display:inline-block; position:relative;">
-                    <button class="btn primary" style="font-weight:bold;">+ New Resource</button>
-                    <div class="dropdown-plus-menu" style="right: 0; left: auto;">
-                        <label class="tiny muted bold uppercase" style="padding: 10px 15px; display: block; border-bottom: 1px solid rgba(255,255,255,0.1); letter-spacing: 0.5px;">Select Classification</label>
-                        ${(state.master.resourceTypes || []).map(t => `
-                            <div class="dropdown-item" onclick="OL.universalCreate('${t.type}')">
-                                ${OL.getRegistryIcon(t.type)} ${t.type}
-                            </div>
-                        `).join('')}
-                        <div class="dropdown-item" onclick="OL.universalCreate('SOP')" style="border-top: 1px solid rgba(255,255,255,0.1);">
-                            📄 Basic SOP
-                        </div>
-                    </div>
-                </div>
-
-                ${!isVaultView && isAdmin ? `
-                    <button class="btn primary" style="background:#38bdf8; color:black; font-weight:bold;" onclick="OL.importFromMaster()">⬇️ Import</button>
-                ` : ''}
-            </div>
-        </div>
-
-        <div class="toolbar" style="display:flex; gap:15px; margin: 20px 0; background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border: 1px solid var(--line);">
-            <input type="text" id="resource-lib-search" class="modal-input" 
-                placeholder="Search..." value="${state.libSearch || ''}"
-                oninput="state.libSearch = this.value; renderResourceManager(); OL.refocus('resource-lib-search')">
-            
-            <select class="modal-input" style="flex:1;" onchange="state.libTypeFilter = this.value; renderResourceManager()">
-                <option value="All">All Categories</option>
-                ${uniqueTypes.map(t => `<option value="${t}" ${activeType === t ? 'selected' : ''}>${t}</option>`).join('')}
-            </select>
-        </div>
-
         <div class="resource-sections-wrapper">
-            ${sphynxPinned.length > 0 ? `
+            ${sphynxPinned.length ? `
                 <div class="resource-group" style="margin-bottom: 30px;">
                     <div style="border-bottom: 2px solid var(--accent); padding: 8px; background: rgba(var(--accent-rgb), 0.05); margin-bottom:12px;">
                         <h3 style="margin:0; font-size:12px; color: var(--accent);">💎 SPHYNX RESOURCES</h3>
                     </div>
-                    <div class="cards-grid">${sphynxPinned.map(res => renderResourceCard(res)).join("")}</div>
-                </div>
-            ` : ''}
+                    <div class="cards-grid">${sphynxPinned.map(r => renderResourceCard(r)).join('')}</div>
+                </div>` : ''}
 
-            ${adminPinned.length > 0 ? `
+            ${adminPinned.length ? `
                 <div class="resource-group" style="margin-bottom: 30px;">
                     <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px;">
                         <h3 style="margin:0; font-size:12px; color: #94a3b8;">📁 ADMIN</h3>
                     </div>
-                    <div class="cards-grid">${adminPinned.map(res => renderResourceCard(res)).join("")}</div>
-                </div>
-            ` : ''}
-            ${sortedTypes.length > 0 ? sortedTypes.map(type => `
+                    <div class="cards-grid">${adminPinned.map(r => renderResourceCard(r)).join('')}</div>
+                </div>` : ''}
+
+            ${sortedTypes.map(type => `
                 <div class="resource-group" style="margin-bottom: 40px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
                         <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">
-                            ${OL.getRegistryIcon(type)} ${esc(type)}s
+                            ${OL.getRegistryIcon(type)} ${type}s
                         </h3>
                         <button class="btn tiny soft" onclick="OL.promptBulkReclassify('${type}')">Bulk Move</button>
                     </div>
                     <div class="cards-grid">
-                        ${grouped[type]
-                            .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-                            .map(res => renderResourceCard(res))
-                            .join("")}
+                        ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(r => renderResourceCard(r)).join('')}
                     </div>
                 </div>
-            `).join("") : `
-                <div class="empty-hint" style="padding: 40px; text-align: center; opacity: 0.5;">
-                    No resources matching your search.
-                </div>
-            `}
+            `).join('')}
         </div>
     `;
+};
+
+OL.clearResourceFilters = function() {
+    state.libSearch = "";
+    state.libTypeFilter = "";
+    // Reset inputs manually for immediate visual feedback
+    document.getElementById('lib-filter-input').value = "";
+    document.getElementById('lib-filter-type').selectedIndex = 0;
+    document.getElementById('lib-filter-app').selectedIndex = 0;
+    document.getElementById('lib-filter-data-tag').selectedIndex = 0;
+    OL.syncResourceLibraryFilters();
 };
 
 OL.universalCreate = async function(type, options = {}) {
@@ -4963,47 +5055,53 @@ OL.closeResourceTypeManager = function() {
 
 //================RESOURCE CARD AND MODAL===================//
 
+OL.getScopingDataForResource = function(resId) {
+    const client = getActiveClient();
+    if (!client?.projectData?.scopingSheets?.[0]) return null;
+    const sheet = client.projectData.scopingSheets[0];
+    return sheet.lineItems.find(item => String(item.resourceId) === String(resId));
+};
+
 // 2. RESOURCE CARD AND MODAL
 window.renderResourceCard = function (res) {
     if (!res) return "";
     
-    // 1. Identity & Status
-    const isAdmin = state.adminMode === true;
+    // 1. Resolve Live Scoping Data
+    const scopeData = OL.getScopingDataForResource(res.id);
     const isMaster = String(res.id || "").startsWith("res-vlt-") || !!res.masterRefId;
-    const isInScope = !!OL.isResourceInScope(res.id);
-    
-    // 2. 👨‍👩‍👧‍👦 Family Number: Count instances specifically on the Canvas layer
-    const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
-
-    // 3. ✨ Selection Logic: Highlight if this is the active resource
     const isActive = state.focusedResourceId === res.id;
+
+    // 2. Map Status to Colors (Matching the Scoping Sheet)
+    const statusColors = { 
+        'Do Now': '#38bdf8',    // Cyan
+        'Done': '#22c55e',      // Green
+        'Do Later': '#fbbf24',  // Amber
+        "Don't Do": '#ef4444',  // Red
+        'Default': 'var(--color-scoping)' 
+    };
+    
+    const statusColor = scopeData ? (statusColors[scopeData.status] || statusColors.Default) : 'transparent';
+
+    // 3. 👨‍👩‍👧‍👦 Family Number: Count instances specifically on the Canvas layer
+    const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
 
     const tagStyle = isMaster 
         ? "background: var(--accent); color: #000;" 
         : "background: var(--panel-border); color: var(--text-dim); border: 1px solid var(--line);";
 
     return `
-        <div class="card is-clickable ${isInScope ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
+        <div class="card is-clickable ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
              id="res-card-${res.id}"
              onclick="OL.selectResourceCard('${res.id}')"
-             style="${isInScope ? 'border-left: 3px solid var(--color-scoping) !important;' : ''}">
+             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''}">
             
             <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start;">
                 <div class="card-title" style="flex:1; font-weight:600;">${esc(res.name || "Unnamed")}</div>
                 
                 <div class="card-controls" style="display:flex; align-items:center; gap:6px;">
-                    
                     ${numberingHtml}
-
-                    <a href="#/scoping-sheet?focus=${res.id}" 
-                       id="badge-${res.id}"
-                       class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
-                       onclick="if(!OL.isResourceInScope('${res.id}')) { event.preventDefault(); } event.stopPropagation();"
-                       oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${res.id}'); return false;">
-                        $
-                    </a>
                     
-                    <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 9px; border-radius: 3px; font-weight: bold;">
+                    <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 8px; border-radius: 3px; font-weight: bold;">
                         ${isMaster ? 'MASTER' : 'LOCAL'}
                     </span>
 
@@ -5012,17 +5110,33 @@ window.renderResourceCard = function (res) {
             </div>
 
             <div class="card-body" style="margin-top: 6px;">
-                <div class="tiny accent bold uppercase" style="font-size: 9px; letter-spacing: 0.5px;">
-                    ${esc(res.archetype || "Base")}
-                </div>
-                <div class="tiny muted" style="font-size: 10px; opacity: 0.6;">
-                    ${esc(res.type || "General")}
+                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                    <div>
+                        <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; opacity: 0.8;">
+                            ${esc(res.archetype || "Base")}
+                        </div>
+                        <div class="tiny muted" style="font-size: 10px; opacity: 0.6;">
+                            ${OL.getRegistryIcon(res.type)} ${esc(res.type || "General")}
+                        </div>
+                    </div>
+
+                    ${scopeData ? `
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+                            <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
+                                ${scopeData.status.toUpperCase()}
+                            </div>
+                            <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5;">
+                                👤 ${esc(scopeData.responsibleParty || 'TBD')}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="tiny muted italic" style="font-size: 8px; opacity: 0.3;">Not Scoped</div>
+                    `}
                 </div>
             </div>
         </div>
     `;
 };
-
 OL.selectResourceCard = function(resId) {
     // 1. Update Global State
     state.focusedResourceId = resId;
@@ -5612,6 +5726,32 @@ const dependencyHtml = `
     </div>
 `;
 
+  //------- SCOPING STATUS ---------//
+
+  const scopeData = OL.getScopingDataForResource(res.id);
+  let scopeContextHtml = "";
+
+  if (scopeData) {
+      scopeContextHtml = `
+          <div class="card-section" style="background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+              <div>
+                  <label class="tiny muted bold uppercase" style="font-size:9px; display:block; margin-bottom:5px;">Scoping Status</label>
+                  <select class="modal-input tiny" onchange="OL.updateLineItem('${scopeData.id}', 'status', this.value)">
+                      ${['Do Now', 'Do Later', "Don't Do", 'Done'].map(s => `<option value="${s}" ${scopeData.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                  </select>
+              </div>
+              <div>
+                  <label class="tiny muted bold uppercase" style="font-size:9px; display:block; margin-bottom:5px;">Responsible Party</label>
+                  <select class="modal-input tiny" onchange="OL.updateLineItem('${scopeData.id}', 'responsibleParty', this.value)">
+                      <option value="Sphynx" ${scopeData.responsibleParty === 'Sphynx' ? 'selected' : ''}>Sphynx</option>
+                      <option value="Client" ${scopeData.responsibleParty === 'Client' ? 'selected' : ''}>Client</option>
+                      <option value="Joint" ${scopeData.responsibleParty === 'Joint' ? 'selected' : ''}>Joint</option>
+                  </select>
+              </div>
+          </div>
+      `;
+  }
+
   // Inside OL.openResourceModal...
   const activeTab = state.v2?.activeCommentTab || 'internal';
   const isGuest = !!window.IS_GUEST;
@@ -5782,6 +5922,7 @@ const dependencyHtml = `
     else {
         // --- MODE D: STANDARD FULL RESOURCE VIEW ---
        bodyContent =`${roundInputHtml}
+          ${scopeContextHtml}
           ${hierarchyHtml}
           ${adminPricingHtml}
           ${dependencyHtml}
@@ -8985,10 +9126,7 @@ OL.initWBMotion = function(e, id) {
     const res = resources.find(r => String(r.id) === String(id));
     if (!res) return;
 
-    // 🚩 1. SHARED STATE (Top of scope)
     let isResizingLane = false; 
-    let activeResizingStage = null;
-
     let pendingWidthChange = null;
     let pendingStageIdx = null;
 
@@ -9007,7 +9145,6 @@ OL.initWBMotion = function(e, id) {
     if (el) el.classList.add('is-dragging-ghost');
 
     const onMove = (mE) => {
-        // 1. Move the Dot (DOM only)
         indicator.style.left = `${mE.clientX - 7}px`;
         indicator.style.top = `${mE.clientY - 7}px`;
         indicator.style.position = 'fixed';
@@ -9015,7 +9152,6 @@ OL.initWBMotion = function(e, id) {
         const rect = canvas.getBoundingClientRect();
         const mouseCanvasX = (mE.clientX - rect.left) / zoom;
 
-        // 2. Visual-only Lane Resizing
         if (mE.clientY < 150) { 
             let accX = 40; 
             const laneElements = document.querySelectorAll('.v2-lane-section:not(.start-trigger)');
@@ -9028,9 +9164,10 @@ OL.initWBMotion = function(e, id) {
                 
                 if (isNearLine) {
                     isResizingLane = true;
+                    pendingStageIdx = idx;
                     const newWidth = Math.max(300, mouseCanvasX - accX);
-                    laneEl.style.width = `${newWidth}px`; // Visual update
-                    // NO SYNC HERE
+                    pendingWidthChange = newWidth;
+                    laneEl.style.width = `${newWidth}px`;
                 }
                 accX += w;
             });
@@ -9038,150 +9175,176 @@ OL.initWBMotion = function(e, id) {
     };
 
     const onUp = async (uE) => {
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    
-    indicator.style.display = 'none';
-    if (el) el.classList.remove('is-dragging-ghost');
-
-    // 💾 COMMIT LANE RESIZE
-    if (isResizingLane && pendingStageIdx !== null) {
-        await OL.updateAndSync(() => {
-            // ONLY touch the data object here, once.
-            stages[pendingStageIdx].width = pendingWidthChange;
-        });
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
         
-        // Reset trackers
-        pendingWidthChange = null;
-        pendingStageIdx = null;
-        isResizingLane = false;
-        OL.renderVisualizer();
-        return;
-    }
-    // 🎯 1. UNIFIED HIT DETECTION
-    el.style.display = 'none';
-    const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
-    el.style.display = 'block';
+        indicator.style.display = 'none';
+        if (el) el.classList.remove('is-dragging-ghost');
 
-    const targetCardEl = dropPointEl?.closest('.v2-node-card');
-    const isOverTopShelf = dropPointEl?.closest('#global-shelf');
-    const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
-
-    // 🚀 2. SCENARIO A: THE MERGE (Dropped directly ON a card)
-    if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
-        const targetId = targetCardEl.id.replace('v2-node-', '');
-        const targetRes = resources.find(r => String(r.id) === String(targetId));
-
-        if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
+        if (isResizingLane && pendingStageIdx !== null) {
             await OL.updateAndSync(() => {
-                // deep clone steps to avoid circular references
-                const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
-                targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
-                
-                const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
-                if (resIdx > -1) resources.splice(resIdx, 1);
-                
-                OL.refreshFamilyNaming(targetRes, resources);
-                OL.syncLogicPorts();
+                stages[pendingStageIdx].width = pendingWidthChange;
             });
+            isResizingLane = false;
             OL.renderVisualizer();
             return;
         }
-    }
 
-    // 📥 SCENARIO B: SHELF / WORKBENCH REORDERING
-    if (isOverTopShelf || isOverWorkbench) {
-        console.log("📍 Drop detected over Shelf/Workbench");
+        el.style.display = 'none';
+        const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+        el.style.display = 'block';
 
-        // 🚀 THE FIX: Re-resolve these elements because they might not be in scope
-        const shelfContents = document.getElementById('shelf-contents');
-        const workbenchContents = document.getElementById('workbench-contents');
-        
-        const container = isOverTopShelf ? shelfContents : workbenchContents;
-        
-        if (!container) {
-            console.error("❌ Drop Container not found in DOM");
+        const stepRow = dropPointEl?.closest('.v2-step-item');
+        const targetCardEl = dropPointEl?.closest('.v2-node-card');
+        const isOverTopShelf = dropPointEl?.closest('#global-shelf');
+        const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
+
+        if (stepRow && targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
+            const targetId = targetCardEl.id.replace('v2-node-', '');
+            const targetRes = resources.find(r => String(r.id) === String(targetId));
+            const stepIdAttr = stepRow.getAttribute('data-step-id');
+            const stepUniqueId = stepIdAttr ? stepIdAttr.split('-').pop() : null;
+            const step = (targetRes.steps || []).find(s => String(s.id) === String(stepUniqueId));
+
+            if (step) {
+                if (!step.links) step.links = [];
+                step.links.push({ id: res.id, name: res.name, type: res.type });
+                await OL.persist();
+                OL.renderVisualizer();
+                return;
+            }
+        }
+
+        if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}` && !isOverTopShelf && !isOverWorkbench) {
+            const targetId = targetCardEl.id.replace('v2-node-', '');
+            const targetRes = resources.find(r => String(r.id) === String(targetId));
+
+            if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
+                await OL.updateAndSync(() => {
+                    const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
+                    targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
+                    const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
+                    if (resIdx > -1) resources.splice(resIdx, 1);
+                    OL.refreshFamilyNaming(targetRes, resources);
+                    OL.syncLogicPorts();
+                });
+                OL.renderVisualizer();
+                return;
+            }
+        }
+
+        if (isOverTopShelf || isOverWorkbench) {
+            const shelfContents = document.getElementById('shelf-contents');
+            const workbenchContents = document.getElementById('workbench-contents');
+            const container = isOverTopShelf ? shelfContents : workbenchContents;
+            if (!container) return;
+
+            const siblings = Array.from(container.querySelectorAll('.v2-node-card:not(.is-dragging-ghost)'));
+            let targetResId = null;
+            for (let i = 0; i < siblings.length; i++) {
+                const rect = siblings[i].getBoundingClientRect();
+                const isBefore = isOverTopShelf ? (uE.clientX < rect.left + rect.width / 2) : (uE.clientY < rect.top + rect.height / 2);
+                if (isBefore) {
+                    targetResId = siblings[i].id.replace('v2-node-', '');
+                    break;
+                }
+            }
+
+            await OL.updateAndSync(() => {
+                const currentData = OL.getCurrentProjectData();
+                const liveResources = currentData.resources; 
+                const draggedIdx = liveResources.findIndex(r => String(r.id) === String(res.id));
+                if (draggedIdx === -1) return;
+                const [movedItem] = liveResources.splice(draggedIdx, 1);
+                movedItem.isGlobal = true;
+                movedItem.isTopShelf = !!isOverTopShelf;
+                movedItem.stageId = null;
+                delete movedItem.coords;
+                if (targetResId) {
+                    const insertIdx = liveResources.findIndex(r => String(r.id) === String(targetResId));
+                    liveResources.splice(insertIdx, 0, movedItem);
+                } else {
+                    liveResources.push(movedItem);
+                }
+            });
+            OL.renderVisualizer();
             return;
-        }
-
-        const siblings = Array.from(container.querySelectorAll('.v2-node-card:not(.is-dragging-ghost)'));
-
-        let targetResId = null;
-
-        for (let i = 0; i < siblings.length; i++) {
-            const rect = siblings[i].getBoundingClientRect();
-            // X check for shelf, Y check for workbench
-            const isBefore = isOverTopShelf 
-                ? (uE.clientX < rect.left + rect.width / 2)
-                : (uE.clientY < rect.top + rect.height / 2);
-
-            if (isBefore) {
-                targetResId = siblings[i].id.replace('v2-node-', '');
-                break;
+        } else {
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = (uE.clientX - rect.left) / zoom;
+            const canvasY = (uE.clientY - rect.top) / zoom;
+            res.coords = { x: Math.round(canvasX - 110), y: Math.round(canvasY - 20) };
+            res.isGlobal = false;
+            res.isTopShelf = false;
+            let accX = 40; 
+            for (let s of stages) {
+                const w = s.width || 320;
+                if (canvasX >= accX && canvasX <= accX + w) {
+                    res.stageId = s.id;
+                    res._col = Math.floor(Math.max(0, canvasX - accX) / 300);
+                    break;
+                }
+                accX += w;
             }
         }
 
-        // 🚀 THE FIX: Re-resolve the actual live array inside the sync block
-        await OL.updateAndSync(() => {
-            const currentData = OL.getCurrentProjectData();
-            // Use currentData.resources to ensure we have the live pointer
-            const liveResources = currentData.resources; 
-
-            const draggedIdx = liveResources.findIndex(r => String(r.id) === String(res.id));
-            if (draggedIdx === -1) return;
-
-            const [movedItem] = liveResources.splice(draggedIdx, 1);
-            
-            movedItem.isGlobal = true;
-            movedItem.isTopShelf = !!isOverTopShelf;
-            movedItem.stageId = null;
-            delete movedItem.coords;
-
-            if (targetResId) {
-                const insertIdx = liveResources.findIndex(r => String(r.id) === String(targetResId));
-                liveResources.splice(insertIdx, 0, movedItem);
-                console.log(`♻️ Reordered: Moved before ${targetResId} at index ${insertIdx}`);
-            } else {
-                liveResources.push(movedItem);
-                console.log("♻️ Reordered: Appended to end");
-            }
+        await OL.updateAndSync(() => { 
+            OL.autoAlignNodes(false);
+            OL.drawConnections();
         });
-
         OL.renderVisualizer();
-        return;
-    }
-    // 📍 4. SCENARIO C: STANDARD CANVAS MOVE
-    else {
-        res.isGlobal = false;
-        res.isTopShelf = false;
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = (uE.clientX - rect.left) / zoom;
-        const canvasY = (uE.clientY - rect.top) / zoom;
-        
-        res.coords = { x: Math.round(canvasX - 110), y: Math.round(canvasY - 20) };
-
-        let accX = 40; 
-        for (let s of stages) {
-            const w = s.width || 320;
-            if (canvasX >= accX && canvasX <= accX + w) {
-                res.stageId = s.id;
-                res._col = Math.floor(Math.max(0, canvasX - accX) / 300);
-                break;
-            }
-            accX += w;
-        }
-    }
-
-    // 💾 5. FINAL PERSIST
-    await OL.updateAndSync(() => { 
-        OL.autoAlignNodes(false);
-        OL.drawConnections();
-    });
-    OL.renderVisualizer();
-};
+    };
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+};
+
+OL.handleCanvasDrop = async function(e) {
+    e.preventDefault();
+    const canvas = document.getElementById('v2-canvas');
+    if (!canvas) return;
+    
+    const zoom = state.v2.zoom || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    let dragId = null;
+    try {
+        const jsonData = e.dataTransfer.getData('application/json');
+        dragId = jsonData ? JSON.parse(jsonData).id : null;
+    } catch(err) {
+        dragId = e.dataTransfer.getData('text/plain');
+    }
+
+    if (dragId) {
+        const data = OL.getCurrentProjectData();
+        const res = data.resources.find(r => String(r.id) === String(dragId));
+        
+        if (res) {
+            res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
+            res.isGlobal = false;
+            res.isTopShelf = false;
+            res.isDeleted = false;
+
+            const stages = data.stages || [];
+            let accX = 40;
+            for (let s of stages) {
+                const w = s.width || 320;
+                if (x >= accX && x <= accX + w) {
+                    res.stageId = s.id;
+                    res._col = Math.floor(Math.max(0, x - accX) / 300);
+                    break;
+                }
+                accX += w;
+            }
+
+            await OL.persist();
+            await OL.autoAlignNodes(false);
+            OL.renderVisualizer();
+        }
+    }
 };
 
 OL.autoAlignNodes = async function() {
@@ -9376,6 +9539,11 @@ OL.renderVisualizer = function() {
                         <option value="">All Scoped Status</option>
                         <option value="scoped">Scoped ($)</option>
                         <option value="unscoped">Unscoped</option>
+                    </select>
+
+                    <select id="filter-data-tag" class="tiny-select" onchange="OL.syncCanvasFilters()">
+                        <option value="">All Data Tags</option>
+                        ${state.master.datapoints.filter(d => !d.isBundle).map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
                     </select>
                 </div>
             </div>
@@ -9686,12 +9854,6 @@ OL.renderVisualizer = function() {
                                     ${esc(s.name || 'New Step')}
                                 </span>
 
-                                <div style="display:flex; gap:4px; align-items:center;">
-                                    ${(s.links || []).length > 0 ? `<span class="tiny-badge" title="Links attached">🔗</span>` : ''}
-                                    ${(s.datapoints || []).length > 0 ? `<span class="tiny-badge purple" title="Data mapped">🏷️</span>` : ''}
-                                    <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
-                                </div>
-
                                 <div style="display:flex; gap:3px; flex-direction: column; flex-shrink: 0; justify-content: flex-end;">
                                     ${outHasLoop ? `<span class="step-logic-icon loop" title="${esc(outTooltip)}">⟳</span>` : ''}
                                     ${outHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">λ</span>` : ''}
@@ -9762,6 +9924,12 @@ OL.renderVisualizer = function() {
         }
     });
 
+    const viewport = document.getElementById('v2-canvas-scroll-wrap');
+    if (viewport) {
+        viewport.ondragover = (e) => e.preventDefault();
+        viewport.ondrop = (e) => OL.handleCanvasDrop(e);
+    }
+
     OL.renderFocusControls();
     // --- 🚀 5. FINAL PASS ---
     if (OL.state.v2.pan) {
@@ -9795,18 +9963,34 @@ OL.handleSidebarSearch = function(e) {
 OL.getStepIcon = function(step) {
     if (!step.links || step.links.length === 0) return '•';
     
-    // Check linked assets for types
-    const hasEmail = step.links.some(l => OL.getResourceById(l.id)?.type?.toLowerCase() === 'email');
-    const hasForm = step.links.some(l => OL.getResourceById(l.id)?.type?.toLowerCase() === 'form');
-    const hasMeeting = step.links.some(l => OL.getResourceById(l.id)?.type?.toLowerCase() === 'event');
-    const hasGuide = step.links.some(l => l.type === 'guide');
+    const linked = step.links.map(l => ({
+        ...l,
+        res: OL.getResourceById(l.id)
+    }));
 
-    if (hasEmail) return '✉️';
-    if (hasForm) return '📄';
-    if (hasMeeting) return '📅';
-    if (hasGuide) return '📖';
+    const check = (str) => {
+        const s = str.toLowerCase();
+        return linked.some(l => 
+            l.type?.toLowerCase().includes(s) || 
+            l.res?.type?.toLowerCase().includes(s) ||
+            l.name?.toLowerCase().includes(s)
+        );
+    };
+
+    if (check('email')) return '✉️';
+    if (check('form')) return '📄';
+    if (check('event') || check('scheduler')) return '📅';
+    if (check('guide') || check('sop')) return '📖';
+    if (check('signature') || check('sig-')) return '🖋️';
     
-    return '🔗'; // Generic link icon if none of the above match
+    if (check('zap') || check('automation')) return '⚡';
+    if (check('database') || check('sheet')) return '📊';
+    if (check('legal') || check('contract')) return '⚖️';
+    if (check('folder') || check('file')) return '📁';
+    if (check('video') || check('recording')) return '🎥';
+    if (check('payment') || check('invoice')) return '💰';
+
+    return '🔗'; 
 };
 
 OL.renderWorkbenchTabs = function() {
@@ -9817,15 +10001,13 @@ OL.renderWorkbenchTabs = function() {
         { id: 'data', label: '🏷️ Data', color: '#a78bfa' }
     ];
 
-    const currentSearch = document.getElementById('sidebar-search-input')?.value || "";
-
     return `
         <div class="workbench-header" style="background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--line);">
             <div class="workbench-tab-bar" style="display: flex;">
                 ${tabs.map(t => `
                     <div class="wb-tab ${state.ui.activeWorkbenchTab === t.id ? 'active' : ''}" 
                         onclick="OL.switchWorkbenchTab('${t.id}')" 
-                        style="flex:1; padding: 10px 5px; text-align:center; font-size:9px; font-weight:bold; cursor:pointer; 
+                        style="flex:1; padding: 12px 5px; text-align:center; font-size:9px; font-weight:bold; cursor:pointer; 
                                 border-bottom: 2px solid ${state.ui.activeWorkbenchTab === t.id ? t.color : 'transparent'};
                                 color: ${state.ui.activeWorkbenchTab === t.id ? t.color : 'var(--text-dim)'};">
                         ${t.label.toUpperCase()}
@@ -9833,31 +10015,62 @@ OL.renderWorkbenchTabs = function() {
                 `).join('')}
             </div>
             
-            <div class="sidebar-search-wrap" style="padding: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+            <div class="sidebar-search-wrap" style="padding: 10px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 8px;">
                 <input type="text" id="sidebar-search-input" 
-                  placeholder="Filter ${state.ui.activeWorkbenchTab}..." 
+                  placeholder="Search ${state.ui.activeWorkbenchTab}..." 
                   value="${state.ui.sidebarSearchQuery || ''}"
                   oninput="OL.handleSidebarSearch(event)"
                   autocomplete="off"
-                  style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); color: white; padding: 5px 10px; border-radius: 4px; font-size: 11px;">
+                  style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); color: white; padding: 6px 10px; border-radius: 4px; font-size: 11px;">
+                
+                <div id="sidebar-sub-filter-container">
+                    ${state.ui.activeWorkbenchTab === 'assets' ? OL.renderSidebarTypeFilter() : ''}
+                </div>
             </div>
         </div>
     `;
 };
 
-OL.switchWorkbenchTab = function(tabId) {
-    // 1. Update State
-    state.ui.activeWorkbenchTab = tabId;
+if (state.v2.hideLinkedAssets === undefined) state.v2.hideLinkedAssets = false;
+
+OL.renderSidebarTypeFilter = function() {
+    const activeTab = state.ui.activeWorkbenchTab;
+    const hideLinked = state.v2.hideLinkedAssets;
     
-    // 2. Re-render the Tabs (to move the highlight/underline)
-    const header = document.querySelector('.workbench-header');
-    if (header) {
-        // We replace the header's outerHTML with a fresh version of itself
-        header.outerHTML = OL.renderWorkbenchTabs();
+    // 🛡️ Guard: Only show filters for Assets and Guides
+    if (activeTab !== 'assets' && activeTab !== 'guides') return '';
+
+    // Only show the type dropdown if we are on the Assets tab
+    let typeDropdown = '';
+    if (activeTab === 'assets') {
+        const data = OL.getCurrentProjectData();
+        const resources = data.resources || [];
+        const types = [...new Set(resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type)).map(r => r.type))].filter(Boolean).sort();
+        
+        typeDropdown = `
+            <select class="modal-input tiny" 
+                    onchange="state.v2.trayTypeFilter = this.value; OL.renderWorkbenchItemsOnly();" 
+                    style="margin:0; background: rgba(0,0,0,0.2); border-color: var(--line); font-size: 10px; color: white; width: 100%;">
+                <option value="All">All Asset Types</option>
+                ${types.map(t => `<option value="${t}" ${state.v2.trayTypeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+        `;
     }
-    
-    // 3. Re-render the Items (to show the new list)
-    OL.renderWorkbenchItemsOnly();
+
+    // 🏗️ The Wrapper: This now returns for both Assets AND Guides
+    return `
+        <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 4px;">
+            ${typeDropdown}
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; padding-left: 2px;">
+                <input type="checkbox" ${hideLinked ? 'checked' : ''} 
+                       onchange="state.v2.hideLinkedAssets = this.checked; OL.renderWorkbenchItemsOnly();"
+                       style="width: 12px; height: 12px; cursor: pointer;">
+                <span class="tiny muted" style="font-size: 9px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">
+                    Hide Already Linked
+                </span>
+            </label>
+        </div>
+    `;
 };
 
 OL.renderWorkbenchItemsOnly = function() {
@@ -9866,81 +10079,143 @@ OL.renderWorkbenchItemsOnly = function() {
 
     const activeTab = state.ui.activeWorkbenchTab || 'flows';
     const query = (state.ui.sidebarSearchQuery || "").toLowerCase();
+    const typeFilter = state.v2.trayTypeFilter || "All";
+    const hideLinked = state.v2.hideLinkedAssets;
+    
     const data = OL.getCurrentProjectData();
-    const resources = (data.resources || []).filter(r => !r.isLocked);
+    const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
-    // 1. FILTER: Tab + "Not on Canvas" + Search Query
+    // 🕵️ BUILD LINKED SET (Scans all steps for Resource AND Guide links)
+    const linkedIds = new Set();
+    resources.forEach(res => {
+        (res.steps || []).forEach(step => {
+            (step.links || []).forEach(link => linkedIds.add(String(link.id)));
+            // Also check explicit guide IDs if your schema stores them separately
+            if (step.howToIds) step.howToIds.forEach(id => linkedIds.add(String(id)));
+        });
+    });
+
     let items = [];
+
     if (activeTab === 'flows') {
-        items = resources.filter(r => 
-            ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords && !r.isTopShelf
-        );
+        items = resources.filter(r => {
+            const isFlow = ['Workflow', 'Zap', 'Email Campaign'].includes(r.type);
+            return isFlow && !r.coords && !r.isTopShelf;
+        });
     } else if (activeTab === 'assets') {
-        items = resources.filter(r => 
-            !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords && !r.isTopShelf
-        );
+        items = resources.filter(r => {
+            const isAsset = !['Workflow', 'Zap', 'Email Campaign'].includes(r.type);
+            const matchesType = (typeFilter === "All" || r.type === typeFilter);
+            const passesLinkFilter = !hideLinked || !linkedIds.has(String(r.id));
+            return isAsset && matchesType && !r.coords && !r.isTopShelf && passesLinkFilter;
+        });
     } else if (activeTab === 'guides') {
-        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])];
+        const masterGuides = state.master.howToLibrary || [];
+        const localGuides = getActiveClient()?.projectData?.localHowTo || [];
+        items = [...masterGuides, ...localGuides].filter(g => {
+            const passesLinkFilter = !hideLinked || !linkedIds.has(String(g.id));
+            return passesLinkFilter;
+        });
     } else if (activeTab === 'data') {
-        items = state.master.datapoints || [];
-    }
-
-    if (query.trim()) {
-        items = items.filter(i => 
-            i.name.toLowerCase().includes(query.trim()) || 
-            (i.key && i.key.toLowerCase().includes(query.trim()))
+        const datapoints = state.master.datapoints || [];
+        
+        // Filter by the sidebar search query
+        items = datapoints.filter(d => 
+            (d.name || "").toLowerCase().includes(query) || 
+            (d.key && d.key.toLowerCase().includes(query))
         );
+
+        workbenchContents.innerHTML = '';
+        
+        if (items.length === 0) {
+            workbenchContents.innerHTML = `
+                <div class="empty-hint p-10">
+                    No datapoints found. <br>
+                    <a href="javascript:void(0)" onclick="OL.renderGlobalDataManager()" class="accent">Manage Library</a>
+                </div>`; // ⬅️ Changed href to an onclick with OL. prefix
+            return;
+        }
+
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'data-tag-draggable';
+            div.draggable = true;
+            
+            // 🎨 Purple tag styling
+            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; color:white; display:flex; justify-content:space-between; align-items:center;`;
+            
+            div.ondragstart = (e) => {
+                e.dataTransfer.setData("application/sphynx-type", "datapoint");
+                e.dataTransfer.setData("application/sphynx-id", item.id);
+            };
+
+            div.innerHTML = `
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span>${item.isBundle ? '📦' : '🏷️'}</span>
+                    <b>${esc(item.name)}</b>
+                </div>
+                <span class="tiny muted" style="opacity:0.4; font-family:monospace;">${item.key || ''}</span>
+            `;
+            workbenchContents.appendChild(div);
+        });
+        return; // Stop execution here for the data tab
     }
 
-    // 2. RENDER
+    // Apply text search
+    if (query.trim()) {
+        items = items.filter(i => (i.name || i.title || "").toLowerCase().includes(query.trim()));
+    }
+
     workbenchContents.innerHTML = '';
     items.forEach(item => {
         const div = document.createElement('div');
+        const icon = OL.getRegistryIcon(item.type);
+        const isGuide = activeTab === 'guides';
+        const isInScope = !!OL.isResourceInScope(item.id);
         
-        if (activeTab === 'data') {
-            // (Keep your Data Tag logic here)
-        } else {
-            const isGuide = activeTab === 'guides';
-            const isInScope = !!OL.isResourceInScope(item.id);
-            
-            div.id = `v2-node-${item.id}`;
-            div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
-            div.draggable = true;
+        div.id = `v2-node-${item.id}`;
+        div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
+        div.draggable = true;
+        div.ondragstart = (e) => {
+            e.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, name: item.name || item.title, type: item.type }));
+        };
 
-            // 🖱️ DRAG START: Ensure dataTransfer is set
-            div.ondragstart = (e) => {
-                const dragData = { id: item.id, name: item.name, type: item.type };
-                e.dataTransfer.setData('application/json', JSON.stringify(dragData));
-                state.draggingResourceId = item.id;
-            };
-
-            // 🎨 RENDER THE SIDEBAR CARD (With Type & Scope)
-            div.innerHTML = `
-                <div class="v2-node-header">
-                    <div class="header-row-content">
-                        <div style="display: flex; flex-direction: column; gap: 2px;">
-                            <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
-                        </div>
-                        
-                        <div class="header-badges-wrap" style="display: flex; flex-direction: row; margin-left: auto;">
-                            <small class="tiny muted uppercase type-badge">
-                                    ${esc(item.type || 'Resource')}
-                            </small>
-                            <div class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
-                                 title="Right Click: Toggle Scoping"
-                                 onmousedown="event.stopPropagation();" 
-                                 oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${item.id}', ${isInScope}); OL.renderWorkbenchItemsOnly();"
-                                 style="cursor: pointer; user-select: none;">
-                                $
-                            </div>
+        div.innerHTML = `
+            <div class="v2-node-header">
+                <div class="header-row-content">
+                    <span style="margin-right: 8px; font-size: 14px;">${isGuide ? '📖' : icon}</span>
+                    <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
+                        <b class="res-name-text" style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(item.name || item.title)}</b>
+                    </div>
+                    <div class="header-badges-wrap" style="display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0;">
+                        ${!isGuide ? `<small class="tiny muted uppercase type-badge" style="font-size: 8px; opacity: 0.6;">${esc(item.type)}</small>` : ''}
+                        <div class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
+                             oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${item.id}', ${isInScope}); OL.renderWorkbenchItemsOnly();">
+                             $
                         </div>
                     </div>
                 </div>
-            `;
-        }
+            </div>
+        `;
         workbenchContents.appendChild(div);
     });
 };
+
+OL.switchWorkbenchTab = function(tabId) {
+    state.ui.activeWorkbenchTab = tabId;
+    
+    const filterContainer = document.getElementById('sidebar-sub-filter-container');
+    if (filterContainer) {
+        filterContainer.innerHTML = OL.renderSidebarTypeFilter();
+    } else {
+        const header = document.querySelector('.workbench-header');
+        if (header) header.outerHTML = OL.renderWorkbenchTabs();
+    }
+    
+    OL.renderWorkbenchItemsOnly();
+};
+
+OL.switchWorkbenchTab(state.ui.activeWorkbenchTab);
 
 // DRAG ASSET/GUIDE
 OL.handleAssetDragStart = function(e, id, type) {
@@ -9962,22 +10237,31 @@ OL.handleUniversalDropOnStep = async function(e, resId, stepId) {
     const type = e.dataTransfer.getData("application/sphynx-type");
     const id = e.dataTransfer.getData("application/sphynx-id");
 
-    const res = OL.getResourceById(resId);
-    const step = res?.steps?.find(s => s.id === stepId);
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    
     if (!step) return;
 
     await OL.updateAndSync(() => {
-        if (type === 'asset' || type === 'guide') {
-            if (!step.links) step.links = [];
-            const linkedObj = (type === 'asset') ? OL.getResourceById(id) : OL.getGuideById(id);
-            step.links.push({ id, name: linkedObj.name, type });
-        } 
-        else if (type === 'datapoint') {
+        if (type === 'datapoint') {
             if (!step.datapoints) step.datapoints = [];
             const dp = state.master.datapoints.find(d => d.id === id);
-            step.datapoints.push(dp);
-            // Optionally append {key} to description
-            step.description = (step.description || "") + " " + dp.key;
+            
+            if (dp.isBundle) {
+                // Expand bundle and add all children
+                dp.childIds.forEach(childId => {
+                    const child = state.master.datapoints.find(c => c.id === childId);
+                    if (child && !step.datapoints.some(existing => existing.id === child.id)) {
+                        step.datapoints.push(child);
+                    }
+                });
+            } else {
+                if (!step.datapoints.some(existing => existing.id === id)) {
+                    step.datapoints.push(dp);
+                }
+            }
+            console.log(`🏷️ Mapped data to step: ${step.name}`);
         }
     });
 
@@ -11727,6 +12011,23 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                     ${step.logic.out.map((l, i) => OL.renderLogicBlock(resId, step.id, 'out', i, l, allOptions)).join('')}
                     <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')">+ Add Output Rule</button>
                 </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">🏷️ DATA REQUIREMENTS (INPUT/OUTPUT)</label>
+                    <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
+                        ${step.datapoints && step.datapoints.length > 0 
+                            ? OL.renderDataTagPills(resId, step.id, step.datapoints) 
+                            : '<div class="tiny muted italic">No data mapped. Drag tags from sidebar to add.</div>'}
+                    </div>
+                    
+                    <div class="data-drop-zone-hint" 
+                        ondragover="event.preventDefault(); this.style.borderColor='var(--accent)';" 
+                        ondragleave="this.style.borderColor='transparent';"
+                        ondrop="OL.handleUniversalDropOnStep(event, '${resId}', '${step.id}')"
+                        style="border: 1px dashed transparent; border-radius: 4px; padding: 5px; text-align: center; transition: 0.2s;">
+                        <small class="tiny muted" style="font-size: 8px;">Drop tags here to map</small>
+                    </div>
+                </div>
             </div>
         `;
         return;
@@ -12256,12 +12557,13 @@ OL.syncCanvasFilters = function() {
     const typeF = document.getElementById('filter-type')?.value || "";
     const appF = document.getElementById('filter-app')?.value || "";
     const assigneeF = document.getElementById('filter-assignee')?.value || "";
+    const dataTagF = document.getElementById('filter-data-tag')?.value || "";
 
     state.canvasMatches = [];
     const nodes = document.querySelectorAll('.v2-node-card');
     
     // 💡 Determine if we are actively filtering right now
-    const isFiltering = !!(query || statusF || typeF || appF || assigneeF);
+    const isFiltering = !!(query || statusF || typeF || appF || assigneeF || dataTagF);
 
     nodes.forEach(node => {
         const resId = node.id.replace('v2-node-', '');
@@ -12297,8 +12599,13 @@ OL.syncCanvasFilters = function() {
         if (statusF === "scoped") matchesStatus = isInScope;
         if (statusF === "unscoped") matchesStatus = !isInScope;
 
+        const matchesDataTag = !dataTagF || (res.steps || []).some(s => 
+            (s.datapoints || []).some(d => d.id === dataTagF)
+        );
+
         // --- FINAL DECISION ---
-        const isMatch = matchesQuery && matchesType && matchesApp && matchesAssignee && matchesStatus;
+        const isMatch = matchesQuery && matchesType && matchesApp && matchesAssignee 
+        && matchesStatus && matchesDataTag;
 
         if (isMatch) {
             node.classList.remove('node-dimmed', 'filter-hidden'); // Ensure it's visible
@@ -16505,11 +16812,404 @@ window.addEventListener("hashchange", window.handleRoute);
 
 
 /*======================= DATAPOINTS =============================*/
-// Add to your state.master object
-state.master.datapoints = [
-    { id: 'dp-1', name: 'First Name', key: '{firstName}', category: 'Identity' },
-    { id: 'dp-2', name: 'Email', key: '{email}', category: 'Contact' },
-    { id: 'bundle-contact', name: 'Contact Info', isBundle: true, childIds: ['dp-1', 'dp-2'], category: 'Identity' }
-];
-
 state.ui.activeWorkbenchTab = 'flows'; // Default tab
+
+// Initialize library if missing
+if (!state.master.datapoints) {
+    state.master.datapoints = [
+        { 
+            id: 'dp-naming-house', 
+            name: 'Household Name', 
+            key: '{householdName}', 
+            category: 'Identity',
+            linkToResource: 'Naming Conventions'
+        },
+        { 
+            id: 'dp-naming-folder', 
+            name: 'Folder Name', 
+            key: '{folderName}', 
+            category: 'Architecture',
+            linkToResource: 'Naming Conventions'
+        },
+        { 
+            id: 'dp-hierarchy', 
+            name: 'Folder Location', 
+            key: '{folderPath}', 
+            category: 'Architecture',
+            linkToResource: 'Folder Hierarchy'
+        },
+        { id: 'dp-1', name: 'First Name', key: '{firstName}', category: 'Identity' },
+        { id: 'dp-2', name: 'Last Name', key: '{lastName}', category: 'Identity' },
+        { id: 'dp-3', name: 'Email', key: '{email}', category: 'Contact' },
+        { 
+            id: 'bundle-onboarding', 
+            name: 'Standard Client Info', 
+            isBundle: true, 
+            childIds: ['dp-naming-house', 'dp-1', 'dp-2', 'dp-3'], 
+            category: 'Identity' 
+        }
+    ];
+}
+
+OL.renderGlobalDataManager = function() {
+    OL.registerView(OL.renderGlobalDataManager);
+    const container = document.getElementById("mainContent");
+    if (!container) return;
+
+    const datapoints = (state.master.datapoints || []).filter(d => !d.isBundle);
+    const bundles = (state.master.datapoints || []).filter(d => d.isBundle);
+
+    container.innerHTML = `
+        <div class="section-header" style="margin-bottom: 30px; padding-bottom: 20px;">
+            <div>
+                <h2 style="font-size: 24px; letter-spacing: -0.5px;">🏷️ Data Architecture Manager</h2>
+                <div class="small muted" style="margin-top: 8px;">Standardize fields and drag them into bundles to organize technical requirements.</div>
+            </div>
+            <div class="header-actions">
+                <button class="btn small soft" onclick="OL.addNewDatapoint(true)">+ New Bundle</button>
+                <button class="btn primary" onclick="OL.addNewDatapoint(false)">+ New Field</button>
+            </div>
+        </div>
+
+        <div class="data-manager-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+            
+            <div class="data-column">
+                <div class="column-label" style="padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                    <b class="tiny muted uppercase" style="letter-spacing: 1px;">Individual Master Fields</b>
+                </div>
+                <div id="master-fields-list">
+                    ${datapoints.map(dp => `
+                        <div class="data-list-item draggable-field" 
+                             draggable="true"
+                             ondragstart="OL.handleFieldDragStart(event, '${dp.id}')"
+                             style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: grab;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <span style="opacity:0.3; font-size:10px;">⠿</span>
+                                <div>
+                                    <div class="bold" style="font-size: 13px; color: var(--text-main);">${esc(dp.name)}</div>
+                                    <div class="tiny muted" style="font-family: monospace; opacity:0.5;">${dp.key}</div>
+                                </div>
+                            </div>
+                            <button class="btn-icon-tiny" onclick="OL.openDataDetailModal('${dp.id}')">🔍</button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="data-column">
+                <div class="column-label" style="padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                    <b class="tiny muted uppercase" style="letter-spacing: 1px;">System Bundles</b>
+                </div>
+                <div id="bundles-list">
+                    ${bundles.map(bn => `
+                        <div class="bundle-drop-zone" 
+                             id="bundle-zone-${bn.id}"
+                             ondragover="OL.handleBundleDragOver(event)"
+                             ondragleave="OL.handleBundleDragLeave(event)"
+                             ondrop="OL.handleFieldDropOnBundle(event, '${bn.id}')"
+                             style="margin-bottom: 15px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); transition: 0.2s;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                                <div>
+                                    <div class="bold" style="color: #fbbf24; font-size: 14px;">📦 ${esc(bn.name)}</div>
+                                    <div class="tiny muted">${(bn.childIds || []).length} Fields Linked</div>
+                                </div>
+                                <button class="btn-icon-tiny" onclick="OL.deleteMasterDatapointById('${bn.id}')">×</button>
+                            </div>
+                            <div class="pills-row" style="gap:5px;">
+                                ${(bn.childIds || []).map(cid => {
+                                    const child = datapoints.find(d => d.id === cid);
+                                    return child ? `<span class="pill tiny soft" style="font-size:9px;">${esc(child.name)} <b class="is-clickable" onclick="OL.removeFieldFromBundle('${bn.id}', '${child.id}')" style="margin-left:5px; opacity:0.5;">×</b></span>` : '';
+                                }).join('')}
+                                ${bn.childIds?.length === 0 ? '<div class="tiny muted italic">Drag fields here to group...</div>' : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// Internal Helper for Field Rows
+function renderDataRow(dp, allBundles) {
+    const parentBundles = allBundles.filter(b => (b.childIds || []).includes(dp.id));
+    return `
+        <div class="dp-manager-row" style="padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1;" class="is-clickable" onclick="OL.openDataDetailModal('${dp.id}')">
+                <div class="bold" style="font-size: 13px;">🏷️ ${esc(dp.name)}</div>
+                <div class="tiny muted" style="font-family: monospace;">${dp.key}</div>
+            </div>
+            <div class="pills-row" style="flex: 1; justify-content: flex-end;">
+                ${parentBundles.map(b => `<span class="pill tiny soft" style="font-size:8px;">📦 ${esc(b.name)}</span>`).join('')}
+                <button class="btn-icon-tiny" onclick="OL.openDataDetailModal('${dp.id}')">🔍</button>
+            </div>
+        </div>
+    `;
+}
+
+// Internal Helper for Bundle Rows
+function renderBundleRow(bn, allFields) {
+    const childCount = (bn.childIds || []).length;
+    return `
+        <div class="dp-manager-row" style="padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+            <div style="flex: 1;" class="is-clickable" onclick="OL.openDataDetailModal('${bn.id}')">
+                <div class="bold" style="color: #fbbf24;">📦 ${esc(bn.name)}</div>
+                <div class="tiny muted">${childCount} linked fields</div>
+            </div>
+            <button class="btn tiny soft" onclick="OL.editBundle('${bn.id}')">Map Fields</button>
+        </div>
+    `;
+}
+
+OL.openDataDetailModal = function(id) {
+    const dp = state.master.datapoints.find(d => d.id === id);
+    const client = getActiveClient();
+    if (!dp) return;
+
+    // 🕵️ Find Project Backlinks
+    const usage = [];
+    const projectResources = client?.projectData?.localResources || [];
+    projectResources.forEach(res => {
+        (res.steps || []).forEach(step => {
+            if ((step.datapoints || []).some(d => d.id === id)) {
+                usage.push({ resId: res.id, resName: res.name, stepName: step.name });
+            }
+        });
+    });
+
+    let html = `
+        <div class="modal-head">
+            <div class="modal-title-text">${dp.isBundle ? '📦' : '🏷️'} ${esc(dp.name)}</div>
+        </div>
+        <div class="modal-body">
+            <div class="card-section">
+                <label class="modal-section-label">📉 DATA USAGE & FLOW</label>
+                ${OL.renderDataFlowMiniMap(id)}
+            </div>
+
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label">📍 PROJECT BACKLINKS</label>
+                <div class="dp-manager-list">
+                    ${usage.map(u => `
+                        <div class="pill soft is-clickable" style="margin-bottom:5px; display:flex; justify-content:space-between;" onclick="OL.openResourceModal('${u.resId}')">
+                            <span><b>${esc(u.resName)}</b> › ${esc(u.stepName)}</span>
+                            <span class="tiny accent">View Card ➔</span>
+                        </div>
+                    `).join('') || '<div class="tiny muted italic">Not currently mapped to any project resources.</div>'}
+                </div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+// 🕸️ The Data Flow Mini-Map
+OL.renderDataFlowMiniMap = function(dataId) {
+    const client = getActiveClient();
+    const resources = client?.projectData?.localResources || [];
+    const nodes = [];
+
+    // Find resources that provide or require this data
+    resources.forEach(res => {
+        const isUsed = (res.steps || []).some(s => (s.datapoints || []).some(d => d.id === dataId));
+        if (isUsed) nodes.push(res);
+    });
+
+    return `
+        <div class="mini-map-grid" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; padding:20px; background:rgba(0,0,0,0.2); border-radius:8px;">
+            ${nodes.map((n, i) => `
+                <div class="mini-node muted" style="min-width:100px; border-color:var(--accent);">
+                    <div class="tiny bold">${esc(n.name)}</div>
+                </div>
+                ${i < nodes.length - 1 ? '<div class="mini-arrow">→</div>' : ''}
+            `).join('') || '<div class="tiny muted">No flow detected.</div>'}
+        </div>
+    `;
+};
+
+OL.addNewDatapoint = function(isBundle = false) {
+    const name = prompt(`Enter ${isBundle ? 'Bundle' : 'Field'} Name:`);
+    if (!name) return;
+
+    const id = (isBundle ? 'bundle-' : 'dp-') + Date.now();
+    const key = `{${name.replace(/\s+/g, '').toLowerCase()}}`;
+    
+    state.master.datapoints.push({
+        id: id,
+        name: name,
+        key: isBundle ? null : key,
+        isBundle: isBundle,
+        childIds: isBundle ? [] : null,
+        category: 'General'
+    });
+
+    OL.persist();
+    OL.renderGlobalDataManager();
+};
+
+OL.updateMasterDatapoint = function(index, field, value) {
+    if (value === 'new') {
+        const newCat = prompt("Enter new category name:");
+        value = newCat || 'General';
+    }
+    
+    state.master.datapoints[index][field] = value;
+    OL.persist();
+    OL.renderGlobalDataManager();
+    OL.renderWorkbenchItemsOnly();
+};
+
+OL.deleteMasterDatapointById = function(id) {
+    if (!confirm("Permanently delete this item?")) return;
+    state.master.datapoints = state.master.datapoints.filter(d => d.id !== id);
+    OL.persist();
+    OL.renderGlobalDataManager();
+};
+
+OL.editBundle = function(bundleId) {
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    const allDps = state.master.datapoints.filter(d => !d.isBundle);
+
+    let html = `
+        <div class="modal-head">
+            <div class="modal-title-text">📦 Edit Bundle: ${esc(bundle.name)}</div>
+        </div>
+        <div class="modal-body">
+            <div class="dp-manager-list">
+                ${allDps.map(dp => {
+                    const isChecked = (bundle.childIds || []).includes(dp.id);
+                    return `
+                        <label class="dp-manager-row" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} 
+                                   onchange="OL.toggleDpInBundle('${bundleId}', '${dp.id}')">
+                            <span>${esc(dp.name)}</span>
+                            <span class="tiny muted" style="margin-left:auto;">${dp.category}</span>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+            <button class="btn primary full-width" style="margin-top:20px;" onclick="OL.renderGlobalDataManager()">Back to Library</button>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.toggleDpInBundle = function(bundleId, dpId) {
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    if (!bundle.childIds) bundle.childIds = [];
+    
+    const idx = bundle.childIds.indexOf(dpId);
+    if (idx === -1) bundle.childIds.push(dpId);
+    else bundle.childIds.splice(idx, 1);
+    
+    OL.persist();
+    OL.editBundle(bundleId);
+};
+
+OL.removeStepDatapoint = async function(resId, stepId, idx) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    
+    if (step && step.datapoints) {
+        const dp = step.datapoints[idx];
+        
+        // 🚀 SMART NAV: If it's a naming tag, left-clicking the text jumps to the resource
+        // We only splice if they click the '×' (handled in the HTML string below)
+        step.datapoints.splice(idx, 1);
+        await OL.persist();
+        OL.openInspector(resId, stepId);
+        OL.renderVisualizer();
+    }
+};
+
+OL.renderDataTagPills = function(resId, stepId, datapoints) {
+    const client = getActiveClient();
+    return datapoints.map((dp, idx) => {
+        // Find if this tag points to a specific naming/hierarchy resource
+        let jumpAction = "";
+        if (dp.linkToResource) {
+            const targetRes = (client?.projectData?.localResources || []).find(r => r.name === dp.linkToResource);
+            if (targetRes) {
+                jumpAction = `onclick="event.stopPropagation(); OL.openResourceModal('${targetRes.id}')"`;
+            }
+        }
+
+        return `
+            <div class="pill purple" ${jumpAction} 
+                 style="background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; display:flex; align-items:center; gap:5px; cursor:${jumpAction ? 'pointer' : 'default'}; padding: 4px 8px; border-radius: 4px;">
+                <span style="font-size:10px;">${dp.linkToResource ? '🔗' : '🏷️'} ${esc(dp.name)}</span>
+                <b class="is-clickable" style="opacity:0.5; padding: 0 4px; font-size: 12px;" 
+                   onclick="event.stopPropagation(); OL.removeStepDatapoint('${resId}', '${stepId}', ${idx})">×</b>
+            </div>
+        `;
+    }).join('');
+};
+
+OL.traceDataLineage = function(dataId) {
+    if (!dataId) return OL.setTraceMode(null, null);
+    
+    const client = getActiveClient();
+    const resources = client.projectData.localResources;
+    
+    // Highlight every node that contains this data ID
+    const pathIds = resources.filter(res => 
+        (res.steps || []).some(s => (s.datapoints || []).some(d => d.id === dataId))
+    ).map(r => String(r.id));
+
+    state.v2.activeTrace = { mode: 'data-trace', resId: dataId };
+    state.v2.highlightedIds = pathIds;
+    
+    OL.renderVisualizer();
+};
+
+// 1. Drag Start
+OL.handleFieldDragStart = function(e, fieldId) {
+    e.dataTransfer.setData("application/sphynx-field-id", fieldId);
+    e.currentTarget.style.opacity = '0.4';
+};
+
+// 2. Drag Over (Visual feedback)
+OL.handleBundleDragOver = function(e) {
+    e.preventDefault();
+    const zone = e.currentTarget;
+    zone.style.borderColor = 'var(--accent)';
+    zone.style.background = 'rgba(var(--accent-rgb), 0.05)';
+};
+
+// 3. Drag Leave (Reset feedback)
+OL.handleBundleDragLeave = function(e) {
+    const zone = e.currentTarget;
+    zone.style.borderColor = 'var(--line)';
+    zone.style.background = 'rgba(255,255,255,0.02)';
+};
+
+// 4. Drop (Execute Mapping)
+OL.handleFieldDropOnBundle = async function(e, bundleId) {
+    e.preventDefault();
+    OL.handleBundleDragLeave(e);
+    
+    const fieldId = e.dataTransfer.getData("application/sphynx-field-id");
+    if (!fieldId) return;
+
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    if (bundle) {
+        if (!bundle.childIds) bundle.childIds = [];
+        if (!bundle.childIds.includes(fieldId)) {
+            bundle.childIds.push(fieldId);
+            await OL.persist();
+            OL.renderGlobalDataManager();
+            console.log(`🔗 Linked ${fieldId} to Bundle ${bundleId}`);
+        }
+    }
+};
+
+// 5. Remove Mapping
+OL.removeFieldFromBundle = async function(bundleId, fieldId) {
+    const bundle = state.master.datapoints.find(d => d.id === bundleId);
+    if (bundle && bundle.childIds) {
+        bundle.childIds = bundle.childIds.filter(id => id !== fieldId);
+        await OL.persist();
+        OL.renderGlobalDataManager();
+    }
+};
