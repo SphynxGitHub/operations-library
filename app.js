@@ -79,30 +79,40 @@ OL.state = state;
 
 OL.persist = async function() {
     const statusEl = document.getElementById('cloud-status');
-    if(statusEl) statusEl.innerHTML = "⏳ Waiting...";
+    if(statusEl) statusEl.innerHTML = "⏳ Pending...";
 
-    // Clear the previous timer
-    clearTimeout(window.saveTimeout);
+    // 1. Clear any existing timer to prevent multiple simultaneous writes
+    if (window.saveTimeout) clearTimeout(window.saveTimeout);
 
-    // Wait 1 second after the LAST change before actually writing to Firebase
-    return new Promise((resolve) => {
-        window.saveTimeout = setTimeout(async () => {
-            if(statusEl) statusEl.innerHTML = "☁️ Syncing...";
-            try {
-                const rawState = JSON.parse(JSON.stringify(state));
-                delete rawState.isSaving;
-                delete rawState.adminMode;
-                
-                await db.collection('systems').doc('main_state').set(rawState);
-                
-                if(statusEl) statusEl.innerHTML = "✅ Synced";
-                resolve();
-            } catch (error) {
-                console.error("Write Error:", error);
-                if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
+    // 2. Set the delay
+    window.saveTimeout = setTimeout(async () => {
+        console.log("📤 Attempting Cloud Write...");
+        
+        try {
+            // Create the clean data package
+            const rawState = JSON.parse(JSON.stringify(state));
+            delete rawState.isSaving;
+            delete rawState.adminMode;
+
+            // ⚡ THE ACTUAL WRITE
+            await db.collection('systems').doc('main_state').set(rawState);
+            
+            // ✅ SUCCESS
+            window.lastLocalSave = Date.now();
+            if(statusEl) statusEl.innerHTML = "✅ Synced";
+            console.log("☁️ CLOUD ACKNOWLEDGED: Data is safe.");
+            
+        } catch (error) {
+            // ❌ FAILURE
+            console.error("💀 CLOUD WRITE CRASHED:", error);
+            if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
+            
+            // If we hit the rate limit, alert the user so they stop typing
+            if (error.code === 'resource-exhausted') {
+                alert("Firebase is overloaded. Please wait 30 seconds before typing again.");
             }
-        }, 1500); // 1 second debounce
-    });
+        }
+    }, 1000); // 1 second buffer
 };
 
 OL.sync = function() {
@@ -172,19 +182,22 @@ OL.sync = function() {
 };
 
 OL.updateAndSync = async function(mutationFn) {
-    state.isSaving = true; // Start the shield
+    state.isSaving = true; // Shield on
     
     try {
-        // Run your data change
+        // 1. Run the local data change
         await mutationFn();
-        await OL.persist();
-        console.log("🚀 Update & Sync Success");
+        
+        // 2. Trigger the persist (the actual Firebase write)
+        OL.persist();
+        
+        // Note: We don't log "Success" here anymore because persist is debounced
+        console.log("📥 Local State Updated. Sync Queued...");
     } catch (error) {
-        console.error("💀 FATAL SYNC FAILURE:", error);
-        alert("CRITICAL: Data did not save to cloud. Please refresh.");
+        console.error("❌ Local Mutation Failed:", error);
     } finally {
-        // Only release the shield after a timeout
-        setTimeout(() => { state.isSaving = false; }, 800);
+        // Shield stays on for 2 seconds to prevent the "Bounce Back" ping
+        setTimeout(() => { state.isSaving = false; }, 2000);
     }
 };
 
