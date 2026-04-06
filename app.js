@@ -101,15 +101,23 @@ OL.persist = async function() {
                 console.error("Write Error:", error);
                 if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
             }
-        }, 1000); // 1 second debounce
+        }, 1500); // 1 second debounce
     });
 };
 
 OL.sync = function() {
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         const now = Date.now();
-        if (!doc.exists || state.isSaving || state.v2?.isSyncingLayout || (window.lastLocalRender && (now - window.lastLocalRender < 2000))) return;
-        
+    
+        // 🛡️ THE OVERWRITE PROTECTOR
+        // 1. If we are currently in a "Waiting to Sync" state, IGNORE the cloud.
+        // 2. If we just saved in the last 5 seconds, IGNORE the cloud (prevents the bounce).
+        if (state.isSaving || (window.lastLocalSave && (now - window.lastLocalSave < 5000))) {
+            console.warn("🛡️ Sync Guard: Cloud data rejected to prevent bounce-back.");
+            return; 
+        }
+    
+        if (!doc.exists) return;
         const cloudData = doc.data();
         
         // 🛡️ DATA REPAIR & SEEDING LOGIC
