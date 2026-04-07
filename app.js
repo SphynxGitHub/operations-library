@@ -7343,7 +7343,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     </div>
                     <div class="header-actions">
                         ${!isMaster ? `<button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')">⭐ Push to Vault</button>` : ''}
-                        <button class="btn tiny primary" onclick="OL.printAnalysisPDF('${analysisId}', ${isMaster})">🖨️ Print</button>
+                        <button class="btn tiny primary" onclick="OL.universalPrint('${analysisId}', ${isMaster})">🖨️ Print</button>
                         <button class="btn tiny soft" onclick="OL.addAppToAnalysis('${analysisId}', ${isMaster})">+ Add App</button>
                         <button class="btn tiny danger soft" onclick="document.getElementById('activeAnalysisMatrix').innerHTML='';" style="margin-left:10px;">✕</button>
                     </div>
@@ -7682,15 +7682,13 @@ OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaste
     }
 };
 
-OL.printAnalysisPDF = function(analysisId, isMaster) {
-    const container = document.getElementById("activeAnalysisMatrix");
-    if (!container) return;
-
+OL.universalPrint = function() {
+    // 1. Identify the layout elements
     const shell = document.querySelector('.three-pane-layout');
     const sidebar = document.querySelector('.sidebar');
     const main = document.getElementById('mainContent');
 
-    // 1. Flatten Layout
+    // 2. TEMPORARILY FLATTEN THE UI (The Margin Killer)
     if (shell) {
         shell.style.display = 'block'; 
         shell.style.gridTemplateColumns = 'none';
@@ -7702,35 +7700,29 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
         main.style.width = '100%';
     }
 
-    // 2. Clear out existing placeholders to prevent double-printing
-    container.querySelectorAll('.print-placeholder').forEach(el => el.remove());
-
-    const textareas = container.querySelectorAll('textarea');
+    // 3. Handle Textareas (Convert to readable divs so text isn't cut off)
+    const textareas = document.querySelectorAll('textarea');
     const itemsToRestore = [];
-
     textareas.forEach((ta) => {
         const div = document.createElement('div');
         div.className = 'print-placeholder';
         div.innerText = ta.value;
-        
-        // Style to ensure it looks like a clean document
-        div.setAttribute('style', 'white-space: pre-wrap; width: 100%; display: block; color: black; padding: 10px 0; font-family: inherit; font-size: 11pt;');
+        // Match standard document styling
+        div.setAttribute('style', 'white-space: pre-wrap; width: 100%; display: block; color: black; padding: 5px 0; font-family: inherit; font-size: 11pt;');
         
         ta.parentNode.insertBefore(div, ta);
         
-        // 🚀 THE CRITICAL FIX: Save the value and WIPE the actual textarea 
-        // and set it to display: none to ensure the browser doesn't see it
+        // Save state and hide the actual input box
         itemsToRestore.push({ ta, div, originalVal: ta.value });
-        
         ta.style.display = 'none';
-        ta.value = ""; 
+        ta.value = ""; // Prevent "ghosting" repetition
     });
 
-    // 3. Trigger Print
+    // 4. TRIGGER PRINT
     setTimeout(() => {
         window.print();
 
-        // 4. RESTORE UI
+        // 5. RESTORE EVERYTHING
         if (shell) {
             shell.style.display = ''; 
             shell.style.gridTemplateColumns = '';
@@ -7741,11 +7733,10 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
             main.style.padding = '';
             main.style.width = '';
         }
-        
         itemsToRestore.forEach(({ ta, div, originalVal }) => {
             div.remove();
             ta.style.display = 'block';
-            ta.value = originalVal; // Put the text back so the user doesn't see it disappear
+            ta.value = originalVal;
         });
     }, 500);
 };
@@ -14761,7 +14752,7 @@ window.renderGrandTotals = function(lineItems, baseRate) {
     area.innerHTML = `
     <div class="grand-totals-bar">
       <div class="grand-actions">
-        <button class="btn tiny soft" onclick="window.print()">🖨️ PDF</button>
+        <button class="btn tiny soft" onclick="OL.universalPrint()">🖨️ PDF</button>
         ${isAdmin ? `<button class="btn tiny accent" onclick="OL.openDiscountManager()">🏷️ Adjustments</button>` : ''}
       </div>
 
