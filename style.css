@@ -89,7 +89,7 @@ body.light-mode {
 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-size: 11px;}
 
 html {
-    background-color: var(--bg-main); /* Set once at the highest level */
+    background-color: var(--bg); /* Set once at the highest level */
 }
 
 body {
@@ -133,7 +133,7 @@ body {
     height: auto;
     /* 🚀 THE FIX: Use variables for the gradient colors */
     background: radial-gradient(circle at top right, var(--accent-glow), transparent);
-    background-color: var(--bg-main); /* Ensures the 'transparent' part matches the theme */
+    background-color: var(--bg); /* Ensures the 'transparent' part matches the theme */
     background-attachment: fixed;
     background-size: cover;
     transition: background 0.3s ease;
@@ -322,7 +322,7 @@ body:has(.sidebar.collapsed) #mainContent {
     font-weight: 700;
 }
 
-.public-container { height: 100vh; display: flex; flex-direction: column; background: var(--bg-main); }
+.public-container { height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
 .public-header { 
     padding: 20px 40px; 
     background: var(--panel); 
@@ -676,7 +676,7 @@ body:has(.sidebar.collapsed) #mainContent {
     display: none;
     position: absolute;
     top: 100%;
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 8px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
@@ -1084,7 +1084,7 @@ body:has(.sidebar.collapsed) #mainContent {
 
 .score-input {
     width: 50px;
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid var(--accent);
     color: var(--accent);
     text-align: center;
@@ -1487,7 +1487,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
 
 /* Style for the quick-select emoji grid */
 .emoji-option {
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid var(--panel-border);
     border-radius: 4px;
     padding: 8px;
@@ -1509,7 +1509,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
 
 .modal-select, .modal-textarea {
     width: 100%;
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid var(--panel-border);
     color: var(--text-main);
     padding: 10px 12px;
@@ -1672,7 +1672,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
 }
 
 .search-map-container .modal-input {
-    background-color: var(--bg-main) !important; /* Deeper contrast vs the panel */
+    background-color: var(--bg) !important; /* Deeper contrast vs the panel */
     border: 1px solid var(--panel-border);
     border-radius: 12px; /* Rounded to match the pills */
     padding: 12px 16px; /* Increased internal padding */
@@ -1702,7 +1702,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
 .search-results-overlay {
     margin-top: 10px;
     border-radius: 12px;
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid var(--accent);
     max-height: 160px; 
     overflow-y: auto;
@@ -1796,17 +1796,17 @@ body.fs-mode-active {
     overflow: auto !important; 
     position: relative; 
     display: block; /* Ensure it treats children as a long list */
-    background: var(--bg-main); 
+    background: var(--bg); 
     height: calc(100vh - 60px);
 }
 
 .fs-header {
-    background: var(--bg-main); border-bottom: 1px solid #30363d;
+    background: var(--bg); border-bottom: 1px solid #30363d;
     padding: 15px 30px; display: flex; align-items: center; justify-content: space-between;
 }
 
 .fs-mode-toggle {
-    background: var(--bg-main); padding: 4px; border-radius: 8px; display: flex; gap: 4px;
+    background: var(--bg); padding: 4px; border-radius: 8px; display: flex; gap: 4px;
 }
 
 .fs-mode-btn {
@@ -2172,7 +2172,7 @@ body.fs-mode-active {
 .vis-description-input {
     width: 100%;
     min-height: 80px;
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid var(--panel-border);
     color: var(--text-main);
     font-size: 11px;
@@ -2453,196 +2453,381 @@ body.fs-mode-active {
     display: none !important;
 }
 
-/* ============================================================
-   COMPLETE PRINT CSS - ZERO EXCLUSIONS & MAXIMUM RESOLUTION
-   ============================================================ */
-
 @media print {
-    /* 0. Wipe UI Noise and Artifacts (Using your exact list) */
+    /* 0. Wipe UI Noise and Artifacts */
     .sidebar, .main-header, .app-header, .btn, .card-close, .top-bar, .card-delete-btn, .header-actions,
-    .local-tag, div.cards-grid, .analysis-summary-card, #modal-layer, .fs-mode-toggle, .tiny-select-arrow,
+    .local-tag, div.cards-grid, .analysis-summary-card, #modal-layer, .fs-mode-toggle, .tiny-select
     .btn-vis-add, .vis-node-delete, .vis-header-actions, .vis-detail-toggle, .drag-handle, .vis-idx,
-    .search-map-container, .col-actions, .toolbar, #balance-button, #inspector-panel
-    .sidebar-toggle, .theme-toggle-zone, .divider {
+    .search-map-container, .col-actions, .toolbar, #balance-button, textarea {
         display: none !important;
     }
 
-    /* 1. Page & Margin Setup */
     @page {
         size: auto;
-        margin: 10mm; /* Consistent safe margin on all sides */
+        margin: 10mm; /* Force a consistent safe margin on all sides */
     }
 
-    /* 2. Global Reset - Sharpness & Margin Fix */
-    html, body, .three-pane-layout, #v2-viewport, #v2-main-content, #v2-workspace, .main-content, #mainContent, .scoping-container, #activeAnalysisMatrix {
+    /* 1. Global Reset - Eliminates the Blank Page 1 */
+    html, body, .main-content, #mainContent, .scoping-container, #activeAnalysisMatrix{
         width: 100% !important;
         height: auto !important;
         background: white !important;
         background-color: white !important;
-        border: none !important;
+        border-right: none !important; /* Hides that ghost right border */
         box-shadow: none !important;
         color: black !important;
         overflow: visible !important;
         margin: 0 !important;
         padding: 0 !important;
-        left: 0 !important; /* Reclaims the sidebar gap */
-        position: relative !important;
-        display: block !important;
-        transform: none !important; /* REMOVES BLUR caused by scaling/zooming */
         filter: none !important; 
         backdrop-filter: none !important;
-        -webkit-font-smoothing: antialiased;
-    }
-
-    /* 2. THE MARGIN KILLER - Target the parent layout shell */
-    /* By forcing these to block and static, we ignore the sidebar's width entirely */
-    .three-pane-layout {
         display: block !important;
-        padding: 0 !important;
-        margin: 0 !important;
+        position: relative !important;
     }
 
-    #mainContent {
-      position: absolute !important;
-      left: 0;
-      top: 0;
+    .card {
+        background: transparent;
     }
 
-    /* 3. High Resolution Text & Colors */
+    /* 🛡️ PREVENT CROP */
     * {
-        color: black !important; /* Force black for maximum resolution */
-        background: transparent !important;
-        text-shadow: none !important;
-        box-shadow: none !important;
         overflow: visible !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact;
     }
 
-    /* 4. Matrix Table - CRISP BORDERS */
+    /* 🚀 CRITICAL: Hide the background app entirely so it doesn't push content down */
+    #mainContent .fs-canvas { 
+        display: none !important; 
+    }
+
+    .tiny-select {
+        appearance: none !important;
+        -webkit-appearance: none !important; /* Safari/Chrome */
+        -moz-appearance: none !important;    /* Firefox */
+        background-image: none !important;    /* Removes custom SVG arrows */
+    }
+
+    /* 🎯 Target the internal browser "Arrow" element specifically */
+    .tiny-select::-ms-expand {
+        display: none !important; /* IE/Edge */
+    }
+
+    .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
+        grid-template-columns: 1.5fr .8fr 100px 60px 60px 60px 0px !important;
+        gap: 5px !important;
+        page-break-inside: avoid;
+    }
+
+    .card, .matrix-container {
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 auto !important; /* Center horizontally */
+        width: 99% !important; /* Slightly less than 100 to ensure border visibility */
+        max-width: 99% !important;
+        border: none !important;
+    }
+
+    div.dp-manager-row {
+      border-bottom: 1px solid black !important;
+      margin-bottom: 0;
+      padding: 4pt auto;
+    }
+    
+    .price-input-tiny, input, textarea {
+        border: none !important;
+    }
+
+    textarea, .price-input-tiny {
+        color:  var(--text-main) !important; /* Ensure high contrast for printing */
+    }
+
+    .tiny-select {
+        border: none !important;
+        color:  var(--text-main) !important; /* Ensure high contrast for printing */
+        font-weight: bold;
+    }
+
+    #activeAnalysisMatrix {
+        border-right: none !important;
+    }
+
     .matrix-table {
-        margin: 0 !important;
-        width: 100% !important; 
+        margin: 0 auto !important; /* Center the table */
+        width: 99% !important; 
         table-layout: fixed !important;
         border-collapse: collapse !important;
-        border: 1pt solid black !important;
+        border: 1px solid #d3d3d3 !important;
         font-size: 11.5px;
         page-break-after: auto;
+        
     }
 
+    /* 5. Force Borders on all Cells */
     .matrix-table th, 
     .matrix-table td {
         border: 1px solid #d3d3d3 !important;
-        box-sizing: border-box !important;
+        box-sizing: border-box !important; /* Borders grow inward, not outward */
         padding: 4px !important;
-        color: black !important;
-        background: white !important;
     }
 
-    /* Column Width Balance */
+    /* 6. Refined Column Widths for Balance */
     .matrix-table th:first-child, 
     .matrix-table td:first-child {
-        width: 30% !important;
+        width: 30% !important; /* Reduced to give more breathing room to right side */
         word-break: break-word !important;
     }
 
     .matrix-table th:nth-child(2), 
     .matrix-table td:nth-child(2) {
-        width: 65px !important;
+        width: 65px !important; /* Tighten weight column */
     }
 
-    /* 5. Inputs & Selects (Including tiny-select) */
-    .tiny-select, .price-input-tiny, input, textarea, .matrix-score-input {
-        appearance: none !important;
-        -webkit-appearance: none !important;
-        -moz-appearance: none !important;
-        background-image: none !important;
-        background: transparent !important;
+    /* 7. Input Alignment */
+    .tiny-input, .matrix-score-input {
+        width: 100% !important;
+        text-align: center !important;
         border: none !important;
-        color: black !important;
-        font-weight: bold;
+        background: transparent !important;
         font-family: inherit !important;
         font-size: 10pt !important;
-        width: 100% !important;
-        height: auto !important;
-        overflow: visible !important;
-        margin: 0 !important;
-        padding: 0 !important;
+    }
+
+    /* 8. Categorization Headers - Ensure they span correctly */
+    .category-header-row td {
+        background-color: var(--bg) !important;
+        -webkit-print-color-adjust: exact; /* Ensure background prints */
+    }
+
+    /* 1. Prevent the table footer from repeating on every page */
+    .matrix-table tfoot {
+        display: table-row-group !important;
+    }
+
+    /* 2. Force the footer to stay attached to the bottom of the table data */
+    .matrix-table tfoot tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    /* 3. Ensure the summary box doesn't get split across pages */
+    .executive-summary-wrapper {
+        page-break-inside: avoid;
+        margin-top: 30px;
+    }
+
+    .matrix-final-footer {
+        position: relative;
+        margin-top: 50px;
+        page-break-inside: avoid;
         display: block !important;
-        text-align: inherit !important;
     }
-
-    /* Remove IE/Edge Select Arrows */
-    .tiny-select::-ms-expand {
-        display: none !important;
+    
+    /* Hide the placeholder text during print */
+    .matrix-notes-auto::placeholder {
+        color: transparent;
+        opacity: 0 !important;
     }
-
-    /* 6. Form Fields & Textareas - Full Expansion */
-    textarea, 
-    .matrix-notes-auto,
+    
+    .matrix-notes-auto, 
     .modal-textarea,
     .executive-summary-wrapper textarea {
-        white-space: pre-wrap !important;
-        line-height: 1.4 !important;
         display: block !important;
-    }
-
-    /* 7. Scoping Grid Alignment */
-    .grid-header, .grid-row, .round-header-row, .grand-totals-bar {
-        grid-template-columns: 1.5fr .8fr 100px 60px 60px 60px 0px !important;
-        gap: 5px !important;
-        page-break-inside: avoid;
-        display: grid !important;
-    }
-
-    /* 8. Container & Wrapper Cleanup */
-    .card, .matrix-container, .executive-summary-wrapper, .matrix-card-main {
-        box-shadow: none !important;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        border: none !important;
         padding: 0 !important;
         margin: 0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        border: none !important;
+        line-height: 1.4 !important;
+        white-space: pre-wrap !important; /* This preserves your line breaks */
+        background: transparent !important;
+        color:  var(--text-main) !important; /* Ensure high contrast for printing */
+        -webkit-print-color-adjust: exact;
+    }
+
+    /* Force the parent wrapper to expand to the child's height */
+    .executive-summary-wrapper,
+    .matrix-card-main {
         height: auto !important;
         overflow: visible !important;
+        display: block !important;
         page-break-inside: auto !important;
     }
 
-    .executive-summary-wrapper {
-        margin-top: 30px;
-        page-break-inside: avoid;
-        border: 1px solid black !important;
-        padding: 10px !important;
+    matrix-card-main {
+        zoom: 0.85; /* Adjust this percentage if it still cuts off horizontally */
+        transform-origin: top left;
     }
 
-    /* 9. Logic for Multi-Page Printing */
+    /* Ensure table cells don't constrain the height */
+    .matrix-table td {
+        height: auto !important;
+        vertical-align: top !important;
+    }
+
+    /* 4. Hide scrollbars on the main containers */
+    .matrix-interaction-wrapper,
+    .matrix-card-main,
+    #activeAnalysisMatrix {
+        overflow: visible !important;
+        height: auto !important;
+        display: block !important;
+    }
+
+    /* 5. Hide the actual scrollbar track in Webkit browsers */
+    ::-webkit-scrollbar {
+        display: none !important;
+    }
+
     .print-placeholder {
         display: block !important;
         width: 100% !important;
         height: auto !important;
-        color: black !important;
+        border: none !important;
+        background: transparent !important;
+        color:  var(--text-main) !important;
+        font-family: inherit;
         font-size: 11px;
         line-height: 1.4;
         margin: 0;
         padding: 5px 0;
-        page-break-inside: avoid;
+        page-break-inside: avoid; /* Prevents a single note from splitting mid-sentence if possible */
+        text-align: left;
     }
 
+    /* Executive summary placeholder should be larger */
+    .executive-summary-wrapper .print-placeholder {
+        padding: 10px 0;
+        page-break-inside: auto; /* Allows summary to span pages */
+    }
+
+    /* Hide empty placeholders so they don't take up space */
     .print-placeholder:empty {
         display: none !important;
     }
 
-    /* Hide background artifacts from Flow Map */
-    #mainContent .fs-canvas, #vis-links-layer, .vis-path, .trigger-path { 
-        display: none !important; 
+    /* 2. Force the Workspace to the very top */
+    #workflow-fs-overlay {
+        position: absolute !important; 
+        top: 0 !important;
+        left: 0 !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        background: white !important;
+        box-shadow: none !important;
+        z-index: 9999 !important;
     }
 
-    /* Ensure scrollbars are gone */
-    ::-webkit-scrollbar {
+    /* 🚀 3. HIDE ALL ARROWS */
+    #vis-links-layer, .vis-path, .trigger-path {
         display: none !important;
     }
-}
 
+    .vis-workspace {
+        position: relative !important;
+        display: block !important;
+        background: white !important;
+        padding: 5mm 0 !important;
+        margin: 0 auto .5cm auto !important;
+        width: 100% !important;
+    }
+
+    .vis-trigger-row {
+        display: flex !important;
+        justify-content: center !important;
+        gap: 5mm !important;
+        margin-bottom: 0 !important; /* This controls space below triggers */
+    }
+
+    .vis-vertical-stack {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 0 !important;
+        margin-bottom: 0;
+    }
+
+    .vis-expanded-editor, 
+    .module-nested-steps, 
+    .vis-outcomes-area,
+    .edit-panel-wrap {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .vis-input-ghost, .modal-textarea, .modal-input {
+        border: none !important;
+        padding: 0 !important;
+        background: transparent !important;
+        resize: none !important;
+        overflow: visible !important;
+        color: var(--text-main) !important;
+        font-size: 10pt !important;
+    }
+
+    /* 🚀 4. REFINED CARDS - Centered and Slimmed Down */
+    .vis-node {
+        border: 1px solid #000 !important; 
+        border-radius: 10px; 
+        background: #fff !important;
+        box-shadow: none !important; 
+        filter: none !important; 
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        
+        /* Centering and Width control */
+        margin: 0 auto .5cm auto !important; 
+        width: 50% !important; /* Narrower for a manual/book look */
+        max-width: 500px !important; 
+        position: relative !important;
+    }
+
+    .vis-node-header {
+        background: #f5f5f5 !important;
+        border-radius: 10px 10px 0 0; 
+        border-bottom: 1pt solid #000 !important;
+        -webkit-print-color-adjust: exact;
+    }
+
+    /* 5. TIGHTEN INTERNAL DATA */
+    .vis-node-body {
+        padding: 10px 15px !important;
+        font-size: 10pt;
+        font-family: inherit;
+    }
+
+    .vis-port {
+        padding: 4px 0 !important;
+        border-top: 0.5pt solid #eee !important;
+    }
+
+    .vis-outcome-chip {
+        padding: 2px 6px !important;
+        border: 0.5pt solid #ccc !important;
+        background: transparent !important;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .vis-outcome-label-text {
+        display: block !important;
+        font-size: 10pt !important;
+        text-align: right !important;
+    }
+
+    .step-group, .vis-node {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        border: 1pt solid #eee !important;
+        margin-bottom: 5pt;
+    }
+
+}
 /*=========== GLOBAL MAP ==============*/
 /*==================================================================
   1. CORE LAYOUT (Screen Fitting)
@@ -3223,7 +3408,7 @@ body.is-visualizer #mainContent {
     left: 0;
     width: 140px;
     min-width: 140px;
-    background: var(--bg-main);
+    background: var(--bg);
     z-index: 40;
     display: flex;
     align-items: center;
@@ -3668,7 +3853,7 @@ ARROWS
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--bg-main);
+    background: var(--bg);
     border: 1px solid var(--accent);
     border-radius: 4px;
     width: 22px;
@@ -3827,7 +4012,7 @@ ARROWS
 ==================================================================*/
 .pane-inventory-split {
     height: 300px;
-    background: var(--bg-main);
+    background: var(--bg);
     border-top: 2px solid var(--accent);
     overflow-y: auto;
 }
@@ -4741,7 +4926,7 @@ path.is-loop-path {
 
 /* 📦 3. THE GLOBAL SHELF FIX (Prevents Overlap) */
 .global-shelf-container {
-    flex-shrink: 0;  z-index: 101; margin: 70px 20px 10px 20px !important;  background: var(--bg-main); 
+    flex-shrink: 0;  z-index: 101; margin: 70px 20px 10px 20px !important;  background: var(--bg); 
     border: 2px dashed var(--accent-glow);
 }
 
@@ -4939,16 +5124,3 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 }
 
 /*===================Sidebar Menu ===============*/
-#module-selection {
-  display: flex;
-  flex-direction: row;
-}
-
-/*=================== Data Architecture========-*/
-.data-field-card:hover {
-    background: rgba(255,255,255,0.06) !important; border-color: var(--accent) !important; transform: translateX(2px);
-}
-
-.data-field-card .card-delete-btn:hover {
-    color: var(--danger) !important; opacity: 1 !important;
-}
