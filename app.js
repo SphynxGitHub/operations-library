@@ -7686,44 +7686,68 @@ OL.printAnalysisPDF = function(analysisId, isMaster) {
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
-    // 1. Cleanup any existing placeholders just in case
+    const shell = document.querySelector('.three-pane-layout');
+    const sidebar = document.querySelector('.sidebar');
+    const main = document.getElementById('mainContent');
+
+    // 1. Flatten Layout
+    if (shell) {
+        shell.style.display = 'block'; 
+        shell.style.gridTemplateColumns = 'none';
+    }
+    if (sidebar) sidebar.style.display = 'none';
+    if (main) {
+        main.style.marginLeft = '0';
+        main.style.padding = '0';
+        main.style.width = '100%';
+    }
+
+    // 2. Clear out existing placeholders to prevent double-printing
     container.querySelectorAll('.print-placeholder').forEach(el => el.remove());
 
     const textareas = container.querySelectorAll('textarea');
     const itemsToRestore = [];
 
-    // 2. Create the flowable divs
     textareas.forEach((ta) => {
         const div = document.createElement('div');
         div.className = 'print-placeholder';
-        // Match the text exactly including line breaks
         div.innerText = ta.value;
         
-        // Style the div to match the location
-        div.setAttribute('style', 'white-space: pre-wrap; width: 100%; display: block;');
+        // Style to ensure it looks like a clean document
+        div.setAttribute('style', 'white-space: pre-wrap; width: 100%; display: block; color: black; padding: 10px 0; font-family: inherit; font-size: 11pt;');
         
-        // Insert it and track it
         ta.parentNode.insertBefore(div, ta);
-        itemsToRestore.push({ ta, div });
+        
+        // 🚀 THE CRITICAL FIX: Save the value and WIPE the actual textarea 
+        // and set it to display: none to ensure the browser doesn't see it
+        itemsToRestore.push({ ta, div, originalVal: ta.value });
+        
+        ta.style.display = 'none';
+        ta.value = ""; 
     });
 
-    // 3. Enter Print Mode
-    document.body.classList.add("print-mode-active");
-    window.scrollTo(0,0);
-    container.classList.add("print-target");
-
+    // 3. Trigger Print
     setTimeout(() => {
         window.print();
 
-        // 4. Exit Print Mode & Cleanup
-        document.body.classList.remove("print-mode-active");
-        container.classList.remove("print-target");
+        // 4. RESTORE UI
+        if (shell) {
+            shell.style.display = ''; 
+            shell.style.gridTemplateColumns = '';
+        }
+        if (sidebar) sidebar.style.display = '';
+        if (main) {
+            main.style.marginLeft = '';
+            main.style.padding = '';
+            main.style.width = '';
+        }
         
-        itemsToRestore.forEach(({ ta, div }) => {
+        itemsToRestore.forEach(({ ta, div, originalVal }) => {
             div.remove();
+            ta.style.display = 'block';
+            ta.value = originalVal; // Put the text back so the user doesn't see it disappear
         });
-        console.log("✅ Print cleanup complete.");
-    }, 500); // Slightly longer delay to ensure the OS print spooler has the data
+    }, 500);
 };
 
 OL.renameMatrix = function(anlyId, newName, isMaster) {
