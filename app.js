@@ -6606,7 +6606,7 @@ OL.handleResourceSave = function(id, field, value) {
                 OL.openInspector(id, null, 'cards');
             } else {
                 // Only go back to the map if no detail view is active
-                OL.renderMap(); 
+                OL.renderVisualizer(); 
             }
         });
     }
