@@ -108,38 +108,64 @@ OL.persist = async function() {
 };
 
 OL.sync = function() {
-    console.log("📡 Initializing Reversion-Shield Sync...");
-    db.collection('systems').doc('main_state').onSnapshot((doc) => {
-        if (!doc.exists) return;
-        const cloudData = doc.data();
-        const now = Date.now();
+    console.log("📡 Initializing Multi-Doc Collection Sync...");
 
-        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
-
-        state.master = cloudData.master || state.master;
-        state.clients = cloudData.clients || {};
-
-        // 🛡️ THE FIX: Convert Array back to Set after JSON stringification
-        if (!state.v2) state.v2 = {};
-        state.v2.selectedNodes = new Set(cloudData.v2?.selectedNodes || []);
-        state.v2.expandedNodes = new Set(cloudData.v2?.expandedNodes || []);
-
-        state.focusedResourceId = cloudData.focusedResourceId;
-        state.viewMode = cloudData.viewMode || 'global';
-
-        const main = document.getElementById('mainContent');
-        if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-            window.handleRoute();
-            return; 
-        }
-
-        if (window.location.hash.includes('visualizer')) {
-            clearTimeout(window.syncDebounce);
-            window.syncDebounce = setTimeout(() => OL.renderVisualizer(), 300); 
+    // 1. Listen to the Master Registry
+    db.collection('systems').doc('master_registry').onSnapshot((doc) => {
+        if (doc.exists) {
+            state.master = doc.data();
+            console.log("🏛️ Master Registry Loaded");
         } else {
-            window.handleRoute();
+            // BRIDGE: Pull master from old state if new one doesn't exist
+            db.collection('systems').doc('main_state').get().then(oldDoc => {
+                if (oldDoc.exists) {
+                    state.master = oldDoc.data().master;
+                    console.log("🌉 Bridge: Master Data recovered.");
+                }
+            });
         }
     });
+
+    // 2. Listen to the WHOLE Clients Collection (For the Dashboard)
+    db.collection('clients').onSnapshot((querySnapshot) => {
+        const cloudClients = {};
+        querySnapshot.forEach((doc) => {
+            cloudClients[doc.id] = doc.data();
+        });
+
+        // If we found clients in the new collection, update the state
+        if (Object.keys(cloudClients).length > 0) {
+            state.clients = cloudClients;
+            console.log(`📋 Dashboard Synced: ${Object.keys(cloudClients).length} clients found.`);
+            window.handleRoute();
+        } else {
+            // BRIDGE: If new collection is empty, pull all clients from old main_state once
+            db.collection('systems').doc('main_state').get().then(oldDoc => {
+                if (oldDoc.exists && !Object.keys(state.clients).length) {
+                    state.clients = oldDoc.data().clients || {};
+                    console.log("🌉 Bridge: Full Client List recovered from old state.");
+                    window.handleRoute();
+                }
+            });
+        }
+    });
+
+    // 3. Keep track of the ACTIVE Client for V2 Sets
+    const activeId = sessionStorage.getItem('lastActiveClientId');
+    if (activeId) {
+        state.activeClientId = activeId;
+        // Listen specifically to active client for V2 logic (Set casting)
+        db.collection('clients').doc(activeId).onSnapshot((doc) => {
+            if (doc.exists) {
+                const clientData = doc.data();
+                if (!state.v2) state.v2 = {};
+                const rawSelected = clientData.v2?.selectedNodes;
+                state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
+                const rawExpanded = clientData.v2?.expandedNodes;
+                state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
+            }
+        });
+    }
 };
 
 OL.updateAndSync = async function(mutationFn) {
