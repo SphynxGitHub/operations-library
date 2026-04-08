@@ -77,7 +77,6 @@ let state = {
 };
 OL.state = state;
 
-// 🛡️ REVERSION GUARD ENGINE
 OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
 
@@ -85,21 +84,25 @@ OL.persist = async function() {
         try {
             const activeId = state.activeClientId;
             
-            // 1. Save Master Data (Apps, Functions, Blueprints)
-            const masterData = JSON.parse(JSON.stringify(state.master));
-            await db.collection('systems').doc('master_registry').set(masterData);
+            // 🚀 SHREDDER LOGIC: Split large object into smaller documents
+            // 1. Save Master Data (Standard library)
+            const masterCopy = JSON.parse(JSON.stringify(state.master));
+            await db.collection('systems').doc('master_registry').set(masterCopy);
 
-            // 2. Save Client Data (The specific project work)
+            // 2. Save Active Client specifically (gives you 1MB per client)
             if (activeId && state.clients[activeId]) {
-                const clientData = JSON.parse(JSON.stringify(state.clients[activeId]));
-                await db.collection('clients').doc(activeId).set(clientData);
-                console.log(`☁️ Client [${activeId}] saved to private document.`);
+                const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
+                await db.collection('clients').doc(activeId).set(clientCopy);
+                console.log(`☁️ CLOUD ACKNOWLEDGED: Client [${activeId}] safe.`);
             }
 
             window.lastLocalSave = Date.now();
-            localStorage.setItem('OL_FS_TEST', JSON.stringify(state)); // Keep local backup
+            localStorage.setItem('OL_FS_TEST', JSON.stringify(state)); 
         } catch (error) {
             console.error("💀 SAVE FAILED:", error);
+            if (error.message.includes("too large")) {
+                alert("CRITICAL: Data too large. Please split your Workflow into smaller resources.");
+            }
         }
     }, 1000);
 };
@@ -111,28 +114,16 @@ OL.sync = function() {
         const cloudData = doc.data();
         const now = Date.now();
 
-        // 🛡️ THE SHIELD: If we saved in the last 4 seconds, ignore the cloud echo
-        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) {
-            console.warn("🛡️ Sync Guard: Blocking cloud revert (Local data is newer).");
-            return; 
-        }
+        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
 
-        // 🛡️ EMPTY DATA GUARD: Never let the cloud wipe local data if cloud looks empty
-        const localClientCount = Object.keys(state.clients || {}).length;
-        const cloudClientCount = Object.keys(cloudData.clients || {}).length;
-        if (localClientCount > 1 && cloudClientCount === 0) {
-            console.error("🚫 Emergency Block: Cloud sent empty client list. Rejecting.");
-            return;
-        }
-
-        // 🧠 DATA REPAIR: Seeding Tags if they are missing in cloud
-        if (!cloudData.master.datapoints || cloudData.master.datapoints.length === 0) {
-            cloudData.master.datapoints = state.master.datapoints;
-        }
-
-        // 🔄 Apply Cloud State
         state.master = cloudData.master || state.master;
         state.clients = cloudData.clients || {};
+
+        // 🛡️ THE FIX: Convert Array back to Set after JSON stringification
+        if (!state.v2) state.v2 = {};
+        state.v2.selectedNodes = new Set(cloudData.v2?.selectedNodes || []);
+        state.v2.expandedNodes = new Set(cloudData.v2?.expandedNodes || []);
+
         state.focusedResourceId = cloudData.focusedResourceId;
         state.viewMode = cloudData.viewMode || 'global';
 
