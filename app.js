@@ -84,88 +84,78 @@ OL.persist = async function() {
         try {
             const activeId = state.activeClientId;
             
-            // 🚀 SHREDDER LOGIC: Split large object into smaller documents
-            // 1. Save Master Data (Standard library)
+            // 1. Save Master Registry (The Library)
             const masterCopy = JSON.parse(JSON.stringify(state.master));
             await db.collection('systems').doc('master_registry').set(masterCopy);
 
-            // 2. Save Active Client specifically (gives you 1MB per client)
-            if (activeId && state.clients[activeId]) {
-                const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
-                await db.collection('clients').doc(activeId).set(clientCopy);
-                console.log(`☁️ CLOUD ACKNOWLEDGED: Client [${activeId}] safe.`);
+            // 2. Save EVERY client in your current state into the new collection
+            // 🚀 This is the migration logic
+            const clientIds = Object.keys(state.clients);
+            for (const id of clientIds) {
+                const clientData = JSON.parse(JSON.stringify(state.clients[id]));
+                await db.collection('clients').doc(id).set(clientData);
             }
 
             window.lastLocalSave = Date.now();
             localStorage.setItem('OL_FS_TEST', JSON.stringify(state)); 
+            console.log(`✅ SHREDDER COMPLETE: ${clientIds.length} clients saved individually.`);
         } catch (error) {
-            console.error("💀 SAVE FAILED:", error);
-            if (error.message.includes("too large")) {
-                alert("CRITICAL: Data too large. Please split your Workflow into smaller resources.");
-            }
+            console.error("💀 Migration Save Failed:", error);
         }
     }, 1000);
 };
 
 OL.sync = function() {
-    console.log("📡 Initializing Multi-Doc Collection Sync...");
+    console.log("📡 Initializing Unified Collection Sync...");
 
-    // 1. Listen to the Master Registry
+    // 1. Master Registry (Standard Library)
     db.collection('systems').doc('master_registry').onSnapshot((doc) => {
         if (doc.exists) {
             state.master = doc.data();
-            console.log("🏛️ Master Registry Loaded");
-        } else {
-            // BRIDGE: Pull master from old state if new one doesn't exist
-            db.collection('systems').doc('main_state').get().then(oldDoc => {
-                if (oldDoc.exists) {
-                    state.master = oldDoc.data().master;
-                    console.log("🌉 Bridge: Master Data recovered.");
-                }
-            });
+            console.log("🏛️ Master Registry Synced");
         }
     });
 
-    // 2. Listen to the WHOLE Clients Collection (For the Dashboard)
+    // 2. The Entire Clients Collection (Dashboard + Active Data)
     db.collection('clients').onSnapshot((querySnapshot) => {
         const cloudClients = {};
         querySnapshot.forEach((doc) => {
             cloudClients[doc.id] = doc.data();
         });
 
-        // If we found clients in the new collection, update the state
-        if (Object.keys(cloudClients).length > 0) {
-            state.clients = cloudClients;
-            console.log(`📋 Dashboard Synced: ${Object.keys(cloudClients).length} clients found.`);
+        const now = Date.now();
+        // 🛡️ Shield: Prevent local edits from being clobbered by the server echo
+        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
+
+        // Update the global state
+        state.clients = cloudClients;
+        
+        // 🎯 Restore Active Client Context
+        const activeId = sessionStorage.getItem('lastActiveClientId');
+        if (activeId && state.clients[activeId]) {
+            state.activeClientId = activeId;
+            const activeClient = state.clients[activeId];
+
+            // 🛡️ THE SET FIX (Ensures Flow Map doesn't crash)
+            if (!state.v2) state.v2 = {};
+            const rawSelected = activeClient.v2?.selectedNodes;
+            state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
+            const rawExpanded = activeClient.v2?.expandedNodes;
+            state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
+        }
+
+        console.log(`📋 Sync Complete: ${Object.keys(cloudClients).length} clients loaded.`);
+
+        // 🚀 UI Routing logic
+        const main = document.getElementById('mainContent');
+        if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
             window.handleRoute();
+        } else if (window.location.hash.includes('visualizer')) {
+            if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
         } else {
-            // BRIDGE: If new collection is empty, pull all clients from old main_state once
-            db.collection('systems').doc('main_state').get().then(oldDoc => {
-                if (oldDoc.exists && !Object.keys(state.clients).length) {
-                    state.clients = oldDoc.data().clients || {};
-                    console.log("🌉 Bridge: Full Client List recovered from old state.");
-                    window.handleRoute();
-                }
-            });
+            window.handleRoute();
         }
     });
-
-    // 3. Keep track of the ACTIVE Client for V2 Sets
-    const activeId = sessionStorage.getItem('lastActiveClientId');
-    if (activeId) {
-        state.activeClientId = activeId;
-        // Listen specifically to active client for V2 logic (Set casting)
-        db.collection('clients').doc(activeId).onSnapshot((doc) => {
-            if (doc.exists) {
-                const clientData = doc.data();
-                if (!state.v2) state.v2 = {};
-                const rawSelected = clientData.v2?.selectedNodes;
-                state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
-                const rawExpanded = clientData.v2?.expandedNodes;
-                state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
-            }
-        });
-    }
 };
 
 OL.updateAndSync = async function(mutationFn) {
@@ -5111,17 +5101,17 @@ window.renderResourceCard = function (res) {
                     </div>
 
                     ${scopeData ? `
-                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
-                            <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
-                                ${scopeData.status.toUpperCase()}
-                            </div>
-                            <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5;">
-                                👤 ${esc(scopeData.responsibleParty || 'TBD')}
-                            </div>
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+                        <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
+                            ${(scopeData.status || "PENDING").toUpperCase()}
                         </div>
-                    ` : `
-                        <div class="tiny muted italic" style="font-size: 8px; opacity: 0.3;">Not Scoped</div>
-                    `}
+                        <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5;">
+                            👤 ${esc(scopeData.responsibleParty || 'TBD')}
+                        </div>
+                    </div>
+                ` : `
+                    <div class="tiny muted italic" style="font-size: 8px; opacity: 0.3;">Not Scoped</div>
+                `}
                 </div>
             </div>
         </div>
