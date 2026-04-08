@@ -79,36 +79,29 @@ OL.state = state;
 
 // 🛡️ REVERSION GUARD ENGINE
 OL.persist = async function() {
-    const statusEl = document.getElementById('cloud-status');
-    if(statusEl) statusEl.innerHTML = "⏳ Pending...";
-
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
 
     window.saveTimeout = setTimeout(async () => {
         try {
-            const rawState = JSON.parse(JSON.stringify(state));
-            delete rawState.isSaving;
-            delete rawState.adminMode;
+            const activeId = state.activeClientId;
+            
+            // 1. Save Master Data (Apps, Functions, Blueprints)
+            const masterData = JSON.parse(JSON.stringify(state.master));
+            await db.collection('systems').doc('master_registry').set(masterData);
 
-            // 📏 SIZE CHECK
-            const size = new TextEncoder().encode(JSON.stringify(rawState)).length;
-            if (size > 1000000) {
-                if(statusEl) statusEl.innerHTML = "⚠️ DATA TOO LARGE";
-                return;
+            // 2. Save Client Data (The specific project work)
+            if (activeId && state.clients[activeId]) {
+                const clientData = JSON.parse(JSON.stringify(state.clients[activeId]));
+                await db.collection('clients').doc(activeId).set(clientData);
+                console.log(`☁️ Client [${activeId}] saved to private document.`);
             }
 
-            await db.collection('systems').doc('main_state').set(rawState);
-            
-            // ✅ LOCK THE TIMESTAMP to block incoming reverts for 3 seconds
             window.lastLocalSave = Date.now();
-            if(statusEl) statusEl.innerHTML = "✅ Synced";
-            console.log("☁️ CLOUD ACKNOWLEDGED: Data safe.");
-            
+            localStorage.setItem('OL_FS_TEST', JSON.stringify(state)); // Keep local backup
         } catch (error) {
-            console.error("💀 CLOUD WRITE CRASHED:", error);
-            if(statusEl) statusEl.innerHTML = "⚠️ Sync Error";
+            console.error("💀 SAVE FAILED:", error);
         }
-    }, 1000); 
+    }, 1000);
 };
 
 OL.sync = function() {
