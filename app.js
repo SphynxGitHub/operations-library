@@ -7438,8 +7438,8 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 return `
                                     <td class="text-center" style="border: 1px solid var(--line); vertical-align: middle;">
                                         <div style="font-size: 9px; color: var(--muted); margin-bottom: 4px; font-weight: bold;">TOTAL SCORE</div>
-                                        <span class="pill ${score > 2.5 ? 'accent' : 'soft'}" data-app-total="${appObj.appId}">${score}</span>
-                                    </td>
+                                        <span class="pill ${score > 2.5 ? 'accent' : 'soft'}" style="font-size: 1.1rem; padding: 4px 12px;">${score}</span>
+                                    </td>`;
                             }).join('')}
                             ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
                         </tr>
@@ -7452,9 +7452,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 const cost = OL.calculateAppTotalCost(appObj);
                                 return `
                                     <td class="text-center" style="border: 1px solid var(--line); padding: 15px 5px;">
-                                        <div style="font-size: 1.2rem; font-weight: bold; color: var(--accent);" data-app-cost="${appObj.appId}">$${cost.toLocaleString()}</div>
+                                        <div style="font-size: 1.2rem; font-weight: bold; color: var(--accent);">$${cost.toLocaleString()}</div>
                                         <div style="font-size: 9px; opacity: 0.6; margin-top: 2px;">PER USER / MO</div>
-                                    </td>
+                                    </td>`;
                             }).join('')}
                             ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
                         </tr>
@@ -8433,6 +8433,8 @@ OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
             }
         }
     });
+    // Re-render only the matrix
+    OL.openAnalysisMatrix(anlyId, isMaster); 
 };
 
 OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
