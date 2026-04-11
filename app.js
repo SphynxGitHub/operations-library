@@ -7462,7 +7462,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 const cost = OL.calculateAppTotalCost(appObj);
                                 return `
                                     <td class="text-center" style="border: 1px solid var(--line); padding: 15px 5px;">
-                                        <div style="font-size: 1.2rem; font-weight: bold; color: var(--accent);">$${cost.toLocaleString()}</div>
+                                        <div id="cost-display-${appObj.appId}" style="font-size: 1.2rem; font-weight: bold; color: var(--accent);">
+                                            $${cost.toLocaleString()}
+                                        </div>
                                         <div style="font-size: 9px; opacity: 0.6; margin-top: 2px;">PER USER / MO</div>
                                     </td>`;
                             }).join('')}
@@ -7670,25 +7672,17 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
-    let anly = null;
+    let anly = isMaster 
+        ? state.master?.analyses.find(a => String(a.id) === String(analysisId))
+        : getActiveClient()?.projectData?.localAnalyses.find(a => String(a.id) === String(analysisId));
 
-    // 🚀 THE SCOPE FIX: Direct path to data source
-    if (isMaster) {
-        anly = (state.master?.analyses || []).find(a => String(a.id) === String(analysisId));
-    } else {
-        const client = getActiveClient();
-        anly = (client?.projectData?.localAnalyses || []).find(a => String(a.id) === String(analysisId));
-    }
-
-    if (!anly) return console.error("❌ Analysis not found in scope:", analysisId);
-
-    const appEntry = (anly.apps || []).find(a => String(a.appId) === String(appId));
     if (appEntry) {
         if (!appEntry.notes) appEntry.notes = {};
         appEntry.notes[featId] = value;
-
-        console.log(`💾 Note persisted to ${isMaster ? 'Master' : 'Local'} scope.`);
-        await OL.persist();
+        
+        // 🚀 THE FIX: Use direct persist, NO RENDER call.
+        await OL.persist(); 
+        console.log("📝 Note saved silently.");
     }
 };
 
@@ -7811,40 +7805,30 @@ OL.calculateAppTotalCost = function(appObj) {
 
 // 🎯 Refined Dropdown Logic
 OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
-    await OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const analyses = OL.getScopedAnalyses();
-        const anly = analyses.find(a => a.id === anlyId);
-        const appInMatrix = anly?.apps.find(a => a.appId === appId);
-        
-        if (!appInMatrix) return;
-        
-        const [type, tierName] = value.split('|');
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses;
+    const anly = source.find(a => a.id === anlyId);
+    const appInMatrix = anly?.apps.find(a => a.appId === appId);
+    
+    const [type, tierName] = value.split('|');
+    if (!appInMatrix.featPricing) appInMatrix.featPricing = {};
+    
+    appInMatrix.featPricing[featId] = {
+        type: type,
+        tierName: tierName || null,
+        addonPrice: appInMatrix.featPricing[featId]?.addonPrice || 0
+    };
 
-        // 1. Update the Matrix Data
-        if (!appInMatrix.featPricing) appInMatrix.featPricing = {};
-        appInMatrix.featPricing[featId] = {
-            type: type,
-            tierName: tierName || null,
-            addonPrice: appInMatrix.featPricing[featId]?.addonPrice || 0
-        };
+    // 🚀 SURGICAL UPDATE: 
+    // 1. Calculate the new cost for this specific app
+    const newCost = OL.calculateAppTotalCost(appInMatrix);
+    
+    // 2. Update only that specific cost text in the DOM
+    const costEl = document.getElementById(`cost-display-${appId}`);
+    if (costEl) costEl.innerText = `$${newCost.toLocaleString()}`;
 
-        // 🚀 2. THE SYNC BRIDGE: Update the App Card
-        if (type === 'tier' && tierName && client) {
-            const appCard = client.projectData.localApps.find(a => a.id === appId || a.masterRefId === appId);
-            if (appCard) {
-                // Find the price of this tier from the matrix app's pricingTiers
-                const tierObj = appInMatrix.pricingTiers?.find(t => t.name === tierName);
-                if (tierObj) {
-                    appCard.monthlyCost = parseFloat(tierObj.price) || 0;
-                    appCard.clientTier = tierName;
-                    console.log(`📡 Syncing ${appCard.name} to Tier: ${tierName} ($${tierObj.price})`);
-                }
-            }
-        }
-    });
-
-    OL.openAnalysisMatrix(anlyId);
+    // 3. Persist the data in the background
+    await OL.persist();
 };
 
 // Add a new Tier to a specific App
