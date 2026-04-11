@@ -7628,7 +7628,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 
                 return `
                     <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
-                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; flex-direction: column; gap: 6px;">return `
                             
                             <select class="tiny-select" 
                                 style="width: 100%; height: 22px; flex-shrink: 0;"
@@ -7815,9 +7815,17 @@ OL.calculateAppTotalCost = function(appObj) {
 // 🎯 Refined Dropdown Logic
 OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
     const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses;
-    const anly = source.find(a => a.id === anlyId);
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => String(a.id) === String(anlyId));
     const appInMatrix = anly?.apps.find(a => a.appId === appId);
+    
+    if (!anly) {
+        console.error("Analysis not found for ID:", anlyId);
+        return;
+    }
+
+    const appInMatrix = anly.apps.find(a => String(a.appId) === String(appId));
+    if (!appInMatrix) return;
     
     const [type, tierName] = value.split('|');
     if (!appInMatrix.featPricing) appInMatrix.featPricing = {};
@@ -7828,15 +7836,12 @@ OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
         addonPrice: appInMatrix.featPricing[featId]?.addonPrice || 0
     };
 
-    // 🚀 SURGICAL UPDATE: 
-    // 1. Calculate the new cost for this specific app
+    // 🚀 SURGICAL UPDATE: Update the specific cost display
     const newCost = OL.calculateAppTotalCost(appInMatrix);
-    
-    // 2. Update only that specific cost text in the DOM
     const costEl = document.getElementById(`cost-display-${appId}`);
     if (costEl) costEl.innerText = `$${newCost.toLocaleString()}`;
 
-    // 3. Persist the data in the background
+    // Background save
     await OL.persist();
 };
 
