@@ -80,29 +80,37 @@ OL.state = state;
 OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
 
+    // 1. Mark as saving locally (The Shield)
+    window.lastLocalSave = Date.now();
+
     window.saveTimeout = setTimeout(async () => {
         try {
             const activeId = state.activeClientId;
-            
-            // 1. Save Master Registry (The Library)
+            if (!activeId) return;
+
+            console.log("☁️ Background Sync Starting...");
+
+            // 🚀 STEP 1: Save Master Registry
             const masterCopy = JSON.parse(JSON.stringify(state.master));
             await db.collection('systems').doc('master_registry').set(masterCopy);
 
-            // 2. Save EVERY client in your current state into the new collection
-            // 🚀 This is the migration logic
-            const clientIds = Object.keys(state.clients);
-            for (const id of clientIds) {
-                const clientData = JSON.parse(JSON.stringify(state.clients[id]));
-                await db.collection('clients').doc(id).set(clientData);
+            // 🚀 STEP 2: Save Only the Active Client
+            // This prevents the "Message Port Closed" error by reducing payload size
+            if (state.clients[activeId]) {
+                const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
+                await db.collection('clients').doc(activeId).set(clientCopy);
             }
 
-            window.lastLocalSave = Date.now();
+            // 🚀 STEP 3: Local Backup
             localStorage.setItem('OL_FS_TEST', JSON.stringify(state)); 
-            console.log(`✅ SHREDDER COMPLETE: ${clientIds.length} clients saved individually.`);
+            
+            console.log("✅ Background Sync Complete. Port remains open.");
+
         } catch (error) {
-            console.error("💀 Migration Save Failed:", error);
+            console.error("💀 Persistence Error:", error);
+            // If the port closes, we don't reload; we just log it.
         }
-    }, 1000);
+    }, 1500); // Increased delay slightly to allow UI to breathe
 };
 
 OL.sync = function() {
