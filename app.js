@@ -7552,6 +7552,7 @@ OL.getCategorySortWeight = function(catName) {
 };
 
 window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalColspan) {
+    const anlyId = anly.id;
     let currentCategory = null;
     let rowsHtml = "";
 
