@@ -124,20 +124,20 @@ OL.sync = function() {
         }
     });
     // 2. The Entire Clients Collection
+
     db.collection('clients').onSnapshot((querySnapshot) => {
+        // 🛡️ PERF GUARD: Don't process the whole collection if we are focused on a matrix
+        if (state.isSaving && window.location.hash.includes('analyze')) return;
+    
         const cloudClients = {};
         querySnapshot.forEach((doc) => {
             cloudClients[doc.id] = doc.data();
         });
-
-        // 🛡️ THE ECHO SHIELD: Only proceed if the data has actually changed
-        const cloudString = JSON.stringify(cloudClients);
-        if (window.lastCloudString === cloudString) return; 
-        window.lastCloudString = cloudString;
-
-        const now = Date.now();
-        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
-
+    
+        // If the data is the same, stop immediately to save CPU cycles
+        if (window.lastSyncHash === JSON.stringify(cloudClients).length) return; 
+        window.lastSyncHash = JSON.stringify(cloudClients).length;
+    
         state.clients = cloudClients;
         
         // 🎯 Restore Active Client Context
@@ -7495,16 +7495,23 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     state.activeMatrixId = analysisId;
 
     // Add at the end of OL.openAnalysisMatrix
+    // 🚀 THE INSTANT-EDIT FIX:
+    // We use a timeout of 0 to push the 'heavy' work to the end of the execution queue.
+    // This allows the browser to 'paint' the inputs and make them focusable immediately.
     setTimeout(() => {
+        // 1. Initialize Auto-Resizing for textareas (Only once UI is drawn)
         document.querySelectorAll('.matrix-notes-auto').forEach(el => {
+            el.style.height = 'auto';
             el.style.height = el.scrollHeight + 'px';
         });
-        const textareas = container.querySelectorAll('textarea');
-        textareas.forEach(ta => {
-            ta.style.height = 'auto';
-            ta.style.height = ta.scrollHeight + 'px';
-        })
-    }, 50);
+    
+        // 2. Calculate Totals (Delayed so it doesn't block typing)
+        if (typeof OL.refreshMatrixTotals === 'function') {
+            OL.refreshMatrixTotals(analysisId);
+        }
+        
+        console.log("⚡ Matrix interactivity initialized.");
+    }, 0);
 }
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
