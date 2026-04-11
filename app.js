@@ -7628,8 +7628,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 
                 return `
                     <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
-                        <div style="display: flex; flex-direction: column; gap: 6px;">return `
-                            
+                        <div style="display: flex; flex-direction: column; gap: 6px;">                            
                             <select class="tiny-select" 
                                 style="width: 100%; height: 22px; flex-shrink: 0;"
                                 onchange="OL.handleMatrixPricingChange('${anlyId}', '${appObj.appId}', '${featId}', this.value, ${isMaster})">
