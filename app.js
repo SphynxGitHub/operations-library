@@ -8388,22 +8388,40 @@ OL.addAllFeaturesFromCategory = async function(anlyId, catName, isMaster) {
 
 OL.executeAddCategoryToAnalysis = function(anlyId, catName, isMaster) {
     const client = getActiveClient();
-    // 🛡️ Source Selection: Use Master Vault if flag is true, else Local Client
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === anlyId);
 
     if (anly) {
-        if (!anly.categories) anly.categories = [];
         const cleanName = catName.trim();
         if (cleanName && !anly.categories.includes(cleanName)) {
             anly.categories.push(cleanName);
             anly.categories.sort();
+
+            // 🚀 SURGICAL UI UPDATE: Manually inject the new category header row
+            const tableBody = document.querySelector(".matrix-table tbody");
+            if (tableBody) {
+                const totalColspan = 2 + (anly.apps || []).length;
+                const newRow = document.createElement('tr');
+                newRow.className = "category-header-row";
+                newRow.style.background = "rgba(255,255,255,0.03)";
+                newRow.style.borderBottom = "1px solid var(--line)";
+                newRow.innerHTML = `
+                    <td colspan="${totalColspan}" style="padding: 10px 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="tiny muted">📁</span>
+                            <span style="color: var(--accent); font-weight: bold; text-transform: uppercase;">
+                                ${esc(cleanName)}
+                            </span>
+                        </div>
+                    </td>
+                `;
+                // Append it to the end of the current feature list
+                tableBody.appendChild(newRow);
+            }
+
             OL.persist();
         }
         OL.closeModal();
-        OL.openAnalysisMatrix(anlyId, isMaster);
-    } else {
-        console.error("Analysis not found for ID:", anlyId);
     }
 };
 
@@ -8454,41 +8472,35 @@ OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
 };
 
 OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
-    OL.updateAndSync(() => { // 🚀 Wrap the logic!
+    OL.updateAndSync(() => {
         const client = getActiveClient();
         const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
         const anly = source.find(a => a.id === anlyId);
 
         if (!anly || !anly.features || anly.features.length === 0) return;
 
-        // 1. Identify categories that actually contain features
         const activeCats = [...new Set(anly.features.map(f => f.category || "General"))];
-        const catCount = activeCats.length;
-        if (catCount === 0) return;
-
-        // 2. Distribute 100% across the categories
-        const weightPerCat = 100 / catCount;
+        const weightPerCat = 100 / activeCats.length;
 
         anly.features.forEach(f => {
             const catFeatures = anly.features.filter(feat => (feat.category || "General") === (f.category || "General"));
-            const featCount = catFeatures.length;
-            // Divide the category's slice by the number of features in it
-            f.weight = parseFloat((weightPerCat / featCount).toFixed(2));
+            f.weight = parseFloat((weightPerCat / catFeatures.length).toFixed(2));
         });
 
-        // 3. 🛡️ NORMALIZE: Ensure the sum is exactly 100.00
-        const currentTotal = anly.features.reduce((sum, f) => sum + f.weight, 0);
-        const difference = parseFloat((100 - currentTotal).toFixed(2));
+        // 🚀 SURGICAL UI UPDATE: Update every weight input on the screen
+        anly.features.forEach(f => {
+            // This assumes your inputs have a unique way to be identified, 
+            // like an onblur attribute containing the feature ID.
+            const inputs = document.querySelectorAll(`input[onblur*="'${f.id}'"][onblur*="'weight'"]`);
+            inputs.forEach(input => {
+                input.value = f.weight;
+            });
+        });
 
-        if (difference !== 0 && anly.features.length > 0) {
-            // Apply the tiny remainder (e.g., 0.01) to the last feature
-            anly.features[anly.features.length - 1].weight = 
-                parseFloat((anly.features[anly.features.length - 1].weight + difference).toFixed(2));
-        }
         OL.persist();
     });
-    OL.openAnalysisMatrix(anlyId, isMaster);
-    console.log(`⚖️ Weights Balanced & Normalized. Total: 100.00%`);
+    
+    console.log(`⚖️ Weights Balanced Surgically.`);
 };
 
 //======================= CONSOLIDATED FEATURES MANAGEMENT =======================//
