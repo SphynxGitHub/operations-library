@@ -158,10 +158,15 @@ OL.sync = function() {
 
         // 🚀 UI Routing logic
         const main = document.getElementById('mainContent');
+        const isMatrixOpen = !!document.querySelector('.matrix-table-container'); 
+
         if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
             window.handleRoute();
         } else if (window.location.hash.includes('visualizer')) {
             if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
+        } else if (isMatrixOpen) {
+            console.log("🛡️ Sync received, but Matrix is open. Skipping full re-render.");
+            return; 
         } else {
             window.handleRoute();
         }
