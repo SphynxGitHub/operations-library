@@ -7680,17 +7680,28 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
 };
 
 OL.updateAnalysisNote = async function(analysisId, appId, featId, value, isMaster) {
-    let anly = isMaster 
-        ? state.master?.analyses.find(a => String(a.id) === String(analysisId))
-        : getActiveClient()?.projectData?.localAnalyses.find(a => String(a.id) === String(analysisId));
+    const client = getActiveClient();
+    
+    // 1. Identify the Source
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => String(a.id) === String(analysisId));
 
-    if (appEntry) {
-        if (!appEntry.notes) appEntry.notes = {};
-        appEntry.notes[featId] = value;
+    if (anly) {
+        // 🚀 THE FIX: Changed 'appEntry' to 'appObj' to match the search
+        const appObj = anly.apps.find(a => String(a.appId) === String(appId));
         
-        // 🚀 THE FIX: Use direct persist, NO RENDER call.
-        await OL.persist(); 
-        console.log("📝 Note saved silently.");
+        if (appObj) {
+            if (!appObj.notes) appObj.notes = {};
+            appObj.notes[featId] = value;
+            
+            // ☁️ Save silently in the background
+            await OL.persist(); 
+            console.log("📝 Note saved surgically.");
+        } else {
+            console.error("App not found in analysis:", appId);
+        }
+    } else {
+        console.error("Analysis not found:", analysisId);
     }
 };
 
