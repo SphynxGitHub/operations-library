@@ -8415,12 +8415,11 @@ OL.calculateAnalysisScore = function(app, features) {
 };
 
 OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
-    // 🛡️ Enforce the 0-3 limit globally
     let score = parseFloat(value) || 0;
     if (score < 0) score = 0;
     if (score > 3) score = 3;
 
-    OL.updateAndSync(() => { // 🚀 Wrap this!
+    OL.updateAndSync(() => {
         const client = getActiveClient();
         const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
         const anly = source.find((a) => a.id === anlyId);
@@ -8429,12 +8428,19 @@ OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
             const appObj = anly.apps.find((a) => a.appId === appId);
             if (appObj) {
                 if (!appObj.scores) appObj.scores = {};
-                appObj.scores[featId] = parseFloat(value) || 0;
+                appObj.scores[featId] = score;
+
+                // 🚀 SURGICAL UPDATE: Update the total score pill in the UI immediately
+                const newTotal = OL.calculateAnalysisScore(appObj, anly.features || []);
+                const scorePill = document.querySelector(`[data-app-total="${appId}"]`);
+                if (scorePill) {
+                    scorePill.innerText = newTotal;
+                    scorePill.className = `pill ${newTotal > 2.5 ? 'accent' : 'soft'}`;
+                }
             }
         }
     });
-    // Re-render only the matrix
-    OL.openAnalysisMatrix(anlyId, isMaster); 
+    // 🛑 REMOVED: OL.openAnalysisMatrix(anlyId, isMaster); 
 };
 
 OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
