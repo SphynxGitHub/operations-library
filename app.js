@@ -123,19 +123,21 @@ OL.sync = function() {
             console.log("🏛️ Master Registry Synced");
         }
     });
-
-    // 2. The Entire Clients Collection (Dashboard + Active Data)
+    // 2. The Entire Clients Collection
     db.collection('clients').onSnapshot((querySnapshot) => {
         const cloudClients = {};
         querySnapshot.forEach((doc) => {
             cloudClients[doc.id] = doc.data();
         });
 
+        // 🛡️ THE ECHO SHIELD: Only proceed if the data has actually changed
+        const cloudString = JSON.stringify(cloudClients);
+        if (window.lastCloudString === cloudString) return; 
+        window.lastCloudString = cloudString;
+
         const now = Date.now();
-        // 🛡️ Shield: Prevent local edits from being clobbered by the server echo
         if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
 
-        // Update the global state
         state.clients = cloudClients;
         
         // 🎯 Restore Active Client Context
