@@ -7566,6 +7566,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
     
     features.forEach(feat => {
         const catName = feat.category || "General";
+        const featId = feat.id;
 
         // 1. Inject Category Header Row
         if (catName !== currentCategory) {
