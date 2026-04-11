@@ -7816,14 +7816,13 @@ OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => String(a.id) === String(anlyId));
-    const appInMatrix = anly?.apps.find(a => a.appId === appId);
+    const appInMatrix = anly.apps.find(a => String(a.appId) === String(appId));    
     
     if (!anly) {
         console.error("Analysis not found for ID:", anlyId);
         return;
     }
-
-    const appInMatrix = anly.apps.find(a => String(a.appId) === String(appId));
+    
     if (!appInMatrix) return;
     
     const [type, tierName] = value.split('|');
