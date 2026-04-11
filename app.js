@@ -7448,7 +7448,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                                 return `
                                     <td class="text-center" style="border: 1px solid var(--line); vertical-align: middle;">
                                         <div style="font-size: 9px; color: var(--muted); margin-bottom: 4px; font-weight: bold;">TOTAL SCORE</div>
-                                        <span class="pill ${score > 2.5 ? 'accent' : 'soft'}" style="font-size: 1.1rem; padding: 4px 12px;">${score}</span>
+                                        <span class="pill ${score > 2.5 ? 'accent' : 'soft'}" data-app-total="${appObj.appId}">${score}</span>
                                     </td>`;
                             }).join('')}
                             ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
