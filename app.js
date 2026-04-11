@@ -7623,7 +7623,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                             
                             <select class="tiny-select" 
                                 style="width: 100%; height: 22px; flex-shrink: 0;"
-                                onchange="OL.handleMatrixPricingChange('${analysisId}', '${appObj.appId}', '${feat.id}', this.value)">
+                                onchange="OL.handleMatrixPricingChange('${anlyId}', '${appObj.appId}', '${featId}', this.value, ${isMaster})">
                                 <option value="not_included" ${costType === 'not_included' ? 'selected' : ''}>Not Included</option>
                                 <optgroup label="Included In:">
                                     ${appTiers.map(t => `
