@@ -133,62 +133,80 @@ OL.sync = function() {
     // 2. The Entire Clients Collection
 
     db.collection('clients').onSnapshot((querySnapshot) => {
-        // 🛡️ PERF GUARD: Don't process the whole collection if we are focused on a matrix
-        if (state.isSaving && window.location.hash.includes('analyze')) return;
-    
-        const cloudClients = {};
-        querySnapshot.forEach((doc) => {
-            cloudClients[doc.id] = doc.data();
-        });
+    // 1. Gather Data immediately
+    const cloudClients = {};
+    querySnapshot.forEach((doc) => {
+        cloudClients[doc.id] = doc.data();
+    });
 
-        // 🛡️ THE MUZZLE: Check if the Matrix is currently on screen
-        const matrixContainer = document.querySelector('.matrix-table-container');
-        if (matrixContainer) {
-            console.log("🛡️ Sync Echo Blocked: Matrix is active. Updating state only.");
-            state.clients = cloudClients; // Update data in background
-            return; // 🛑 STOP HERE. Do not call handleRoute() or render anything.
-        }
+    // 🛡️ THE IRON CLAD MUZZLE (Move this to the top)
+    // Check for the DOM element OR the URL state
+    const matrixContainer = document.querySelector('.matrix-table-container');
+    const isAnalyzing = window.location.hash.includes('analyze');
     
-        // If the data is the same, stop immediately to save CPU cycles
-        if (window.lastSyncHash === JSON.stringify(cloudClients).length) return; 
-        window.lastSyncHash = JSON.stringify(cloudClients).length;
-
-        const now = Date.now();
-        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
-    
+    if (matrixContainer || isAnalyzing) {
+        console.log("🚫 SYNC ABORTED: Matrix or Analyze view is active. Shielding focus.");
+        
+        // 🚀 CRITICAL: Update the state so calculations stay fresh in memory
+        // but RETURN so handleRoute() is never reached.
         state.clients = cloudClients;
         
-        // 🎯 Restore Active Client Context
+        // Quietly update the active client reference
         const activeId = sessionStorage.getItem('lastActiveClientId');
         if (activeId && state.clients[activeId]) {
             state.activeClientId = activeId;
+            // Background data update (no DOM touch)
             const activeClient = state.clients[activeId];
-
-            // 🛡️ THE SET FIX (Ensures Flow Map doesn't crash)
             if (!state.v2) state.v2 = {};
             const rawSelected = activeClient.v2?.selectedNodes;
             state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
             const rawExpanded = activeClient.v2?.expandedNodes;
             state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
         }
+        return; // 🛑 HARD STOP - No rendering allowed
+    }
 
-        console.log(`📋 Sync Complete: ${Object.keys(cloudClients).length} clients loaded.`);
+    // 🛡️ PERF GUARD: Skip if data hasn't actually changed
+    const currentHash = JSON.stringify(cloudClients).length;
+    if (window.lastSyncHash === currentHash) return; 
+    window.lastSyncHash = currentHash;
 
-        // 🚀 UI Routing logic
-        const main = document.getElementById('mainContent');
-        const isMatrixOpen = !!document.querySelector('.matrix-table-container'); 
+    // 🛡️ RECENT SAVE GUARD
+    const now = Date.now();
+    if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) {
+        console.log("⏳ Recent local save detected. Skipping sync echo.");
+        return;
+    }
 
-        if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-            window.handleRoute();
-        } else if (window.location.hash.includes('visualizer')) {
-            if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
-        } else if (isMatrixOpen) {
-            console.log("🛡️ Sync received, but Matrix is open. Skipping full re-render.");
-            return; 
-        } else {
-            window.handleRoute();
-        }
-    });
+    state.clients = cloudClients;
+    
+    // 🎯 Restore Active Client Context (Normal Flow)
+    const activeId = sessionStorage.getItem('lastActiveClientId');
+    if (activeId && state.clients[activeId]) {
+        state.activeClientId = activeId;
+        const activeClient = state.clients[activeId];
+        if (!state.v2) state.v2 = {};
+        const rawSelected = activeClient.v2?.selectedNodes;
+        state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
+        const rawExpanded = activeClient.v2?.expandedNodes;
+        state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
+    }
+
+    console.log(`📋 Sync Complete: ${Object.keys(cloudClients).length} clients loaded.`);
+
+    // 🚀 UI Routing logic (Clean Slate)
+    const main = document.getElementById('mainContent');
+    
+    // Final check before letting handleRoute fire
+    if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
+        window.handleRoute();
+    } else if (window.location.hash.includes('visualizer')) {
+        if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
+    } else {
+        console.log("🚦 Route Clear: Proceeding with render...");
+        window.handleRoute();
+    }
+});
 };
 
 OL.updateAndSync = async function(mutationFn) {
