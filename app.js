@@ -7369,145 +7369,214 @@ OL.deleteMasterAnalysis = function(anlyId) {
     renderAnalysisModule(true); // Refresh the Vault view
 };
 
+// 3. OPEN INDIVIDUAL ANALYSIS MATRIX
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     window.isMatrixActive = true;
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === analysisId);
+
+    if (!anly) return console.error("Analysis not found:", analysisId);
+
     state.activeMatrixId = analysisId;
+
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
 
-    // 1. Show loading state immediately
-    container.innerHTML = `<div class="card" style="padding:40px; text-align:center;">
-        <div class="spinner"></div><p>Optimizing Matrix for ${state.clients ? Object.keys(state.clients).length : 0} clients...</p>
-    </div>`;
+    // 🏆 CALCULATIONS
+    const totalWeight = (anly.features || []).reduce((sum, f) => sum + (parseFloat(f.weight) || 0), 0);
+    const appResults = (anly.apps || []).map(appObj => ({
+        appId: appObj.appId,
+        total: parseFloat(OL.calculateAnalysisScore(appObj, anly.features || []))
+    }));
+    const topScore = Math.max(...appResults.map(r => r.total), 0);
 
-    setTimeout(() => {
-        const client = getActiveClient();
-        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-        const anly = source.find(a => a.id === analysisId);
+    const appCount = (anly.apps || []).length;
+    const compCount = (anly.competitors || []).length;
 
-        if (!anly) return console.error("Analysis not found:", analysisId);
+    // 🚀 THE FIX: Dynamic Colspan Calculation
+    // Total = Feature Name (1) + Weight (1) + Apps count + Competitors count
+    const totalColspan = 2 + appCount + compCount;
 
-        // 🚀 THE REFERENCE ERROR FIX: Create a hardcoded string for HTML attributes
-        const mFlag = isMaster ? 'true' : 'false';
-        
-        const appCount = (anly.apps || []).length;
-        const compCount = (anly.competitors || []).length;
-        const totalColspan = 2 + appCount + compCount;
-
-        // 🚀 THE LAG FIX: We start with "..." for totals and fill them in AFTER rendering
-        let html = `
-            <div class="matrix-interaction-wrapper" onclick="event.stopPropagation()">
-                <div class="card matrix-card-main" style="border-top: 3px solid var(--accent); padding: 20px; margin-bottom: 40px;">
-                    <div class="section-header">
-                        <div>
-                            <h3>📊 Matrix: 
-                              <span contenteditable="true" 
-                                    class="editable-matrix-name m-name-${analysisId}"
-                                    onblur="OL.renameMatrix('${analysisId}', this.innerText, ${mFlag})">
-                                  ${esc(anly.name)}
-                              </span>
-                            </h3>
-                        </div>
-                        <div class="header-actions">
-                            <button class="btn tiny primary" onclick="OL.universalPrint('${analysisId}', ${mFlag})">🖨️ Print</button>
-                            <button class="btn tiny soft" onclick="OL.addAppToAnalysis('${analysisId}', ${mFlag})">+ Add App</button>
-                            <button class="btn tiny danger soft" onclick="document.getElementById('activeAnalysisMatrix').innerHTML=''; window.isMatrixActive=false;" style="margin-left:10px;">✕</button>
-                        </div>
+    let html = `
+        <div class="matrix-interaction-wrapper" onclick="event.stopPropagation()">
+            <div class="card matrix-card-main" style="border-top: 3px solid var(--accent); padding: 20px; margin-bottom: 40px;">
+                <div class="section-header">
+                    <div>
+                        <h3>📊 Matrix: 
+                          <span contenteditable="true" 
+                                class="editable-matrix-name m-name-${analysisId}"
+                                data-m-id="${analysisId}"
+                                style="border-bottom: 1px dashed var(--accent); cursor: text;"
+                                oninput="OL.syncMatrixName(this)"
+                                onblur="OL.renameMatrix('${analysisId}', this.innerText, ${isMaster})">
+                              ${esc(anly.name)}
+                          </span>
+                        </h3>
+                        <div class="subheader">Scores: 0 (N/A), 1 (<60%), 2 (60-80%), 3 (80%+)</div>
                     </div>
+                    <div class="header-actions">
+                        ${!isMaster ? `<button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')">⭐ Push to Vault</button>` : ''}
+                        <button class="btn tiny primary" onclick="OL.universalPrint('${analysisId}', ${isMaster})">🖨️ Print</button>
+                        <button class="btn tiny soft" onclick="OL.addAppToAnalysis('${analysisId}', ${isMaster})">+ Add App</button>
+                        <button class="btn tiny danger soft" onclick="document.getElementById('activeAnalysisMatrix').innerHTML='';" style="margin-left:10px;">✕</button>
+                    </div>
+                </div>
 
-                    <table class="matrix-table" style="width: 100%; margin-top: 20px; border-collapse: collapse; table-layout: fixed;">
-                       <thead>
-                            <tr>
-                                <th style="text-align: left; width: 220px;">Features</th>
-                                <th style="text-align: center; width:60px;">Weight</th>
-                                ${(anly.apps || []).map(appObj => {
-                                    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-                                    const matchedApp = allApps.find(a => a.id === appObj.appId);
-                                    return `
-                                        <th class="text-center">
-                                            <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
-                                                <button class="card-delete-btn" onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${mFlag})">×</button>
-                                                <span class="is-clickable" onclick="OL.openAppModal('${matchedApp?.id}')">
-                                                    ${esc(matchedApp?.name || 'Unknown')}
-                                                </span>
-                                            </div>
-                                        </th>`;
-                                }).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr class="category-header-row" style="background: rgba(var(--accent-rgb), 0.1);">
-                                <td colspan="${totalColspan}" style="padding: 10px 12px;"><strong>💰 PRICING & TIERS</strong></td>
-                            </tr>
+                <table class="matrix-table" style="width: 100%; margin-top: 20px; border-collapse: collapse; table-layout: fixed;">
+                   <thead>
+                        <tr>
+                            <th style="text-align: left; width: 220px;">Features</th>
+                            <th style="text-align: center; width:60px;">Weight</th>
 
-                            <tr style="background: rgba(255,255,255,0.02); vertical-align: top;">
-                                <td colspan="2" style="padding: 15px; color: var(--muted); font-size: 11px;">Rate Card</td>
-                                ${(anly.apps || []).map(appObj => `
-                                    <td style="padding: 10px; border: 1px solid var(--line);">
-                                        <div class="stacked-tiers-list">
-                                            ${(appObj.pricingTiers || []).map((t, idx) => `
-                                                <div class="tier-entry" style="margin-bottom:6px;">
-                                                    <input type="text" class="price-input-tiny" value="${esc(t.name)}" onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value, ${mFlag})">
-                                                    <input type="number" class="price-input-tiny" value="${t.price}" onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value, ${mFlag})">
-                                                </div>
-                                            `).join('')}
-                                            <button class="btn tiny soft full-width" onclick="OL.addAppTier('${analysisId}', '${appObj.appId}', ${mFlag})">+ Tier</button>
+                            ${(anly.apps || []).map(appObj => {
+                                const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+                                const matchedApp = allApps.find(a => a.id === appObj.appId);
+                                const isWinner = topScore > 0 && appResults.find(r => r.appId === appObj.appId)?.total === topScore;
+
+                                return `
+                                    <th class="text-center" style="${isWinner ? 'background: rgba(251, 191, 36, 0.05);' : ''}">
+                                        <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
+                                            <button class="card-delete-btn" onclick="OL.removeAppFromAnalysis('${analysisId}', '${appObj.appId}', ${isMaster})">×</button>
+                                            <span class="is-clickable" onclick="OL.openAppModal('${matchedApp?.id}')" style="${isWinner ? 'color: var(--vault-gold); font-weight: bold;' : ''}">
+                                                ${isWinner ? '⭐ ' : ''}${esc(matchedApp?.name || 'Unknown')}
+                                            </span>
                                         </div>
-                                    </td>`).join('')}
-                            </tr>
+                                    </th>`;
+                            }).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="category-header-row" style="background: rgba(var(--accent-rgb), 0.1); border-bottom: 1px solid var(--line);">
+                            <td colspan="${totalColspan}" style="padding: 10px 12px;">
+                                <div style="display: flex; align-items: center; gap: 2px;">
+                                    <span class="tiny">💰</span>
+                                    <span style="color: var(--accent); font-weight: bold; text-transform: uppercase;">PRICING & TIERS DEFINITION</span>
+                                </div>
+                            </td>
+                        </tr>
 
-                            ${window.renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
+                        <tr style="background: rgba(255,255,255,0.02); vertical-align: top;">
+                            <td colspan="2" style="padding: 15px; color: var(--muted); font-size: 11px; line-height: 1.4;">
+                                <strong>Rate Card:</strong><br>Aailable plan tiers and cost for each provider.
+                            </td>
+                            ${(anly.apps || []).map(appObj => {
+                                const tiers = appObj.pricingTiers || [];
+                                return `
+                                    <td style="padding: 10px; border: 1px solid var(--line);">
+                                        <div class="app-rate-card">                                           
+                                            <div class="stacked-tiers-list" style="display:flex; flex-direction:column; gap:2px;">
+                                                ${tiers.map((t, idx) => `
+                                                    <div class="tier-entry" style="position:relative; padding: 4px; border-radius: 4px; margin-bottom: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--panel-border);">
+                                                        <button class="card-delete-btn" onclick="OL.removeAppTier('${analysisId}', '${appObj.appId}', ${idx})" 
+                                                                style="position:absolute; top:-6px; right:-6px; background:var(--bg); border:1px solid var(--panel-border); border-radius:50%; color:var(--danger); cursor:pointer; font-size:12px; width:18px; height:18px; display:flex; align-items:center; justify-content:center; z-index: 10;">×</button>
+                                                        
+                                                        <div style="display:flex; flex-wrap: wrap; align-items: center; gap:4px; width: 100%;">
+                                                            
+                                                            <input type="text" class="price-input-tiny" 
+                                                                style="flex: 1 1 80px; min-width: 0; color: var(--text-main); background:transparent; border: none; font-size: 10px; padding: 2px 4px; font-weight: 600;" 
+                                                                placeholder="Tier Name" value="${esc(t.name)}" 
+                                                                onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'name', this.value)">
+                                                            
+                                                            <div style="display:flex; align-items:center; gap:2px; flex: 0 0 auto; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; margin-left: auto;">
+                                                                <span class="tiny muted" style="font-size: 9px; opacity: 0.5;">$</span>
+                                                                <input type="number" class="price-input-tiny" 
+                                                                    style="width: 45px; color: var(--accent); background:transparent; border: none; text-align: right; font-size: 10px; padding: 0; font-weight: bold; outline: none;" 
+                                                                    placeholder="0" value="${t.price}" 
+                                                                    onblur="OL.updateAppTier('${analysisId}', '${appObj.appId}', ${idx}, 'price', this.value)">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                `).join('')}
+                                                <button class="btn tiny soft full-width" style="margin-top:4px; font-size:9px; border-style:dashed;" 
+                                                        onclick="OL.addAppTier('${analysisId}', '${appObj.appId}')">+ Add Tier</button>
+                                            </div>
+                                        </div>
+                                    </td>`;
+                            }).join('')}
+                            ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
+                        </tr>
 
-                            <tr style="background: rgba(255,255,255,0.02);">
-                                <td><button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${mFlag})">+ Feature</button></td>
-                                <td class="bold center" id="total-weight-display">...</td>
-                                ${(anly.apps || []).map(appObj => `
-                                    <td class="text-center" style="border: 1px solid var(--line);">
-                                        <div style="font-size: 9px; color: var(--muted);">TOTAL SCORE</div>
-                                        <span class="pill soft" id="score-pill-${appObj.appId}">...</span>
-                                    </td>`).join('')}
-                            </tr>
+                        ${renderAnalysisMatrixRows(anly, analysisId, isMaster, totalColspan)}
+                        <tr style="background: rgba(255,255,255,0.02);">
+                            <td style="padding: 15px 10px;">
+                                <button class="btn tiny soft" onclick="OL.addFeatureToAnalysis('${analysisId}', ${isMaster})">+ Add Feature</button>
+                            </td>
+                            <td class="bold center" style="color: ${Math.abs(totalWeight - 100) < 0.1 ? 'var(--success)' : 'var(--danger)'}; border: 1px solid var(--line); font-weight: bold; padding:.5%;">
+                                ${totalWeight.toFixed(1)}%
+                                <div id="balance-button" onclick="OL.equalizeAnalysisWeights('${analysisId}', ${isMaster})" 
+                                style="cursor:pointer; font-size: 10px; margin-top: 4px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; margin-left:auto; margin-right:auto; padding-top: 15%; padding-bottom: 15%; width: 50%">⚖️</div>
+                            </td>
+                            ${(anly.apps || []).map(appObj => {
+                                const score = OL.calculateAnalysisScore(appObj, anly.features || []);
+                                return `
+                                    <td class="text-center" style="border: 1px solid var(--line); vertical-align: middle;">
+                                        <div style="font-size: 9px; color: var(--muted); margin-bottom: 4px; font-weight: bold;">TOTAL SCORE</div>
+                                        <span class="pill ${score > 2.5 ? 'accent' : 'soft'}" data-app-total="${appObj.appId}">${score}</span>
+                                    </td>`;
+                            }).join('')}
+                            ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
+                        </tr>
 
-                            <tr style="background: rgba(var(--accent-rgb), 0.1);">
-                                <td colspan="2" style="text-align: right; padding: 15px; font-weight: bold; color: var(--accent);">Monthly Total</td>
-                                ${(anly.apps || []).map(appObj => `
-                                    <td class="text-center" style="border: 1px solid var(--line);">
-                                        <div id="cost-display-${appObj.appId}" style="font-size: 1.1rem; font-weight: bold; color: var(--accent);">$...</div>
-                                    </td>`).join('')}
-                            </tr>
-                        </tbody>
-                    </table>
+                        <tr style="background: rgba(var(--accent-rgb), 0.1);">
+                            <td colspan="2" style="text-align: right; padding: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: var(--accent);">
+                                Est. Monthly Total Cost
+                            </td>
+                            ${(anly.apps || []).map(appObj => {
+                                const cost = OL.calculateAppTotalCost(appObj);
+                                return `
+                                    <td class="text-center" style="border: 1px solid var(--line); padding: 15px 5px;">
+                                        <div id="cost-display-${appObj.appId}" style="font-size: 1.2rem; font-weight: bold; color: var(--accent);">
+                                            $${cost.toLocaleString()}
+                                        </div>
+                                        <div style="font-size: 9px; opacity: 0.6; margin-top: 2px;">PER USER / MO</div>
+                                    </td>`;
+                            }).join('')}
+                            ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
+                        </tr>
+                    </tobdy>
+                </table>
+
+                <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                        <label class="modal-section-label" style="margin: 0; font-size: 1rem; color: var(--accent);">Executive Summary & Recommendations</label>
+                    </div>
+                    <textarea class="modal-textarea matrix-notes-auto" 
+                            placeholder="Add your final analysis notes or decision rationale here..."
+                            oninput="this.style.height = 'auto'; this.style.height = this.scrollHeight + 'px'"
+                            onblur="OL.updateAnalysisMeta('${analysisId}', 'summary', this.value, ${isMaster})"
+                            style="display: block; width: 100%; min-height: 100px;">${esc(anly.summary || "")}</textarea>
                 </div>
             </div>
-        `;
+        </div>
+    `;
+    const isAlreadyOpen = container.innerHTML !== "" && state.activeMatrixId === analysisId;                            
 
-        container.innerHTML = html;
+    container.innerHTML = html;
+    if (!isAlreadyOpen) {
         container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    state.activeMatrixId = analysisId;
 
-        // 🚀 SECOND TIMEOUT: Interactivity and Heavy Math
-        setTimeout(() => {
-            // 1. Calculate and Inject Totals without freezing the UI
-            (anly.apps || []).forEach(app => {
-                const score = OL.calculateAnalysisScore(app, anly.features || []);
-                const cost = OL.calculateAppTotalCost(app);
-                
-                const scoreEl = document.getElementById(`score-pill-${app.appId}`);
-                const costEl = document.getElementById(`cost-display-${app.appId}`);
-                
-                if (scoreEl) scoreEl.innerText = score;
-                if (costEl) costEl.innerText = `$${cost.toLocaleString()}`;
-            });
-
-            // 2. Resize textareas
-            document.querySelectorAll('.matrix-notes-auto').forEach(el => {
-                el.style.height = 'auto';
-                el.style.height = el.scrollHeight + 'px';
-            });
-
-            console.log("⚡ Matrix interactivity initialized.");
-        }, 50); 
-    }, 10);
-};
+    // Add at the end of OL.openAnalysisMatrix
+    // 🚀 THE INSTANT-EDIT FIX:
+    // We use a timeout of 0 to push the 'heavy' work to the end of the execution queue.
+    // This allows the browser to 'paint' the inputs and make them focusable immediately.
+    setTimeout(() => {
+        // 1. Initialize Auto-Resizing for textareas (Only once UI is drawn)
+        document.querySelectorAll('.matrix-notes-auto').forEach(el => {
+            el.style.height = 'auto';
+            el.style.height = el.scrollHeight + 'px';
+        });
+    
+        // 2. Calculate Totals (Delayed so it doesn't block typing)
+        if (typeof OL.refreshMatrixTotals === 'function') {
+            OL.refreshMatrixTotals(analysisId);
+        }
+        
+        console.log("⚡ Matrix interactivity initialized.");
+    }, 0);
+}
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
     // 🚀 THE SHIELD
@@ -7622,7 +7691,7 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
                 <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
                     <div style="display: flex; flex-direction: column; gap: 6px;">                            
                         <select class="tiny-select" style="width: 100%; height: 22px;"
-                            onchange="OL.handleMatrixPricingChange('${anlyId}', '${appObj.appId}', '${featId}', this.value, ${isMaster ? 'true' : 'false'})">
+                            onchange="OL.handleMatrixPricingChange('${anlyId}', '${appObj.appId}', '${featId}', this.value, ${masterFlag})">
                             <option value="not_included" ${isNotIncluded ? 'selected' : ''}>Not Included</option>
                             <optgroup label="Included In:">
                                 ${(appObj.pricingTiers || []).map(t => `
