@@ -7882,18 +7882,29 @@ OL.calculateAppTotalCost = function(appObj) {
 OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value, isMaster) {
     const client = getActiveClient();
     
-    // Now isMaster will be defined because it's passed in from the HTML
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    // 1. Force isMaster to a real boolean (handles 'true' vs true)
+    const masterBool = (isMaster === true || isMaster === 'true');
     
+    // 2. Identify the correct source
+    const source = masterBool ? (state.master?.analyses || []) : (client?.projectData?.localAnalyses || []);
+    
+    // 3. Find the analysis using String comparison to avoid ID type issues
     const anly = source.find(a => String(a.id) === String(anlyId));
+    
     if (!anly) {
-        console.error("Analysis not found for ID:", anlyId);
+        console.error("❌ Analysis not found for ID:", anlyId, "| Master Mode:", masterBool);
+        // Debug: Log the available IDs so you can see why it failed
+        console.log("Available IDs in source:", source.map(a => a.id));
         return;
     }
 
     const appInMatrix = anly.apps.find(a => String(a.appId) === String(appId));    
-    if (!appInMatrix) return;
+    if (!appInMatrix) {
+        console.error("❌ App not found in this analysis:", appId);
+        return;
+    }
     
+    // 4. Process the value
     const [type, tierName] = value.split('|');
     if (!appInMatrix.featPricing) appInMatrix.featPricing = {};
     
@@ -7903,12 +7914,16 @@ OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value, isMa
         addonPrice: appInMatrix.featPricing[featId]?.addonPrice || 0
     };
 
-    // Surgical Update
+    // 5. Surgical Update (UI only)
     const newCost = OL.calculateAppTotalCost(appInMatrix);
     const costEl = document.getElementById(`cost-display-${appId}`);
-    if (costEl) costEl.innerText = `$${newCost.toLocaleString()}`;
+    if (costEl) {
+        costEl.innerText = `$${newCost.toLocaleString()}`;
+    }
 
+    // 6. Persist to Cloud
     await OL.persist();
+    console.log("✅ Pricing updated and persisted.");
 };
 
 // Add a new Tier to a specific App
