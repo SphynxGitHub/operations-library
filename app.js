@@ -123,6 +123,7 @@ OL.sync = function() {
             console.log("🏛️ Master Registry Synced");
         }
     });
+    
     // 2. The Entire Clients Collection
 
     db.collection('clients').onSnapshot((querySnapshot) => {
@@ -133,10 +134,21 @@ OL.sync = function() {
         querySnapshot.forEach((doc) => {
             cloudClients[doc.id] = doc.data();
         });
+
+        // 🛡️ THE MUZZLE: Check if the Matrix is currently on screen
+        const matrixContainer = document.querySelector('.matrix-table-container');
+        if (matrixContainer) {
+            console.log("🛡️ Sync Echo Blocked: Matrix is active. Updating state only.");
+            state.clients = cloudClients; // Update data in background
+            return; // 🛑 STOP HERE. Do not call handleRoute() or render anything.
+        }
     
         // If the data is the same, stop immediately to save CPU cycles
         if (window.lastSyncHash === JSON.stringify(cloudClients).length) return; 
         window.lastSyncHash = JSON.stringify(cloudClients).length;
+
+        const now = Date.now();
+        if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) return;
     
         state.clients = cloudClients;
         
