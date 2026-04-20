@@ -7686,12 +7686,13 @@ window.renderAnalysisMatrixRows = function(anly, analysisId, isMaster, totalCols
             const pricing = appObj.featPricing?.[featId] || {};
             const costType = pricing.type || 'not_included'; 
             const isNotIncluded = costType === 'not_included';
+            const mFlag = isMaster ? 'true' : 'false';
 
             return `
                 <td style="padding: 6px; border: 1px solid var(--line); vertical-align: top; min-width: 140px; background: rgba(255,255,255,0.01);">
                     <div style="display: flex; flex-direction: column; gap: 6px;">                            
                         <select class="tiny-select" style="width: 100%; height: 22px;"
-                            onchange="OL.handleMatrixPricingChange('${anlyId}', '${appObj.appId}', '${featId}', this.value, ${masterFlag})">
+                            onchange="OL.handleMatrixPricingChange('${anlyId}', '${appObj.appId}', '${featId}', this.value, '${mFlag}')">
                             <option value="not_included" ${isNotIncluded ? 'selected' : ''}>Not Included</option>
                             <optgroup label="Included In:">
                                 ${(appObj.pricingTiers || []).map(t => `
