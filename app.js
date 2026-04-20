@@ -116,6 +116,11 @@ OL.persist = async function() {
 
 OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync...");
+    // 🛑 STOP: If we already have a listener, don't create another one!
+    if (window.isSyncInitialized) return;
+    window.isSyncInitialized = true;
+
+    console.log("📡 Initializing Unified Collection Sync (First & Only Time)...");
 
     // 1. Master Registry (Standard Library)
     db.collection('systems').doc('master_registry').onSnapshot((doc) => {
