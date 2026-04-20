@@ -7878,17 +7878,20 @@ OL.calculateAppTotalCost = function(appObj) {
 };
 
 // 🎯 Refined Dropdown Logic
-OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
+// Add 'isMaster' to the arguments list here 👇
+OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value, isMaster) {
     const client = getActiveClient();
-    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-    const anly = source.find(a => String(a.id) === String(anlyId));
-    const appInMatrix = anly.apps.find(a => String(a.appId) === String(appId));    
     
+    // Now isMaster will be defined because it's passed in from the HTML
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    
+    const anly = source.find(a => String(a.id) === String(anlyId));
     if (!anly) {
         console.error("Analysis not found for ID:", anlyId);
         return;
     }
-    
+
+    const appInMatrix = anly.apps.find(a => String(a.appId) === String(appId));    
     if (!appInMatrix) return;
     
     const [type, tierName] = value.split('|');
@@ -7900,12 +7903,11 @@ OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value) {
         addonPrice: appInMatrix.featPricing[featId]?.addonPrice || 0
     };
 
-    // 🚀 SURGICAL UPDATE: Update the specific cost display
+    // Surgical Update
     const newCost = OL.calculateAppTotalCost(appInMatrix);
     const costEl = document.getElementById(`cost-display-${appId}`);
     if (costEl) costEl.innerText = `$${newCost.toLocaleString()}`;
 
-    // Background save
     await OL.persist();
 };
 
