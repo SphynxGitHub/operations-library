@@ -2,6 +2,7 @@
 
 // 1. MUST BE LINE 1: Define the namespace immediately
 const OL = window.OL = {};
+window.isMatrixActive = false;
 
 OL.getScopingDataForResource = function(resId) {
     const client = getActiveClient();
@@ -1038,6 +1039,7 @@ OL.getCurrentContext = function() {
 
 // 🚀 Register current view so modals know what to refresh
 OL.registerView = function(renderFn) {
+    if (window.isMatrixActive) return;
     // 🛡️ THE LOCK: If the matrix is on screen, we update the logic but ABORT the render
     if (document.querySelector('.matrix-table-container')) {
         OL.currentRenderer = renderFn;
@@ -7332,6 +7334,7 @@ OL.deleteMasterAnalysis = function(anlyId) {
 
 // 3. OPEN INDIVIDUAL ANALYSIS MATRIX
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
+    window.isMatrixActive = true;
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === analysisId);
@@ -10746,6 +10749,7 @@ OL.toggleMasterExpand = function(forceExpand = null) {
 };
 
 OL.closeModal = function() {
+    window.isMatrixActive = false;
     const quickInput = document.getElementById('quick-step-input');
     
     // 1. 🤖 AUTO-SAVE CHECK (Keep your existing logic)
