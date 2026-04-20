@@ -842,6 +842,16 @@ window.buildLayout = function () {
 };
 
 window.handleRoute = function () {
+    const matrix = document.querySelector('.matrix-table-container');
+    const modal = document.querySelector('.modal-overlay'); // Or whatever your modal class is
+    
+    if (matrix || modal || window.blockRefresh) {
+        console.warn("🛡️ CRITICAL BLOCK: handleRoute tried to fire but was intercepted.");
+        return; 
+    }
+
+    console.log("🚦 Route Clear: Proceeding with render...");
+    
     const hash = window.location.hash || "#/";
     window.buildLayout(); 
 
