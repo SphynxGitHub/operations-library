@@ -842,11 +842,15 @@ window.buildLayout = function () {
 };
 
 window.handleRoute = function () {
+    // 1. Check if the matrix is ACTUALLY visible on screen
     const matrix = document.querySelector('.matrix-table-container');
-    const modal = document.querySelector('.modal-overlay'); // Or whatever your modal class is
     
-    if (matrix || modal || window.blockRefresh) {
-        console.warn("🛡️ CRITICAL BLOCK: handleRoute tried to fire but was intercepted.");
+    // 2. Allow the route if we are currently on the "Loading" or "Init" phase
+    const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
+
+    // 🛡️ THE REFINED GUARD
+    if (matrix && !isAppLoading) {
+        console.warn("🛡️ Matrix Active: Blocking Background Refresh to save your focus.");
         return; 
     }
 
