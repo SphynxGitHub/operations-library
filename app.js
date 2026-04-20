@@ -1038,6 +1038,13 @@ OL.getCurrentContext = function() {
 
 // 🚀 Register current view so modals know what to refresh
 OL.registerView = function(renderFn) {
+    // 🛡️ THE LOCK: If the matrix is on screen, we update the logic but ABORT the render
+    if (document.querySelector('.matrix-table-container')) {
+        OL.currentRenderer = renderFn;
+        console.log(`🛡️ View Context Updated Silently (Matrix Active): ${renderFn.name}`);
+        return; // 🛑 Stop the process here!
+    }
+
     OL.currentRenderer = renderFn;
     const viewName = renderFn.name || window.location.hash;
     console.log(`📍 View Context Set: ${renderFn.name}`);
