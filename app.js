@@ -4997,25 +4997,38 @@ window.renderSopStepList = function(res) {
 };
 
 OL.goToStepFromLibrary = function(resId, stepId) {
-    // 1. Close the current Modal
+    // 1. Detect if we are currently in the Vault/Master view
+    const isVaultMode = window.location.hash.includes('vault');
+    
+    // 2. Close the current Modal
     OL.closeModal();
 
-    // 2. Set the Map focus
+    // 3. Set the Map focus in memory
     state.focusedResourceId = resId;
     sessionStorage.setItem('active_resource_id', resId);
     
-    // 3. Navigate to the Visualizer if not already there
-    if (!window.location.hash.includes('visualizer')) {
-        // Save where we came from so we can go back
-        sessionStorage.setItem('map_return_path', window.location.hash.split('?')[0]);
+    // 4. Save the return path so the "Back" button works later
+    sessionStorage.setItem('map_return_path', window.location.hash.split('?')[0]);
+
+    // 5. Navigate to the CORRECT Map based on context
+    if (isVaultMode) {
+        window.location.hash = '#/vault/visualizer';
+    } else {
         window.location.hash = '#/visualizer';
     }
 
-    // 4. Wait for the map to render, then open the sidebar
+    // 6. Wait for the map to render, then snap to node and open sidebar
     setTimeout(() => {
+        // Ensure the visualizer renders the correct context
+        if (typeof OL.renderVisualizer === 'function') {
+            OL.renderVisualizer(isVaultMode);
+        }
+
         if (typeof OL.centerCanvasNode === 'function') {
             OL.centerCanvasNode(resId);
         }
+        
+        // Open the Inspector for the specific step
         OL.openInspector(resId, stepId);
     }, 150);
 };
