@@ -4953,19 +4953,48 @@ window.getAllIncomingLinks = function(targetResId, allResources) {
 
 window.renderSopStepList = function(res) {
     const steps = res.steps || [];
+    
+    // 🏗️ 1. Header with Add Button
+    let html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <label class="tiny muted bold uppercase" style="letter-spacing:1px;">Step Sequence</label>
+            <button class="btn tiny primary" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
+        </div>
+    `;
+
     if (steps.length === 0) {
-        return `<div class="empty-hint p-10">No steps defined. Use the Visual Editor to add sequence logic.</div>`;
+        return html + `<div class="empty-hint p-10">No steps defined. Click Add Step or use the Visual Editor.</div>`;
     }
 
-    return steps.map((step, idx) => `
-        <div class="sop-step-row" style="display:flex; align-items:flex-start; gap:10px; padding:8px; border-bottom:1px solid var(--line);">
-            <div class="step-number-circle">${idx + 1}</div>
-            <div style="flex:1;">
-                <div class="bold" style="font-size:11px;">${esc(step.name || 'Untitled Step')}</div>
-                ${step.notes ? `<div class="tiny muted">${esc(step.notes)}</div>` : ''}
+    // 🏗️ 2. Interactive Step Rows
+    html += steps.map((step, idx) => {
+        const hasLogic = (step.logic?.out?.length > 0 || step.logic?.in?.length > 0);
+        const hasLinks = (step.links?.length > 0);
+
+        return `
+            <div class="sop-step-row is-clickable" 
+                 onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${step.id}')"
+                 style="display:flex; align-items:flex-start; gap:10px; padding:10px; border-bottom:1px solid var(--line); transition: background 0.2s; border-radius: 4px; margin-bottom: 2px;">
+                
+                <div class="step-number-circle" style="width:20px; height:20px; font-size:10px; flex-shrink:0;">${idx + 1}</div>
+                
+                <div style="flex:1; min-width:0;">
+                    <div class="bold" style="font-size:12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${esc(step.name || 'Untitled Step')}
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center; margin-top:2px;">
+                        <span class="tiny accent" style="font-size:9px;">${step.appName || 'Auto-Tool'}</span>
+                        ${hasLogic ? '<span class="pill tiny accent" style="font-size:7px; padding:0 3px;">λ</span>' : ''}
+                        ${hasLinks ? '<span class="pill tiny soft" style="font-size:7px; padding:0 3px;">🔗</span>' : ''}
+                    </div>
+                </div>
+
+                <div style="opacity:0.3; font-size:10px;">Edit ➔</div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
+
+    return html;
 };
 
 // 1. Add New Type
@@ -5996,6 +6025,7 @@ const dependencyHtml = `
                 <label class="modal-section-label">📋 WORKFLOW STEPS</label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
                     <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
+                    <button class="btn tiny primary" onclick="OL.addNewStepToCard('${res.id}')">+ Add Step</button>
                 </div>
                 <div id="sop-step-list">${renderSopStepList(res)}</div>
             </div>
