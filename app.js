@@ -4958,7 +4958,6 @@ window.renderSopStepList = function(res) {
     let html = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <label class="tiny muted bold uppercase" style="letter-spacing:1px;">Step Sequence</label>
-            <button class="btn tiny primary" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
         </div>
     `;
 
@@ -4973,7 +4972,7 @@ window.renderSopStepList = function(res) {
 
         return `
             <div class="sop-step-row is-clickable" 
-                 onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${step.id}')"
+                 onclick="event.stopPropagation(); OL.goToStepFromLibrary('${res.id}', '${step.id}')"
                  style="display:flex; align-items:flex-start; gap:10px; padding:10px; border-bottom:1px solid var(--line); transition: background 0.2s; border-radius: 4px; margin-bottom: 2px;">
                 
                 <div class="step-number-circle" style="width:20px; height:20px; font-size:10px; flex-shrink:0;">${idx + 1}</div>
@@ -4995,6 +4994,30 @@ window.renderSopStepList = function(res) {
     }).join('');
 
     return html;
+};
+
+OL.goToStepFromLibrary = function(resId, stepId) {
+    // 1. Close the current Modal
+    OL.closeModal();
+
+    // 2. Set the Map focus
+    state.focusedResourceId = resId;
+    sessionStorage.setItem('active_resource_id', resId);
+    
+    // 3. Navigate to the Visualizer if not already there
+    if (!window.location.hash.includes('visualizer')) {
+        // Save where we came from so we can go back
+        sessionStorage.setItem('map_return_path', window.location.hash.split('?')[0]);
+        window.location.hash = '#/visualizer';
+    }
+
+    // 4. Wait for the map to render, then open the sidebar
+    setTimeout(() => {
+        if (typeof OL.centerCanvasNode === 'function') {
+            OL.centerCanvasNode(resId);
+        }
+        OL.openInspector(resId, stepId);
+    }, 150);
 };
 
 // 1. Add New Type
