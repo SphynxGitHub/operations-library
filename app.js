@@ -17446,7 +17446,7 @@ OL.importZapToResources = function() {
         const zapGroupId = `zap-${Date.now()}`;
         const zapGroup = {
             id: zapGroupId,
-            type: 'automation',
+            type: 'zap',
             category: 'Zapier',
             name: `⚡ Zap: ${zap.zapName}`,
             description: `Auto-documented on ${new Date().toLocaleDateString()}`,
