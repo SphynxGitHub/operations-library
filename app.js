@@ -4507,7 +4507,7 @@ window.renderResourceManager = function () {
             <div class="header-actions">
                 ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
                 <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
-                <button class="btn primary" onclick="OL.importZapToResources()">🔌 Import Zap Config</button>
+                <button class="btn primary" onclick="OL.importZapToResources(true)">🔌 Import Zap Config</button>
             </div>
         </div>
 
@@ -17430,41 +17430,42 @@ OL.removeFieldFromBundle = async function(bundleId, fieldId) {
 };
 
 // IMPORT ZAP AUDIT
-OL.importZapToResources = function() {
+OL.importZapToResources = function(isMaster = false) {
     const rawData = prompt("Paste the JSON output from the Bot here:");
     if (!rawData) return;
 
     try {
         const zap = JSON.parse(rawData);
-        const client = getActiveClient();
-        if (!client) return alert("Please select a client first.");
-
-        // Ensure the localResources array exists
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-
-        // Create a parent Resource Card for the entire Zap
-        const zapGroupId = `zap-${Date.now()}`;
         const zapGroup = {
-            id: zapGroupId,
-            type: 'zap',
-            category: 'Zapier',
-            name: `⚡ Zap: ${zap.zapName}`,
+            id: `res-vlt-${Date.now()}`, // 'vlt' for Vault/Master style
+            type: 'Zap',
+            category: 'Zap',
+            name: `⚡ ${zap.zapName}`,
             description: `Auto-documented on ${new Date().toLocaleDateString()}`,
-            steps: zap.steps // Store the full mapping data inside the object
+            steps: zap.steps,
+            isExpanded: true,
+            isTopShelf: true,
+            _col: 0
         };
 
-        client.projectData.localResources.push(zapGroup);
+        if (isMaster) {
+            // Save to Master Library
+            if (!state.master.resources) state.master.resources = [];
+            state.master.resources.unshift(zapGroup);
+            alert("✅ Saved to Master Library");
+        } else {
+            // Save to Active Client
+            const client = getActiveClient();
+            if (!client) return alert("Select a client first.");
+            client.projectData.localResources.unshift(zapGroup);
+            alert(`✅ Saved to ${client.name}`);
+        }
 
-        alert(`Successfully imported "${zap.zapName}" with ${zap.steps.length} steps.`);
-        
-        // Refresh the specific view you are on
-        if (typeof renderProjectResources === 'function') renderProjectResources();
-        if (typeof renderFlowMap === 'function') renderFlowMap();
-        
         OL.persist();
+        location.reload(); // Hard refresh to ensure Master UI updates
         
     } catch (e) {
         console.error(e);
-        alert("Invalid JSON data. Check the console for details.");
+        alert("Invalid JSON data.");
     }
 };
