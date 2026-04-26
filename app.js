@@ -4507,6 +4507,7 @@ window.renderResourceManager = function () {
             <div class="header-actions">
                 ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
                 <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
+                <button class="btn primary" onclick="OL.importZapToResources()">🔌 Import Zap Config</button>
             </div>
         </div>
 
@@ -17425,5 +17426,45 @@ OL.removeFieldFromBundle = async function(bundleId, fieldId) {
         bundle.childIds = bundle.childIds.filter(id => id !== fieldId);
         await OL.persist();
         OL.renderGlobalDataManager();
+    }
+};
+
+// IMPORT ZAP AUDIT
+OL.importZapToResources = function() {
+    const rawData = prompt("Paste the JSON output from the Bot here:");
+    if (!rawData) return;
+
+    try {
+        const zap = JSON.parse(rawData);
+        const client = getActiveClient();
+        if (!client) return alert("Please select a client first.");
+
+        // Ensure the localResources array exists
+        if (!client.projectData.localResources) client.projectData.localResources = [];
+
+        // Create a parent Resource Card for the entire Zap
+        const zapGroupId = `zap-${Date.now()}`;
+        const zapGroup = {
+            id: zapGroupId,
+            type: 'automation',
+            category: 'Zapier',
+            name: `⚡ Zap: ${zap.zapName}`,
+            description: `Auto-documented on ${new Date().toLocaleDateString()}`,
+            steps: zap.steps // Store the full mapping data inside the object
+        };
+
+        client.projectData.localResources.push(zapGroup);
+
+        alert(`Successfully imported "${zap.zapName}" with ${zap.steps.length} steps.`);
+        
+        // Refresh the specific view you are on
+        if (typeof renderProjectResources === 'function') renderProjectResources();
+        if (typeof renderFlowMap === 'function') renderFlowMap();
+        
+        OL.persist();
+        
+    } catch (e) {
+        console.error(e);
+        alert("Invalid JSON data. Check the console for details.");
     }
 };
