@@ -17436,36 +17436,53 @@ OL.importZapToResources = function(isMaster = false) {
 
     try {
         const zap = JSON.parse(rawData);
+        
+        // 🚀 THE TRANSFORMATION LAYER
+        const transformedSteps = zap.steps.map((s, i) => ({
+            id: "step_" + Date.now() + "_" + i, // Generate the unique ID your code needs
+            name: s.title,                      // Map 'title' to 'name' (FIXES UNTITLED)
+            description: s.title,               // Map 'title' to 'description'
+            appName: s.app,                     // Standardize app name
+            timingValue: 0,
+            timingType: 'after_prev',
+            logic: { in: [], out: [] },         // Initialize empty logic blocks
+            links: []                           // Initialize empty asset links
+        }));
+
         const zapGroup = {
-            id: `res-vlt-${Date.now()}`, // 'vlt' for Vault/Master style
+            id: isMaster ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
             type: 'Zap',
-            category: 'Zap',
+            archetype: 'Multi-Step',            // Ensure it uses your Multi-Step layout
             name: `⚡ ${zap.zapName}`,
-            description: `Auto-documented on ${new Date().toLocaleDateString()}`,
-            steps: zap.steps,
+            description: `Auto-documented Zapier Logic`,
+            steps: transformedSteps,            // Use the fixed steps
             isExpanded: true,
-            isTopShelf: true,
+            isTopShelf: isMaster,
             _col: 0
         };
 
         if (isMaster) {
-            // Save to Master Library
             if (!state.master.resources) state.master.resources = [];
             state.master.resources.unshift(zapGroup);
             alert("✅ Saved to Master Library");
         } else {
-            // Save to Active Client
             const client = getActiveClient();
             if (!client) return alert("Select a client first.");
+            if (!client.projectData.localResources) client.projectData.localResources = [];
             client.projectData.localResources.unshift(zapGroup);
-            alert(`✅ Saved to ${client.name}`);
+            alert(`✅ Saved to ${client.meta.name}`);
         }
 
         OL.persist();
-        location.reload(); // Hard refresh to ensure Master UI updates
+        // Use your handleRoute instead of reload for a cleaner UI refresh
+        if (window.location.hash.includes('visualizer')) {
+            OL.renderVisualizer();
+        } else {
+            window.handleRoute();
+        }
         
     } catch (e) {
-        console.error(e);
-        alert("Invalid JSON data.");
+        console.error("Import Error:", e);
+        alert("Invalid JSON data. Check console for details.");
     }
 };
