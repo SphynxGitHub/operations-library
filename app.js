@@ -16046,7 +16046,7 @@ OL.updateCredentialStatus = function (clientId, idx, status) {
 
 //============================= HOW TO SECTION ============================== //
 
-window.renderHowToLibrary = function() {
+function renderHowToLibrary () {
     OL.registerView(window.renderHowToLibrary);
     const container = document.getElementById("mainContent");
     const client = getActiveClient();
