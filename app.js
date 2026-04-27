@@ -17562,31 +17562,43 @@ OL.importZapToResources = function(isMaster = false) {
                     const idFields = ['spreadsheet', 'folder', 'file', 'form', 'board', 'database'];
                     if (idFields.includes(m.field.toLowerCase()) && m.value && !m.value.includes('{{')) {
                         
-                        // 1. Look for existing resource with this ID in external link
+                        // 1. Look for existing resource by ID
                         let existingRes = library.find(r => r.externalUrl && r.externalUrl.includes(m.value));
-
+                    
                         if (!existingRes) {
-                            // 2. Create it if not found (Infrastructure Auto-Discovery)
+                            // 🚀 SMART URL ASSIGNMENT
+                            let generatedUrl = "";
+                            const fieldKey = m.field.toLowerCase();
+                    
+                            if (fieldKey.includes('folder')) {
+                                generatedUrl = `https://drive.google.com/drive/u/1/folders/${m.value}`;
+                            } else if (fieldKey.includes('spreadsheet') || fieldKey.includes('sheet')) {
+                                generatedUrl = `https://docs.google.com/spreadsheets/d/${m.value}`;
+                            } else {
+                                // Fallback for generic files
+                                generatedUrl = `https://drive.google.com/open?id=${m.value}`;
+                            }
+                    
                             const newResId = (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5);
+                            
                             existingRes = {
                                 id: newResId,
                                 name: `[Discovered] ${m.field}: ${m.value.substring(0, 8)}...`,
-                                type: m.field.charAt(0).toUpperCase() + m.field.slice(1),
-                                externalUrl: `https://docs.google.com/spreadsheets/d/${m.value}`, // Defaulting to G-Suite style
+                                type: fieldKey.includes('folder') ? 'Folder' : (fieldKey.includes('sheet') ? 'Spreadsheet' : 'File'),
+                                externalUrl: generatedUrl,
                                 description: `Auto-discovered via Zap: ${zap.zapName}`,
                                 createdDate: new Date().toISOString()
                             };
                             library.push(existingRes);
-                            console.log(`🏗️ Discovered New Infrastructure: ${existingRes.name}`);
                         }
-
+                    
                         // 3. Link the step to this resource
                         stepLinks.push({ 
                             id: existingRes.id, 
                             name: existingRes.name, 
                             type: existingRes.type 
                         });
-                    }
+                    }               
                 });
             }
 
