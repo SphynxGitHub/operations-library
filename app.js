@@ -17762,44 +17762,46 @@ OL.processZapLogic = function(zap, isMaster = false) {
     };
 };
 
-OL.bulkImportZaps = function() {
-    // 1. Ask the user directly to avoid the "Undefined" state trap
-    const isMaster = confirm("Click OK for MASTER VAULT\nClick CANCEL for OPEN PROJECT");
+OL.bulkImportZaps = function(isMaster = false) {
+    // 1. 🔍 THE SIDEBAR TRICK: If the state is lying, look at the UI
+    // We hunt for the active/highlighted client in your sidebar
+    const sidebarActiveElement = document.querySelector('.sidebar-client.active, .client-link.selected');
+    const sidebarName = sidebarActiveElement ? sidebarActiveElement.innerText.trim() : null;
+
+    // 2. Cross-reference the sidebar name with your client list
+    let client = getActiveClient();
     
-    const activeClient = getActiveClient();
-    
-    // 2. Safety Check: If user chose Project, but no client is loaded
-    if (!isMaster && (!activeClient || !activeClient.projectData)) {
-        alert("❌ Error: No Active Client detected in memory. \nTry refreshing the project page first.");
-        return;
+    // 🏗️ FAILSAFE: If getActiveClient() is failing, find the client by the sidebar name
+    if (!client && sidebarName) {
+        client = state.clients.find(c => c.name === sidebarName);
     }
 
-    const library = isMaster ? state.master.resources : activeClient.projectData.localResources;
-    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${activeClient.name}`;
+    // 3. Determine the final destination
+    const isReallyMaster = (isMaster || state.currentView === 'master-vault' || !client);
+    const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
+    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
 
-    console.log("🛠️ MANUAL OVERRIDE IMPORT:", {
-        chosenDestination: destinationName,
-        clientName: activeClient?.name
+    console.log("🛰️ DOM-BASED IMPORT CHECK:", {
+        sidebarDetectedName: sidebarName,
+        clientObjectFound: !!client,
+        target: destinationName
     });
 
-    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
+    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        
         zapArray.forEach(zapData => {
-            const processedZap = OL.processZapLogic(zapData, isMaster);
+            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
             library.unshift(processedZap);
         });
 
         OL.persist();
-        OL.renderVisualizer(isMaster);
+        OL.renderVisualizer(isReallyMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Imported ${zapArray.length} Zaps to ${destinationName}`);
-        
+        alert(`✅ Success! Imported to ${destinationName}`);
     } catch (e) {
         console.error("Import Error:", e);
-        alert("Import failed. Check console.");
     }
 };
