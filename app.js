@@ -17763,34 +17763,33 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    const rawData = prompt("Paste the content of the Bulk Export file:");
+    // 🎯 THE DEBUG BLOCK
+    const client = getActiveClient();
+    console.log("📍 IMPORT ATTEMPT DETECTED");
+    console.log("View isMaster Flag:", isMaster);
+    console.log("App currentView:", state.currentView);
+    console.log("Active Client Object:", client ? client.name : "NULL");
+
+    const rawData = prompt(`IMPORTING TO: ${isMaster ? 'Master Vault' : (client ? client.name : 'Unknown Client')}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         
-        // 🎯 USE YOUR EXISTING HELPER
-        const client = getActiveClient();
-        
-        // Target the correct library based on your pasted logic
+        // Use the library based on the isMaster flag
         const library = isMaster ? state.master.resources : client.projectData.localResources;
 
-        console.log("🚀 IMPORTING TO:", isMaster ? "Master Vault" : client.name);
-
         zapArray.forEach(zapData => {
-            // Use your existing processor
             const processedZap = OL.processZapLogic(zapData, isMaster);
             library.unshift(processedZap);
         });
 
-        // Sync and Render using your existing methods
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
-        
-        alert(`✅ Imported ${zapArray.length} Zaps into ${isMaster ? 'Master Vault' : client.name + ' Project'}`);
+        alert(`✅ Success! Imported ${zapArray.length} Zaps.`);
     } catch (e) {
         console.error("Bulk Import Error:", e);
-        alert("Check console. Data format might be wrong or no client is active.");
+        alert("Import failed. Check console.");
     }
 };
