@@ -17771,7 +17771,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         return;
     }
 
-    const rawData = prompt(`🔄 SYNC ENGINE READY\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
+    const rawData = prompt(`🔄 SMART SYNC (ID + Name Match)\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
@@ -17782,35 +17782,45 @@ OL.bulkImportZaps = function(isMaster = false) {
         let newCount = 0;
 
         zapArray.forEach(zapData => {
-            // 1. Process the incoming data
+            const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
+            const displayName = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
+
             const processedZap = OL.processZapLogic(zapData, isMaster);
-            // Ensure the zapId is preserved on the top-level object for future lookups
+            processedZap.name = displayName;
             processedZap.originalZapId = zapData.zapId;
 
-            // 2. Check if this Zap already exists in our library
-            const existingIndex = library.findIndex(r => 
-                r.type === 'Zap' && (r.originalZapId === zapData.zapId || r.name.includes(zapData.zapName))
-            );
+            // 🎯 THE DUPE-KILLER SEARCH
+            const existingIndex = library.findIndex(r => {
+                if (r.type !== 'Zap') return false;
+                
+                // 1. Match by zapId
+                const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
+                
+                // 2. Match by Name (case insensitive, icon independent)
+                const cleanExistingName = r.name.replace(/^⚡\s*/, '').trim().toLowerCase();
+                const nameMatch = cleanExistingName === cleanIncomingName;
+                
+                return idMatch || nameMatch;
+            });
 
             if (existingIndex !== -1) {
-                // UPDATE: Replace existing at the same index
+                // UPDATE EXISTING
                 library[existingIndex] = processedZap;
                 updateCount++;
             } else {
-                // IMPORT: Add to the top
+                // ADD NEW
                 library.unshift(processedZap);
                 newCount++;
             }
         });
 
-        // 3. Persist and Refresh UI
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Complete!\n\n✨ New: ${newCount}\n🔄 Updated: ${updateCount}\n📂 Total: ${zapArray.length}`);
+        alert(`✅ Sync Complete!\n\n🔄 Updated (Matching name or ID): ${updateCount}\n✨ New: ${newCount}`);
     } catch (e) {
         console.error("Bulk Import Error:", e);
-        alert("Import failed. Check console for details.");
+        alert("Import failed. Check console.");
     }
 };
