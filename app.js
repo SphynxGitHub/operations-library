@@ -10375,16 +10375,32 @@ OL.renderWorkbenchItemsOnly = function() {
 };
 
 OL.switchWorkbenchTab = function(tabId) {
+    // 1. Update the logical state
     state.ui.activeWorkbenchTab = tabId;
     
+    // 2. 🚀 SURGICAL CSS UPDATE: Update tab highlights without a full redraw
+    const tabs = document.querySelectorAll('.wb-tab');
+    tabs.forEach(tab => {
+        // We look for the function call inside the onclick to identify the tab
+        if (tab.getAttribute('onclick').includes(`'${tabId}'`)) {
+            tab.classList.add('active');
+            // Force the specific styling you defined in renderWorkbenchTabs
+            tab.style.color = "var(--accent)"; 
+            tab.style.borderBottom = "2px solid var(--accent)";
+        } else {
+            tab.classList.remove('active');
+            tab.style.color = "var(--text-dim)";
+            tab.style.borderBottom = "2px solid transparent";
+        }
+    });
+
+    // 3. Update the sidebar sub-filters (important for the Assets checkbox)
     const filterContainer = document.getElementById('sidebar-sub-filter-container');
     if (filterContainer) {
         filterContainer.innerHTML = OL.renderSidebarTypeFilter();
-    } else {
-        const header = document.querySelector('.workbench-header');
-        if (header) header.outerHTML = OL.renderWorkbenchTabs();
     }
-    
+
+    // 4. Refresh the list content
     OL.renderWorkbenchItemsOnly();
 };
 
