@@ -17763,20 +17763,26 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    // 🎯 THE DEBUG BLOCK
-    const client = getActiveClient();
-    console.log("📍 IMPORT ATTEMPT DETECTED");
-    console.log("View isMaster Flag:", isMaster);
-    console.log("App currentView:", state.currentView);
-    console.log("Active Client Object:", client ? client.name : "NULL");
+    // 1. 🎯 THE HARD RESET: Force the active ID from the UI
+    const activeSidebarItem = document.querySelector('.sidebar-client.active, .client-link.selected');
+    if (activeSidebarItem && activeSidebarItem.getAttribute('data-id')) {
+        state.activeClientId = activeSidebarItem.getAttribute('data-id');
+    }
 
-    const rawData = prompt(`IMPORTING TO: ${isMaster ? 'Master Vault' : (client ? client.name : 'Unknown Client')}\n\nPaste JSON content:`);
+    // 2. Now use the standard logic with the forced ID
+    const client = state.clients[state.activeClientId];
+    
+    // 3. LOG EVERYTHING so we see the "Why"
+    console.log("📍 CONTEXT RECOVERY:");
+    console.log("- Forced ID from Sidebar:", state.activeClientId);
+    console.log("- Client found in State:", client ? client.name : "STILL NULL");
+
+    const destinationName = isMaster ? "MASTER VAULT" : (client ? client.name : "UNDEFINED");
+    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        
-        // Use the library based on the isMaster flag
         const library = isMaster ? state.master.resources : client.projectData.localResources;
 
         zapArray.forEach(zapData => {
@@ -17787,9 +17793,9 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Imported ${zapArray.length} Zaps.`);
+        alert(`✅ Success! Imported to ${destinationName}`);
     } catch (e) {
-        console.error("Bulk Import Error:", e);
-        alert("Import failed. Check console.");
+        console.error("Import Error:", e);
+        alert("Check console. Is the client selected in the sidebar?");
     }
 };
