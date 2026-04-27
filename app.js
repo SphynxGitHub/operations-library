@@ -17614,45 +17614,26 @@ OL.bulkImportZaps = function(isMaster = false) {
     
     const isReallyMaster = isMaster || !client || state.currentView === 'master-vault';
     const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
+    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
 
-    const rawData = prompt(`RE-IMPORT (Mapping Restore)\nPaste JSON:`);
+    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         
         zapArray.forEach(zapData => {
-            // 1. Identify existing
-            const cleanName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
-            const existingIndex = library.findIndex(r => {
-                const rName = r.name ? r.name.replace(/^⚡\s*/, '').trim().toLowerCase() : "";
-                return r.type === 'Zap' && (r.zapId === zapData.zapId || rName === cleanName);
-            });
-
-            // 2. Remove it so the app forgets it ever existed
-            if (existingIndex !== -1) {
-                library.splice(existingIndex, 1);
-            }
-
-            // 3. RUN YOUR ORIGINAL WORKING LOGIC
-            // We pass a fresh copy of the data to avoid any reference issues
-            const processedZap = OL.processZapLogic(JSON.parse(JSON.stringify(zapData)), isReallyMaster);
-            
-            // 4. Ensure the Zap name has the icon (if that's what you prefer)
-            if (!processedZap.name.startsWith('⚡')) {
-                processedZap.name = `⚡ ${processedZap.name}`;
-            }
-
+            // Raw, un-tampered processing logic
+            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
             library.unshift(processedZap);
         });
 
-        // 5. Hard Refresh
         OL.persist();
         OL.renderVisualizer(isReallyMaster);
         OL.renderWorkbenchItemsOnly();
-        
-        alert(`✅ Synced ${zapArray.length} Zaps. Mappings should be restored.`);
+        alert(`✅ Success! Imported ${zapArray.length} Zaps to ${destinationName}`);
     } catch (e) {
-        console.error("Import Error:", e);
+        console.error("Bulk Import Error:", e);
+        alert("Import failed. See console.");
     }
 };
