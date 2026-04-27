@@ -17613,17 +17613,16 @@ OL.bulkImportZaps = function(isMaster = false) {
     const client = state.clients[activeId];
     if (!client && !isMaster) return alert("❌ No active project.");
 
-    // 1. Translation Map for Zapier's internal "Robot" IDs
     const zapierRobotMap = {
         "app115533": "Wealthbox",
-        "app235438": "Wealthbox",
+        "app235438": "Orion",
         "app223706": "CurrentClient",
-        "schedule": "Zapier Schedule",
-        "zapierlooping": "Zapier Looping",
-        "filterapi": "Zapier Filter",
-        "codeapi": "Zapier Code",
-        "engineapi": "Zapier Engine",
-        "storage": "Zapier Storage",
+        "schedule": "Zapier",
+        "zapierlooping": "Zapier",
+        "filterapi": "Filter",
+        "codeapi": "Code",
+        "engineapi": "Engine",
+        "storage": "Zapier",
         "slackapi": "Slack",
         "googlemakersuite": "AI"
     };
@@ -17636,22 +17635,20 @@ OL.bulkImportZaps = function(isMaster = false) {
         });
 
     const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
 
-    const rawData = prompt(`🔄 FINAL REPAIR SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 MAP-PRESERVING SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         
         zapArray.forEach((zapData) => {
-            // 2. PRE-MATCH: Identify IDs and clean names
             const stepIdMap = []; 
 
             if (zapData.steps) {
                 zapData.steps.forEach((step, sIdx) => {
                     let incoming = step.app.split('@')[0].replace(/CLIAPI|V\d+/g, '').toLowerCase().trim();
-                    
-                    // Apply translation map
                     if (zapierRobotMap[incoming]) incoming = zapierRobotMap[incoming].toLowerCase();
 
                     const matchedApp = projectApps.find(pApp => {
@@ -17663,16 +17660,14 @@ OL.bulkImportZaps = function(isMaster = false) {
                     if (matchedApp) {
                         step.app = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
                         step.appId = typeof matchedApp === 'string' ? null : matchedApp.id;
-                        // Store this for post-processing injection
                         stepIdMap[sIdx] = { name: step.app, id: step.appId };
                     }
                 });
             }
 
-            // 3. RUN ORIGINAL LOGIC
             const processedZap = OL.processZapLogic(zapData, isMaster);
             
-            // 🎯 4. THE FIX: RE-INJECT DATA WIPED BY processZapLogic
+            // Re-inject mapped IDs
             processedZap.steps.forEach((pStep, pIdx) => {
                 if (stepIdMap[pIdx]) {
                     pStep.appId = stepIdMap[pIdx].id;
@@ -17680,24 +17675,37 @@ OL.bulkImportZaps = function(isMaster = false) {
                 }
             });
 
-            // 5. Card level info
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
-            // 6. Update or Insert
-            const idx = library.findIndex(r => 
+            // 🎯 THE MAP PRESERVATION LOGIC
+            const existingIndex = library.findIndex(r => 
                 r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
             );
 
-            if (idx !== -1) library[idx] = processedZap;
-            else library.unshift(processedZap);
+            if (existingIndex !== -1) {
+                const oldZap = library[existingIndex];
+                
+                // 🧬 Graft map properties from the old object to the new one
+                processedZap.id = oldZap.id; // Keep the same ID so logic links don't break
+                processedZap.coords = oldZap.coords;
+                processedZap.stageId = oldZap.stageId;
+                processedZap.isGlobal = oldZap.isGlobal;
+                processedZap.isTopShelf = oldZap.isTopShelf;
+                processedZap._col = oldZap._col;
+
+                // Overwrite at same position
+                library[existingIndex] = processedZap;
+            } else {
+                library.unshift(processedZap);
+            }
         });
 
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Fixed. ${zapArray.length} Zaps processed with manual ID injection.`);
+        alert(`✅ Sync Complete! Updated Zaps kept their positions on the map.`);
     } catch (e) {
         console.error("🔥 Error:", e);
     }
