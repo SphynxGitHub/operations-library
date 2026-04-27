@@ -17763,34 +17763,30 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    // 1. Grab the ID string directly from the active sidebar element
-    const activeEl = document.querySelector('.sidebar-client.active, .client-link.selected');
-    const forcedId = activeEl ? activeEl.getAttribute('data-id') : null;
+    // 1. Get the ID directly from the state (the same one the rest of the app uses)
+    const currentId = state.activeClientId;
+    
+    // 2. Access the client directly from the Object using the ID
+    const client = state.clients[currentId];
 
-    if (!forcedId && !isMaster) {
-        alert("❌ Sidebar error: No active client found visually.");
-        return;
-    }
-
-    // 2. Manual Search: Look through state.clients (handles Object or Array)
-    const allClients = Object.values(state.clients);
-    const client = allClients.find(c => c.id === forcedId);
-
-    console.log("🧬 FINAL ATTEMPT DEBUG:", {
-        idFromSidebar: forcedId,
-        clientFoundInState: client ? client.name : "STILL UNDEFINED",
-        totalClientsInState: allClients.length
+    // 3. LOGGING: Let's see exactly what's in the box
+    console.log("🧬 FINAL CONTEXT CHECK:", {
+        activeId: currentId,
+        clientFound: client ? client.name : "STILL NULL",
+        isMasterFlag: isMaster
     });
 
-    const isReallyMaster = isMaster || !client;
+    // 4. Fallback Logic
+    const isReallyMaster = isMaster || !client || state.currentView === 'master-vault';
     const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
     const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
 
-    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
+        
         zapArray.forEach(zapData => {
             const processedZap = OL.processZapLogic(zapData, isReallyMaster);
             library.unshift(processedZap);
@@ -17799,8 +17795,9 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.persist();
         OL.renderVisualizer(isReallyMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Imported to ${destinationName}`);
+        alert(`✅ Success! Imported ${zapArray.length} Zaps to ${destinationName}`);
     } catch (e) {
-        console.error("Import Error:", e);
+        console.error("Bulk Import Error:", e);
+        alert("Import failed. See console for details.");
     }
 };
