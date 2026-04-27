@@ -17613,7 +17613,7 @@ OL.bulkImportZaps = function(isMaster = false) {
     const client = state.clients[activeId];
     if (!client && !isMaster) return alert("❌ No active project.");
 
-    // Get your localApps for the fuzzy match
+    // 1. Get project apps for the fuzzy match
     const projectApps = (client.projectData?.localApps || [])
         .sort((a, b) => {
             const nameA = typeof a === 'string' ? a : (a.name || a.label || "");
@@ -17624,14 +17624,17 @@ OL.bulkImportZaps = function(isMaster = false) {
     const library = isMaster ? state.master.resources : client.projectData.localResources;
     const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
 
-    const rawData = prompt(`🔄 RESTORED MAPPING LOGIC\nTarget: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 SYNC ZAPS & APPS\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         
         zapArray.forEach(zapData => {
-            // 1. 🎯 PRE-CLEAN: Fix the apps inside the raw JSON so processZapLogic can see them
+            let primaryAppId = null;
+            let primaryAppName = null;
+
+            // 2. PRE-CLEAN: Match robot names to your project's localApps
             if (zapData.steps && projectApps.length > 0) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
@@ -17639,24 +17642,36 @@ OL.bulkImportZaps = function(isMaster = false) {
                         const matchedApp = projectApps.find(pApp => {
                             const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
                             const pClean = pAppName.toLowerCase().replace(/\s/g, '');
+                            // Smart match with word boundaries to protect Box vs Wealthbox
                             return incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pAppName);
                         });
                         
-                        // Overwrite the raw JSON string with your project's app string
                         if (matchedApp) {
-                            step.app = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
+                            const finalName = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
+                            const finalId = typeof matchedApp === 'string' ? null : matchedApp.id;
+                            
+                            step.app = finalName; // Update raw JSON for processZapLogic
+
+                            // 🎯 CAPTURE FIRST MATCH: Save the first real app we find to be the "Primary"
+                            if (!primaryAppName) {
+                                primaryAppName = finalName;
+                                primaryAppId = finalId;
+                            }
                         }
                     }
                 });
             }
 
-            // 2. RUN YOUR ORIGINAL LOGIC
-            // Now that zapData.steps[x].app is "Wealthbox", this function will map it correctly.
+            // 3. RUN ORIGINAL LOGIC
             const processedZap = OL.processZapLogic(zapData, isMaster);
+            
+            // 4. INJECT MAPPING: Explicitly set the fields the Inspector looks for
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
+            processedZap.appName = primaryAppName; 
+            processedZap.appId = primaryAppId;
 
-            // 3. UPDATE OR INSERT
+            // 5. UPDATE OR INSERT
             const existingIndex = library.findIndex(r => 
                 r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
             );
@@ -17672,7 +17687,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Success! Mapped using original processZapLogic.`);
+        alert(`✅ Success! Zaps imported and apps mapped to "${primaryAppName || 'System'}".`);
     } catch (e) {
         console.error("Sync Error:", e);
     }
