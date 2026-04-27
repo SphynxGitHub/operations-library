@@ -4507,7 +4507,7 @@ window.renderResourceManager = function () {
             <div class="header-actions">
                 ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
                 <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
-                <button class="btn primary" onclick="OL.importZapToResources(true)">🔌 Import Zap Config</button>
+                <button class="btn tiny primary" onclick="OL.bulkImportZaps(true)">📁 Bulk Load Master Zaps</button>
             </div>
         </div>
 
@@ -17694,24 +17694,94 @@ OL.importZapToResources = function(isMaster = false) {
         alert("Invalid JSON data.");
     }
 };
-OL.bulkImportZaps = function() {
-    const rawData = prompt("Paste the contents of your Bulk Export JSON here:");
+
+OL.processZapLogic = function(zap, isMaster = false) {
+    const client = getActiveClient();
+    const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const dataLibrary = isMaster ? state.master.datapoints : (client.projectData.localDatapoints || []);
+
+    const transformedSteps = zap.steps.map((s, i) => {
+        const cleanAppName = s.app ? s.app.split('@')[0].replace(/CLIAPI|V\d+|V\d+CLIAPI/g, '').replace(/([A-Z])/g, ' $1').trim() : "System";
+        const stepLinks = [];
+        const stepDatapoints = [];
+
+        if (s.mappings) {
+            s.mappings.forEach(m => {
+                const fieldLower = (m.label || m.field || "").toLowerCase();
+                const idFields = ['spreadsheet', 'folder', 'file', 'form', 'board', 'database'];
+
+                // 🏗️ INFRASTRUCTURE DISCOVERY
+                if (idFields.some(f => fieldLower.includes(f)) && m.value && !m.value.includes('{{')) {
+                    let existingRes = library.find(r => r.externalUrl && r.externalUrl.includes(m.value));
+                    if (!existingRes) {
+                        let genUrl = fieldLower.includes('folder') ? `https://drive.google.com/drive/u/1/folders/${m.value}` : `https://docs.google.com/spreadsheets/d/${m.value}`;
+                        existingRes = {
+                            id: (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5),
+                            name: `[Discovered] ${m.field}: ${m.value.substring(0, 8)}...`,
+                            type: fieldLower.includes('folder') ? 'Folder' : 'Spreadsheet',
+                            externalUrl: genUrl,
+                            isGlobal: true, coords: null, stageId: null
+                        };
+                        library.push(existingRes);
+                    }
+                    stepLinks.push({ id: existingRes.id, name: existingRes.name, type: existingRes.type });
+                }
+
+                // 🏷️ DATA TAG DISCOVERY
+                if (m.value && m.value.includes('{{')) {
+                    const rawName = m.label || m.field || "Unknown";
+                    const cleanName = rawName.replace(/_/g, ' ').trim();
+                    let tag = dataLibrary.find(d => d.name.toLowerCase() === cleanName.toLowerCase());
+                    if (!tag) {
+                        tag = { id: 'dp-' + Date.now() + Math.random().toString(36).substr(2, 5), name: cleanName, category: 'Auto-Discovered' };
+                        dataLibrary.push(tag);
+                    }
+                    if (!stepDatapoints.some(d => d.id === tag.id)) stepDatapoints.push(tag);
+                }
+            });
+        }
+
+        return {
+            id: "step_" + Date.now() + "_" + i,
+            name: s.title || "Untitled Step",
+            appName: cleanAppName,
+            assignees: (i === 0) ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] : [{ id: 'zap-auto', name: 'Zapier', type: 'app' }],
+            logic: { in: [], out: [] },
+            links: stepLinks,
+            datapoints: stepDatapoints
+        };
+    });
+
+    return {
+        id: (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5),
+        type: 'Zap',
+        archetype: 'Multi-Step',
+        name: `⚡ ${zap.zapName}`,
+        steps: transformedSteps,
+        isExpanded: true
+    };
+};
+
+OL.bulkImportZaps = function(isMaster = false) {
+    const rawData = prompt("Paste the content of the Bulk Export file:");
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        console.log(`📦 Bulk processing ${zapArray.length} Zaps...`);
+        const client = getActiveClient();
+        const library = isMaster ? state.master.resources : client.projectData.localResources;
 
         zapArray.forEach(zapData => {
-            // Re-use your existing logic for each zap in the file
-            // We'll wrap your current logic into a reusable 'processSingleZap' function
-            OL.processSingleZapImport(zapData);
+            const processedZap = OL.processZapLogic(zapData, isMaster);
+            library.unshift(processedZap);
         });
 
-        alert(`✅ Successfully imported ${zapArray.length} Zaps and mapped infrastructure!`);
-        OL.renderVisualizer();
+        OL.persist();
+        OL.renderVisualizer(isMaster);
+        OL.renderWorkbenchItemsOnly();
+        alert(`✅ Imported ${zapArray.length} Zaps and mapped infrastructure!`);
     } catch (e) {
         console.error("Bulk Import Error:", e);
-        alert("Invalid JSON format.");
+        alert("Check console for errors. Data format might be wrong.");
     }
 };
