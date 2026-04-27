@@ -4560,8 +4560,19 @@ window.renderResourceManager = function () {
             </div>
             <div class="header-actions">
                 ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
-                <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
-                <button class="btn tiny primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
+                <div class="dropdown-plus">
+                    <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
+                    <div class="dropdown-content">
+                        ${(state.master.resourceTypes || []).map(t => `
+                            <a href="javascript:void(0)" onclick="OL.universalCreate('${t.type}')">
+                                ${t.icon || '📄'} New ${t.type}
+                            </a>
+                        `).join('')}
+                        <div class="divider"></div>
+                        <a href="javascript:void(0)" onclick="OL.universalCreate('General')">⚙️ New General Resource</a>
+                    </div>
+                </div>
+                <button class="btn primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
             </div>
         </div>
 
