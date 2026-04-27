@@ -17609,24 +17609,17 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    // 1. Grab the ID from the state
     const activeId = state.activeClientId;
-    
-    // 2. Find the client in the state object/array
-    // Based on your previous logs, state.clients uses the IDs as keys
     const client = state.clients[activeId];
     
-    if (!client && !isMaster) {
-        console.error("❌ Context Error: No client found in state for ID:", activeId);
-        return alert("❌ Error: Please click into a project before importing.");
-    }
+    if (!client && !isMaster) return alert("❌ No active project detected.");
 
-    // 3. Setup Project Data (using meta.name based on your HTML)
-    const clientName = client?.meta?.name || "Unknown Project";
-    const projectApps = (client?.projectData?.infrastructure || [])
-        .sort((a, b) => b.length - a.length);
+    // 1. Target the correct tool list: localApps
+    const projectApps = (client.projectData?.localApps || [])
+        .sort((a, b) => b.length - a.length); // Longest first to protect "Box" vs "Wealthbox"
 
     const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const clientName = client.meta?.name || "Project";
     const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${clientName}`;
 
     console.log("🧬 SYNC START:", { 
@@ -17635,7 +17628,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         activeId: activeId 
     });
 
-    const rawData = prompt(`🔄 SYNC ENGINE (Meta-Fixed)\nTarget: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 FINAL SMART SYNC\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -17644,7 +17637,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         let newCount = 0;
 
         zapArray.forEach(zapData => {
-            // 4. SMART MAPPING (Fuzzy Match)
+            // 2. SMART MAPPING (Fuzzy Match using localApps)
             if (zapData.steps && projectApps.length > 0) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
@@ -17655,18 +17648,20 @@ OL.bulkImportZaps = function(isMaster = false) {
                         const matchedApp = projectApps.find(pApp => {
                             const project = pApp.toLowerCase().replace(/\s/g, '');
                             if (incoming === project) return true;
+                            // Word boundary check
                             const regex = new RegExp(`\\b${incoming}\\b`, 'i');
                             return pApp.match(regex) || project === incoming;
                         });
 
                         if (matchedApp) {
+                            console.log(`🎯 Matched ${step.app} to ${matchedApp}`);
                             step.app = matchedApp; 
                         }
                     }
                 });
             }
 
-            // 5. PROCESS & UPDATE
+            // 3. PROCESS & UPDATE
             const processedZap = OL.processZapLogic(zapData, isMaster);
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
@@ -17688,7 +17683,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`🎉 Success!\n\nTarget: ${destinationName}\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
+        alert(`🎉 Sync Complete!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
     } catch (e) {
         console.error("Sync Error:", e);
     }
