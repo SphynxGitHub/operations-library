@@ -17614,38 +17614,45 @@ OL.bulkImportZaps = function(isMaster = false) {
     
     const isReallyMaster = isMaster || !client || state.currentView === 'master-vault';
     const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
 
-    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
+    const rawData = prompt(`RE-IMPORT (Mapping Restore)\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         
         zapArray.forEach(zapData => {
-            // --- THE ONLY ADDITION: Remove duplicate before processing ---
+            // 1. Identify existing
             const cleanName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
             const existingIndex = library.findIndex(r => {
                 const rName = r.name ? r.name.replace(/^⚡\s*/, '').trim().toLowerCase() : "";
                 return r.type === 'Zap' && (r.zapId === zapData.zapId || rName === cleanName);
             });
 
+            // 2. Remove it so the app forgets it ever existed
             if (existingIndex !== -1) {
-                library.splice(existingIndex, 1); // Delete the old one
+                library.splice(existingIndex, 1);
             }
-            // -------------------------------------------------------------
 
-            // YOUR ORIGINAL WORKING LOGIC
-            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
+            // 3. RUN YOUR ORIGINAL WORKING LOGIC
+            // We pass a fresh copy of the data to avoid any reference issues
+            const processedZap = OL.processZapLogic(JSON.parse(JSON.stringify(zapData)), isReallyMaster);
+            
+            // 4. Ensure the Zap name has the icon (if that's what you prefer)
+            if (!processedZap.name.startsWith('⚡')) {
+                processedZap.name = `⚡ ${processedZap.name}`;
+            }
+
             library.unshift(processedZap);
         });
 
+        // 5. Hard Refresh
         OL.persist();
         OL.renderVisualizer(isReallyMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Synced ${zapArray.length} Zaps to ${destinationName}`);
+        
+        alert(`✅ Synced ${zapArray.length} Zaps. Mappings should be restored.`);
     } catch (e) {
-        console.error("Bulk Import Error:", e);
-        alert("Import failed.");
+        console.error("Import Error:", e);
     }
 };
