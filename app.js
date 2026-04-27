@@ -17611,10 +17611,9 @@ OL.processZapLogic = function(zap, isMaster = false) {
 OL.bulkImportZaps = function(isMaster = false) {
     const activeId = state.activeClientId;
     const client = state.clients[activeId];
-    
     if (!client && !isMaster) return alert("❌ No active project detected.");
 
-    // 1. Target localApps and handle Object vs String entries
+    // 1. Get your localApps (including Filter/Formatter)
     const rawApps = client.projectData?.localApps || [];
     const projectApps = [...rawApps].sort((a, b) => {
         const nameA = typeof a === 'string' ? a : (a.name || a.label || "");
@@ -17623,71 +17622,61 @@ OL.bulkImportZaps = function(isMaster = false) {
     });
 
     const library = isMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
 
-    console.log("🧬 SYNC START:", { destination: destinationName, projectTools: projectApps });
-
-    const rawData = prompt(`🔄 OBJECT-SAFE SYNC\nTarget: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt(`🛠️ APP MAPPING (Including Filter/Formatter)\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        let updateCount = 0;
-        let newCount = 0;
-
+        
         zapArray.forEach(zapData => {
-            if (zapData.steps && projectApps.length > 0) {
-                zapData.steps.forEach(step => {
-                    if (step.app) {
-                        const incoming = step.app.split('@')[0]
-                            .replace(/CLIAPI/g, '').replace(/V\d/g, '')
-                            .toLowerCase().trim();
-
-                        // 2. Updated Match Logic to handle Objects
-                        const matchedAppEntry = projectApps.find(pApp => {
-                            // Extract the string name from the potential Object
-                            const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
-                            if (!pAppName) return false;
-
-                            const project = pAppName.toLowerCase().replace(/\s/g, '');
-                            if (incoming === project) return true;
-                            
-                            const regex = new RegExp(`\\b${incoming}\\b`, 'i');
-                            return pAppName.match(regex) || project === incoming;
-                        });
-
-                        if (matchedAppEntry) {
-                            // Map to the String name specifically
-                            step.app = typeof matchedAppEntry === 'string' ? matchedAppEntry : matchedAppEntry.name; 
-                        }
-                    }
-                });
-            }
-
             const processedZap = OL.processZapLogic(zapData, isMaster);
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
+            
+            // 🎯 THE MAPPING LOGIC
+            if (zapData.steps && projectApps.length > 0) {
+                // Find the first step that exists in your localApps list
+                const mainStep = zapData.steps.find(step => {
+                    if (!step.app) return false;
+                    const incoming = step.app.split('@')[0].replace(/CLIAPI/g, '').replace(/V\d/g, '').toLowerCase().trim();
 
-            const existingIndex = library.findIndex(r => 
+                    return projectApps.some(pApp => {
+                        const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
+                        const project = pAppName.toLowerCase().replace(/\s/g, '');
+                        return incoming === project || new RegExp(`\\b${incoming}\\b`, 'i').test(pAppName);
+                    });
+                });
+
+                if (mainStep) {
+                    const incomingClean = mainStep.app.split('@')[0].replace(/CLIAPI/g, '').replace(/V\d/g, '').toLowerCase().trim();
+                    const matchedApp = projectApps.find(pApp => {
+                        const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
+                        const project = pAppName.toLowerCase().replace(/\s/g, '');
+                        return incomingClean === project || new RegExp(`\\b${incomingClean}\\b`, 'i').test(pAppName);
+                    });
+
+                    // Set the Primary Application field
+                    processedZap.primaryApplication = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
+                    console.log(`📍 Mapped "${processedZap.name}" to: ${processedZap.primaryApplication}`);
+                }
+            }
+
+            // Update or Insert
+            const idx = library.findIndex(r => 
                 r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
             );
 
-            if (existingIndex !== -1) {
-                library[existingIndex] = processedZap;
-                updateCount++;
-            } else {
-                library.unshift(processedZap);
-                newCount++;
-            }
+            if (idx !== -1) library[idx] = processedZap;
+            else library.unshift(processedZap);
         });
 
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`🎉 Sync Success!\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
+        alert(`✅ Done! Zaps mapped to your local apps (Filter/Formatter included).`);
     } catch (e) {
         console.error("Sync Error:", e);
-        alert("Still erroring? Check console.");
     }
 };
