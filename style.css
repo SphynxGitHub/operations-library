@@ -5137,4 +5137,50 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
     background: rgba(var(--accent-rgb), 0.3) !important; border: 1px dashed var(--accent) !important;
 }
 
+/*====================== New Resource Dropdown ================ */
+/* Container for the split button */
+.dropdown-plus {
+    position: relative;
+    display: inline-block;
+}
+
+/* Hide the menu by default */
+.dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    background-color: var(--panel-dark);
+    min-width: 180px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.5);
+    z-index: 1000;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 0;
+}
+
+/* Style the links inside the dropdown */
+.dropdown-content a {
+    color: var(--text-main);
+    padding: 10px 15px;
+    text-decoration: none;
+    display: block;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.dropdown-content a:hover {
+    background-color: rgba(var(--accent-rgb), 0.1);
+    color: var(--accent);
+}
+
+/* 🚀 THE HOVER TRIGGER */
+.dropdown-plus:hover .dropdown-content {
+    display: block;
+}
+
+/* Optional: Make the main button look like a split-button */
+.dropdown-plus:hover .btn.primary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
 /*===================Sidebar Menu ===============*/
