@@ -5488,7 +5488,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     if (!state.v2.activeCommentTab) state.v2.activeCommentTab = 'internal';
     if (!targetId) return;
 
-    const isAdmin = true//state.adminMode === true || window.location.search.includes('admin=');
+    const isAdmin = state.adminMode || window.FORCE_ADMIN;
     const isClientView = window.location.search.includes('access='); // 1. Context Detection
     const isVaultMode = window.location.hash.includes('vault');
 
