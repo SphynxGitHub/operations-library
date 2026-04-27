@@ -17629,12 +17629,13 @@ OL.bulkImportZaps = function(isMaster = false) {
 
     try {
         const zapArray = JSON.parse(rawData);
+        let importCount = 0;
         
         zapArray.forEach(zapData => {
-            let primaryAppId = null;
-            let primaryAppName = null;
+            let foundPrimaryId = null;
+            let foundPrimaryName = null;
 
-            // 2. PRE-CLEAN: Match robot names to your project's localApps
+            // 2. PRE-CLEAN: Match robot names to localApps
             if (zapData.steps && projectApps.length > 0) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
@@ -17642,7 +17643,6 @@ OL.bulkImportZaps = function(isMaster = false) {
                         const matchedApp = projectApps.find(pApp => {
                             const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
                             const pClean = pAppName.toLowerCase().replace(/\s/g, '');
-                            // Smart match with word boundaries to protect Box vs Wealthbox
                             return incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pAppName);
                         });
                         
@@ -17650,12 +17650,12 @@ OL.bulkImportZaps = function(isMaster = false) {
                             const finalName = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
                             const finalId = typeof matchedApp === 'string' ? null : matchedApp.id;
                             
-                            step.app = finalName; // Update raw JSON for processZapLogic
+                            step.app = finalName; 
 
-                            // 🎯 CAPTURE FIRST MATCH: Save the first real app we find to be the "Primary"
-                            if (!primaryAppName) {
-                                primaryAppName = finalName;
-                                primaryAppId = finalId;
+                            // 🎯 CAPTURE FIRST MATCH for the Card/Inspector Header
+                            if (!foundPrimaryName) {
+                                foundPrimaryName = finalName;
+                                foundPrimaryId = finalId;
                             }
                         }
                     }
@@ -17665,11 +17665,11 @@ OL.bulkImportZaps = function(isMaster = false) {
             // 3. RUN ORIGINAL LOGIC
             const processedZap = OL.processZapLogic(zapData, isMaster);
             
-            // 4. INJECT MAPPING: Explicitly set the fields the Inspector looks for
+            // 4. MAPPING: Set properties used by your Inspector
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
-            processedZap.appName = primaryAppName; 
-            processedZap.appId = primaryAppId;
+            processedZap.appName = foundPrimaryName; 
+            processedZap.appId = foundPrimaryId;
 
             // 5. UPDATE OR INSERT
             const existingIndex = library.findIndex(r => 
@@ -17681,13 +17681,14 @@ OL.bulkImportZaps = function(isMaster = false) {
             } else {
                 library.unshift(processedZap);
             }
+            importCount++;
         });
 
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Success! Zaps imported and apps mapped to "${primaryAppName || 'System'}".`);
+        alert(`✅ Success! ${importCount} Zaps imported. Apps mapped to the "appName" field.`);
     } catch (e) {
         console.error("Sync Error:", e);
     }
