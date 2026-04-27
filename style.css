@@ -5110,6 +5110,20 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
     background: rgba(255, 255, 255, 0.06) !important;
 }
 
+.zap-utilities-summary {
+    transition: all 0.2s ease;
+}
+
+.zap-utilities-summary:hover {
+    background: rgba(var(--accent-rgb), 0.08) !important;
+    border-color: var(--accent) !important;
+}
+
+.zap-utilities-summary span {
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
 /*================= Folder Tree Card ================= */
 .tree-drop-zone {
     height: 6px; margin: 2px 0; transition: all 0.2s; border-radius: 4px;
