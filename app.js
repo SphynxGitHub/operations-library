@@ -17617,7 +17617,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         return;
     }
 
-    const rawData = prompt(`🔄 CLEAN MAPPING SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 RESTORED SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -17625,53 +17625,40 @@ OL.bulkImportZaps = function(isMaster = false) {
         const library = isMaster ? state.master.resources : client.projectData.localResources;
         
         zapArray.forEach(zapData => {
-            // 1. CLEAN THE APP NAMES IN THE DATA BEFORE PROCESSING
-            if (zapData.steps) {
-                zapData.steps.forEach(step => {
-                    if (step.app) {
-                        // Transform "GoogleDocsV2CLIAPI@1.11.0" -> "Google Docs"
-                        let cleanApp = step.app.split('@')[0]          // Remove version
-                                             .replace(/CLIAPI/g, '')   // Remove CLIAPI
-                                             .replace(/V\d/g, '')      // Remove V2, V3
-                                             .replace(/([A-Z])/g, ' $1') // Space before Caps
-                                             .trim();
-                        
-                        // Handle specific oddities
-                        if (cleanApp === "Code") cleanApp = "Code by Zapier";
-                        
-                        step.app = cleanApp;
-                    }
-                });
-            }
-
-            // 2. Now run the standard process logic with the cleaned names
+            // 1. RUN THE EXACT LOGIC THAT WORKED BEFORE
+            // This handles the mapping, icons, and infrastructure discovery
             const processedZap = OL.processZapLogic(zapData, isMaster);
+            
+            // Ensure the ID is attached for future syncs
             processedZap.originalZapId = zapData.zapId;
-            if (!processedZap.name.startsWith('⚡')) {
-                processedZap.name = `⚡ ${processedZap.name.replace(/^⚡\s*/, '').trim()}`;
-            }
 
-            // 3. Match and Merge
+            // 2. FIND AND REPLACE (To avoid duplicates)
             const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
+            
             const existingIndex = library.findIndex(r => {
                 if (r.type !== 'Zap') return false;
+                // Match by ID if we have it, otherwise match by name
                 const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
                 const cleanExistingName = r.name.replace(/^⚡\s*/, '').trim().toLowerCase();
                 return idMatch || (cleanExistingName === cleanIncomingName);
             });
 
             if (existingIndex !== -1) {
+                // Keep the original name if you've customized it, but update everything else
+                const originalName = library[existingIndex].name;
                 library[existingIndex] = processedZap;
+                library[existingIndex].name = originalName; 
             } else {
                 library.unshift(processedZap);
             }
         });
 
+        // 3. PERSIST & RENDER
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Clean Sync Complete! Apps like "Google Docs" should now map correctly.`);
+        alert(`✅ Sync Finished. Mappings should match the original successful import.`);
     } catch (e) {
         console.error("Sync Error:", e);
     }
