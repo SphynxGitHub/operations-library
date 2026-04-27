@@ -17541,160 +17541,6 @@ OL.removeFieldFromBundle = async function(bundleId, fieldId) {
 };
 
 // IMPORT ZAP AUDIT
-OL.importZapToResources = function(isMaster = false) {
-    const rawData = prompt("Paste the JSON output from the Bot here:");
-    if (!rawData) return;
-
-    try {
-        const zap = JSON.parse(rawData);
-        const client = getActiveClient();
-        const data = isMaster ? state.master : client.projectData;
-        const library = isMaster ? state.master.resources : client.projectData.localResources;
-
-        const transformedSteps = zap.steps.map((s, i) => {
-            const cleanAppName = s.app ? s.app.split('@')[0].replace(/CLIAPI|V\d+|V\d+CLIAPI/g, '').replace(/([A-Z])/g, ' $1').trim() : "System";
-            const stepLinks = [];
-            const stepDatapoints = [];
-
-            // 🕵️ RESOURCE MAPPING ENGINE
-            if (s.mappings) {
-                s.mappings.forEach(m => {
-                    // Identify fields that usually contain IDs
-                    const idFields = ['spreadsheet', 'folder', 'file', 'form', 'board', 'database'];
-                    if (idFields.includes(m.field.toLowerCase()) && m.value && !m.value.includes('{{')) {
-                        
-                        // 1. Look for existing resource by ID
-                        let existingRes = library.find(r => r.externalUrl && r.externalUrl.includes(m.value));
-                    
-                        if (!existingRes) {
-                            // 🚀 SMART URL ASSIGNMENT
-                            let generatedUrl = "";
-                            const fieldKey = m.field.toLowerCase();
-                    
-                            if (fieldKey.includes('folder')) {
-                                generatedUrl = `https://drive.google.com/drive/u/1/folders/${m.value}`;
-                            } else if (fieldKey.includes('spreadsheet') || fieldKey.includes('sheet')) {
-                                generatedUrl = `https://docs.google.com/spreadsheets/d/${m.value}`;
-                            } else {
-                                // Fallback for generic files
-                                generatedUrl = `https://drive.google.com/open?id=${m.value}`;
-                            }
-                    
-                            const newResId = (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5);
-    
-                            existingRes = {
-                                id: newResId,
-                                name: `[Discovered] ${m.field}: ${m.value.substring(0, 8)}...`,
-                                type: fieldKey.includes('folder') ? 'Folder' : (fieldKey.includes('sheet') ? 'Spreadsheet' : 'File'),
-                                externalUrl: generatedUrl,
-                                description: `Auto-discovered via Zap: ${zap.zapName}`,
-                                createdDate: new Date().toISOString(),
-                        
-                                // 🚀 THE FIX: Give it the properties needed to be "Visible"
-                                isGlobal: true,      // Ensures it shows up in the Sidebar Tray
-                                isTopShelf: false,   // Keeps it out of the top horizontal bar
-                                coords: null,        // Explicitly null so the Sidebar 'Assets' tab picks it up
-                                stageId: null        // It hasn't been dragged to a lane yet
-                            };
-                            
-                            library.push(existingRes);
-                            console.log(`🏗️ Manifested New Resource: ${existingRes.name}`);
-                        }
-                    
-                        // 3. Link the step to this resource
-                        stepLinks.push({ 
-                            id: existingRes.id, 
-                            name: existingRes.name, 
-                            type: existingRes.type 
-                        });
-                    }
-                    
-                    // 1. Choose the best possible name for the Data Tag
-                    const rawFieldName = m.label || m.field || "Unknown Field"; 
-                    
-                    // 2. Clean it up (Remove technical prefixes or suffixes)
-                    const fieldName = rawFieldName
-                        .replace(/CLIAPI|V\d+/g, '') // Clean technical versioning
-                        .replace(/_/g, ' ')          // Replace underscores with spaces
-                        .trim();
-                    
-                    // 🏷️ DATA TAG LOGIC
-                    if (m.value && m.value.trim() !== "") {
-                        const dataLibrary = isMaster ? state.master.datapoints : (client.projectData.localDatapoints || []);
-                        
-                        // Deduplicate: See if we already have this tag by name
-                        let existingTag = dataLibrary.find(d => d.name.toLowerCase() === fieldName.toLowerCase());
-                    
-                        if (!existingTag) {
-                            const newTagId = 'dp-' + Date.now() + Math.random().toString(36).substr(2, 5);
-                            existingTag = {
-                                id: newTagId,
-                                name: fieldName, // Now uses "First Name" instead of "first_name"
-                                key: `{${fieldName.replace(/\s+/g, '').toLowerCase()}}`,
-                                category: 'Auto-Discovered',
-                                isBundle: false
-                            };
-                            
-                            if (isMaster) {
-                                state.master.datapoints.push(existingTag);
-                            } else {
-                                if (!client.projectData.localDatapoints) client.projectData.localDatapoints = [];
-                                client.projectData.localDatapoints.push(existingTag);
-                            }
-                        }
-                    
-                        // Map the tag to this specific step
-                        if (!stepDatapoints.some(d => d.id === existingTag.id)) {
-                            stepDatapoints.push(existingTag);
-                        }
-                    }
-                });
-            }
-
-            return {
-                id: "step_" + Date.now() + "_" + i,
-                name: s.title,
-                description: s.title,
-                appName: cleanAppName,
-                assignees: (i === 0) ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] : [{ id: 'zap-auto', name: 'Zapier', type: 'app' }],
-                timingValue: 0,
-                timingType: 'after_prev',
-                logic: { in: [], out: [] },
-                links: stepLinks, // 🔗 These are your auto-mapped resources!
-                datapoints: stepDatapoints
-            };
-        });
-
-        // ... rest of the existing save/unshift logic ...
-        const zapGroup = {
-            id: isMaster ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
-            type: 'Zap',
-            archetype: 'Multi-Step',
-            name: `⚡ ${zap.zapName}`,
-            description: `Auto-documented Zapier Logic`,
-            steps: transformedSteps,
-            isExpanded: true,
-            isTopShelf: isMaster,
-            _col: 0
-        };
-
-        if (isMaster) {
-            if (!state.master.resources) state.master.resources = [];
-            state.master.resources.unshift(zapGroup);
-        } else {
-            client.projectData.localResources.unshift(zapGroup);
-        }
-
-        OL.persist();
-        window.handleRoute();
-        alert("🚀 Zap Imported! Infrastructure resources were auto-mapped.");
-
-    } catch (e) {
-        console.error("Import Error:", e);
-        alert("Invalid JSON data.");
-    }
-};
-
 OL.processZapLogic = function(zap, isMaster = false) {
     const client = getActiveClient();
     const library = isMaster ? state.master.resources : client.projectData.localResources;
@@ -17771,7 +17617,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         return;
     }
 
-    const rawData = prompt(`🔄 SMART SYNC (ID + Name Match)\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
+    const rawData = prompt(`🔄 DEEP SYNC (Updating Apps & Steps)\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
@@ -17785,42 +17631,52 @@ OL.bulkImportZaps = function(isMaster = false) {
             const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
             const displayName = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
+            // 1. Process the Zap data
             const processedZap = OL.processZapLogic(zapData, isMaster);
             processedZap.name = displayName;
             processedZap.originalZapId = zapData.zapId;
 
-            // 🎯 THE DUPE-KILLER SEARCH
+            // 2. FORCE RE-SCAN: Extract apps from steps and push to project infrastructure
+            if (!isMaster && client.projectData.infrastructure) {
+                processedZap.steps.forEach(step => {
+                    if (step.app && !client.projectData.infrastructure.includes(step.app)) {
+                        client.projectData.infrastructure.push(step.app);
+                    }
+                });
+            }
+
+            // 3. Match and Merge
             const existingIndex = library.findIndex(r => {
                 if (r.type !== 'Zap') return false;
-                
-                // 1. Match by zapId
                 const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
-                
-                // 2. Match by Name (case insensitive, icon independent)
                 const cleanExistingName = r.name.replace(/^⚡\s*/, '').trim().toLowerCase();
                 const nameMatch = cleanExistingName === cleanIncomingName;
-                
                 return idMatch || nameMatch;
             });
 
             if (existingIndex !== -1) {
-                // UPDATE EXISTING
+                // OVERWRITE: Ensure new steps and apps are carried over
                 library[existingIndex] = processedZap;
                 updateCount++;
             } else {
-                // ADD NEW
                 library.unshift(processedZap);
                 newCount++;
             }
         });
 
+        // 4. Final Save & UI Refresh
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Complete!\n\n🔄 Updated (Matching name or ID): ${updateCount}\n✨ New: ${newCount}`);
+        // If your app has a specific function to render the app icons, call it here:
+        if (typeof OL.renderAppIcons === 'function') {
+            OL.renderAppIcons();
+        }
+
+        alert(`✅ Deep Sync Complete!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}\n\nApp mappings have been refreshed.`);
     } catch (e) {
-        console.error("Bulk Import Error:", e);
-        alert("Import failed. Check console.");
+        console.error("Deep Sync Error:", e);
+        alert("Sync failed. Check console.");
     }
 };
