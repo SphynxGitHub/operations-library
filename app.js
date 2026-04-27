@@ -17763,40 +17763,34 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    // 1. USE THE EXISTING APP LOGIC
-    // This is how the other tabs find the open project
-    const activeClient = state.clients.find(c => c.id === state.activeClientId);
-    
-    // 2. Determine destination based on the same state checks the app uses
-    const isReallyMaster = isMaster || state.currentView === 'master-vault' || !activeClient;
-    const library = isReallyMaster ? state.master.resources : activeClient.projectData.localResources;
-    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${activeClient.name}`;
-
-    console.log("🧬 STANDARD STATE CHECK:", {
-        activeClientId: state.activeClientId,
-        clientFound: activeClient ? activeClient.name : "NONE",
-        target: destinationName
-    });
-
-    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt("Paste the content of the Bulk Export file:");
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
+        
+        // 🎯 USE YOUR EXISTING HELPER
+        const client = getActiveClient();
+        
+        // Target the correct library based on your pasted logic
+        const library = isMaster ? state.master.resources : client.projectData.localResources;
+
+        console.log("🚀 IMPORTING TO:", isMaster ? "Master Vault" : client.name);
+
         zapArray.forEach(zapData => {
-            // Process the logic with the same context
-            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
+            // Use your existing processor
+            const processedZap = OL.processZapLogic(zapData, isMaster);
             library.unshift(processedZap);
         });
 
-        // 3. Sync and Render
+        // Sync and Render using your existing methods
         OL.persist();
-        OL.renderVisualizer(isReallyMaster);
+        OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Success! Imported to ${destinationName}`);
+        alert(`✅ Imported ${zapArray.length} Zaps into ${isMaster ? 'Master Vault' : client.name + ' Project'}`);
     } catch (e) {
         console.error("Bulk Import Error:", e);
-        alert("Import failed. Check console.");
+        alert("Check console. Data format might be wrong or no client is active.");
     }
 };
