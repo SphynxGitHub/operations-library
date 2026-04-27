@@ -17613,6 +17613,21 @@ OL.bulkImportZaps = function(isMaster = false) {
     const client = state.clients[activeId];
     if (!client && !isMaster) return alert("❌ No active project.");
 
+    // 1. Translation Map for Zapier's internal "Robot" IDs
+    const zapierRobotMap = {
+        "app115533": "Wealthbox",
+        "app235438": "Wealthbox",
+        "app223706": "CurrentClient",
+        "schedule": "Zapier Schedule",
+        "zapierlooping": "Zapier Looping",
+        "filterapi": "Zapier Filter",
+        "codeapi": "Zapier Code",
+        "engineapi": "Zapier Engine",
+        "storage": "Zapier Storage",
+        "slackapi": "Slack",
+        "googlemakersuite": "AI"
+    };
+
     const projectApps = (client.projectData?.localApps || [])
         .sort((a, b) => {
             const nameA = typeof a === 'string' ? a : (a.name || a.label || "");
@@ -17620,84 +17635,70 @@ OL.bulkImportZaps = function(isMaster = false) {
             return nameB.length - nameA.length;
         });
 
-    console.group("🔍 ZAP IMPORT DIAGNOSTIC");
-    console.log("📂 Target Project:", client.meta?.name);
-    console.log("📱 Project Apps Available:", projectApps.map(a => `${a.name} (${a.id})`));
-
     const library = isMaster ? state.master.resources : client.projectData.localResources;
-    const rawData = prompt(`🔄 DIAGNOSTIC SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
-    if (!rawData) { console.groupEnd(); return; }
+
+    const rawData = prompt(`🔄 FINAL REPAIR SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
+    if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         
-        zapArray.forEach((zapData, zIdx) => {
-            console.group(`⚡ Processing Zap [${zIdx}]: ${zapData.zapName}`);
-            
+        zapArray.forEach((zapData) => {
+            // 2. PRE-MATCH: Identify IDs and clean names
+            const stepIdMap = []; 
+
             if (zapData.steps) {
                 zapData.steps.forEach((step, sIdx) => {
-                    if (step.app) {
-                        const incoming = step.app.split('@')[0].replace(/CLIAPI/g, '').replace(/V\d/g, '').toLowerCase().trim();
-                        
-                        const matchedApp = projectApps.find(pApp => {
-                            const pName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
-                            const pClean = pName.toLowerCase().replace(/\s/g, '');
-                            const match = incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pName);
-                            return match;
-                        });
+                    let incoming = step.app.split('@')[0].replace(/CLIAPI|V\d+/g, '').toLowerCase().trim();
+                    
+                    // Apply translation map
+                    if (zapierRobotMap[incoming]) incoming = zapierRobotMap[incoming].toLowerCase();
 
-                        if (matchedApp) {
-                            step.app = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
-                            step.appId = typeof matchedApp === 'string' ? null : matchedApp.id;
-                            console.log(`✅ Step ${sIdx + 1} Match: "${incoming}" -> "${step.app}" (ID: ${step.appId})`);
-                        } else {
-                            console.warn(`❌ Step ${sIdx + 1} No Match: Could not find "${incoming}" in projectApps.`);
-                        }
+                    const matchedApp = projectApps.find(pApp => {
+                        const pName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
+                        const pClean = pName.toLowerCase().replace(/\s/g, '');
+                        return incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pName);
+                    });
+
+                    if (matchedApp) {
+                        step.app = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
+                        step.appId = typeof matchedApp === 'string' ? null : matchedApp.id;
+                        // Store this for post-processing injection
+                        stepIdMap[sIdx] = { name: step.app, id: step.appId };
                     }
                 });
             }
 
-            // RUN ORIGINAL LOGIC
+            // 3. RUN ORIGINAL LOGIC
             const processedZap = OL.processZapLogic(zapData, isMaster);
             
-            // Critical: Check if processZapLogic wiped our IDs
+            // 🎯 4. THE FIX: RE-INJECT DATA WIPED BY processZapLogic
             processedZap.steps.forEach((pStep, pIdx) => {
-                // If processZapLogic doesn't return appId, we re-inject it from our pre-cleaned data
-                if (!pStep.appId && zapData.steps[pIdx].appId) {
-                    pStep.appId = zapData.steps[pIdx].appId;
-                }
-                if (!pStep.appName && zapData.steps[pIdx].app) {
-                    pStep.appName = zapData.steps[pIdx].app;
+                if (stepIdMap[pIdx]) {
+                    pStep.appId = stepIdMap[pIdx].id;
+                    pStep.appName = stepIdMap[pIdx].name;
                 }
             });
 
-            console.log("📦 Final Processed Object:", processedZap);
-
+            // 5. Card level info
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
-            const existingIndex = library.findIndex(r => 
+            // 6. Update or Insert
+            const idx = library.findIndex(r => 
                 r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
             );
 
-            if (existingIndex !== -1) {
-                library[existingIndex] = processedZap;
-                console.log("🔄 Action: Overwrote existing Zap.");
-            } else {
-                library.unshift(processedZap);
-                console.log("✨ Action: Added as new Zap.");
-            }
-            console.groupEnd();
+            if (idx !== -1) library[idx] = processedZap;
+            else library.unshift(processedZap);
         });
 
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        console.groupEnd();
-        alert(`✅ Sync Complete. CHECK THE CONSOLE for match details.`);
+        alert(`✅ Sync Fixed. ${zapArray.length} Zaps processed with manual ID injection.`);
     } catch (e) {
-        console.error("🔥 Sync Error:", e);
-        console.groupEnd();
+        console.error("🔥 Error:", e);
     }
 };
