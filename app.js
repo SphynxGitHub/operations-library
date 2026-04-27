@@ -1715,13 +1715,22 @@ window.renderAppsGrid = function() {
                           </div>
                       </div>
                       <div class="card-body">
-                            ${app.name === "Zapier" && !isVaultMode ? `
-                                <div class="zap-utilities-summary" style="margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
-                                    <div class="tiny muted bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; margin-bottom: 5px;">Included Utilities</div>
+                            ${app.name === "Zapier" ? `
+                                <div class="zap-utilities-summary" style="margin-bottom: 12px; padding: 8px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px; border: 1px solid rgba(var(--accent-rgb), 0.2);">
+                                    <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; margin-bottom: 5px;">
+                                        ${isVaultMode ? 'Master Utility Templates' : 'Included Utilities'}
+                                    </div>
                                     <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                                        ${(client?.projectData?.localApps || [])
-                                            .filter(a => a.isHidden && (a.name.toLowerCase().includes('zapier') || ["webhook", "subzap", "engine"].some(u => a.name.toLowerCase().includes(u))))
-                                            .map(u => `<span class="tiny muted" style="font-size: 9px; background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 3px;">${esc(u.name.replace('Zapier ', ''))}</span>`)
+                                        ${(isVaultMode ? state.master.apps : (client?.projectData?.localApps || []))
+                                            .filter(a => {
+                                                // In Vault mode, we don't rely on isHidden (since you might want to edit them), 
+                                                // we rely on the name containing "Zapier" but NOT being the main "Zapier" app.
+                                                const n = (a.name || "").toLowerCase();
+                                                const isUtil = n.includes('zapier') && n !== 'zapier';
+                                                const isOther = ["webhook", "subzap", "engine"].some(u => n.includes(u));
+                                                return isUtil || isOther;
+                                            })
+                                            .map(u => `<span class="tiny" style="font-size: 9px; background: rgba(255,255,255,0.05); color: var(--text-main); padding: 1px 4px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.1);">${esc(u.name.replace('Zapier ', ''))}</span>`)
                                             .join('')}
                                     </div>
                                 </div>
