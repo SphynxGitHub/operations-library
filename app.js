@@ -17580,16 +17580,24 @@ OL.importZapToResources = function(isMaster = false) {
                             }
                     
                             const newResId = (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5);
-                            
+    
                             existingRes = {
                                 id: newResId,
                                 name: `[Discovered] ${m.field}: ${m.value.substring(0, 8)}...`,
                                 type: fieldKey.includes('folder') ? 'Folder' : (fieldKey.includes('sheet') ? 'Spreadsheet' : 'File'),
                                 externalUrl: generatedUrl,
                                 description: `Auto-discovered via Zap: ${zap.zapName}`,
-                                createdDate: new Date().toISOString()
+                                createdDate: new Date().toISOString(),
+                        
+                                // 🚀 THE FIX: Give it the properties needed to be "Visible"
+                                isGlobal: true,      // Ensures it shows up in the Sidebar Tray
+                                isTopShelf: false,   // Keeps it out of the top horizontal bar
+                                coords: null,        // Explicitly null so the Sidebar 'Assets' tab picks it up
+                                stageId: null        // It hasn't been dragged to a lane yet
                             };
+                            
                             library.push(existingRes);
+                            console.log(`🏗️ Manifested New Resource: ${existingRes.name}`);
                         }
                     
                         // 3. Link the step to this resource
