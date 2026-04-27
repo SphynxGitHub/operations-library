@@ -17614,21 +17614,20 @@ OL.bulkImportZaps = function(isMaster = false) {
     
     if (!client && !isMaster) return alert("❌ No active project detected.");
 
-    // 1. Target the correct tool list: localApps
-    const projectApps = (client.projectData?.localApps || [])
-        .sort((a, b) => b.length - a.length); // Longest first to protect "Box" vs "Wealthbox"
-
-    const library = isMaster ? state.master.resources : client.projectData.localResources;
-    const clientName = client.meta?.name || "Project";
-    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${clientName}`;
-
-    console.log("🧬 SYNC START:", { 
-        destination: destinationName, 
-        projectTools: projectApps,
-        activeId: activeId 
+    // 1. Target localApps and handle Object vs String entries
+    const rawApps = client.projectData?.localApps || [];
+    const projectApps = [...rawApps].sort((a, b) => {
+        const nameA = typeof a === 'string' ? a : (a.name || a.label || "");
+        const nameB = typeof b === 'string' ? b : (b.name || b.label || "");
+        return nameB.length - nameA.length;
     });
 
-    const rawData = prompt(`🔄 FINAL SMART SYNC\nTarget: ${destinationName}\n\nPaste JSON:`);
+    const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
+
+    console.log("🧬 SYNC START:", { destination: destinationName, projectTools: projectApps });
+
+    const rawData = prompt(`🔄 OBJECT-SAFE SYNC\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -17637,7 +17636,6 @@ OL.bulkImportZaps = function(isMaster = false) {
         let newCount = 0;
 
         zapArray.forEach(zapData => {
-            // 2. SMART MAPPING (Fuzzy Match using localApps)
             if (zapData.steps && projectApps.length > 0) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
@@ -17645,23 +17643,27 @@ OL.bulkImportZaps = function(isMaster = false) {
                             .replace(/CLIAPI/g, '').replace(/V\d/g, '')
                             .toLowerCase().trim();
 
-                        const matchedApp = projectApps.find(pApp => {
-                            const project = pApp.toLowerCase().replace(/\s/g, '');
+                        // 2. Updated Match Logic to handle Objects
+                        const matchedAppEntry = projectApps.find(pApp => {
+                            // Extract the string name from the potential Object
+                            const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
+                            if (!pAppName) return false;
+
+                            const project = pAppName.toLowerCase().replace(/\s/g, '');
                             if (incoming === project) return true;
-                            // Word boundary check
+                            
                             const regex = new RegExp(`\\b${incoming}\\b`, 'i');
-                            return pApp.match(regex) || project === incoming;
+                            return pAppName.match(regex) || project === incoming;
                         });
 
-                        if (matchedApp) {
-                            console.log(`🎯 Matched ${step.app} to ${matchedApp}`);
-                            step.app = matchedApp; 
+                        if (matchedAppEntry) {
+                            // Map to the String name specifically
+                            step.app = typeof matchedAppEntry === 'string' ? matchedAppEntry : matchedAppEntry.name; 
                         }
                     }
                 });
             }
 
-            // 3. PROCESS & UPDATE
             const processedZap = OL.processZapLogic(zapData, isMaster);
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
@@ -17683,8 +17685,9 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`🎉 Sync Complete!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
+        alert(`🎉 Sync Success!\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
     } catch (e) {
         console.error("Sync Error:", e);
+        alert("Still erroring? Check console.");
     }
 };
