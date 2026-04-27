@@ -17617,27 +17617,41 @@ OL.bulkImportZaps = function(isMaster = false) {
         return;
     }
 
-    const rawData = prompt(`🔄 RESTORE MAPPING SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
+    const rawData = prompt(`🔄 CLEAN MAPPING SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         const library = isMaster ? state.master.resources : client.projectData.localResources;
         
-        let updateCount = 0;
-        let newCount = 0;
-
         zapArray.forEach(zapData => {
-            // 1. Process via your existing app logic (the "old way")
+            // 1. CLEAN THE APP NAMES IN THE DATA BEFORE PROCESSING
+            if (zapData.steps) {
+                zapData.steps.forEach(step => {
+                    if (step.app) {
+                        // Transform "GoogleDocsV2CLIAPI@1.11.0" -> "Google Docs"
+                        let cleanApp = step.app.split('@')[0]          // Remove version
+                                             .replace(/CLIAPI/g, '')   // Remove CLIAPI
+                                             .replace(/V\d/g, '')      // Remove V2, V3
+                                             .replace(/([A-Z])/g, ' $1') // Space before Caps
+                                             .trim();
+                        
+                        // Handle specific oddities
+                        if (cleanApp === "Code") cleanApp = "Code by Zapier";
+                        
+                        step.app = cleanApp;
+                    }
+                });
+            }
+
+            // 2. Now run the standard process logic with the cleaned names
             const processedZap = OL.processZapLogic(zapData, isMaster);
-            
-            // 2. Ensure IDs and Icons are maintained
             processedZap.originalZapId = zapData.zapId;
             if (!processedZap.name.startsWith('⚡')) {
                 processedZap.name = `⚡ ${processedZap.name.replace(/^⚡\s*/, '').trim()}`;
             }
 
-            // 3. Find existing by ID or Name
+            // 3. Match and Merge
             const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
             const existingIndex = library.findIndex(r => {
                 if (r.type !== 'Zap') return false;
@@ -17647,24 +17661,18 @@ OL.bulkImportZaps = function(isMaster = false) {
             });
 
             if (existingIndex !== -1) {
-                // UPDATE: Overwrite with the freshly processed object
                 library[existingIndex] = processedZap;
-                updateCount++;
             } else {
-                // NEW: Unshift
                 library.unshift(processedZap);
-                newCount++;
             }
         });
 
-        // 4. Force Persist and Visual Refresh
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Complete!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}\n\nMapping applied from existing Project App List.`);
+        alert(`✅ Clean Sync Complete! Apps like "Google Docs" should now map correctly.`);
     } catch (e) {
         console.error("Sync Error:", e);
-        alert("Sync failed. Check console.");
     }
 };
