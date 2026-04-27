@@ -17617,7 +17617,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         return;
     }
 
-    const rawData = prompt(`🔄 DEEP SYNC (Updating Apps & Steps)\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
+    const rawData = prompt(`🔄 RESTORE MAPPING SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
@@ -17628,55 +17628,43 @@ OL.bulkImportZaps = function(isMaster = false) {
         let newCount = 0;
 
         zapArray.forEach(zapData => {
-            const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
-            const displayName = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
-
-            // 1. Process the Zap data
+            // 1. Process via your existing app logic (the "old way")
             const processedZap = OL.processZapLogic(zapData, isMaster);
-            processedZap.name = displayName;
+            
+            // 2. Ensure IDs and Icons are maintained
             processedZap.originalZapId = zapData.zapId;
-
-            // 2. FORCE RE-SCAN: Extract apps from steps and push to project infrastructure
-            if (!isMaster && client.projectData.infrastructure) {
-                processedZap.steps.forEach(step => {
-                    if (step.app && !client.projectData.infrastructure.includes(step.app)) {
-                        client.projectData.infrastructure.push(step.app);
-                    }
-                });
+            if (!processedZap.name.startsWith('⚡')) {
+                processedZap.name = `⚡ ${processedZap.name.replace(/^⚡\s*/, '').trim()}`;
             }
 
-            // 3. Match and Merge
+            // 3. Find existing by ID or Name
+            const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
             const existingIndex = library.findIndex(r => {
                 if (r.type !== 'Zap') return false;
                 const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
                 const cleanExistingName = r.name.replace(/^⚡\s*/, '').trim().toLowerCase();
-                const nameMatch = cleanExistingName === cleanIncomingName;
-                return idMatch || nameMatch;
+                return idMatch || (cleanExistingName === cleanIncomingName);
             });
 
             if (existingIndex !== -1) {
-                // OVERWRITE: Ensure new steps and apps are carried over
+                // UPDATE: Overwrite with the freshly processed object
                 library[existingIndex] = processedZap;
                 updateCount++;
             } else {
+                // NEW: Unshift
                 library.unshift(processedZap);
                 newCount++;
             }
         });
 
-        // 4. Final Save & UI Refresh
+        // 4. Force Persist and Visual Refresh
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        // If your app has a specific function to render the app icons, call it here:
-        if (typeof OL.renderAppIcons === 'function') {
-            OL.renderAppIcons();
-        }
-
-        alert(`✅ Deep Sync Complete!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}\n\nApp mappings have been refreshed.`);
+        alert(`✅ Sync Complete!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}\n\nMapping applied from existing Project App List.`);
     } catch (e) {
-        console.error("Deep Sync Error:", e);
+        console.error("Sync Error:", e);
         alert("Sync failed. Check console.");
     }
 };
