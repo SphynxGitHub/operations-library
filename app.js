@@ -17762,31 +17762,24 @@ OL.processZapLogic = function(zap, isMaster = false) {
     };
 };
 
-OL.bulkImportZaps = function(isMaster = false) {
-    // 1. HARD-CHECK: Look at the URL or the UI header to find the project
-    const path = window.location.hash || window.location.pathname;
-    const isProjectView = path.includes('project') || path.includes('client');
+OL.bulkImportZaps = function() {
+    // 1. Ask the user directly to avoid the "Undefined" state trap
+    const isMaster = confirm("Click OK for MASTER VAULT\nClick CANCEL for OPEN PROJECT");
     
-    // 2. FORCE CLIENT: If we are in a project view, grab the client directly from the state
     const activeClient = getActiveClient();
     
-    // 3. LOGIC GATE: If the URL says project but the state is missing, we have a hydration issue
-    let targetLibrary;
-    let destinationName;
-
-    if (isMaster === true || (!isProjectView && !activeClient)) {
-        targetLibrary = state.master.resources;
-        destinationName = "MASTER VAULT";
-    } else {
-        targetLibrary = activeClient.projectData.localResources;
-        destinationName = `PROJECT: ${activeClient.name}`;
+    // 2. Safety Check: If user chose Project, but no client is loaded
+    if (!isMaster && (!activeClient || !activeClient.projectData)) {
+        alert("❌ Error: No Active Client detected in memory. \nTry refreshing the project page first.");
+        return;
     }
 
-    console.log("🚀 FORCED IMPORT ATTEMPT:", {
-        detectedPath: path,
-        isProjectView: isProjectView,
-        clientFound: activeClient?.name || "NONE",
-        finalDestination: destinationName
+    const library = isMaster ? state.master.resources : activeClient.projectData.localResources;
+    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${activeClient.name}`;
+
+    console.log("🛠️ MANUAL OVERRIDE IMPORT:", {
+        chosenDestination: destinationName,
+        clientName: activeClient?.name
     });
 
     const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
@@ -17796,17 +17789,17 @@ OL.bulkImportZaps = function(isMaster = false) {
         const zapArray = JSON.parse(rawData);
         
         zapArray.forEach(zapData => {
-            // We use the same destinationName logic for the individual zaps
-            const processedZap = OL.processZapLogic(zapData, destinationName === "MASTER VAULT");
-            targetLibrary.unshift(processedZap);
+            const processedZap = OL.processZapLogic(zapData, isMaster);
+            library.unshift(processedZap);
         });
 
         OL.persist();
-        OL.renderVisualizer(destinationName === "MASTER VAULT");
+        OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         alert(`✅ Success! Imported ${zapArray.length} Zaps to ${destinationName}`);
         
     } catch (e) {
         console.error("Import Error:", e);
+        alert("Import failed. Check console.");
     }
 };
