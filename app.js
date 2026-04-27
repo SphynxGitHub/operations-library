@@ -17547,53 +17547,71 @@ OL.importZapToResources = function(isMaster = false) {
 
     try {
         const zap = JSON.parse(rawData);
+        const client = getActiveClient();
         
+        // 1. Resolve Project Apps to find matches for IDs
+        const allAvailableApps = [
+            ...(state.master.apps || []),
+            ...(client?.projectData?.localApps || [])
+        ];
+
         // 🚀 THE TRANSFORMATION LAYER
-        const transformedSteps = zap.steps.map((s, i) => ({
-            id: "step_" + Date.now() + "_" + i, // Generate the unique ID your code needs
-            name: s.title,                      // Map 'title' to 'name' (FIXES UNTITLED)
-            description: s.title,               // Map 'title' to 'description'
-            appName: s.app,                     // Standardize app name
-            timingValue: 0,
-            timingType: 'after_prev',
-            logic: { in: [], out: [] },         // Initialize empty logic blocks
-            links: []                           // Initialize empty asset links
-        }));
+        const transformedSteps = zap.steps.map((s, i) => {
+            // Clean the app name (e.g., "GoogleDriveCLIAPI@1.18.3" -> "Google Drive")
+            const cleanAppName = s.app ? s.app.split('@')[0].replace(/CLIAPI|V\d+|V\d+CLIAPI/g, '').replace(/([A-Z])/g, ' $1').trim() : "System";
+            
+            // Find if this app already exists in our library to get the ID
+            const matchedApp = allAvailableApps.find(a => a.name.toLowerCase().includes(cleanAppName.toLowerCase()));
+
+            return {
+                id: "step_" + Date.now() + "_" + i,
+                name: s.title,
+                description: s.title,
+                
+                // 📱 Primary Application Detection
+                appId: matchedApp ? matchedApp.id : null,
+                appName: cleanAppName,
+
+                // 👤 Assignee Logic: Trigger (Index 0) is usually 'Any Client' or 'System', others are 'Zapier'
+                assignees: (i === 0) 
+                    ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] 
+                    : [{ id: 'zapier-auto', name: 'Zapier', type: 'app' }],
+                
+                timingValue: 0,
+                timingType: 'after_prev',
+                logic: { in: [], out: [] },
+                links: []
+            };
+        });
 
         const zapGroup = {
             id: isMaster ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
             type: 'Zap',
-            archetype: 'Multi-Step',            // Ensure it uses your Multi-Step layout
+            archetype: 'Multi-Step',
             name: `⚡ ${zap.zapName}`,
             description: `Auto-documented Zapier Logic`,
-            steps: transformedSteps,            // Use the fixed steps
+            steps: transformedSteps,
             isExpanded: true,
             isTopShelf: isMaster,
             _col: 0
         };
 
+        // Standard save logic...
         if (isMaster) {
             if (!state.master.resources) state.master.resources = [];
             state.master.resources.unshift(zapGroup);
-            alert("✅ Saved to Master Library");
         } else {
-            const client = getActiveClient();
             if (!client) return alert("Select a client first.");
             if (!client.projectData.localResources) client.projectData.localResources = [];
             client.projectData.localResources.unshift(zapGroup);
-            alert(`✅ Saved to ${client.meta.name}`);
         }
 
         OL.persist();
-        // Use your handleRoute instead of reload for a cleaner UI refresh
-        if (window.location.hash.includes('visualizer')) {
-            OL.renderVisualizer();
-        } else {
-            window.handleRoute();
-        }
+        window.handleRoute();
+        alert("✅ Zap Imported with Auto-Assignments and Tool Detection!");
         
     } catch (e) {
         console.error("Import Error:", e);
-        alert("Invalid JSON data. Check console for details.");
+        alert("Invalid JSON data.");
     }
 };
