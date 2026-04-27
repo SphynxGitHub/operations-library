@@ -17609,19 +17609,27 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    const currentId = state.activeClientId;
-    const client = state.clients[currentId];
+    // 1. IMPROVED CONTEXT GRAB
+    const activeId = state.activeClientId || document.querySelector('.sidebar-client.active, .client-link.selected')?.getAttribute('data-id');
+    const client = state.clients[activeId];
     
-    if (!client && !isMaster) return alert("❌ No active project detected in Sidebar.");
+    if (!client && !isMaster) {
+        console.error("❌ Context Error: state.activeClientId is:", state.activeClientId);
+        return alert("❌ Error: No active project detected. Please click a client in the sidebar again.");
+    }
 
-    // 1. Get Project Apps & Sort by Length (Protects "Box" vs "Wealthbox")
+    // 2. Get Project Apps from the verified client object
     const projectApps = isMaster ? [] : (client.projectData.infrastructure || [])
         .sort((a, b) => b.length - a.length);
 
     const library = isMaster ? state.master.resources : client.projectData.localResources;
     const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
 
-    console.log("🧬 SYNC START:", { destination: destinationName, projectTools: projectApps });
+    console.log("🧬 SYNC START:", { 
+        destination: destinationName, 
+        projectTools: projectApps,
+        activeId: activeId 
+    });
 
     const rawData = prompt(`🔄 SMART SYNC & UPDATE\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
@@ -17632,7 +17640,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         let newCount = 0;
 
         zapArray.forEach(zapData => {
-            // 2. SMART MAPPING: Clean and Match Apps
+            // 3. SMART MAPPING (Fuzzy Match)
             if (zapData.steps) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
@@ -17643,7 +17651,6 @@ OL.bulkImportZaps = function(isMaster = false) {
                         const matchedApp = projectApps.find(pApp => {
                             const project = pApp.toLowerCase().replace(/\s/g, '');
                             if (incoming === project) return true;
-                            // Regex for word boundary: prevents "Box" matching "Wealthbox"
                             const regex = new RegExp(`\\b${incoming}\\b`, 'i');
                             return pApp.match(regex) || project === incoming;
                         });
@@ -17655,12 +17662,11 @@ OL.bulkImportZaps = function(isMaster = false) {
                 });
             }
 
-            // 3. RUN ORIGINAL PROCESSING
+            // 4. PROCESS & UPDATE
             const processedZap = OL.processZapLogic(zapData, isMaster);
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
-            // 4. UPDATE OR INSERT LOGIC
             const existingIndex = library.findIndex(r => {
                 if (r.type !== 'Zap') return false;
                 const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
@@ -17669,25 +17675,20 @@ OL.bulkImportZaps = function(isMaster = false) {
             });
 
             if (existingIndex !== -1) {
-                // OVERWRITE EXISTING
                 library[existingIndex] = processedZap;
                 updateCount++;
             } else {
-                // ADD NEW
                 library.unshift(processedZap);
                 newCount++;
             }
         });
 
-        // 5. PERSIST & REFRESH
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        console.log(`✅ SYNC COMPLETE: ${newCount} New, ${updateCount} Updated.`);
-        alert(`🎉 Sync Success!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
+        alert(`🎉 Sync Success!\n\nTarget: ${destinationName}\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
     } catch (e) {
         console.error("Bulk Sync Error:", e);
-        alert("Sync failed. Check console for details.");
     }
 };
