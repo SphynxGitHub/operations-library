@@ -13326,26 +13326,55 @@ OL.updateStepLogic = async function(resId, stepTarget, direction, logicIdx, fiel
 
 OL.removeStepLogic = async function(resId, stepTarget, direction, logicIdx) {
     const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
+    const resources = data.resources || [];
+    const res = resources.find(r => String(r.id) === String(resId));
     
-    // 🎯 FIX: ID-Aware lookup
+    // 🎯 ID-Aware lookup
     let step = res?.steps.find(s => String(s.id) === String(stepTarget));
     if (!step && isFinite(stepTarget)) step = res?.steps[stepTarget];
 
     if (!step || !step.logic) return;
 
+    // 1. 🔍 IDENTIFY THE PARTNER before deleting
     const itemToRemove = step.logic[direction][logicIdx];
-    const partnerId = direction === 'out' ? itemToRemove.targetId : itemToRemove.sourceId;
+    const myFullId = `${resId}-${step.id}`;
+    
+    // If we're deleting an Output, the partner is the TargetId. 
+    // If we're deleting an Input, the partner is the SourceId.
+    const partnerFullId = direction === 'out' ? itemToRemove.targetId : itemToRemove.sourceId;
 
-    if (partnerId) {
-        this.clearMirrorLink(`${resId}-${res.steps.indexOf(step)}`, partnerId);
+    if (partnerFullId) {
+        const lastHyphen = String(partnerFullId).lastIndexOf('-');
+        const pResId = partnerFullId.substring(0, lastHyphen);
+        const pStepId = partnerFullId.substring(lastHyphen + 1);
+        
+        const partnerRes = resources.find(r => String(r.id) === String(pResId));
+        const partnerStep = partnerRes?.steps.find(s => String(s.id) === String(pStepId));
+
+        if (partnerStep && partnerStep.logic) {
+            // 🧹 Clean the mirror side
+            if (direction === 'out') {
+                // We are 'Out', so remove the 'In' from the target
+                partnerStep.logic.in = (partnerStep.logic.in || []).filter(l => l.sourceId !== myFullId);
+            } else {
+                // We are 'In', so remove the 'Out' from the source
+                partnerStep.logic.out = (partnerStep.logic.out || []).filter(l => l.targetId !== myFullId);
+            }
+        }
     }
 
+    // 2. 🔥 DELETE THE LOCAL RULE
     step.logic[direction].splice(logicIdx, 1);
     
+    // 3. 💾 PERSIST & REFRESH
     await OL.persist(); 
-    this.drawConnections();
-    this.openInspector(resId, step.id); 
+    
+    // Draw connections to clear the lines from the map
+    if (typeof OL.drawConnections === 'function') OL.drawConnections();
+    
+    // Refresh the inspector to show the rule is gone
+    OL.openInspector(resId, step.id); 
+    console.log(`🧹 Ghost link removed from ${partnerFullId}`);
 };
 
 OL.updateStepTarget = async function(resId, stepId, direction, logicIdx, newPartnerFullId) {
