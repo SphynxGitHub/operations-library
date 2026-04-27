@@ -17763,41 +17763,54 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    // 1. Get the ID directly from the state (the same one the rest of the app uses)
     const currentId = state.activeClientId;
-    
-    // 2. Access the client directly from the Object using the ID
     const client = state.clients[currentId];
+    
+    if (!isMaster && !client) {
+        alert("❌ Error: No active project detected.");
+        return;
+    }
 
-    // 3. LOGGING: Let's see exactly what's in the box
-    console.log("🧬 FINAL CONTEXT CHECK:", {
-        activeId: currentId,
-        clientFound: client ? client.name : "STILL NULL",
-        isMasterFlag: isMaster
-    });
-
-    // 4. Fallback Logic
-    const isReallyMaster = isMaster || !client || state.currentView === 'master-vault';
-    const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
-
-    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
+    const rawData = prompt(`🔄 SYNC ENGINE READY\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
+        const library = isMaster ? state.master.resources : client.projectData.localResources;
         
+        let updateCount = 0;
+        let newCount = 0;
+
         zapArray.forEach(zapData => {
-            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
-            library.unshift(processedZap);
+            // 1. Process the incoming data
+            const processedZap = OL.processZapLogic(zapData, isMaster);
+            // Ensure the zapId is preserved on the top-level object for future lookups
+            processedZap.originalZapId = zapData.zapId;
+
+            // 2. Check if this Zap already exists in our library
+            const existingIndex = library.findIndex(r => 
+                r.type === 'Zap' && (r.originalZapId === zapData.zapId || r.name.includes(zapData.zapName))
+            );
+
+            if (existingIndex !== -1) {
+                // UPDATE: Replace existing at the same index
+                library[existingIndex] = processedZap;
+                updateCount++;
+            } else {
+                // IMPORT: Add to the top
+                library.unshift(processedZap);
+                newCount++;
+            }
         });
 
+        // 3. Persist and Refresh UI
         OL.persist();
-        OL.renderVisualizer(isReallyMaster);
+        OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Imported ${zapArray.length} Zaps to ${destinationName}`);
+        
+        alert(`✅ Sync Complete!\n\n✨ New: ${newCount}\n🔄 Updated: ${updateCount}\n📂 Total: ${zapArray.length}`);
     } catch (e) {
         console.error("Bulk Import Error:", e);
-        alert("Import failed. See console for details.");
+        alert("Import failed. Check console for details.");
     }
 };
