@@ -17762,13 +17762,21 @@ OL.processZapLogic = function(zap, isMaster = false) {
     };
 };
 
-OL.bulkImportZaps = function(isMaster = false) {
+OL.bulkImportZaps = function(isMaster = null) {
+    // 🎯 AUTO-DETECT CONTEXT: 
+    // If isMaster isn't explicitly passed, check if we are in the Master Vault view
+    if (isMaster === null) {
+        isMaster = (state.currentView === 'master-vault'); 
+    }
+
     const rawData = prompt("Paste the content of the Bulk Export file:");
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
         const client = getActiveClient();
+        
+        // 🏗️ TARGETING: Set library based on the context
         const library = isMaster ? state.master.resources : client.projectData.localResources;
 
         zapArray.forEach(zapData => {
@@ -17779,7 +17787,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Imported ${zapArray.length} Zaps and mapped infrastructure!`);
+        alert(`✅ Imported ${zapArray.length} Zaps into ${isMaster ? 'Master Vault' : client.name + ' Project'}!`);
     } catch (e) {
         console.error("Bulk Import Error:", e);
         alert("Check console for errors. Data format might be wrong.");
