@@ -2441,6 +2441,7 @@ OL.pushAppToClient = async function(appId, clientId) {
             { name: "Zapier Formatter", key: "formatter" },
             { name: "Zapier Storage", key: "storage" },
             { name: "Zapier Table", key: "table" },
+            { name: "Zapier Engine", key: "engine" },
             { name: "Zapier AI", key: "ai" },
             { name: "Webhook", key: "webhook" },
             { name: "SubZap", key: "subzap" },
