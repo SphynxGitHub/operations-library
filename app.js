@@ -2395,21 +2395,14 @@ OL.pushAppToClient = async function(appId, clientId) {
     const masterApp = state.master.apps.find(a => String(a.id) === String(appId));
     if (!client || !masterApp) return;
 
-    // 1. Pre-calculate the local mappings before creating the instance
-    const localMappings = [];
-    (masterApp.functionIds || []).forEach(m => {
+    // 1. Standard Provisioning for the selected App
+    const localMappings = (masterApp.functionIds || []).map(m => {
         const fnId = String(typeof m === 'string' ? m : m.id);
-        
-        const isAlreadyVisible = (client.sharedMasterIds || []).includes(fnId) || 
-                                 (client.projectData.localFunctions || []).some(lf => String(lf.id) === fnId);
-
-        if (!isAlreadyVisible && (fnId.startsWith('fn-') || fnId.startsWith('master-'))) {
+        if (!client.sharedMasterIds?.includes(fnId)) {
             if (!client.sharedMasterIds) client.sharedMasterIds = [];
             client.sharedMasterIds.push(fnId);
         }
-
-        // We map it if it's visible now (which it is, thanks to auto-unlock above)
-        localMappings.push({ id: fnId, status: 'available' });
+        return { id: fnId, status: 'available' };
     });
 
     const localInstance = {
@@ -2417,23 +2410,56 @@ OL.pushAppToClient = async function(appId, clientId) {
         masterRefId: appId, 
         name: masterApp.name,
         notes: masterApp.notes || "",
-        functionIds: localMappings, // 🚀 Mappings are born with the object
+        functionIds: localMappings,
         capabilities: [] 
     };
 
     if (!client.projectData.localApps) client.projectData.localApps = [];
     client.projectData.localApps.push(localInstance);
-    
-    // 2. Persist the change
+
+    // 🚀 2. THE ZAPIER SUITE AUTO-PROVISIONER
+    // If the app being added is "Zapier", automatically add the utilities as hidden
+    if (masterApp.name === "Zapier") {
+        console.log("⚡ Zapier detected. Provisioning Hidden Utility Suite...");
+        
+        const utilities = [
+            { name: "Zapier Filter", key: "filter" },
+            { name: "Zapier Formatter", key: "formatter" },
+            { name: "Zapier Code", key: "code" },
+            { name: "Zapier Delay", key: "delay" },
+            { name: "Zapier Manager", key: "manager" },
+            { name: "Zapier Looping", key: "looping" },
+            { name: "Zapier Webhooks", key: "webhook" },
+            { name: "Zapier Email", key: "mail" },
+            { name: "Zapier Scheduler", key: "scheduler" },
+            { name: "Zapier Formatter", key: "formatter" },
+            { name: "Zapier Storage", key: "storage" },
+            { name: "Zapier Table", key: "table" },
+            { name: "Zapier AI", key: "ai" },
+            { name: "Webhook", key: "webhook" },
+            { name: "SubZap", key: "subzap" },
+        ];
+
+        utilities.forEach(util => {
+            // Check if already exists to prevent duplicates
+            const exists = client.projectData.localApps.some(a => a.name === util.name);
+            if (!exists) {
+                client.projectData.localApps.push({
+                    id: `local-util-${util.key}-${Date.now()}`,
+                    name: util.name,
+                    isHidden: true, // 🔒 THE SECRET FLAG
+                    notes: "System Utility (Auto-added with Zapier)",
+                    functionIds: [],
+                    capabilities: []
+                });
+            }
+        });
+    }
+
     await OL.persist();
-    
-    // 3. 🚀 THE UI TRIGGER: Ensure we refresh the specific view
-    // buildLayout updates the sidebar (newly unlocked functions)
-    // renderAppsGrid updates the cards (the new app with its pills)
     buildLayout();
     renderAppsGrid();
     
-    // Small delay only for DOM cleanup if needed, but the render calls above do the heavy lifting
     setTimeout(() => {
         const modal = document.getElementById("modal-layer");
         if (modal) modal.style.display = "none";
@@ -2460,7 +2486,6 @@ OL.cloneMasterToLocal = function(masterAppId, clientId) {
 
     // 3. Detach the Master Reference
     client.sharedMasterIds = client.sharedMasterIds.filter(id => id !== masterAppId);
-
     OL.persist();
     OL.closeModal();
     renderAppsGrid();
