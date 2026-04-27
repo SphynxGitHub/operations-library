@@ -17617,7 +17617,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         return;
     }
 
-    const rawData = prompt(`🔄 RESTORED SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 FORCE REFRESH SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -17625,40 +17625,40 @@ OL.bulkImportZaps = function(isMaster = false) {
         const library = isMaster ? state.master.resources : client.projectData.localResources;
         
         zapArray.forEach(zapData => {
-            // 1. RUN THE EXACT LOGIC THAT WORKED BEFORE
-            // This handles the mapping, icons, and infrastructure discovery
-            const processedZap = OL.processZapLogic(zapData, isMaster);
-            
-            // Ensure the ID is attached for future syncs
-            processedZap.originalZapId = zapData.zapId;
-
-            // 2. FIND AND REPLACE (To avoid duplicates)
             const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
-            
+
+            // 1. Find if it already exists
             const existingIndex = library.findIndex(r => {
                 if (r.type !== 'Zap') return false;
-                // Match by ID if we have it, otherwise match by name
                 const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
                 const cleanExistingName = r.name.replace(/^⚡\s*/, '').trim().toLowerCase();
                 return idMatch || (cleanExistingName === cleanIncomingName);
             });
 
+            // 2. ⚡ THE TRICK: Remove it temporarily if it exists
+            // This tricks processZapLogic into thinking it's a BRAND NEW import
             if (existingIndex !== -1) {
-                // Keep the original name if you've customized it, but update everything else
-                const originalName = library[existingIndex].name;
-                library[existingIndex] = processedZap;
-                library[existingIndex].name = originalName; 
-            } else {
-                library.unshift(processedZap);
+                library.splice(existingIndex, 1);
             }
+
+            // 3. Process the Zap (now it's "New" to the system)
+            const processedZap = OL.processZapLogic(zapData, isMaster);
+            processedZap.originalZapId = zapData.zapId;
+            
+            // Re-apply the icon if it got stripped
+            if (!processedZap.name.startsWith('⚡')) {
+                processedZap.name = `⚡ ${processedZap.name.replace(/^⚡\s*/, '').trim()}`;
+            }
+
+            // 4. Put it back at the top (or at its old position)
+            library.unshift(processedZap);
         });
 
-        // 3. PERSIST & RENDER
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Finished. Mappings should match the original successful import.`);
+        alert(`✅ Sync Complete. Total Zaps in Library: ${library.length}`);
     } catch (e) {
         console.error("Sync Error:", e);
     }
