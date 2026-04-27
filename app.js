@@ -1655,7 +1655,13 @@ window.renderAppsGrid = function() {
     const localApps = client ? (client.projectData.localApps || []) : [];
     
     // Determine which list to show based on view
-    const displayApps = isVaultMode ? masterApps : (client?.projectData?.localApps || []);
+    let displayApps = isVaultMode ? masterApps : (client?.projectData?.localApps || []);
+
+    // Filter out hidden apps unless we are in the Master Vault
+    if (!isVaultMode) {
+        displayApps = displayApps.filter(app => app.isHidden !== true);
+    }
+    
     displayApps.sort((a, b) => a.name.localeCompare(b.name));
 
     container.innerHTML = `
