@@ -17637,7 +17637,7 @@ OL.bulkImportZaps = function(isMaster = false) {
     const library = isMaster ? state.master.resources : client.projectData.localResources;
     const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
 
-    const rawData = prompt(`🔄 MAP-PRESERVING SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 LOGIC-PRESERVING SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -17646,6 +17646,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         zapArray.forEach((zapData) => {
             const stepIdMap = []; 
 
+            // 1. PRE-CLEAN
             if (zapData.steps) {
                 zapData.steps.forEach((step, sIdx) => {
                     let incoming = step.app.split('@')[0].replace(/CLIAPI|V\d+/g, '').toLowerCase().trim();
@@ -17665,9 +17666,10 @@ OL.bulkImportZaps = function(isMaster = false) {
                 });
             }
 
+            // 2. PROCESS LOGIC
             const processedZap = OL.processZapLogic(zapData, isMaster);
             
-            // Re-inject mapped IDs
+            // 3. RE-INJECT APP IDs
             processedZap.steps.forEach((pStep, pIdx) => {
                 if (stepIdMap[pIdx]) {
                     pStep.appId = stepIdMap[pIdx].id;
@@ -17678,7 +17680,7 @@ OL.bulkImportZaps = function(isMaster = false) {
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
-            // 🎯 THE MAP PRESERVATION LOGIC
+            // 🎯 4. LOGIC & POSITION GRAFTING
             const existingIndex = library.findIndex(r => 
                 r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
             );
@@ -17686,27 +17688,47 @@ OL.bulkImportZaps = function(isMaster = false) {
             if (existingIndex !== -1) {
                 const oldZap = library[existingIndex];
                 
-                // 🧬 Graft map properties from the old object to the new one
-                processedZap.id = oldZap.id; // Keep the same ID so logic links don't break
+                // Copy Card Meta
+                processedZap.id = oldZap.id; 
                 processedZap.coords = oldZap.coords;
                 processedZap.stageId = oldZap.stageId;
                 processedZap.isGlobal = oldZap.isGlobal;
                 processedZap.isTopShelf = oldZap.isTopShelf;
                 processedZap._col = oldZap._col;
 
-                // Overwrite at same position
+                // 🧠 DEEP STEP RECOVERY: Restore Logic Links and Data Tags
+                processedZap.steps.forEach(newStep => {
+                    // Find the matching step in the old version by name
+                    const oldStep = (oldZap.steps || []).find(s => s.name === newStep.name);
+                    
+                    if (oldStep) {
+                        // Restore the lines (Logic)
+                        if (oldStep.logic) {
+                            newStep.logic = JSON.parse(JSON.stringify(oldStep.logic));
+                        }
+                        // Restore the purple tags (Datapoints)
+                        if (oldStep.datapoints) {
+                            newStep.datapoints = JSON.parse(JSON.stringify(oldStep.datapoints));
+                        }
+                        // Restore internal ID so incoming links from other cards don't break
+                        newStep.id = oldStep.id; 
+                    }
+                });
+
                 library[existingIndex] = processedZap;
             } else {
                 library.unshift(processedZap);
             }
         });
 
+        // 5. Final UI Sync
+        OL.syncLogicPorts(); // Forces all "Inbound" links to recalculate
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Sync Complete! Updated Zaps kept their positions on the map.`);
+        alert(`✅ Sync Complete! Positions, Connections (Logic), and Tags were preserved.`);
     } catch (e) {
-        console.error("🔥 Error:", e);
+        console.error("🔥 Sync Error:", e);
     }
 };
