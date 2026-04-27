@@ -17548,42 +17548,62 @@ OL.importZapToResources = function(isMaster = false) {
     try {
         const zap = JSON.parse(rawData);
         const client = getActiveClient();
-        
-        // 1. Resolve Project Apps to find matches for IDs
-        const allAvailableApps = [
-            ...(state.master.apps || []),
-            ...(client?.projectData?.localApps || [])
-        ];
+        const data = isMaster ? state.master : client.projectData;
+        const library = isMaster ? state.master.resources : client.projectData.localResources;
 
-        // 🚀 THE TRANSFORMATION LAYER
         const transformedSteps = zap.steps.map((s, i) => {
-            // Clean the app name (e.g., "GoogleDriveCLIAPI@1.18.3" -> "Google Drive")
             const cleanAppName = s.app ? s.app.split('@')[0].replace(/CLIAPI|V\d+|V\d+CLIAPI/g, '').replace(/([A-Z])/g, ' $1').trim() : "System";
-            
-            // Find if this app already exists in our library to get the ID
-            const matchedApp = allAvailableApps.find(a => a.name.toLowerCase().includes(cleanAppName.toLowerCase()));
+            const stepLinks = [];
+
+            // 🕵️ RESOURCE MAPPING ENGINE
+            if (s.mappings) {
+                s.mappings.forEach(m => {
+                    // Identify fields that usually contain IDs
+                    const idFields = ['spreadsheet', 'folder', 'file', 'form', 'board', 'database'];
+                    if (idFields.includes(m.field.toLowerCase()) && m.value && !m.value.includes('{{')) {
+                        
+                        // 1. Look for existing resource with this ID in external link
+                        let existingRes = library.find(r => r.externalUrl && r.externalUrl.includes(m.value));
+
+                        if (!existingRes) {
+                            // 2. Create it if not found (Infrastructure Auto-Discovery)
+                            const newResId = (isMaster ? 'res-vlt-' : 'local-prj-') + Date.now() + Math.random().toString(36).substr(2, 5);
+                            existingRes = {
+                                id: newResId,
+                                name: `[Discovered] ${m.field}: ${m.value.substring(0, 8)}...`,
+                                type: m.field.charAt(0).toUpperCase() + m.field.slice(1),
+                                externalUrl: `https://docs.google.com/spreadsheets/d/${m.value}`, // Defaulting to G-Suite style
+                                description: `Auto-discovered via Zap: ${zap.zapName}`,
+                                createdDate: new Date().toISOString()
+                            };
+                            library.push(existingRes);
+                            console.log(`🏗️ Discovered New Infrastructure: ${existingRes.name}`);
+                        }
+
+                        // 3. Link the step to this resource
+                        stepLinks.push({ 
+                            id: existingRes.id, 
+                            name: existingRes.name, 
+                            type: existingRes.type 
+                        });
+                    }
+                });
+            }
 
             return {
                 id: "step_" + Date.now() + "_" + i,
                 name: s.title,
                 description: s.title,
-                
-                // 📱 Primary Application Detection
-                appId: matchedApp ? matchedApp.id : null,
                 appName: cleanAppName,
-
-                // 👤 Assignee Logic: Trigger (Index 0) is usually 'Any Client' or 'System', others are 'Zapier'
-                assignees: (i === 0) 
-                    ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] 
-                    : [{ id: 'zapier-auto', name: 'Zapier', type: 'app' }],
-                
+                assignees: (i === 0) ? [{ id: 'role-client', name: 'Any Client', type: 'role' }] : [{ id: 'zap-auto', name: 'Zapier', type: 'app' }],
                 timingValue: 0,
                 timingType: 'after_prev',
                 logic: { in: [], out: [] },
-                links: []
+                links: stepLinks // 🔗 These are your auto-mapped resources!
             };
         });
 
+        // ... rest of the existing save/unshift logic ...
         const zapGroup = {
             id: isMaster ? `res-vlt-${Date.now()}` : `local-prj-${Date.now()}`,
             type: 'Zap',
@@ -17596,20 +17616,17 @@ OL.importZapToResources = function(isMaster = false) {
             _col: 0
         };
 
-        // Standard save logic...
         if (isMaster) {
             if (!state.master.resources) state.master.resources = [];
             state.master.resources.unshift(zapGroup);
         } else {
-            if (!client) return alert("Select a client first.");
-            if (!client.projectData.localResources) client.projectData.localResources = [];
             client.projectData.localResources.unshift(zapGroup);
         }
 
         OL.persist();
         window.handleRoute();
-        alert("✅ Zap Imported with Auto-Assignments and Tool Detection!");
-        
+        alert("🚀 Zap Imported! Infrastructure resources were auto-mapped.");
+
     } catch (e) {
         console.error("Import Error:", e);
         alert("Invalid JSON data.");
