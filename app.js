@@ -17694,3 +17694,24 @@ OL.importZapToResources = function(isMaster = false) {
         alert("Invalid JSON data.");
     }
 };
+OL.bulkImportZaps = function() {
+    const rawData = prompt("Paste the contents of your Bulk Export JSON here:");
+    if (!rawData) return;
+
+    try {
+        const zapArray = JSON.parse(rawData);
+        console.log(`📦 Bulk processing ${zapArray.length} Zaps...`);
+
+        zapArray.forEach(zapData => {
+            // Re-use your existing logic for each zap in the file
+            // We'll wrap your current logic into a reusable 'processSingleZap' function
+            OL.processSingleZapImport(zapData);
+        });
+
+        alert(`✅ Successfully imported ${zapArray.length} Zaps and mapped infrastructure!`);
+        OL.renderVisualizer();
+    } catch (e) {
+        console.error("Bulk Import Error:", e);
+        alert("Invalid JSON format.");
+    }
+};
