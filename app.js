@@ -4507,7 +4507,7 @@ window.renderResourceManager = function () {
             <div class="header-actions">
                 ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
                 <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
-                <button class="btn tiny primary" onclick="OL.bulkImportZaps(true)">📁 Bulk Load Master Zaps</button>
+                <button class="btn tiny primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
             </div>
         </div>
 
@@ -17762,19 +17762,19 @@ OL.processZapLogic = function(zap, isMaster = false) {
     };
 };
 
-OL.bulkImportZaps = function() {
-    const activeClient = getActiveClient();
+OL.bulkImportZaps = function(isMaster = false) {
+    // 1. USE THE EXISTING APP LOGIC
+    // This is how the other tabs find the open project
+    const activeClient = state.clients.find(c => c.id === state.activeClientId);
     
-    // 🎯 THE BRUTE FORCE LOGIC:
-    // If we have an active client, we are importing to that client.
-    // Otherwise, we go to Master.
-    const isMaster = !activeClient || (state.currentView === 'master-vault');
-    
-    const library = isMaster ? state.master.resources : activeClient.projectData.localResources;
-    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${activeClient.name}`;
+    // 2. Determine destination based on the same state checks the app uses
+    const isReallyMaster = isMaster || state.currentView === 'master-vault' || !activeClient;
+    const library = isReallyMaster ? state.master.resources : activeClient.projectData.localResources;
+    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${activeClient.name}`;
 
-    console.log("🦾 FINAL OVERRIDE:", {
-        clientName: activeClient?.name || "NONE",
+    console.log("🧬 STANDARD STATE CHECK:", {
+        activeClientId: state.activeClientId,
+        clientFound: activeClient ? activeClient.name : "NONE",
         target: destinationName
     });
 
@@ -17784,16 +17784,19 @@ OL.bulkImportZaps = function() {
     try {
         const zapArray = JSON.parse(rawData);
         zapArray.forEach(zapData => {
-            // Process based on the same logic
-            const processedZap = OL.processZapLogic(zapData, isMaster);
+            // Process the logic with the same context
+            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
             library.unshift(processedZap);
         });
 
+        // 3. Sync and Render
         OL.persist();
-        OL.renderVisualizer(isMaster);
+        OL.renderVisualizer(isReallyMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Done! Imported to ${destinationName}`);
+        
+        alert(`✅ Success! Imported to ${destinationName}`);
     } catch (e) {
-        console.error("Import Error:", e);
+        console.error("Bulk Import Error:", e);
+        alert("Import failed. Check console.");
     }
 };
