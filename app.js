@@ -17554,6 +17554,7 @@ OL.importZapToResources = function(isMaster = false) {
         const transformedSteps = zap.steps.map((s, i) => {
             const cleanAppName = s.app ? s.app.split('@')[0].replace(/CLIAPI|V\d+|V\d+CLIAPI/g, '').replace(/([A-Z])/g, ' $1').trim() : "System";
             const stepLinks = [];
+            const stepDatapoints = [];
 
             // 🕵️ RESOURCE MAPPING ENGINE
             if (s.mappings) {
@@ -17606,7 +17607,47 @@ OL.importZapToResources = function(isMaster = false) {
                             name: existingRes.name, 
                             type: existingRes.type 
                         });
-                    }               
+                    }
+                    
+                    // 1. Choose the best possible name for the Data Tag
+                    const rawFieldName = m.label || m.field || "Unknown Field"; 
+                    
+                    // 2. Clean it up (Remove technical prefixes or suffixes)
+                    const fieldName = rawFieldName
+                        .replace(/CLIAPI|V\d+/g, '') // Clean technical versioning
+                        .replace(/_/g, ' ')          // Replace underscores with spaces
+                        .trim();
+                    
+                    // 🏷️ DATA TAG LOGIC
+                    if (m.value && m.value.trim() !== "") {
+                        const dataLibrary = isMaster ? state.master.datapoints : (client.projectData.localDatapoints || []);
+                        
+                        // Deduplicate: See if we already have this tag by name
+                        let existingTag = dataLibrary.find(d => d.name.toLowerCase() === fieldName.toLowerCase());
+                    
+                        if (!existingTag) {
+                            const newTagId = 'dp-' + Date.now() + Math.random().toString(36).substr(2, 5);
+                            existingTag = {
+                                id: newTagId,
+                                name: fieldName, // Now uses "First Name" instead of "first_name"
+                                key: `{${fieldName.replace(/\s+/g, '').toLowerCase()}}`,
+                                category: 'Auto-Discovered',
+                                isBundle: false
+                            };
+                            
+                            if (isMaster) {
+                                state.master.datapoints.push(existingTag);
+                            } else {
+                                if (!client.projectData.localDatapoints) client.projectData.localDatapoints = [];
+                                client.projectData.localDatapoints.push(existingTag);
+                            }
+                        }
+                    
+                        // Map the tag to this specific step
+                        if (!stepDatapoints.some(d => d.id === existingTag.id)) {
+                            stepDatapoints.push(existingTag);
+                        }
+                    }
                 });
             }
 
@@ -17619,7 +17660,8 @@ OL.importZapToResources = function(isMaster = false) {
                 timingValue: 0,
                 timingType: 'after_prev',
                 logic: { in: [], out: [] },
-                links: stepLinks // 🔗 These are your auto-mapped resources!
+                links: stepLinks, // 🔗 These are your auto-mapped resources!
+                datapoints: stepDatapoints
             };
         });
 
