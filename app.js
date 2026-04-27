@@ -17762,28 +17762,19 @@ OL.processZapLogic = function(zap, isMaster = false) {
     };
 };
 
-OL.bulkImportZaps = function(isMaster = false) {
-    // 1. 🔍 THE SIDEBAR TRICK: If the state is lying, look at the UI
-    // We hunt for the active/highlighted client in your sidebar
-    const sidebarActiveElement = document.querySelector('.sidebar-client.active, .client-link.selected');
-    const sidebarName = sidebarActiveElement ? sidebarActiveElement.innerText.trim() : null;
-
-    // 2. Cross-reference the sidebar name with your client list
-    let client = getActiveClient();
+OL.bulkImportZaps = function() {
+    const activeClient = getActiveClient();
     
-    // 🏗️ FAILSAFE: If getActiveClient() is failing, find the client by the sidebar name
-    if (!client && sidebarName) {
-        client = state.clients.find(c => c.name === sidebarName);
-    }
+    // 🎯 THE BRUTE FORCE LOGIC:
+    // If we have an active client, we are importing to that client.
+    // Otherwise, we go to Master.
+    const isMaster = !activeClient || (state.currentView === 'master-vault');
+    
+    const library = isMaster ? state.master.resources : activeClient.projectData.localResources;
+    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${activeClient.name}`;
 
-    // 3. Determine the final destination
-    const isReallyMaster = (isMaster || state.currentView === 'master-vault' || !client);
-    const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
-
-    console.log("🛰️ DOM-BASED IMPORT CHECK:", {
-        sidebarDetectedName: sidebarName,
-        clientObjectFound: !!client,
+    console.log("🦾 FINAL OVERRIDE:", {
+        clientName: activeClient?.name || "NONE",
         target: destinationName
     });
 
@@ -17793,14 +17784,15 @@ OL.bulkImportZaps = function(isMaster = false) {
     try {
         const zapArray = JSON.parse(rawData);
         zapArray.forEach(zapData => {
-            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
+            // Process based on the same logic
+            const processedZap = OL.processZapLogic(zapData, isMaster);
             library.unshift(processedZap);
         });
 
         OL.persist();
-        OL.renderVisualizer(isReallyMaster);
+        OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Imported to ${destinationName}`);
+        alert(`✅ Done! Imported to ${destinationName}`);
     } catch (e) {
         console.error("Import Error:", e);
     }
