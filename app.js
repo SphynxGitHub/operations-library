@@ -17612,54 +17612,40 @@ OL.bulkImportZaps = function(isMaster = false) {
     const currentId = state.activeClientId;
     const client = state.clients[currentId];
     
-    if (!isMaster && !client) {
-        alert("❌ Error: No active project detected.");
-        return;
-    }
+    const isReallyMaster = isMaster || !client || state.currentView === 'master-vault';
+    const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
+    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
 
-    const rawData = prompt(`🔄 FORCE REFRESH SYNC\nTarget: ${isMaster ? 'MASTER VAULT' : 'PROJECT: ' + client.name}\n\nPaste JSON:`);
+    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        const library = isMaster ? state.master.resources : client.projectData.localResources;
         
         zapArray.forEach(zapData => {
-            const cleanIncomingName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
-
-            // 1. Find if it already exists
+            // --- THE ONLY ADDITION: Remove duplicate before processing ---
+            const cleanName = zapData.zapName.replace(/^⚡\s*/, '').trim().toLowerCase();
             const existingIndex = library.findIndex(r => {
-                if (r.type !== 'Zap') return false;
-                const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
-                const cleanExistingName = r.name.replace(/^⚡\s*/, '').trim().toLowerCase();
-                return idMatch || (cleanExistingName === cleanIncomingName);
+                const rName = r.name ? r.name.replace(/^⚡\s*/, '').trim().toLowerCase() : "";
+                return r.type === 'Zap' && (r.zapId === zapData.zapId || rName === cleanName);
             });
 
-            // 2. ⚡ THE TRICK: Remove it temporarily if it exists
-            // This tricks processZapLogic into thinking it's a BRAND NEW import
             if (existingIndex !== -1) {
-                library.splice(existingIndex, 1);
+                library.splice(existingIndex, 1); // Delete the old one
             }
+            // -------------------------------------------------------------
 
-            // 3. Process the Zap (now it's "New" to the system)
-            const processedZap = OL.processZapLogic(zapData, isMaster);
-            processedZap.originalZapId = zapData.zapId;
-            
-            // Re-apply the icon if it got stripped
-            if (!processedZap.name.startsWith('⚡')) {
-                processedZap.name = `⚡ ${processedZap.name.replace(/^⚡\s*/, '').trim()}`;
-            }
-
-            // 4. Put it back at the top (or at its old position)
+            // YOUR ORIGINAL WORKING LOGIC
+            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
             library.unshift(processedZap);
         });
 
         OL.persist();
-        OL.renderVisualizer(isMaster);
+        OL.renderVisualizer(isReallyMaster);
         OL.renderWorkbenchItemsOnly();
-        
-        alert(`✅ Sync Complete. Total Zaps in Library: ${library.length}`);
+        alert(`✅ Success! Synced ${zapArray.length} Zaps to ${destinationName}`);
     } catch (e) {
-        console.error("Sync Error:", e);
+        console.error("Bulk Import Error:", e);
+        alert("Import failed.");
     }
 };
