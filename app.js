@@ -17612,28 +17612,82 @@ OL.bulkImportZaps = function(isMaster = false) {
     const currentId = state.activeClientId;
     const client = state.clients[currentId];
     
-    const isReallyMaster = isMaster || !client || state.currentView === 'master-vault';
-    const library = isReallyMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isReallyMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
+    if (!client && !isMaster) return alert("❌ No active project detected in Sidebar.");
 
-    const rawData = prompt(`IMPORTING TO: ${destinationName}\n\nPaste JSON content:`);
+    // 1. Get Project Apps & Sort by Length (Protects "Box" vs "Wealthbox")
+    const projectApps = isMaster ? [] : (client.projectData.infrastructure || [])
+        .sort((a, b) => b.length - a.length);
+
+    const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
+
+    console.log("🧬 SYNC START:", { destination: destinationName, projectTools: projectApps });
+
+    const rawData = prompt(`🔄 SMART SYNC & UPDATE\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        
+        let updateCount = 0;
+        let newCount = 0;
+
         zapArray.forEach(zapData => {
-            // Raw, un-tampered processing logic
-            const processedZap = OL.processZapLogic(zapData, isReallyMaster);
-            library.unshift(processedZap);
+            // 2. SMART MAPPING: Clean and Match Apps
+            if (zapData.steps) {
+                zapData.steps.forEach(step => {
+                    if (step.app) {
+                        const incoming = step.app.split('@')[0]
+                            .replace(/CLIAPI/g, '').replace(/V\d/g, '')
+                            .toLowerCase().trim();
+
+                        const matchedApp = projectApps.find(pApp => {
+                            const project = pApp.toLowerCase().replace(/\s/g, '');
+                            if (incoming === project) return true;
+                            // Regex for word boundary: prevents "Box" matching "Wealthbox"
+                            const regex = new RegExp(`\\b${incoming}\\b`, 'i');
+                            return pApp.match(regex) || project === incoming;
+                        });
+
+                        if (matchedApp) {
+                            step.app = matchedApp; 
+                        }
+                    }
+                });
+            }
+
+            // 3. RUN ORIGINAL PROCESSING
+            const processedZap = OL.processZapLogic(zapData, isMaster);
+            processedZap.originalZapId = zapData.zapId;
+            processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
+
+            // 4. UPDATE OR INSERT LOGIC
+            const existingIndex = library.findIndex(r => {
+                if (r.type !== 'Zap') return false;
+                const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
+                const nameMatch = r.name.toLowerCase() === processedZap.name.toLowerCase();
+                return idMatch || nameMatch;
+            });
+
+            if (existingIndex !== -1) {
+                // OVERWRITE EXISTING
+                library[existingIndex] = processedZap;
+                updateCount++;
+            } else {
+                // ADD NEW
+                library.unshift(processedZap);
+                newCount++;
+            }
         });
 
+        // 5. PERSIST & REFRESH
         OL.persist();
-        OL.renderVisualizer(isReallyMaster);
+        OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
-        alert(`✅ Success! Imported ${zapArray.length} Zaps to ${destinationName}`);
+        
+        console.log(`✅ SYNC COMPLETE: ${newCount} New, ${updateCount} Updated.`);
+        alert(`🎉 Sync Success!\n\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
     } catch (e) {
-        console.error("Bulk Import Error:", e);
-        alert("Import failed. See console.");
+        console.error("Bulk Sync Error:", e);
+        alert("Sync failed. Check console for details.");
     }
 };
