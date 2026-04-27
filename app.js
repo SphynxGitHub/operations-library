@@ -17613,7 +17613,7 @@ OL.bulkImportZaps = function(isMaster = false) {
     const client = state.clients[activeId];
     if (!client && !isMaster) return alert("❌ No active project.");
 
-    // 1. Get project apps for the fuzzy match
+    // 1. Get project apps (localApps) to find the correct IDs
     const projectApps = (client.projectData?.localApps || [])
         .sort((a, b) => {
             const nameA = typeof a === 'string' ? a : (a.name || a.label || "");
@@ -17624,52 +17624,41 @@ OL.bulkImportZaps = function(isMaster = false) {
     const library = isMaster ? state.master.resources : client.projectData.localResources;
     const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
 
-    const rawData = prompt(`🔄 SYNC ZAPS & APPS\nTarget: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 STEP-LEVEL MAPPING\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
         const zapArray = JSON.parse(rawData);
-        let importCount = 0;
         
         zapArray.forEach(zapData => {
-            let foundPrimaryId = null;
-            let foundPrimaryName = null;
-
-            // 2. PRE-CLEAN: Match robot names to localApps
-            if (zapData.steps && projectApps.length > 0) {
+            // 2. 🎯 MAP AT THE STEP LEVEL BEFORE PROCESSING
+            if (zapData.steps) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
                         const incoming = step.app.split('@')[0].replace(/CLIAPI/g, '').replace(/V\d/g, '').toLowerCase().trim();
-                        const matchedApp = projectApps.find(pApp => {
-                            const pAppName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
-                            const pClean = pAppName.toLowerCase().replace(/\s/g, '');
-                            return incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pAppName);
-                        });
                         
-                        if (matchedApp) {
-                            const finalName = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
-                            const finalId = typeof matchedApp === 'string' ? null : matchedApp.id;
-                            
-                            step.app = finalName; 
+                        const matchedApp = projectApps.find(pApp => {
+                            const pName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
+                            const pClean = pName.toLowerCase().replace(/\s/g, '');
+                            return incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pName);
+                        });
 
-                            // 🎯 CAPTURE FIRST MATCH for the Card/Inspector Header
-                            if (!foundPrimaryName) {
-                                foundPrimaryName = finalName;
-                                foundPrimaryId = finalId;
-                            }
+                        if (matchedApp) {
+                            // Inject the real project name and ID into the raw JSON
+                            step.app = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
+                            step.appId = typeof matchedApp === 'string' ? null : matchedApp.id;
                         }
                     }
                 });
             }
 
             // 3. RUN ORIGINAL LOGIC
+            // We modify processZapLogic's input so its output already contains the IDs
             const processedZap = OL.processZapLogic(zapData, isMaster);
             
-            // 4. MAPPING: Set properties used by your Inspector
+            // 4. Ensure IDs are maintained for the update check
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
-            processedZap.appName = foundPrimaryName; 
-            processedZap.appId = foundPrimaryId;
 
             // 5. UPDATE OR INSERT
             const existingIndex = library.findIndex(r => 
@@ -17681,14 +17670,13 @@ OL.bulkImportZaps = function(isMaster = false) {
             } else {
                 library.unshift(processedZap);
             }
-            importCount++;
         });
 
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Success! ${importCount} Zaps imported. Apps mapped to the "appName" field.`);
+        alert(`✅ Success! Apps mapped at the Step level.`);
     } catch (e) {
         console.error("Sync Error:", e);
     }
