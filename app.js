@@ -17609,21 +17609,25 @@ OL.processZapLogic = function(zap, isMaster = false) {
 };
 
 OL.bulkImportZaps = function(isMaster = false) {
-    // 1. IMPROVED CONTEXT GRAB
-    const activeId = state.activeClientId || document.querySelector('.sidebar-client.active, .client-link.selected')?.getAttribute('data-id');
+    // 1. Grab the ID from the state
+    const activeId = state.activeClientId;
+    
+    // 2. Find the client in the state object/array
+    // Based on your previous logs, state.clients uses the IDs as keys
     const client = state.clients[activeId];
     
     if (!client && !isMaster) {
-        console.error("❌ Context Error: state.activeClientId is:", state.activeClientId);
-        return alert("❌ Error: No active project detected. Please click a client in the sidebar again.");
+        console.error("❌ Context Error: No client found in state for ID:", activeId);
+        return alert("❌ Error: Please click into a project before importing.");
     }
 
-    // 2. Get Project Apps from the verified client object
-    const projectApps = isMaster ? [] : (client.projectData.infrastructure || [])
+    // 3. Setup Project Data (using meta.name based on your HTML)
+    const clientName = client?.meta?.name || "Unknown Project";
+    const projectApps = (client?.projectData?.infrastructure || [])
         .sort((a, b) => b.length - a.length);
 
     const library = isMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.name}`;
+    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${clientName}`;
 
     console.log("🧬 SYNC START:", { 
         destination: destinationName, 
@@ -17631,7 +17635,7 @@ OL.bulkImportZaps = function(isMaster = false) {
         activeId: activeId 
     });
 
-    const rawData = prompt(`🔄 SMART SYNC & UPDATE\nTarget: ${destinationName}\n\nPaste JSON:`);
+    const rawData = prompt(`🔄 SYNC ENGINE (Meta-Fixed)\nTarget: ${destinationName}\n\nPaste JSON:`);
     if (!rawData) return;
 
     try {
@@ -17640,8 +17644,8 @@ OL.bulkImportZaps = function(isMaster = false) {
         let newCount = 0;
 
         zapArray.forEach(zapData => {
-            // 3. SMART MAPPING (Fuzzy Match)
-            if (zapData.steps) {
+            // 4. SMART MAPPING (Fuzzy Match)
+            if (zapData.steps && projectApps.length > 0) {
                 zapData.steps.forEach(step => {
                     if (step.app) {
                         const incoming = step.app.split('@')[0]
@@ -17662,17 +17666,14 @@ OL.bulkImportZaps = function(isMaster = false) {
                 });
             }
 
-            // 4. PROCESS & UPDATE
+            // 5. PROCESS & UPDATE
             const processedZap = OL.processZapLogic(zapData, isMaster);
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
-            const existingIndex = library.findIndex(r => {
-                if (r.type !== 'Zap') return false;
-                const idMatch = r.originalZapId && String(r.originalZapId) === String(zapData.zapId);
-                const nameMatch = r.name.toLowerCase() === processedZap.name.toLowerCase();
-                return idMatch || nameMatch;
-            });
+            const existingIndex = library.findIndex(r => 
+                r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
+            );
 
             if (existingIndex !== -1) {
                 library[existingIndex] = processedZap;
@@ -17687,8 +17688,8 @@ OL.bulkImportZaps = function(isMaster = false) {
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`🎉 Sync Success!\n\nTarget: ${destinationName}\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
+        alert(`🎉 Success!\n\nTarget: ${destinationName}\n🔄 Updated: ${updateCount}\n✨ New: ${newCount}`);
     } catch (e) {
-        console.error("Bulk Sync Error:", e);
+        console.error("Sync Error:", e);
     }
 };
