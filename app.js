@@ -17613,7 +17613,6 @@ OL.bulkImportZaps = function(isMaster = false) {
     const client = state.clients[activeId];
     if (!client && !isMaster) return alert("❌ No active project.");
 
-    // 1. Get project apps (localApps) to find the correct IDs
     const projectApps = (client.projectData?.localApps || [])
         .sort((a, b) => {
             const nameA = typeof a === 'string' ? a : (a.name || a.label || "");
@@ -17621,63 +17620,84 @@ OL.bulkImportZaps = function(isMaster = false) {
             return nameB.length - nameA.length;
         });
 
-    const library = isMaster ? state.master.resources : client.projectData.localResources;
-    const destinationName = isMaster ? "MASTER VAULT" : `PROJECT: ${client.meta?.name}`;
+    console.group("🔍 ZAP IMPORT DIAGNOSTIC");
+    console.log("📂 Target Project:", client.meta?.name);
+    console.log("📱 Project Apps Available:", projectApps.map(a => `${a.name} (${a.id})`));
 
-    const rawData = prompt(`🔄 STEP-LEVEL MAPPING\nTarget: ${destinationName}\n\nPaste JSON:`);
-    if (!rawData) return;
+    const library = isMaster ? state.master.resources : client.projectData.localResources;
+    const rawData = prompt(`🔄 DIAGNOSTIC SYNC\nTarget: ${client.meta?.name}\n\nPaste JSON:`);
+    if (!rawData) { console.groupEnd(); return; }
 
     try {
         const zapArray = JSON.parse(rawData);
         
-        zapArray.forEach(zapData => {
-            // 2. 🎯 MAP AT THE STEP LEVEL BEFORE PROCESSING
+        zapArray.forEach((zapData, zIdx) => {
+            console.group(`⚡ Processing Zap [${zIdx}]: ${zapData.zapName}`);
+            
             if (zapData.steps) {
-                zapData.steps.forEach(step => {
+                zapData.steps.forEach((step, sIdx) => {
                     if (step.app) {
                         const incoming = step.app.split('@')[0].replace(/CLIAPI/g, '').replace(/V\d/g, '').toLowerCase().trim();
                         
                         const matchedApp = projectApps.find(pApp => {
                             const pName = typeof pApp === 'string' ? pApp : (pApp.name || pApp.label || "");
                             const pClean = pName.toLowerCase().replace(/\s/g, '');
-                            return incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pName);
+                            const match = incoming === pClean || new RegExp(`\\b${incoming}\\b`, 'i').test(pName);
+                            return match;
                         });
 
                         if (matchedApp) {
-                            // Inject the real project name and ID into the raw JSON
                             step.app = typeof matchedApp === 'string' ? matchedApp : matchedApp.name;
                             step.appId = typeof matchedApp === 'string' ? null : matchedApp.id;
+                            console.log(`✅ Step ${sIdx + 1} Match: "${incoming}" -> "${step.app}" (ID: ${step.appId})`);
+                        } else {
+                            console.warn(`❌ Step ${sIdx + 1} No Match: Could not find "${incoming}" in projectApps.`);
                         }
                     }
                 });
             }
 
-            // 3. RUN ORIGINAL LOGIC
-            // We modify processZapLogic's input so its output already contains the IDs
+            // RUN ORIGINAL LOGIC
             const processedZap = OL.processZapLogic(zapData, isMaster);
             
-            // 4. Ensure IDs are maintained for the update check
+            // Critical: Check if processZapLogic wiped our IDs
+            processedZap.steps.forEach((pStep, pIdx) => {
+                // If processZapLogic doesn't return appId, we re-inject it from our pre-cleaned data
+                if (!pStep.appId && zapData.steps[pIdx].appId) {
+                    pStep.appId = zapData.steps[pIdx].appId;
+                }
+                if (!pStep.appName && zapData.steps[pIdx].app) {
+                    pStep.appName = zapData.steps[pIdx].app;
+                }
+            });
+
+            console.log("📦 Final Processed Object:", processedZap);
+
             processedZap.originalZapId = zapData.zapId;
             processedZap.name = `⚡ ${zapData.zapName.replace(/^⚡\s*/, '').trim()}`;
 
-            // 5. UPDATE OR INSERT
             const existingIndex = library.findIndex(r => 
                 r.type === 'Zap' && (String(r.originalZapId) === String(zapData.zapId) || r.name.toLowerCase() === processedZap.name.toLowerCase())
             );
 
             if (existingIndex !== -1) {
                 library[existingIndex] = processedZap;
+                console.log("🔄 Action: Overwrote existing Zap.");
             } else {
                 library.unshift(processedZap);
+                console.log("✨ Action: Added as new Zap.");
             }
+            console.groupEnd();
         });
 
         OL.persist();
         OL.renderVisualizer(isMaster);
         OL.renderWorkbenchItemsOnly();
         
-        alert(`✅ Success! Apps mapped at the Step level.`);
+        console.groupEnd();
+        alert(`✅ Sync Complete. CHECK THE CONSOLE for match details.`);
     } catch (e) {
-        console.error("Sync Error:", e);
+        console.error("🔥 Sync Error:", e);
+        console.groupEnd();
     }
 };
