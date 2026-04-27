@@ -10315,7 +10315,7 @@ OL.renderWorkbenchItemsOnly = function() {
             div.draggable = true;
             
             // 🎨 Purple tag styling
-            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; color:white; display:flex; justify-content:space-between; align-items:center;`;
+            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; display:flex; justify-content:space-between; align-items:center;`;
             
             div.ondragstart = (e) => {
                 e.dataTransfer.setData("application/sphynx-type", "datapoint");
