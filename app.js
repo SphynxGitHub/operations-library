@@ -17825,7 +17825,7 @@ OL.syncWealthbox = async function(client) {
 
     // 2. Fetch Workflow Templates from Wealthbox
     // Note: Wealthbox requires the 'X-API-Key' or 'Authorization' header
-    const response = await fetch(`https://api.wealthbox.com/v1/workflow_templates`, {
+    const response = await fetch(`https://api.crmworkspace.com/v1/workflow_templates`, {
         method: 'GET',
         headers: { 
             "Authorization": `Bearer ${apiKey}`,
