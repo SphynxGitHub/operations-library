@@ -8,5 +8,5 @@
     "axios": "^1.6.0",
     "cors": "^2.8.5"
   },
-  "engines": { "node": "20" }
+  "engines": { "node": "22" }
 }
