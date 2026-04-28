@@ -17897,3 +17897,48 @@ OL.upsertExternalResource = function(client, data) {
         library.push(data);
     }
 };
+
+// 📡 THE SYNC ORCHESTRATOR
+OL.syncExternalIntegrations = async function() {
+    const client = getActiveClient();
+    if (!client) return alert("❌ No active project selected.");
+
+    // Visual feedback on the button
+    const btn = event?.target;
+    const originalText = btn ? btn.innerText : "";
+    if (btn) {
+        btn.innerText = "⏳ Syncing...";
+        btn.disabled = true;
+    }
+
+    try {
+        console.group("📡 Unified External Sync");
+        
+        // 1. WEALTHBOX RUN
+        console.log("🔨 Checking Wealthbox...");
+        const wbCount = await OL.syncWealthbox(client);
+        console.log(`✅ Wealthbox sync complete: ${wbCount} templates.`);
+
+        // 2. FUTURE HOOKS (Jotform / Calendly)
+        // await OL.syncJotform(client);
+
+        // 3. PERSIST & REFRESH UI
+        await OL.persist();
+        
+        // Refresh whichever view we are on
+        if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
+        if (window.location.hash.includes('resources')) renderResourceManager();
+        
+        alert(`✅ Sync Successful!\n- Wealthbox: ${wbCount} workflows updated.`);
+
+    } catch (e) {
+        console.error("🔥 Sync Error:", e);
+        alert("Sync Failed: " + e.message);
+    } finally {
+        if (btn) {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+        console.groupEnd();
+    }
+};
