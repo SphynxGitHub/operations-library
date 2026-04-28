@@ -1,0 +1,29 @@
+name: Deploy Firebase Functions
+on:
+  push:
+    branches: [ main ]
+    # This ensures the middleman only redeploys if you actually change the middleman code
+    paths:
+      - 'functions/**'
+      - '.github/workflows/deploy-functions.yml'
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
+
+      - name: Install Dependencies
+        run: cd functions && npm install
+
+      - name: Deploy to Firebase
+        run: firebase deploy --only functions --token "${{ secrets.FIREBASE_TOKEN }}"
