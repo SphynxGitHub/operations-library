@@ -17824,16 +17824,16 @@ OL.syncWealthbox = async function(client) {
     const apiKey = wbCreds.secret;
 
     // 2. Fetch Workflow Templates from Wealthbox
-    // Note: Wealthbox requires the 'X-API-Key' or 'Authorization' header
-    const response = await fetch(`https://api.crmworkspace.com/v1/workflow_templates`, {
-        method: 'GET',
-        headers: { 
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-        }
-    });
+    const cloudUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/syncWealthboxProxy?apiKey=${apiKey}`;
 
-    if (!response.ok) throw new Error(`Wealthbox API Error: ${response.statusText}`);
+    console.log("📡 Calling Firebase Middleman...");
+    
+    const response = await fetch(cloudUrl);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Middleman Error: ${errorText}`);
+    }
     
     const result = await response.json();
     const templates = result.workflow_templates || [];
