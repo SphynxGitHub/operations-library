@@ -4574,6 +4574,9 @@ window.renderResourceManager = function () {
                     </div>
                 </div>
                 <button class="btn primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
+                <button class="btn tiny primary" onclick="OL.syncExternalIntegrations()">
+                    🔄 Sync Automations
+                </button>
             </div>
         </div>
 
@@ -17803,5 +17806,94 @@ OL.bulkImportZaps = function(isMaster = false) {
         alert(`✅ Sync Complete! Positions, Connections (Logic), and Tags were preserved.`);
     } catch (e) {
         console.error("🔥 Sync Error:", e);
+    }
+};
+
+OL.syncWealthbox = async function(client) {
+    // 1. Find Wealthbox Credentials in the Access Registry
+    const registry = client.projectData.accessRegistry || [];
+    const wbCreds = registry.find(r => {
+        const app = client.projectData.localApps.find(a => a.id === r.appId);
+        return app?.name.toLowerCase().includes('wealthbox');
+    });
+
+    if (!wbCreds || !wbCreds.secret) {
+        throw new Error("Wealthbox API Key not found in Credentials section.");
+    }
+
+    const apiKey = wbCreds.secret;
+
+    // 2. Fetch Workflow Templates from Wealthbox
+    // Note: Wealthbox requires the 'X-API-Key' or 'Authorization' header
+    const response = await fetch(`https://api.wealthbox.com/v1/workflow_templates`, {
+        method: 'GET',
+        headers: { 
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+        }
+    });
+
+    if (!response.ok) throw new Error(`Wealthbox API Error: ${response.statusText}`);
+    
+    const result = await response.json();
+    const templates = result.workflow_templates || [];
+
+    console.log(`📥 Wealthbox: Found ${templates.length} templates.`);
+
+    // 3. Process each template into your Library
+    templates.forEach(wf => {
+        const resourceData = {
+            externalId: wf.id,
+            externalSource: 'Wealthbox',
+            name: `🕸️ WB: ${wf.name}`,
+            type: 'Workflow',
+            archetype: 'Multi-Step',
+            // Transform WB "Steps" into your internal "Step" format
+            steps: (wf.steps || []).map((s, idx) => ({
+                id: "wb-step-" + s.id,
+                name: s.name,
+                description: s.description || "No description provided.",
+                assignees: s.assigned_to_name ? [{ name: s.assigned_to_name, type: 'role' }] : [],
+                logic: { in: [], out: [] }
+            }))
+        };
+
+        // Use the Universal Upsert we discussed to preserve map positions
+        OL.upsertExternalResource(client, resourceData);
+    });
+
+    return templates.length;
+};
+
+OL.upsertExternalResource = function(client, data) {
+    if (!client.projectData.localResources) client.projectData.localResources = [];
+    const library = client.projectData.localResources;
+    
+    // 🎯 MATCHING LOGIC: Find existing card by External ID OR Name match
+    const existingIdx = library.findIndex(r => 
+        (r.externalId && String(r.externalId) === String(data.externalId)) || 
+        r.name.toLowerCase() === data.name.toLowerCase()
+    );
+
+    if (existingIdx !== -1) {
+        const old = library[existingIdx];
+        console.log(`♻️ Syncing existing card: ${old.name}`);
+        
+        // 🧬 GRAFTING: Keep Map IDs, Coordinates, and internal Logic links
+        // but overwrite the "Steps" and "External IDs"
+        library[existingIdx] = { 
+            ...old, 
+            ...data, 
+            id: old.id,           // Keep original ID so lines don't break
+            coords: old.coords,   // Keep Map Position
+            stageId: old.stageId, // Keep Lane
+            isGlobal: old.isGlobal // Keep Workbench/Map status
+        };
+    } else {
+        // ✨ NEW DISCOVERY: Send to Workbench
+        console.log(`✨ New asset discovered: ${data.name}`);
+        data.id = 'res-wb-' + Date.now() + Math.random().toString(36).substr(2,5);
+        data.isGlobal = true;
+        library.push(data);
     }
 };
