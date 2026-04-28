@@ -2463,9 +2463,9 @@ OL.pushAppToClient = async function(appId, clientId) {
             { name: "Zapier Formatter", key: "formatter" },
             { name: "Zapier Storage", key: "storage" },
             { name: "Zapier Table", key: "table" },
+            { name: "Zapier SMS", key: "sms" },
             { name: "Zapier Engine", key: "engine" },
             { name: "Zapier AI", key: "ai" },
-            { name: "Zapier SMS", key: "sms" },
             { name: "Webhook", key: "webhook" },
             { name: "SubZap", key: "subzap" },
         ];
@@ -17695,9 +17695,9 @@ OL.bulkImportZaps = function(isMaster = false) {
         "codeapi": "Zapier Code",
         "engineapi": "Zapier Engine",
         "storage": "Zapier Storage",
-        "smsapi": "Zapier SMS"
         "slackapi": "Slack",
-        "googlemakersuite": "Google Maker Suite"
+        "googlemakersuite": "Google Maker Suite",
+        "smsapi" : "Zapier SMS"
     };
 
     const projectApps = (client.projectData?.localApps || [])
@@ -17803,125 +17803,5 @@ OL.bulkImportZaps = function(isMaster = false) {
         alert(`✅ Sync Complete! Positions, Connections (Logic), and Tags were preserved.`);
     } catch (e) {
         console.error("🔥 Sync Error:", e);
-    }
-};
-
-OL.syncExternalIntegrations = async function() {
-    const client = getActiveClient();
-    if (!client) return alert("❌ Select a project first.");
-
-    // Visual feedback for the team
-    const btn = event.target;
-    const originalText = btn.innerText;
-    btn.innerText = "⏳ Synchronizing Suite...";
-    btn.disabled = true;
-
-    try {
-        console.group("📡 Unified Integration Sync Started");
-
-        // 1. JOTFORM SYNC
-        if (client.projectData.jotformApiKey) {
-            console.log("📝 Syncing Jotform...");
-            await OL.syncJotform(client);
-        }
-
-        // 2. WEALTHBOX SYNC
-        if (client.projectData.wealthboxApiKey) {
-            console.log("🔨 Syncing Wealthbox Workflows...");
-            await OL.syncWealthbox(client);
-        }
-
-        // 3. CALENDLY SYNC
-        if (client.projectData.calendlyPat) { // Personal Access Token
-            console.log("🗓️ Syncing Calendly Events...");
-            await OL.syncCalendly(client);
-        }
-
-        // Finalize
-        await OL.persist();
-        OL.renderVisualizer();
-        alert("✅ Project Library Updated. All external assets synced.");
-        
-    } catch (e) {
-        console.error("🔥 Sync Failure:", e);
-        alert("Sync Error: " + e.message);
-    } finally {
-        btn.innerText = originalText;
-        btn.disabled = false;
-        console.groupEnd();
-    }
-};
-
-OL.syncJotform = async function(client) {
-    const apiKey = client.projectData.jotformApiKey;
-    const response = await fetch(`https://api.jotform.com/user/forms?apiKey=${apiKey}`);
-    const result = await response.json();
-    
-    const jotformApp = client.projectData.localApps.find(a => a.name.includes("Jotform"));
-
-    result.content.forEach(form => {
-        const resourceData = {
-            externalId: form.id,
-            externalSource: 'Jotform',
-            name: form.title,
-            type: 'Form',
-            externalUrl: form.url,
-            appId: jotformApp?.id,
-            appName: "Jotform",
-            // We can even pull questions to populate 'steps' if desired
-        };
-        OL.upsertExternalResource(client, resourceData);
-    });
-};
-
-OL.syncWealthbox = async function(client) {
-    // Note: Wealthbox requires specific headers for their API
-    const response = await fetch(`https://api.wealthbox.com/v1/workflow_templates`, {
-        headers: { "Authorization": `Bearer ${client.projectData.wealthboxApiKey}` }
-    });
-    const result = await response.json();
-
-    result.workflow_templates.forEach(wf => {
-        const resourceData = {
-            externalId: wf.id,
-            externalSource: 'Wealthbox',
-            name: wf.name,
-            type: 'Workflow',
-            // Map WB steps to our internal step format
-            steps: wf.steps.map(s => ({
-                id: uid(),
-                name: s.name,
-                description: s.description
-            }))
-        };
-        OL.upsertExternalResource(client, resourceData);
-    });
-};
-
-OL.upsertExternalResource = function(client, data) {
-    const library = client.projectData.localResources;
-    
-    // Find existing by External ID OR Name
-    const existingIdx = library.findIndex(r => 
-        (r.externalId && String(r.externalId) === String(data.externalId)) || 
-        r.name.toLowerCase() === data.name.toLowerCase()
-    );
-
-    if (existingIdx !== -1) {
-        const old = library[existingIdx];
-        // 🧬 Grafting: Keep the map data, update the content
-        const updated = { 
-            ...old, 
-            ...data, 
-            id: old.id, 
-            coords: old.coords, 
-            stageId: old.stageId 
-        };
-        library[existingIdx] = updated;
-    } else {
-        // ✨ New discovery: Send to Workbench
-        data.id = 'res-' + Date.now() + Math.random().toString(36).substr(2,5);
-        data.isGlobal = true;
-        library.push(data);
     }
 };
