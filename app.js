@@ -17847,7 +17847,8 @@ OL.syncWealthbox = async function(client) {
             externalId: wf.id,
             externalSource: 'Wealthbox',
             name: `🕸️ WB: ${wf.name}`,
-            type: 'Workflow',   // 🎯 Matches the Library Tab
+            type: 'workflow',   // 🎯 Matches the Library Tab
+            visible: true,
             archetype: 'Multi-Step',
             category: 'Automations', 
             steps: (wf.workflow_steps || []).map((s, idx) => ({
