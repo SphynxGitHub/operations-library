@@ -17860,28 +17860,42 @@ OL.syncWealthbox = async function(client) {
             }))
         };
 
-        // 🟢 STEP A: Save to the Data Layer
+        // 🟢 STEP A: Save to the Data Layer (The Master Database)
         OL.upsertExternalResource(client, resourceData);
 
-        // 🟢 STEP B: Force into the UI Layer
-        if (!client.projectData.resources) client.projectData.resources = [];
+        // 🟢 STEP B: Force into the LOCAL UI Layer (The Showroom)
+        if (!client.projectData.localResources) client.projectData.localResources = [];
         
-        const existingIndex = client.projectData.resources.findIndex(r => r.id === resourceData.id);
-        if (existingIndex > -1) {
-            client.projectData.resources[existingIndex] = resourceData;
+        const localIdx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
+        if (localIdx > -1) {
+            client.projectData.localResources[localIdx] = resourceData;
         } else {
-            client.projectData.resources.push(resourceData);
+            client.projectData.localResources.push(resourceData);
         }
     });
 
-    // 🟢 STEP C: Trigger the Library Component to "Wake Up"
-    console.log("♻️ Refreshing Library View...");
-    if (typeof OL.rebuildLibrary === 'function') {
-        OL.rebuildLibrary(client);
-    } else {
-        // Fallback: Manually trigger the render if the specific refresh doesn't exist
-        OL.renderLibrary(client);
+    console.log(`✅ Wealthbox sync complete: ${templates.length} templates.`);
+
+    // 1. Update the Filter Index (Tells the search bar what exists)
+    if (typeof OL.syncResourceLibraryFilters === 'function') {
+        OL.syncResourceLibraryFilters();
     }
+
+    // 2. 🎯 TRIGGER THE UI ENGINE
+    if (typeof OL.renderResourceManager === 'function') {
+        OL.renderResourceManager(client);
+    }
+
+    // 3. Force-Enable the Search Bar
+    const searchInput = document.getElementById('lib-filter-input');
+    if (searchInput) {
+        searchInput.disabled = false;
+        // Pointing to the actual count of what we just injected
+        const total = client.projectData.localResources.length;
+        searchInput.placeholder = `Search ${total} resources...`;
+    }
+
+    return templates.length;
 };
 
 OL.upsertExternalResource = function(client, data) {
