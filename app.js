@@ -17852,11 +17852,13 @@ OL.syncWealthbox = async function(client) {
             visible: true,       // Ensures the 'Ghost' check passes
             category: 'Systems', // Gives it a home in the grouping logic
     
-            archetype: 'Multi-Step',
+            archetype: 'Multi-Level',
+            isExpannded: true,
             steps: (wf.workflow_steps || []).map((s, idx) => ({
                 id: `wb-step-${wf.id}-${idx}`,
                 name: s.name,
-                description: s.description || ""
+                description: s.description || "",
+                appName: 'Wealthbox'
             }))
         };
     
