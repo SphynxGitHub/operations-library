@@ -10,7 +10,7 @@ exports.syncWealthboxProxy = functions.https.onRequest((req, res) => {
         try {
             // This is the server talking to Wealthbox
             const response = await axios.get('https://api.crmworkspace.com/v1/workflow_templates', {
-                headers: { 'Authorization': `Bearer ${apiKey}` }
+                headers: { 'ACCESS_TOKEN': apiKey }
             });
             // Sending the data back to your app
             res.status(200).json(response.data);
