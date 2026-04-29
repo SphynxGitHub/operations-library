@@ -17876,24 +17876,48 @@ OL.syncWealthbox = async function(client) {
 
     console.log(`✅ Wealthbox sync complete: ${templates.length} templates.`);
 
-    // 1. Update the Filter Index (Tells the search bar what exists)
-    if (typeof OL.syncResourceLibraryFilters === 'function') {
-        OL.syncResourceLibraryFilters();
-    }
+    // 🎯 THE STICKY FIX: 
+    // We use a small timeout (100ms) to ensure the Data Layer is finished 
+    // before we scream at the UI Layer to wake up.
+    setTimeout(() => {
+        const activeId = OL.state.activeClientId;
+        const clientObj = OL.state.clients[activeId];
+        
+        // 1. Ensure the metadata is forced (matching your console logic)
+        if (clientObj && clientObj.projectData.localResources) {
+            clientObj.projectData.localResources.forEach(res => {
+                if (res.name && res.name.includes('WB:')) {
+                    res.type = 'workflow';
+                    res.visible = true;
+                }
+            });
+        }
 
-    // 2. 🎯 TRIGGER THE UI ENGINE
-    if (typeof OL.renderResourceManager === 'function') {
-        OL.renderResourceManager(client);
-    }
+        // 2. Reset Search State
+        OL.state.libSearch = ""; 
 
-    // 3. Force-Enable the Search Bar
-    const searchInput = document.getElementById('lib-filter-input');
-    if (searchInput) {
-        searchInput.disabled = false;
-        // Pointing to the actual count of what we just injected
-        const total = client.projectData.localResources.length;
-        searchInput.placeholder = `Search ${total} resources...`;
-    }
+        // 3. Trigger the internal filters
+        if (typeof OL.syncResourceLibraryFilters === 'function') {
+            OL.syncResourceLibraryFilters();
+        }
+
+        // 4. Force the render (Use BOTH potential names to be safe)
+        if (typeof OL.renderResourceManager === 'function') {
+            OL.renderResourceManager(clientObj);
+        } else if (typeof OL.renderLibrary === 'function') {
+            OL.renderLibrary(clientObj);
+        }
+
+        // 5. Force the HTML search bar to unlock
+        const input = document.getElementById('lib-filter-input');
+        if (input) {
+            input.disabled = false;
+            input.style.pointerEvents = 'auto';
+            input.style.opacity = '1';
+        }
+
+        console.log("🔓 Search bar auto-unlocked via Timeout.");
+    }, 100);
 
     return templates.length;
 };
