@@ -1,22 +1,45 @@
-const functions = require('firebase-functions');
+const { onRequest } = require("firebase-functions/v2/https");
 const axios = require('axios');
-const cors = require('cors')({origin: true});
 
-exports.syncWealthboxProxy = functions.https.onRequest((req, res) => {
-    return cors(req, res, async () => {
-        const apiKey = req.query.apiKey;
-        if (!apiKey) return res.status(400).send('Missing API Key');
+exports.syncWealthboxProxy = onRequest({ cors: true, timeoutSeconds: 120 }, async (req, res) => {
+    const apiKey = req.query.apiKey;
+    if (!apiKey) return res.status(400).send('Missing API Key');
 
-        try {
-            // This is the server talking to Wealthbox
-            const response = await axios.get('https://api.crmworkspace.com/v1/workflow_templates', {
-                headers: { 'ACCESS_TOKEN': apiKey }
+    try {
+        let allTemplates = [];
+        let page = 1;
+        let hasMore = true;
+
+        console.log("📡 Starting Multi-Page Sync...");
+
+        while (hasMore) {
+            const response = await axios.get(`https://api.crmworkspace.com/v1/workflow_templates?page=${page}`, {
+                headers: { 
+                    'ACCESS_TOKEN': apiKey,
+                    'Accept': 'application/json'
+                }
             });
-            // Sending the data back to your app
-            res.status(200).json(response.data);
-        } catch (error) {
-            console.error('Wealthbox Error:', error.message);
-            res.status(500).send(error.message);
+
+            const templates = response.data.workflow_templates || [];
+            allTemplates = allTemplates.concat(templates);
+
+            // Wealthbox usually provides metadata about the next page
+            // If we got 25, there's likely another page. If less, we are done.
+            if (templates.length === 25) {
+                page++;
+            } else {
+                hasMore = false;
+            }
+            
+            // Safety brake: Don't loop more than 20 times (500 templates)
+            if (page > 20) hasMore = false;
         }
-    });
+
+        console.log(`✅ Total Templates Fetched: ${allTemplates.length}`);
+        res.status(200).json({ workflow_templates: allTemplates });
+
+    } catch (error) {
+        console.error('Wealthbox Pagination Error:', error.message);
+        res.status(500).send(error.message);
+    }
 });
