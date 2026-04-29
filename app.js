@@ -4663,7 +4663,7 @@ OL.syncResourceLibraryFilters = function() {
     const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     const filtered = source.filter(res => {
-        if (res.type === 'Workflow') return false;
+        //if (res.type === 'Workflow') return false;
 
         const matchesQuery = !query || res.name.toLowerCase().includes(query) || (res.description || "").toLowerCase().includes(query);
         const matchesType = !typeF || res.type === typeF;
@@ -9851,12 +9851,12 @@ OL.renderVisualizer = function() {
     if (activeTab === 'flows') {
         // Only show Flows that are NOT yet on the map
         workbenchItems = resources.filter(r => 
-            ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords
+            ['workflow', 'zap', 'email campaign'].includes(r.type?.toLowerCase()) && !r.coords
         );
     } else if (activeTab === 'assets') {
         // Only show Assets that are NOT yet on the map
         workbenchItems = resources.filter(r => 
-            !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords
+            !['workflow', 'zap', 'email campaign'].includes(r.type?.toLowerCase()) && !r.coords
         );
     } else if (activeTab === 'guides') {
         workbenchItems = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
