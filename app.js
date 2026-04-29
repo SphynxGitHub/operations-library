@@ -17848,7 +17848,7 @@ OL.syncWealthbox = async function(client) {
             name: `🕸️ WB: ${wf.name}`,
             
             // 🎯 THE FIX: Force these three properties
-            type: 'workflow',    // Must be lowercase to match the filter
+            type: 'Workflow',  
             visible: true,       // Ensures the 'Ghost' check passes
             category: 'Systems', // Gives it a home in the grouping logic
     
