@@ -17848,20 +17848,43 @@ OL.syncWealthbox = async function(client) {
             name: `🕸️ WB: ${wf.name}`,
             type: 'Workflow',
             archetype: 'Multi-Step',
-            // Transform WB "Steps" into your internal "Step" format
-            steps: (wf.steps || []).map((s, idx) => ({
-                id: "wb-step-" + s.id,
+            description: wf.description || "Wealthbox Workflow Template",
+            // WB specific flags
+            metadata: {
+                isSequential: wf.sequential, // True if steps must be done in order
+                kind: wf.kind,               // Usually 'Contact' or 'Opportunity'
+                milestones: wf.workflow_milestones || []
+            },
+            // Mapping the "workflow_steps" array from your sample
+            steps: (wf.workflow_steps || []).map((s, idx) => ({
+                id: `wb-step-${wf.id}-${idx}`,
                 name: s.name,
-                description: s.description || "No description provided.",
-                assignees: s.assigned_to_name ? [{ name: s.assigned_to_name, type: 'role' }] : [],
+                description: s.description || "",
+                priority: s.priority,
+                // TIMING: Using the human-readable 'due_later' string
+                timing: {
+                    dueInfo: s.due_later || "No due date set",
+                    basedOn: s.due_based_on
+                },
+                // SUBTASKS: Mapping the nested array found in your sample
+                subtasks: (s.subtasks || []).map(st => ({
+                    id: `wb-sub-${st.id}`,
+                    name: st.name,
+                    description: st.description || "",
+                    priority: st.priority,
+                    isComplete: st.complete
+                })),
+                // OUTCOMES: Wealthbox steps often lead to outcomes (branching logic)
+                outcomes: (s.outcomes || []).map(o => ({
+                    label: o.name,
+                    nextStepId: o.next_step_id
+                })),
                 logic: { in: [], out: [] }
             }))
         };
 
-        // Use the Universal Upsert we discussed to preserve map positions
         OL.upsertExternalResource(client, resourceData);
     });
-
     return templates.length;
 };
 
