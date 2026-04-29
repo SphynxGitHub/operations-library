@@ -17846,14 +17846,14 @@ OL.syncWealthbox = async function(client) {
             id: `wb-${wf.id}`,
             externalId: wf.id,
             name: `🕸️ WB: ${wf.name}`,
-            
-            // 🎯 THE FIX: Force these three properties
             type: 'Workflow',  
-            visible: true,       // Ensures the 'Ghost' check passes
-            category: 'Flows', // Gives it a home in the grouping logic
-    
+            visible: true, 
+            category: 'Flows',
             archetype: 'Multi-Level',
-            isExpannded: true,
+            
+            // 🎯 TYPO FIXED: Was 'isExpannded'
+            isExpanded: true, 
+
             steps: (wf.workflow_steps || []).map((s, idx) => ({
                 id: `wb-step-${wf.id}-${idx}`,
                 name: s.name,
@@ -17861,8 +17861,11 @@ OL.syncWealthbox = async function(client) {
                 appName: 'Wealthbox'
             }))
         };
+
+        // 🎯 ADD THIS: Register with the system so it "sticks"
+        OL.upsertExternalResource(client, resourceData);
     
-        // 🟢 Save to localResources (The Sidebar's source of truth)
+        // 🟢 Save to localResources
         if (!client.projectData.localResources) client.projectData.localResources = [];
         
         const idx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
