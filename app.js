@@ -17888,7 +17888,7 @@ OL.syncWealthbox = async function(client) {
         if (clientObj && clientObj.projectData.localResources) {
             clientObj.projectData.localResources.forEach(res => {
                 if (res.name && res.name.includes('WB:')) {
-                    res.type = 'Wworkflow';
+                    res.type = 'Workflow';
                     res.visible = true;
                     res.category = 'Flows';
                 }
