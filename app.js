@@ -17843,37 +17843,33 @@ OL.syncWealthbox = async function(client) {
     // 3. Process each template into your Library
     templates.forEach(wf => {
         const resourceData = {
-            id: `wb-${wf.id}`, // Standardized ID
+            id: `wb-${wf.id}`,
             externalId: wf.id,
-            externalSource: 'Wealthbox',
             name: `🕸️ WB: ${wf.name}`,
-            type: 'workflow',   // 🎯 Matches the Library Tab
-            visible: true,
+            
+            // 🎯 THE FIX: Force these three properties
+            type: 'workflow',    // Must be lowercase to match the filter
+            visible: true,       // Ensures the 'Ghost' check passes
+            category: 'Systems', // Gives it a home in the grouping logic
+    
             archetype: 'Multi-Step',
-            category: 'Automations', 
             steps: (wf.workflow_steps || []).map((s, idx) => ({
                 id: `wb-step-${wf.id}-${idx}`,
                 name: s.name,
-                description: s.description || "",
-                timing: { dueInfo: s.due_later || "" },
-                logic: { in: [], out: [] }
+                description: s.description || ""
             }))
         };
-
-        // 🟢 STEP A: Save to the Data Layer (The Master Database)
-        OL.upsertExternalResource(client, resourceData);
-
-        // 🟢 STEP B: Force into the LOCAL UI Layer (The Showroom)
+    
+        // 🟢 Save to localResources (The Sidebar's source of truth)
         if (!client.projectData.localResources) client.projectData.localResources = [];
         
-        const localIdx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
-        if (localIdx > -1) {
-            client.projectData.localResources[localIdx] = resourceData;
+        const idx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
+        if (idx > -1) {
+            client.projectData.localResources[idx] = resourceData;
         } else {
             client.projectData.localResources.push(resourceData);
         }
     });
-
     console.log(`✅ Wealthbox sync complete: ${templates.length} templates.`);
 
     // 🎯 THE STICKY FIX: 
