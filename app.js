@@ -17850,7 +17850,7 @@ OL.syncWealthbox = async function(client) {
             // 🎯 THE FIX: Force these three properties
             type: 'Workflow',  
             visible: true,       // Ensures the 'Ghost' check passes
-            category: 'Systems', // Gives it a home in the grouping logic
+            category: 'Flows', // Gives it a home in the grouping logic
     
             archetype: 'Multi-Level',
             isExpannded: true,
