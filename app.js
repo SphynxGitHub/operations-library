@@ -17843,49 +17843,44 @@ OL.syncWealthbox = async function(client) {
     // 3. Process each template into your Library
     templates.forEach(wf => {
         const resourceData = {
+            id: `wb-${wf.id}`, // Standardized ID
             externalId: wf.id,
             externalSource: 'Wealthbox',
             name: `🕸️ WB: ${wf.name}`,
-            type: 'Workflow',
+            type: 'Workflow',   // 🎯 Matches the Library Tab
             archetype: 'Multi-Step',
-            description: wf.description || "Wealthbox Workflow Template",
-            // WB specific flags
-            metadata: {
-                isSequential: wf.sequential, // True if steps must be done in order
-                kind: wf.kind,               // Usually 'Contact' or 'Opportunity'
-                milestones: wf.workflow_milestones || []
-            },
-            // Mapping the "workflow_steps" array from your sample
+            category: 'Automations', 
             steps: (wf.workflow_steps || []).map((s, idx) => ({
                 id: `wb-step-${wf.id}-${idx}`,
                 name: s.name,
                 description: s.description || "",
-                priority: s.priority,
-                // TIMING: Using the human-readable 'due_later' string
-                timing: {
-                    dueInfo: s.due_later || "No due date set",
-                    basedOn: s.due_based_on
-                },
-                // SUBTASKS: Mapping the nested array found in your sample
-                subtasks: (s.subtasks || []).map(st => ({
-                    id: `wb-sub-${st.id}`,
-                    name: st.name,
-                    description: st.description || "",
-                    priority: st.priority,
-                    isComplete: st.complete
-                })),
-                // OUTCOMES: Wealthbox steps often lead to outcomes (branching logic)
-                outcomes: (s.outcomes || []).map(o => ({
-                    label: o.name,
-                    nextStepId: o.next_step_id
-                })),
+                timing: { dueInfo: s.due_later || "" },
                 logic: { in: [], out: [] }
             }))
         };
 
+        // 🟢 STEP A: Save to the Data Layer
         OL.upsertExternalResource(client, resourceData);
+
+        // 🟢 STEP B: Force into the UI Layer
+        if (!client.projectData.resources) client.projectData.resources = [];
+        
+        const existingIndex = client.projectData.resources.findIndex(r => r.id === resourceData.id);
+        if (existingIndex > -1) {
+            client.projectData.resources[existingIndex] = resourceData;
+        } else {
+            client.projectData.resources.push(resourceData);
+        }
     });
-    return templates.length;
+
+    // 🟢 STEP C: Trigger the Library Component to "Wake Up"
+    console.log("♻️ Refreshing Library View...");
+    if (typeof OL.rebuildLibrary === 'function') {
+        OL.rebuildLibrary(client);
+    } else {
+        // Fallback: Manually trigger the render if the specific refresh doesn't exist
+        OL.renderLibrary(client);
+    }
 };
 
 OL.upsertExternalResource = function(client, data) {
