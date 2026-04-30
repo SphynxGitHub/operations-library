@@ -9424,6 +9424,10 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
+const FLOW_COLUMN_VW = 22;   // Width of one card (22% of viewport)
+const FLOW_GAP_VW = 3;      // Gap between columns (3% of viewport)
+const FLOW_SPINE_X_VW = 50;  // The center of the screen
+
 OL.initWBMotion = function(e, id) {
     const canvas = document.getElementById('v2-canvas');
     const zoom = OL.state.v2.zoom || 1;
@@ -9506,6 +9510,16 @@ OL.initWBMotion = function(e, id) {
         const targetCardEl = dropPointEl?.closest('.v2-node-card');
         const isOverTopShelf = dropPointEl?.closest('#global-shelf');
         const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
+        const vw = window.innerWidth / 100;
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = (uE.clientX - rect.left) / zoom;
+        
+        // Convert canvas pixel X back to a VW value
+        const droppedXvw = canvasX / vw;
+        
+        // Find nearest column index based on our VW constants
+        const colStep = FLOW_COLUMN_VW + FLOW_GAP_VW;
+        res.layoutCol = Math.round((droppedXvw - FLOW_SPINE_X_VW) / colStep);
 
         if (stepRow && targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
             const targetId = targetCardEl.id.replace('v2-node-', '');
@@ -9607,6 +9621,17 @@ OL.initWBMotion = function(e, id) {
     window.addEventListener('mouseup', onUp);
 };
 
+// Add this near your other event listeners
+window.addEventListener('resize', () => {
+    if (window.location.hash.includes('visualizer')) {
+        // Debounce this if you want to be extra performant
+        clearTimeout(window.resizeSnapTimer);
+        window.resizeSnapSnapTimer = setTimeout(() => {
+            OL.autoAlignNodes();
+        }, 200);
+    }
+});
+
 OL.handleCanvasDrop = async function(e) {
     e.preventDefault();
     const canvas = document.getElementById('v2-canvas');
@@ -9660,69 +9685,43 @@ OL.autoAlignNodes = async function() {
     const resources = data.resources || [];
     const stages = data.stages || [];
     
-    const VERTICAL_GAP = 35;         
-    const COLUMN_WIDTH = 300;       
-    const START_Y = 120;            
-    const LANE_LEFT_PADDING = 40; // 🚀 Keeps cards from touching the left divider
-
-    // Start at the very beginning of the "World"
-    let currentXOffset = 0; 
+    // Get actual pixel value of 1vw for coordinate math
+    const vw = window.innerWidth / 100;
+    const VERTICAL_GAP = 35;
+    let cursorY = 120; 
 
     stages.forEach((stage) => {
-        const laneNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
-        
-        // Sort by current Y to preserve the sequence
-        laneNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+        const stageNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
+        stageNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
 
-        const columnYCursors = {}; 
+        let stageMaxHeight = 0;
 
-        laneNodes.forEach(node => {
-            const col = node._col || 0;
-            if (columnYCursors[col] === undefined) columnYCursors[col] = START_Y;
+        stageNodes.forEach(node => {
+            const el = document.getElementById(`v2-node-${node.id}`);
+            const h = el ? el.offsetHeight : 120;
+            const col = node.layoutCol || 0;
 
-            const element = document.getElementById(`v2-node-${node.id}`);
-            let measuredHeight = 100; 
+            // 🧲 VW-Based Magnetic Positioning
+            // We center the card by subtracting half the column width from the slot center
+            const slotCenterX = FLOW_SPINE_X_VW + (col * (FLOW_COLUMN_VW + FLOW_GAP_VW));
+            const xPosPx = (slotCenterX * vw) - ((FLOW_COLUMN_VW * vw) / 2);
 
-            if (element) {
-                measuredHeight = element.offsetHeight;
-            }
-
-            // 🚀 THE HORIZONTAL FIX:
-            // currentXOffset (previous stages) + Padding + (Column Index * Width)
             node.coords = {
-                x: currentXOffset + LANE_LEFT_PADDING + (col * COLUMN_WIDTH),
-                y: columnYCursors[col]
+                x: xPosPx,
+                y: cursorY + stageMaxHeight
             };
 
-            columnYCursors[col] += (measuredHeight + VERTICAL_GAP);
+            if (col === 0) {
+                stageMaxHeight += (h + VERTICAL_GAP);
+            }
         });
 
-        // Calculate how wide this stage actually needs to be based on how many columns are in it
-        const maxColIndex = Math.max(-1, ...Object.keys(columnYCursors).map(Number));
-        const calculatedStageWidth = ((maxColIndex + 1) * COLUMN_WIDTH) + (LANE_LEFT_PADDING * 2);
-        
-        // Update stage width (minimum 400px)
-        stage.width = Math.max(400, calculatedStageWidth);
-        
-        // 🚀 THE ANCHOR: Move the starting point for the NEXT stage
-        currentXOffset += stage.width;
+        stage.yPos = cursorY;
+        cursorY += Math.max(stageMaxHeight, 200) + 100; 
     });
 
-    // Save coordinates to Firebase
     await OL.persist();
-    
-    // Apply visual positions immediately
-    resources.forEach(node => {
-        const el = document.getElementById(`v2-node-${node.id}`);
-        if (el && node.coords) {
-            el.style.left = `${node.coords.x}px`;
-            el.style.top = `${node.coords.y}px`;
-        }
-    });
-
-    // Refresh lane backgrounds and connection lines
-    OL.renderVisualizer(); 
-    if (OL.drawConnections) OL.drawConnections();
+    OL.renderVisualizer();
 };
 
 OL.getCurrentProjectData = function() {
