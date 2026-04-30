@@ -9968,15 +9968,15 @@ OL.renderVisualizer = function() {
     // --- 📁 3. RENDER STAGES ---
     stages.forEach((s, idx) => {
         const div = document.createElement('div');
-        div.className = 'v2-lane-section';
-        div.style.width = `${s.width || 320}px`;
+        div.className = 'v2-stage-divider';
+        
+        // 🎯 Use the yPos calculated by autoAlignNodes
+        div.style.top = `${s.yPos || 0}px`; 
+        
         div.innerHTML = `
-            <div class="lane-label">
+            <div class="stage-label-bar">
+                <span style="opacity:0.5; margin-right:10px;">STAGE ${idx + 1}</span>
                 <span contenteditable="true" onblur="OL.renameStage(${idx}, this.innerText)">${esc(s.name)}</span>
-                <button class="delete-lane-btn" onclick="OL.deleteStage(${idx})">×</button>
-            </div>
-            <div class="lane-insert-trigger" onclick="OL.addStageBetween(${idx + 1})">
-                <div class="insert-btn">+</div>
             </div>
         `;
         stageLayer.appendChild(div);
