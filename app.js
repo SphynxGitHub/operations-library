@@ -139,6 +139,13 @@ OL.sync = function() {
         cloudClients[doc.id] = doc.data();
     });
 
+    const client = getActiveClient();
+    if (window.IS_GUEST && client) {
+        console.log("🎟️ Guest Token Validated:", client.meta.name);
+        window.handleRoute(); // Force the redirect to their tasks
+        return;
+    }
+
     // 🛡️ THE IRON CLAD MUZZLE (Move this to the top)
     // Check for the DOM element OR the URL state
     const matrixContainer = document.querySelector('.matrix-table-container');
@@ -1182,12 +1189,17 @@ window.renderClientDashboard = function() {
     // 🛡️ THE LOADING GUARD
     // If we have no clients AND we haven't confirmed the cloud is empty, show loading
     if (!state.clients || Object.keys(state.clients).length === 0) {
-        container.innerHTML = `
-            <div>
-                <div class="spinner">⏳</div>
-                <h3 class="muted">Connecting to Registry...</h3>
-            </div>`;
-        return;
+        if (getActiveClient()) {
+            // Proceed to render...
+        }
+        else {
+            container.innerHTML = `
+                <div>
+                    <div class="spinner">⏳</div>
+                    <h3 class="muted">Connecting to Registry...</h3>
+                </div>`;
+            return;
+        }
     }
 
     container.innerHTML = `
