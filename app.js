@@ -9487,140 +9487,97 @@ OL.initWBMotion = function(e, id) {
     };
 
     const onUp = async (uE) => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        
-        indicator.style.display = 'none';
-        if (el) el.classList.remove('is-dragging-ghost');
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    
+    indicator.style.display = 'none';
+    if (el) el.classList.remove('is-dragging-ghost');
 
-        if (isResizingLane && pendingStageIdx !== null) {
-            await OL.updateAndSync(() => {
-                stages[pendingStageIdx].width = pendingWidthChange;
-            });
-            isResizingLane = false;
+    // 1. Setup Canvas Context
+    el.style.display = 'none';
+    const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+    el.style.display = 'block';
+
+    const vw = window.innerWidth / 100;
+    const rect = canvas.getBoundingClientRect();
+    const canvasX = (uE.clientX - rect.left) / zoom;
+    const canvasY = (uE.clientY - rect.top) / zoom;
+    
+    // 2. 🧲 Magnetic Column Snap (Horizontal VW Math)
+    const droppedXvw = canvasX / vw;
+    const colStep = FLOW_COLUMN_VW + FLOW_GAP_VW;
+    res.layoutCol = Math.round((droppedXvw - FLOW_SPINE_X_VW) / colStep);
+
+    const stepRow = dropPointEl?.closest('.v2-step-item');
+    const targetCardEl = dropPointEl?.closest('.v2-node-card');
+    const isOverTopShelf = dropPointEl?.closest('#global-shelf');
+    const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
+
+    // 3. Handle Linking Logic (Existing)
+    if (stepRow && targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
+        const targetId = targetCardEl.id.replace('v2-node-', '');
+        const targetRes = resources.find(r => String(r.id) === String(targetId));
+        const stepIdAttr = stepRow.getAttribute('data-step-id');
+        const stepUniqueId = stepIdAttr ? stepIdAttr.split('-').pop() : null;
+        const step = (targetRes.steps || []).find(s => String(s.id) === String(stepUniqueId));
+
+        if (step) {
+            if (!step.links) step.links = [];
+            step.links.push({ id: res.id, name: res.name, type: res.type });
+            await OL.persist();
             OL.renderVisualizer();
             return;
         }
+    }
 
-        el.style.display = 'none';
-        const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
-        el.style.display = 'block';
+    // 4. Handle Merging Logic (Existing)
+    if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}` && !isOverTopShelf && !isOverWorkbench) {
+        const targetId = targetCardEl.id.replace('v2-node-', '');
+        const targetRes = resources.find(r => String(r.id) === String(targetId));
 
-        const stepRow = dropPointEl?.closest('.v2-step-item');
-        const targetCardEl = dropPointEl?.closest('.v2-node-card');
-        const isOverTopShelf = dropPointEl?.closest('#global-shelf');
-        const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
-        const vw = window.innerWidth / 100;
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = (uE.clientX - rect.left) / zoom;
-        
-        // Convert canvas pixel X back to a VW value
-        const droppedXvw = canvasX / vw;
-        
-        // Find nearest column index based on our VW constants
-        const colStep = FLOW_COLUMN_VW + FLOW_GAP_VW;
-        res.layoutCol = Math.round((droppedXvw - FLOW_SPINE_X_VW) / colStep);
-
-        if (stepRow && targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
-            const targetId = targetCardEl.id.replace('v2-node-', '');
-            const targetRes = resources.find(r => String(r.id) === String(targetId));
-            const stepIdAttr = stepRow.getAttribute('data-step-id');
-            const stepUniqueId = stepIdAttr ? stepIdAttr.split('-').pop() : null;
-            const step = (targetRes.steps || []).find(s => String(s.id) === String(stepUniqueId));
-
-            if (step) {
-                if (!step.links) step.links = [];
-                step.links.push({ id: res.id, name: res.name, type: res.type });
-                await OL.persist();
-                OL.renderVisualizer();
-                return;
-            }
-        }
-
-        if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}` && !isOverTopShelf && !isOverWorkbench) {
-            const targetId = targetCardEl.id.replace('v2-node-', '');
-            const targetRes = resources.find(r => String(r.id) === String(targetId));
-
-            if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
-                await OL.updateAndSync(() => {
-                    const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
-                    targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
-                    const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
-                    if (resIdx > -1) resources.splice(resIdx, 1);
-                    OL.refreshFamilyNaming(targetRes, resources);
-                    OL.syncLogicPorts();
-                });
-                OL.renderVisualizer();
-                return;
-            }
-        }
-
-        if (isOverTopShelf || isOverWorkbench) {
-            const shelfContents = document.getElementById('shelf-contents');
-            const workbenchContents = document.getElementById('workbench-contents');
-            const container = isOverTopShelf ? shelfContents : workbenchContents;
-            if (!container) return;
-
-            const siblings = Array.from(container.querySelectorAll('.v2-node-card:not(.is-dragging-ghost)'));
-            let targetResId = null;
-            for (let i = 0; i < siblings.length; i++) {
-                const rect = siblings[i].getBoundingClientRect();
-                const isBefore = isOverTopShelf ? (uE.clientX < rect.left + rect.width / 2) : (uE.clientY < rect.top + rect.height / 2);
-                if (isBefore) {
-                    targetResId = siblings[i].id.replace('v2-node-', '');
-                    break;
-                }
-            }
-
+        if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
             await OL.updateAndSync(() => {
-                const currentData = OL.getCurrentProjectData();
-                const liveResources = currentData.resources; 
-                const draggedIdx = liveResources.findIndex(r => String(r.id) === String(res.id));
-                if (draggedIdx === -1) return;
-                const [movedItem] = liveResources.splice(draggedIdx, 1);
-                movedItem.isGlobal = true;
-                movedItem.isTopShelf = !!isOverTopShelf;
-                movedItem.stageId = null;
-                delete movedItem.coords;
-                if (targetResId) {
-                    const insertIdx = liveResources.findIndex(r => String(r.id) === String(targetResId));
-                    liveResources.splice(insertIdx, 0, movedItem);
-                } else {
-                    liveResources.push(movedItem);
-                }
+                const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
+                targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
+                const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
+                if (resIdx > -1) resources.splice(resIdx, 1);
+                OL.refreshFamilyNaming(targetRes, resources);
+                OL.syncLogicPorts();
             });
             OL.renderVisualizer();
             return;
-        } else {
-            const rect = canvas.getBoundingClientRect();
-            const canvasX = (uE.clientX - rect.left) / zoom;
-            const canvasY = (uE.clientY - rect.top) / zoom;
-            res.coords = { x: Math.round(canvasX - 110), y: Math.round(canvasY - 20) };
-            res.isGlobal = false;
-            res.isTopShelf = false;
-            let accX = 40; 
-            for (let s of stages) {
-                const w = s.width || 320;
-                if (canvasX >= accX && canvasX <= accX + w) {
-                    res.stageId = s.id;
-                    res._col = Math.floor(Math.max(0, canvasX - accX) / 300);
-                    break;
-                }
-                accX += w;
-            }
         }
+    }
 
-        await OL.updateAndSync(() => { 
-            OL.autoAlignNodes(false);
-            OL.drawConnections();
+    // 5. Handle Global Shelf / Workbench or Standard Drop
+    if (isOverTopShelf || isOverWorkbench) {
+        await OL.updateAndSync(() => {
+            res.isGlobal = true;
+            res.isTopShelf = !!isOverTopShelf;
+            res.stageId = null;
+            delete res.coords;
         });
-        OL.renderVisualizer();
-    };
+    } else {
+        // 📍 VERTICAL STAGE DETECTION
+        // We find the stage by looking at our stages and finding the one whose yPos is 
+        // just above where we dropped. Sort desc so we find the deepest one first.
+        const sortedStages = [...stages].sort((a, b) => (b.yPos || 0) - (a.yPos || 0));
+        const targetStage = sortedStages.find(s => canvasY >= (s.yPos || 0)) || stages[0];
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+        res.stageId = targetStage.id;
+        res.coords = { x: Math.round(canvasX), y: Math.round(canvasY) };
+        res.isGlobal = false;
+        res.isTopShelf = false;
+    }
+
+    // 6. Trigger Auto-Align and Sync
+    await OL.updateAndSync(() => { 
+        OL.autoAlignNodes(); 
+        OL.drawConnections();
+    });
+
+    OL.renderVisualizer();
 };
-
 // Add this near your other event listeners
 window.addEventListener('resize', () => {
     if (window.location.hash.includes('visualizer')) {
@@ -9684,40 +9641,45 @@ OL.autoAlignNodes = async function() {
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
     const stages = data.stages || [];
-    
-    // Get actual pixel value of 1vw for coordinate math
     const vw = window.innerWidth / 100;
-    const VERTICAL_GAP = 35;
-    let cursorY = 120; 
+    
+    const VERTICAL_GAP = 40;
+    let currentY = 100; // Starting point at the top of the map
 
     stages.forEach((stage) => {
+        // 1. Position the Stage Header/Divider
+        stage.yPos = currentY;
+        currentY += 80; // Space for the Stage Title bar
+
         const stageNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
+        
+        // 2. Sort nodes by their current Y to preserve drag-order
         stageNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
 
-        let stageMaxHeight = 0;
+        let stageHeightAccumulator = 0;
 
         stageNodes.forEach(node => {
             const el = document.getElementById(`v2-node-${node.id}`);
             const h = el ? el.offsetHeight : 120;
             const col = node.layoutCol || 0;
 
-            // 🧲 VW-Based Magnetic Positioning
-            // We center the card by subtracting half the column width from the slot center
-            const slotCenterX = FLOW_SPINE_X_VW + (col * (FLOW_COLUMN_VW + FLOW_GAP_VW));
-            const xPosPx = (slotCenterX * vw) - ((FLOW_COLUMN_VW * vw) / 2);
+            // 🎯 VW Magnetic Snap (X remains relative to screen width)
+            const xPosPx = (FLOW_SPINE_X_VW * vw) + (col * (FLOW_COLUMN_VW + FLOW_GAP_VW) * vw) - ((FLOW_COLUMN_VW * vw) / 2);
 
             node.coords = {
                 x: xPosPx,
-                y: cursorY + stageMaxHeight
+                y: currentY + stageHeightAccumulator
             };
 
+            // 🌊 Waterfall: Only the SPINE (Col 0) pushes the vertical flow down
             if (col === 0) {
-                stageMaxHeight += (h + VERTICAL_GAP);
+                stageHeightAccumulator += (h + VERTICAL_GAP);
             }
         });
 
-        stage.yPos = cursorY;
-        cursorY += Math.max(stageMaxHeight, 200) + 100; 
+        // 3. Set the starting Y for the NEXT stage
+        // Add a buffer so stages don't feel cramped
+        currentY += Math.max(stageHeightAccumulator, 150) + 100; 
     });
 
     await OL.persist();
