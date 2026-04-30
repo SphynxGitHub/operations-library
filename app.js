@@ -1666,17 +1666,30 @@ window.renderAppsGrid = function() {
 
     const masterApps = state.master.apps || [];
     const localApps = client ? (client.projectData.localApps || []) : [];
-    
+
     // Determine which list to show based on view
     let displayApps = isVaultMode ? masterApps : (client?.projectData?.localApps || []);
 
-    // 🎯 THE FIX: Show EVERYTHING in Vault Mode so nothing stays lost
     displayApps = displayApps.filter(app => {
-        if (isVaultMode) return true; // 🔓 Force visibility in the Master Vault
-        
+        // 1. In Vault Mode, always show everything so Admin can edit
+        if (isVaultMode) return true; 
+
         const name = (app.name || "").trim();
-        if (name === "Zapier") return true; 
-        return app.isHidden !== true; 
+
+        // 2. The "Zapier Exception": 
+        // If it is the main "Zapier" anchor app, show it.
+        if (name === "Zapier") return true;
+
+        // 3. The "Robot Filter":
+        // Hide anything that starts with "Zapier " (e.g., Zapier Filter, Zapier Delay)
+        // or other specific utility keywords.
+        const isZapUtility = name.startsWith("Zapier ") || 
+                             ["Webhook", "SubZap", "Zapier Robot"].some(u => name.includes(u));
+
+        if (isZapUtility) return false;
+
+        // 4. Default: Show all other real tools (Redtail, ActiveCampaign, etc.)
+        return true; 
     });
     
     displayApps.sort((a, b) => a.name.localeCompare(b.name));
