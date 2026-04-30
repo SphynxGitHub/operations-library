@@ -7417,77 +7417,90 @@ OL.filterMasterAnalysisImport = function(query) {
 
 // Helper to handle the specific ID from search
 OL.executeAnalysisImportById = async function(templateId) {
-    const template = state.master.analyses.find(t => t.id === templateId);
+    const template = state.master.analyses.find(t => String(t.id) === String(templateId));
     const client = getActiveClient();
-    if (!template || !client) return;
+    
+    if (!template || !client) {
+        console.error("❌ Import Failed: Missing template or client context.");
+        return;
+    }
 
-    // 1. Deep Clone the template
+    // 1. Deep Clone the template to create the project-specific version
     const newAnalysis = JSON.parse(JSON.stringify(template));
     newAnalysis.id = "anly-" + Date.now();
     newAnalysis.masterRefId = templateId;
     newAnalysis.isMaster = false;
 
-    // 🚀 2. THE APP PROVISIONING LOOP
-    // We must ensure every app in the matrix actually exists in the project library
+    // Initialize localApps if missing
+    if (!client.projectData.localApps) client.projectData.localApps = [];
+
+    // 🚀 2. THE ATOMIC PROVISIONING LOOP
     if (newAnalysis.apps) {
         for (let i = 0; i < newAnalysis.apps.length; i++) {
-            const matrixApp = newAnalysis.apps[i];
+            const matrixAppEntry = newAnalysis.apps[i];
             
-            // Look for this app in the local project already
-            // We check by Name or Master Reference to avoid duplicates
-            let localApp = (client.projectData.localApps || []).find(la => 
-                la.masterRefId === matrixApp.appId || 
-                la.name.toLowerCase() === (matrixApp.name || "").toLowerCase()
+            // Try to find the app in the Project already (by masterRef or Name)
+            let localApp = client.projectData.localApps.find(la => 
+                String(la.masterRefId) === String(matrixAppEntry.appId) || 
+                la.name.toLowerCase() === (matrixAppEntry.name || "").toLowerCase()
             );
 
             if (!localApp) {
-                // 🏗️ DISCOVERY: The app isn't in the project. We must deploy it.
-                const masterSource = state.master.apps.find(ma => ma.id === matrixApp.appId);
-                
+                // 🏗️ DISCOVERY: App missing from project. Find source in Master Vault.
+                const masterSource = state.master.apps.find(ma => 
+                    String(ma.id) === String(matrixAppEntry.appId) || 
+                    ma.name.toLowerCase() === (matrixAppEntry.name || "").toLowerCase()
+                );
+
                 if (masterSource) {
-                    console.log(`🚚 Auto-deploying Master App to Project: ${masterSource.name}`);
-                    const newLocalInstance = {
+                    console.log(`🚚 Deploying: ${masterSource.name}`);
+                    localApp = {
                         ...JSON.parse(JSON.stringify(masterSource)),
                         id: 'local-app-' + Date.now() + Math.random().toString(36).substr(2, 5),
                         masterRefId: masterSource.id,
                         notes: `(Auto-deployed via ${template.name} Import)`
                     };
-
-                    if (!client.projectData.localApps) client.projectData.localApps = [];
-                    client.projectData.localApps.push(newLocalInstance);
-                    localApp = newLocalInstance;
+                    client.projectData.localApps.push(localApp);
                 }
             }
 
-            // 🎯 LINKING: Update the Matrix entry to use the LOCAL ID
+            // 🎯 WIRE THE MATRIX TO THE LOCAL APP
             if (localApp) {
                 newAnalysis.apps[i].appId = localApp.id;
-                newAnalysis.apps[i].name = localApp.name; // Ensure name is synced
+                newAnalysis.apps[i].name = localApp.name; // Crucial for label rendering
                 
-                // Adopt Master Pricing if the local app has none
+                // Copy pricing to the app card if it's currently $0
                 if (!localApp.monthlyCost || localApp.monthlyCost === 0) {
-                    localApp.monthlyCost = matrixApp.monthlyCost || 0;
+                    localApp.monthlyCost = matrixAppEntry.monthlyCost || 0;
                 }
+            } else {
+                // ⚠️ LAST RESORT: If no master source found, preserve the name so it isn't "Unknown"
+                newAnalysis.apps[i].name = matrixAppEntry.name || "Unknown Tool";
+                console.warn(`⚠️ App "${newAnalysis.apps[i].name}" not found in Vault. Label preserved but unlinked.`);
             }
             
-            // 🧼 Clear client-specific scores for the new project
+            // Clear evaluative scores for the fresh import
             newAnalysis.apps[i].scores = {};
         }
     }
-    
-    // 3. Save to Project
+
+    // 3. Save the new Analysis to the project
     if (!client.projectData.localAnalyses) client.projectData.localAnalyses = [];
     client.projectData.localAnalyses.push(newAnalysis);
 
+    // 4. Force a hard save and immediate refresh
     await OL.persist();
+    
+    // UI Cleanup
     OL.closeModal();
     
-    // 4. Refresh UI
-    if (typeof renderAnalysisModule === "function") {
-        renderAnalysisModule(false);
-    }
-    console.log(`✅ Import Complete: Analysis and Apps synchronized.`);
+    // 🔄 Switch to the newly imported matrix immediately
+    setTimeout(() => {
+        if (typeof renderAnalysisModule === "function") renderAnalysisModule(false);
+        OL.openAnalysisMatrix(newAnalysis.id, false);
+    }, 100);
 };
+
 OL.pushMatrixToMasterLibrary = function(anlyId) {
     const client = getActiveClient();
     const anly = (client?.projectData?.localAnalyses || []).find(a => a.id === anlyId);
