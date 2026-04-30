@@ -152,7 +152,7 @@ OL.sync = function() {
     const isAnalyzing = window.location.hash.includes('analyze');
     const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
     
-    if (matrixContainer || isAnalyzing && !isAppLoading) {
+    if (matrixContainer || isAnalyzing && !isAppLoading && !state.isSaving) {
         console.log("🚫 SYNC ABORTED: Matrix or Analyze view is active. Shielding focus.");
         
         // 🚀 CRITICAL: Update the state so calculations stay fresh in memory
@@ -7360,22 +7360,30 @@ OL.createNewAnalysisSandbox = function () {
   renderAnalysisModule(false);
 };
 
-OL.deleteAnalysis = function (anlyId, isVaultMode) {
-  if (!confirm("Are you sure you want to delete this analysis?")) return;
+OL.deleteAnalysis = async function (anlyId, isVaultMode) {
+    if (!confirm("Are you sure you want to delete this analysis?")) return;
 
-  if (isVaultMode) {
-    state.master.analyses = state.master.analyses.filter(
-      (a) => a.id !== anlyId,
-    );
-  } else {
-    const client = getActiveClient();
-    client.projectData.localAnalyses = client.projectData.localAnalyses.filter(
-      (a) => a.id !== anlyId,
-    );
-  }
+    // 🚀 THE SHIELD: Wrap in updateAndSync to bypass the Muzzle
+    await OL.updateAndSync(() => {
+        if (isVaultMode) {
+            state.master.analyses = state.master.analyses.filter(a => a.id !== anlyId);
+        } else {
+            const client = getActiveClient();
+            if (client?.projectData?.localAnalyses) {
+                client.projectData.localAnalyses = client.projectData.localAnalyses.filter(a => a.id !== anlyId);
+            }
+        }
+    });
 
-  OL.persist();
-  renderAnalysisModule(isVaultMode);
+    // 🧹 UI Cleanup
+    const container = document.getElementById("activeAnalysisMatrix");
+    if (container) container.innerHTML = ""; // Wipe the matrix from view immediately
+    
+    state.activeMatrixId = null;
+    window.isMatrixActive = false; // 🔓 Release the lock
+
+    renderAnalysisModule(isVaultMode);
+    console.log("🗑️ Analysis deleted and persisted.");
 };
 
 OL.importAnalysisFromVault = function () {
