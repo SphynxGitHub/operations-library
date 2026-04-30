@@ -4433,8 +4433,8 @@ body.light-mode {
     transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
                 top 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
                 width 0.3s ease;
-   width: 20vw;
-   min-width: 250px;
+   width: 10vw;
+   min-width: 200px;
 }
 
 .v2-node-card:hover {
