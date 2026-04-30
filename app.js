@@ -150,8 +150,9 @@ OL.sync = function() {
     // Check for the DOM element OR the URL state
     const matrixContainer = document.querySelector('.matrix-table-container');
     const isAnalyzing = window.location.hash.includes('analyze');
+    const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
     
-    if (matrixContainer || isAnalyzing) {
+    if (matrixContainer || isAnalyzing && !isAppLoading) {
         console.log("🚫 SYNC ABORTED: Matrix or Analyze view is active. Shielding focus.");
         
         // 🚀 CRITICAL: Update the state so calculations stay fresh in memory
