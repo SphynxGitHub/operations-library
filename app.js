@@ -1670,11 +1670,13 @@ window.renderAppsGrid = function() {
     // Determine which list to show based on view
     let displayApps = isVaultMode ? masterApps : (client?.projectData?.localApps || []);
 
-    // Filter out hidden apps
+    // 🎯 THE FIX: Show EVERYTHING in Vault Mode so nothing stays lost
     displayApps = displayApps.filter(app => {
+        if (isVaultMode) return true; // 🔓 Force visibility in the Master Vault
+        
         const name = (app.name || "").trim();
-        if (name === "Zapier") return true; // Always show anchor
-        return app.isHidden !== true; // Hide anything marked as a utility
+        if (name === "Zapier") return true; 
+        return app.isHidden !== true; 
     });
     
     displayApps.sort((a, b) => a.name.localeCompare(b.name));
