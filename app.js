@@ -4602,8 +4602,8 @@ window.renderResourceManager = function () {
                     </div>
                 </div>
                 <button class="btn primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
-                <button class="btn tiny primary" onclick="OL.syncExternalIntegrations()">
-                    🔄 Sync Automations
+                <button class="btn primary" onclick="OL.syncExternalIntegrations()">
+                    🔄 Sync Wealthbox Workflows
                 </button>
             </div>
         </div>
