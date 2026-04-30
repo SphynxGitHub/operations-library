@@ -9464,6 +9464,7 @@ OL.initWBMotion = function(e, id) {
         const rect = canvas.getBoundingClientRect();
         const mouseCanvasX = (mE.clientX - rect.left) / zoom;
 
+        // Legacy lane resizing logic (Optional: keep or remove)
         if (mE.clientY < 150) { 
             let accX = 40; 
             const laneElements = document.querySelectorAll('.v2-lane-section:not(.start-trigger)');
@@ -9487,97 +9488,106 @@ OL.initWBMotion = function(e, id) {
     };
 
     const onUp = async (uE) => {
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    
-    indicator.style.display = 'none';
-    if (el) el.classList.remove('is-dragging-ghost');
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        
+        indicator.style.display = 'none';
+        if (el) el.classList.remove('is-dragging-ghost');
 
-    // 1. Setup Canvas Context
-    el.style.display = 'none';
-    const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
-    el.style.display = 'block';
-
-    const vw = window.innerWidth / 100;
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = (uE.clientX - rect.left) / zoom;
-    const canvasY = (uE.clientY - rect.top) / zoom;
-    
-    // 2. 🧲 Magnetic Column Snap (Horizontal VW Math)
-    const droppedXvw = canvasX / vw;
-    const colStep = FLOW_COLUMN_VW + FLOW_GAP_VW;
-    res.layoutCol = Math.round((droppedXvw - FLOW_SPINE_X_VW) / colStep);
-
-    const stepRow = dropPointEl?.closest('.v2-step-item');
-    const targetCardEl = dropPointEl?.closest('.v2-node-card');
-    const isOverTopShelf = dropPointEl?.closest('#global-shelf');
-    const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
-
-    // 3. Handle Linking Logic (Existing)
-    if (stepRow && targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
-        const targetId = targetCardEl.id.replace('v2-node-', '');
-        const targetRes = resources.find(r => String(r.id) === String(targetId));
-        const stepIdAttr = stepRow.getAttribute('data-step-id');
-        const stepUniqueId = stepIdAttr ? stepIdAttr.split('-').pop() : null;
-        const step = (targetRes.steps || []).find(s => String(s.id) === String(stepUniqueId));
-
-        if (step) {
-            if (!step.links) step.links = [];
-            step.links.push({ id: res.id, name: res.name, type: res.type });
-            await OL.persist();
-            OL.renderVisualizer();
-            return;
-        }
-    }
-
-    // 4. Handle Merging Logic (Existing)
-    if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}` && !isOverTopShelf && !isOverWorkbench) {
-        const targetId = targetCardEl.id.replace('v2-node-', '');
-        const targetRes = resources.find(r => String(r.id) === String(targetId));
-
-        if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
+        if (isResizingLane && pendingStageIdx !== null) {
             await OL.updateAndSync(() => {
-                const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
-                targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
-                const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
-                if (resIdx > -1) resources.splice(resIdx, 1);
-                OL.refreshFamilyNaming(targetRes, resources);
-                OL.syncLogicPorts();
+                stages[pendingStageIdx].width = pendingWidthChange;
             });
+            isResizingLane = false;
             OL.renderVisualizer();
             return;
         }
-    }
 
-    // 5. Handle Global Shelf / Workbench or Standard Drop
-    if (isOverTopShelf || isOverWorkbench) {
-        await OL.updateAndSync(() => {
-            res.isGlobal = true;
-            res.isTopShelf = !!isOverTopShelf;
-            res.stageId = null;
-            delete res.coords;
+        el.style.display = 'none';
+        const dropPointEl = document.elementFromPoint(uE.clientX, uE.clientY);
+        el.style.display = 'block';
+
+        const stepRow = dropPointEl?.closest('.v2-step-item');
+        const targetCardEl = dropPointEl?.closest('.v2-node-card');
+        const isOverTopShelf = dropPointEl?.closest('#global-shelf');
+        const isOverWorkbench = dropPointEl?.closest('#v2-workbench-sidebar');
+        const vw = window.innerWidth / 100;
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = (uE.clientX - rect.left) / zoom;
+        const canvasY = (uE.clientY - rect.top) / zoom;
+        
+        // 🧲 Magnetic Column Snap
+        const droppedXvw = canvasX / vw;
+        const colStep = FLOW_COLUMN_VW + FLOW_GAP_VW;
+        res.layoutCol = Math.round((droppedXvw - FLOW_SPINE_X_VW) / colStep);
+
+        // --- Step Linking ---
+        if (stepRow && targetCardEl && targetCardEl.id !== `v2-node-${res.id}`) {
+            const targetId = targetCardEl.id.replace('v2-node-', '');
+            const targetRes = resources.find(r => String(r.id) === String(targetId));
+            const stepIdAttr = stepRow.getAttribute('data-step-id');
+            const stepUniqueId = stepIdAttr ? stepIdAttr.split('-').pop() : null;
+            const step = (targetRes.steps || []).find(s => String(s.id) === String(stepUniqueId));
+
+            if (step) {
+                if (!step.links) step.links = [];
+                step.links.push({ id: res.id, name: res.name, type: res.type });
+                await OL.persist();
+                OL.renderVisualizer();
+                return;
+            }
+        }
+
+        // --- Merge Logic ---
+        if (targetCardEl && targetCardEl.id !== `v2-node-${res.id}` && !isOverTopShelf && !isOverWorkbench) {
+            const targetId = targetCardEl.id.replace('v2-node-', '');
+            const targetRes = resources.find(r => String(r.id) === String(targetId));
+
+            if (targetRes && confirm(`Merge steps from "${res.name}" into "${targetRes.name}"?`)) {
+                await OL.updateAndSync(() => {
+                    const stepsToMove = JSON.parse(JSON.stringify(res.steps || []));
+                    targetRes.steps = [...(targetRes.steps || []), ...stepsToMove].filter(Boolean);
+                    const resIdx = resources.findIndex(r => String(r.id) === String(res.id));
+                    if (resIdx > -1) resources.splice(resIdx, 1);
+                    OL.refreshFamilyNaming(targetRes, resources);
+                    OL.syncLogicPorts();
+                });
+                OL.renderVisualizer();
+                return;
+            }
+        }
+
+        // --- Shelf / Workspace or Stage Drop ---
+        if (isOverTopShelf || isOverWorkbench) {
+            await OL.updateAndSync(() => {
+                res.isGlobal = true;
+                res.isTopShelf = !!isOverTopShelf;
+                res.stageId = null;
+                delete res.coords;
+            });
+        } else {
+            // 📍 Vertical Stage Detection
+            const sortedStages = [...stages].sort((a, b) => (b.yPos || 0) - (a.yPos || 0));
+            const targetStage = sortedStages.find(s => canvasY >= (s.yPos || 0)) || stages[0];
+
+            res.stageId = targetStage.id;
+            res.coords = { x: Math.round(canvasX), y: Math.round(canvasY) };
+            res.isGlobal = false;
+            res.isTopShelf = false;
+        }
+
+        await OL.updateAndSync(() => { 
+            OL.autoAlignNodes(); 
+            if (OL.drawConnections) OL.drawConnections();
         });
-    } else {
-        // 📍 VERTICAL STAGE DETECTION
-        // We find the stage by looking at our stages and finding the one whose yPos is 
-        // just above where we dropped. Sort desc so we find the deepest one first.
-        const sortedStages = [...stages].sort((a, b) => (b.yPos || 0) - (a.yPos || 0));
-        const targetStage = sortedStages.find(s => canvasY >= (s.yPos || 0)) || stages[0];
 
-        res.stageId = targetStage.id;
-        res.coords = { x: Math.round(canvasX), y: Math.round(canvasY) };
-        res.isGlobal = false;
-        res.isTopShelf = false;
-    }
+        OL.renderVisualizer();
+    };
 
-    // 6. Trigger Auto-Align and Sync
-    await OL.updateAndSync(() => { 
-        OL.autoAlignNodes(); 
-        OL.drawConnections();
-    });
-
-    OL.renderVisualizer();
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
 };
+    
 // Add this near your other event listeners
 window.addEventListener('resize', () => {
     if (window.location.hash.includes('visualizer')) {
