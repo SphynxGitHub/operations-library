@@ -4237,7 +4237,7 @@ body.light-mode {
 
 #v2-main-content {display: flex; flex-direction: row; flex: 1; overflow: hidden; background: var(--bg-main); }
 
-#v2-canvas { position: relative; }
+#v2-canvas { position: relative; width: 200vw; min-height: 100vh;}
 
 #v2-canvas-scroll-wrap { flex: 1; overflow: auto; position: relative; }
 
@@ -4348,6 +4348,26 @@ body.light-mode {
 
 /*==========================================Card Lanes*/
 
+.v2-stage-divider {
+    position: absolute;
+    left: 0;
+    width: 100vw; /* Spans the viewport */
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+}
+
+#v2-node-layer::before {
+    content: "";
+    position: absolute;
+    left: 40vw; 
+    width: 20vw;
+    height: 100%;
+    background: rgba(var(--accent-rgb), 0.02);
+    border-left: 1px dashed rgba(var(--accent-rgb), 0.1);
+    border-right: 1px dashed rgba(var(--accent-rgb), 0.1);
+    pointer-events: none;
+}
+
 .v2-lane-section { 
     border-right: 1px dashed var(--accent-glow); position: relative; height: 100%;
     display: flex; flex-direction: column; align-items: center; padding-top: 20px; overflow: visible;
@@ -4407,12 +4427,14 @@ body.light-mode {
 .step-row-content { width:100%; align-items:center; display: flex; flex-direction: row; min-height: 24px;}
 
 .v2-node-card {
-    position: absolute; width: 220px; background: var(--bg-card); color: var(--text-main); overflow: visible;
+    position: absolute; background: var(--bg-card); color: var(--text-main); overflow: visible;
     border: 1px solid var(--border); border-radius: 8px; padding: 15px; cursor: grab;
     box-shadow: 0 4px 6px rgba(0,0,0,0.3); user-select: none; /* Prevents text selection during drag */
     transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
                 top 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), 
                 width 0.3s ease;
+   width: 20vw;
+   min-width: 250px;
 }
 
 .v2-node-card:hover {
