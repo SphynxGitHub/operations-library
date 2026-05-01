@@ -9975,8 +9975,17 @@ OL.renderVisualizer = function() {
         
         div.innerHTML = `
             <div class="stage-label-bar">
-                <span style="opacity:0.5; margin-right:10px;">STAGE ${idx + 1}</span>
-                <span contenteditable="true" onblur="OL.renameStage(${idx}, this.innerText)">${esc(s.name)}</span>
+                <span class="stage-index">${idx + 1}</span>
+                <input type="text" 
+                       class="stage-name-input" 
+                       value="${esc(s.name)}" 
+                       onchange="OL.renameStage('${s.id}', this.value)" />
+                
+                <div class="stage-actions">
+                    <button class="stage-btn delete" onclick="OL.deleteStage('${s.id}')" title="Delete Stage">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
             </div>
         `;
         stageLayer.appendChild(div);
