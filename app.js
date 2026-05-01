@@ -9967,12 +9967,20 @@ OL.renderVisualizer = function() {
 
     // --- 📁 3. RENDER STAGES ---
     stages.forEach((s, idx) => {
+        const inserter = document.createElement('div');
+        inserter.className = 'stage-inserter';
+        // Position it slightly above the current stage divider
+        inserter.style.top = `${(s.yPos || 0) - 40}px`; 
+        inserter.innerHTML = `
+            <button class="add-stage-mid-btn" onclick="OL.insertStage(${idx})">
+                <i class="fa-solid fa-plus"></i> Add Stage
+            </button>
+        `;
+        stageLayer.appendChild(inserter);
+        
         const div = document.createElement('div');
         div.className = 'v2-stage-divider';
-        
-        // 🎯 Use the yPos calculated by autoAlignNodes
         div.style.top = `${s.yPos || 0}px`; 
-        
         div.innerHTML = `
             <div class="stage-label-bar">
                 <span class="stage-index">${idx + 1}</span>
@@ -9992,6 +10000,12 @@ OL.renderVisualizer = function() {
     });
 
     let totalZapSteps = 0;
+    const finalInserter = document.createElement('div');
+    finalInserter.className = 'stage-inserter';
+    const lastY = stages.length > 0 ? (stages[stages.length-1].yPos + 500) : 500;
+    finalInserter.style.top = `${lastY}px`;
+    finalInserter.innerHTML = `<button class="add-stage-mid-btn" onclick="OL.insertStage(${stages.length})"><i class="fa-solid fa-plus"></i> Add Stage</button>`;
+    stageLayer.appendChild(finalInserter);
 
     // --- 📇 4. RENDER RESOURCES ---
     const milestoneIds = new Set();
@@ -10232,6 +10246,25 @@ OL.renderVisualizer = function() {
     if (document.getElementById('canvas-filter-input')?.value) {
         OL.syncCanvasFilters(document.getElementById('canvas-filter-input').value);
     }
+};
+
+OL.insertStage = async function(index) {
+    const data = OL.getCurrentProjectData();
+    
+    const newStage = {
+        id: 'stage-' + Date.now(),
+        name: 'New Stage',
+        width: 1000 // Legacy support
+    };
+
+    // 💉 Inject the stage at the specific position
+    data.stages.splice(index, 0, newStage);
+
+    await OL.persist();
+    
+    // 🧲 Run auto-align to shift all cards down and make room
+    OL.autoAlignNodes(); 
+    console.log(`✨ Inserted new stage at index ${index}`);
 };
 
 OL.handleSidebarSearch = function(e) {
