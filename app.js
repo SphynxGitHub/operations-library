@@ -640,109 +640,37 @@ window.buildLayout = function () {
   if (!root) return; // Safety guard
 
   const masterTabs = [
-    { key: "apps", label: "Master Apps", icon: "📱", href: "#/vault/apps" },
-    {
-      key: "functions",
-      label: "Master Functions",
-      icon: "🔨",
-      href: "#/vault/functions",
-    },
-    {
-      key: "resources",
-      label: "Master Resources",
-      icon: "💾",
-      href: "#/vault/resources",
-    },
-    {
-      key: "visualizer",
-      label: "Flow Map",
-      icon: "🕸️",
-      href: "#/vault/visualizer",
-    },
-     {
-      key: "how-to",
-      label: "Master How-To Guides",
-      icon: "👩‍🏫",
-      href: "#/vault/how-to",
-    },
-     {
-      key: "checklist",
-      label: "Master Tasks",
-      icon: "📋",
-      href: "#/vault/tasks",
-    },
-    {
-      key: "analyses",
-      label: "Master Analyses",
-      icon: "📈",
-      href: "#/vault/analyses",
-    },
-    { key: "rates", label: "Scoping Rates", icon: "💰", href: "#/vault/rates" },
-    { key: "data", label: "Master Data Tags", icon: "🏷️", href: "#/vault/data" },
-  ];
+  { key: "apps", label: "Master Apps", icon: "layout-grid", href: "#/vault/apps" },
+  { key: "functions", label: "Master Functions", icon: "wrench", href: "#/vault/functions" },
+  { key: "resources", label: "Master Resources", icon: "database", href: "#/vault/resources" },
+  { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/vault/visualizer" },
+  { key: "how-to", label: "Master How-To Guides", icon: "book-open", href: "#/vault/how-to" },
+  { key: "checklist", label: "Master Tasks", icon: "clipboard-list", href: "#/vault/tasks" },
+  { key: "analyses", label: "Master Analyses", icon: "trending-up", href: "#/vault/analyses" },
+  { key: "rates", label: "Scoping Rates", icon: "circle-dollar-sign", href: "#/vault/rates" },
+  { key: "data", label: "Master Data Tags", icon: "tag", href: "#/vault/data" },
+];
 
-  const clientTabs = [
-    {
-      key: "checklist",
-      label: "Tasks",
-      icon: "📋",
-      href: "#/client-tasks",
-    },
-    {
-      key: "apps",
-      label: "Applications",
-      icon: "📱",
-      href: "#/applications",
-    },
-    {
-      key: "functions",
-      label: "Functions",
-      icon: "🔨",
-      href: "#/functions",
-    },
-    {
-      key: "resources",
-      label: "Project Resources",
-      icon: "💾",
-      href: "#/resources",
-    },
-    {
-      key: "visualizer",
-      label: "Flow Map",
-      icon: "🕸️",
-      href: "#/visualizer",
-    },
-    {
-      key: "scoping",
-      label: "Scoping & Pricing",
-      icon: "📊",
-      href: "#/scoping-sheet",
-    },
-    {
-      key: "analysis",
-      label: "Weighted Analysis",
-      icon: "📈",
-      href: "#/analyze",
-    },
-    {
-      key: "how-to",
-      label: "How-To Library",
-      icon: "👩‍🏫",
-      href: "#/how-to",
-    },
-    { key: "team", label: "Team Members", icon: "👬", href: "#/team" },
-    { key: "data", label: "Data Tags", icon: "🏷️", href: "#/data" },
-  ];
+const clientTabs = [
+  { key: "checklist", label: "Tasks", icon: "clipboard-list", href: "#/client-tasks" },
+  { key: "apps", label: "Applications", icon: "layout-grid", href: "#/applications" },
+  { key: "functions", label: "Functions", icon: "wrench", href: "#/functions" },
+  { key: "resources", label: "Project Resources", icon: "database", href: "#/resources" },
+  { key: "visualizer", label: "Flow Map", icon: "workflow", href: "#/visualizer" },
+  { key: "scoping", label: "Scoping & Pricing", icon: "bar-chart-2", href: "#/scoping-sheet" },
+  { key: "analysis", label: "Weighted Analysis", icon: "trending-up", href: "#/analyze" },
+  { key: "how-to", label: "How-To Library", icon: "book-open", href: "#/how-to" },
+  { key: "team", label: "Team Members", icon: "users", href: "#/team" },
+  { key: "data", label: "Data Tags", icon: "tag", href: "#/data" },
+];
 
-  // Inside your layout/sidebar render function:
-    const isLightMode = document.body.classList.contains('light-mode');
-    const themeIcon = isLightMode ? '🌙' : '☀️';
-    const themeLabel = isLightMode ? 'Dark Mode' : 'Light Mode';
+const themeIcon = isLightMode ? "moon" : "sun";
+const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 
     const themeSection = `
         <div class="theme-toggle-zone">
             <button class="btn soft tiny" onclick="OL.toggleTheme()" title="${themeLabel}">
-                <span class="theme-icon">${themeIcon}</span>
+                <i data-lucide="${themeIcon}" style="width:16px;height:16px;"></i>
                 <span class="theme-label">${themeLabel}</span>
             </button>
         </div>
@@ -765,7 +693,9 @@ window.buildLayout = function () {
                                 onclick="${homeAction}" 
                                 class="${(hash === '#/' || hash === '#/partner-dashboard') ? 'active' : ''}"
                                 style="${isAdmin ? 'border-left: 3px solid var(--accent);' : 'background: rgba(var(--accent-rgb), 0.1); font-weight: bold;'}">
-                                <i>🏠</i> <span>${homeLabel.toUpperCase()}</span>
+                                <i data-lucide="home" style="width:16px;height:16px;"></i> 
+                                <span>${homeLabel.toUpperCase()}</span>
+
                             </a>
                         </nav>
                     </div>
@@ -786,7 +716,8 @@ window.buildLayout = function () {
                 <nav class="menu">
                     ${masterTabs.map(item => `
                         <a href="${item.href}" class="${hash === item.href ? 'active' : ''}">
-                            <i>${item.icon}</i> <span class="menu-item">${item.label}</span>
+                            <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                            <span class="menu-item">${item.label}</span>
                         </a>
                     `).join('')}
                 </nav>
@@ -820,7 +751,8 @@ window.buildLayout = function () {
                         const isActive = hash.startsWith(item.href);
                         return `
                             <a href="${item.href}" class="${isActive ? 'active' : ''}">
-                                <i>${item.icon}</i> <span class="menu-item">${item.label}</span>
+                                <i data-lucide="${item.icon}" style="width:16px;height:16px;flex-shrink:0;"></i> 
+                                <span class="menu-item">${item.label}</span>
                                 ${perm === 'view' ? '<i class="lock-icon" title="Read Only">🔒</i>' : ''}
                             </a>
                         `;
@@ -865,6 +797,7 @@ window.buildLayout = function () {
         inspector.innerHTML = `<div class="sidebar-resizer right-side-handle"></div><div class="inspector-scroll-content"></div>`;
         OL.initSideResizers();
     }
+    if (window.lucide) window.lucide.createIcons();
 };
 
 window.handleRoute = function () {
