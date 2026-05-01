@@ -9976,7 +9976,7 @@ OL.renderVisualizer = function() {
         
         inserter.innerHTML = `
             <button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})" title="Insert Stage Above">
-                <i class="fa-solid fa-plus"></i>
+                <i class="fa-solid fa-plus">+</i>
             </button>
         `;
         stageLayer.appendChild(inserter);
@@ -9996,7 +9996,7 @@ OL.renderVisualizer = function() {
                        onchange="OL.renameStage('${s.id}', this.value)" />
                 
                 <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">
-                    <i class="fa-solid fa-trash-can">+</i>
+                    <i class="fa-solid fa-trash-can"></i>
                 </button>
             </div>
         `;
@@ -10008,7 +10008,7 @@ OL.renderVisualizer = function() {
     finalInserter.className = 'stage-inserter';
     const lastY = stages.length > 0 ? (stages[stages.length-1].yPos + 500) : 500;
     finalInserter.style.top = `${lastY}px`;
-    finalInserter.innerHTML = `<button class="add-stage-btn-v2" onclick="OL.insertStage(${stages.length})">
+    finalInserter.innerHTML = `<button class="add-stage-btn-v2" onclick="OL.insertStage(${stages.length}) title="Insert Stage Below">
         <i class="fa-solid fa-plus">+</i>
     </button>`;
     stageLayer.appendChild(finalInserter);
