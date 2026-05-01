@@ -9987,7 +9987,7 @@ OL.renderVisualizer = function() {
                        onchange="OL.renameStage('${s.id}', this.value)" />
                 
                 <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">
-                    <i class="fa-solid fa-trash-can"></i>
+                    <i class="fa-solid fa-trash-can">x</i>
                 </button>
             </div>
         `;
