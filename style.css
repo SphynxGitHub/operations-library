@@ -4348,94 +4348,97 @@ body.light-mode {
 
 /*==========================================Card Lanes*/
 /* Ensure the Stage Layer is on top of the canvas background */
+/* 1. Ensure the Stage Layer allows interaction */
 #v2-stage-layer {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
-    z-index: 100; /* Higher than cards */
+    z-index: 10; /* Lower than cards (usually z-index 100) */
     pointer-events: none;
 }
 
-/* The Horizontal Line */
+/* 2. The Horizontal Line */
 .v2-stage-divider {
     position: absolute;
     left: 0;
     width: 100%;
-    height: 1px;
-    background: rgba(var(--accent-rgb), 0.3);
+    height: 2px;
+    background: rgba(56, 189, 248, 0.2); /* var(--accent) with opacity */
     pointer-events: none;
 }
 
-/* The Main Bubble (Title + Index + Delete) */
+/* 3. The Main Bubble (Title + Index + Delete) */
 .stage-label-bar-v2 {
     position: absolute;
     top: -18px;
-    left: 50px;
+    left: 40px;
     display: flex;
     align-items: center;
-    background: #1a1a1a; /* Hard hex to ensure visibility */
+    background: var(--panel-dark);
     border: 1px solid var(--accent);
-    padding: 4px 10px;
-    border-radius: 6px;
-    pointer-events: auto; /* IMPORTANT: Enables clicking */
-    gap: 10px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    pointer-events: auto; /* 🔥 This allows you to click the input/delete */
+    gap: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
 }
 
-/* The Insert Button (The one you couldn't see) */
+/* 4. The Add Stage Trigger (The floating + button) */
 .stage-inserter-v2 {
     position: absolute;
-    left: 15px;
-    z-index: 110;
-    pointer-events: auto;
+    left: 10px; /* Positioned to the left of the bubble */
+    z-index: 100;
+    pointer-events: auto; /* 🔥 This allows you to click the + */
 }
 
 .add-stage-btn-v2 {
     background: var(--accent);
-    color: white;
+    color: var(--bg);
     border: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    font-size: 12px;
+    transition: transform 0.2s;
 }
 
 .add-stage-btn-v2:hover {
-    transform: scale(1.2);
+    transform: scale(1.1);
     background: white;
-    color: var(--accent);
 }
 
-/* The Delete Button inside the bubble */
+/* 5. The Delete Button (Trash Can) */
 .stage-delete-btn-v2 {
     background: transparent;
     border: none;
-    color: #ff4444;
+    color: var(--danger);
     cursor: pointer;
     padding: 5px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
+    font-size: 14px;
+    opacity: 0.6;
+    transition: opacity 0.2s, color 0.2s;
 }
 
 .stage-delete-btn-v2:hover {
-    color: white;
-    background: #ff4444;
-    border-radius: 3px;
+    opacity: 1;
+    color: #ff4d4d;
 }
 
+/* 6. The Input Field */
 .stage-name-input-v2 {
     background: transparent;
     border: none;
     color: white;
-    font-weight: bold;
+    font-weight: 800;
+    font-size: 12px;
+    text-transform: uppercase;
     outline: none;
-    width: 150px;
+    width: 180px;
 }
 
 #v2-node-layer::before {
