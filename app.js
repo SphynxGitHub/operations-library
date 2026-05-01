@@ -9974,7 +9974,7 @@ OL.renderVisualizer = function() {
     inserter.style.top = `${(s.yPos || 0) - 30}px`; 
     inserter.innerHTML = `
         <div class="inserter-line"></div>
-        <button class="add-stage-mid-btn" onclick="event.stopPropagation(); OL.insertStage(${idx})">
+        <button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})">
             <i class="fa-solid fa-plus"></i>
         </button>
     `;
@@ -9986,16 +9986,16 @@ OL.renderVisualizer = function() {
     div.style.top = `${s.yPos || 0}px`; 
     
     div.innerHTML = `
-        <div class="stage-label-bar">
-            <div class="stage-index">${idx + 1}</div>
+        <div class="stage-label-bar-v2">
+            <div class="stage-index-v2">${idx + 1}</div>
             <input type="text" 
-                   class="stage-name-input" 
+                   class="stage-name-input-v2" 
                    value="${esc(s.name)}" 
                    onclick="event.stopPropagation()"
                    onchange="OL.renameStage('${s.id}', this.value)" />
             
             <div class="stage-actions">
-                <button class="stage-btn delete" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">
+                <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">
                     <i class="fa-solid fa-trash-can"></i>
                 </div>
             </div>
