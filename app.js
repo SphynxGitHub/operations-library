@@ -9967,43 +9967,42 @@ OL.renderVisualizer = function() {
 
     // --- 📁 3. RENDER STAGES ---
     stages.forEach((s, idx) => {
-    // 1. THE INSERTER (Positioned ABOVE the stage)
-    const inserter = document.createElement('div');
-    inserter.className = 'stage-inserter';
-    // Offset it so it sits in the gap, not on the line
-    inserter.style.top = `${(s.yPos || 0) - 30}px`; 
-    inserter.innerHTML = `
-        <div class="inserter-line"></div>
-        <button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})">
-            <i class="fa-solid fa-plus"></i>
-        </button>
-    `;
-    stageLayer.appendChild(inserter);
-
-    // 2. THE DIVIDER
-    const div = document.createElement('div');
-    div.className = 'v2-stage-divider';
-    div.style.top = `${s.yPos || 0}px`; 
+        // 1. THE INSERTER (Positioned in the gap ABOVE the stage)
+        const inserter = document.createElement('div');
+        inserter.className = 'stage-inserter-v2';
+        // If it's the first stage, put the plus button a bit higher
+        const inserterY = (s.yPos || 0) - 40; 
+        inserter.style.top = `${inserterY}px`; 
+        
+        inserter.innerHTML = `
+            <button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})" title="Insert Stage Above">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+        `;
+        stageLayer.appendChild(inserter);
     
-    div.innerHTML = `
-        <div class="stage-label-bar-v2">
-            <div class="stage-index-v2">${idx + 1}</div>
-            <input type="text" 
-                   class="stage-name-input-v2" 
-                   value="${esc(s.name)}" 
-                   onclick="event.stopPropagation()"
-                   onchange="OL.renameStage('${s.id}', this.value)" />
-            
-            <div class="stage-actions">
+        // 2. THE DIVIDER
+        const div = document.createElement('div');
+        div.className = 'v2-stage-divider';
+        div.style.top = `${s.yPos || 0}px`; 
+        
+        div.innerHTML = `
+            <div class="stage-label-bar-v2">
+                <div class="stage-index-v2" style="background:var(--accent); color:black; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:10px;">${idx + 1}</div>
+                <input type="text" 
+                       class="stage-name-input-v2" 
+                       value="${esc(s.name)}" 
+                       onclick="event.stopPropagation()" 
+                       onchange="OL.renameStage('${s.id}', this.value)" />
+                
                 <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">
                     <i class="fa-solid fa-trash-can"></i>
-                </div>
+                </button>
             </div>
-        </div>
-    `;
-    stageLayer.appendChild(div);
-});
-
+        `;
+        stageLayer.appendChild(div);
+    });
+    
     let totalZapSteps = 0;
     const finalInserter = document.createElement('div');
     finalInserter.className = 'stage-inserter';
