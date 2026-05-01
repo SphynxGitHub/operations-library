@@ -4347,50 +4347,39 @@ body.light-mode {
 }
 
 /*==========================================Card Lanes*/
-
-.v2-stage-divider {
+/* Ensure the Stage Layer is on top of the canvas background */
+#v2-stage-layer {
     position: absolute;
+    top: 0;
     left: 0;
-    width: 100vw; /* Spans the viewport */
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+    width: 100%;
+    z-index: 100; /* Higher than cards */
+    pointer-events: none;
 }
 
-/* THE DIVIDER LINE */
+/* The Horizontal Line */
 .v2-stage-divider {
     position: absolute;
     left: 0;
     width: 100%;
-    height: 2px;
-    background: var(--accent);
-    z-index: 5; /* Sit above the background but below cards if needed */
-    pointer-events: none; /* Allow clicks to pass through to the bar */
+    height: 1px;
+    background: rgba(var(--accent-rgb), 0.3);
+    pointer-events: none;
 }
 
-/* THE LABEL BAR (Interactive Area) */
-.stage-label-bar {
+/* The Main Bubble (Title + Index + Delete) */
+.stage-label-bar-v2 {
     position: absolute;
-    top: -20px; /* Center it over the line */
-    left: 20px;
+    top: -18px;
+    left: 50px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: var(--bg-canvas); /* Match your background color */
-    padding: 5px 15px;
-    border-radius: 20px;
+    background: #1a1a1a; /* Hard hex to ensure visibility */
     border: 1px solid var(--accent);
-    pointer-events: auto; /* Enable clicks here */
-}
-
-.stage-name-input {
-    background: transparent;
-    border: none;
-    color: var(--text);
-    font-weight: 800;
-    font-size: 13px;
-    text-transform: uppercase;
-    width: 200px;
-    outline: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    pointer-events: auto; /* IMPORTANT: Enables clicking */
+    gap: 10px;
 }
 
 /* The Insert Button (The one you couldn't see) */
@@ -4420,14 +4409,6 @@ body.light-mode {
     transform: scale(1.2);
     background: white;
     color: var(--accent);
-}
-
-.inserter-line {
-    position: absolute;
-    width: 80%;
-    height: 1px;
-    border-top: 1px dashed var(--accent);
-    opacity: 0.3;
 }
 
 /* The Delete Button inside the bubble */
