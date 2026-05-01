@@ -9995,13 +9995,44 @@ OL.renderVisualizer = function() {
     });
     
     let totalZapSteps = 0;
+    
+    // 1. Calculate where the bottom is
+    let finalY = 200; // Default if map is empty
+    
+    if (stages.length > 0) {
+        // Find the stage with the highest yPos
+        const lastStage = stages[stages.length - 1];
+        
+        // Find all resources in that last stage
+        const lastStageNodes = resources.filter(r => String(r.stageId) === String(lastStage.id) && !r.isGlobal);
+        
+        if (lastStageNodes.length > 0) {
+            // Find the absolute lowest point (Y + Height) of nodes in that stage
+            const lowestNode = lastStageNodes.reduce((prev, curr) => {
+                const currY = (curr.coords?.y || 0) + 200; // Approximate card height if not rendered
+                return (currY > prev) ? currY : prev;
+            }, lastStage.yPos || 0);
+            
+            finalY = lowestNode + 100;
+        } else {
+            // If stage is empty, put it 150px below the header
+            finalY = (lastStage.yPos || 0) + 150;
+        }
+    }
+    
+    // 2. Create the element
     const finalInserter = document.createElement('div');
-    finalInserter.className = 'stage-inserter';
-    const lastY = stages.length > 0 ? (stages[stages.length-1].yPos + 500) : 500;
-    finalInserter.style.top = `${lastY}px`;
-    finalInserter.innerHTML = `<button class="add-stage-btn-v2" onclick="OL.insertStage(${stages.length}) title="Insert Stage Below">
-        <i class="fa-solid fa-plus">+</i>
-    </button>`;
+    finalInserter.className = 'stage-inserter-v2'; // Use the V2 class for styling
+    finalInserter.style.top = `${finalY}px`;
+    finalInserter.style.left = `10px`; // Match your other inserter alignment
+    
+    finalInserter.innerHTML = `
+        <button class="add-stage-btn-v2" 
+                style="width: auto; padding: 0 15px; border-radius: 20px; gap: 8px;" 
+                onclick="event.stopPropagation(); OL.insertStage(${stages.length})">
+            <i class="fa-solid fa-plus"></i> ADD FINAL STAGE
+        </button>
+    `;
     stageLayer.appendChild(finalInserter);
 
     // --- 📇 4. RENDER RESOURCES ---
