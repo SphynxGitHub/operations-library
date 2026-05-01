@@ -9652,49 +9652,54 @@ OL.autoAlignNodes = async function() {
     const resources = data.resources || [];
     const stages = data.stages || [];
     const vw = window.innerWidth / 100;
+    const depth = OL.state.v2.viewDepth;
     
     const VERTICAL_GAP = 40;
     let currentY = 100; // Starting point at the top of the map
 
     stages.forEach((stage) => {
-        // 1. Position the Stage Header/Divider
         stage.yPos = currentY;
-        currentY += 80; // Space for the Stage Title bar
+        currentY += 80;
 
-        const stageNodes = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
-        
-        // 2. Sort nodes by their current Y to preserve drag-order
-        stageNodes.sort((a, b) => (a.coords?.y || 0) - (b.coords?.y || 0));
+        // 🚀 THE BIG SWITCH: Get either Resources or individual Steps
+        let nodesToAlign = [];
+        const stageResources = resources.filter(r => String(r.stageId) === String(stage.id) && !r.isGlobal);
+
+        if (depth === 'step') {
+            // Flatten all steps into a single list for this stage
+            stageResources.forEach(res => {
+                res.steps.forEach((step, idx) => {
+                    nodesToAlign.push({
+                        ...step,
+                        parentId: res.id,
+                        parentName: res.name,
+                        parentType: res.type,
+                        stepIdx: idx,
+                        // Maintain the user's manual vertical preference
+                        sortY: (res.coords?.y || 0) + (idx * 50) 
+                    });
+                });
+            });
+        } else {
+            nodesToAlign = stageResources.map(r => ({ ...r, sortY: r.coords?.y || 0 }));
+        }
+
+        nodesToAlign.sort((a, b) => a.sortY - b.sortY);
 
         let stageHeightAccumulator = 0;
-
-        stageNodes.forEach(node => {
-            const el = document.getElementById(`v2-node-${node.id}`);
-            const h = el ? el.offsetHeight : 120;
-            const col = node.layoutCol || 0;
-
-            // 🎯 VW Magnetic Snap (X remains relative to screen width)
-            const xPosPx = (FLOW_SPINE_X_VW * vw) + (col * (FLOW_COLUMN_VW + FLOW_GAP_VW) * vw) - ((FLOW_COLUMN_VW * vw) / 2);
-
-            node.coords = {
-                x: xPosPx,
-                y: currentY + stageHeightAccumulator
-            };
-
-            // 🌊 Waterfall: Only the SPINE (Col 0) pushes the vertical flow down
-            if (col === 0) {
-                stageHeightAccumulator += (h + VERTICAL_GAP);
-            }
+        nodesToAlign.forEach(node => {
+            // Logic to calculate xPosPx based on node.layoutCol or parent's layoutCol...
+            // Logic to calculate yPos based on currentY + stageHeightAccumulator...
+            
+            // If it's a step, we save its coords to a temp state for drawing lines
+            // If it's a resource, we update res.coords directly.
         });
-
-        // 3. Set the starting Y for the NEXT stage
-        // Add a buffer so stages don't feel cramped
-        currentY += Math.max(stageHeightAccumulator, 150) + 100; 
+        
+        currentY += Math.max(stageHeightAccumulator, 150) + 100;
     });
-
     await OL.persist();
     OL.renderVisualizer();
-    if (OL.drawConnections) OL.drawConnections();
+     if (OL.drawConnections) OL.drawConnections();
 };
 
 OL.getCurrentProjectData = function() {
@@ -9730,551 +9735,227 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
+OL.state.v2.viewDepth = 'resource'; // Options: 'resource' (current) or 'step' (broken out)
 OL.renderVisualizer = function() {
     const mainArea = document.getElementById('mainContent');
     if (!mainArea) return;
 
     const client = getActiveClient();
-    if (!client) return; // Guard against null client
+    if (!client) return; 
 
     const data = OL.getCurrentProjectData();
     const stages = data.stages || [];
     const resources = (data.resources || []).filter(r => !r.isLocked);
 
-    // 🏷️ Extract Unique Values for Filter Dropdowns
-    const types = [...new Set(resources.map(r => r.type))].filter(Boolean).sort();
-    const apps = [...new Set(resources.map(r => r.integration?.app))].filter(Boolean).sort();
-    const objects = [...new Set(resources.map(r => r.integration?.object))].filter(Boolean).sort();
-    const verbs = [...new Set(resources.map(r => r.integration?.verb))].filter(Boolean).sort();
-    const assignees = [...new Set([
-        ...resources.map(r => r.assigneeName),
-        ...resources.flatMap(r => (r.steps || []).map(s => s.assigneeName))
-    ])].filter(Boolean).sort();
-
+    // 🏷️ 1. SETUP UI STATE & TOKENS
+    const depth = OL.state.v2.viewDepth || 'resource';
     const isAnyExpanded = resources.some(r => r.isExpanded);
     const trayOpen = state.ui.sidebarOpen;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
     const toggleIcon = trayOpen ? '🔳' : '⬜';
     const tidyIcon = '🧹';
     const filterIcon = '📶';
+    const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
 
+    // 🏷️ Extract Unique Values for Filter Dropdowns
+    const types = [...new Set(resources.map(r => r.type))].filter(Boolean).sort();
+    const apps = [...new Set(client?.projectData?.localApps || [])].map(a => a.name).sort();
+    const assignees = [...new Set([
+        ...resources.map(r => r.assigneeName),
+        ...resources.flatMap(r => (r.steps || []).map(s => s.assigneeName))
+    ])].filter(Boolean).sort();
+
+    // 🏗️ 2. BUILD THE UI OVERLAY & VIEWPORT (If not exists)
     if (!document.getElementById('v2-viewport')) {
-        const trayOpen = state.ui.sidebarOpen !== false; // Default to open
         mainArea.innerHTML = `
-            <div class="v2-ui-overlay" style="position: absolute; top: 20px; left: 20px; z-index: 5000; pointer-events: none;">
-                <div class="v2-master-toolbar" style="display: flex; align-items: center; gap: 10px; pointer-events: auto;">
+            <div class="v2-ui-overlay">
+                <div class="v2-master-toolbar">
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap">
                             <span class="search-icon">🔍</span>
-                            <input class="v2-search-input" 
-                                type="text" id="canvas-filter-input" placeholder="Search map..." oninput="OL.syncCanvasFilters(this.value)">
+                            <input class="v2-search-input" type="text" id="canvas-filter-input" placeholder="Search map..." oninput="OL.syncCanvasFilters(this.value)">
                         </div>
                         <div class="v2-search-nav" id="search-nav-controls">
-                            <button class="btn tiny soft" onclick="OL.centerPrevCanvasMatch()" title="Previous Result">◀</button>
-                            <span id="canvas-match-count" class="tiny muted search-counter">0/0</span>
-                            <button class="btn tiny soft" onclick="OL.centerNextCanvasMatch()" title="Next Result">▶</button>
-                            <button class="btn tiny danger soft search-clear-btn" onclick="OL.clearAllFilters()" title="Clear Search">✕</button>
+                            <button class="btn tiny soft" onclick="OL.centerPrevCanvasMatch()">◀</button>
+                            <span id="canvas-match-count" class="tiny muted">0/0</span>
+                            <button class="btn tiny soft" onclick="OL.centerNextCanvasMatch()">▶</button>
+                            <button class="btn tiny danger soft" onclick="OL.clearAllFilters()">✕</button>
                         </div>
                         <button id="filter-menu-btn" class="btn tiny soft" onclick="OL.toggleFilterMenu(event)">
-                            ${filterIcon} Filter <span id="active-filter-count" class="pill tiny accent" style="display:none; margin-left:5px; font-size:9px; padding:1px 5px;">0</span>
+                            ${filterIcon} Filter <span id="active-filter-count" class="pill tiny accent" style="display:none;">0</span>
                         </button>
                         <button class="btn primary tiny" onclick="OL.addNewResourceToCanvas()">+ Add Resource</button>
                         <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy">${tidyIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
+                        <button class="btn tiny ${depth === 'step' ? 'accent' : 'soft'}" onclick="OL.state.v2.viewDepth = (OL.state.v2.viewDepth === 'step' ? 'resource' : 'step'); OL.renderVisualizer();">
+                            ${depth === 'step' ? '📦 Cards' : '🧩 Steps'}
+                        </button>
                         <div class="divider-v"></div>
                         <button class="btn soft tiny" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft tiny" onclick="OL.zoom(-0.1)">-</button>
                     </div>
                 </div>
-                <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
-                    <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Types</option>
-                        ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
-                    </select>
-                    <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Apps</option>
-                        ${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
-                    </select>
-                    <select id="filter-assignee" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Owners</option>
-                        ${assignees.map(a => `<option value="${a}">${a}</option>`).join('')}
-                    </select>
-                    <select id="filter-logic" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">Any Logic</option>
-                        <option value="has">With λ Logic</option>
-                    </select>
-                    
-                    <select id="filter-delay" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">Any Timing</option>
-                        <option value="has">With ⏱ Delay</option>
-                    </select>
-
-                    <select id="filter-loop" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">Any Repeat</option>
-                        <option value="has">With ⟳ Loop</option>
-                    </select>
-
-                    <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Scoped Status</option>
-                        <option value="scoped">Scoped ($)</option>
-                        <option value="unscoped">Unscoped</option>
-                    </select>
-
-                    <select id="filter-data-tag" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Data Tags</option>
-                        ${state.master.datapoints.filter(d => !d.isBundle).map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
-                    </select>
+                <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px;">
+                    <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Types</option>${types.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+                    <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Apps</option>${apps.map(a => `<option value="${a}">${a}</option>`).join('')}</select>
+                    <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Scoping</option><option value="scoped">Scoped ($)</option><option value="unscoped">Unscoped</option></select>
                 </div>
             </div>
-
             <div id="v2-viewport" class="${trayOpen ? '' : 'tray-closed'}">
-              <aside id="global-shelf" class="global-shelf-container">
-                  <div class="global-shelf-label">GLOBAL RESOURCES</div>
-                  <div id="shelf-contents"></div>
-              </aside>
-              
-              <div id="v2-main-content">
-                  <aside id="v2-workbench-sidebar">
-                      ${OL.renderWorkbenchTabs()}
-                      <div id="workbench-contents" class="workbench-contents"></div>
-                  </aside>
+                <aside id="global-shelf" class="global-shelf-container">
+                    <div class="global-shelf-label">GLOBAL RESOURCES</div>
+                    <div id="shelf-contents"></div>
+                </aside>
+                <div id="v2-main-content">
+                    <aside id="v2-workbench-sidebar">
+                        ${OL.renderWorkbenchTabs()}
+                        <div id="workbench-contents" class="workbench-contents"></div>
+                    </aside>
+                    <div id="v2-workspace">
+                        <div id="v2-canvas-scroll-wrap">
+                            <div id="v2-canvas">
+                                <div id="v2-stage-layer"></div>
+                                <div id="v2-node-layer"></div>
+                                <svg id="v2-connections"><g id="line-group"></g></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <aside id="v2-inspector-panel">
+                        <div id="inspector-content"></div>
+                    </aside>
+                </div>
+            </div>`;
+    }
 
-                  <div id="v2-workspace">
-                      <div id="v2-canvas-scroll-wrap">
-                          <div id="v2-canvas">                     
-                              <div id="v2-stage-layer"></div>
-                              <div id="v2-node-layer"></div>
-                              <svg id="v2-connections">
-                                  <defs>
-                                      <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
-                                          <path d="M0,0 L10,3.5 L0,7 Z" fill="var(--accent)" />
-                                      </marker>
-                                  </defs>
-                                  <g id="line-group"></g>
-                              </svg>
-                          </div>
-                      </div>
-                  </div>
-
-                  <aside id="v2-inspector-panel">
-                      <div id="inspector-content"><div class="empty-state">Select a step to inspect</div></div>
-                  </aside>
-              </div>
-            </div>
-        `;
-    }    // 1. 🏗️ BUILD THE UI SHELL
-
+    // 📐 3. DATA RESOLUTION & PRE-CALC
     const shelfContents = document.getElementById('shelf-contents');
     const workbenchContents = document.getElementById('workbench-contents');
     const nodeLayer = document.getElementById('v2-node-layer');
     const stageLayer = document.getElementById('v2-stage-layer');
-
-    if (!workbenchContents || !shelfContents) {
-        console.warn("⏳ Workbench containers missing. Aborting render pass.");
-        return; 
-    }
-
     const canvas = document.getElementById('v2-canvas');
-    const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
-    
-    // 1. Clear everything
+
     [shelfContents, workbenchContents, nodeLayer, stageLayer].forEach(el => { if(el) el.innerHTML = ''; });
 
-    // 🗂️ 2. Resolve what goes in the Workbench
-    const activeTab = state.ui.activeWorkbenchTab || 'flows';
-    const sidebarSearch = document.getElementById('sidebar-search-input')?.value.toLowerCase() || "";
-    let workbenchItems = [];
+    const milestoneIds = new Set();
+    resources.forEach(r => (r.steps || []).forEach(s => { if (s.targetResourceId) milestoneIds.add(String(s.targetResourceId)); }));
 
-    if (activeTab === 'flows') {
-        // Only show Flows that are NOT yet on the map
-        workbenchItems = resources.filter(r => 
-            ['workflow', 'zap', 'email campaign'].includes(r.type?.toLowerCase()) && !r.coords
-        );
-    } else if (activeTab === 'assets') {
-        // Only show Assets that are NOT yet on the map
-        workbenchItems = resources.filter(r => 
-            !['workflow', 'zap', 'email campaign'].includes(r.type?.toLowerCase()) && !r.coords
-        );
-    } else if (activeTab === 'guides') {
-        workbenchItems = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
-    } else if (activeTab === 'data') {
-        workbenchItems = state.master.datapoints || [];
-    }
-
-    // 🔍 NEW: Filter the resulting list by the Sidebar-specific search string
-    if (sidebarSearch) {
-        workbenchItems = workbenchItems.filter(item => 
-            item.name.toLowerCase().includes(sidebarSearch) || 
-            (item.key && item.key.toLowerCase().includes(sidebarSearch))
-        );
-    }
-
-    // 3. 🎨 RENDER THE WORKBENCH CONTENT
-    workbenchItems.forEach(item => {
-        const div = document.createElement('div');
-        
-        if (activeTab === 'data') {
-            div.className = 'data-tag-draggable';
-            div.draggable = true;
-            div.ondragstart = (e) => OL.handleDataDragStart(e, item.id);
-            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; color:white;`;
-            div.innerHTML = `${item.isBundle ? '📦' : '🏷️'} <b>${item.name}</b>`;
-        } else {
-            const isGuide = activeTab === 'guides';
-            div.id = `v2-node-${item.id}`;
-            div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
-            
-            // Interaction Logic: Flows get moved to map, Assets/Guides get linked to steps
-            div.onmousedown = (e) => {
-                if (activeTab === 'flows') OL.initWBMotion(e, item.id);
-                else OL.handleAssetDragStart(e, item.id, activeTab === 'assets' ? 'asset' : 'guide');
-            };
-
-            div.innerHTML = `
-                <div class="v2-node-header"
-                    ondragover="event.preventDefault(); this.classList.add('drag-over');" 
-                    ondragleave="this.classList.remove('drag-over');"
-                    ondrop="OL.handleStepDrop(event, '${item.id}', null)">
-
-                    <div class="header-row-content">
-                        <b class="res-name-text">${isGuide ? '📖 ' : ''}${esc(item.name)}</b>
-                    </div>
-                </div>
-            `;
-        }
-        if (activeTab === 'flows' || activeTab === 'assets' || activeTab === 'guides' || activeTab === 'data') {
-             if (workbenchContents) {
-                 workbenchContents.appendChild(div);
-             }
-        }
-    });
-
-    // 🎯 2. CANVAS WIDTH MATH
-    const totalCanvasWidth = stages.reduce((acc, s) => acc + (s.width || 320), 0) + 600;
-    if (canvas) {
-        canvas.style.width = `${totalCanvasWidth}px`;
-        canvas.style.transform = `scale(${OL.state.v2.zoom})`;
-    }
-    
-    // --- 📁 3. RENDER STAGES ---
+    // --- 📁 RENDER STAGES ---
     stages.forEach((s, idx) => {
-        // 1. THE INSERTER (Positioned in the gap ABOVE the stage)
         const inserter = document.createElement('div');
         inserter.className = 'stage-inserter-v2';
-        // If it's the first stage, put the plus button a bit higher
-        const inserterY = (s.yPos || 0) - 40; 
-        inserter.style.top = `${inserterY}px`; 
-        
-        inserter.innerHTML = `
-            <button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})" title="Insert Stage Above">
-                <i class="fa-solid fa-plus">+</i>
-            </button>
-        `;
+        inserter.style.top = `${(s.yPos || 0) - 40}px`; 
+        inserter.innerHTML = `<button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})">+</button>`;
         stageLayer.appendChild(inserter);
-    
-        // 2. THE DIVIDER
+
         const div = document.createElement('div');
         div.className = 'v2-stage-divider';
         div.style.top = `${s.yPos || 0}px`; 
-        
         div.innerHTML = `
             <div class="stage-label-bar-v2">
-                <div class="stage-index-v2" style="background:var(--accent); color:black; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:10px;">${idx + 1}</div>
-                <input type="text" 
-                       class="stage-name-input-v2" 
-                       value="${esc(s.name)}" 
-                       onclick="event.stopPropagation()" 
-                       onchange="OL.renameStage('${s.id}', this.value)" />
-                
-                <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">
-                    <i class="fa-solid fa-trash-can">x</i>
-                </button>
-            </div>
-        `;
+                <div class="stage-index-v2">${idx + 1}</div>
+                <input type="text" class="stage-name-input-v2" value="${esc(s.name)}" onchange="OL.renameStage('${s.id}', this.value)" />
+                <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">×</button>
+            </div>`;
         stageLayer.appendChild(div);
     });
-    
+
+    // --- 📇 4. RENDER NODES ---
     let totalZapSteps = 0;
-    
-    // 1. Calculate where the bottom is
-    let finalY = 200; // Default if map is empty
-    
-    if (stages.length > 0) {
-        // Find the stage with the highest yPos
-        const lastStage = stages[stages.length - 1];
-        
-        // Find all resources in that last stage
-        const lastStageNodes = resources.filter(r => String(r.stageId) === String(lastStage.id) && !r.isGlobal);
-        
-        if (lastStageNodes.length > 0) {
-            // Find the absolute lowest point (Y + Height) of nodes in that stage
-            const lowestNode = lastStageNodes.reduce((prev, curr) => {
-                const currY = (curr.coords?.y || 0) + 200; // Approximate card height if not rendered
-                return (currY > prev) ? currY : prev;
-            }, lastStage.yPos || 0);
-            
-            finalY = lowestNode + 100;
-        } else {
-            // If stage is empty, put it 150px below the header
-            finalY = (lastStage.yPos || 0) + 150;
-        }
-    }
-    
-    // 2. Create the element
-    const finalInserter = document.createElement('div');
-    finalInserter.className = 'stage-inserter-v2'; // Use the V2 class for styling
-    finalInserter.style.top = `${finalY}px`;
-    finalInserter.style.left = `10px`; // Match your other inserter alignment
-    
-    finalInserter.innerHTML = `
-        <button class="add-stage-btn-v2" 
-                style="width: auto; padding: 0 15px; border-radius: 20px; gap: 8px;" 
-                onclick="event.stopPropagation(); OL.insertStage(${stages.length})">
-            <i class="fa-solid fa-plus">+</i>
-        </button>
-    `;
-    stageLayer.appendChild(finalInserter);
+    let itemsToRender = [];
 
-    // --- 📇 4. RENDER RESOURCES ---
-    const milestoneIds = new Set();
-    resources.forEach(r => {
-        (r.steps || []).forEach(s => {
-            if (s.targetResourceId) milestoneIds.add(String(s.targetResourceId));
+    if (depth === 'step') {
+        resources.filter(r => !r.isGlobal && r.coords).forEach(res => {
+            (res.steps || []).forEach((step, i) => {
+                itemsToRender.push({ ...step, isAtomicStep: true, parentResId: res.id, parentResName: res.name, renderX: res.coords.x, renderY: res.coords.y + (i * 130) });
+            });
         });
-    });
+    } else {
+        itemsToRender = resources.map(r => ({ ...r, isAtomicStep: false, renderX: r.coords?.x || 0, renderY: r.coords?.y || 0 }));
+    }
 
-    resources.forEach(res => {
-        const isExpanded = res.isExpanded || false;
-        const isFocused = OL.focusedResourceId === String(res.id);
-        const isMilestone = milestoneIds.has(String(res.id));
-        const hasActiveFocus = !!OL.focusedResourceId;
-
-        const stepCount = (res.steps || []).length;
-
-    // 🚀 THE TALLY LOGIC
-        if (res.type?.toLowerCase() === 'zap') {
-            totalZapSteps += stepCount;
-        }
-
-        let cardClass = "resource-card";
-        if (hasActiveFocus) {
-            cardClass += isFocused ? " focused-node" : " node-dimmed";
-        }
-
-        const isInScope = !!OL.isResourceInScope(res.id);
-        const scopeBadge = `
-            <a href="#/scoping-sheet?focus=${res.id}" 
-              class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
-              onmousedown="event.stopPropagation();" 
-              onclick="if(!${isInScope}) { event.preventDefault(); } event.stopPropagation(); sessionStorage.removeItem('active_resource_id'); state.focusedResourceId = null;"
-              oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${res.id}', ${isInScope})"
-              title="Left Click: View in Sheet | Right Click: Toggle Status"
-              >
-                $
-            </a>`;        
-            // 🔍 Check if ANY step in this resource has incoming or outgoing logic
-        const hasLogic = (res.steps || []).some(s => 
-            (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0)
-        );
-
-        const logicMenu = `
-            <div class="v2-logic-trigger-wrap" style="position: relative; display: inline-block;">
-                <button class="v2-logic-badge ${hasLogic ? 'has-logic': ''}"
-                  onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">
-                    λ
-                </button>
-                <div id="logic-menu-${res.id}" class="v2-logic-menu dropdown-plus-menu">
-                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'in')">📥 Show Inputs</div>
-                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'out')">📤 Show Outputs</div>
-                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'both')">↔️ Show Both</div>
-                    <div class="divider"></div>
-                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'trace-start')">⏪ Flow to Start</div>
-                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'trace-end')">⏩ Flow to End</div>
-                    <div class="dropdown-item danger" onclick="OL.setTraceMode(null, null)">🚫 Hide All</div>
-                </div>
-            </div>
-        `;
-        const duplicateBadge = `
-          <div class="v2-duplicate-badge action-duplicate" 
-              data-id="${res.id}"
-              title="Duplicate Resource">
-              ⿻
-          </div>
-      `;
-        
-        // Handle Tray Filtering
-        if (res.isGlobal && !res.isTopShelf && traySearch && !res.name.toLowerCase().includes(traySearch)) return;
-
+    itemsToRender.forEach(node => {
         const div = document.createElement('div');
-        div.id = `v2-node-${res.id}`;
-        div.className = `v2-node-card ${cardClass} ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''}`;
-        
-        if (!res.isGlobal && res.coords) {
-            div.style.left = `${res.coords.x}px`;
-            div.style.top = `${res.coords.y}px`;
-        }
+        const isFocused = OL.focusedResourceId === String(node.isAtomicStep ? node.parentResId : node.id);
 
-        const numberingHtml = OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : '';
-
-        div.innerHTML = `
-            <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${res.id}', null, 'cards')">
-                <div class="header-row-content">
-                    <b class="res-name-text">${esc(res.name)}</b>
-                    <div class="header-badges-wrap">
-                        <small class="tiny muted uppercase type-badge">${esc(res.type || 'Resource')}</small>
-                        ${numberingHtml}
-                        ${scopeBadge}
-                        ${logicMenu}
-                        ${duplicateBadge}
+        if (node.isAtomicStep) {
+            div.id = `v2-step-node-${node.id}`;
+            div.className = `v2-step-node-card ${isFocused ? 'focused-node' : ''}`;
+            div.style.left = `${node.renderX}px`; div.style.top = `${node.renderY}px`;
+            div.innerHTML = `
+                <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${node.parentResId}', '${node.id}')">
+                    <div class="header-row-content">
+                        <small style="display:block; font-size:8px; opacity:0.5; color:var(--accent); text-transform:uppercase;">${esc(node.parentResName)}</small>
+                        <b class="res-name-text" style="font-size:11px;">${esc(node.name)}</b>
+                        <div class="header-badges-wrap"><span class="pill tiny soft" style="font-size:8px;">${node.appName || 'Auto'}</span></div>
                     </div>
-                </div>
-            </div>
-            <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
-                ${(res.steps || []).map((s, i) => {
-                    const stepId = s.id || i; 
-                    const stepAssignees = s.assignees || [];
+                </div>`;
+        } else {
+            const res = node;
+            const isMilestone = milestoneIds.has(String(res.id));
+            const isExpanded = res.isExpanded || false;
+            if (res.type?.toLowerCase() === 'zap') totalZapSteps += (res.steps || []).length;
 
-                    // 1. Assignee Border Logic
-                    const hasTeamAssignee = stepAssignees.some(a => a.name === "Any Team Member" || a.type === "person" || (a.type === "role" && !["Client 1", "Client 2", "Any Client"].includes(a.name)));
-                    const hasClientAssignee = stepAssignees.some(a => ["Client 1", "Client 2", "Any Client"].includes(a.name));
-                    let borderColor = "transparent"; let borderWidth = "1px";
-                    if (hasTeamAssignee) { borderColor = "#22c55e"; borderWidth = "2px"; }
-                    else if (hasClientAssignee) { borderColor = "#fbbf24"; borderWidth = "2px"; }
-                    
-                    // 2. 📥 INCOMING LOGIC SUMMARY (Left Side)
-                    const allIn = s.logic?.in || [];
-                    const inHasCond = allIn.some(l => l.type === 'link' || !l.type);
-                    const inHasNext = allIn.some(l => l.type === 'next');
-                    const inHasLoop = allIn.some(l => l.type === 'loop');
-                    const inHasDelay = allIn.some(l => l.type === 'delay');
-                    const inTooltip = allIn.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' :  l.type ==='delay' ? '⏱︎' : 'λ'} From: ${l.rule || 'Previous'}`).join(' | ');
+            div.id = `v2-node-${res.id}`;
+            div.className = `v2-node-card resource-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''} ${isFocused ? 'focused-node' : (OL.focusedResourceId ? 'node-dimmed' : '')}`;
+            
+            if (!res.isGlobal && res.coords) {
+                div.style.left = `${res.renderX}px`; div.style.top = `${res.renderY}px`;
+            }
 
-                    // 3. 📤 OUTGOING LOGIC SUMMARY (Right Side)
-                    const allOut = s.logic?.out || [];
-                    const outHasCond = allOut.some(l => l.type === 'link' || !l.type);
-                    const outHasNext = allOut.some(l => l.type === 'next');
-                    const outHasLoop = allOut.some(l => l.type === 'loop');
-                    const outHasDelay = allOut.some(l => l.type === 'delay');
-                    const outTooltip = allOut.map(l => `${l.type === 'next' ? '➔' : l.type === 'loop' ? '⟳' : l.type ==='delay'  ? '⏱︎' : 'λ'} ${l.rule || (l.type === 'next' ? 'Next' : 'Logic')}`).join(' | ');
+            const isInScope = !!OL.isResourceInScope(res.id);
+            const hasLogic = (res.steps || []).some(s => (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0));
 
-                    return `
-                        <div class="v2-step-item" 
-                            data-step-id="${res.id}-${stepId}" 
-                            ondragover="event.preventDefault(); OL.handleStepDragOver(event)"
-                            ondragleave="OL.handleStepDragLeave(event)"
-                            ondrop="OL.handleStepDrop(event, '${res.id}', ${i})"
-                            onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${stepId}')"
-                            style="border: ${borderWidth} solid ${borderColor}; border-radius: 4px; margin: 2px 0; position: relative;">
-                            
-                            <span class="step-port port-in" style="pointer-events:none"></span>
-                            <span class="step-port port-out" style="pointer-events:none"></span>
-
-                            <div class="step-row-content">
-                                <span class="drag-handle" style="cursor: grab; opacity: 0.3; flex-shrink: 0;" draggable="true" ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})">⠿</span>
-                                
-                                <div style="display:flex; gap:3px; flex-direction: column; flex-shrink: 0; min-width: 15px;">
-                                    ${inHasLoop ? `<span class="step-logic-icon loop" title="${esc(inTooltip)}">⟳</span>` : ''}
-                                    ${inHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">λ</span>` : ''}
-                                    ${inHasNext ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">➔</span>` : ''}
-                                    ${inHasDelay ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">⏱︎</span>` : ''}
-                                </div>
-
-                                <span style="flex: 1; font-size: 11px; line-height: 1.3; padding: 0 4px;">
-                                    <span style="color:var(--accent); margin-right:4px;">${OL.getStepIcon(s)}</span>
-                                    ${esc(s.name || 'New Step')}
-                                </span>
-
-                                <div style="display:flex; gap:3px; flex-direction: column; flex-shrink: 0; justify-content: flex-end;">
-                                    ${outHasLoop ? `<span class="step-logic-icon loop" title="${esc(outTooltip)}">⟳</span>` : ''}
-                                    ${outHasCond ? `<span class="step-logic-icon active" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">λ</span>` : ''}
-                                    ${outHasNext ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'out')" title="${esc(outTooltip)}">➔</span>` : ''}
-                                    ${outHasDelay ? `<span class="step-logic-icon" onclick="event.stopPropagation(); OL.setTraceMode('${res.id}', 'in')" title="${esc(inTooltip)}">⏱︎</span>` : ''}
-                                </div>
-
-                                <span class="delete-step-btn" style="flex-shrink: 0; opacity: 0.2; margin-left: 5px;" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+            div.innerHTML = `
+                <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${res.id}', null, 'cards')">
+                    <div class="header-row-content">
+                        <b class="res-name-text">${esc(res.name)}</b>
+                        <div class="header-badges-wrap">
+                            <a href="#/scoping-sheet?focus=${res.id}" class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" onclick="event.stopPropagation();">$</a>
+                            <button class="v2-logic-badge ${hasLogic ? 'has-logic': ''}" onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">λ</button>
+                            <div id="logic-menu-${res.id}" class="v2-logic-menu">
+                                <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'in')">📥 Show Inputs</div>
+                                <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'out')">📤 Show Outputs</div>
+                                <div class="dropdown-item danger" onclick="OL.setTraceMode(null, null)">🚫 Hide All</div>
                             </div>
                         </div>
-
-                        ${i < res.steps.length - 1 ? `
-                            <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
-                                <div class="split-icon">✂️</div>
-                            </div>` : ''}
-                    `;
-                }).join('')}
-            </div>
-            <div class="v2-card-footer">
-                <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
-                <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">
-                    ${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}
+                    </div>
                 </div>
-            </div>
-        `;
+                <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
+                    ${(res.steps || []).map(s => `<div class="v2-step-item" onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${s.id}')"><span style="font-size: 11px;">${esc(s.name)}</span></div>`).join('')}
+                </div>
+                <div class="v2-card-footer">
+                    <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}</div>
+                </div>`;
+        }
 
         div.onmousedown = (e) => {
-            // Keep your existing guards
-            if (e.target.closest('.v2-logic-trigger-wrap, .v2-logic-badge, .v2-logic-menu')) return;
-            if (e.target.closest('.v2-step-badge, .v2-step-divider, .v2-card-part, .v2-step-item, .v2-add-step-btn, .delete-step-btn')) return;
-            
+            if (e.target.closest('.v2-logic-badge, .v2-scope-badge, .v2-step-badge, .v2-step-item, .v2-logic-menu')) return;
             e.stopPropagation();
-
-            // 💡 ADD THIS: Track mouse position to distinguish between a click and a drag
-            const startX = e.clientX;
-            const startY = e.clientY;
-
-            const onMouseUp = (upE) => {
-                const diffX = Math.abs(upE.clientX - startX);
-                const diffY = Math.abs(upE.clientY - startY);
-
-                // If the mouse barely moved (less than 5px), treat it as a click
-                if (diffX < 5 && diffY < 5) {
-                    if (e.target.closest('.v2-node-header')) {
-                        OL.openInspector(res.id, null, 'cards');
-                    }
-                }
-                window.removeEventListener('mouseup', onMouseUp);
-            };
-
-            window.addEventListener('mouseup', onMouseUp);
-
-            // Call your existing motion logic
-            OL.initWBMotion(e, res.id);
+            OL.initWBMotion(e, node.isAtomicStep ? node.parentResId : node.id);
         };
 
-        if (res.isGlobal) {
-            // ✅ ONLY handle the Top Shelf here.
-            // We ignore the 'else' because OL.renderWorkbenchItemsOnly handles the sidebar.
-            if (res.isTopShelf) {
-                shelfContents.appendChild(div);
-            }
-        } else {
-            // 📍 Handle the active project resources on the Canvas
-            if (res.coords) {
-                nodeLayer.appendChild(div);
-            }
-        }
+        if (!node.isAtomicStep && node.isGlobal && node.isTopShelf) shelfContents.appendChild(div);
+        else if (node.renderX || node.coords) nodeLayer.appendChild(div);
     });
 
-    const viewport = document.getElementById('v2-canvas-scroll-wrap');
-    if (viewport) {
-        viewport.ondragover = (e) => e.preventDefault();
-        viewport.ondrop = (e) => OL.handleCanvasDrop(e);
+    // 🏁 5. FINAL PASS
+    const lastStage = stages[stages.length - 1];
+    const finalY = lastStage ? (lastStage.yPos || 0) + 400 : 400;
+    const finalInserter = document.createElement('div');
+    finalInserter.className = 'stage-inserter-v2';
+    finalInserter.style.top = `${finalY}px`;
+    finalInserter.style.left = `10px`;
+    finalInserter.innerHTML = `<button class="add-stage-btn-v2" style="width: auto; padding: 0 15px; border-radius: 20px;" onclick="event.stopPropagation(); OL.insertStage(${stages.length})">+ ADD FINAL STAGE</button>`;
+    stageLayer.appendChild(finalInserter);
+
+    if (OL.state.v2.pan && canvas) {
+        canvas.style.transform = `translate3d(${OL.state.v2.pan.x}px, ${OL.state.v2.pan.y}px, 0) scale(${OL.state.v2.zoom})`;
     }
 
     OL.renderFocusControls();
-    // --- 🚀 5. FINAL PASS ---
-    if (OL.state.v2.pan) {
-        const { x, y } = OL.state.v2.pan;
-        canvas.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${OL.state.v2.zoom})`;
-    }
-
-    // Refresh connections and run any active filters
     OL.renderWorkbenchItemsOnly();
     OL.drawConnections();
-    OL.refreshFilterDropdowns();
-    if (document.getElementById('canvas-filter-input')?.value) {
-        OL.syncCanvasFilters(document.getElementById('canvas-filter-input').value);
-    }
 };
 
 OL.insertStage = async function(index) {
