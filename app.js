@@ -9694,6 +9694,7 @@ OL.autoAlignNodes = async function() {
 
     await OL.persist();
     OL.renderVisualizer();
+    if (OL.drawConnections) OL.drawConnections();
 };
 
 OL.getCurrentProjectData = function() {
