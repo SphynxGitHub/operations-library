@@ -11967,41 +11967,47 @@ OL.addStageBetween = async function(index) {
     OL.renderVisualizer();
 };
 
-OL.deleteStage = function(index) {
-    // 🎯 1. Get the correct project context
+OL.deleteStage = async function(stageId) {
     const data = OL.getCurrentProjectData();
-    const stage = data.stages[index];
+    const stages = data.stages || [];
+    const resources = data.resources || [];
+
+    // 1. Find the stage index using the ID
+    const stageIdx = stages.findIndex(s => String(s.id) === String(stageId));
     
-    if (!stage) return;
-
-    // Use data.resources instead of currentData
-    const cardsInLane = data.resources.filter(r => r.stageId === stage.id);
-
-    // 🛡️ Safety Guard
-    if (cardsInLane.length > 0) {
-        if (!confirm(`This stage contains ${cardsInLane.length} cards. Deleting it will move them back to the Global Shelf. Proceed?`)) {
-            return;
-        }
-        // Unmap the cards
-        cardsInLane.forEach(r => {
-            r.isGlobal = true;
-            r.stageId = null;
-            delete r.coords; // Remove canvas coords so they snap to shelf
-        });
-    } else {
-        if (!confirm(`Delete the "${stage.name}" stage?`)) return;
+    if (stageIdx === -1) {
+        console.error("❌ Delete failed: Stage ID not found in data.", stageId);
+        return;
     }
 
-    // 🚀 2. Remove from array
-    data.stages.splice(index, 1);
+    const stageName = stages[stageIdx].name;
+
+    // 2. Confirmation Guard
+    if (!confirm(`Permanently delete the "${stageName}" section? Any cards inside will be moved back to the Workbench.`)) return;
+
+    // 3. Move cards inside this stage back to "Global" (Workbench)
+    resources.forEach(res => {
+        if (String(res.stageId) === String(stageId)) {
+            console.log(`📦 Unmapping resource: ${res.name}`);
+            res.stageId = null;
+            res.isGlobal = true;
+            delete res.coords; // Remove coordinates so it lands in the tray
+        }
+    });
+
+    // 4. Remove the stage from the array
+    stages.splice(stageIdx, 1);
+
+    // 5. Save and Hard Refresh
+    await OL.persist();
     
-    // 💾 3. Persist the changes
-    OL.save(); 
+    // We run autoAlign to close the gap where the stage used to be
+    await OL.autoAlignNodes(); 
     
-    // 📏 4. Refresh the UI
-    // autoAlign to close the gap, then render to redraw the lanes
-    OL.autoAlignNodes(false);
-    OL.renderVisualizer();
+    // Force the tray to refresh so the unmapped cards appear
+    OL.renderWorkbenchItemsOnly(); 
+    
+    console.log(`✅ Stage "${stageName}" deleted successfully.`);
 };
 
 OL.splitCardAtStep = function(resourceId, stepIndex) {
