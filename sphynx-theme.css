@@ -1,0 +1,783 @@
+/**
+ * Sphynx Automation — Operations Library Theme Override
+ * Drop this in AFTER style.css to restyle the app with Sphynx brand tokens.
+ * All class names are preserved — no JS changes needed.
+ *
+ * Fonts: Nunito Sans (display/headings) + DM Sans (body/UI) via Google Fonts
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   ROOT TOKENS — SPHYNX LIGHT MODE (DEFAULT)
+   ============================================================ */
+:root {
+  /* Core backgrounds */
+  --bg:           #fafafa;
+  --panel:        #ffffff;
+  --panel-dark:   #f5f5f5;
+  --panel-soft:   #f9f9f9;
+  --panel-border: #e5e5e5;
+  --line:         rgba(0, 0, 0, 0.08);
+  --dot-color:    rgba(0, 0, 0, 0.06);
+
+  /* Brand */
+  --accent:       #3DD9C5;
+  --accent-rgb:   61, 217, 197;
+  --accent-glow:  rgba(61, 217, 197, 0.15);
+  --vault-gold:   #F5B800;
+  --danger:       #D4472A;
+  --success:      #22c55e;
+  --warn:         #F5B800;
+
+  /* Text */
+  --text-main:    #1B2D3F;
+  --text-dim:     #6B7280;
+  --text-muted:   #a3a3a3;
+  --text:         #1B2D3F;
+
+  /* Fonts */
+  --font-main:    'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Nunito Sans', sans-serif;
+
+  /* Tray */
+  --tray-item-bg:    rgba(0, 0, 0, 0.02);
+  --tray-item-hover: rgba(0, 0, 0, 0.05);
+
+  /* Scoping */
+  --color-scoping:     #3DD9C5;
+  --color-scoping-rgb: 61, 217, 197;
+
+  /* Shadows */
+  --shadow-sm:  0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.12);
+  --shadow-brand: 0 4px 20px rgba(61,217,197,0.25);
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+/* ============================================================
+   DARK MODE OVERRIDES (kept for toggle compatibility)
+   ============================================================ */
+body:not(.light-mode) {
+  --bg:           #0f1520;
+  --panel:        #17202e;
+  --panel-dark:   #111827;
+  --panel-soft:   #1e2a3a;
+  --panel-border: #2a3a4d;
+  --line:         rgba(255, 255, 255, 0.08);
+  --dot-color:    rgba(255, 255, 255, 0.06);
+  --text-main:    #f0f4f8;
+  --text-dim:     #94a3b8;
+  --text-muted:   #64748b;
+  --text:         #f0f4f8;
+  --tray-item-bg:    rgba(255,255,255,0.03);
+  --tray-item-hover: rgba(255,255,255,0.07);
+}
+
+/* ============================================================
+   BASE TYPOGRAPHY
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-main) !important;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-main);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display) !important;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+   SIDEBAR — NAVY
+   ============================================================ */
+.sidebar {
+  background: #1B2D3F !important;
+  border-right: none !important;
+  box-shadow: 2px 0 16px rgba(0,0,0,0.12);
+}
+
+body:not(.light-mode) .sidebar {
+  background: #111e2a !important;
+}
+
+/* Logo / brand zone */
+.sidebar .brand,
+.sidebar .menu-category-label {
+  font-family: var(--font-display) !important;
+  color: rgba(255,255,255,0.35) !important;
+  letter-spacing: 0.12em;
+}
+
+/* Nav links */
+.sidebar .menu a {
+  color: rgba(255,255,255,0.60) !important;
+  border-radius: var(--radius-md) !important;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar .menu a:hover {
+  background: rgba(255,255,255,0.07) !important;
+  color: #fff !important;
+}
+
+.sidebar .menu a.active {
+  background: rgba(61,217,197,0.15) !important;
+  color: #3DD9C5 !important;
+  border: 1px solid rgba(61,217,197,0.25) !important;
+  box-shadow: none !important;
+  font-weight: 600;
+}
+
+.sidebar .menu a.active i {
+  color: #3DD9C5 !important;
+  filter: none !important;
+}
+
+/* Client profile card inside sidebar */
+.client-profile-trigger {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.client-profile-trigger:hover {
+  background: rgba(61,217,197,0.12) !important;
+  border-color: rgba(61,217,197,0.4) !important;
+}
+
+.client-avatar {
+  background: #3DD9C5 !important;
+  color: #1B2D3F !important;
+  font-family: var(--font-display) !important;
+  font-weight: 800 !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.client-name { color: #fff !important; }
+.client-meta { color: rgba(255,255,255,0.35) !important; }
+
+/* Sidebar toggle button */
+.sidebar-toggle { color: rgba(255,255,255,0.3) !important; }
+.sidebar-toggle:hover { color: #3DD9C5 !important; }
+
+/* Sidebar collapse — icon rail */
+.sidebar.collapsed .menu a {
+  padding: 10px 0 !important;
+  justify-content: center !important;
+}
+
+/* Category labels */
+.menu-category-label {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.14em !important;
+  color: rgba(255,255,255,0.28) !important;
+  padding: 20px 16px 8px !important;
+}
+
+/* Divider */
+.sidebar .divider {
+  background: rgba(255,255,255,0.08) !important;
+  margin: 8px 14px !important;
+}
+
+/* Theme toggle inside sidebar */
+.theme-toggle-zone button {
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: rgba(255,255,255,0.5) !important;
+  border-radius: var(--radius-md) !important;
+}
+.theme-toggle-zone button:hover {
+  background: rgba(61,217,197,0.1) !important;
+  border-color: rgba(61,217,197,0.4) !important;
+  color: #3DD9C5 !important;
+}
+
+/* ============================================================
+   TOP BAR / HEADER
+   ============================================================ */
+.section-header h2 {
+  font-family: var(--font-display) !important;
+  font-weight: 800 !important;
+  font-size: 22px !important;
+  color: var(--text-main) !important;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s !important;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md) !important;
+  border-color: #3DD9C5 !important;
+  transform: translateY(-2px) !important;
+}
+
+.card-title {
+  font-family: var(--font-display) !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  color: var(--text-main) !important;
+}
+
+.card.vault-card {
+  border: 1.5px solid rgba(61,217,197,0.4) !important;
+  background: rgba(61,217,197,0.04) !important;
+}
+
+.card.is-master-template {
+  border-left: 4px solid #F5B800 !important;
+}
+
+.card.is-local-app {
+  border-left: 4px solid #3DD9C5 !important;
+}
+
+/* Active client card */
+.card.active-client {
+  border: 1.5px solid #3DD9C5 !important;
+  background: rgba(61,217,197,0.03) !important;
+}
+
+.card.active-client::after {
+  color: #3DD9C5 !important;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  font-family: var(--font-main) !important;
+  font-weight: 600 !important;
+  border-radius: var(--radius-md) !important;
+  transition: all 0.15s !important;
+  letter-spacing: 0.01em;
+}
+
+.btn.primary {
+  background: #3DD9C5 !important;
+  color: #1B2D3F !important;
+  border-color: transparent !important;
+}
+
+.btn.primary:hover {
+  background: #22c4b0 !important;
+  box-shadow: var(--shadow-brand) !important;
+}
+
+.header-actions .btn.primary {
+  background: rgba(61,217,197,0.1) !important;
+  border: 1px solid rgba(61,217,197,0.4) !important;
+  color: #3DD9C5 !important;
+}
+
+.header-actions .btn.primary:hover {
+  background: #3DD9C5 !important;
+  color: #1B2D3F !important;
+  box-shadow: var(--shadow-brand) !important;
+}
+
+.btn.soft {
+  background: var(--panel-soft) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--panel-border) !important;
+}
+
+.btn.soft:hover {
+  border-color: #3DD9C5 !important;
+  color: #3DD9C5 !important;
+}
+
+.btn.warn {
+  background: rgba(245,184,0,0.1) !important;
+  color: #c47d00 !important;
+  border: 1px solid rgba(245,184,0,0.3) !important;
+}
+
+/* ============================================================
+   PILLS & BADGES
+   ============================================================ */
+.pill {
+  font-family: var(--font-main) !important;
+  font-weight: 600 !important;
+}
+
+.pill.accent, .status-pill.accent {
+  background: rgba(61,217,197,0.12) !important;
+  border-color: rgba(61,217,197,0.35) !important;
+  color: #1B8A80 !important;
+}
+
+.status-pill {
+  background: var(--panel-soft) !important;
+  color: var(--text-muted) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: var(--font-main) !important;
+}
+
+.vault-tag {
+  background: #F5B800 !important;
+  color: #1B2D3F !important;
+  font-family: var(--font-main) !important;
+}
+
+.local-tag {
+  background: var(--panel-soft) !important;
+  color: var(--text-muted) !important;
+}
+
+.badge.discovery {
+  background: rgba(61,217,197,0.1) !important;
+  color: #1B8A80 !important;
+  border-color: rgba(61,217,197,0.3) !important;
+}
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+.modal-box {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+#modal-layer {
+  background: rgba(27,45,63,0.70) !important;
+  backdrop-filter: blur(6px) !important;
+}
+
+.modal-head {
+  border-bottom: 1px solid var(--panel-border) !important;
+}
+
+.modal-title-text {
+  font-family: var(--font-display) !important;
+  font-weight: 700 !important;
+  color: var(--text-main) !important;
+}
+
+.modal-section-label {
+  color: #3DD9C5 !important;
+  font-family: var(--font-main) !important;
+}
+
+/* ============================================================
+   FORM INPUTS
+   ============================================================ */
+.modal-input, .modal-select, .modal-textarea,
+.ghost-input, .form-control, .tiny-select {
+  background: var(--panel-soft) !important;
+  border: 1px solid var(--panel-border) !important;
+  color: var(--text-main) !important;
+  border-radius: var(--radius-md) !important;
+  font-family: var(--font-main) !important;
+  transition: border-color 0.15s !important;
+}
+
+.modal-input:focus, .modal-select:focus,
+.modal-textarea:focus, .tiny-select:focus {
+  border-color: #3DD9C5 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(61,217,197,0.12) !important;
+}
+
+/* Search bar */
+.search-map-container .modal-input {
+  background: var(--panel) !important;
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--panel-border) !important;
+}
+
+.search-map-container .modal-input:focus {
+  border-color: #3DD9C5 !important;
+  box-shadow: 0 0 0 3px rgba(61,217,197,0.12) !important;
+}
+
+.search-results-overlay {
+  border: 1px solid rgba(61,217,197,0.3) !important;
+  border-radius: var(--radius-lg) !important;
+  background: var(--panel) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.search-result-item:hover {
+  background: rgba(61,217,197,0.06) !important;
+  color: #3DD9C5 !important;
+}
+
+.search-category-label {
+  color: #3DD9C5 !important;
+  background: rgba(61,217,197,0.05) !important;
+}
+
+/* ============================================================
+   MAIN CONTENT AREA
+   ============================================================ */
+#mainContent {
+  background: var(--bg) !important;
+  background-image: radial-gradient(circle at top right, rgba(61,217,197,0.06), transparent 60%) !important;
+  background-attachment: fixed !important;
+}
+
+/* ============================================================
+   TASK ROWS
+   ============================================================ */
+.task-row {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.task-row:hover {
+  border-color: #3DD9C5 !important;
+}
+
+.task-name, .task-title {
+  font-family: var(--font-display) !important;
+  font-weight: 600 !important;
+}
+
+/* ============================================================
+   VISUALIZER (FLOW MAP)
+   ============================================================ */
+
+/* Canvas */
+.vis-workspace {
+  background: var(--bg) !important;
+}
+
+/* Node cards — match our mockup step cards */
+.vis-node {
+  background: var(--panel) !important;
+  border: 1.5px solid var(--panel-border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: box-shadow 0.15s, border-color 0.15s !important;
+}
+
+.vis-node:hover {
+  border-color: #3DD9C5 !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.vis-node-header {
+  background: var(--panel-soft) !important;
+  border-bottom: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+}
+
+.vis-node-body {
+  padding: 12px !important;
+  font-size: 12px !important;
+}
+
+/* Step index badge */
+.vis-idx {
+  background: #3DD9C5 !important;
+  color: #1B2D3F !important;
+  font-family: var(--font-display) !important;
+  font-weight: 800 !important;
+}
+
+/* Connector paths */
+.vis-path {
+  stroke: #3DD9C5 !important;
+  opacity: 0.4 !important;
+}
+
+.vis-path:hover {
+  opacity: 0.9 !important;
+}
+
+/* Trigger node */
+.trigger-node {
+  border: 2px dashed rgba(61,217,197,0.5) !important;
+  background: rgba(61,217,197,0.04) !important;
+  border-radius: var(--radius-lg) !important;
+}
+
+.trigger-header {
+  background: rgba(61,217,197,0.08) !important;
+  border-bottom: 1px solid rgba(61,217,197,0.2) !important;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+}
+
+.trigger-path {
+  stroke: #3DD9C5 !important;
+}
+
+/* Fullscreen overlay */
+#workflow-fs-overlay {
+  background: var(--bg) !important;
+}
+
+.fs-header {
+  background: var(--panel) !important;
+  border-bottom: 1px solid var(--panel-border) !important;
+}
+
+.fs-mode-btn.active {
+  background: #3DD9C5 !important;
+  color: #1B2D3F !important;
+}
+
+/* Vis pills */
+.vis-meta-pill {
+  background: rgba(61,217,197,0.1) !important;
+  border-color: rgba(61,217,197,0.25) !important;
+  color: #1B8A80 !important;
+}
+
+.vis-resource-item { color: var(--text-muted) !important; }
+
+/* Logic nodes */
+.vis-node.is-logic {
+  border-color: #F5B800 !important;
+  background: rgba(245,184,0,0.04) !important;
+}
+
+.vis-node.is-logic .vis-node-header {
+  background: rgba(245,184,0,0.08) !important;
+  border-bottom-color: #F5B800 !important;
+  color: #c47d00 !important;
+}
+
+/* Arrows */
+.vis-arrow { color: #3DD9C5 !important; }
+
+/* Icon buttons on nodes */
+.vis-icon-btn.edit:hover { color: #3DD9C5 !important; }
+.vis-icon-btn.delete:hover { color: #D4472A !important; }
+
+/* ============================================================
+   SCOPING GRID
+   ============================================================ */
+.grid-header,
+.matrix-table thead th {
+  background: var(--panel-soft) !important;
+  color: var(--text-muted) !important;
+  font-family: var(--font-main) !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+.matrix-table thead th {
+  box-shadow: 0 2px 0 0 #3DD9C5 !important;
+}
+
+.grand-totals-bar {
+  border-top-color: #3DD9C5 !important;
+  background: rgba(61,217,197,0.04) !important;
+}
+
+/* ============================================================
+   FILTER BAR
+   ============================================================ */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+/* ============================================================
+   STATUS PILLS — COLOUR CODED
+   ============================================================ */
+.pill.status-primary {
+  background: rgba(124,58,237,0.12) !important;
+  color: #7c3aed !important;
+  border-color: rgba(124,58,237,0.25) !important;
+}
+
+.pill.status-evaluating {
+  background: rgba(245,184,0,0.12) !important;
+  color: #a16207 !important;
+  border-color: rgba(245,184,0,0.25) !important;
+}
+
+.pill.status-available {
+  background: var(--panel-soft) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--panel-border) !important;
+}
+
+/* ============================================================
+   ACTIVE VAULT BADGE
+   ============================================================ */
+.active-vault-badge {
+  background: rgba(245,184,0,0.12) !important;
+  border-color: rgba(245,184,0,0.35) !important;
+  color: #a16207 !important;
+}
+
+.pill.vault-gold {
+  background: rgba(245,184,0,0.12) !important;
+  border-color: rgba(245,184,0,0.35) !important;
+  color: #a16207 !important;
+}
+
+/* ============================================================
+   SECTION HEADER SEARCH BAR
+   ============================================================ */
+.section-header {
+  margin-bottom: 28px !important;
+}
+
+/* ============================================================
+   VAULT MASTER CARD
+   ============================================================ */
+.vault-card .card-title { color: #3DD9C5 !important; }
+
+/* ============================================================
+   MISC REFINEMENTS
+   ============================================================ */
+
+/* Spinner */
+.spinner { color: #3DD9C5; }
+
+/* Dividers */
+.divider { background: var(--panel-border) !important; opacity: 1 !important; }
+
+/* Credential reveal */
+.reveal-box {
+  background: rgba(0,0,0,0.04) !important;
+  border-radius: var(--radius-md) !important;
+}
+.reveal-box.revealed .visible-val { color: #3DD9C5 !important; }
+
+/* Dropdown menus */
+.dropdown-plus-menu {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.dropdown-item:hover {
+  background: rgba(61,217,197,0.08) !important;
+  color: #3DD9C5 !important;
+  padding-left: 20px;
+}
+
+/* 3-pane layout */
+.three-pane-layout { background: var(--bg) !important; }
+
+.pane-inspector {
+  background: var(--panel) !important;
+  border-left: 1px solid var(--panel-border) !important;
+}
+
+/* Inspector scroll */
+.inspector-scroll-content {
+  background: var(--panel) !important;
+}
+
+/* Card hover zone */
+.hover-preview-zone { position: relative; }
+
+.task-preview-tooltip {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* Module blocks */
+.module-block-container:hover {
+  border-color: #3DD9C5 !important;
+  background: rgba(61,217,197,0.03) !important;
+}
+
+/* How-To */
+.card.is-shared {
+  border-color: var(--success) !important;
+  background: rgba(34,197,94,0.04) !important;
+}
+
+.rich-text h3 { color: #3DD9C5 !important; }
+
+/* Score inputs */
+.score-input {
+  border-color: #3DD9C5 !important;
+  color: #3DD9C5 !important;
+  background: rgba(61,217,197,0.05) !important;
+}
+
+.winner-highlight {
+  background: rgba(34,197,94,0.08) !important;
+  border-color: var(--success) !important;
+  color: #16a34a !important;
+}
+
+/* Progress / status dots */
+.status-dot.primary { background: #7c3aed !important; }
+.status-dot.evaluating { background: #F5B800 !important; }
+
+/* Guide link button */
+.btn-guide-link {
+  background: rgba(61,217,197,0.1) !important;
+  color: #1B8A80 !important;
+  border-color: rgba(61,217,197,0.3) !important;
+}
+.btn-guide-link:hover {
+  background: #3DD9C5 !important;
+  color: #1B2D3F !important;
+}
+
+/* Lock icon */
+.lock-icon { opacity: 0.4 !important; }
+
+/* Tiny placeholder */
+.tiny-placeholder {
+  color: var(--text-muted) !important;
+  border-color: var(--panel-border) !important;
+}
+.tiny-placeholder:hover {
+  color: #3DD9C5 !important;
+  border-color: #3DD9C5 !important;
+  background: rgba(61,217,197,0.05) !important;
+}
+
+/* ============================================================
+   LOGO / WORDMARK
+   ============================================================ */
+.sidebar .brand {
+  font-family: var(--font-display) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.15em !important;
+  text-transform: uppercase !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  padding: 20px 16px 16px !important;
+}
+
+/* ============================================================
+   ACCENT-RGB for rgba() usage in existing code
+   ============================================================ */
+:root { --accent-rgb: 61, 217, 197; }
+body:not(.light-mode) { --accent-rgb: 61, 217, 197; }
