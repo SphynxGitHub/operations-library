@@ -9955,16 +9955,7 @@ OL.renderVisualizer = function() {
         canvas.style.width = `${totalCanvasWidth}px`;
         canvas.style.transform = `scale(${OL.state.v2.zoom})`;
     }
-    const startTrigger = document.createElement('div');
-        startTrigger.className = 'v2-lane-section start-trigger';
-        startTrigger.style.width = '40px';
-        startTrigger.innerHTML = `
-            <div class="lane-insert-trigger" onclick="OL.addStageBetween(0)">
-                <div class="insert-btn" title="Add First Stage">+</div>
-            </div>
-        `;
-        stageLayer.appendChild(startTrigger);
-
+    
     // --- 📁 3. RENDER STAGES ---
     stages.forEach((s, idx) => {
         // 1. THE INSERTER (Positioned in the gap ABOVE the stage)
