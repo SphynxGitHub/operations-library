@@ -4356,32 +4356,30 @@ body.light-mode {
     background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
 }
 
-/* THE DIVIDER LINE */
+/* The Horizontal Line */
 .v2-stage-divider {
     position: absolute;
     left: 0;
     width: 100%;
-    height: 2px;
-    background: var(--accent);
-    z-index: 5; /* Sit above the background but below cards if needed */
-    pointer-events: none; /* Allow clicks to pass through to the bar */
+    height: 1px;
+    background: rgba(var(--accent-rgb), 0.3);
+    pointer-events: none;
 }
 
-/* THE LABEL BAR (Interactive Area) */
-.stage-label-bar {
+/* The Main Bubble (Title + Index + Delete) */
+.stage-label-bar-v2 {
     position: absolute;
-    top: -20px; /* Center it over the line */
-    left: 20px;
+    top: -18px;
+    left: 50px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: var(--bg-canvas); /* Match your background color */
-    padding: 5px 15px;
-    border-radius: 20px;
+    background: #1a1a1a; /* Hard hex to ensure visibility */
     border: 1px solid var(--accent);
-    pointer-events: auto; /* Enable clicks here */
+    padding: 4px 10px;
+    border-radius: 6px;
+    pointer-events: auto; /* IMPORTANT: Enables clicking */
+    gap: 10px;
 }
-
 .stage-name-input {
     background: transparent;
     border: none;
@@ -4406,41 +4404,62 @@ body.light-mode {
     opacity: 0;
 }
 
-.stage-inserter:hover {
-    opacity: 1;
-}
-
-.inserter-line {
+/* The Insert Button (The one you couldn't see) */
+.stage-inserter-v2 {
     position: absolute;
-    width: 80%;
-    height: 1px;
-    border-top: 1px dashed var(--accent);
-    opacity: 0.3;
+    left: 15px;
+    z-index: 110;
+    pointer-events: auto;
 }
 
-.add-stage-mid-btn {
-    position: relative;
-    z-index: 11;
+.add-stage-btn-v2 {
     background: var(--accent);
     color: white;
     border: none;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
     cursor: pointer;
     display: flex;
-    justify-content: center;
     align-items: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    justify-content: center;
+    font-size: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
 }
 
-.stage-btn.delete {
-    color: #ff4d4d;
+.add-stage-btn-v2:hover {
+    transform: scale(1.2);
+    background: white;
+    color: var(--accent);
+}
+
+/* The Delete Button inside the bubble */
+.stage-delete-btn-v2 {
     background: transparent;
     border: none;
+    color: #ff4444;
     cursor: pointer;
-    font-size: 14px;
+    padding: 5px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
 }
+
+.stage-delete-btn-v2:hover {
+    color: white;
+    background: #ff4444;
+    border-radius: 3px;
+}
+
+.stage-name-input-v2 {
+    background: transparent;
+    border: none;
+    color: white;
+    font-weight: bold;
+    outline: none;
+    width: 150px;
+}
+
 #v2-node-layer::before {
     content: "";
     position: absolute;
