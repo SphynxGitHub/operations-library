@@ -9736,6 +9736,7 @@ document.addEventListener('mousedown', (e) => {
 });
 
 OL.state.v2.viewDepth = 'resource'; // Options: 'resource' (current) or 'step' (broken out)
+
 OL.renderVisualizer = function() {
     const mainArea = document.getElementById('mainContent');
     if (!mainArea) return;
@@ -9745,19 +9746,19 @@ OL.renderVisualizer = function() {
 
     const data = OL.getCurrentProjectData();
     const stages = data.stages || [];
-    const resources = (data.resources || []).filter(r => !r.isLocked);
+    const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
     // 🏷️ 1. SETUP UI STATE & TOKENS
     const depth = OL.state.v2.viewDepth || 'resource';
     const isAnyExpanded = resources.some(r => r.isExpanded);
-    const trayOpen = state.ui.sidebarOpen;
+    const trayOpen = state.ui.sidebarOpen !== false;
     const expandIcon = isAnyExpanded ? '📂' : '📁';
     const toggleIcon = trayOpen ? '🔳' : '⬜';
     const tidyIcon = '🧹';
     const filterIcon = '📶';
     const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
 
-    // 🏷️ Extract Unique Values for Filter Dropdowns
+    // Extract Unique Values for Filter Dropdowns
     const types = [...new Set(resources.map(r => r.type))].filter(Boolean).sort();
     const apps = [...new Set(client?.projectData?.localApps || [])].map(a => a.name).sort();
     const assignees = [...new Set([
@@ -9765,11 +9766,11 @@ OL.renderVisualizer = function() {
         ...resources.flatMap(r => (r.steps || []).map(s => s.assigneeName))
     ])].filter(Boolean).sort();
 
-    // 🏗️ 2. BUILD THE UI OVERLAY & VIEWPORT (If not exists)
+    // 🏗️ 2. BUILD THE UI OVERLAY & VIEWPORT
     if (!document.getElementById('v2-viewport')) {
         mainArea.innerHTML = `
-            <div class="v2-ui-overlay">
-                <div class="v2-master-toolbar">
+            <div class="v2-ui-overlay" style="position: absolute; top: 0; left: 0; width: 100%; padding: 15px 20px; z-index: 5000; pointer-events: none;">
+                <div class="v2-master-toolbar" style="display: flex; align-items: center; gap: 10px; pointer-events: auto;">
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap">
                             <span class="search-icon">🔍</span>
@@ -9788,15 +9789,16 @@ OL.renderVisualizer = function() {
                         <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy">${tidyIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
                         <button class="btn soft tiny" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
-                        <button class="btn tiny ${depth === 'step' ? 'accent' : 'soft'}" onclick="OL.state.v2.viewDepth = (OL.state.v2.viewDepth === 'step' ? 'resource' : 'step'); OL.renderVisualizer();">
-                            ${depth === 'step' ? '📦 Cards' : '🧩 Steps'}
+                        <button class="btn tiny ${depth === 'step' ? 'accent' : 'soft'}" 
+                                onclick="OL.state.v2.viewDepth = (OL.state.v2.viewDepth === 'step' ? 'resource' : 'step'); OL.renderVisualizer();">
+                            ${depth === 'step' ? '📦 View Cards' : '🧩 View Steps'}
                         </button>
                         <div class="divider-v"></div>
                         <button class="btn soft tiny" onclick="OL.zoom(0.1)">+</button>
                         <button class="btn soft tiny" onclick="OL.zoom(-0.1)">-</button>
                     </div>
                 </div>
-                <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px;">
+                <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
                     <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Types</option>${types.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
                     <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Apps</option>${apps.map(a => `<option value="${a}">${a}</option>`).join('')}</select>
                     <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Scoping</option><option value="scoped">Scoped ($)</option><option value="unscoped">Unscoped</option></select>
@@ -9817,30 +9819,27 @@ OL.renderVisualizer = function() {
                             <div id="v2-canvas">
                                 <div id="v2-stage-layer"></div>
                                 <div id="v2-node-layer"></div>
-                                <svg id="v2-connections"><g id="line-group"></g></svg>
+                                <svg id="v2-connections"><defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7 Z" fill="var(--accent)" /></marker></defs><g id="line-group"></g></svg>
                             </div>
                         </div>
                     </div>
-                    <aside id="v2-inspector-panel">
-                        <div id="inspector-content"></div>
-                    </aside>
+                    <aside id="v2-inspector-panel"><div id="inspector-content"></div></aside>
                 </div>
             </div>`;
     }
 
-    // 📐 3. DATA RESOLUTION & PRE-CALC
-    const shelfContents = document.getElementById('shelf-contents');
-    const workbenchContents = document.getElementById('workbench-contents');
+    // 📐 3. DOM & DATA CLEANUP
     const nodeLayer = document.getElementById('v2-node-layer');
     const stageLayer = document.getElementById('v2-stage-layer');
+    const shelfContents = document.getElementById('shelf-contents');
+    const workbenchContents = document.getElementById('workbench-contents');
     const canvas = document.getElementById('v2-canvas');
-
     [shelfContents, workbenchContents, nodeLayer, stageLayer].forEach(el => { if(el) el.innerHTML = ''; });
 
     const milestoneIds = new Set();
     resources.forEach(r => (r.steps || []).forEach(s => { if (s.targetResourceId) milestoneIds.add(String(s.targetResourceId)); }));
 
-    // --- 📁 RENDER STAGES ---
+    // --- 📁 4. RENDER STAGES ---
     stages.forEach((s, idx) => {
         const inserter = document.createElement('div');
         inserter.className = 'stage-inserter-v2';
@@ -9853,17 +9852,15 @@ OL.renderVisualizer = function() {
         div.style.top = `${s.yPos || 0}px`; 
         div.innerHTML = `
             <div class="stage-label-bar-v2">
-                <div class="stage-index-v2">${idx + 1}</div>
+                <div class="stage-index-v2" style="background:var(--accent); color:black; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:10px;">${idx + 1}</div>
                 <input type="text" class="stage-name-input-v2" value="${esc(s.name)}" onchange="OL.renameStage('${s.id}', this.value)" />
                 <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">×</button>
             </div>`;
         stageLayer.appendChild(div);
     });
 
-    // --- 📇 4. RENDER NODES ---
-    let totalZapSteps = 0;
+    // --- 📇 5. PREPARE NODES ---
     let itemsToRender = [];
-
     if (depth === 'step') {
         resources.filter(r => !r.isGlobal && r.coords).forEach(res => {
             (res.steps || []).forEach((step, i) => {
@@ -9874,11 +9871,13 @@ OL.renderVisualizer = function() {
         itemsToRender = resources.map(r => ({ ...r, isAtomicStep: false, renderX: r.coords?.x || 0, renderY: r.coords?.y || 0 }));
     }
 
+    // --- 🎨 6. THE RENDER LOOP ---
     itemsToRender.forEach(node => {
         const div = document.createElement('div');
         const isFocused = OL.focusedResourceId === String(node.isAtomicStep ? node.parentResId : node.id);
 
         if (node.isAtomicStep) {
+            // 🧩 ATOMIC STEP NODE
             div.id = `v2-step-node-${node.id}`;
             div.className = `v2-step-node-card ${isFocused ? 'focused-node' : ''}`;
             div.style.left = `${node.renderX}px`; div.style.top = `${node.renderY}px`;
@@ -9891,46 +9890,73 @@ OL.renderVisualizer = function() {
                     </div>
                 </div>`;
         } else {
+            // 📇 FULL RESOURCE CARD
             const res = node;
             const isMilestone = milestoneIds.has(String(res.id));
             const isExpanded = res.isExpanded || false;
-            if (res.type?.toLowerCase() === 'zap') totalZapSteps += (res.steps || []).length;
+            const isInScope = !!OL.isResourceInScope(res.id);
+            const hasLogic = (res.steps || []).some(s => (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0));
 
             div.id = `v2-node-${res.id}`;
             div.className = `v2-node-card resource-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''} ${isFocused ? 'focused-node' : (OL.focusedResourceId ? 'node-dimmed' : '')}`;
-            
-            if (!res.isGlobal && res.coords) {
-                div.style.left = `${res.renderX}px`; div.style.top = `${res.renderY}px`;
-            }
-
-            const isInScope = !!OL.isResourceInScope(res.id);
-            const hasLogic = (res.steps || []).some(s => (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0));
+            if (!res.isGlobal && res.coords) { div.style.left = `${res.renderX}px`; div.style.top = `${res.renderY}px`; }
 
             div.innerHTML = `
                 <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${res.id}', null, 'cards')">
                     <div class="header-row-content">
                         <b class="res-name-text">${esc(res.name)}</b>
                         <div class="header-badges-wrap">
+                            <small class="tiny muted uppercase type-badge">${esc(res.type || 'Resource')}</small>
+                            ${OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : ''}
                             <a href="#/scoping-sheet?focus=${res.id}" class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" onclick="event.stopPropagation();">$</a>
-                            <button class="v2-logic-badge ${hasLogic ? 'has-logic': ''}" onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">λ</button>
-                            <div id="logic-menu-${res.id}" class="v2-logic-menu">
-                                <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'in')">📥 Show Inputs</div>
-                                <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'out')">📤 Show Outputs</div>
-                                <div class="dropdown-item danger" onclick="OL.setTraceMode(null, null)">🚫 Hide All</div>
+                            <div class="v2-logic-trigger-wrap" style="position: relative; display: inline-block;">
+                                <button class="v2-logic-badge ${hasLogic ? 'has-logic': ''}" onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">λ</button>
+                                <div id="logic-menu-${res.id}" class="v2-logic-menu">
+                                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'in')">📥 Show Inputs</div>
+                                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'out')">📤 Show Outputs</div>
+                                    <div class="dropdown-item danger" onclick="OL.setTraceMode(null, null)">🚫 Hide All</div>
+                                </div>
                             </div>
+                            <div class="v2-duplicate-badge action-duplicate" data-id="${res.id}" onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}')">⿻</div>
                         </div>
                     </div>
                 </div>
                 <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
-                    ${(res.steps || []).map(s => `<div class="v2-step-item" onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${s.id}')"><span style="font-size: 11px;">${esc(s.name)}</span></div>`).join('')}
+                    ${(res.steps || []).map((s, i) => {
+                        const sAssignees = s.assignees || [];
+                        const hasTeam = sAssignees.some(a => a.type === "person" || (a.type === "role" && !a.name.includes("Client")));
+                        const hasClient = sAssignees.some(a => a.name.includes("Client"));
+                        let bStyle = hasTeam ? "2px solid #22c55e" : hasClient ? "2px solid #fbbf24" : "1px solid transparent";
+                        return `
+                            <div class="v2-step-item" style="border: ${bStyle};" onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${s.id}')">
+                                <span class="step-port port-in" id="port-in-${res.id}-${s.id}"></span>
+                                <span class="step-port port-out" id="port-out-${res.id}-${s.id}"></span>
+                                <div class="step-row-content">
+                                    <span class="drag-handle" draggable="true" ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})">⠿</span>
+                                    <span style="flex: 1; font-size: 11px;">
+                                        <span style="color:var(--accent); margin-right:4px;">${OL.getStepIcon(s)}</span>
+                                        ${esc(s.name)}
+                                    </span>
+                                    <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
+                                </div>
+                            </div>
+                            ${i < res.steps.length - 1 ? `
+                                <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
+                                    <div class="split-icon">✂️</div>
+                                </div>` : ''}
+                        `;
+                    }).join('')}
                 </div>
                 <div class="v2-card-footer">
-                    <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}</div>
+                    <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
+                    <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">
+                        ${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}
+                    </div>
                 </div>`;
         }
 
         div.onmousedown = (e) => {
-            if (e.target.closest('.v2-logic-badge, .v2-scope-badge, .v2-step-badge, .v2-step-item, .v2-logic-menu')) return;
+            if (e.target.closest('.v2-logic-badge, .v2-scope-badge, .v2-step-badge, .v2-step-item, .v2-logic-menu, .v2-add-step-btn, .v2-step-divider, .action-duplicate')) return;
             e.stopPropagation();
             OL.initWBMotion(e, node.isAtomicStep ? node.parentResId : node.id);
         };
@@ -9939,20 +9965,18 @@ OL.renderVisualizer = function() {
         else if (node.renderX || node.coords) nodeLayer.appendChild(div);
     });
 
-    // 🏁 5. FINAL PASS
+    // --- 🏁 7. FINAL INSERTER & VIEW SYNC ---
     const lastStage = stages[stages.length - 1];
-    const finalY = lastStage ? (lastStage.yPos || 0) + 400 : 400;
+    const lastY = lastStage ? (lastStage.yPos || 0) + 400 : 400;
     const finalInserter = document.createElement('div');
     finalInserter.className = 'stage-inserter-v2';
-    finalInserter.style.top = `${finalY}px`;
+    finalInserter.style.top = `${lastY}px`;
     finalInserter.style.left = `10px`;
     finalInserter.innerHTML = `<button class="add-stage-btn-v2" style="width: auto; padding: 0 15px; border-radius: 20px;" onclick="event.stopPropagation(); OL.insertStage(${stages.length})">+ ADD FINAL STAGE</button>`;
     stageLayer.appendChild(finalInserter);
 
-    if (OL.state.v2.pan && canvas) {
-        canvas.style.transform = `translate3d(${OL.state.v2.pan.x}px, ${OL.state.v2.pan.y}px, 0) scale(${OL.state.v2.zoom})`;
-    }
-
+    if (OL.state.v2.pan && canvas) canvas.style.transform = `translate3d(${OL.state.v2.pan.x}px, ${OL.state.v2.pan.y}px, 0) scale(${OL.state.v2.zoom})`;
+    
     OL.renderFocusControls();
     OL.renderWorkbenchItemsOnly();
     OL.drawConnections();
