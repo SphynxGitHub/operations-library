@@ -655,7 +655,6 @@ const clientTabs = [
 ];
 
 const isLightMode = document.body.classList.contains('light-mode');
-const root = document.getElementById("app-root");
 const themeIcon = isLightMode ? "moon" : "sun";
 const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 
