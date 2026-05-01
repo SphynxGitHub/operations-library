@@ -417,19 +417,9 @@ window.addEventListener('load', () => {
 });
 
 OL.toggleTheme = function() {
-    // 1. Toggle the class on body
     const isLight = document.body.classList.toggle('light-mode');
-    
-    // 2. Persist to localStorage
     localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
-    
-    // 3. 🚀 CRITICAL: Re-render the main layout so the sidebar button text updates
-    if (typeof OL.renderLayout === 'function') {
-        OL.renderLayout(); 
-    } else {
-        // Fallback: reload if layout function isn't globally accessible
-        window.location.reload(); 
-    }
+    window.buildLayout(); // ✅ calls the real function directly
 };
 
 // Call this at the very top of your script execution
@@ -664,6 +654,8 @@ const clientTabs = [
   { key: "data", label: "Data Tags", icon: "tag", href: "#/data" },
 ];
 
+const isLightMode = document.body.classList.contains('light-mode');
+const root = document.getElementById("app-root");
 const themeIcon = isLightMode ? "moon" : "sun";
 const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 
