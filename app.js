@@ -10031,7 +10031,7 @@ OL.renderVisualizer = function() {
         <button class="add-stage-btn-v2" 
                 style="width: auto; padding: 0 15px; border-radius: 20px; gap: 8px;" 
                 onclick="event.stopPropagation(); OL.insertStage(${stages.length})">
-            <i class="fa-solid fa-plus"></i> ADD FINAL STAGE
+            <i class="fa-solid fa-plus">+</i>
         </button>
     `;
     stageLayer.appendChild(finalInserter);
