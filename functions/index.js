@@ -2,10 +2,10 @@ const { onRequest } = require("firebase-functions/v2/https");
 const functions = require("firebase-functions");
 const axios = require('axios');
 
-// Default options for all proxies: 2-minute timeout and automatic CORS support
+// Default options for v2 proxies
 const proxyOptions = { cors: true, timeoutSeconds: 120 };
 
-// 1. Wealthbox Proxy (With Multi-Page Support)
+// 1. Wealthbox Proxy (v2)
 exports.syncWealthboxProxy = onRequest(proxyOptions, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
@@ -22,10 +22,13 @@ exports.syncWealthboxProxy = onRequest(proxyOptions, async (req, res) => {
             if (templates.length === 25 && page < 20) page++; else hasMore = false;
         }
         res.status(200).json({ workflow_templates: allTemplates });
-    } catch (error) { res.status(500).send(error.message); }
+    } catch (error) { 
+        console.error("Wealthbox Error:", error.message);
+        res.status(500).send(error.message); 
+    }
 });
 
-// 2. Jotform Proxy
+// 2. Jotform Proxy (v2)
 exports.jotformProxy = onRequest(proxyOptions, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
@@ -34,19 +37,18 @@ exports.jotformProxy = onRequest(proxyOptions, async (req, res) => {
             params: { apiKey: apiKey },
             headers: { 'User-Agent': 'SphynxOperationsLibrary/1.0' }
         });
-        // Jotform usually returns { responseCode: 200, content: [...] }
         res.status(200).json(response.data);
     } catch (error) { 
-        console.error("Jotform Proxy Error:", error.response?.data || error.message);
+        console.error("Jotform Error:", error.message);
         res.status(500).send(error.message); 
     }
 });
 
-// 3. Calendly Proxy
+// 3. Calendly Proxy (v1 Pattern for specific URL requirement)
 exports.calendlyProxy = functions.https.onRequest(async (req, res) => {
-    // 🛡️ Manually handle CORS for v1 pattern
     res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, POST');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
         res.status(204).send('');
@@ -60,17 +62,17 @@ exports.calendlyProxy = functions.https.onRequest(async (req, res) => {
         const response = await axios.get("https://api.calendly.com/event_types?user=me", {
             headers: { 
                 'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
+                'Accept': 'application/json'
             }
         });
         res.status(200).json(response.data);
     } catch (error) {
-        console.error("Calendly API Error:", error.response?.data || error.message);
+        console.error("Calendly Error:", error.message);
         res.status(500).send(error.message);
     }
 });
 
-// 4. ActiveCampaign Proxy
+// 4. ActiveCampaign Proxy (v2)
 exports.acProxy = onRequest(proxyOptions, async (req, res) => {
     const { apiKey, baseUrl } = req.query;
     if (!apiKey || !baseUrl) return res.status(400).send('Missing API Key or Base URL');
@@ -82,7 +84,7 @@ exports.acProxy = onRequest(proxyOptions, async (req, res) => {
     } catch (error) { res.status(500).send(error.message); }
 });
 
-// 5. MailerLite Proxy
+// 5. MailerLite Proxy (v2)
 exports.mailerliteProxy = onRequest(proxyOptions, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
@@ -94,9 +96,9 @@ exports.mailerliteProxy = onRequest(proxyOptions, async (req, res) => {
     } catch (error) { res.status(500).send(error.message); }
 });
 
-// 6. YouCanBookMe Proxy
+// 6. YouCanBookMe Proxy (v2)
 exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
-    const apiKey = req.query.apiKey; // Base64 encoded 'email:api_key'
+    const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
     try {
         const response = await axios.get("https://api.youcanbook.me/v1/profiles", {
