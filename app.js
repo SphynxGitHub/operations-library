@@ -17853,29 +17853,56 @@ OL.syncExternalIntegrations = async function(serviceKey) {
         console.groupEnd();
     }
 };
+
 OL.openImportHub = function() {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">🔌 External System Importer</div>
+            <div class="modal-title-text">🔌 System Importer Hub</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
-            <div class="cards-grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div class="card is-clickable" onclick="OL.syncWealthboxFlows()">
-                    <div class="bold">🕸️ Wealthbox</div>
-                    <div class="tiny muted">Sync Workflow Templates</div>
+            <p class="tiny muted" style="margin-bottom: 20px;">
+                Select a service to sync live data into your Workbench.
+            </p>
+            
+            <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px;">
+                
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('wealthbox')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🕸️</div>
+                    <div class="bold">Wealthbox</div>
+                    <div class="tiny muted">Sync Workflows</div>
                 </div>
-                <div class="card is-clickable" onclick="OL.openJotformImport()">
-                    <div class="bold">📄 Jotform</div>
-                    <div class="tiny muted">Import Forms & Questionnaires</div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('jotform')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">📄</div>
+                    <div class="bold">Jotform</div>
+                    <div class="tiny muted">Sync Active Forms</div>
                 </div>
-                <div class="card is-clickable" onclick="OL.openCalendlyImport()">
-                    <div class="bold">📅 Calendly / YCBM</div>
-                    <div class="tiny muted">Import Event Types</div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('calendly')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">📅</div>
+                    <div class="bold">Calendly</div>
+                    <div class="tiny muted">Sync Event Types</div>
                 </div>
-                <div class="card is-clickable" onclick="OL.openMarketingImport()">
-                    <div class="bold">📧 ActiveCampaign / MailerLite</div>
-                    <div class="tiny muted">Import Automations & Campaigns</div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('activecampaign')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">📧</div>
+                    <div class="bold">ActiveCampaign</div>
+                    <div class="tiny muted">Sync Automations</div>
                 </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('mailerlite')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">⚡</div>
+                    <div class="bold">MailerLite</div>
+                    <div class="tiny muted">Sync Sequences</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('ycbm')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🗓️</div>
+                    <div class="bold">YouCanBook.me</div>
+                    <div class="tiny muted">Sync Booking Profiles</div>
+                </div>
+
             </div>
         </div>
     `;
