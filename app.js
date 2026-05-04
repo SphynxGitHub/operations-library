@@ -4526,9 +4526,7 @@ window.renderResourceManager = function () {
                     </div>
                 </div>
                 <button class="btn primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
-                <button class="btn primary" onclick="OL.syncExternalIntegrations()">
-                    🔄 Sync Wealthbox Workflows
-                </button>
+                <button class="btn primary" onclick="OL.openImportHub()">🔌 Import Hub</button>
             </div>
         </div>
 
@@ -17693,80 +17691,295 @@ OL.syncWealthbox = async function(client) {
     return templates.length;
 };
 
+OL.openImportHub = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔌 System Importer Hub</div>
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+        </div>
+        <div class="modal-body">
+            <p class="tiny muted" style="margin-bottom: 20px;">
+                Select a service to sync. This will fetch live data using the API keys saved in your <b>Credentials</b> section.
+            </p>
+            
+            <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px;">
+                
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('wealthbox')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🕸️</div>
+                    <div class="bold">Wealthbox</div>
+                    <div class="tiny muted">Sync Workflow Templates & Steps</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('jotform')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">📄</div>
+                    <div class="bold">Jotform</div>
+                    <div class="tiny muted">Import active Forms & Links</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('calendly')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">📅</div>
+                    <div class="bold">Calendly</div>
+                    <div class="tiny muted">Import Event Types & Booking URLs</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('ycbm')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🗓️</div>
+                    <div class="bold">YouCanBook.me</div>
+                    <div class="tiny muted">Sync Booking Profiles</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('activecampaign')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">📧</div>
+                    <div class="bold">ActiveCampaign</div>
+                    <div class="tiny muted">Import Marketing Automations</div>
+                </div>
+
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('mailerlite')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">⚡</div>
+                    <div class="bold">MailerLite</div>
+                    <div class="tiny muted">Sync Email Sequences</div>
+                </div>
+
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
 OL.upsertExternalResource = function(client, data) {
     if (!client.projectData.localResources) client.projectData.localResources = [];
     const library = client.projectData.localResources;
     
-    // 🎯 MATCHING LOGIC: Find existing card by External ID OR Name match
-    const existingIdx = library.findIndex(r => 
-        (r.externalId && String(r.externalId) === String(data.externalId)) || 
-        r.name.toLowerCase() === data.name.toLowerCase()
-    );
+    // 🎯 REFINED MATCHING LOGIC
+    // We check: 1. External ID (Best), 2. Name Match, 3. Clean Name Match (ignoring icons)
+    const existingIdx = library.findIndex(r => {
+        const matchId = (r.externalId && data.externalId && String(r.externalId) === String(data.externalId));
+        const matchExactName = r.name.toLowerCase() === data.name.toLowerCase();
+        
+        // Handle "Imported" prefixes (e.g., matching "My Form" with "📄 Form: My Form")
+        const cleanR = r.name.toLowerCase().replace(/^(📅 cal:|📄 form:|📧 ac:|🕸️ wb:)\s*/, '').trim();
+        const cleanD = data.name.toLowerCase().replace(/^(📅 cal:|📄 form:|📧 ac:|🕸️ wb:)\s*/, '').trim();
+        const matchCleanName = cleanR === cleanD;
+
+        return matchId || matchExactName || matchCleanName;
+    });
 
     if (existingIdx !== -1) {
         const old = library[existingIdx];
-        console.log(`♻️ Syncing existing card: ${old.name}`);
+        console.log(`♻️ Grafting update onto: ${old.name}`);
         
-        // 🧬 GRAFTING: Keep Map IDs, Coordinates, and internal Logic links
-        // but overwrite the "Steps" and "External IDs"
+        // 🧠 DEEP STEP PRESERVATION
+        // If the imported data has steps, we try to preserve local edits (like descriptions or logic)
+        if (data.steps && old.steps) {
+            data.steps.forEach(newStep => {
+                const oldStep = old.steps.find(os => os.name === newStep.name);
+                if (oldStep) {
+                    // Carry over logic and user-written descriptions from the existing card
+                    newStep.logic = oldStep.logic || { in: [], out: [] };
+                    newStep.description = oldStep.description || newStep.description;
+                    newStep.id = oldStep.id; // Keep internal ID to prevent line breakage
+                }
+            });
+        }
+
+        // 🧬 UPDATE OBJECT
         library[existingIdx] = { 
             ...old, 
             ...data, 
-            id: old.id,           // Keep original ID so lines don't break
-            coords: old.coords,   // Keep Map Position
-            stageId: old.stageId, // Keep Lane
-            isGlobal: old.isGlobal // Keep Workbench/Map status
+            id: old.id,           // Never change the system ID
+            coords: old.coords,   // Keep on Map
+            stageId: old.stageId, // Keep in Lane
+            layoutCol: old.layoutCol, // Keep in Column
+            isGlobal: old.isGlobal,
+            isExpanded: old.isExpanded ?? true
         };
     } else {
-        // ✨ NEW DISCOVERY: Send to Workbench
+        // ✨ NEW DISCOVERY: Assign a formatted ID based on type
         console.log(`✨ New asset discovered: ${data.name}`);
-        data.id = 'res-wb-' + Date.now() + Math.random().toString(36).substr(2,5);
-        data.isGlobal = true;
+        const prefix = data.id?.split('-')[0] || 'ext';
+        data.id = `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        
+        // Initial setup for the Workbench
+        data.isGlobal = true; 
+        data.isExpanded = true;
+        
         library.push(data);
     }
 };
 
 // 📡 THE SYNC ORCHESTRATOR
-OL.syncExternalIntegrations = async function() {
+OL.syncExternalIntegrations = async function(serviceKey) {
     const client = getActiveClient();
     if (!client) return alert("❌ No active project selected.");
 
-    // Visual feedback on the button
     const btn = event?.target;
     const originalText = btn ? btn.innerText : "";
-    if (btn) {
-        btn.innerText = "⏳ Syncing...";
-        btn.disabled = true;
-    }
+    if (btn) { btn.innerText = "⏳ Syncing..."; btn.disabled = true; }
 
     try {
-        console.group("📡 Unified External Sync");
-        
-        // 1. WEALTHBOX RUN
-        console.log("🔨 Checking Wealthbox...");
-        const wbCount = await OL.syncWealthbox(client);
-        console.log(`✅ Wealthbox sync complete: ${wbCount} templates.`);
+        console.group(`📡 Syncing: ${serviceKey}`);
+        let count = 0;
 
-        // 2. FUTURE HOOKS (Jotform / Calendly)
-        // await OL.syncJotform(client);
+        switch(serviceKey) {
+            case 'wealthbox':
+                count = await OL.importWealthbox(client);
+                break;
+            case 'jotform':
+                count = await OL.importJotform(client);
+                break;
+            case 'calendly':
+                count = await OL.importCalendly(client);
+                break;
+            case 'activecampaign':
+                count = await OL.importActiveCampaign(client);
+                break;
+            case 'mailerlite':
+                count = await OL.importMailerLite(client);
+                break;
+            case 'ycbm':
+                count = await OL.importYCBM(client);
+                break;
+        }
 
-        // 3. PERSIST & REFRESH UI
         await OL.persist();
-        
-        // Refresh whichever view we are on
         if (window.location.hash.includes('visualizer')) OL.renderVisualizer();
-        if (window.location.hash.includes('resources')) renderResourceManager();
-        
-        alert(`✅ Sync Successful!\n- Wealthbox: ${wbCount} workflows updated.`);
+        alert(`✅ Sync Successful!\n- ${serviceKey.toUpperCase()}: ${count} items updated.`);
 
     } catch (e) {
-        console.error("🔥 Sync Error:", e);
-        alert("Sync Failed: " + e.message);
+        console.error(`🔥 ${serviceKey} Sync Error:`, e);
+        alert(`Sync Failed: ${e.message}`);
     } finally {
-        if (btn) {
-            btn.innerText = originalText;
-            btn.disabled = false;
-        }
+        if (btn) { btn.innerText = originalText; btn.disabled = false; }
         console.groupEnd();
     }
+};
+OL.openImportHub = function() {
+    const html = `
+        <div class="modal-head">
+            <div class="modal-title-text">🔌 External System Importer</div>
+        </div>
+        <div class="modal-body">
+            <div class="cards-grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="card is-clickable" onclick="OL.syncWealthboxFlows()">
+                    <div class="bold">🕸️ Wealthbox</div>
+                    <div class="tiny muted">Sync Workflow Templates</div>
+                </div>
+                <div class="card is-clickable" onclick="OL.openJotformImport()">
+                    <div class="bold">📄 Jotform</div>
+                    <div class="tiny muted">Import Forms & Questionnaires</div>
+                </div>
+                <div class="card is-clickable" onclick="OL.openCalendlyImport()">
+                    <div class="bold">📅 Calendly / YCBM</div>
+                    <div class="tiny muted">Import Event Types</div>
+                </div>
+                <div class="card is-clickable" onclick="OL.openMarketingImport()">
+                    <div class="bold">📧 ActiveCampaign / MailerLite</div>
+                    <div class="tiny muted">Import Automations & Campaigns</div>
+                </div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+};
+
+OL.importCalendly = async function(apiKey) {
+    // 1. Fetch via Proxy
+    const response = await fetch(`YOUR_PROXY_URL/calendly?key=${apiKey}`);
+    const data = await response.json(); // collection of event_types
+    
+    data.collection.forEach(event => {
+        OL.upsertExternalResource(getActiveClient(), {
+            name: `📅 Cal: ${event.name}`,
+            type: 'Event',
+            externalUrl: event.scheduling_url,
+            description: event.description,
+            steps: [{ name: "Client Books Appointment", appName: "Calendly" }]
+        });
+    });
+};
+
+OL.importYCBM = async function(client) {
+    const creds = OL.getCredsForApp(client, 'youcanbookme');
+    if (!creds?.secret) throw new Error("YCBM API Key missing.");
+
+    // Note: YCBM often uses Basic Auth (email:api_key encoded)
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/ycbmProxy?apiKey=${creds.secret}`;
+    const response = await fetch(url);
+    const profiles = await response.json();
+
+    profiles.forEach(p => {
+        OL.upsertExternalResource(client, {
+            externalId: p.id,
+            name: `📅 YCBM: ${p.title}`,
+            type: 'Event',
+            externalUrl: `https://${p.subdomain}.youcanbook.me`,
+            steps: [{ id: uid(), name: "Customer Books via YCBM", appName: "YouCanBookMe" }]
+        });
+    });
+    return profiles.length;
+};
+
+OL.importActiveCampaign = async function(url, key) {
+    const response = await fetch(`${url}/api/3/automations`, { headers: { "Api-Token": key }});
+    const data = await response.json();
+
+    data.automations.forEach(auto => {
+        // We treat an AC Automation like a Multi-Step Resource
+        const resource = {
+            name: `📧 AC: ${auto.name}`,
+            type: 'Email Campaign',
+            archetype: 'Multi-Level',
+            steps: [
+                { name: "Trigger: " + auto.enter_trigger, appName: "ActiveCampaign" },
+                { name: "Drip Sequence Active", appName: "ActiveCampaign" }
+            ]
+        };
+        OL.upsertExternalResource(getActiveClient(), resource);
+    });
+};
+
+OL.importMailerLite = async function(client) {
+    const creds = OL.getCredsForApp(client, 'mailerlite');
+    if (!creds?.secret) throw new Error("MailerLite API Key missing.");
+
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/mailerliteProxy?apiKey=${creds.secret}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    const automations = data.data || [];
+
+    automations.forEach(auto => {
+        OL.upsertExternalResource(client, {
+            externalId: auto.id,
+            name: `📧 ML: ${auto.name}`,
+            type: 'Email Campaign',
+            archetype: 'Multi-Level',
+            steps: [
+                { id: uid(), name: "Trigger: " + (auto.trigger_type || "Subscriber Joins"), appName: "MailerLite" },
+                { id: uid(), name: "Automation Flow", appName: "MailerLite" }
+            ]
+        });
+    });
+    return automations.length;
+};
+
+OL.importJotform = async function(apiKey) {
+    const response = await fetch(`https://api.jotform.com/user/forms?apiKey=${apiKey}`);
+    const data = await response.json();
+
+    data.content.forEach(form => {
+        OL.upsertExternalResource(getActiveClient(), {
+            name: `📄 Form: ${form.title}`,
+            type: 'Form',
+            externalUrl: form.url,
+            steps: [{ name: "User Submits Form", appName: "Jotform" }]
+        });
+    });
+};
+
+OL.getCredsForApp = function(client, appSearchTerm) {
+    const registry = client.projectData.accessRegistry || [];
+    return registry.find(r => {
+        const app = client.projectData.localApps.find(a => a.id === r.appId);
+        return app?.name.toLowerCase().includes(appSearchTerm.toLowerCase());
+    });
 };
