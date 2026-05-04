@@ -17909,20 +17909,48 @@ OL.openImportHub = function() {
     openModal(html);
 };
 
-OL.importCalendly = async function(apiKey) {
-    // 1. Fetch via Proxy
-    const response = await fetch(`YOUR_PROXY_URL/calendly?key=${apiKey}`);
-    const data = await response.json(); // collection of event_types
+OL.importCalendly = async function(client) {
+    const creds = OL.getCredsForApp(client, 'calendly');
+    if (!creds?.secret) throw new Error("Calendly API Key missing in Credentials (Secret field).");
+
+    // 🎯 REPLACE THIS URL with the one from your Firebase Console
+    const baseUrl = `https://calendlyproxy-YOUR-ID-HERE.a.run.app`; 
+    const url = `${baseUrl}?apiKey=${creds.secret}`;
+
+    console.log("📡 Fetching from Calendly Proxy...");
+    const response = await fetch(url);
+
+    // 🛡️ Error Catching
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Proxy Error: ${err}`);
+    }
+
+    const data = await response.json();
     
-    data.collection.forEach(event => {
-        OL.upsertExternalResource(getActiveClient(), {
-            name: `📅 Cal: ${event.name}`,
+    // Calendly API v2 returns items in a 'collection' array
+    const events = data.collection || [];
+
+    events.forEach(ev => {
+        // We use the URI or ID as the external unique identifier
+        const externalId = ev.uri.split('/').pop(); 
+        
+        OL.upsertExternalResource(client, {
+            id: `cal-${externalId}`,
+            externalId: externalId,
+            name: `📅 Cal: ${ev.name}`,
             type: 'Event',
-            externalUrl: event.scheduling_url,
-            description: event.description,
-            steps: [{ name: "Client Books Appointment", appName: "Calendly" }]
+            externalUrl: ev.scheduling_url,
+            description: ev.description || "Calendly Event Type",
+            steps: [{ 
+                id: uid(), 
+                name: "Client Schedules Appointment", 
+                appName: "Calendly" 
+            }]
         });
     });
+
+    return events.length;
 };
 
 OL.importYCBM = async function(client) {
