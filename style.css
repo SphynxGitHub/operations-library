@@ -1605,6 +1605,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
     align-items: center;
     justify-content: center;
     vertical-align: middle;
+   border-radius: 8px;
 }
 
 .invisible-pill {
@@ -4293,8 +4294,8 @@ body.light-mode {
 
 /* The outer wrapper */
 .canvas-search-wrap {
-    display: flex; align-items: center; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--line); border-radius: 4px;
-    padding: 2px 8px; min-width: 200px; flex: 1; width: 320px; pointer-events: none;
+    display: flex; align-items: center; gap: 6px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px;
 }
 
 .search-icon {
@@ -4307,16 +4308,20 @@ body.light-mode {
 
 /* The actual text input */
 .v2-search-input {
-    background: transparent; border: none; color: white; font-size: 12px; outline: none; width: 100%; padding: 4px 0; flex: 1; 
+    background: transparent; border: none; outline: none; color: white; font-size: 12px; outline: none; width: 160px;
 }
 
 .v2-search-input::placeholder {
     color: rgba(255, 255, 255, 0.3);
 }
 
+.v2-master-toolbar {
+  width: 100%;
+}
+
 /* Ensure the master toolbar doesn't squish everything */
 .v2-toolbar {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 8px; width: 100%;
 }
 /*===========================================Global Shelf*/
 
@@ -4991,7 +4996,8 @@ path.is-loop-path {
 
 /* 🛠️ 1. THE FLOATING UI OVERLAY */
 .v2-ui-overlay {
-    position: absolute; top: 0; left: 0; width: 100%; padding: 15px 20px; z-index: 5000; pointer-events: none;
+   border-bottom: 1px solid #e5e5e5; padding: 0 24px !important; height: 56px; display: flex; align-items: center; position: relative !important;
+  top: auto !important; left: auto !important; width: 100% !important; pointer-events: auto !important; z-index: 100; flex-shrink: 0;
 }
 
 /* 🛠️ 2. THE MASTER TOOLBAR BAR */
