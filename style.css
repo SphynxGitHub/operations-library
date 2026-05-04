@@ -1606,6 +1606,7 @@ select.perm-select[value="Invalid"] { color: var(--danger); }
     justify-content: center;
     vertical-align: middle;
    border-radius: 8px;
+   color var(--text-main);
 }
 
 .invisible-pill {
