@@ -17822,7 +17822,7 @@ OL.syncExternalIntegrations = async function(serviceKey) {
 
         switch(serviceKey) {
             case 'wealthbox':
-                count = await OL.importWealthbox(client);
+                count = await OL.syncWealthbox(client);
                 break;
             case 'jotform':
                 count = await OL.importJotform(client);
