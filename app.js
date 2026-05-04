@@ -17950,20 +17950,37 @@ OL.importCalendly = async function(client) {
 
 OL.importYCBM = async function(client) {
     const creds = OL.getCredsForApp(client, 'youcanbookme');
-    if (!creds?.secret) throw new Error("YCBM API Key missing.");
+    
+    // 🕵️ GUIDANCE: YCBM needs "email:api_key" encoded in Base64
+    // If you just have the key in the Secret field, we need to handle that.
+    if (!creds?.secret) throw new Error("YCBM Credentials missing.");
 
-    // Note: YCBM often uses Basic Auth (email:api_key encoded)
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/ycbmProxy?apiKey=${creds.secret}`;
+    let authKey = creds.secret;
+
+    // 🚀 THE AUTO-ENCODER: 
+    // If the secret starts with 'ak_', it's a raw key. We need the email too.
+    if (authKey.startsWith('ak_')) {
+        const email = creds.username; // Use the 'Username' field from the App Card
+        if (!email) throw new Error("YCBM Error: Please put your Account Email in the 'Username' field of the App Card.");
+        authKey = btoa(`${email}:${authKey}`);
+    }
+
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/ycbmProxy?apiKey=${authKey}`;
+
     const response = await fetch(url);
-    const profiles = await response.json();
+    if (!response.ok) {
+        const txt = await response.text();
+        throw new Error(`YCBM Error: ${txt}`);
+    }
 
+    const profiles = await response.json();
     profiles.forEach(p => {
         OL.upsertExternalResource(client, {
             externalId: p.id,
             name: `📅 YCBM: ${p.title}`,
             type: 'Event',
             externalUrl: `https://${p.subdomain}.youcanbook.me`,
-            steps: [{ id: uid(), name: "Customer Books via YCBM", appName: "YouCanBookMe" }]
+            steps: [{ id: uid(), name: "Client Books via YCBM", appName: "YouCanBookMe" }]
         });
     });
     return profiles.length;
