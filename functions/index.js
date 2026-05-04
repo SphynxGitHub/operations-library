@@ -98,12 +98,21 @@ exports.mailerliteProxy = onRequest(proxyOptions, async (req, res) => {
 
 // 6. YouCanBookMe Proxy (v2)
 exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
-    const apiKey = req.query.apiKey;
+    const apiKey = req.query.apiKey; // This is the Base64 string from your app
     if (!apiKey) return res.status(400).send('Missing API Key');
+
     try {
         const response = await axios.get("https://api.youcanbook.me/v1/profiles", {
-            headers: { 'Authorization': `Basic ${apiKey}` }
+            headers: { 
+                // 🚀 THE FIX: Pass the key as a Basic Auth header
+                'Authorization': `Basic ${apiKey}`,
+                'Accept': 'application/json'
+            }
         });
         res.status(200).json(response.data);
-    } catch (error) { res.status(500).send(error.message); }
+    } catch (error) {
+        // Log the specific error from YCBM so you can see it in Firebase Logs
+        console.error("YCBM API Error:", error.response?.data || error.message);
+        res.status(500).send(error.message);
+    }
 });
