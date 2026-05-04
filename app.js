@@ -9693,12 +9693,14 @@ OL.renderVisualizer = function() {
     // 🏗️ 2. BUILD THE UI OVERLAY & VIEWPORT
     if (!document.getElementById('v2-viewport')) {
         mainArea.innerHTML = `
-            <div class="v2-ui-overlay" style="position: absolute; top: 0; left: 0; width: 100%; padding: 15px 20px; z-index: 5000; pointer-events: none;">
-                <div class="v2-master-toolbar" style="display: flex; align-items: center; gap: 10px; pointer-events: auto;">
+            <div class="v2-ui-overlay">
+                <div class="v2-master-toolbar">
                     <div class="v2-toolbar">
                         <div class="canvas-search-wrap">
-                            <span class="search-icon">🔍</span>
-                            <input class="v2-search-input" type="text" id="canvas-filter-input" placeholder="Search map..." oninput="OL.syncCanvasFilters(this.value)">
+                            <span class="search-icon" style="color:#a3a3a3; font-size:13px;">⌕</span>
+                            <input class="v2-search-input" type="text" id="canvas-filter-input" 
+                                placeholder="Search map..." 
+                                oninput="OL.syncCanvasFilters(this.value)">
                         </div>
                         <div class="v2-search-nav" id="search-nav-controls">
                             <button class="btn tiny soft" onclick="OL.centerPrevCanvasMatch()">◀</button>
@@ -9707,25 +9709,49 @@ OL.renderVisualizer = function() {
                             <button class="btn tiny danger soft" onclick="OL.clearAllFilters()">✕</button>
                         </div>
                         <button id="filter-menu-btn" class="btn tiny soft" onclick="OL.toggleFilterMenu(event)">
-                            ${filterIcon} Filter <span id="active-filter-count" class="pill tiny accent" style="display:none;">0</span>
+                            <i data-lucide="sliders-horizontal" style="width:13px;height:13px;"></i>
+                            Filter 
+                            <span id="active-filter-count" class="pill tiny accent" style="display:none;">0</span>
                         </button>
-                        <button class="btn primary tiny" onclick="OL.addNewResourceToCanvas()">+ Add Resource</button>
-                        <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy">${tidyIcon}</button>
-                        <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()">${toggleIcon}</button>
-                        <button class="btn soft tiny" onclick="OL.toggleMasterExpand()">${expandIcon}</button>
+                         <div class="divider-v"></div>
+                        <button class="btn primary tiny" onclick="OL.addNewResourceToCanvas()">
+                             <i data-lucide="plus" style="width:13px;height:13px;"></i>
+                            Add Resource
+                        </button>
+                        <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy Layout">
+                            <i data-lucide="align-justify" style="width:13px;height:13px;"></i>
+                        </button>
+                        <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()" title="Toggle Sidebar">
+                             <i data-lucide="panel-left" style="width:13px;height:13px;"></i>
+                        </button>
+                        <button class="btn soft tiny" onclick="OL.toggleMasterExpand()" title="Expand All">
+                            <i data-lucide="${isAnyExpanded ? 'folder-open' : 'folder'}" style="width:13px;height:13px;"></i>
+                        </button>
                         <button class="btn tiny ${depth === 'step' ? 'accent' : 'soft'}" 
                                 onclick="OL.state.v2.viewDepth = (OL.state.v2.viewDepth === 'step' ? 'resource' : 'step'); OL.renderVisualizer();">
-                            ${depth === 'step' ? '📦 View Cards' : '🧩 View Steps'}
+                             <i data-lucide="${depth === 'step' ? 'layout-grid' : 'list'}" style="width:13px;height:13px;"></i>
+                             ${depth === 'step' ? 'Cards' : 'Steps'}
                         </button>
                         <div class="divider-v"></div>
-                        <button class="btn soft tiny" onclick="OL.zoom(0.1)">+</button>
-                        <button class="btn soft tiny" onclick="OL.zoom(-0.1)">-</button>
+                        <button class="btn soft tiny" onclick="OL.zoom(0.1)">
+                             <i data-lucide="zoom-in" style="width:13px;height:13px;"></i>
+                        </button>
+                        <button class="btn soft tiny" onclick="OL.zoom(-0.1)">
+                            <i data-lucide="zoom-out" style="width:13px;height:13px;"></i>
+                        </button>
                     </div>
                 </div>
                 <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
-                    <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Types</option>${types.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
-                    <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Apps</option>${apps.map(a => `<option value="${a}">${a}</option>`).join('')}</select>
-                    <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">All Scoping</option><option value="scoped">Scoped ($)</option><option value="unscoped">Unscoped</option></select>
+                    <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()">
+                        <option value="">All Types</option>
+                        ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
+                    </select>
+                    <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">
+                        All Apps</option>${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
+                    </select>
+                    <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">
+                        All Scoping</option><option value="scoped">Scoped ($)</option><option value="unscoped">Unscoped</option>
+                    </select>
                 </div>
             </div>
             <div id="v2-viewport" class="${trayOpen ? '' : 'tray-closed'}">
