@@ -17913,26 +17913,21 @@ OL.importCalendly = async function(client) {
     const creds = OL.getCredsForApp(client, 'calendly');
     if (!creds?.secret) throw new Error("Calendly API Key missing in Credentials (Secret field).");
 
-    // 🎯 REPLACE THIS URL with the one from your Firebase Console
-    const baseUrl = `https://calendlyproxy-YOUR-ID-HERE.a.run.app`; 
-    const url = `${baseUrl}?apiKey=${creds.secret}`;
+    // 🎯 The exact URL you provided
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/calendlyProxy?apiKey=${creds.secret}`;
 
     console.log("📡 Fetching from Calendly Proxy...");
     const response = await fetch(url);
 
-    // 🛡️ Error Catching
     if (!response.ok) {
         const err = await response.text();
         throw new Error(`Proxy Error: ${err}`);
     }
 
     const data = await response.json();
-    
-    // Calendly API v2 returns items in a 'collection' array
     const events = data.collection || [];
 
     events.forEach(ev => {
-        // We use the URI or ID as the external unique identifier
         const externalId = ev.uri.split('/').pop(); 
         
         OL.upsertExternalResource(client, {
@@ -18017,18 +18012,34 @@ OL.importMailerLite = async function(client) {
     return automations.length;
 };
 
-OL.importJotform = async function(apiKey) {
-    const response = await fetch(`https://api.jotform.com/user/forms?apiKey=${apiKey}`);
+OL.importJotform = async function(client) {
+    const creds = OL.getCredsForApp(client, 'jotform');
+    if (!creds?.secret) throw new Error("Jotform API Key missing.");
+
+    const url = `https://jotformproxy-YOUR-ID.a.run.app/?apiKey=${creds.secret}`;
+    const response = await fetch(url);
     const data = await response.json();
 
-    data.content.forEach(form => {
-        OL.upsertExternalResource(getActiveClient(), {
+    // 🚀 THE FIX: Jotform sometimes returns an array in 'data' or 'content'
+    // We check for both, or assume the data itself is the array
+    const forms = data.content || data.data || (Array.isArray(data) ? data : []);
+
+    if (!Array.isArray(forms)) {
+        console.error("Jotform Data Received:", data);
+        throw new Error("Jotform returned an unexpected data format.");
+    }
+
+    forms.forEach(form => {
+        OL.upsertExternalResource(client, {
+            id: `jf-${form.id}`,
+            externalId: form.id,
             name: `📄 Form: ${form.title}`,
             type: 'Form',
-            externalUrl: form.url,
-            steps: [{ name: "User Submits Form", appName: "Jotform" }]
+            externalUrl: `https://www.jotform.com/form/${form.id}`,
+            steps: [{ id: uid(), name: "User Submits Form", appName: "Jotform" }]
         });
     });
+    return forms.length;
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
