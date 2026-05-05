@@ -18154,45 +18154,49 @@ OL.importProcessStreet = async function(client) {
 };
 
 // Renamed to 'syncRedtail' to break the cache
-OL.syncRedtail = async function(client) {
-    console.log("🚀 Starting Redtail Sync...");
+OL.syncRedtail = async function() {
+    console.group("🔴 REDTAIL SYSTEM SYNC");
     
-    // 🎯 THE CURE: If 'client' is missing, grab the one currently on the screen
-    const targetClient = client || OL.activeClient;
-
-    if (!targetClient) {
-        // One last attempt: If OL.activeClient is also empty, find the first client in the list
-        console.warn("⚠️ No client passed, searching registry...");
-        const fallbackClient = (typeof projectData !== 'undefined' && projectData.clients) ? projectData.clients[0] : null;
+    try {
+        // 🎯 THE SOURCE OF TRUTH: Use your native helper function
+        const activeClientId = getActiveClient().id;
         
-        if (!fallbackClient) {
-            alert("❌ Sync Error: No client selected. Please click on a Client Card first so the app knows where to save the data.");
+        // Find that client in the projectData we know is loaded
+        const targetClient = projectData.clients.find(c => c.id === activeClientId);
+
+        if (!targetClient) {
+            console.error("❌ Context Error: getActiveClient().id did not match any loaded project.");
+            alert("Please select a client card before syncing.");
+            console.groupEnd();
             return;
         }
-    }
 
-    try {
-        // Use the fallback if targetClient is still null
-        const finalClient = targetClient || projectData.clients[0];
-        
-        // Pull creds directly from the object
-        const creds = finalClient.externalIntegrations?.find(i => i.appSlug === 'redtail');
+        console.log(`✅ Target Identified: ${targetClient.name} (ID: ${activeClientId})`);
+
+        // Pull credentials from the identified client
+        const creds = targetClient.externalIntegrations?.find(i => i.appSlug === 'redtail');
         
         if (!creds || !creds.username || !creds.secret) {
-            alert("Missing Redtail Credentials on this card.");
+            alert(`Credentials missing for ${targetClient.name}`);
+            console.groupEnd();
             return;
         }
 
+        // 🎯 EXACT CONSOLE LOGIC
         const auth = btoa(`${creds.username}:${creds.secret}`);
         const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(auth)}`;
 
-        console.log("📡 Fetching for Client:", finalClient.name);
+        console.log("📡 Fetching from Proxy...");
         const res = await fetch(url);
         const data = await res.json();
-        const list = data.workflow_templates || [];
         
+        // Key confirmed in your console test: workflow_templates
+        const list = data.workflow_templates || [];
+
+        console.log(`📦 Received ${list.length} templates.`);
+
         list.forEach(tpl => {
-            OL.upsertExternalResource(finalClient, {
+            OL.upsertExternalResource(targetClient, {
                 id: `rt-${tpl.id}`,
                 name: `🔴 RT: ${tpl.name}`,
                 type: 'Workflow',
@@ -18200,15 +18204,17 @@ OL.syncRedtail = async function(client) {
             });
         });
 
+        // Use your native persistence logic
         if (typeof OL.persist === 'function') OL.persist();
         if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
         
-        alert(`🎉 Success! ${list.length} Workflows synced to ${finalClient.name}`);
+        alert(`🎉 Success! ${list.length} Redtail Workflows synced to ${targetClient.name}`);
 
     } catch (e) {
-        console.error("🔥 Sync Failed:", e);
-        alert("Sync Error: " + e.message);
+        console.error("🔥 Sync Error:", e);
+        alert("Sync Failed: " + e.message);
     }
+    console.groupEnd();
 };
 
 OL.getCredsForApp = function(client, appSlug) {
