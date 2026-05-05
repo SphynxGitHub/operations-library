@@ -10092,88 +10092,56 @@ OL.renderWorkbenchItemsOnly = function() {
 
     const activeTab = state.ui.activeWorkbenchTab || 'flows';
     const query = (state.ui.sidebarSearchQuery || "").toLowerCase();
-    const typeFilter = state.v2.trayTypeFilter || "All";
-    const hideLinked = state.v2.hideLinkedAssets;
-    
     const data = OL.getCurrentProjectData();
     const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
-    // 🕵️ BUILD LINKED SET
-    const linkedIds = new Set();
-    resources.forEach(res => {
-        (res.steps || []).forEach(step => {
-            (step.links || []).forEach(link => linkedIds.add(String(link.id)));
-            if (step.howToIds) step.howToIds.forEach(id => linkedIds.add(String(id)));
-        });
-    });
-
     let items = [];
-
     if (activeTab === 'flows') {
-        items = resources.filter(r => ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords && !r.isTopShelf);
+        items = resources.filter(r => ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords);
     } else if (activeTab === 'assets') {
-        items = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && (typeFilter === "All" || r.type === typeFilter) && !r.coords && !r.isTopShelf && (!hideLinked || !linkedIds.has(String(r.id))));
+        items = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords);
     } else if (activeTab === 'guides') {
-        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])].filter(g => !hideLinked || !linkedIds.has(String(g.id)));
+        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])];
     } else if (activeTab === 'data') {
-        items = (state.master.datapoints || []).filter(d => (d.name || "").toLowerCase().includes(query) || (d.key && d.key.toLowerCase().includes(query)));
+        items = state.master.datapoints || [];
     }
 
-    if (query.trim() && activeTab !== 'data') {
+    if (query.trim()) {
         items = items.filter(i => (i.name || i.title || "").toLowerCase().includes(query.trim()));
     }
 
     workbenchContents.innerHTML = '';
     
-    if (items.length === 0) {
-        workbenchContents.innerHTML = `<div class="empty-hint p-10">No items found.</div>`;
-        return;
-    }
-
     items.forEach(item => {
         const div = document.createElement('div');
         div.id = `wb-node-${item.id}`;
+        div.className = activeTab === 'data' ? 'data-tag-draggable' : 'v2-node-card on-shelf';
+        div.draggable = true;
         
-        // 🎯 Set Drag Logic based on Tab
-        if (activeTab === 'data') {
-            div.className = 'data-tag-draggable';
-            div.draggable = true;
-            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; display:flex; justify-content:space-between; align-items:center; color: var(--text-main);`;
-            
-            div.ondragstart = (e) => {
+        // 🎯 THE FIX: Manual Event Binding
+        div.addEventListener('dragstart', (e) => {
+            if (activeTab === 'data') {
                 e.dataTransfer.setData("application/sphynx-type", "datapoint");
                 e.dataTransfer.setData("application/sphynx-id", item.id);
-                e.target.style.opacity = "0.5";
-            };
-        } else {
-            const isGuide = activeTab === 'guides';
-            const icon = isGuide ? '📖' : OL.getRegistryIcon(item.type);
-            const isInScope = !!OL.isResourceInScope(item.id);
-            
-            div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
-            div.draggable = true;
-            
-            div.ondragstart = (e) => {
-                // For Resources moving to Canvas
+            } else {
                 e.dataTransfer.setData('text/plain', item.id);
-                e.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, name: item.name || item.title, type: item.type }));
                 e.dataTransfer.effectAllowed = "move";
-                e.target.style.opacity = "0.5";
-            };
+            }
+            e.target.style.opacity = "0.5";
+        });
 
-            div.innerHTML = `
-                <div class="v2-node-header">
-                    <div class="header-row-content">
-                        <span style="margin-right: 8px; font-size: 14px;">${icon}</span>
-                        <b class="res-name-text" style="font-size: 11px;">${esc(item.name || item.title)}</b>
-                        <div class="header-badges-wrap" style="margin-left: auto;">
-                            <div class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}">$</div>
-                        </div>
-                    </div>
-                </div>`;
-        }
+        div.addEventListener('dragend', (e) => { e.target.style.opacity = "1"; });
 
-        div.ondragend = (e) => e.target.style.opacity = "1";
+        // Simple Inner HTML for the card
+        const icon = activeTab === 'data' ? (item.isBundle ? '📦' : '🏷️') : OL.getRegistryIcon(item.type);
+        div.innerHTML = `
+            <div class="v2-node-header" style="pointer-events: none;">
+                <div class="header-row-content">
+                    <span style="margin-right: 8px;">${icon}</span>
+                    <b class="res-name-text">${esc(item.name || item.title)}</b>
+                </div>
+            </div>`;
+            
         workbenchContents.appendChild(div);
     });
 };
