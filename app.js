@@ -17839,6 +17839,13 @@ OL.syncExternalIntegrations = async function(serviceKey) {
             case 'ycbm':
                 count = await OL.importYCBM(client);
                 break;
+            case 'redtail': // 🎯 ADDED
+                count = await OL.syncRedtail(client);
+                break;
+            case 'processstreet': // 🎯 ADDED
+            case 'process-street':
+                count = await OL.syncProcessStreet(client);
+                break;
         }
 
         await OL.persist();
