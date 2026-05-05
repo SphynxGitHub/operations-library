@@ -4262,23 +4262,33 @@ window.OL.deleteComment = async function(id, idx) {
 // 3. MASTER TASK IMPORTER
 OL.openMasterTaskImporter = function () {
     const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">📥 Import Master Blueprints</div>
+        <div class="modal-head" style="display:flex; align-items:center; gap:12px; padding: 20px;">
+            <i data-lucide="download-cloud" style="width:20px; height:20px; color:var(--accent);"></i>
+            <div class="modal-title-text">Import Master Blueprints</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
         <div class="modal-body">
             <div class="search-map-container">
-                <input type="text" class="modal-input" 
-                       placeholder="Search blueprints or onboarding steps..." 
-                       onfocus="OL.filterMasterTaskImport('')"
-                       oninput="OL.filterMasterTaskImport(this.value)" 
-                       autofocus>
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
+                    <input type="text" class="modal-input" 
+                           style="padding-left:35px;"
+                           placeholder="Search blueprints or onboarding steps..." 
+                           onfocus="OL.filterMasterTaskImport('')"
+                           oninput="OL.filterMasterTaskImport(this.value)" 
+                           autofocus>
+                </div>
                 <div id="master-task-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
             </div>
         </div>
     `;
     openModal(html);
+
+    // 🚀 THE REPAINT: Ensure the icons render correctly immediately
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.filterMasterTaskImport = function(query) {
@@ -4423,34 +4433,35 @@ OL.filterTaskAppSearch = function(taskId, query, isVault) {
     const q = (query || "").toLowerCase().trim();
     const client = getActiveClient();
     
-    // 1. Resolve current task to find existing app links
     const task = isVault 
         ? state.master.taskBlueprints.find(t => t.id === taskId)
         : client?.projectData?.clientTasks.find(t => t.id === taskId);
     
     const existingAppIds = task?.appIds || [];
-
-    // 2. Identify the source list (Master + Local)
     const source = [...state.master.apps, ...(client?.projectData?.localApps || [])];
 
-    // 3. Apply Smart Filter: Match search AND exclude existing IDs
     const matches = source.filter(a => {
         const nameMatch = a.name.toLowerCase().includes(q);
         const alreadyLinked = existingAppIds.includes(a.id);
         return nameMatch && !alreadyLinked;
     });
 
-    // 4. Render results
     listEl.innerHTML = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.toggleTaskApp('${taskId}', '${app.id}', ${isVault})">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                <span>📱 ${esc(app.name)}</span>
-                <span class="tiny-tag ${String(app.id).startsWith('local') ? 'local' : 'vault'}">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="smartphone" style="width:14px; height:14px; color:var(--accent);"></i>
+                    <span>${esc(app.name)}</span>
+                </div>
+                <span class="tiny-tag ${String(app.id).startsWith('local') ? 'local' : 'vault'}" style="font-size:8px; opacity:0.6;">
                     ${String(app.id).startsWith('local') ? 'LOCAL' : 'MASTER'}
                 </span>
             </div>
         </div>
-    `).join('') || '<div class="search-result-item muted">All matching tools are already linked.</div>';
+    `).join('') || '<div class="search-result-item muted">No unlinked tools found.</div>';
+
+    // 🚀 Update icons instantly as user types
+    if (window.lucide) window.lucide.createIcons();
 };
 
 OL.toggleTaskApp = function(taskId, appId, isVault) {
@@ -4528,10 +4539,15 @@ OL.filterTaskAssigneeSearch = function(taskId, query) {
     });
 
     listEl.innerHTML = matches.map(member => `
-        <div class="search-result-item" onmousedown="OL.toggleTaskAssignee(event, '${taskId}', '${member.id}')">
-            👨‍💼 ${esc(member.name)}
+        <div class="search-result-item" style="display:flex; align-items:center; gap:8px;" 
+             onmousedown="OL.toggleTaskAssignee(event, '${taskId}', '${member.id}')">
+            <i data-lucide="user" style="width:14px; height:14px; color:var(--accent);"></i>
+            <span>${esc(member.name)}</span>
         </div>
-    `).join('') || '<div class="search-result-item muted">Everyone matching is already assigned.</div>';
+    `).join('') || '<div class="search-result-item muted">No other members found.</div>';
+
+    // 🚀 Update icons instantly as user types
+    if (window.lucide) window.lucide.createIcons();
 };
 
 OL.toggleTaskAssignee = function(event, taskId, memberId) {
