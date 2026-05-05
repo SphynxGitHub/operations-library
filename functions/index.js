@@ -110,15 +110,22 @@ exports.calendlyProxy = functions.https.onRequest(async (req, res) => {
 });
 
 // 4. ActiveCampaign Proxy (v2)
-exports.acProxy = onRequest(proxyOptions, async (req, res) => {
+exports.acProxy = onRequest({ cors: true, timeoutSeconds: 120 }, async (req, res) => {
     const { apiKey, baseUrl } = req.query;
     if (!apiKey || !baseUrl) return res.status(400).send('Missing API Key or Base URL');
+
     try {
         const response = await axios.get(`${baseUrl}/api/3/automations`, {
-            headers: { 'Api-Token': apiKey }
+            headers: { 
+                'Api-Token': apiKey,
+                'Accept': 'application/json'
+            }
         });
         res.status(200).json(response.data);
-    } catch (error) { res.status(500).send(error.message); }
+    } catch (error) {
+        console.error("AC Proxy Error:", error.response?.data || error.message);
+        res.status(500).send(error.message);
+    }
 });
 
 // 5. MailerLite Proxy (v2)
