@@ -18137,7 +18137,7 @@ OL.syncProcessStreet = async function(client) {
         
         const psCreds = registry.find(r => {
             const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
-            return app?.name.toLowerCase().includes('process street');
+            return name.includes('process street') || name.includes('processstreet') || name === 'ps';
         });
 
         if (!psCreds?.secret) {
