@@ -28,18 +28,51 @@ exports.syncWealthboxProxy = onRequest(proxyOptions, async (req, res) => {
     }
 });
 
-// 2. Jotform Proxy (v2)
-exports.jotformProxy = onRequest(proxyOptions, async (req, res) => {
+// 2. Jotform Proxy (Updated with Multi-Page Pagination)
+exports.jotformProxy = onRequest({ cors: true, timeoutSeconds: 120 }, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
+
     try {
-        const response = await axios.get(`https://api.jotform.com/user/forms`, {
-            params: { apiKey: apiKey },
-            headers: { 'User-Agent': 'SphynxOperationsLibrary/1.0' }
-        });
-        res.status(200).json(response.data);
+        let allForms = [];
+        let offset = 0;
+        let hasMore = true;
+        const limit = 50; // Fetch 50 at a time (Jotform's max per page is usually 100)
+
+        console.log("📡 Jotform: Starting multi-page sync...");
+
+        while (hasMore) {
+            const response = await axios.get(`https://api.jotform.com/user/forms`, {
+                params: { 
+                    apiKey: apiKey,
+                    offset: offset,
+                    limit: limit,
+                    orderby: 'id'
+                }
+            });
+
+            const content = response.data.content || [];
+            allForms = allForms.concat(content);
+
+            // Jotform result set meta-data tells us if there are more
+            // If we fetched fewer than the limit, we've reached the end
+            if (content.length === limit) {
+                offset += limit;
+            } else {
+                hasMore = false;
+            }
+
+            // Safety brake: stop after 10 pages (500 forms)
+            if (offset >= 500) hasMore = false;
+        }
+
+        console.log(`✅ Jotform: Total forms fetched: ${allForms.length}`);
+        
+        // Return the same structure so app.js doesn't break
+        res.status(200).json({ content: allForms });
+
     } catch (error) { 
-        console.error("Jotform Error:", error.message);
+        console.error("Jotform Pagination Error:", error.message);
         res.status(500).send(error.message); 
     }
 });
