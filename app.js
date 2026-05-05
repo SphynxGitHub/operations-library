@@ -4626,12 +4626,14 @@ OL.isResourceInScope = function(resourceId) {
 // 1. RESOURCE MANAGER
 if (!state.master.resourceTypes) {
   state.master.resourceTypes = [
-    { type: "Zap", typeKey: "zap", archetype: "Multi-Step", icon: "⚡" },
-    { type: "Form", typeKey: "form", archetype: "Base", icon: "📄" },
-    { type: "Email", typeKey: "email", archetype: "Base", icon: "📧" },
-    { type: "Event", typeKey: "event", archetype: "Base", icon: "🗓️" },
-    { type: "SOP", typeKey: "sop", archetype: "Base", icon: "📖" },
-    { type: "Signature", typeKey: "signature", archetype: "Base", icon: "✍️" }
+    { type: "Zap", typeKey: "zap", archetype: "Multi-Step", lucideIcon: "zap" },
+    { type: "Form", typeKey: "form", archetype: "Base", lucideIcon: "file-text" },
+    { type: "Email", typeKey: "email", archetype: "Base", lucideIcon: "mail" },
+    { type: "Event", typeKey: "event", archetype: "Base", lucideIcon: "calendar" },
+    { type: "SOP", typeKey: "sop", archetype: "Base", lucideIcon: "book-open" },
+    { type: "Signature", typeKey: "signature", archetype: "Base", lucideIcon: "pen-tool" },
+    { type: "Folder", typeKey: "folder", archetype: "Base", lucideIcon: "folder" },
+    { type: "Spreadsheet", typeKey: "spreadsheet", archetype: "Base", lucideIcon: "table-2" }
   ];
 }
 
@@ -4656,35 +4658,52 @@ window.renderResourceManager = function () {
     const team = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || []), { name: 'Client 1' }, { name: 'Client 2' }];
 
     container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>📦 ${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="database" style="width:28px; height:24px; color:var(--accent);"></i>
+            <div style="flex:1;">
+                <h2 style="margin:0;">${isVaultView ? 'Master Vault' : 'Project Library'}</h2>
                 <div class="small muted subheader">Full technical catalog for ${esc(client?.meta.name || 'Global')}</div>
             </div>
             <div class="header-actions">
-                ${state.adminMode ? `<button class="btn small soft" onclick="OL.openResourceTypeManager()">⚙️ Types</button>` : ''}
+                ${state.adminMode ? `
+                    <button class="btn small soft" onclick="OL.openResourceTypeManager()" style="display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="settings" style="width:14px; height:14px;"></i> Types
+                    </button>` : ''}
+                
                 <div class="dropdown-plus">
-                    <button class="btn primary" onclick="OL.universalCreate('SOP')">+ New Resource</button>
+                    <button class="btn primary" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="plus" style="width:16px; height:16px;"></i> New Resource
+                    </button>
                     <div class="dropdown-content">
                         ${(state.master.resourceTypes || []).map(t => `
-                            <a href="javascript:void(0)" onclick="OL.universalCreate('${t.type}')">
-                                ${t.icon || '📄'} New ${t.type}
+                            <a href="javascript:void(0)" onclick="OL.universalCreate('${t.type}')" style="display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="${OL.getRegistryIcon(t.type)}" style="width:14px; height:14px; opacity:0.7;"></i>
+                                <span>New ${t.type}</span>
                             </a>
                         `).join('')}
                         <div class="divider"></div>
-                        <a href="javascript:void(0)" onclick="OL.universalCreate('General')">⚙️ New General Resource</a>
+                        <a href="javascript:void(0)" onclick="OL.universalCreate('General')" style="display:flex; align-items:center; gap:8px;">
+                            <i data-lucide="component" style="width:14px; height:14px; opacity:0.7;"></i>
+                            <span>New General Resource</span>
+                        </a>
                     </div>
                 </div>
-                <button class="btn primary" onclick="OL.bulkImportZaps()">📁 Bulk Load Master Zaps</button>
-                <button class="btn primary" onclick="OL.openImportHub()">🔌 Import Hub</button>
+
+                <button class="btn primary" onclick="OL.bulkImportZaps()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="zap" style="width:14px; height:14px;"></i> Bulk Zaps
+                </button>
+                <button class="btn primary" onclick="OL.openImportHub()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="plug-2" style="width:14px; height:14px;"></i> Import Hub
+                </button>
             </div>
         </div>
 
         <div class="v2-toolbar" style="margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid var(--line);">
-            <div class="canvas-search-wrap" style="flex: 2; min-width: 250px;">
-                <span class="search-icon">🔍</span>
+            <div class="canvas-search-wrap" style="flex: 2; min-width: 250px; position:relative; display:flex; align-items:center;">
+                <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
                 <input type="text" id="lib-filter-input" class="v2-search-input" 
                        placeholder="Search name, description, or notes..." 
+                       style="padding-left:35px; width:100%;"
                        value="${state.libSearch || ''}"
                        oninput="state.libSearch = this.value; OL.syncResourceLibraryFilters()">
             </div>
@@ -4704,23 +4723,10 @@ window.renderResourceManager = function () {
                 ${team.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}
             </select>
 
-            <select id="lib-filter-data-tag" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Data Tags</option>
-                ${dataTags.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
-            </select>
-
             <select id="lib-filter-scoped" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
                 <option value="">All Scoping</option>
                 <option value="scoped">Scoped ($)</option>
                 <option value="unscoped">Unscoped</option>
-            </select>
-
-            <select id="lib-filter-scoping-status" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
-                <option value="">All Statuses</option>
-                <option value="Do Now">Do Now</option>
-                <option value="Do Later">Do Later</option>
-                <option value="Don't Do">Don't Do</option>
-                <option value="Done">Done</option>
             </select>
 
             <select id="lib-filter-party" class="tiny-select" onchange="OL.syncResourceLibraryFilters()">
@@ -4735,11 +4741,18 @@ window.renderResourceManager = function () {
                 <option value="has">With λ Logic</option>
             </select>
 
-            <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()">✕ Clear</button>
+            <button class="btn tiny danger soft" onclick="OL.clearResourceFilters()" style="display:flex; align-items:center; gap:4px;">
+                <i data-lucide="filter-x" style="width:12px; height:12px;"></i> Clear
+            </button>
         </div>
 
         <div id="resource-library-results"></div>
     `;
+
+    // 🚀 THE REPAINT: Convert all tags to SVGs
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 
     OL.syncResourceLibraryFilters();
 };
@@ -4817,16 +4830,18 @@ OL.renderResourceGroups = function(container, items) {
         <div class="resource-sections-wrapper">
             ${sphynxPinned.length ? `
                 <div class="resource-group" style="margin-bottom: 30px;">
-                    <div style="border-bottom: 2px solid var(--accent); padding: 8px; background: rgba(var(--accent-rgb), 0.05); margin-bottom:12px;">
-                        <h3 style="margin:0; font-size:12px; color: var(--accent);">💎 SPHYNX RESOURCES</h3>
+                    <div style="border-bottom: 2px solid var(--accent); padding: 8px; background: rgba(var(--accent-rgb), 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                        <i data-lucide="gem" style="width:16px; height:16px; color: var(--accent);"></i>
+                        <h3 style="margin:0; font-size:12px; color: var(--accent); letter-spacing:0.05em;">SPHYNX RESOURCES</h3>
                     </div>
                     <div class="cards-grid">${sphynxPinned.map(r => renderResourceCard(r)).join('')}</div>
                 </div>` : ''}
 
             ${adminPinned.length ? `
                 <div class="resource-group" style="margin-bottom: 30px;">
-                    <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px;">
-                        <h3 style="margin:0; font-size:12px; color: #94a3b8;">📁 ADMIN</h3>
+                    <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                        <i data-lucide="shield-check" style="width:16px; height:16px; color: #94a3b8;"></i>
+                        <h3 style="margin:0; font-size:12px; color: #94a3b8;">ADMIN</h3>
                     </div>
                     <div class="cards-grid">${adminPinned.map(r => renderResourceCard(r)).join('')}</div>
                 </div>` : ''}
@@ -4834,9 +4849,12 @@ OL.renderResourceGroups = function(container, items) {
             ${sortedTypes.map(type => `
                 <div class="resource-group" style="margin-bottom: 40px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
-                        <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">
-                            ${OL.getRegistryIcon(type)} ${type}s
-                        </h3>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <i data-lucide="${OL.getRegistryIcon(type)}" style="width:18px; height:18px; color: var(--accent);"></i>
+                            <h3 style="margin:0; font-size: 13px; text-transform: uppercase; color: var(--accent); letter-spacing: 0.1em;">
+                                ${type}s
+                            </h3>
+                        </div>
                         <button class="btn tiny soft" onclick="OL.promptBulkReclassify('${type}')">Bulk Move</button>
                     </div>
                     <div class="cards-grid">
@@ -4846,6 +4864,9 @@ OL.renderResourceGroups = function(container, items) {
             `).join('')}
         </div>
     `;
+
+    // 🚀 THE REPAINT
+    if (window.lucide) window.lucide.createIcons();
 };
 
 OL.clearResourceFilters = function() {
@@ -4952,35 +4973,43 @@ OL.promptBulkReclassify = function(oldType) {
 OL.openResourceTypeManager = function () {
     const registry = state.master.resourceTypes || [];
     const masterFunctions = state.master.functions || [];
-    const quickIcons = ["⚡", "📄", "📧", "📅", "🔌", "📖", "🏠", "💬", "🛠️", "🎯", "🤖", "📈"];
+    // 🎨 Lucide-friendly icon names
+    const quickIcons = ["zap", "file-text", "mail", "calendar", "plug-2", "book-open", "home", "message-square", "wrench", "target", "bot", "trending-up"];
 
     let html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚙️ Manage Resource Types</div>
+        <div class="modal-head" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="settings" style="width:20px; height:20px; color:var(--accent);"></i>
+            <div class="modal-title-text">Manage Resource Types</div>
         </div>
         <div class="modal-body">
             <p class="tiny muted mb-20">
-                Define categories, icons, and link them to Master Functions to enable auto-locking of primary apps.
+                Define categories, link Lucide icons, and map to Master Functions for auto-locking logic.
             </p>
             
-            <div class="dp-manager-list custom-scrollbar">
+            <div class="dp-manager-list custom-scrollbar" style="max-height: 400px; overflow-y: auto;">
                 ${registry.map(t => {
                     const encType = btoa(t.type);
+                    const currentIcon = t.lucideIcon || 'settings';
                     return `
-                    <div class="dp-manager-row type-editor-row">
-                        <span contenteditable="true" 
-                              class="icon-edit-box"
-                              onblur="OL.updateResourceTypeProp('${t.typeKey}', 'icon', this.innerText)">
-                            ${t.icon || '⚙️'}
-                        </span>
+                    <div class="dp-manager-row type-editor-row" style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
+                        <div style="display:flex; align-items:center; background:var(--bg-card); padding:5px; border-radius:4px; border:1px solid var(--line);">
+                            <i data-lucide="${currentIcon}" style="width:16px; height:16px; color:var(--accent);"></i>
+                        </div>
+
+                        <input type="text" class="modal-input tiny" style="width:80px; font-family:monospace; font-size:10px;"
+                               value="${currentIcon}"
+                               placeholder="icon-name"
+                               onblur="OL.updateResourceTypeProp('${t.typeKey}', 'lucideIcon', this.value)">
 
                         <span contenteditable="true" 
                               class="type-name-edit"
+                              style="flex:1; font-weight:bold; outline:none;"
                               onblur="OL.renameResourceTypeFlat('${encType}', this.innerText)">
                             ${esc(t.type)}
                         </span>
                         
                         <select class="modal-input tiny func-match-select" 
+                                style="width:140px;"
                                 onchange="OL.updateResourceTypeProp('${t.typeKey}', 'matchedFunctionId', this.value)">
                             <option value="">-- No Auto-Lock --</option>
                             ${masterFunctions.map(f => `
@@ -4990,27 +5019,34 @@ OL.openResourceTypeManager = function () {
                             `).join('')}
                         </select>
 
-                        <button class="card-delete-btn" onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">×</button>
+                        <button class="card-delete-btn" style="position:static;" onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">
+                            <i data-lucide="x" style="width:14px; height:14px;"></i>
+                        </button>
                     </div>`;
                 }).join('')}
             </div>
 
-            <div class="manager-footer-add">
+            <div class="manager-footer-add" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--line);">
                 <label class="modal-section-label">Quick Add New Type</label>
-                <div class="add-type-form">
-                    <input type="text" id="new-type-icon" class="modal-input icon-input" placeholder="⚙️" maxlength="2">
-                    <input type="text" id="new-type-input" class="modal-input name-input" placeholder="New Type Name...">
+                <div class="add-type-form" style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="text" id="new-type-icon" class="modal-input icon-input" style="width:100px;" placeholder="Icon (e.g. zap)">
+                    <input type="text" id="new-type-input" class="modal-input name-input" style="flex:1;" placeholder="New Type Name...">
                     <button class="btn primary" onclick="OL.addNewResourceTypeFlat()">Add Type</button>
                 </div>
                 
-                <div class="emoji-quick-grid">
+                <div class="emoji-quick-grid" style="display:flex; flex-wrap:wrap; gap:8px;">
                     ${quickIcons.map(icon => `
-                        <div class="emoji-option" onclick="document.getElementById('new-type-icon').value='${icon}'">${icon}</div>
+                        <div class="emoji-option" 
+                             style="cursor:pointer; padding:6px; background:var(--bg-card); border:1px solid var(--line); border-radius:4px;"
+                             onclick="document.getElementById('new-type-icon').value='${icon}'">
+                             <i data-lucide="${icon}" style="width:14px; height:14px;"></i>
+                        </div>
                     `).join('')}
                 </div>
             </div>
         </div>`;
     openModal(html);
+    if (window.lucide) window.lucide.createIcons();
 };
 
 OL.renderHierarchySelectors = function (res, isVault) {
