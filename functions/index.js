@@ -161,21 +161,21 @@ exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
     }
 });
 
-// 7. Redtail Proxy (CRM Workflows)
+// 7. Redtail v3 Proxy
 exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
-    const authHeader = req.query.apiKey; // This will be the Base64 "username:password"
-    if (!authHeader) return res.status(400).send('Missing Authorization Credentials');
-    
+    const authHeader = req.query.apiKey; // Base64(username:password) 
+
     try {
-        const response = await axios.get("https://api.redtailtechnology.com/crm/v1/rest/workflows", {
-            headers: { 
-                'Authorization': `Basic ${authHeader}`,
-                'Accept': 'application/json'
+        const response = await axios.get("https://smf.crm3.redtailtechnology.com/api/public/v1/workflows/templates", {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': ${authHeader}
             }
         });
+        
         res.status(200).json(response.data);
     } catch (error) {
-        console.error("Redtail API Error:", error.response?.data || error.message);
+        console.error("Redtail v3 Error:", error.response?.data || error.message);
         res.status(error.response?.status || 500).send(error.message);
     }
 });
