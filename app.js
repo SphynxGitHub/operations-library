@@ -11523,24 +11523,26 @@ OL.toggleSteps = function(id) {
 };
 
 // 📝 THE RENAME HELPER
-OL.renameStage = function(index, newName) {
+OL.renameStage = async function(stageId, newName) {
     const cleanName = newName.trim();
-    
-    // 🎯 1. Get the correct data context (Project vs Vault)
-    const data = OL.getCurrentProjectData();
-    const stage = data.stages[index];
+    if (!cleanName) return;
 
-    if (cleanName && stage) {
-        // 2. Update the data
+    const data = OL.getCurrentProjectData();
+    const stage = data.stages.find(s => String(s.id) === String(stageId));
+
+    if (stage) {
+        // 1. Update the data
         stage.name = cleanName;
-        console.log(`✅ Stage ${index} renamed to: ${cleanName}`);
         
-        // 💾 3. CRITICAL: Save the change to the database/localStorage
-        OL.save(); 
-        
-        // 🚀 4. OPTIONAL: Refresh connections 
-        // Sometimes labels shifting can slightly move connection lines
-        OL.drawConnections();
+        // 2. 🚀 THE SHIELD: Use updateAndSync to prevent the "Bounce Back" 
+        // that causes you to lose focus or the map to flash.
+        await OL.updateAndSync(() => {
+            console.log(`✅ Stage ${stageId} renamed to: ${cleanName}`);
+        });
+
+        // 3. Optional: Sync the specific label in the DOM without re-rendering everything
+        const inputEl = document.querySelector(`input[onchange*="${stageId}"]`);
+        if (inputEl) inputEl.value = cleanName;
     }
 };
 
