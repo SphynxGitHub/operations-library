@@ -190,18 +190,29 @@ exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, asyn
         let nextCursor = null;
         let hasMore = true;
 
-        // Step 1: Paginate Workflows
+        // Step 1: Paginate Workflows (v1.1 Style)
         while (hasMore) {
-            const url = `https://public-api.process.st/api/v1.1/workflows`;
+            // If we have a nextCursor, use the specific pagination URL
+            const url = nextCursor 
+                ? nextCursor 
+                : `https://public-api.process.st/api/v1.1/workflows`;
+        
             const response = await axios.get(url, {
-                headers: { 'X-API-Key': apiKey },
-                params: { cursor: nextCursor, limit: 20 }
+                headers: { 'X-API-Key': apiKey }
             });
-
-            const items = response.data.items || [];
-            allWorkflows = allWorkflows.concat(items);
-            nextCursor = response.data.cursor;
-            hasMore = !!nextCursor;
+        
+            // 🎯 THE FIX: v1.1 uses 'workflows', not 'items'
+            const pageWorkflows = response.data.workflows || [];
+            allWorkflows = allWorkflows.concat(pageWorkflows);
+        
+            // 🎯 THE FIX: v1.1 uses a 'links' array for the next page
+            const nextLink = (response.data.links || []).find(l => l.rel === 'next');
+            if (nextLink) {
+                nextCursor = nextLink.href;
+                hasMore = true;
+            } else {
+                hasMore = false;
+            }
         }
 
         // Step 2: Parallel Fetch Tasks
