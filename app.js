@@ -18033,30 +18033,39 @@ OL.importJotform = async function(client) {
     const creds = OL.getCredsForApp(client, 'jotform');
     if (!creds?.secret) throw new Error("Jotform API Key missing.");
 
-    const url = `https://jotformproxy-YOUR-ID.a.run.app/?apiKey=${creds.secret}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    // Ensure the URL is EXACT
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/jotformProxy?apiKey=${creds.secret}`;
 
-    // 🚀 THE FIX: Jotform sometimes returns an array in 'data' or 'content'
-    // We check for both, or assume the data itself is the array
-    const forms = data.content || data.data || (Array.isArray(data) ? data : []);
-
-    if (!Array.isArray(forms)) {
-        console.error("Jotform Data Received:", data);
-        throw new Error("Jotform returned an unexpected data format.");
-    }
-
-    forms.forEach(form => {
-        OL.upsertExternalResource(client, {
-            id: `jf-${form.id}`,
-            externalId: form.id,
-            name: `📄 Form: ${form.title}`,
-            type: 'Form',
-            externalUrl: `https://www.jotform.com/form/${form.id}`,
-            steps: [{ id: uid(), name: "User Submits Form", appName: "Jotform" }]
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors', // Explicitly ask for CORS
+            headers: { 'Accept': 'application/json' }
         });
-    });
-    return forms.length;
+
+        if (!response.ok) {
+            const errTxt = await response.text();
+            throw new Error(`Jotform Proxy Error (${response.status}): ${errTxt}`);
+        }
+
+        const data = await response.json();
+        const forms = data.content || data.data || (Array.isArray(data) ? data : []);
+
+        forms.forEach(form => {
+            OL.upsertExternalResource(client, {
+                id: `jf-${form.id}`,
+                externalId: form.id,
+                name: `📄 Form: ${form.title}`,
+                type: 'Form',
+                externalUrl: `https://www.jotform.com/form/${form.id}`,
+                steps: [{ id: uid(), name: "User Submits Form", appName: "Jotform" }]
+            });
+        });
+        return forms.length;
+    } catch (err) {
+        console.error("Fetch Interruption:", err);
+        throw err;
+    }
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
