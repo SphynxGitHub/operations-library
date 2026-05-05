@@ -163,18 +163,20 @@ exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
 
 // 7. Redtail Proxy (CRM Workflows)
 exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
-    const userKey = req.query.apiKey; // This will be the encoded APIKey:UserKey
-    if (!userKey) return res.status(400).send('Missing Redtail Key');
+    const authHeader = req.query.apiKey; // This will be the Base64 "username:password"
+    if (!authHeader) return res.status(400).send('Missing Authorization Credentials');
+    
     try {
         const response = await axios.get("https://api.redtailtechnology.com/crm/v1/rest/workflows", {
             headers: { 
-                'Authorization': `Userkey ${userKey}`,
+                'Authorization': `Basic ${authHeader}`,
                 'Accept': 'application/json'
             }
         });
         res.status(200).json(response.data);
     } catch (error) {
-        res.status(500).send(error.message);
+        console.error("Redtail API Error:", error.response?.data || error.message);
+        res.status(error.response?.status || 500).send(error.message);
     }
 });
 
