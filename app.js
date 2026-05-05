@@ -14189,30 +14189,38 @@ window.renderScopingSheet = function () {
         .sort((a, b) => a - b);
 
     // 5. RENDER HTML
-    container.innerHTML = `
-    <div class="section-header">
-        <div>
-            <h2>📊 ${esc(client.meta.name)} Scoping Sheet</h2>
+    ccontainer.innerHTML = `
+    <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+        <i data-lucide="table-properties" style="width:28px; height:24px; color:var(--accent);"></i>
+        <div style="flex:1;">
+            <h2 style="margin:0;">${esc(client.meta.name)} Scoping Sheet</h2>
         </div>
         <div class="header-actions">
-            <button class="btn small soft" onclick="OL.toggleScopingUnits()">
-                ${showUnits ? "👁️ Hide Units" : "👁️ Show Units"}
+            <button class="btn small soft" onclick="OL.toggleScopingUnits()" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="${showUnits ? "eye-off" : "eye"}" style="width:14px; height:14px;"></i>
+                ${showUnits ? "Hide Units" : "Show Units"}
             </button>
             
             ${(state.adminMode || window.location.search.includes('admin=')) ? `
-                <button class="btn small soft" onclick="OL.universalCreate('SOP')">+ Create New Resource</button>
-                <button class="btn primary" onclick="OL.addResourceToScope()">+ Add From Library</button>
+                <button class="btn small soft" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="plus" style="width:14px; height:14px;"></i> New Resource
+                </button>
+                <button class="btn primary" onclick="OL.addResourceToScope()" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="library" style="width:14px; height:14px;"></i> Add From Library
+                </button>
             ` : ''}
         </div>
     </div>
 
     ${state.scopingFilterActive ? `
         <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <button class="btn primary" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/scoping-sheet';">
-                ⬅ Show Full Scoping Sheet
+            <button class="btn primary" style="display:flex; align-items:center; gap:6px;"
+                    onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/scoping-sheet';">
+                <i data-lucide="arrow-left" style="width:14px; height:14px;"></i> Show Full Scoping Sheet
             </button>
-            <button class="btn soft" onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/visualizer';">
-                🌐 Back to Flow Map
+            <button class="btn soft" style="display:flex; align-items:center; gap:6px;"
+                    onclick="state.scopingFilterActive = false; state.scopingTargetId = null; location.hash='#/visualizer';">
+                <i data-lucide="map" style="width:14px; height:14px;"></i> Back to Flow Map
             </button>
         </div>
     ` : ''}
@@ -14220,13 +14228,15 @@ window.renderScopingSheet = function () {
     ${wfContext ? `
         <div class="workflow-context-widget" 
              style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); padding: 12px 15px; border-radius: 8px; margin-bottom: 25px; display: flex; align-items: center; gap: 15px;">
-            <div style="font-size: 20px;">🕸️</div>
+            <i data-lucide="workflow" style="width:24px; height:24px; color:var(--accent);"></i>
             <div style="flex: 1;">
-                <div class="tiny accent bold uppercase" style="font-size: 9px;">Active Mapping Context</div>
+                <div class="tiny accent bold uppercase" style="font-size: 9px; letter-spacing: 0.05em;">Active Mapping Context</div>
                 <div style="font-weight: bold; color: white; font-size: 14px;">${esc(wfContext.name)}</div>
                 <div class="tiny muted">${wfContext.summary}</div>
             </div>
-            <button class="btn tiny primary" onclick="location.hash='#/visualizer'">View Map ➔</button>
+            <button class="btn tiny primary" onclick="location.hash='#/visualizer'" style="display:flex; align-items:center; gap:6px;">
+                View Map <i data-lucide="chevron-right" style="width:12px; height:12px;"></i>
+            </button>
         </div>
     ` : ''}
 
@@ -14378,7 +14388,11 @@ window.renderRoundGroup = function(roundName, items, baseRate, showUnits, client
             <div class="round-grid">${rows}</div>
         </div>
     `;
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
+
 // 3. RENDER SCOPING ROW / UPDATE ROW
 function renderScopingRow (item, idx, showUnits) {
     const client = getActiveClient();
