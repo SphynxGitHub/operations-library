@@ -5,7 +5,7 @@ const OL = window.OL = {};
 
 // 🎨 THEME BOOTLOADER: Run immediately on script load
 (function initTheme() {
-    const savedTheme = localStorage.getItem('ol_theme');
+    const savedTheme = localStorage.getItem('ol_theme'); 
     if (savedTheme === 'light') {
         document.body.classList.add('light-mode');
     } else {
