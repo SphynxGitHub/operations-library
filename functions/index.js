@@ -161,27 +161,22 @@ exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
     }
 });
 
-// 7. Redtail v3 Proxy (Corrected Auth & URI)
+// 7. Redtail v3 Proxy (Direct Header)
 exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
-    const authHeader = req.query.apiKey; // Expected to be the Base64 string from app.js
-
-    if (!authHeader) return res.status(400).send('Missing Authorization String');
-
+    const rawAuth = req.query.apiKey; 
+    
     try {
         const response = await axios.get("https://smf.crm3.redtailtechnology.com/api/public/v1/workflows/templates", {
             headers: {
-                'Content-Type': 'application/json',
-                // 🚀 AUTH FIX: No "Basic" prefix needed for this endpoint
-                'Authorization': authHeader 
+                'Authorization': rawAuth, // 🎯 Sends exactly what you provide
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
         });
-        
         res.status(200).json(response.data);
     } catch (error) {
-        console.error("Redtail v3 Error:", error.response?.data || error.message);
-        const status = error.response?.status || 500;
-        const msg = error.response?.data?.message || error.message;
-        res.status(status).send(msg);
+        console.error("Redtail Error:", error.response?.data || error.message);
+        res.status(error.response?.status || 500).send(error.message);
     }
 });
 
