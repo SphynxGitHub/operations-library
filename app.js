@@ -9923,6 +9923,18 @@ OL.renderVisualizer = function() {
     OL.renderFocusControls();
     OL.renderWorkbenchItemsOnly();
     OL.drawConnections();
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+    
+    // Force toolbar button style recalculation
+    const toolbarButtons = document.querySelectorAll('.v2-toolbar .btn');
+    toolbarButtons.forEach(btn => {
+        // This forces the browser to re-check the CSS variables
+        btn.style.display = 'none';
+        btn.offsetHeight; // trigger reflow
+        btn.style.display = '';
+    });
 };
 
 OL.insertStage = async function(index) {
