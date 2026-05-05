@@ -18157,22 +18157,32 @@ OL.importProcessStreet = async function(client) {
 
 OL.importRedtail = async function(client) {
     const creds = OL.getCredsForApp(client, 'redtail');
-    const authString = btoa(`${creds.username}:${creds.secret}`);
+    if (!creds?.username || !creds?.secret) throw new Error("Missing Redtail Credentials");
+
+    // 🎯 Use the exact {{basic_auth}} logic that worked in your console
+    // If your working console used Username:Password, we do that here.
+    const myFullAuthString = btoa(`${creds.username}:${creds.secret}`); 
     
     let allTemplates = [];
     let page = 1;
     let hasMore = true;
 
+    console.log("📡 Redtail: Starting sync using verified console logic...");
+
     while (hasMore) {
-        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}&page=${page}`;
+        // 🎯 The exact URL structure from your successful console test
+        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(myFullAuthString)}&page=${page}`;
+
         const response = await fetch(url);
         const data = await response.json();
 
-        // 🎯 KEY MATCH: Using 'workflow_templates' from your console log
-        const list = data.workflow_templates || [];
-        allTemplates = allTemplates.concat(list);
+        // 🎯 Using the verified key 'workflow_templates' from your console output
+        const batch = data.workflow_templates || [];
+        allTemplates = allTemplates.concat(batch);
 
-        // Check if there's a next page (total_pages: 2)
+        console.log(`✅ Page ${page}: Found ${batch.length}. Total: ${allTemplates.length}`);
+
+        // Pagination logic based on your console log (total_pages: 2)
         if (page < (data.total_pages || 1)) {
             page++;
         } else {
@@ -18186,9 +18196,13 @@ OL.importRedtail = async function(client) {
             externalId: tpl.id,
             name: `🔴 RT: ${tpl.name}`,
             type: 'Workflow',
-            steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
+            steps: [{ id: uid(), name: "Workflow Template Step", appName: "Redtail" }]
         });
     });
+
+    // Final UI updates
+    OL.persist();
+    if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
 
     return allTemplates.length;
 };
