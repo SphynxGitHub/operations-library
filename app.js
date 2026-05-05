@@ -18155,40 +18155,66 @@ OL.importProcessStreet = async function(client) {
 
 // Renamed to 'syncRedtail' to break the cache
 OL.syncRedtail = async function(client) {
-    console.log("Starting Redtail Sync...");
+    console.log("🚀 Starting Redtail Sync...");
     
-    // Check if the database is ready
-    if (typeof projectData === 'undefined') {
-        alert("Hold up! The library is still loading. Give it 2 more seconds.");
+    // 🎯 THE FIX: Find the data wherever it is hiding
+    const masterData = typeof projectData !== 'undefined' ? projectData : (OL.registry || null);
+    
+    if (!masterData) {
+        console.error("❌ Data Context Missing. projectData is undefined.");
+        alert("System Error: Registry not found. Check console.");
         return;
     }
 
-    // Ensure we have a valid client
+    // Ensure we have a client to work with
     const targetClient = client || OL.activeClient;
     if (!targetClient) {
-        alert("No active client selected!");
+        alert("Please select a Client Card first!");
         return;
     }
 
     try {
-        const creds = OL.getCredsForApp(targetClient, 'redtail');
+        // Find credentials directly without the helper if it's acting up
+        const creds = targetClient.externalIntegrations?.find(i => i.appSlug === 'redtail');
+        
         if (!creds || !creds.username || !creds.secret) {
-            alert("Redtail credentials missing on this card!");
+            alert("Missing Redtail Username or Secret on this card.");
             return;
         }
 
-        // ... rest of your verified console logic here ...
+        // 🎯 EXACT CONSOLE LOGIC THAT WORKED
         const auth = btoa(`${creds.username}:${creds.secret}`);
         const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(auth)}`;
-        
+
+        console.log("📡 Fetching from Proxy:", url);
         const res = await fetch(url);
         const data = await res.json();
-        const list = data.workflow_templates || [];
         
-        // Success logic...
-        alert(`Imported ${list.length} Redtail templates!`);
+        // Use the confirmed key from your console test
+        const list = data.workflow_templates || [];
+        console.log(`✅ Received ${list.length} templates from Redtail.`);
+
+        if (list.length === 0) {
+            alert("Connected to Redtail, but 0 templates were found.");
+            return;
+        }
+
+        list.forEach(tpl => {
+            OL.upsertExternalResource(targetClient, {
+                id: `rt-${tpl.id}`,
+                name: `🔴 RT: ${tpl.name}`,
+                type: 'Workflow',
+                steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
+            });
+        });
+
+        OL.persist();
+        if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
+        alert(`🎉 Success! ${list.length} Redtail Workflows added.`);
+
     } catch (e) {
-        console.error("Sync Error:", e);
+        console.error("🔥 Sync Failed:", e);
+        alert("Sync Failed: " + e.message);
     }
 };
 
