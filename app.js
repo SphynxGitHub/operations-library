@@ -9881,7 +9881,7 @@ OL.renderVisualizer = function() {
                                 <div class="step-row-content">
                                     <span class="drag-handle" draggable="true" ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})">⠿</span>
                                     <span style="flex: 1; font-size: 11px;">
-                                        <span style="color:var(--accent); margin-right:4px;">${OL.getStepIcon(s)}</span>
+                                        <i data-lucide="${iconName}" style="width:12px; height:12px; margin-right:6px; color:var(--accent);"></i>
                                         ${esc(s.name)}
                                     </span>
                                     <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
@@ -9975,7 +9975,7 @@ OL.handleSidebarSearch = function(e) {
 };
 
 OL.getStepIcon = function(step) {
-    if (!step.links || step.links.length === 0) return '•';
+    if (!step.links || step.links.length === 0) return 'circle'; // Generic dot
     
     const linked = step.links.map(l => ({
         ...l,
@@ -9991,28 +9991,29 @@ OL.getStepIcon = function(step) {
         );
     };
 
-    if (check('email')) return '✉️';
-    if (check('form')) return '📄';
-    if (check('event') || check('scheduler')) return '📅';
-    if (check('guide') || check('sop')) return '📖';
-    if (check('signature') || check('sig-')) return '🖋️';
+    // Return Lucide Icon Slugs
+    if (check('email')) return 'mail';
+    if (check('form')) return 'file-text';
+    if (check('event') || check('scheduler')) return 'calendar';
+    if (check('guide') || check('sop')) return 'book-open';
+    if (check('signature') || check('sig-')) return 'pen-tool';
     
-    if (check('zap') || check('automation')) return '⚡';
-    if (check('database') || check('sheet')) return '📊';
-    if (check('legal') || check('contract')) return '⚖️';
-    if (check('folder') || check('file')) return '📁';
-    if (check('video') || check('recording')) return '🎥';
-    if (check('payment') || check('invoice')) return '💰';
+    if (check('zap') || check('automation')) return 'zap';
+    if (check('database') || check('sheet')) return 'table-2';
+    if (check('legal') || check('contract')) return 'file-signature';
+    if (check('folder') || check('file')) return 'folder';
+    if (check('video') || check('recording')) return 'video';
+    if (check('payment') || check('invoice')) return 'banknote';
 
-    return '🔗'; 
+    return 'link'; 
 };
 
 OL.renderWorkbenchTabs = function() {
     const tabs = [
-        { id: 'flows', label: '🌊 Flows', color: 'var(--accent)' },
-        { id: 'assets', label: '📦 Assets', color: '#38bdf8' },
-        { id: 'guides', label: '📖 Guides', color: '#fbbf24' },
-        { id: 'data', label: '🏷️ Data', color: '#a78bfa' }
+        { id: 'flows', label: 'Flows', icon: 'workflow', color: 'var(--accent)' },
+        { id: 'assets', label: 'Assets', icon: 'database', color: '#38bdf8' },
+        { id: 'guides', label: 'Guides', icon: 'book-open', color: '#fbbf24' },
+        { id: 'data', label: 'Data', icon: 'tag', color: '#a78bfa' }
     ];
 
     return `
@@ -10021,10 +10022,13 @@ OL.renderWorkbenchTabs = function() {
                 ${tabs.map(t => `
                     <div class="wb-tab ${state.ui.activeWorkbenchTab === t.id ? 'active' : ''}" 
                         onclick="OL.switchWorkbenchTab('${t.id}')" 
-                        style="flex:1; padding: 12px 5px; text-align:center; font-size:9px; font-weight:bold; cursor:pointer; 
+                        style="flex:1; padding: 12px 5px; text-align:center; cursor:pointer; 
                                 border-bottom: 2px solid ${state.ui.activeWorkbenchTab === t.id ? t.color : 'transparent'};
-                                color: ${state.ui.activeWorkbenchTab === t.id ? t.color : 'var(--text-dim)'};">
-                        ${t.label.toUpperCase()}
+                                color: ${state.ui.activeWorkbenchTab === t.id ? t.color : 'var(--text-dim)'};
+                                display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        
+                        <i data-lucide="${t.icon}" style="width:14px; height:14px;"></i>
+                        <span style="font-size:9px; font-weight:bold;">${t.label.toUpperCase()}</span>
                     </div>
                 `).join('')}
             </div>
