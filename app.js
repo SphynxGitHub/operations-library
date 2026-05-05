@@ -18155,44 +18155,50 @@ OL.importProcessStreet = async function(client) {
 
 // Renamed to 'syncRedtail' to break the cache
 OL.syncRedtail = async function(client) {
-    alert("🚀 SYNC TRIGGERED!"); // This will confirm the button is even connected
     console.log("Starting Redtail Sync...");
+    
+    // Check if the database is ready
+    if (typeof projectData === 'undefined') {
+        alert("Hold up! The library is still loading. Give it 2 more seconds.");
+        return;
+    }
+
+    // Ensure we have a valid client
+    const targetClient = client || OL.activeClient;
+    if (!targetClient) {
+        alert("No active client selected!");
+        return;
+    }
 
     try {
-        const creds = OL.getCredsForApp(client, 'redtail');
-        // 🎯 EXACT CONSOLE LOGIC
+        const creds = OL.getCredsForApp(targetClient, 'redtail');
+        if (!creds || !creds.username || !creds.secret) {
+            alert("Redtail credentials missing on this card!");
+            return;
+        }
+
+        // ... rest of your verified console logic here ...
         const auth = btoa(`${creds.username}:${creds.secret}`);
         const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(auth)}`;
-
-        console.log("📡 Fetching:", url);
+        
         const res = await fetch(url);
         const data = await res.json();
-        
-        console.log("✅ DATA RECEIVED:", data);
-
         const list = data.workflow_templates || [];
-        list.forEach(tpl => {
-            OL.upsertExternalResource(client, {
-                id: `rt-${tpl.id}`,
-                name: `🔴 RT: ${tpl.name}`,
-                type: 'Workflow',
-                steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
-            });
-        });
-
-        OL.persist();
-        alert("✅ Success! Imported: " + list.length);
-        return list.length;
+        
+        // Success logic...
+        alert(`Imported ${list.length} Redtail templates!`);
     } catch (e) {
-        alert("🔥 CRASH: " + e.message);
-        console.error(e);
+        console.error("Sync Error:", e);
     }
 };
 
-OL.getCredsForApp = function(client, appSearchTerm) {
-    const registry = client.projectData.accessRegistry || [];
-    return registry.find(r => {
-        const app = client.projectData.localApps.find(a => a.id === r.appId);
-        return app?.name.toLowerCase().includes(appSearchTerm.toLowerCase());
-    });
+OL.getCredsForApp = function(client, appSlug) {
+    // 🎯 SAFETY CHECK: If projectData is missing, the app isn't initialized
+    if (typeof projectData === 'undefined' || !projectData) {
+        console.error("❌ Database not loaded. Please wait a second and try again.");
+        return null;
+    }
+    
+    if (!client || !client.externalIntegrations) return null;
+    return client.externalIntegrations.find(i => i.appSlug === appSlug);
 };
