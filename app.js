@@ -2527,18 +2527,22 @@ function renderCapabilitiesList(app, isReadOnlyView) {
 
     // --- RENDER MASTER SPECS ---
     let html = masterSpecs.map((cap, idx) => `
-        <div class="dp-manager-row master-spec">
-            <div style="display:flex; gap:10px; flex:1;">
-                <span class="pill tiny soft">${cap.type}</span>
-                <div class="dp-name-cell muted" style="cursor: default;">${esc(cap.name)}</div>
+        <div class="dp-manager-row master-spec" style="display:flex; align-items:center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">
+            <div style="display:flex; gap:10px; align-items:center; flex:1;">
+                <span class="pill tiny soft" style="display:flex; align-items:center; gap:4px; font-size:9px;">
+                    <i data-lucide="${cap.type === 'Trigger' ? 'zap' : 'play'}" style="width:10px; height:10px;"></i>
+                    ${cap.type}
+                </span>
+                <div class="dp-name-cell muted" style="cursor: default; font-size:12px;">${esc(cap.name)}</div>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
                 ${isAdmin ? `
-                    <span class="card-close" 
-                          style="cursor:pointer; padding-right:5px; font-size: 18px; color: var(--text-dim);" 
-                          onclick="event.stopPropagation(); OL.removeMasterCapabilityFromApp('${app.id}', ${idx})">×</span>
+                    <button class="card-delete-btn" style="position:static; opacity:0.4;" 
+                            onclick="event.stopPropagation(); OL.removeMasterCapabilityFromApp('${app.id}', ${idx})">
+                        <i data-lucide="x" style="width:14px; height:14px;"></i>
+                    </button>
                 ` : `
-                    <span class="tiny muted" style="padding-right:10px; font-size: 10px;">🔒</span>
+                    <i data-lucide="lock" style="width:12px; height:12px; margin-right:10px; opacity:0.3;"></i>
                 `}
             </div>
         </div>
@@ -2546,41 +2550,54 @@ function renderCapabilitiesList(app, isReadOnlyView) {
 
     // --- RENDER LOCAL SPECS ---
     html += localSpecs.map((cap, idx) => {
-        const isAdmin = state.adminMode === true || window.location.search.includes('admin=pizza');
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAdmin = state.adminMode === true || urlParams.get('admin') === 'pizza123';
         const isPushed = !!cap.masterRefId;
         const canEdit = (!isPushed || isAdmin);
 
         return `
-        <div class="dp-manager-row local-spec">
-            
-            <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'}" 
-                style="cursor: ${canEdit ? 'pointer' : 'default'}; min-width: 60px; text-align: center; user-select: none;"
-                onmousedown="if(${canEdit}) { event.stopPropagation(); OL.toggleCapabilityType(event, '${app.id}', ${idx}); }">
-                ${cap.type || 'Action'}
-            </span>
+        <div class="dp-manager-row local-spec" style="display:flex; align-items:center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">
+            <div style="display:flex; gap:10px; align-items:center; flex:1;">
+                <span class="pill tiny ${cap.type === 'Trigger' ? 'accent' : 'soft'} is-clickable" 
+                    style="display:flex; align-items:center; gap:4px; min-width: 75px; justify-content: center; user-select: none; font-size:9px;"
+                    onmousedown="if(${canEdit}) { event.stopPropagation(); OL.toggleCapabilityType(event, '${app.id}', ${idx}); }">
+                    <i data-lucide="${cap.type === 'Trigger' ? 'zap' : 'play'}" style="width:10px; height:10px;"></i>
+                    ${cap.type || 'Action'}
+                </span>
 
-            <div class="dp-name-cell" 
-                contenteditable="${canEdit ? 'true' : 'false'}" 
-                style="flex: 1; cursor: ${canEdit ? 'text' : 'default'}; padding: 4px; outline: none;"
-                onmousedown="event.stopPropagation();"
-                onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
-                ${esc(cap.name)}
+                <div class="dp-name-cell" 
+                    contenteditable="${canEdit ? 'true' : 'false'}" 
+                    style="flex: 1; cursor: ${canEdit ? 'text' : 'default'}; padding: 4px; outline: none; font-size:12px; color: var(--text-main);"
+                    onmousedown="event.stopPropagation();"
+                    onblur="OL.updateLocalCapability('${app.id}', ${idx}, 'name', this.textContent)">
+                    ${esc(cap.name)}
+                </div>
             </div>
 
-            <div style="display:flex; gap:5px; align-items:center;">
+            <div style="display:flex; gap:8px; align-items:center;">
                 ${isAdmin && !isPushed && !!app.masterRefId ? `
-                    <button class="btn tiny primary" onclick="OL.pushSpecToMaster('${app.id}', ${idx})">⭐ PUSH</button>
+                    <button class="btn tiny primary" style="font-size:8px; padding: 2px 6px; display:flex; align-items:center; gap:4px;" 
+                            onclick="OL.pushSpecToMaster('${app.id}', ${idx})">
+                        <i data-lucide="arrow-up-circle" style="width:10px; height:10px;"></i> PUSH
+                    </button>
                 ` : ''}
                 
                 ${canEdit ? `
-                    <span class="card-close" style="cursor:pointer; font-size:18px; padding:0 8px;" 
-                        onmousedown="event.stopPropagation(); OL.removeLocalCapability('${app.id}', ${idx})">×</span>
-                ` : `<span class="tiny muted">🔒</span>`}
+                    <button class="card-delete-btn" style="position:static; opacity:0.4;"
+                            onmousedown="event.stopPropagation(); OL.removeLocalCapability('${app.id}', ${idx})">
+                        <i data-lucide="x" style="width:14px; height:14px;"></i>
+                    </button>
+                ` : `
+                    <i data-lucide="lock" style="width:12px; height:12px; margin-right:10px; opacity:0.3;"></i>
+                `}
             </div>
         </div>`;
     }).join('');
 
-    return html || '<div class="empty-hint">No capabilities defined.</div>';
+    // 🚀 Trigger icon generation for dynamic content
+    setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 0);
+
+    return html || '<div class="empty-hint" style="padding:20px; text-align:center; opacity:0.5; font-size:11px;">No capabilities defined.</div>';
 }
 
 OL.addAppCapability = function(appId) {
@@ -3117,10 +3134,13 @@ OL.openGlobalFunctionManager = function() {
     const fns = state.master.functions || [];
 
     const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚙️ Master Function Groups</div>
+        <div class="modal-head" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="settings-2" style="width:20px; height:20px; color:var(--accent);"></i>
+            <div class="modal-title-text">Master Function Groups</div>
             <div class="spacer"></div>
-            <button class="btn small primary" onclick="OL.addNewMasterFunction()">+ New Group</button>
+            <button class="btn small primary" onclick="OL.addNewMasterFunction()">
+                <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i> New Group
+            </button>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
@@ -3129,13 +3149,16 @@ OL.openGlobalFunctionManager = function() {
             </p>
             <div class="dp-manager-list">
                 ${fns.map(fn => `
-                    <div class="dp-manager-row">
+                    <div class="dp-manager-row" style="display:flex; align-items:center; justify-content:space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div class="dp-name-cell" contenteditable="true" 
+                             style="flex:1; cursor:text; outline:none; font-size:13px;"
                              onblur="OL.updateMasterFunction('${fn.id}', 'name', this.textContent); OL.persist();">
                             ${esc(fn.name)}
                         </div>
                         <div class="dp-action-cell">
-                            <span class="card-close" onclick="OL.deleteMasterFunction('${fn.id}')">×</span>
+                            <button class="card-delete-btn" style="position:static; opacity:0.4;" onclick="OL.deleteMasterFunction('${fn.id}')">
+                                <i data-lucide="x" style="width:14px; height:14px;"></i>
+                            </button>
                         </div>
                     </div>
                 `).join('')}
@@ -3144,6 +3167,7 @@ OL.openGlobalFunctionManager = function() {
         </div>
     `;
     openModal(html);
+    if (window.lucide) window.lucide.createIcons();
 };
 
 window.renderFunctionsGrid = function() {
@@ -3155,13 +3179,10 @@ window.renderFunctionsGrid = function() {
     
     if (!container) return;
 
-    // 1. DATA AGGREGATION: Smart Filtering
     let displayFunctions = [];
     if (isMasterMode) {
-        // Vault: Show all global templates
         displayFunctions = state.master.functions || [];
     } else if (client) {
-        // Project: Show ONLY local functions + Master functions this client has deployed
         const local = client.projectData.localFunctions || [];
         const sharedMaster = (state.master.functions || []).filter(f => 
             (client.sharedMasterIds || []).includes(f.id)
@@ -3170,27 +3191,31 @@ window.renderFunctionsGrid = function() {
     }
     displayFunctions.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Get Apps for pill display inside the cards
-    const masterApps = state.master.apps || [];
-    const clientLocalApps = client?.projectData?.localApps || [];
     const allRelevantApps = isMasterMode 
         ? (state.master.apps || []) 
         : (client?.projectData?.localApps || []);
 
     container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>${isMasterMode ? '🏛️ Master Function Vault' : '⚒️ Project Functions'}</h2>
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="wrench" style="width:28px; height:24px; color:var(--accent);"></i>
+            <div style="flex:1;">
+                <h2 style="margin:0;">${isMasterMode ? 'Master Function Vault' : 'Project Functions'}</h2>
                 <div class="small muted subheader">
                     ${isMasterMode ? 'Global System Architecture' : `Categorized Operations for ${esc(client.meta.name)}`}
                 </div>
             </div>
             <div class="header-actions">
                 ${isMasterMode ? `
-                    <button class="btn primary" onclick="OL.addNewMasterFunction()">+ Create Master Function</button>
+                    <button class="btn primary" onclick="OL.addNewMasterFunction()">
+                        <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i> Create Master Function
+                    </button>
                 ` : `
-                    <button class="btn small soft" onclick="OL.promptAddLocalFunction('${client.id}')">+ Create Local Function</button>
-                    <button class="btn primary" onclick="OL.openVaultFunctionDeploymentModal('${client.id}')">⬇ Import from Master</button>
+                    <button class="btn small soft" onclick="OL.promptAddLocalFunction('${client.id}')">
+                        <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i> Local Function
+                    </button>
+                    <button class="btn primary" onclick="OL.openVaultFunctionDeploymentModal('${client.id}')">
+                        <i data-lucide="download-cloud" style="width:14px; height:14px; margin-right:6px;"></i> Import from Master
+                    </button>
                 `}
             </div>
         </div>
@@ -3198,7 +3223,6 @@ window.renderFunctionsGrid = function() {
 
         <div class="cards-grid">
             ${displayFunctions.map(fn => {
-                // Determine Tag and color based on Linkage
                 const isMasterRef = !!fn.masterRefId || String(fn.id).startsWith('fn-');
                 const tagLabel = isMasterRef ? 'MASTER' : 'LOCAL';
                 const tagColor = isMasterRef ? 'var(--accent)' : 'var(--panel-border)';
@@ -3216,12 +3240,17 @@ window.renderFunctionsGrid = function() {
                 return `
                     <div class="card is-clickable" onclick="OL.openFunctionModal('${fn.id}')">
                         <div class="card-header">
-                            <div class="card-title">${esc(fn.name)}</div>
                             <div style="display:flex; align-items:center; gap:8px;">
-                                <span class="vault-tag" style="background: ${tagColor}">
+                                <i data-lucide="component" style="width:14px; height:14px; color:var(--accent);"></i>
+                                <div class="card-title">${esc(fn.name)}</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="vault-tag" style="background: ${tagColor}; font-size: 8px;">
                                     ${tagLabel}
                                 </span>
-                                <button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${fn.id}', 'functions', event)">×</button>
+                                <button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${fn.id}', 'functions', event)">
+                                    <i data-lucide="x" style="width:12px; height:12px;"></i>
+                                </button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -3229,20 +3258,21 @@ window.renderFunctionsGrid = function() {
                                 ${mappedApps.map(app => `
                                     <span class="pill tiny status-${app.currentStatus || 'available'} is-clickable" 
                                         onclick="OL.handlePillInteraction(event, '${app.id}', '${fn.id}')"
-                                        oncontextmenu="OL.handlePillInteraction(event, '${app.id}', '${fn.id}'); return false;"
-                                        title="Left Click: Jump | Right Click: Cycle Status | Cmd+Click: Unmap">
+                                        oncontextmenu="OL.handlePillInteraction(event, '${app.id}', '${fn.id}'); return false;">
                                       ${esc(app.name)}
                                     </span>
                                 `).join('')}
-                                ${mappedApps.length === 0 ? '<span class="tiny muted">No apps currently mapped.</span>' : ''}
+                                ${mappedApps.length === 0 ? '<span class="tiny muted italic">No apps mapped.</span>' : ''}
                             </div>
                         </div>
                     </div>
                 `;
-              }).join('')}
-            ${displayFunctions.length === 0 ? '<div class="empty-hint">No functions active. Deploy from vault or add local.</div>' : ''}
+            }).join('')}
         </div>
     `;
+
+    // 🚀 THE REPAINT
+    if (window.lucide) window.lucide.createIcons();
 };
 
 // 2. ADD, EDIT, OR REMOVE FUNCTION CARD
@@ -3361,42 +3391,54 @@ OL.openFunctionModal = function(fnId, draftObj = null) {
     const isModalVisible = modalLayer && modalLayer.style.display === "flex";
     const modalBody = document.querySelector('.modal-body');
 
-    // 🚀 THE FIX: Use a "Safe Client" variable to ensure the renderer 
-    // knows exactly which context to look at for Apps.
     const safeClient = isVaultMode ? null : client;
 
     // Soft Refresh Logic
     if (isModalVisible && modalBody) {
         modalBody.innerHTML = renderFunctionModalInnerContent(fn, safeClient);
-        // Sync the header name too
+        
         const titleInput = document.querySelector('.header-editable-input');
         if (titleInput) titleInput.value = fn.name;
+
+        // 🚀 Repaint icons for soft refresh
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
 
-    // 3. Generate Full HTML (Standard logic)
+    // 3. Generate Full HTML
     const html = `
-        <div class="modal-head">
+        <div class="modal-head" style="display:flex; align-items:center; gap:15px; padding: 20px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-size:18px;">⚒️</span>
+                <i data-lucide="wrench" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
                        value="${esc(val(fn.name))}" 
                        placeholder="Function Name..."
+                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
                        onblur="OL.handleFunctionSave('${fn.id}', this.value)">
             </div>
-            ${canPushFunction ? `
-            <button class="btn tiny primary" 
-                    onclick="OL.pushLocalFunctionToMaster('${fn.id}')"
-                    style="background: var(--accent); color: var(--main-text); font-weight: bold; margin-right:10px;">
-                ⭐ PUSH TO MASTER
-            </button>
-        ` : ''}
+            <div style="display:flex; align-items:center; gap:10px;">
+                ${canPushFunction ? `
+                    <button class="btn tiny primary" 
+                            onclick="OL.pushLocalFunctionToMaster('${fn.id}')"
+                            style="background: var(--accent); color: var(--main-text); font-weight: bold; display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="arrow-up-circle" style="width:12px; height:12px;"></i>
+                        PUSH TO MASTER
+                    </button>
+                ` : ''}
+                <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            </div>
         </div>
         <div class="modal-body">
             ${renderFunctionModalInnerContent(fn, safeClient)}
         </div>
     `;
+    
     window.openModal(html);
+
+    // 🚀 THE REPAINT: Convert data-lucide to SVGs
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.pushLocalFunctionToMaster = function(fnId) {
@@ -3512,23 +3554,33 @@ function renderFunctionModalInnerContent(fn, client) {
 // 4. SYNC FUNCTIONS FROM MASTER TO PROJECT AND VICE VERSA
 OL.openVaultFunctionDeploymentModal = function(clientId) {
     const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">⚒️ Deploy Master Functions</div>
+        <div class="modal-head" style="display:flex; align-items:center; gap:12px; padding: 20px;">
+            <i data-lucide="download-cloud" style="width:20px; height:20px; color:var(--accent);"></i>
+            <div class="modal-title-text">Deploy Master Functions</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
         <div class="modal-body">
             <div class="search-map-container">
-                <input type="text" class="modal-input" 
-                       placeholder="Click to view functions..." 
-                       onfocus="OL.filterMasterFunctionImport('${clientId}', '')"
-                       oninput="OL.filterMasterFunctionImport('${clientId}', this.value)" 
-                       autofocus>
-                <div id="master-fn-import-results" class="search-results-overlay"></div>
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
+                    <input type="text" class="modal-input" 
+                           style="padding-left:35px;"
+                           placeholder="Search function library..." 
+                           onfocus="OL.filterMasterFunctionImport('${clientId}', '')"
+                           oninput="OL.filterMasterFunctionImport('${clientId}', this.value)" 
+                           autofocus>
+                </div>
+                <div id="master-fn-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
             </div>
         </div>
     `;
     openModal(html);
+
+    // 🚀 THE REPAINT: Ensure the header and search icons render immediately
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.filterMasterFunctionImport = function(clientId, query) {
@@ -3539,7 +3591,6 @@ OL.filterMasterFunctionImport = function(clientId, query) {
     const client = state.clients[clientId];
     
     // 🛡️ Get IDs of EVERYTHING already in the project
-    // This includes locally created functions AND master functions already shared/imported
     const deployedRefs = (client?.projectData?.localFunctions || []).map(f => String(f.masterRefId));
     const sharedIds = (client?.sharedMasterIds || []).map(id => String(id));
     
@@ -3549,16 +3600,21 @@ OL.filterMasterFunctionImport = function(clientId, query) {
             const isAlreadyPresent = deployedRefs.includes(String(fn.id)) || sharedIds.includes(String(fn.id));
             return isMatch && !isAlreadyPresent;
         })
-        .sort((a, b) => a.name.localeCompare(b.name)); // 🚀 Alphabetical Sort
+        .sort((a, b) => a.name.localeCompare(b.name));
 
     listEl.innerHTML = available.map(fn => `
         <div class="search-result-item" onmousedown="OL.pushFunctionToClient('${fn.id}', '${clientId}'); OL.closeModal();">
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span>⚙️</span>
-                <span>${esc(fn.name)}</span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <i data-lucide="wrench" style="width:14px; height:14px; color:var(--accent); opacity:0.8;"></i>
+                <span style="font-size: 13px;">${esc(fn.name)}</span>
             </div>
         </div>
     `).join('') || `<div class="search-result-item muted">No unlinked functions found.</div>`;
+
+    // 🚀 THE TRIGGER: Repaint the icons for the newly injected HTML
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.adoptFunctionToMaster = function(clientId, localFnId) {
@@ -3931,14 +3987,14 @@ OL.openTaskModal = function(taskId, isVault) {
     const isGuest = !!window.IS_GUEST;
 
     const html = `
-        <div class="modal-head" style="gap:15px; display:flex; align-items:center;">
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <i data-lucide="clipboard-list" style="width:20px; height:20px; color:var(--accent);"></i>
+                <i data-lucide="clipboard-check" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
-                      value="${esc(task.title || task.name)}" 
-                      placeholder="Task Name..."
-                      style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                      onblur="OL.updateTaskField('${taskId}', '${isVault ? 'title' : 'name'}', this.value, ${isVault})">
+                       value="${esc(task.title || task.name)}" 
+                       placeholder="Task Name..."
+                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
+                       onblur="OL.updateTaskField('${taskId}', '${isVault ? 'title' : 'name'}', this.value, ${isVault})">
             </div>
             <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
@@ -3957,7 +4013,9 @@ OL.openTaskModal = function(taskId, isVault) {
                                    onchange="OL.updateTaskField('${taskId}', 'dueDate', this.value, false)">
                         </div>
                         <div>
-                            <label class="modal-section-label">Status</label>
+                            <label class="modal-section-label">
+                                <i data-lucide="activity" style="width:10px; height:10px; margin-right:4px;"></i> Status
+                            </label>
                             <select class="modal-input tiny" onchange="OL.updateTaskField('${taskId}', 'status', this.value, false)">
                                 <option value="Pending" ${task.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
                                 <option value="In Progress" ${task.status === 'In Progress' ? 'selected' : ''}>🚧 In Progress</option>
@@ -4030,8 +4088,8 @@ OL.openTaskModal = function(taskId, isVault) {
                             ${(task.assigneeIds || []).map(mId => {
                                 const member = client.projectData.teamMembers?.find(m => m.id === mId);
                                 return member ? `
-                                    <span class="pill tiny accent">
-                                        <i data-lucide="user" style="width:10px; height:10px; margin-right:4px;"></i> ${esc(member.name)}
+                                    <span class="pill tiny accent" style="display:flex; align-items:center; gap:4px;">
+                                        <i data-lucide="user" style="width:10px; height:10px;"></i> ${esc(member.name)}
                                         <b class="pill-remove-x" style="cursor:pointer; margin-left:4px;" onclick="OL.toggleTaskAssignee(event, '${taskId}', '${member.id}')">×</b>
                                     </span>` : '';
                             }).join('')}
@@ -4051,13 +4109,13 @@ OL.openTaskModal = function(taskId, isVault) {
                 <div style="display: flex; border-bottom: 1px solid var(--line);">
                     ${!isGuest ? `
                         <div onclick="state.v2.activeCommentTab='internal'; OL.openTaskModal('${taskId}', ${isVault})"
-                             style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'internal' ? 'color:var(--accent); border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
-                            INTERNAL
+                             style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:6px; ${activeTab === 'internal' ? 'color:var(--accent); border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                            <i data-lucide="lock" style="width:12px; height:12px;"></i> INTERNAL
                         </div>
                     ` : ''}
                     <div onclick="state.v2.activeCommentTab='client'; OL.openTaskModal('${taskId}', ${isVault})"
-                         style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'client' ? 'color:#10b981; border-bottom:2px solid #10b981;' : 'opacity:0.5'}">
-                        CLIENT FEEDBACK
+                         style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:6px; ${activeTab === 'client' ? 'color:#10b981; border-bottom:2px solid #10b981;' : 'opacity:0.5'}">
+                        <i data-lucide="message-square" style="width:12px; height:12px;"></i> CLIENT FEEDBACK
                     </div>
                 </div>
 
@@ -4070,9 +4128,9 @@ OL.openTaskModal = function(taskId, isVault) {
                               placeholder="Type a ${activeTab === 'client' ? 'message...' : 'note...'}" 
                               style="min-height: 60px; margin-bottom: 8px; font-size: 11px;"></textarea>
                     <button class="btn tiny full-width" 
-                            style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'}; color:black; font-weight:bold;"
+                            style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'}; color:black; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:6px;"
                             onclick="OL.addTaskComment('${taskId}', ${isVault}, ${activeTab === 'client'})">
-                        Post ${activeTab === 'client' ? 'to Client' : 'Note'}
+                        <i data-lucide="send" style="width:12px; height:12px;"></i> Post ${activeTab === 'client' ? 'to Client' : 'Note'}
                     </button>
                 </div>
             </aside>
@@ -4080,7 +4138,7 @@ OL.openTaskModal = function(taskId, isVault) {
     `;
     openModal(html);
 
-    // 🚀 THE REPAINT: Convert all data-lucide to SVGs
+    // 🚀 THE REPAINT: Ensure all icons render correctly immediately
     if (window.lucide) {
         window.lucide.createIcons();
     }
