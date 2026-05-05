@@ -180,53 +180,53 @@ exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
     }
 });
 
-// 8. Process Street Proxy (Final Optimized Version)
+// 8. Process Street Proxy (FIXED v1.1 VERSION)
 exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
 
     try {
         let allWorkflows = [];
-        let nextCursor = null;
+        let nextUrl = `https://public-api.process.st/api/v1.1/workflows`;
         let hasMore = true;
 
-        // Step 1: Paginate Workflows (v1.1 Style)
+        // Step 1: Paginate Workflows using v1.1 'links'
         while (hasMore) {
-            // If we have a nextCursor, use the specific pagination URL
-            const url = nextCursor 
-                ? nextCursor 
-                : `https://public-api.process.st/api/v1.1/workflows`;
-        
-            const response = await axios.get(url, {
+            const response = await axios.get(nextUrl, {
                 headers: { 'X-API-Key': apiKey }
             });
-        
-            // 🎯 THE FIX: v1.1 uses 'workflows', not 'items'
-            const pageWorkflows = response.data.workflows || [];
-            allWorkflows = allWorkflows.concat(pageWorkflows);
-        
-            // 🎯 THE FIX: v1.1 uses a 'links' array for the next page
-            const nextLink = (response.data.links || []).find(l => l.rel === 'next');
-            if (nextLink) {
-                nextCursor = nextLink.href;
-                hasMore = true;
+
+            // 🎯 FIX: Check 'workflows' key, not 'items'
+            const workflows = response.data.workflows || [];
+            allWorkflows = allWorkflows.concat(workflows);
+
+            // 🎯 FIX: Pagination in v1.1 uses the 'links' array
+            const nextLink = (response.data.links || []).find(link => link.rel === 'next');
+            if (nextLink && nextLink.href) {
+                nextUrl = nextLink.href;
             } else {
                 hasMore = false;
             }
+            
+            // Safety break to prevent infinite loops during testing
+            if (allWorkflows.length > 500) hasMore = false;
         }
 
-        // Step 2: Parallel Fetch Tasks
+        // Step 2: Parallel Fetch Tasks (Using v1.1 structure)
         const fullData = await Promise.all(allWorkflows.map(async (wf) => {
             try {
                 const taskRes = await axios.get(`https://public-api.process.st/api/v1.1/workflows/${wf.id}/tasks`, {
                     headers: { 'X-API-Key': apiKey }
                 });
-                return { ...wf, tasks: taskRes.data.items || [] };
+                // v1.1 tasks are also under a 'tasks' or 'items' key depending on endpoint; 
+                // typically 'tasks' for this specific route.
+                return { ...wf, tasks: taskRes.data.tasks || taskRes.data.items || [] };
             } catch (e) {
                 return { ...wf, tasks: [] }; 
             }
         }));
 
+        // Wrap it back in 'items' so your existing app.js doesn't need to change!
         res.status(200).json({ items: fullData });
 
     } catch (error) {
