@@ -18137,7 +18137,14 @@ OL.syncProcessStreet = async function(client) {
         
         const psCreds = registry.find(r => {
             const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
-            return name.includes('process street') || name.includes('processstreet') || name === 'ps';
+            
+            // 🎯 FIX: You must define 'name' before checking .includes()
+            const name = app?.name || ""; 
+            
+            // Now this will work because 'name' is defined
+            return name.toLowerCase().includes('processstreet') || 
+                   name.toLowerCase().includes('process street') || 
+                   name.toLowerCase() === 'ps';
         });
 
         if (!psCreds?.secret) {
