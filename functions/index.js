@@ -160,3 +160,34 @@ exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
         res.status(500).send(error.message);
     }
 });
+
+// 7. Redtail Proxy (CRM Workflows)
+exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
+    const userKey = req.query.apiKey; // This will be the encoded APIKey:UserKey
+    if (!userKey) return res.status(400).send('Missing Redtail Key');
+    try {
+        const response = await axios.get("https://api.redtailtechnology.com/crm/v1/rest/workflows", {
+            headers: { 
+                'Authorization': `Userkey ${userKey}`,
+                'Accept': 'application/json'
+            }
+        });
+        res.status(200).json(response.data);
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
+});
+
+// 8. Process Street Proxy (Checklist Workflows)
+exports.processStreetProxy = onRequest(proxyOptions, async (req, res) => {
+    const apiKey = req.query.apiKey;
+    if (!apiKey) return res.status(400).send('Missing API Key');
+    try {
+        const response = await axios.get("https://public-api.processstreet.com/v1/workflows", {
+            headers: { 'X-API-KEY': apiKey }
+        });
+        res.status(200).json(response.data);
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
+});
