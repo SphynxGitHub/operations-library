@@ -2,6 +2,18 @@
 
 // 1. MUST BE LINE 1: Define the namespace immediately
 const OL = window.OL = {};
+
+// 🎨 THEME BOOTLOADER: Run immediately on script load
+(function initTheme() {
+    const savedTheme = localStorage.getItem('ol_theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+    } else {
+        document.body.classList.remove('light-mode');
+    }
+    console.log("🌓 Theme Initialized:", savedTheme || 'dark (default)');
+})();
+
 window.isMatrixActive = false;
 
 OL.getScopingDataForResource = function(resId) {
@@ -417,32 +429,21 @@ window.addEventListener('load', () => {
 });
 
 OL.toggleTheme = function() {
-    // 1. Toggle the class on the body
     const isLight = document.body.classList.toggle('light-mode');
+    
+    // Save the specific string to match our bootloader check
     localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
     
-    console.log("🎨 Theme switched to:", isLight ? 'Light' : 'Dark');
-
-    // 2. 🚀 THE CRITICAL REPAINT: 
-    // We must rebuild the Layout HTML so the button classes (btn soft/primary) 
-    // and labels are fresh for the new theme.
-    if (typeof window.buildLayout === 'function') {
-        window.buildLayout(); 
-    }
+    // 🔄 UI Refresh Logic
+    if (typeof window.buildLayout === 'function') window.buildLayout(); 
     
-    // 3. 🕸️ VISUALIZER SYNC:
-    // If the map is open, we need to force a re-render because the canvas
-    // elements often use hardcoded or calculated colors.
     if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') {
         OL.renderVisualizer();
     }
 
-    // 4. ✨ ICON COLOR RECOVERY:
-    // Lucide icons are injected as SVGs. If they don't change color, we force 
-    // Lucide to delete the existing SVGs and draw new ones for the current theme.
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
+    if (window.lucide) window.lucide.createIcons();
+    
+    console.log("💾 Theme Preference Saved:", isLight ? 'light' : 'dark');
 };
 
 /*===================== PARTNER ACCESS ==================*/
