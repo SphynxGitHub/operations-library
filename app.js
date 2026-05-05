@@ -1614,45 +1614,38 @@ window.renderAppsGrid = function() {
     const masterApps = state.master.apps || [];
     const localApps = client ? (client.projectData.localApps || []) : [];
 
-    // Determine which list to show based on view
     let displayApps = isVaultMode ? masterApps : (client?.projectData?.localApps || []);
 
     displayApps = displayApps.filter(app => {
-        // 1. In Vault Mode, always show everything so Admin can edit
         if (isVaultMode) return true; 
-
         const name = (app.name || "").trim();
-
-        // 2. The "Zapier Exception": 
-        // If it is the main "Zapier" anchor app, show it.
-        if (name === "Zapier") return true;
-
-        // 3. The "Robot Filter":
-        // Hide anything that starts with "Zapier " (e.g., Zapier Filter, Zapier Delay)
-        // or other specific utility keywords.
         const isZapUtility = name.startsWith("Zapier ") || 
                              ["Webhook", "SubZap", "Zapier Robot"].some(u => name.includes(u));
-
-        if (isZapUtility) return false;
-
-        // 4. Default: Show all other real tools (Redtail, ActiveCampaign, etc.)
-        return true; 
+        if (name === "Zapier") return true;
+        return !isZapUtility;
     });
     
     displayApps.sort((a, b) => a.name.localeCompare(b.name));
 
     container.innerHTML = `
-      <div class="section-header">
-          <div>
-              <h2>${isVaultMode ? '🏛️ Master App Vault' : '📱 Project Applications'}</h2>
+      <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+          <i data-lucide="layout-grid" style="width:28px; height:24px; color:var(--accent);"></i>
+          <div style="flex:1;">
+              <h2 style="margin:0;">${isVaultMode ? 'Master App Vault' : 'Project Applications'}</h2>
               <div class="small muted subheader">${isVaultMode ? 'Global Standard Library' : `Software stack for ${esc(client.meta.name)}`}</div>
           </div>
           <div class="header-actions">
               ${isVaultMode ? `
-                  <button class="btn primary" onclick="OL.createMasterAppFromGrid()">+ Create Master App</button>
+                  <button class="btn primary" onclick="OL.createMasterAppFromGrid()">
+                    <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i> Create Master App
+                  </button>
               ` : `
-                  <button class="btn small soft" onclick="OL.promptAddApp('${client.id}')">+ Create Local App</button>
-                  <button class="btn primary" onclick="OL.openVaultDeploymentModal('${client.id}')">⬇ Import from Master</button>
+                  <button class="btn small soft" onclick="OL.promptAddApp('${client.id}')">
+                    <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i> Local App
+                  </button>
+                  <button class="btn primary" onclick="OL.openVaultDeploymentModal('${client.id}')">
+                    <i data-lucide="download-cloud" style="width:14px; height:14px; margin-right:6px;"></i> Import from Master
+                  </button>
               `}
           </div>
       </div>
@@ -1660,48 +1653,43 @@ window.renderAppsGrid = function() {
 
       <div class="cards-grid">
           ${displayApps.length > 0 ? displayApps.map(app => {
-              // ✨ FIXED: Move these lines INSIDE the map loop
               const isMasterRef = !!app.masterRefId || String(app.id).startsWith('master-');
               const tagLabel = isMasterRef ? 'MASTER' : 'LOCAL';
               const tagColor = isMasterRef ? 'var(--accent)' : 'var(--panel-border)';
               
-              const isLocal = app.id && String(app.id).startsWith('local-');
-              
-              // Standardize mapping format
               let mappings = (app.functionIds || []).map(m => 
                   typeof m === 'string' ? { id: m, status: 'available' } : m
               );
               
-              // Sort the 'mappings' array for the card face
               const rank = { 'primary': 2, 'evaluating': 1, 'available': 0 };
-              mappings.sort((a, b) => {
-                  const scoreA = rank[a.status || 'available'] || 0;
-                  const scoreB = rank[b.status || 'available'] || 0;
-                  return scoreB - scoreA;
-              });
+              mappings.sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0));
                 
               return `
                   <div class="card is-clickable" onclick="OL.openAppModal('${app.id}')">
                       <div class="card-header">
-                          <div class="card-title">${esc(app.name)}</div>
+                          <div style="display:flex; align-items:center; gap:10px;">
+                             <i data-lucide="smartphone" style="width:16px; height:16px; color:var(--accent);"></i>
+                             <div class="card-title">${esc(app.name)}</div>
+                          </div>
                           <div style="display:flex; align-items:center; gap:8px;">
-                              <span class="vault-tag" style="background: ${tagColor}; border: 1px solid ${isMasterRef ? 'transparent' : 'var(--line)'};">
+                              <span class="vault-tag" style="background: ${tagColor}; border: 1px solid ${isMasterRef ? 'transparent' : 'var(--line)'}; font-size:8px;">
                                 ${tagLabel}
-                              </span>   
-                              <button class="card-delete-btn" onclick="OL.universalDelete('${app.id}', 'apps', event)">×</button>
+                              </span>    
+                              <button class="card-delete-btn" onclick="OL.universalDelete('${app.id}', 'apps', event)">
+                                <i data-lucide="x" style="width:12px; height:12px;"></i>
+                              </button>
                           </div>
                       </div>
                       <div class="card-body">
                             ${app.name === "Zapier" ? `
                                 <div class="zap-utilities-summary" style="margin-bottom: 12px; padding: 8px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px; border: 1px solid rgba(var(--accent-rgb), 0.2);">
-                                    <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; margin-bottom: 5px;">
+                                    <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; margin-bottom: 5px; display:flex; align-items:center; gap:4px;">
+                                        <i data-lucide="cpu" style="width:10px; height:10px;"></i>
                                         ${isVaultMode ? 'Master Utility Templates' : 'Included Utilities'}
                                     </div>
                                     <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                                         ${(isVaultMode ? state.master.apps : (client?.projectData?.localApps || []))
                                             .filter(a => {
-                                                // In Vault mode, we don't rely on isHidden (since you might want to edit them), 
-                                                // we rely on the name containing "Zapier" but NOT being the main "Zapier" app.
                                                 const n = (a.name || "").toLowerCase();
                                                 const isUtil = n.includes('zapier') && n !== 'zapier';
                                                 const isOther = ["webhook", "subzap", "engine"].some(u => n.includes(u));
@@ -1725,8 +1713,7 @@ window.renderAppsGrid = function() {
                                   return `
                                       <span class="pill tiny status-${mapping.status || 'available'} is-clickable" 
                                             onclick="OL.handlePillInteraction(event, '${app.id}', '${fn.id}')"
-                                            oncontextmenu="OL.handlePillInteraction(event, '${app.id}', '${fn.id}'); return false;"
-                                            title="Left Click: Jump | Right Click: Cycle | Cmd/Ctrl+Click: Unmap">
+                                            oncontextmenu="OL.handlePillInteraction(event, '${app.id}', '${fn.id}'); return false;">
                                           ${esc(fn.name)}
                                       </span>`;
                               }).join('')}
@@ -1737,6 +1724,11 @@ window.renderAppsGrid = function() {
           }).join('') : `<div class="empty-hint">No apps deployed. Use the buttons above to get started.</div>`}
       </div>
     `;
+
+    // 🚀 Refresh Lucide
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.openVaultDeploymentModal = function(clientId) {
@@ -1772,13 +1764,26 @@ OL.filterMasterAppImport = function(clientId, query) {
     
     const available = (state.master.apps || [])
         .filter(app => !existingMasterIds.includes(String(app.id)) && app.name.toLowerCase().includes(q))
-        .sort((a, b) => a.name.localeCompare(b.name)); // 🚀 Sort the list
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-    listEl.innerHTML = available.map(app => `
-        <div class="search-result-item" onmousedown="OL.pushAppToClient('${app.id}', '${clientId}'); OL.closeModal();">
-            <span>📱 ${esc(app.name)}</span>
-        </div>
-    `).join('') || `<div class="search-result-item muted">No new apps found.</div>`;
+    listEl.innerHTML = available.map(app => {
+        // Resolve the specific icon for this app from the registry
+        const iconName = OL.getRegistryIcon(app.type);
+
+        return `
+            <div class="search-result-item" style="display:flex; align-items:center; gap:10px;" 
+                 onmousedown="OL.pushAppToClient('${app.id}', '${clientId}'); OL.closeModal();">
+                <i data-lucide="${iconName}" style="width:14px; height:14px; color:var(--accent); opacity:0.7;"></i>
+                <span style="font-size: 13px;">${esc(app.name)}</span>
+            </div>
+        `;
+    }).join('') || `<div class="search-result-item muted">No new apps found.</div>`;
+
+    // 🚀 THE TRIGGER: Since this list updates as you type, 
+    // we must tell Lucide to scan the new HTML immediately.
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // CREATE NEW APP
@@ -2140,7 +2145,6 @@ function renderAppModalInnerContent(app, client) {
 }
 
 let modalPillOrder = [];
-
 OL.openAppModal = function(appId, draftObj = null) {
     OL.currentOpenModalId = appId;
     const client = getActiveClient();
@@ -2150,31 +2154,25 @@ OL.openAppModal = function(appId, draftObj = null) {
     // 1. Resolve Data: Context-Aware Lookup
     let app = draftObj;
     if (!app) {
-        const hash = window.location.hash;
-        const isVaultMode = hash.startsWith('#/vault');
-
-        if (isVaultMode) {
-            // In Vault, only look at Master
+        if (isVaultRoute) {
             app = (state.master.apps || []).find(a => a.id === appId);
         } else {
-            // In Project, find the LOCAL instance specifically
-            // Even if appId is a master ID, we find the local app that REFERENCES it
             app = (client?.projectData?.localApps || []).find(a => 
                 a.id === appId || a.masterRefId === appId
             );
-            
-            // Fallback: If not found in project, check master (e.g. previewing from search)
             if (!app) {
                 app = (state.master.apps || []).find(a => a.id === appId);
             }
         }
     }
+
     if (!app) {
         console.error("❌ Modal Error: App object not found for ID:", appId);
-        // Optional: Close modal if it's broken to prevent white-screen
-        // OL.closeModal(); 
         return; 
     }
+
+    // 🎯 Resolve the Lucide icon for this app
+    const iconName = OL.getRegistryIcon(app.type);
 
     // 2. Identify Modal Shell for Soft Refresh
     const modalLayer = document.getElementById("modal-layer");
@@ -2187,6 +2185,8 @@ OL.openAppModal = function(appId, draftObj = null) {
             ${renderAppModalInnerContent(app, client)}
             ${OL.renderAccessSection(appId, 'app')} 
         `;
+        // Trigger repaint for dynamic content
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
 
@@ -2196,9 +2196,9 @@ OL.openAppModal = function(appId, draftObj = null) {
 
     // 3. Generate Full HTML
     const html = `
-        <div class="modal-head" style="gap:15px;">
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-size:18px;">📱</span>
+                <i data-lucide="${iconName}" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
                        value="${esc(val(app.name))}" 
                        placeholder="App Name (e.g. Slack)..."
@@ -2208,17 +2208,25 @@ OL.openAppModal = function(appId, draftObj = null) {
             ${canPushToMaster ? `
                 <button class="btn tiny primary" 
                         onclick="OL.pushLocalAppToMaster('${app.id}')"
-                        style="background: var(--accent); color: var(--main-text); font-weight: bold; border:none;">
-                    ⭐ PUSH TO MASTER
+                        style="background: var(--accent); color: var(--main-text); font-weight: bold; border:none; display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="arrow-up-circle" style="width:12px; height:12px;"></i>
+                    PUSH TO MASTER
                 </button>
             ` : ''}
+            <button class="btn small soft" onclick="OL.closeModal()">Close</button>
         </div>
         <div class="modal-body">
             ${renderAppModalInnerContent(app, client)}
             ${OL.renderAccessSection(appId, 'app')}
         </div>
     `;
+    
     window.openModal(html);
+
+    // 🚀 THE REPAINT: Convert all data-lucide to SVGs
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 
     // Auto-focus the name field
     setTimeout(() => {
