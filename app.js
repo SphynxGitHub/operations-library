@@ -3697,22 +3697,29 @@ window.renderChecklistModule = function (isVaultMode = false) {
     const completedCount = allTasks.filter(t => t.status === "Done").length;
 
     container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>📋 ${isVault ? 'Master Tasks' : 'Project Checklist'}</h2>
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="${isVault ? 'shield-check' : 'clipboard-list'}" 
+               style="width:28px; height:24px; color:var(--accent);"></i>
+            
+            <div style="flex: 1;">
+                <h2 style="margin:0;">${isVault ? 'Master Tasks' : 'Project Checklist'}</h2>
                 <div class="small muted">${visibleTasks.length} tasks visible</div>
             </div>
+        
             <div class="header-actions">
                 ${!isVault ? `
                     <button class="btn small ${showCompleted ? 'accent' : 'soft'}" onclick="OL.toggleCompletedTasks()">
-                        ${showCompleted ? '👁️ Hide' : '👁️ Show'} Completed (${completedCount})
+                        <i data-lucide="${showCompleted ? 'eye-off' : 'eye'}" style="width:14px; height:14px; margin-right:6px;"></i>
+                        ${showCompleted ? 'Hide' : 'Show'} Completed (${completedCount})
                     </button>
                 ` : ''}
                 <button class="btn small soft" onclick="${isVault ? 'OL.promptCreateMasterTask()' : `OL.openAddTaskModal('${client.id}')`}">
-                    + Create Task
+                    <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i>
+                    Create Task
                 </button>
                 <button class="btn primary" onclick="OL.openMasterTaskImporter()">
-                    ⬇️ Import from Master
+                    <i data-lucide="download-cloud" style="width:14px; height:14px; margin-right:6px;"></i>
+                    Import from Master
                 </button>
             </div>
         </div>
@@ -3723,34 +3730,52 @@ window.renderChecklistModule = function (isVaultMode = false) {
             </div>
         </div>
     `;
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 window.renderBlueprintManager = function () {
-  const container = document.getElementById("mainContent");
-  const blueprints = state.master.taskBlueprints || [];
+    const container = document.getElementById("mainContent");
+    const blueprints = state.master.taskBlueprints || [];
 
-  container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>📋 Master Task Blueprints</h2>
+    container.innerHTML = `
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="copy" style="width:28px; height:24px; color:var(--accent);"></i>
+            <div style="flex: 1;">
+                <h2 style="margin:0;">Master Task Blueprints</h2>
                 <div class="small muted">Standard implementation steps</div>
             </div>
-            <button class="btn primary" onclick="OL.promptCreateMasterTask()">+ New Blueprint</button>
+            <button class="btn primary" onclick="OL.promptCreateMasterTask()">
+                <i data-lucide="plus" style="width:14px; height:14px; margin-right:6px;"></i>
+                New Blueprint
+            </button>
         </div>
+
         <div class="cards-grid">
             ${blueprints.map((task) => `
                 <div class="card is-clickable" onclick="OL.openTaskModal('${task.id}', true)">
                     <div class="card-header">
                         <div class="card-title">${esc(task.title)}</div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <button class="card-delete-btn" onclick="event.stopPropagation(); OL.removeMasterTask('${task.id}')">×</button>
+                            <button class="card-delete-btn" onclick="event.stopPropagation(); OL.removeMasterTask('${task.id}')">
+                                <i data-lucide="x" style="width:14px; height:14px;"></i>
+                            </button>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="tiny muted">${esc(task.category || 'General')}</div>
+                        <div class="tiny muted" style="margin-bottom: 8px;">${esc(task.category || 'General')}</div>
                         <div class="pills-row">
-                             ${(task.appIds || []).length > 0 ? `<span class="pill tiny soft">📱 ${(task.appIds || []).length} Tools</span>` : ''}
-                             ${(task.howToIds || []).length > 0 ? `<span class="pill tiny soft">📖 SOP Linked</span>` : ''}
+                             ${(task.appIds || []).length > 0 ? `
+                                <span class="pill tiny soft" style="display:flex; align-items:center; gap:4px;">
+                                    <i data-lucide="layout-grid" style="width:10px; height:10px;"></i>
+                                    ${(task.appIds || []).length} Tools
+                                </span>` : ''}
+                             ${(task.howToIds || []).length > 0 ? `
+                                <span class="pill tiny soft" style="display:flex; align-items:center; gap:4px;">
+                                    <i data-lucide="book-open" style="width:10px; height:10px;"></i>
+                                    SOP Linked
+                                </span>` : ''}
                         </div>
                     </div>
                 </div>
@@ -3758,6 +3783,11 @@ window.renderBlueprintManager = function () {
             ${blueprints.length === 0 ? '<div class="empty-hint">No blueprints created yet.</div>' : ''}
         </div>
     `;
+
+    // 🚀 Critical: Trigger the icon render
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // 2. RENDER TASK LIST AND TASK CARDS
@@ -3893,9 +3923,9 @@ OL.openTaskModal = function(taskId, isVault) {
     const isGuest = !!window.IS_GUEST;
 
     const html = `
-        <div class="modal-head" style="gap:15px;">
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-size:18px;">📋</span>
+                <i data-lucide="clipboard-list" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
                       value="${esc(task.title || task.name)}" 
                       placeholder="Task Name..."
@@ -3912,7 +3942,9 @@ OL.openTaskModal = function(taskId, isVault) {
                 <div class="card-section" style="margin-top: 20px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div>
-                            <label class="modal-section-label">📅 Due Date</label>
+                            <label class="modal-section-label">
+                                <i data-lucide="calendar" style="width:10px; height:10px; margin-right:4px;"></i> Due Date
+                            </label>
                             <input type="date" class="modal-input tiny" value="${task.dueDate || ''}" 
                                    onchange="OL.updateTaskField('${taskId}', 'dueDate', this.value, false)">
                         </div>
@@ -3928,19 +3960,23 @@ OL.openTaskModal = function(taskId, isVault) {
                 </div>
                 
                 <div class="card-section">
-                    <label class="modal-section-label">Internal SOP / Instructions</label>
+                    <label class="modal-section-label">
+                        <i data-lucide="file-text" style="width:10px; height:10px; margin-right:4px;"></i> Internal SOP / Instructions
+                    </label>
                     <textarea class="modal-textarea" rows="4" 
                               onblur="OL.updateTaskField('${taskId}', 'description', this.value, ${isVault})">${esc(task.description || task.notes || "")}</textarea>
                 </div>
 
                 <div class="card-section" style="margin-top: 20px;">
-                    <label class="modal-section-label">🛠️ Required Tools (Apps)</label>
+                    <label class="modal-section-label">
+                        <i data-lucide="layout-grid" style="width:10px; height:10px; margin-right:4px;"></i> Required Tools (Apps)
+                    </label>
                     <div class="pills-row" id="task-app-pills" style="margin-bottom: 8px;">
                         ${(task.appIds || []).map(appId => {
                             const app = [...state.master.apps, ...(client?.projectData.localApps || [])].find(a => a.id === appId);
                             return app ? `
                                 <span class="pill tiny soft is-clickable" onclick="OL.handleTaskAppInteraction(event, '${taskId}', '${app.id}', ${isVault})">
-                                    📱 ${esc(app.name)}
+                                    <i data-lucide="smartphone" style="width:10px; height:10px; margin-right:4px;"></i> ${esc(app.name)}
                                 </span>` : '';
                         }).join('')}
                     </div>
@@ -3953,7 +3989,9 @@ OL.openTaskModal = function(taskId, isVault) {
                 </div>
 
                 <div class="card-section" style="margin-top: 20px;">
-                    <label class="modal-section-label">👩‍🏫 Linked How-To Guides</label>
+                    <label class="modal-section-label">
+                        <i data-lucide="book-open" style="width:10px; height:10px; margin-right:4px;"></i> Linked How-To Guides
+                    </label>
                     <div class="pills-row" style="margin-bottom: 8px;">
                         ${(task.howToIds || []).map(htId => {
                             const guide = (state.master.howToLibrary || []).find(g => g.id === htId); 
@@ -3962,7 +4000,7 @@ OL.openTaskModal = function(taskId, isVault) {
                                 <span class="pill tiny soft is-clickable" 
                                       style="cursor: pointer;" 
                                       onclick="OL.openHowToModal('${guide.id}')">
-                                    📖 ${esc(guide.name)}
+                                    <i data-lucide="book" style="width:10px; height:10px; margin-right:4px;"></i> ${esc(guide.name)}
                                 </span>`;
                         }).join('')}
                     </div>
@@ -3977,13 +4015,15 @@ OL.openTaskModal = function(taskId, isVault) {
                 ${!isVault ? `
                 <div class="card-section" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
                     <div style="margin-top:15px;">
-                        <label class="modal-section-label">👨‍💼 Assigned Team Members</label>
+                        <label class="modal-section-label">
+                            <i data-lucide="users" style="width:10px; height:10px; margin-right:4px;"></i> Assigned Team Members
+                        </label>
                         <div class="pills-row" id="task-assignee-pills" style="margin-bottom: 8px;">
                             ${(task.assigneeIds || []).map(mId => {
                                 const member = client.projectData.teamMembers?.find(m => m.id === mId);
                                 return member ? `
                                     <span class="pill tiny accent">
-                                        👨‍💼 ${esc(member.name)}
+                                        <i data-lucide="user" style="width:10px; height:10px; margin-right:4px;"></i> ${esc(member.name)}
                                         <b class="pill-remove-x" style="cursor:pointer; margin-left:4px;" onclick="OL.toggleTaskAssignee(event, '${taskId}', '${member.id}')">×</b>
                                     </span>` : '';
                             }).join('')}
@@ -4031,6 +4071,11 @@ OL.openTaskModal = function(taskId, isVault) {
         </div>
     `;
     openModal(html);
+
+    // 🚀 THE REPAINT: Convert all data-lucide to SVGs
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.addTaskComment = async function(taskId, isVault, isClientFacing = false) {
