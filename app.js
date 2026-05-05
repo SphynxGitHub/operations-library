@@ -18158,45 +18158,41 @@ OL.syncRedtail = async function() {
     console.group("🔴 REDTAIL SYSTEM SYNC");
     
     try {
-        // 🎯 THE SOURCE OF TRUTH: Use your native helper function
-        const activeClientId = getActiveClient().id;
-        
-        // Find that client in the projectData we know is loaded
-        const targetClient = projectData.clients.find(c => c.id === activeClientId);
+        // 🎯 THE CORRECT PATH: 
+        const clientContext = getActiveClient();
+        const data = clientContext.projectData; // This is what you just found!
 
-        if (!targetClient) {
-            console.error("❌ Context Error: getActiveClient().id did not match any loaded project.");
-            alert("Please select a client card before syncing.");
-            console.groupEnd();
-            return;
+        if (!data) {
+            throw new Error("Could not find projectData inside the active client context.");
         }
 
-        console.log(`✅ Target Identified: ${targetClient.name} (ID: ${activeClientId})`);
+        console.log(`✅ Target Identified: ${data.name}`);
 
-        // Pull credentials from the identified client
-        const creds = targetClient.externalIntegrations?.find(i => i.appSlug === 'redtail');
+        // Pull credentials from the externalIntegrations array inside that data
+        const creds = data.externalIntegrations?.find(i => i.appSlug === 'redtail');
         
         if (!creds || !creds.username || !creds.secret) {
-            alert(`Credentials missing for ${targetClient.name}`);
+            alert(`Missing Redtail Credentials on card: ${data.name}`);
             console.groupEnd();
             return;
         }
 
-        // 🎯 EXACT CONSOLE LOGIC
+        // 🎯 THE VERIFIED CONSOLE LOGIC
         const auth = btoa(`${creds.username}:${creds.secret}`);
         const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(auth)}`;
 
         console.log("📡 Fetching from Proxy...");
         const res = await fetch(url);
-        const data = await res.json();
+        const result = await res.json();
         
         // Key confirmed in your console test: workflow_templates
-        const list = data.workflow_templates || [];
+        const list = result.workflow_templates || [];
 
         console.log(`📦 Received ${list.length} templates.`);
 
         list.forEach(tpl => {
-            OL.upsertExternalResource(targetClient, {
+            // We pass 'clientContext' (the full object) to the upsert
+            OL.upsertExternalResource(clientContext, {
                 id: `rt-${tpl.id}`,
                 name: `🔴 RT: ${tpl.name}`,
                 type: 'Workflow',
@@ -18204,11 +18200,11 @@ OL.syncRedtail = async function() {
             });
         });
 
-        // Use your native persistence logic
+        // Native persistence
         if (typeof OL.persist === 'function') OL.persist();
         if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
         
-        alert(`🎉 Success! ${list.length} Redtail Workflows synced to ${targetClient.name}`);
+        alert(`🎉 Success! ${list.length} Redtail Workflows synced to ${data.name}`);
 
     } catch (e) {
         console.error("🔥 Sync Error:", e);
