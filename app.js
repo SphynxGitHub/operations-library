@@ -18157,41 +18157,40 @@ OL.importProcessStreet = async function(client) {
 
 OL.importRedtail = async function(client) {
     const creds = OL.getCredsForApp(client, 'redtail');
-    if (!creds?.username || !creds?.secret) throw new Error("Redtail Username/Password missing.");
-
-    // Encode Basic Auth
     const authString = btoa(`${creds.username}:${creds.secret}`);
     
-    // If Redtail gave you a "Developer Key" or "Partner Key", 
-    // you can put it in a custom field or hardcode it here if it's static.
-    const devKey = "YOUR_REDTAIL_DEVELOPER_KEY"; 
+    let allTemplates = [];
+    let page = 1;
+    let hasMore = true;
 
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${authString}&devKey=${devKey}`;
+    while (hasMore) {
+        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}&page=${page}`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-    console.log("📡 Syncing Redtail v3 Templates...");
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Redtail v3 Error: ${err}`);
+        // 🎯 KEY MATCH: Using 'workflow_templates' from your console log
+        const list = data.workflow_templates || [];
+        allTemplates = allTemplates.concat(list);
+
+        // Check if there's a next page (total_pages: 2)
+        if (page < (data.total_pages || 1)) {
+            page++;
+        } else {
+            hasMore = false;
+        }
     }
 
-    const data = await response.json();
-    
-    // v3 usually returns a 'templates' or 'collection' array
-    const templates = data.templates || data.WorkflowTemplates || data.collection || [];
-
-    templates.forEach(tpl => {
+    allTemplates.forEach(tpl => {
         OL.upsertExternalResource(client, {
-            id: `rt-v3-${tpl.id}`,
+            id: `rt-${tpl.id}`,
             externalId: tpl.id,
-            name: `🔴 RT: ${tpl.name || tpl.subject}`,
+            name: `🔴 RT: ${tpl.name}`,
             type: 'Workflow',
             steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
         });
     });
 
-    return templates.length;
+    return allTemplates.length;
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
