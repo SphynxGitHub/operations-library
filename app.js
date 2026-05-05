@@ -14310,6 +14310,10 @@ window.renderScopingSheet = function () {
     // Note: Totals usually reflect the FULL project, not just filtered results. 
     // If you want totals to change with the filters, pass filteredItems here instead.
     renderGrandTotals(sheet.lineItems, baseRate);
+    
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // 2. RENDER ROUND GROUPS
