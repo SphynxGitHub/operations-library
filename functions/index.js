@@ -181,24 +181,46 @@ exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
 });
 
 // 8. Process Street Proxy (Enhanced for v1.1)
-exports.processStreetProxy = onRequest(proxyOptions, async (req, res) => {
+exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
 
     try {
-        const response = await axios.get("https://public-api.process.st/api/v1.1/workflows", {
-            headers: { 
-                'X-API-Key': apiKey,
-                'Accept': 'application/json'
+        let allWorkflows = [];
+        let nextCursor = null;
+        let hasMore = true;
+
+        // --- STEP 1: Paginate through Workflows (Templates) ---
+        while (hasMore) {
+            const url = `https://public-api.process.st/api/v1.1/workflows`;
+            const response = await axios.get(url, {
+                headers: { 'X-API-Key': apiKey },
+                params: { cursor: nextCursor, limit: 20 }
+            });
+
+            const items = response.data.items || [];
+            allWorkflows = allWorkflows.concat(items);
+
+            nextCursor = response.data.cursor;
+            hasMore = !!nextCursor; // If cursor is null/undefined, stop
+        }
+
+        // --- STEP 2: Fetch Tasks for each Workflow ---
+        // We'll run these in parallel to save time
+        const fullData = await Promise.all(allWorkflows.map(async (wf) => {
+            try {
+                const taskRes = await axios.get(`https://public-api.process.st/api/v1.1/workflows/${wf.id}/tasks`, {
+                    headers: { 'X-API-Key': apiKey }
+                });
+                return { ...wf, tasks: taskRes.data.items || [] };
+            } catch (e) {
+                return { ...wf, tasks: [] }; // Fallback if task fetch fails
             }
-        });
-        
-        // Log the keys we received to help debug 0-item returns
-        console.log("PS Response Keys:", Object.keys(response.data));
-        
-        res.status(200).json(response.data);
+        }));
+
+        res.status(200).json({ items: fullData });
+
     } catch (error) {
-        console.error("Process Street Proxy Error:", error.response?.data || error.message);
-        res.status(error.response?.status || 500).send(error.message);
+        res.status(500).send(error.message);
     }
 });
