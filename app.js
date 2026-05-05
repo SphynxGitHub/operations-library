@@ -7435,21 +7435,31 @@ window.renderAnalysisModule = function(isVaultMode = false) {
     const localAnalyses = (!isActuallyVault && client) ? (client.projectData.localAnalyses || []) : [];
 
     container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>${isActuallyVault ? '📚 Master Analysis Library' : '📈 Feature Analysis & Comparison'}</h2>
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="${isActuallyVault ? 'library' : 'bar-chart-horizontal'}" 
+               style="width:28px; height:24px; color:var(--accent);"></i>
+            <div style="flex:1;">
+                <h2 style="margin:0;">
+                    ${isActuallyVault ? 'Master Analysis Library' : 'Feature Analysis & Comparison'}
+                </h2>
                 <div class="small muted subheader">
                     ${isActuallyVault ? 'Global templates for standardized scoring' : `Helping ${esc(client?.meta.name)} find the right fit`}
                 </div>
             </div>
             <div class="header-actions">
-                <button class="btn small soft" onclick="OL.openGlobalContentManager()" style="margin-right: 8px;" title="Manage Global Content">
-                    ⚙️
+                <button class="btn small soft" onclick="OL.openGlobalContentManager()" style="margin-right: 8px; display:inline-flex; align-items:center;" title="Manage Global Content">
+                    <i data-lucide="settings" style="width:16px; height:16px;"></i>
                 </button>
                 ${isActuallyVault ? 
-                    `<button class="btn primary" onclick="OL.createNewMasterAnalysis()">+ Create Template</button>` : 
-                    `<button class="btn small soft" onclick="OL.createNewAnalysisSandbox()">+ Create Local Analysis</button>
-                    <button class="btn primary" onclick="OL.importAnalysisFromVault()" style="margin-right:8px;">⬇ Import from Master</button>`
+                    `<button class="btn primary" onclick="OL.createNewMasterAnalysis()" style="display:inline-flex; align-items:center; gap:6px;">
+                        <i data-lucide="plus" style="width:14px; height:14px;"></i> Create Template
+                     </button>` : 
+                    `<button class="btn small soft" onclick="OL.createNewAnalysisSandbox()" style="display:inline-flex; align-items:center; gap:6px;">
+                        <i data-lucide="plus" style="width:14px; height:14px;"></i> Local Analysis
+                     </button>
+                     <button class="btn primary" onclick="OL.importAnalysisFromVault()" style="margin-right:8px; display:inline-flex; align-items:center; gap:6px;">
+                        <i data-lucide="download-cloud" style="width:14px; height:14px;"></i> Import from Master
+                     </button>`
                 }
             </div>
         </div>
@@ -7462,6 +7472,9 @@ window.renderAnalysisModule = function(isVaultMode = false) {
 
         <div id="activeAnalysisMatrix" class="matrix-container" style="margin-top: 40px;"></div>
     `;
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 window.renderAnalysisCard = function (anly, isMaster) {
@@ -7603,39 +7616,64 @@ OL.deleteAnalysis = async function (anlyId, isVaultMode) {
 
 OL.importAnalysisFromVault = function () {
     const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">📚 Import Analysis Template</div>
+        <div class="modal-head" style="display:flex; align-items:center; gap:12px; padding: 20px;">
+            <i data-lucide="download-cloud" style="width:20px; height:20px; color:var(--accent);"></i>
+            <div class="modal-title-text">Import Analysis Template</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
         <div class="modal-body">
             <div class="search-map-container">
-                <input type="text" class="modal-input" 
-                       placeholder="Search templates (e.g. CRM, AI)..." 
-                       onfocus="OL.filterMasterAnalysisImport('')"
-                       oninput="OL.filterMasterAnalysisImport(this.value)" 
-                       autofocus>
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
+                    <input type="text" class="modal-input" 
+                           style="padding-left:35px;"
+                           placeholder="Search templates (e.g. CRM, AI)..." 
+                           onfocus="OL.filterMasterAnalysisImport('')"
+                           oninput="OL.filterMasterAnalysisImport(this.value)" 
+                           autofocus>
+                </div>
                 <div id="master-anly-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
             </div>
         </div>
     `;
     openModal(html);
+
+    // 🚀 THE REPAINT: Convert tags to SVGs
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
-OL.filterMasterAnalysisImport = function(query) {
-    const listEl = document.getElementById("master-anly-import-results");
-    if (!listEl) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const available = (state.master.analyses || []).filter(a => 
-        a.name.toLowerCase().includes(q)
-    );
-
-    listEl.innerHTML = available.map(anly => `
-        <div class="search-result-item" onmousedown="OL.executeAnalysisImportById('${anly.id}')">
-            📈 ${esc(anly.name)}
+OL.importAnalysisFromVault = function () {
+    const html = `
+        <div class="modal-head" style="display:flex; align-items:center; gap:12px; padding: 20px;">
+            <i data-lucide="download-cloud" style="width:20px; height:20px; color:var(--accent);"></i>
+            <div class="modal-title-text">Import Analysis Template</div>
+            <div class="spacer"></div>
+            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
-    `).join('') || `<div class="search-result-item muted">No templates found.</div>`;
+        <div class="modal-body">
+            <div class="search-map-container">
+                <div style="position:relative; display:flex; align-items:center;">
+                    <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
+                    <input type="text" class="modal-input" 
+                           style="padding-left:35px;"
+                           placeholder="Search templates (e.g. CRM, AI)..." 
+                           onfocus="OL.filterMasterAnalysisImport('')"
+                           oninput="OL.filterMasterAnalysisImport(this.value)" 
+                           autofocus>
+                </div>
+                <div id="master-anly-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
+            </div>
+        </div>
+    `;
+    openModal(html);
+
+    // 🚀 THE REPAINT: Convert tags to SVGs
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // Helper to handle the specific ID from search
@@ -7805,23 +7843,34 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
             <div class="card matrix-card-main" style="border-top: 3px solid var(--accent); padding: 20px; margin-bottom: 40px;">
                 <div class="section-header">
                     <div>
-                        <h3>📊 Matrix: 
-                          <span contenteditable="true" 
-                                class="editable-matrix-name m-name-${analysisId}"
-                                data-m-id="${analysisId}"
-                                style="border-bottom: 1px dashed var(--accent); cursor: text;"
-                                oninput="OL.syncMatrixName(this)"
-                                onblur="OL.renameMatrix('${analysisId}', this.innerText, ${isMaster})">
-                              ${esc(anly.name)}
-                          </span>
+                        <h3 style="display:flex; align-items:center; gap:10px;">
+                            <i data-lucide="bar-chart-horizontal" style="width:20px; height:20px; color:var(--accent);"></i>
+                            Matrix: 
+                            <span contenteditable="true" 
+                                    class="editable-matrix-name m-name-${analysisId}"
+                                    data-m-id="${analysisId}"
+                                    style="border-bottom: 1px dashed var(--accent); cursor: text;"
+                                    oninput="OL.syncMatrixName(this)"
+                                    onblur="OL.renameMatrix('${analysisId}', this.innerText, ${isMaster})">
+                                ${esc(anly.name)}
+                            </span>
                         </h3>
                         <div class="subheader">Scores: 0 (N/A), 1 (<60%), 2 (60-80%), 3 (80%+)</div>
                     </div>
-                    <div class="header-actions">
-                        ${!isMaster ? `<button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')">⭐ Push to Vault</button>` : ''}
-                        <button class="btn tiny primary" onclick="OL.universalPrint('${analysisId}', ${isMaster})">🖨️ Print</button>
-                        <button class="btn tiny soft" onclick="OL.addAppToAnalysis('${analysisId}', ${isMaster})">+ Add App</button>
-                        <button class="btn tiny danger soft" onclick="document.getElementById('activeAnalysisMatrix').innerHTML='';" style="margin-left:10px;">✕</button>
+                    <div class="header-actions" style="display:flex; align-items:center; gap:8px;">
+                        ${!isMaster ? `
+                            <button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')" style="display:flex; align-items:center; gap:4px;">
+                                <i data-lucide="upload-cloud" style="width:12px; height:12px;"></i> Push to Vault
+                            </button>` : ''}
+                        <button class="btn tiny primary" onclick="OL.universalPrint('${analysisId}', ${isMaster})" style="display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="printer" style="width:12px; height:12px;"></i> Print
+                        </button>
+                        <button class="btn tiny soft" onclick="OL.addAppToAnalysis('${analysisId}', ${isMaster})" style="display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="plus" style="width:12px; height:12px;"></i> App
+                        </button>
+                        <button class="btn tiny danger soft" onclick="document.getElementById('activeAnalysisMatrix').innerHTML='';" style="margin-left:10px; height:24px; width:24px; display:flex; align-items:center; justify-content:center;">
+                            <i data-lucide="x" style="width:14px; height:14px;"></i>
+                        </button>
                     </div>
                 </div>
 
@@ -7851,9 +7900,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                     <tbody>
                         <tr class="category-header-row" style="background: rgba(var(--accent-rgb), 0.1); border-bottom: 1px solid var(--line);">
                             <td colspan="${totalColspan}" style="padding: 10px 12px;">
-                                <div style="display: flex; align-items: center; gap: 2px;">
-                                    <span class="tiny">💰</span>
-                                    <span style="color: var(--accent); font-weight: bold; text-transform: uppercase;">PRICING & TIERS DEFINITION</span>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i data-lucide="banknote" style="width:14px; height:14px; color:var(--accent);"></i>
+                                    <span style="color: var(--accent); font-weight: bold; text-transform: uppercase; font-size:11px; letter-spacing:0.1em;">PRICING & TIERS DEFINITION</span>
                                 </div>
                             </td>
                         </tr>
@@ -7978,6 +8027,9 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
         
         console.log("⚡ Matrix interactivity initialized.");
     }, 0);
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 }
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
