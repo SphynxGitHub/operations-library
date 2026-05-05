@@ -432,9 +432,6 @@ OL.toggleTheme = function() {
     if (window.lucide) window.lucide.createIcons();
 };
 
-OL.renderVisualizer();
-if (window.lucide) window.lucide.createIcons();
-
 /*===================== PARTNER ACCESS ==================*/
 
 // 🔑 THE TOKEN GENERATOR
@@ -9749,7 +9746,7 @@ OL.renderVisualizer = function() {
                     </aside>
                     <div id="v2-workspace">
                         <div id="v2-canvas-scroll-wrap">
-                            <div id="v2-canvas">
+                            <div id="v2-canvas" ondragover="event.preventDefault()" ondrop="OL.handleCanvasDrop(event)">
                                 <div id="v2-stage-layer"></div>
                                 <div id="v2-node-layer"></div>
                                 <svg id="v2-connections"><defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7 Z" fill="var(--accent)" /></marker></defs><g id="line-group"></g></svg>
