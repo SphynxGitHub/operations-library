@@ -14189,7 +14189,7 @@ window.renderScopingSheet = function () {
         .sort((a, b) => a - b);
 
     // 5. RENDER HTML
-    ccontainer.innerHTML = `
+    container.innerHTML = `
     <div class="section-header" style="display:flex; align-items:center; gap:12px;">
         <i data-lucide="table-properties" style="width:28px; height:24px; color:var(--accent);"></i>
         <div style="flex:1;">
