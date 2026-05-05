@@ -250,26 +250,33 @@ OL.updateAndSync = async function(mutationFn) {
 };
 
 OL.getRegistryIcon = function(type) {
-    if (!type) return "📄"; // Default fallback
+    if (!type) return "file-text"; 
+    
     const registry = state.master.resourceTypes || [];
     const entry = registry.find(t => 
         String(t.type).toLowerCase() === String(type).toLowerCase()
     );
 
-    // 🚀 Return the custom icon from the registry, or a smart fallback
-    if (entry && entry.icon) return entry.icon;
+    // If the registry entry has a lucide icon defined, use it
+    if (entry && entry.lucideIcon) return entry.lucideIcon;
 
-    // Smart Fallbacks if registry entry is missing icons
+    // 🎯 Standardized Mapping
     const defaults = {
-        zap: "⚡",
-        form: "📄",
-        email: "📧",
-        event: "🗓️",
-        sop: "📖",
-        workflow: "🕸️",
-        other: "⚙️"
+        zap: "zap",
+        form: "file-text",
+        email: "mail",
+        event: "calendar",
+        sop: "book-open",
+        guide: "book-open",
+        workflow: "workflow",
+        checklist: "clipboard-list",
+        signature: "pen-tool",
+        spreadsheet: "table",
+        folder: "folder",
+        other: "settings"
     };
-    return defaults[type.toLowerCase()] || "📄";
+    
+    return defaults[type.toLowerCase()] || "file-text";
 };
 
 window.addEventListener("load", () => {
@@ -9670,10 +9677,6 @@ OL.renderVisualizer = function() {
     const depth = OL.state.v2.viewDepth || 'resource';
     const isAnyExpanded = resources.some(r => r.isExpanded);
     const trayOpen = state.ui.sidebarOpen !== false;
-    const expandIcon = isAnyExpanded ? '📂' : '📁';
-    const toggleIcon = trayOpen ? '🔳' : '⬜';
-    const tidyIcon = '🧹';
-    const filterIcon = '📶';
     const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
 
     // Extract Unique Values for Filter Dropdowns
@@ -10131,17 +10134,20 @@ OL.renderWorkbenchItemsOnly = function() {
         div.addEventListener('dragend', (e) => { e.target.style.opacity = "1"; });
 
         // Simple Inner HTML for the card
-        const icon = activeTab === 'data' ? (item.isBundle ? '📦' : '🏷️') : OL.getRegistryIcon(item.type);
+        const iconName = OL.getRegistryIcon(res.type);
         div.innerHTML = `
             <div class="v2-node-header" style="pointer-events: none;">
                 <div class="header-row-content">
-                    <span style="margin-right: 8px;">${icon}</span>
+                   <i data-lucide="${iconName}" style="width:16px; height:16px; margin-right:8px; color: var(--accent);"></i>
                     <b class="res-name-text">${esc(item.name || item.title)}</b>
                 </div>
             </div>`;
             
         workbenchContents.appendChild(div);
     });
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.switchWorkbenchTab = function(tabId) {
