@@ -18122,70 +18122,76 @@ OL.importJotform = async function(client) {
 
 OL.importProcessStreet = async function(client) {
     const creds = OL.getCredsForApp(client, 'processstreet');
-    if (!creds?.secret) throw new Error("Process Street API Key missing.");
-
-    // Using the v1.1 endpoint often yields better results for modern accounts
     const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${creds.secret}`;
 
-    console.log("📡 Syncing Process Street Workflows...");
     const response = await fetch(url);
     const data = await response.json();
+    const templates = data.items || [];
 
-    // 🚀 THE FIX: Process Street can return 'workflows' or 'items' depending on the version
-    const workflows = data.workflows || data.items || (Array.isArray(data) ? data : []);
+    templates.forEach(tpl => {
+        // Map the real PS tasks to our Map Steps format
+        const mappedSteps = tpl.tasks.map(task => ({
+            id: uid(),
+            externalId: task.id,
+            name: task.name,
+            appName: "Process Street"
+        }));
 
-    if (workflows.length === 0) {
-        console.warn("Process Street returned an empty list. Full Response:", data);
-    }
+        // If no tasks were found, provide a default starting step
+        if (mappedSteps.length === 0) {
+            mappedSteps.push({ id: uid(), name: "Run Checklist", appName: "Process Street" });
+        }
 
-    workflows.forEach(wf => {
         OL.upsertExternalResource(client, {
-            id: `ps-${wf.id}`,
-            externalId: wf.id,
-            name: `🏁 PS: ${wf.name}`,
+            id: `ps-${tpl.id}`,
+            externalId: tpl.id,
+            name: `🏁 PS: ${tpl.name}`,
             type: 'Checklist',
-            externalUrl: `https://app.processstreet.com/workflows/${wf.id}`,
-            steps: [{ id: uid(), name: "Run Process Street Checklist", appName: "Process Street" }]
+            externalUrl: `https://app.process.st/workflows/${tpl.id}`,
+            steps: mappedSteps // 🚀 Real tasks now appear inside the node!
         });
     });
 
-    return workflows.length;
+    return templates.length;
 };
 
 OL.importRedtail = async function(client) {
     const creds = OL.getCredsForApp(client, 'redtail');
-    
-    if (!creds?.username || !creds?.secret) {
-        throw new Error("Redtail Sync Failed: Please ensure your Redtail Username and Password/API Key are in the App Credentials.");
-    }
+    if (!creds?.username || !creds?.secret) throw new Error("Redtail Username/Password missing.");
 
-    // Standard Redtail REST Auth: Base64(username:password)
+    // Encode Basic Auth
     const authString = btoa(`${creds.username}:${creds.secret}`);
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${authString}`;
+    
+    // If Redtail gave you a "Developer Key" or "Partner Key", 
+    // you can put it in a custom field or hardcode it here if it's static.
+    const devKey = "YOUR_REDTAIL_DEVELOPER_KEY"; 
 
-    console.log("📡 Syncing Redtail Workflows...");
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${authString}&devKey=${devKey}`;
+
+    console.log("📡 Syncing Redtail v3 Templates...");
     const response = await fetch(url);
     
     if (!response.ok) {
-        const errTxt = await response.text();
-        throw new Error(`Redtail Error: ${errTxt}`);
+        const err = await response.text();
+        throw new Error(`Redtail v3 Error: ${err}`);
     }
 
     const data = await response.json();
-    // Redtail returns an object with a "Workflows" array
-    const workflows = data.Workflows || [];
+    
+    // v3 usually returns a 'templates' or 'collection' array
+    const templates = data.templates || data.WorkflowTemplates || data.collection || [];
 
-    workflows.forEach(wf => {
+    templates.forEach(tpl => {
         OL.upsertExternalResource(client, {
-            id: `rt-${wf.Id}`,
-            externalId: wf.Id,
-            name: `🔴 RT: ${wf.Name}`,
+            id: `rt-v3-${tpl.id}`,
+            externalId: tpl.id,
+            name: `🔴 RT: ${tpl.name || tpl.subject}`,
             type: 'Workflow',
-            steps: [{ id: uid(), name: "Workflow Started", appName: "Redtail" }]
+            steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
         });
     });
 
-    return workflows.length;
+    return templates.length;
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
