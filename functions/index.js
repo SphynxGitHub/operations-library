@@ -164,19 +164,19 @@ exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
 // 7. Redtail v3 Proxy (Direct Header)
 exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
     const rawAuth = req.query.apiKey; 
+    const page = req.query.page || 1;
     
     try {
-        const response = await axios.get("https://smf.crm3.redtailtechnology.com/api/public/v1/workflows/templates", {
+        const response = await axios.get(`https://smf.crm3.redtailtechnology.com/api/public/v1/workflows/templates?page=${page}`, {
             headers: {
-                'Authorization': rawAuth, // 🎯 Sends exactly what you provide
+                'Authorization': rawAuth, // 🎯 Direct passthrough of your verified string
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
         });
         res.status(200).json(response.data);
     } catch (error) {
-        console.error("Redtail Error:", error.response?.data || error.message);
-        res.status(error.response?.status || 500).send(error.message);
+        res.status(500).send(error.message);
     }
 });
 
