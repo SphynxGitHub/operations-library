@@ -420,20 +420,20 @@ OL.toggleTheme = function() {
     const isLight = document.body.classList.toggle('light-mode');
     localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
     
-    // 1. Rebuild the sidebar and shell
+    // Force the structural rebuild
     window.buildLayout(); 
-
-    // 2. 🚀 THE FIX: Force the map and its custom toolbar to repaint
+    
+    // Force the toolbar and canvas to repaint using the new CSS variables
     if (window.location.hash.includes('visualizer')) {
         OL.renderVisualizer();
     }
 
-    // 3. Re-initialize icons to fix SVG coloring
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
+    // Crucial: Fix the SVG icon colors
+    if (window.lucide) window.lucide.createIcons();
 };
 
+OL.renderVisualizer();
+if (window.lucide) window.lucide.createIcons();
 
 /*===================== PARTNER ACCESS ==================*/
 
