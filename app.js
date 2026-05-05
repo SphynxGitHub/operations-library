@@ -417,19 +417,32 @@ window.addEventListener('load', () => {
 });
 
 OL.toggleTheme = function() {
+    // 1. Toggle the class on the body
     const isLight = document.body.classList.toggle('light-mode');
     localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
     
-    // Force the structural rebuild
-    window.buildLayout(); 
+    console.log("🎨 Theme switched to:", isLight ? 'Light' : 'Dark');
+
+    // 2. 🚀 THE CRITICAL REPAINT: 
+    // We must rebuild the Layout HTML so the button classes (btn soft/primary) 
+    // and labels are fresh for the new theme.
+    if (typeof window.buildLayout === 'function') {
+        window.buildLayout(); 
+    }
     
-    // Force the toolbar and canvas to repaint using the new CSS variables
-    if (window.location.hash.includes('visualizer')) {
+    // 3. 🕸️ VISUALIZER SYNC:
+    // If the map is open, we need to force a re-render because the canvas
+    // elements often use hardcoded or calculated colors.
+    if (window.location.hash.includes('visualizer') && typeof OL.renderVisualizer === 'function') {
         OL.renderVisualizer();
     }
 
-    // Crucial: Fix the SVG icon colors
-    if (window.lucide) window.lucide.createIcons();
+    // 4. ✨ ICON COLOR RECOVERY:
+    // Lucide icons are injected as SVGs. If they don't change color, we force 
+    // Lucide to delete the existing SVGs and draw new ones for the current theme.
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 /*===================== PARTNER ACCESS ==================*/
