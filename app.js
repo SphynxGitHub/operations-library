@@ -15716,19 +15716,30 @@ window.renderTeamManager = function () {
         ? m.roles
             .map(
               (r) =>
-                `<span class="pill tiny soft" style="font-size: 8px;">${esc(r)}</span>`,
+                `<span class="pill tiny soft" style="font-size: 8px; display:flex; align-items:center; gap:3px;">
+                  <i data-lucide="shield" style="width:8px; height:8px;"></i> ${esc(r)}
+                </span>`,
             )
             .join("")
-        : `<span class="tiny muted uppercase">${esc(m.role || "Contributor")}</span>`;
+        : `<span class="tiny muted uppercase" style="display:flex; align-items:center; gap:4px;">
+            <i data-lucide="user" style="width:10px; height:10px;"></i> ${esc(m.role || "Contributor")}
+           </span>`;
 
       return `
-           <div class="card is-clickable" onclick="OL.openTeamMemberModal('${m.id}')">
-              <div class="card-header">
-                  <div class="card-title tm-card-title-${m.id}">${esc(m.name)}</div>
-                  <button class="card-delete-btn" onclick="event.stopPropagation(); OL.removeTeamMember('${m.id}')">×</button>
+           <div class="card is-clickable hover-trigger" onclick="OL.openTeamMemberModal('${m.id}')" style="padding:15px;">
+              <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="background:var(--accent); color:black; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px;">
+                        ${m.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                    </div>
+                    <div class="card-title tm-card-title-${m.id}" style="font-weight:bold;">${esc(m.name)}</div>
+                  </div>
+                  <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation(); OL.removeTeamMember('${m.id}')">
+                    <i data-lucide="x" style="width:14px; height:14px;"></i>
+                  </button>
               </div>
               <div class="card-body">
-                  <div class="pills-row" style="margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px;">
+                  <div class="pills-row" style="display: flex; flex-wrap: wrap; gap: 4px;">
                       ${rolesHtml}
                   </div>
               </div>
@@ -15738,19 +15749,27 @@ window.renderTeamManager = function () {
     .join("");
 
   container.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h2>👬 Team Members</h2>
+        <div class="section-header" style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="users" style="width:28px; height:24px; color:var(--accent);"></i>
+            <div style="flex:1;">
+                <h2 style="margin:0;">Team Members</h2>
                 <div class="small muted subheader">Manage members assigned to ${esc(client.meta.name)}</div>
             </div>
-            <button class="btn primary" onclick="OL.promptAddTeamMember()">+ Add Member</button>
+            <button class="btn primary" onclick="OL.promptAddTeamMember()" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="user-plus" style="width:16px; height:16px;"></i> Add Member
+            </button>
         </div>
 
-        <div class="cards-grid">
+        <div class="cards-grid" style="margin-top: 20px;">
             ${memberCardsHtml}
-            ${members.length === 0 ? '<div class="empty-hint">No team members added yet.</div>' : ""}
+            ${members.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No team members added yet.</div>' : ""}
         </div>
     `;
+
+    // 🚀 THE REPAINT: Essential for dynamic card icons
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // 2. ADD, UPDATE, REMOVE TEAM MEMBERS
@@ -15832,24 +15851,18 @@ OL.removeTeamMember = function (memberId) {
 // 3. OPEN TEAM MEMBER MODAL
 OL.openTeamMemberModal = function (memberId, draftObj = null) {
     const client = getActiveClient();
-    
-    // 1. Resolve Data: Use draft if provided, otherwise find in client data
-    let member = draftObj;
-    if (!member) {
-        member = client?.projectData?.teamMembers.find(m => m.id === memberId);
-    }
+    let member = draftObj || client?.projectData?.teamMembers.find(m => m.id === memberId);
     
     if (!member) return;
 
-    // Ensure roles is initialized as an array
     if (!Array.isArray(member.roles)) {
         member.roles = member.role ? [member.role] : [];
     }
 
     const html = `
-        <div class="modal-head" style="gap:15px;">
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-size:18px;">👨‍💼</span>
+                <i data-lucide="user" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
                        value="${esc(member.name)}" 
                        placeholder="Full Name..."
@@ -15862,42 +15875,52 @@ OL.openTeamMemberModal = function (memberId, draftObj = null) {
         <div class="modal-body">
 
             <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label">Assigned Roles</label>
-                <div class="pills-row" style="margin-bottom: 12px; min-height: 32px;">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="shield" style="width:14px; height:14px;"></i> Assigned Roles
+                </label>
+                <div class="pills-row" style="margin-bottom: 12px; min-height: 32px; display:flex; flex-wrap:wrap; gap:6px;">
                     ${member.roles.map(role => `
-                        <span class="pill tiny accent">
+                        <span class="pill tiny accent" style="display:flex; align-items:center; gap:4px;">
                             ${esc(role)}
-                            <b style="cursor:pointer; margin-left:4px;" onclick="OL.removeRoleFromMember('${memberId}', '${esc(role)}')">×</b>
+                            <i data-lucide="x" style="width:10px; height:10px; cursor:pointer;" onclick="OL.removeRoleFromMember('${memberId}', '${esc(role)}')"></i>
                         </span>
                     `).join("") || '<span class="tiny muted">No roles assigned</span>'}
                 </div>
 
                 <div class="search-map-container">
-                    <input type="text" class="modal-input tiny" 
-                        placeholder="Search roles or type to add new..." 
-                        onfocus="OL.filterRoleSearch('${memberId}', '')" // 🚀 THE FIX: Trigger on click/focus
-                        oninput="OL.filterRoleSearch('${memberId}', this.value)">
+                    <div style="position:relative; display:flex; align-items:center;">
+                        <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
+                        <input type="text" class="modal-input tiny" 
+                            style="padding-left:30px;"
+                            placeholder="Search roles or type to add new..." 
+                            onfocus="OL.filterRoleSearch('${memberId}', '')" 
+                            oninput="OL.filterRoleSearch('${memberId}', this.value)">
+                    </div>
                     <div id="role-search-results" class="search-results-overlay"></div>
                 </div>
             </div>
+
             <div class="card-section" style="margin-top: 20px;">
-                <label class="modal-section-label">✍️ Email Signature</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="pen-tool" style="width:14px; height:14px;"></i> Email Signature
+                </label>
                 <textarea class="modal-textarea" 
-                        style="min-height: 100px; font-family: monospace; font-size: 11px;" 
+                        style="min-height: 100px; font-family: monospace; font-size: 11px; line-height:1.4;" 
                         placeholder="Best regards,\n{{name}}\nSphynx Financial"
                         onblur="OL.updateTeamMember('${memberId}', 'signature', this.value)">${esc(member.signature || '')}</textarea>
-                <div class="tiny muted" style="margin-top:5px;">This signature will be used for all email templates sent by this member.</div>
+                <div class="tiny muted" style="margin-top:5px; display:flex; align-items:center; gap:4px;">
+                    <i data-lucide="info" style="width:10px; height:10px;"></i>
+                    Used for automated email templates sent by this member.
+                </div>
             </div>
             ${OL.renderAccessSection(memberId, "member")} 
         </div>
     `;
     openModal(html);
 
-    // Auto-focus name field immediately
-    setTimeout(() => {
-        const input = document.getElementById('modal-tm-name-input');
-        if (input) input.focus();
-    }, 100);
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // 🚀 REAL-TIME SURGICAL SYNC
@@ -15918,33 +15941,31 @@ OL.filterRoleSearch = function (memberId, query) {
     const member = client?.projectData?.teamMembers.find(m => m.id === memberId);
     if (!member) return;
 
-    // 1. Get unique list of every role used in the project
-    const allProjectRoles = [
-        ...new Set(client.projectData.teamMembers.flatMap(m => m.roles || []))
-    ];
-
-    // 2. Filter: Match search AND exclude roles the member already has
+    const allProjectRoles = [...new Set(client.projectData.teamMembers.flatMap(m => m.roles || []))];
     const memberRoles = member.roles || [];
     const matches = allProjectRoles.filter(role => 
         role.toLowerCase().includes(q) && !memberRoles.includes(role)
     ).sort();
 
     let html = matches.map(role => `
-        <div class="search-result-item" onmousedown="OL.addRoleToMember('${memberId}', '${esc(role)}')">
-            <span>🎭 ${esc(role)}</span>
+        <div class="search-result-item" style="display:flex; align-items:center; gap:10px;" onmousedown="OL.addRoleToMember('${memberId}', '${esc(role)}')">
+            <i data-lucide="tag" style="width:12px; height:12px; opacity:0.6;"></i>
+            <span style="flex:1;">${esc(role)}</span>
             <span class="tiny muted">Assign</span>
         </div>
     `).join("");
 
-    // 3. Add "Create New" option if typing a unique role name
     if (q.length > 0 && !allProjectRoles.some(r => r.toLowerCase() === q)) {
         html += `
-            <div class="search-result-item create-action" onmousedown="OL.addRoleToMember('${memberId}', '${esc(query)}')">
-                <span class="pill tiny accent">+ New</span> Create Role "${esc(query)}"
+            <div class="search-result-item create-action" style="display:flex; align-items:center; gap:10px;" onmousedown="OL.addRoleToMember('${memberId}', '${esc(query)}')">
+                <i data-lucide="plus-circle" style="width:14px; height:14px; color:var(--accent);"></i>
+                <span>Create Role "<strong>${esc(query)}</strong>"</span>
             </div>`;
     }
 
     listEl.innerHTML = html || `<div class="search-result-item muted">No other roles found.</div>`;
+    
+    if (window.lucide) window.lucide.createIcons();
 };
 
 OL.addRoleToMember = function (memberId, roleName) {
@@ -16312,26 +16333,36 @@ function renderHowToLibrary () {
     const masterLibrary = state.master.howToLibrary || [];
     const localLibrary = (client && client.projectData.localHowTo) || [];
     
-    // If in Vault, show all master. If in project, show shared masters + locals.
     const visibleGuides = isVaultView 
         ? masterLibrary 
         : [...masterLibrary.filter(ht => (client?.sharedMasterIds || []).includes(ht.id)), ...localLibrary];
 
     container.innerHTML = `
-        <div class="section-header" style="display: flex !important; visibility: visible !important; opacity: 1 !important;">
+        <div class="section-header" style="display: flex !important; align-items: center; gap: 12px; visibility: visible !important; opacity: 1 !important;">
+            <i data-lucide="library" style="width: 28px; height: 24px; color: var(--accent);"></i>
             <div style="flex: 1;">
-                <h2>📖 ${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
+                <h2 style="margin:0;">${isVaultView ? 'Master SOP Vault' : 'Project Instructions'}</h2>
                 <div class="small muted">${isVaultView ? 'Global Standards' : `Custom guides for ${esc(client?.meta?.name)}`}</div>
             </div>
             
-            <div class="header-actions" style="display: flex !important; gap: 10px !important;">
+            <div class="header-actions" style="display: flex !important; gap: 10px !important; align-items: center;">
                 ${isVaultView && isAdmin ? `
-                    <button class="btn primary" style="background: #38bdf8 !important; color: black !important; font-weight: bold;" onclick="OL.openHowToEditorModal()">+ Create Master SOP</button>
+                    <button class="btn primary" style="background: var(--accent) !important; color: black !important; font-weight: bold; display: flex; align-items: center; gap: 6px;" 
+                            onclick="OL.openHowToEditorModal()">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Create Master SOP
+                    </button>
                 ` : ''}
 
                 ${!isVaultView ? `
-                    <button class="btn small soft" onclick="OL.openLocalHowToEditor()">+ Create Local SOP</button>
-                    ${isAdmin ? `<button class="btn primary" style="background: #38bdf8 !important; color: black !important; margin-left:8px;" onclick="OL.importHowToToProject()">⬇ Import Master</button>` : ''}
+                    <button class="btn small soft" style="display: flex; align-items: center; gap: 6px;" 
+                            onclick="OL.openLocalHowToEditor()">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Local SOP
+                    </button>
+                    ${isAdmin ? `
+                        <button class="btn primary" style="background: var(--accent) !important; color: black !important; display: flex; align-items: center; gap: 6px;" 
+                                onclick="OL.importHowToToProject()">
+                            <i data-lucide="download-cloud" style="width: 14px; height: 14px;"></i> Import Master
+                        </button>` : ''}
                 ` : ''}
             </div>
         </div>
@@ -16341,6 +16372,11 @@ function renderHowToLibrary () {
             ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
         </div>
     `;
+
+    // 🚀 THE REPAINT
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 // 2. RENDER HOW TO CARDS
@@ -16348,9 +16384,7 @@ function renderHowToCard(clientId, ht, isClientView) {
     const client = state.clients[clientId];
     const isAdmin = window.FORCE_ADMIN === true;
     
-    // 🚀 THE FIX: Define the missing variable
     const isVaultView = window.location.hash.includes('vault');
-    
     const isLocal = String(ht.id).includes('local');
     const isMaster = !isLocal;
     const canDelete = isAdmin || isLocal;
@@ -16361,31 +16395,39 @@ function renderHowToCard(clientId, ht, isClientView) {
              style="cursor: pointer; position: relative;" 
              onclick="OL.openHowToModal('${ht.id}')">
 
-            <div class="card-header">
-                <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="book-open" style="width:14px; height:14px; color:var(--accent); opacity:0.8;"></i>
+                    <div class="card-title ht-card-title-${ht.id}">${esc(ht.name || 'Untitled SOP')}</div>
+                </div>
 
                 ${canDelete ? `
                 <button class="card-delete-btn" 
+                        style="position:static;"
                         title="${isVaultView ? 'Delete Master Source' : (isMaster ? 'Remove from Client View' : 'Delete Permanently')}" 
-                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">×</button>
+                        onclick="event.stopPropagation(); OL.deleteSOP('${clientId}', '${ht.id}')">
+                    <i data-lucide="x" style="width:14px; height:14px;"></i>
+                </button>
                 ` : ''}
             </div>
             
             <div class="card-body" style="padding-top: 12px;">
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em;">
+                <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 10px;">
+                    <span class="pill tiny ${isMaster ? 'vault' : 'local'}" style="font-size: 8px; letter-spacing: 0.05em; display:flex; align-items:center; gap:4px;">
+                        <i data-lucide="${isMaster ? 'shield-check' : 'map-pin'}" style="width:10px; height:10px;"></i>
                         ${isMaster ? 'MASTER' : 'LOCAL'}
                     </span>
 
                     ${!isClientView && isMaster ? `
                         <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
-                              style="font-size: 8px; cursor: pointer;"
+                              style="font-size: 8px; cursor: pointer; display:flex; align-items:center; gap:4px;"
                               onclick="event.stopPropagation(); OL.toggleSOPSharing('${clientId}', '${ht.id}')">
-                            ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
+                            <i data-lucide="${isShared ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
+                            ${isShared ? 'Client-Facing' : 'Internal-Only'}
                         </span>
                     ` : ''}
                 </div>
-                <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">
+                <p class="small muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; font-size: 11px;">
                     ${esc(ht.summary || 'No summary provided.')}
                 </p>
             </div>
@@ -16434,7 +16476,7 @@ OL.openHowToModal = function(htId, draftObj = null) {
     // 2. Identify Permissions & Scope
     const isAdmin = window.FORCE_ADMIN === true;
     const isLocal = String(ht.id).includes('local');
-    const isMaster = !isLocal; // 🚀 FIXED: isMaster is now defined here
+    const isMaster = !isLocal;
     const isDraft = String(htId).startsWith('draft');
     const isShared = client?.sharedMasterIds?.includes(ht.id);
 
@@ -16445,9 +16487,9 @@ OL.openHowToModal = function(htId, draftObj = null) {
     const sharedProjects = isMaster ? OL.getProjectsSharingSOP(ht.id) : [];
 
     const html = `
-        <div class="modal-head" style="gap:15px;">
+        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px;">
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-size:18px;">📖</span>
+                <i data-lucide="book-open" style="width:20px; height:20px; color:var(--accent);"></i>
                 <input type="text" class="header-editable-input" 
                        value="${esc(ht.name)}" 
                        placeholder="Enter SOP Name..."
@@ -16456,50 +16498,62 @@ OL.openHowToModal = function(htId, draftObj = null) {
                        onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
             </div>
             
-            ${canPromote ? `
-                <button class="btn tiny primary" 
-                        style="background: #fbbf24 !important; color: black !important; font-weight: bold;" 
-                        onclick="OL.promoteLocalSOPToMaster('${ht.id}')">
-                    ⭐ PROMOTE TO MASTER
-                </button>
-            ` : ''}
+            <div style="display:flex; align-items:center; gap:10px;">
+                ${canPromote ? `
+                    <button class="btn tiny primary" 
+                            style="background: var(--accent) !important; color: black !important; font-weight: bold; display:flex; align-items:center; gap:6px;" 
+                            onclick="OL.promoteLocalSOPToMaster('${ht.id}')">
+                        <i data-lucide="star" style="width:12px; height:12px;"></i> PROMOTE
+                    </button>
+                ` : ''}
 
-            ${isAdmin && isMaster ? `
-                <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
-                    style="font-size: 8px; cursor: pointer;"
-                    onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
-                    ${isShared ? '🌍 Client-Facing' : '🔒 Internal-Only'}
-                </span>
-            ` : ''}
-            
-            ${!isAdmin && isLocal ? `
-                <span class="pill tiny soft" style="font-size: 8px;">📍 Project-Specific</span>
-            ` : ''}
-
+                ${isAdmin && isMaster ? `
+                    <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
+                        style="font-size: 8px; cursor: pointer; display:flex; align-items:center; gap:4px;"
+                        onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
+                        <i data-lucide="${isShared ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
+                        ${isShared ? 'Client-Facing' : 'Internal-Only'}
+                    </span>
+                ` : ''}
+                
+                ${!isAdmin && isLocal ? `
+                    <span class="pill tiny soft" style="font-size: 8px; display:flex; align-items:center; gap:4px;">
+                        <i data-lucide="map-pin" style="width:10px; height:10px;"></i> Project-Specific
+                    </span>
+                ` : ''}
+                <button class="btn small soft" onclick="OL.closeModal()">Close</button>
+            </div>
         </div>
+
         <div class="modal-body">
             <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">📄 Brief Summary (Shows on card)</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="file-text" style="width:14px; height:14px;"></i> Brief Summary
+                </label>
                 <input type="text" class="modal-input tiny" 
                        placeholder="One-sentence overview..."
                        value="${esc(ht.summary || '')}" 
                        ${!canEdit ? 'readonly' : ''}
-                       onblur="OL.handleHowToSave('${ht.id}', 'summary', this.value)">
+                       onblur="OL.updateHowToField('${ht.id}', 'summary', this.value)">
             </div>
 
             <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">🎥 Training Video URL</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="video" style="width:14px; height:14px;"></i> Training Video URL
+                </label>
                 ${canEdit ? `
                     <input type="text" class="modal-input tiny" 
                            placeholder="Paste link..."
                            value="${esc(ht.videoUrl || '')}" 
                            onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value); OL.openHowToModal('${ht.id}')">
                 ` : ''}
-                ${ht.videoUrl ? `<div class="video-preview-wrap" style="margin-top:10px;">${OL.parseVideoEmbed(ht.videoUrl)}</div>` : ''}
+                ${ht.videoUrl ? `<div class="video-preview-wrap" style="margin-top:10px; border-radius:8px; overflow:hidden;">${OL.parseVideoEmbed(ht.videoUrl)}</div>` : ''}
             </div>
 
             <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">📂 Category</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="folder" style="width:14px; height:14px;"></i> Category
+                </label>
                 <input type="text" class="modal-input tiny" 
                        value="${esc(ht.category || 'General')}" 
                        ${!canEdit ? 'readonly' : ''}
@@ -16507,44 +16561,56 @@ OL.openHowToModal = function(htId, draftObj = null) {
             </div>
 
             <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label">📱 Related Applications</label>
-                <div class="pills-row" id="ht-app-pills">
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="smartphone" style="width:14px; height:14px;"></i> Related Applications
+                </label>
+                <div class="pills-row" id="ht-app-pills" style="margin-bottom:8px;">
                     ${(ht.appIds || []).map(appId => {
                         const app = allApps.find(a => a.id === appId);
-                        return app ? `<span class="pill tiny accent">${esc(app.name)}</span>` : '';
+                        return app ? `<span class="pill tiny accent" style="display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="smartphone" style="width:10px; height:10px;"></i> ${esc(app.name)}
+                        </span>` : '';
                     }).join('')}
                 </div>
                 ${canEdit ? `
-                    <div class="search-map-container" style="margin-top:8px;">
-                        <input type="text" class="modal-input tiny" placeholder="Link an app..." 
-                               onfocus="OL.filterHTAppSearch('${ht.id}', '')"
-                               oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
+                    <div class="search-map-container">
+                        <div style="position:relative; display:flex; align-items:center;">
+                            <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
+                            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Link an app..." 
+                                   onfocus="OL.filterHTAppSearch('${ht.id}', '')"
+                                   oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
+                        </div>
                         <div id="ht-app-search-results" class="search-results-overlay"></div>
                     </div>
                 ` : ''}
             </div>
 
             <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:20px;">
-                <label class="modal-section-label">Instructions</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="align-left" style="width:14px; height:14px;"></i> Instructions
+                </label>
                 <textarea class="modal-textarea" rows="12" 
                           ${!canEdit ? 'readonly' : ''} 
-                          style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.5);' : ''}"
+                          style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.7); line-height:1.6;' : ''}"
                           onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
             </div>
+
             ${backlinks.length > 0 ? `
                 <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
-                    <label class="modal-section-label" style="color: var(--accent); opacity: 1;">🔗 Mapped to Technical Resources</label>
+                    <label class="modal-section-label" style="color: var(--accent); opacity: 1; display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="link" style="width:14px; height:14px;"></i> Mapped to Technical Resources
+                    </label>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
                         ${backlinks.map(link => `
                             <div class="pill soft is-clickable" 
-                                style="display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(56, 189, 248, 0.05);"
+                                style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(56, 189, 248, 0.05);"
                                 onclick="OL.openResourceModal('${link.resId}')">
-                                <span style="font-size: 12px;">📱</span>
+                                <i data-lucide="${OL.getRegistryIcon(link.resType)}" style="width:14px; height:14px; color:var(--accent);"></i>
                                 <div style="flex: 1;">
-                                    <div style="font-size: 10px; font-weight: bold;">${esc(link.resName)}</div>
-                                    <div style="font-size: 8px; opacity: 0.6;">Linked via ${link.context}: "${esc(link.detail)}"</div>
+                                    <div style="font-size: 11px; font-weight: bold;">${esc(link.resName)}</div>
+                                    <div style="font-size: 9px; opacity: 0.6;">Linked via ${link.context}: "${esc(link.detail)}"</div>
                                 </div>
-                                <span style="font-size: 10px; opacity: 0.4;">View Resource ➔</span>
+                                <i data-lucide="chevron-right" style="width:14px; height:14px; opacity:0.4;"></i>
                             </div>
                         `).join('')}
                     </div>
@@ -16553,23 +16619,33 @@ OL.openHowToModal = function(htId, draftObj = null) {
 
             ${sharedProjects.length > 0 ? `
                 <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
-                    <label class="modal-section-label" style="color: #10b981;">🌍 Shared With Projects</label>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                    <label class="modal-section-label" style="color: #10b981; display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="globe" style="width:14px; height:14px;"></i> Shared With Projects
+                    </label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
                         ${sharedProjects.map(p => `
-                            <div class="pill soft" style="display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
-                                <span style="font-size: 10px;">🏢</span>
+                            <div class="pill soft" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <i data-lucide="building" style="width:12px; height:12px;"></i>
                                 <span style="font-size: 10px; font-weight: bold;">${esc(p.name)}</span>
                                 <button class="pill-remove-x" 
                                         style="cursor:pointer; opacity: 0.5; margin-left: 5px;" 
-                                        onclick="event.stopPropagation(); OL.deleteSOP('${p.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">×</button>
+                                        onclick="event.stopPropagation(); OL.deleteSOP('${p.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
+                                    <i data-lucide="x" style="width:12px; height:12px;"></i>
+                                </button>
                             </div>
                         `).join('')}
                     </div>
                 </div>
             ` : (isMaster ? '<div class="tiny muted" style="margin-top:20px;">This Master SOP is not shared with any projects.</div>' : '')}
-                    </div>
-        `;
+        </div>
+    `;
+    
     openModal(html);
+
+    // 🚀 REPAINT
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 window.OL.promoteLocalSOPToMaster = function(localId) {
@@ -17180,7 +17256,6 @@ OL.renderGlobalDataManager = function() {
     const isVaultMode = window.location.hash.includes('vault');
     const client = getActiveClient();
 
-    // Determine source based on context
     const sourcePool = (isVaultMode || !client) 
         ? (state.master.datapoints || []) 
         : (client.projectData.localDatapoints || []);
@@ -17189,28 +17264,36 @@ OL.renderGlobalDataManager = function() {
     const bundles = sourcePool.filter(d => d.isBundle);
 
     container.innerHTML = `
-        <div class="section-header" style="margin-bottom: 30px; padding-bottom: 20px;">
-            <div>
-                <h2 style="font-size: 24px; letter-spacing: -0.5px;">🏷️ Data Architecture Manager</h2>
-                <div class="small muted" style="margin-top: 8px;">Standardize fields and drag them into bundles to organize technical requirements.</div>
+        <div class="section-header" style="display: flex; align-items: center; gap: 12px; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--line);">
+            <i data-lucide="database" style="width: 28px; height: 24px; color: var(--accent);"></i>
+            <div style="flex: 1;">
+                <h2 style="font-size: 24px; letter-spacing: -0.5px; margin: 0;">Data Architecture Manager</h2>
+                <div class="small muted" style="margin-top: 4px;">Standardize fields and drag them into bundles to organize technical requirements.</div>
             </div>
-            <div class="header-actions">
-                ${!isVaultMode ? `<button class="btn primary" style="background:#38bdf8; color:black; margin-right:8px;" onclick="OL.openMasterDataImporter()">⬇️ Import Master</button>` : ''}
-                <button class="btn small soft" onclick="OL.addNewDatapoint(true)">+ New Bundle</button>
-                <button class="btn primary" onclick="OL.addNewDatapoint(false)">+ New Field</button>
+            <div class="header-actions" style="display: flex; gap: 8px;">
+                ${!isVaultMode ? `
+                    <button class="btn primary" style="background:#38bdf8; color:black; display: flex; align-items: center; gap: 6px;" onclick="OL.openMasterDataImporter()">
+                        <i data-lucide="download-cloud" style="width: 14px; height: 14px;"></i> Import Master
+                    </button>` : ''}
+                <button class="btn small soft" style="display: flex; align-items: center; gap: 6px;" onclick="OL.addNewDatapoint(true)">
+                    <i data-lucide="package-plus" style="width: 14px; height: 14px;"></i> New Bundle
+                </button>
+                <button class="btn primary" style="display: flex; align-items: center; gap: 6px;" onclick="OL.addNewDatapoint(false)">
+                    <i data-lucide="plus" style="width: 14px; height: 14px;"></i> New Field
+                </button>
             </div>
         </div>
 
         <div class="data-manager-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
             
             <div class="data-column">
-                <div class="column-label" style="padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                <div class="column-label" style="display: flex; align-items: center; gap: 8px; padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                    <i data-lucide="list" style="width: 12px; height: 12px; opacity: 0.5;"></i>
                     <b class="tiny muted uppercase" style="letter-spacing: 1px;">Individual Master Fields</b>
                 </div>
                 <div id="master-fields-list">
                     ${datapoints.map(dp => {
                         const parentBundles = bundles.filter(b => (b.childIds || []).includes(dp.id));
-                        
                         const protectedFields = [
                             '{householdName}', '{folderName}', '{firstName}', '{lastName}', 
                             '{email}', '{phone}', '{phoneType}', '{homeAddress}', '{mailingAddress}'
@@ -17228,26 +17311,34 @@ OL.renderGlobalDataManager = function() {
                                         border-radius: 6px; cursor: pointer; transition: 0.2s;">
                                 
                                 <div style="display:flex; align-items:center; gap:12px; flex: 1;">
-                                    <span style="opacity:0.3; font-size:10px; cursor: grab;" onmousedown="event.stopPropagation()">⠿</span>
+                                    <i data-lucide="grip-vertical" style="width: 14px; height: 14px; opacity: 0.2; cursor: grab;" onmousedown="event.stopPropagation()"></i>
                                     <div style="min-width: 0;">
-                                        <div class="bold" style="font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            ${dp.linkToResource ? '🔗' : '🏷️'} ${esc(dp.name)}
+                                        <div class="bold" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            <i data-lucide="${dp.linkToResource ? 'link' : 'tag'}" style="width: 12px; height: 12px; color: var(--accent); opacity: 0.8;"></i>
+                                            ${esc(dp.name)}
                                         </div>
-                                        <div class="tiny muted" style="font-family: monospace; opacity:0.5; font-size: 9px;">${dp.key}</div>
+                                        <div class="tiny muted" style="font-family: monospace; opacity:0.5; font-size: 9px; padding-left: 18px;">${dp.key}</div>
                                     </div>
                                 </div>
 
                                 <div style="display:flex; align-items:center; gap:10px;">
                                     <div class="pills-row" style="gap:3px;">
-                                        ${parentBundles.map(b => `<span class="pill tiny soft" style="font-size:7px; padding: 1px 4px;">📦</span>`).join('')}
+                                        ${parentBundles.map(b => `
+                                            <span class="pill tiny soft" style="padding: 2px 4px;" title="Included in ${esc(b.name)}">
+                                                <i data-lucide="package" style="width: 8px; height: 8px;"></i>
+                                            </span>`).join('')}
                                     </div>
                                     
                                     ${!isProtected ? `
                                         <button class="card-delete-btn" 
-                                                style="position:static; font-size: 16px; opacity: 0.4;" 
-                                                onclick="event.stopPropagation(); OL.deleteMasterDatapointById('${dp.id}')">×</button>
+                                                style="position:static; opacity: 0.4; display: flex; align-items: center; justify-content: center;" 
+                                                onclick="event.stopPropagation(); OL.deleteMasterDatapointById('${dp.id}')">
+                                            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                                        </button>
                                     ` : `
-                                        <span title="System Protected Field" style="font-size: 10px; opacity: 0.2; width: 22px; text-align: center;">🔒</span>
+                                        <span title="System Protected Field" style="opacity: 0.2; width: 22px; display: flex; justify-content: center;">
+                                            <i data-lucide="lock" style="width: 12px; height: 12px;"></i>
+                                        </span>
                                     `}
                                 </div>
                             </div>
@@ -17257,7 +17348,8 @@ OL.renderGlobalDataManager = function() {
             </div>
 
             <div class="data-column">
-                <div class="column-label" style="padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                <div class="column-label" style="display: flex; align-items: center; gap: 8px; padding: 0 0 15px 5px; border-bottom: 1px solid var(--line); margin-bottom: 15px;">
+                    <i data-lucide="layers" style="width: 12px; height: 12px; opacity: 0.5;"></i>
                     <b class="tiny muted uppercase" style="letter-spacing: 1px;">System Bundles</b>
                 </div>
                 <div id="bundles-list">
@@ -17269,16 +17361,25 @@ OL.renderGlobalDataManager = function() {
                              ondrop="OL.handleFieldDropOnBundle(event, '${bn.id}')"
                              style="margin-bottom: 15px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.02); transition: 0.2s;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-                                <div>
-                                    <div class="bold" style="color: var(--accent); font-size: 14px;">📦 ${esc(bn.name)}</div>
-                                    <div class="tiny muted">${(bn.childIds || []).length} Fields Linked</div>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <i data-lucide="package" style="width: 18px; height: 18px; color: var(--accent);"></i>
+                                    <div>
+                                        <div class="bold" style="color: var(--accent); font-size: 14px;">${esc(bn.name)}</div>
+                                        <div class="tiny muted">${(bn.childIds || []).length} Fields Linked</div>
+                                    </div>
                                 </div>
-                                <button class="btn-icon-tiny" onclick="OL.deleteMasterDatapointById('${bn.id}')">×</button>
+                                <button class="btn-icon-tiny" style="display: flex; align-items: center; justify-content: center;" onclick="OL.deleteMasterDatapointById('${bn.id}')">
+                                    <i data-lucide="x" style="width: 12px; height: 12px;"></i>
+                                </button>
                             </div>
                             <div class="pills-row" style="gap:5px;">
                                 ${(bn.childIds || []).map(cid => {
                                     const child = datapoints.find(d => d.id === cid);
-                                    return child ? `<span class="pill tiny soft" style="font-size:9px;">${esc(child.name)} <b class="is-clickable" onclick="OL.removeFieldFromBundle('${bn.id}', '${child.id}')" style="margin-left:5px; opacity:0.5;">×</b></span>` : '';
+                                    return child ? `
+                                        <span class="pill tiny soft" style="font-size:9px; display: flex; align-items: center; gap: 6px;">
+                                            ${esc(child.name)} 
+                                            <i data-lucide="x-circle" class="is-clickable" onclick="OL.removeFieldFromBundle('${bn.id}', '${child.id}')" style="width: 10px; height: 10px; opacity:0.5;"></i>
+                                        </span>` : '';
                                 }).join('')}
                                 ${bn.childIds?.length === 0 ? '<div class="tiny muted italic">Drag fields here to group...</div>' : ''}
                             </div>
@@ -17288,6 +17389,11 @@ OL.renderGlobalDataManager = function() {
             </div>
         </div>
     `;
+
+    // 🚀 THE REPAINT
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.openMasterDataImporter = function() {
