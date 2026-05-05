@@ -80,28 +80,32 @@ exports.jotformProxy = onRequest({ cors: true, timeoutSeconds: 120 }, async (req
 // 3. Calendly Proxy (v1 Pattern for specific URL requirement)
 exports.calendlyProxy = functions.https.onRequest(async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        res.status(204).send('');
-        return;
-    }
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    if (req.method === 'OPTIONS') return res.status(204).send('');
 
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
 
     try {
-        const response = await axios.get("https://api.calendly.com/event_types?user=me", {
-            headers: { 
-                'Authorization': `Bearer ${apiKey}`,
-                'Accept': 'application/json'
-            }
+        // 1. Get User Details first (to get the user URI)
+        const userRes = await axios.get("https://api.calendly.com/users/me", {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
         });
-        res.status(200).json(response.data);
+        
+        const userUri = userRes.data.resource.uri;
+
+        // 2. Now fetch Event Types for that specific user URI
+        const eventsRes = await axios.get(`https://api.calendly.com/event_types?user=${userUri}`, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+
+        res.status(200).json(eventsRes.data);
     } catch (error) {
-        console.error("Calendly Error:", error.message);
-        res.status(500).send(error.message);
+        console.error("Calendly Proxy Error:", error.response?.data || error.message);
+        // Send the specific Calendly error back so we can see it in the app
+        const status = error.response?.status || 500;
+        const message = error.response?.data?.message || error.message;
+        res.status(status).send(message);
     }
 });
 
