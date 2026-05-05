@@ -5772,16 +5772,18 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     // This replaces the dropdown with compact inline tags
     const originPill = `
         <span class="pill tiny ${isAlreadyMaster ? 'vault' : 'local' }" 
-              style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; border: 1px solid rgba(255,255,255,0.1);">
-            ${isAlreadyMaster ? '🏛️ Master' : '📍 Local' }
+              style="display:flex; align-items:center; gap:4px; font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; font-weight: 700; border: 1px solid rgba(255,255,255,0.1);">
+            <i data-lucide="${isAlreadyMaster ? 'shield-check' : 'map-pin'}" style="width:10px; height:10px;"></i>
+            ${isAlreadyMaster ? 'Master' : 'Local' }
         </span>`;
     
     const typePill = `
         <div style="position: relative; display: inline-block;">
             <span class="pill tiny soft is-clickable" 
                   onclick="document.getElementById('res-type-selector').click()"
-                  style="font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
-                ${esc(res.type || 'General')} ▾
+                  style="display:flex; align-items:center; gap:4px; font-size: 9px; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+                <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:10px; height:10px;"></i>
+                ${esc(res.type || 'General')} <i data-lucide="chevron-down" style="width:10px; height:10px;"></i>
             </span>
             <select id="res-type-selector" 
                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
@@ -5792,39 +5794,42 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 `).join("")}
             </select>
         </div>`;
-
+    
       // 🎯 NEW: AUTO-MAPPING SECTION
       const appMappingHtml = `
       <div class="card-section" style="margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <label class="modal-section-label" style="margin:0;">📱 PRIMARY APPLICATION</label>
+              <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin:0;">
+                <i data-lucide="smartphone" style="width:12px; height:12px;"></i> PRIMARY APPLICATION
+              </label>
               ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px;">CUSTOM OVERRIDE</span>' : ''}
           </div>
 
           <div id="modal-app-pill-container">
-              ${isZap ? `<div class="pill soft tiny muted" style="width:100%; border-style:dashed; justify-content:center;">⚡ Multi-App Automation</div>` : 
+              ${isZap ? `<div class="pill soft tiny muted" style="width:100%; border-style:dashed; justify-content:center; gap:6px;">
+                            <i data-lucide="zap" style="width:12px; height:12px;"></i> Multi-App Automation
+                         </div>` : 
                 res.appId ? `
                   <div class="pill ${isManualOverride ? 'accent' : 'primary'}" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
                       <div style="display:flex; align-items:center; gap:8px;">
-                          <span>${isManualOverride ? '✏️' : '🤖'}</span>
+                          <i data-lucide="${isManualOverride ? 'edit-3' : 'bot'}" style="width:14px; height:14px;"></i>
                           <span style="font-weight:bold;">${esc(res.appName)}</span>
                       </div>
-                      <b class="is-clickable" style="padding: 2px 6px; opacity: 0.5;" 
+                      <i data-lucide="x" class="is-clickable" style="width:14px; height:14px; opacity: 0.5;" 
                         onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.handleResourceSave('${res.id}', 'appName', null); OL.openResourceModal('${res.id}')">
-                        ×
-                      </b>
+                      </i>
                   </div>
               ` : `
-                  <div class="search-map-container">
-                      <input type="text" class="modal-input tiny" placeholder="Search Apps to Override..." 
-                            onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
-                            oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
+                  <div class="search-map-container" style="position:relative; display:flex; align-items:center;">
+                      <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
+                      <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search Apps to Override..." 
+                             onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
+                             oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
                       <div id="res-app-results" class="search-results-overlay"></div>
                   </div>
               `}
           </div>
-      </div>
-  `;
+      </div>`;
 
     // Back button to go back to flow map if jumped from scope button
     const backBtn = state.v2.returnTo ? `
@@ -5842,26 +5847,38 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             typeSpecificHtml = `
             <div class="card-section" style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--line); margin-top: 20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
-                    <label class="modal-section-label" style="color: var(--accent); margin:0;">✉️ EMAIL COMPOSITION</label>
-                    <button class="btn tiny primary" onclick="OL.previewEmailTemplate('${res.id}')">👁️ Preview Template</button>
+                    <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; color: var(--accent); margin:0;">
+                        <i data-lucide="mail" style="width:14px; height:14px;"></i> EMAIL COMPOSITION
+                    </label>
+                    <button class="btn tiny primary" onclick="OL.previewEmailTemplate('${res.id}')">
+                        <i data-lucide="eye" style="width:12px; height:12px; margin-right:4px;"></i> Preview
+                    </button>
                 </div>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="modal-column">
-                        <label class="tiny muted bold">FROM (Team Member)</label>
+                        <label class="tiny muted bold" style="display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="user-round" style="width:10px; height:10px;"></i> FROM (Team Member)
+                        </label>
                         <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailFrom', this.value)">
                             <option value="">Select Sender...</option>
-                            ${team.map(m => `<option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>👨‍💼 ${esc(m.name)}</option>`).join('')}
+                            ${team.map(m => `
+                                <option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>
+                                    ${esc(m.name)}
+                                </option>
+                            `).join('')}
                         </select>
                     </div>
                     <div class="modal-column">
-                        <label class="tiny muted bold">TO (Contact Type)</label>
+                        <label class="tiny muted bold" style="display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="users" style="width:10px; height:10px;"></i> TO (Contact Type)
+                        </label>
                         <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailToType', this.value)">
                             <option value="">Select Recipient...</option>
-                            <option value="Household" ${res.emailToType === 'Household' ? 'selected' : ''}>🏠 Household</option>
-                            <option value="Client 1" ${res.emailToType === 'Client 1' ? 'selected' : ''}>👤 Client 1</option>
-                            <option value="Client 2" ${res.emailToType === 'Client 2' ? 'selected' : ''}>👤 Client 2</option>
-                            <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>🤝 COI (Professional)</option>
+                            <option value="Household" ${res.emailToType === 'Household' ? 'selected' : ''}>Household</option>
+                            <option value="Client 1" ${res.emailToType === 'Client 1' ? 'selected' : ''}>Client 1</option>
+                            <option value="Client 2" ${res.emailToType === 'Client 2' ? 'selected' : ''}>Client 2</option>
+                            <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>COI (Professional)</option>
                         </select>
                     </div>
                 </div>
@@ -5899,14 +5916,16 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         const activeId = lineItem ? lineItem.id : targetId;
         const currentRound = lineItem ? (lineItem.round || 1) : 1;
         roundInputHtml = `
-            <div class="card-section" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--accent);">
-                <label class="modal-section-label" style="color: var(--accent);">🗓️ IMPLEMENTATION STAGE</label>
-                <div class="form-group" style="margin-top: 10px;">
-                    <label class="tiny muted uppercase bold">Round / Phase Number</label>
-                    <input type="number" class="modal-input" value="${currentRound}" min="1"
-                           onchange="OL.updateLineItem('${activeId}', 'round', this.value)">
-                </div>
-            </div>`;
+        <div class="card-section" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--accent);">
+            <label class="modal-section-label" style="color: var(--accent); display:flex; align-items:center; gap:6px;">
+                <i data-lucide="milestone" style="width:14px; height:14px;"></i> IMPLEMENTATION STAGE
+            </label>
+            <div class="form-group" style="margin-top: 10px;">
+                <label class="tiny muted uppercase bold">Round / Phase Number</label>
+                <input type="number" class="modal-input" value="${currentRound}" min="1"
+                       onchange="OL.updateLineItem('${activeId}', 'round', this.value)">
+            </div>
+        </div>`
     }
     else {
         hierarchyHtml = `
@@ -5982,24 +6001,37 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     }).join("");
 
     // 🚀 FORCE VISIBLE FOR TESTING: Remove "isAdmin &&" to show regardless of permissions
+    // --- 📊 SECTION: ADMIN PRICING ---
     const adminPricingHtml = (isAdmin && relevantVars?.length > 0) ? `
         <div class="card-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px; display:block !important;">
-            <label class="modal-section-label">⚙️ PRICING CONFIG</label>
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="settings" style="width:14px; height:14px;"></i> PRICING CONFIG
+            </label>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
                 ${pricingRows}
             </div>
         </div>` : '';
-
-    // --- 📝 SECTION: LINKED MASTER GUIDES ---
+    
+    // --- 📖 SECTION: LINKED MASTER GUIDES ---
     const linkedSOPs = (state.master.howToLibrary || []).filter(ht => 
         (ht.resourceIds || []).includes(res.masterRefId || res.id)
     );
     
     const sopLibraryHtml = `
         <div class="card-section" style="margin-bottom:20px;">
-            <label class="modal-section-label">📚 LINKED MASTER GUIDES</label>
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="library" style="width:14px; height:14px;"></i> LINKED MASTER GUIDES
+            </label>
             <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
-                ${linkedSOPs.length > 0 ? linkedSOPs.map(sop => `<span class="pill soft tiny">📖 ${esc(sop.name)}</span>`).join("") : '<span class="tiny muted">No guides linked to this resource template.</span>'}
+                ${linkedSOPs.length > 0 ? linkedSOPs.map(sop => `
+                    <span class="pill soft tiny" style="display:flex; align-items:center; gap:4px;">
+                        <i data-lucide="book-open" style="width:10px; height:10px;"></i> 
+                        ${esc(sop.name)}
+                    </span>`).join("") : `
+                    <span class="tiny muted" style="display:flex; align-items:center; gap:4px;">
+                        <i data-lucide="info" style="width:12px; height:12px; opacity:0.5;"></i>
+                        No guides linked to this resource template.
+                    </span>`}
             </div>
         </div>`;
 
@@ -6024,12 +6056,15 @@ const resDeps = allDeps.filter(d => d.type === 'resource');
 
 const dependencyHtml = `
     <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
-        <label class="modal-section-label">📋 TASK DEPENDENCIES (PROJECT-SPECIFIC)</label>
+        <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+            <i data-lucide="list-checks" style="width:14px; height:14px;"></i> TASK DEPENDENCIES (PROJECT-SPECIFIC)
+        </label>
         <div class="dp-manager-list" id="task-dependency-list">
             ${taskDeps.map((dep, idx) => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No tasks linked.</div>'}
         </div>
-        <div class="search-map-container" style="margin-top:8px;">
-            <input type="text" class="modal-input tiny" placeholder="Search or Create Task..." 
+        <div class="search-map-container" style="margin-top:8px; position:relative; display:flex; align-items:center;">
+            <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
+            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search or Create Task..." 
                    onfocus="OL.filterDependencySearch('${res.id}', 'task', '')"
                    oninput="OL.filterDependencySearch('${res.id}', 'task', this.value)">
             <div id="task-dep-results" class="search-results-overlay"></div>
@@ -6037,12 +6072,15 @@ const dependencyHtml = `
     </div>
 
     <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
-        <label class="modal-section-label">🛠️ RESOURCE DEPENDENCIES (INFRASTRUCTURE)</label>
+        <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+            <i data-lucide="layers" style="width:14px; height:14px;"></i> RESOURCE DEPENDENCIES (INFRASTRUCTURE)
+        </label>
         <div class="dp-manager-list" id="res-dependency-list">
             ${resDeps.map((dep, idx) => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No resources linked.</div>'}
         </div>
-        <div class="search-map-container" style="margin-top:8px;">
-            <input type="text" class="modal-input tiny" placeholder="Search Project Library..." 
+        <div class="search-map-container" style="margin-top:8px; position:relative; display:flex; align-items:center;">
+            <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
+            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search Project Library..." 
                    onfocus="OL.filterDependencySearch('${res.id}', 'resource', '')"
                    oninput="OL.filterDependencySearch('${res.id}', 'resource', this.value)">
             <div id="res-dep-results" class="search-results-overlay"></div>
