@@ -18257,53 +18257,55 @@ OL.syncRedtail = async function(client) {
 
        console.log(`✅ Total Templates Collected: ${allTemplates.length}`);
 
+        // 1. Clear out old Redtail entries first to start fresh
+        if (!targetClient.projectData.localResources) targetClient.projectData.localResources = [];
+        targetClient.projectData.localResources = targetClient.projectData.localResources.filter(r => !r.id.startsWith('rt-'));
+
+        console.log("🧹 Cleared old Redtail references. Re-building from 61 items...");
+
         allTemplates.forEach((wf, index) => {
+            // 🎯 THE FIX: Force a unique ID using the Redtail ID + Index
+            // This prevents the system from "merging" 61 items into 3.
+            const uniqueId = `rt-workflow-${wf.id || index}-${index}`;
+
             const resourceData = {
-                // 🎯 UNIQUE ID: Adding index and a prefix to prevent collisions
-                id: `rt-${wf.id}-${index}`, 
+                id: uniqueId,
                 externalId: wf.id,
                 name: `🔴 RT: ${wf.name}`,
                 type: 'Workflow',
                 visible: true,
                 category: 'Flows',
                 isExpanded: true,
-                steps: [{ id: `rt-step-${wf.id}`, name: "Workflow Template", appName: 'Redtail' }]
+                archetype: 'Multi-Level',
+                steps: [{ id: `step-${uniqueId}`, name: "Workflow Template", appName: 'Redtail' }]
             };
 
-            // 1. System Upsert
-            OL.upsertExternalResource(targetClient, resourceData);
-            
-            // 2. Direct injection into localResources
-            if (!targetClient.projectData.localResources) targetClient.projectData.localResources = [];
-            
-            const idx = targetClient.projectData.localResources.findIndex(r => r.externalId === wf.id);
-            if (idx > -1) {
-                targetClient.projectData.localResources[idx] = resourceData;
-            } else {
-                targetClient.projectData.localResources.push(resourceData);
-            }
+            // 🟢 Push directly to the array - bypassing any 'upsert' logic that might be bugged
+            targetClient.projectData.localResources.push(resourceData);
         });
 
-        // 🎯 THE CRITICAL STEP: Hard-save to the database
-        if (typeof OL.persist === 'function') {
-            OL.persist(); 
-            console.log("💾 Database Persisted.");
-        }
+        console.log(`💾 Array count before persist: ${targetClient.projectData.localResources.length}`);
 
-        // 3. UI Refresh logic (Existing)
+        // 🎯 THE LOCK: Ensure the system writes this array to the DB
+        if (typeof OL.persist === 'function') OL.persist();
+
+        // 🎯 UI RECOVERY: Force the render
         setTimeout(() => {
             if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
             
-            // Re-fetch the client from state to ensure we have the SAVED version
-            const freshClient = OL.state.clients[OL.state.activeClientId];
             if (typeof OL.renderResourceManager === 'function') {
-                OL.renderResourceManager(freshClient);
+                OL.renderResourceManager(targetClient);
             }
-            console.log("✅ Redtail UI Refreshed with persistent data.");
-        }, 200);
-
-        alert(`🎉 Success! ${allTemplates.length} templates saved permanently.`);
-
+            
+            // Final Verification Check
+            const finalCount = targetClient.projectData.localResources.filter(r => r.id.startsWith('rt-')).length;
+            console.log(`🏁 Final verification: ${finalCount} Redtail items in memory.`);
+            
+            if(finalCount < 61) {
+                console.error("⚠️ ALERT: Something is still stripping the array during persist!");
+            }
+        }, 300);
+        
     } catch (e) {
         console.error("🔥 Sync Failed:", e);
     }
