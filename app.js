@@ -17903,6 +17903,18 @@ OL.openImportHub = function() {
                     <div class="tiny muted">Sync Booking Profiles</div>
                 </div>
 
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('redtail')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🔴</div>
+                    <div class="bold">Redtail</div>
+                    <div class="tiny muted">Sync CRM Workflows</div>
+                </div>
+                
+                <div class="card is-clickable import-card" onclick="OL.syncExternalIntegrations('processstreet')">
+                    <div style="font-size: 24px; margin-bottom: 10px;">🏁</div>
+                    <div class="bold">Process Street</div>
+                    <div class="tiny muted">Sync Checklists</div>
+                </div>
+
             </div>
         </div>
     `;
@@ -18106,6 +18118,63 @@ OL.importJotform = async function(client) {
         console.error("Fetch Interruption:", err);
         throw err;
     }
+};
+
+OL.importProcessStreet = async function(client) {
+    const creds = OL.getCredsForApp(client, 'processstreet');
+    if (!creds?.secret) throw new Error("Process Street API Key missing.");
+
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${creds.secret}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    const workflows = data.workflows || [];
+
+    workflows.forEach(wf => {
+        OL.upsertExternalResource(client, {
+            id: `ps-${wf.id}`,
+            name: `🏁 PS: ${wf.name}`,
+            type: 'Checklist',
+            externalUrl: `https://app.processstreet.com/workflows/${wf.id}`,
+            steps: [{ id: uid(), name: "Run Process Street Checklist", appName: "Process Street" }]
+        });
+    });
+    return workflows.length;
+};
+
+OL.importRedtail = async function(client) {
+    const creds = OL.getCredsForApp(client, 'redtail');
+    
+    if (!creds?.username || !creds?.secret) {
+        throw new Error("Redtail Sync Failed: Please ensure your Redtail Username and Password/API Key are in the App Credentials.");
+    }
+
+    // Standard Redtail REST Auth: Base64(username:password)
+    const authString = btoa(`${creds.username}:${creds.secret}`);
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${authString}`;
+
+    console.log("📡 Syncing Redtail Workflows...");
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+        const errTxt = await response.text();
+        throw new Error(`Redtail Error: ${errTxt}`);
+    }
+
+    const data = await response.json();
+    // Redtail returns an object with a "Workflows" array
+    const workflows = data.Workflows || [];
+
+    workflows.forEach(wf => {
+        OL.upsertExternalResource(client, {
+            id: `rt-${wf.Id}`,
+            externalId: wf.Id,
+            name: `🔴 RT: ${wf.Name}`,
+            type: 'Workflow',
+            steps: [{ id: uid(), name: "Workflow Started", appName: "Redtail" }]
+        });
+    });
+
+    return workflows.length;
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
