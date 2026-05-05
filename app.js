@@ -6157,97 +6157,123 @@ const dependencyHtml = `
     if (res.isContainer) {
         containerHtml = `
             <div class="card-section" style="margin-top:20px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
-                <label class="modal-section-label">📋 DOCUMENT COLLECTION</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="files" style="width:14px; height:14px;"></i> DOCUMENT COLLECTION
+                </label>
                 <div id="file-list-container" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
                     ${(res.files || []).map((file, idx) => `
                         <div class="file-row" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
-                            <div style="flex: 1;">
+                            <div style="flex: 1; display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="file" style="width:12px; height:12px; opacity:0.5;"></i>
                                 <input type="text" class="modal-input tiny" value="${esc(file.name)}" 
-                                      style="font-weight:bold; border:none; background:transparent; padding:0;"
+                                      style="font-weight:bold; border:none; background:transparent; padding:0; width:100%;"
                                       onblur="OL.updateContainerFile('${res.id}', ${idx}, 'name', this.value)">
                             </div>
                             
-                            <div style="flex: 2; display:flex; gap:5px;">
+                            <div style="flex: 2; display:flex; align-items:center; gap:8px;">
                                 <input type="text" class="modal-input tiny" placeholder="Paste link or URL..." 
                                       value="${esc(file.url || '')}" 
                                       onblur="OL.updateContainerFile('${res.id}', ${idx}, 'url', this.value)">
                                 
                                 ${file.url ? `
-                                    <a href="${file.url}" target="_blank" class="btn primary tiny" style="padding:0 10px;">🚀</a>
+                                    <a href="${file.url}" target="_blank" class="btn primary tiny" style="height:24px; width:30px; display:flex; align-items:center; justify-content:center;">
+                                        <i data-lucide="external-link" style="width:12px; height:12px;"></i>
+                                    </a>
                                 ` : `
-                                    <button class="btn tiny soft" onclick="OL.simulateUpload('${res.id}', ${idx})" title="Upload PDF">📁</button>
+                                    <button class="btn tiny soft" style="height:24px; width:30px; display:flex; align-items:center; justify-content:center;" 
+                                            onclick="OL.simulateUpload('${res.id}', ${idx})" title="Upload File">
+                                        <i data-lucide="upload-cloud" style="width:12px; height:12px;"></i>
+                                    </button>
                                 `}
                             </div>
-                            <button class="card-delete-btn" style="position:static;" onclick="OL.removeFileFromContainer('${res.id}', ${idx})">×</button>
+                            <button class="card-delete-btn" style="position:static; opacity:0.5;" onclick="OL.removeFileFromContainer('${res.id}', ${idx})">
+                                <i data-lucide="x" style="width:14px; height:14px;"></i>
+                            </button>
                         </div>
                     `).join('')}
                 </div>
-                <button class="btn tiny soft full-width" style="margin-top:10px; border-style:dashed;" 
-                        onclick="OL.addFileToContainer('${res.id}')">+ Add Document Entry</button>
+                <button class="btn tiny soft full-width" style="margin-top:10px; border-style:dashed; display:flex; align-items:center; justify-content:center; gap:6px;" 
+                        onclick="OL.addFileToContainer('${res.id}')">
+                    <i data-lucide="plus" style="width:14px; height:14px;"></i> Add Document Entry
+                </button>
             </div>
         `;
     }
-
     // --- 🚀 FINAL ASSEMBLY ---
     let bodyContent = "";
     if (isHierarchy) {
         // --- MODE A: DRAGGABLE HIERARCHY HUB ---
         if (!res.tree) res.tree = [{ id: uid(), name: "Clients", children: [] }];
-
+    
         bodyContent = `
             <div class="card-section" style="background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
-                <label class="modal-section-label" style="color: var(--accent);">📁 FOLDER ARCHITECTURE</label>
-                <p class="tiny muted" style="margin-bottom: 15px;">Drag handles ⠿ to reorder. Root 'Clients' is protected.</p>
+                <label class="modal-section-label" style="color: var(--accent); display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="sitemap" style="width:16px; height:16px;"></i> FOLDER ARCHITECTURE
+                </label>
+                <p class="tiny muted" style="margin-bottom: 15px;">Drag handles <i data-lucide="grip-vertical" style="width:12px; height:12px; vertical-align:middle; opacity:0.5;"></i> to reorder. Root 'Clients' is protected.</p>
                 
                 <div id="hierarchy-tree-root" class="hierarchy-container">
                     ${OL.renderHierarchyTree(res.id, res.tree)}
                 </div>
                 
                 <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line);">
-                    <button class="btn tiny primary" onclick="OL.addFolderNode('${res.id}')">+ Add Root Folder</button>
+                    <button class="btn tiny primary" style="display:flex; align-items:center; gap:6px;" onclick="OL.addFolderNode('${res.id}')">
+                        <i data-lucide="folder-plus" style="width:14px; height:14px;"></i> Add Root Folder
+                    </button>
                 </div>
             </div>
         `;
     }
     else if (isCompliance) {
-        // --- MODE B: COMPLIANCE DOCS---
+        // --- MODE B: COMPLIANCE DOCS ---
         bodyContent = `
             <div class="card-section" style="margin-top:10px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
-                <label class="modal-section-label">📋 DOCUMENT COLLECTION</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="files" style="width:16px; height:16px;"></i> DOCUMENT COLLECTION
+                </label>
                 <div id="file-list-container" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
                     ${(res.files || []).map((file, idx) => `
                         <div class="file-row" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(0,0,0,0.2); border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
-                            <div style="flex: 1.5;">
+                            <div style="flex: 1.5; display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="file-check" style="width:14px; height:14px; color:var(--accent); opacity:0.6;"></i>
                                 <input type="text" class="modal-input tiny" value="${esc(file.name)}" 
-                                       style="font-weight:bold; border:none; background:transparent; padding:0; color:var(--accent);"
+                                       style="font-weight:bold; border:none; background:transparent; padding:0; color:var(--accent); width:100%;"
                                        onblur="OL.updateContainerFile('${res.id}', ${idx}, 'name', this.value)">
                             </div>
-                            <div style="flex: 2.5; display:flex; gap:5px;">
+                            <div style="flex: 2.5; display:flex; align-items:center; gap:5px;">
                                 <input type="text" class="modal-input tiny" placeholder="Paste link or URL..." 
                                        value="${esc(file.url || '')}" 
                                        onblur="OL.updateContainerFile('${res.id}', ${idx}, 'url', this.value)">
                                 ${file.url ? `
-                                    <a href="${file.url}" target="_blank" class="btn primary tiny" style="padding:0 12px; height: 32px; display:flex; align-items:center; background:var(--accent); color:black; font-weight:bold; text-decoration:none;">🚀 OPEN</a>
+                                    <a href="${file.url}" target="_blank" class="btn primary tiny" style="padding:0 12px; height: 32px; display:flex; align-items:center; gap:6px; background:var(--accent); color:black; font-weight:bold; text-decoration:none;">
+                                        <i data-lucide="external-link" style="width:14px; height:14px;"></i> OPEN
+                                    </a>
                                 ` : `
-                                    <button class="btn tiny soft" onclick="OL.simulateUpload('${res.id}', ${idx})" style="height:32px;">📁</button>
+                                    <button class="btn tiny soft" style="height:32px; width:40px; display:flex; align-items:center; justify-content:center;" onclick="OL.simulateUpload('${res.id}', ${idx})">
+                                        <i data-lucide="upload-cloud" style="width:16px; height:16px;"></i>
+                                    </button>
                                 `}
                             </div>
-                            <button class="card-delete-btn" style="position:static; opacity:0.3;" onclick="OL.removeFileFromContainer('${res.id}', ${idx})">×</button>
+                            <button class="card-delete-btn" style="position:static; opacity:0.3;" onclick="OL.removeFileFromContainer('${res.id}', ${idx})">
+                                <i data-lucide="x" style="width:14px; height:14px;"></i>
+                            </button>
                         </div>
                     `).join('')}
                 </div>
-                <button class="btn tiny soft full-width" style="margin-top:15px; border-style:dashed; padding: 10px;" 
-                        onclick="OL.addFileToContainer('${res.id}')">+ Add Document Entry</button>
+                <button class="btn tiny soft full-width" style="margin-top:15px; border-style:dashed; padding: 10px; display:flex; align-items:center; justify-content:center; gap:8px;" 
+                        onclick="OL.addFileToContainer('${res.id}')">
+                    <i data-lucide="plus-circle" style="width:16px; height:16px;"></i> Add Document Entry
+                </button>
             </div>
         `;
     }
     else if (isNaming) {
         // --- MODE C: NAMING CONVENTIONS HUB ---
-        const hierarchyRes = (client?.projectData?.localResources || []).find(r => r.name === "Folder Hierarchy");
         const sections = [
-            { id: 'household', label: '🏠 HOUSEHOLD NAMING' },
-            { id: 'folders', label: '📁 FOLDER NAMING' }
+            { id: 'household', label: 'HOUSEHOLD NAMING', icon: 'home' },
+            { id: 'folders', label: 'FOLDER NAMING', icon: 'folder-search' }
         ];
+
         const fields = [
             { key: 'individual', label: 'Individual' },
             { key: 'jointSame', label: 'Joint - Same Last' },
@@ -6292,19 +6318,27 @@ const dependencyHtml = `
           ${containerHtml}
 
           <div class="card-section" style="margin-top:20px;">
-              <label class="modal-section-label">📝 Description & Access Notes</label>
-              <textarea class="modal-textarea" 
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="fingerprint" style="width:14px; height:14px;"></i> Description & Access Notes
+            </label>
+            <textarea class="modal-textarea" 
                       placeholder="Enter login details, account purpose, or specific access instructions..." 
                       style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
                       onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-          </div>
+        </div>
           ${OL.renderResourceMiniMaps(res.id)}
           ${showWorkflowSteps ? `
             <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                <label class="modal-section-label">📋 WORKFLOW STEPS</label>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="git-branch" style="width:14px; height:14px;"></i> WORKFLOW STEPS
+                </label>
                 <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                    <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')">🎨 Visual Editor</button>
-                    <button class="btn tiny primary" onclick="OL.addNewStepToCard('${res.id}')">+ Add Step</button>
+                    <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')" style="display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="mouse-pointer-2" style="width:12px; height:12px;"></i> Visual Editor
+                    </button>
+                    <button class="btn tiny primary" onclick="OL.addNewStepToCard('${res.id}')" style="display:flex; align-items:center; gap:6px;">
+                        <i data-lucide="plus" style="width:12px; height:12px;"></i> Add Step
+                    </button>
                 </div>
                 <div id="sop-step-list">${renderSopStepList(res)}</div>
             </div>
@@ -6312,30 +6346,32 @@ const dependencyHtml = `
           ${sopLibraryHtml}
           
           <div class="card-section" style="margin-top:20px;">
-              <label class="modal-section-label">🌐 External Link & Source</label>
-              <div style="display:flex; gap:10px; margin-bottom:10px;">
-                  <input type="text" class="modal-input tiny" 
-                      style="flex: 1;"
-                      placeholder="https://app.example.com" 
-                      value="${esc(res.externalUrl || '')}" 
-                      onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
-                  
-                  ${res.externalUrl ? `
-                      <button class="btn soft tiny" style="color: black !important; padding: 0 12px;" 
-                              onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)" title="Copy Link">
-                          📋 Copy
-                      </button>
-                      <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
-                        style="display: flex; align-items: center; gap: 4px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
-                          ↗️ Open
-                      </a>
-                  ` : ''}
-              </div>
-              ${!res.externalUrl ? `<div class="tiny muted italic">No link provided for this resource.</div>` : ''}
-          </div>
-
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="link-2" style="width:14px; height:14px;"></i> External Link & Source
+                </label>
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="text" class="modal-input tiny" 
+                        style="flex: 1;"
+                        placeholder="https://app.example.com" 
+                        value="${esc(res.externalUrl || '')}" 
+                        onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
+                    
+                    ${res.externalUrl ? `
+                        <button class="btn soft tiny" style="color: black !important; padding: 0 12px; display:flex; align-items:center; gap:6px;" 
+                                onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)">
+                            <i data-lucide="copy" style="width:12px; height:12px;"></i> Copy
+                        </button>
+                        <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
+                          style="display: flex; align-items: center; gap: 6px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
+                            <i data-lucide="external-link" style="width:12px; height:12px;"></i> Open
+                        </a>
+                    ` : ''}
+                </div>
+            </div>
           <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
-              <label class="modal-section-label">🔗 Connected Relationships</label>
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="share-2" style="width:14px; height:14px;"></i> Connected Relationships
+            </label>
               
               <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
                   ${types.map(t => `
@@ -6386,18 +6422,24 @@ const dependencyHtml = `
     const html = `
         <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
-                <div style="display: flex; align-items: flex-start; gap: 12px; width: 100%;">
-                    <span style="font-size: 24px; margin-top: 2px;">${isCompliance ? '📋' : '🛠️'}</span>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                    <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" style="width:24px; height:24px; color:var(--accent);"></i>
                     <div style="flex-grow: 1;">
-                        <textarea class="header-editable-input" id="modal-res-name"
+                        <textarea class="header-editable-input" 
                             style="background: transparent; border: none; color: inherit; font-size: 22px; font-weight: bold; width: 100%; outline: none; resize: none; overflow: hidden;"
                             onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
                     </div>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
-                    ${originPill} ${typePill} ${backBtn}
-                    ${hasHistory ? `<button class="btn tiny soft" style="color:black!important; background:#fff!important;" onclick="OL.navigateBack()">⬅️ Back</button>` : ''}
-                    ${canPromote ? `<button class="btn tiny primary" style="background:#fbbf24!important; color:black!important;" onclick="OL.pushToMaster('${res.id}')">⭐ Promote to Master</button>` : ''}
+                    ${originPill} ${typePill}
+                    ${hasHistory ? `
+                        <button class="btn tiny soft" style="display:flex; align-items:center; gap:4px; color:black!important; background:#fff!important;" onclick="OL.navigateBack()">
+                            <i data-lucide="arrow-left" style="width:12px; height:12px;"></i> Back
+                        </button>` : ''}
+                    ${canPromote ? `
+                        <button class="btn tiny primary" style="display:flex; align-items:center; gap:4px; background:#fbbf24!important; color:black!important;" onclick="OL.pushToMaster('${res.id}')">
+                            <i data-lucide="star" style="width:12px; height:12px;"></i> Promote
+                        </button>` : ''}
                 </div>
             </div>
         </div>
@@ -6428,6 +6470,10 @@ const dependencyHtml = `
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
+    
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.renderHierarchyTree = function(resId, nodes, path = "") {
@@ -6454,7 +6500,11 @@ OL.renderHierarchyTree = function(resId, nodes, path = "") {
                      style="display:flex; align-items:center; gap:8px; padding: 6px; background: ${isNamingLink ? 'rgba(var(--accent-rgb), 0.1)' : 'rgba(0,0,0,0.2)'}; border-radius: 4px; border: 1px solid ${isNamingLink ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};">
                     
                     <span class="drag-handle" style="cursor:grab; opacity:0.3;">⠿</span>
-                    <span style="font-size: 12px;">${node.children?.length > 0 ? '📂' : '📁'}</span>
+                    <span style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px;">
+                        <i data-lucide="${node.children?.length > 0 ? 'folder-open' : 'folder'}" 
+                           style="width: 14px; height: 14px; color: ${node.children?.length > 0 ? 'var(--accent)' : 'var(--text-dim)'};">
+                        </i>
+                    </span>
                     
                     <input type="text" class="tiny-input" 
                            value="${esc(node.name)}" 
@@ -6488,6 +6538,10 @@ OL.renderHierarchyTree = function(resId, nodes, path = "") {
             </div>
         `;
     }).join('');
+    
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
 };
 
 OL.addFolderNode = function(resId, path = null) {
