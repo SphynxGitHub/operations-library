@@ -18155,43 +18155,46 @@ OL.importProcessStreet = async function(client) {
 
 // Renamed to 'syncRedtail' to break the cache
 OL.syncRedtail = async function(client) {
-    console.log("🚀 Starting Redtail Sync (Registry Mode)...");
-
-    // 🎯 THE FIX: If 'client' is undefined, grab the active one from the state
     const targetClient = client || OL.state.clients[OL.state.activeClientId];
-
-    if (!targetClient || !targetClient.projectData) {
-        console.error("❌ Sync Error: Could not find targetClient or projectData.");
-        alert("Please select a client card first!");
-        return;
-    }
+    if (!targetClient || !targetClient.projectData) return;
 
     try {
-        // 1. Find Redtail Credentials in the Access Registry (Registry Pattern)
         const registry = targetClient.projectData.accessRegistry || [];
         const rtCreds = registry.find(r => {
             const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
             return app?.name.toLowerCase().includes('redtail');
         });
 
-        if (!rtCreds || !rtCreds.secret) {
-            alert("Redtail API Key/Secret not found in your Registry for this client.");
-            return;
-        }
+        if (!rtCreds || !rtCreds.secret) throw new Error("Credentials missing.");
 
-        // 2. Use the Verified Console logic
-        const authString = rtCreds.secret; // This should be your User:Pass string
-        const cloudUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}`;
-        
-        console.log("📡 Calling Redtail Proxy...");
-        const response = await fetch(cloudUrl);
-        const result = await response.json();
-        const templates = result.workflow_templates || [];
+        const authString = rtCreds.secret;
+        let allTemplates = [];
+        let currentPage = 1;
+        let totalPages = 1;
 
-        console.log(`📥 Redtail: Found ${templates.length} templates.`);
+        console.log("📡 Starting Paginated Sync...");
 
-        // 3. Process each template
-        templates.forEach(wf => {
+        // 🎯 THE PAGINATION LOOP
+        do {
+            const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}&page=${currentPage}`;
+            
+            const response = await fetch(url);
+            const result = await response.json();
+            
+            const pageTemplates = result.workflow_templates || [];
+            allTemplates = allTemplates.concat(pageTemplates);
+            
+            // Update total pages from the API response
+            totalPages = result.total_pages || 1;
+            console.log(`📥 Received Page ${currentPage} of ${totalPages} (${pageTemplates.length} items)`);
+            
+            currentPage++;
+        } while (currentPage <= totalPages);
+
+        console.log(`✅ Total Templates Collected: ${allTemplates.length}`);
+
+        // Process all collected templates
+        allTemplates.forEach(wf => {
             const resourceData = {
                 id: `rt-${wf.id}`,
                 externalId: wf.id,
@@ -18214,18 +18217,16 @@ OL.syncRedtail = async function(client) {
             }
         });
 
-        // 🎯 REFRESH UI
+        // UI Refresh logic...
         setTimeout(() => {
             if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
             if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
-            console.log("✅ Redtail UI Refreshed.");
         }, 100);
 
-        alert(`🎉 Success! ${templates.length} templates synced.`);
+        alert(`🎉 Success! All ${allTemplates.length} templates synced.`);
 
     } catch (e) {
         console.error("🔥 Sync Failed:", e);
-        alert("Sync Error: " + e.message);
     }
 };
 
