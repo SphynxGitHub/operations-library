@@ -17996,23 +17996,53 @@ OL.importYCBM = async function(client) {
     return profiles.length;
 };
 
-OL.importActiveCampaign = async function(url, key) {
-    const response = await fetch(`${url}/api/3/automations`, { headers: { "Api-Token": key }});
-    const data = await response.json();
+OL.importActiveCampaign = async function(client) {
+    const creds = OL.getCredsForApp(client, 'activecampaign');
+    if (!creds?.secret) throw new Error("ActiveCampaign API Key missing in Secret field.");
 
-    data.automations.forEach(auto => {
-        // We treat an AC Automation like a Multi-Step Resource
-        const resource = {
+    // 1. Handle the Base URL (Prompt if missing)
+    let baseUrl = creds.username; // We'll store the URL in the 'username' slot
+    if (!baseUrl || !baseUrl.includes('http')) {
+        baseUrl = prompt("Please enter your ActiveCampaign API URL (e.g., https://accountname.api-us1.com):");
+        if (!baseUrl) return 0;
+        
+        // Sanitize: remove trailing slashes
+        baseUrl = baseUrl.trim().replace(/\/$/, "");
+        creds.username = baseUrl;
+        OL.persist();
+    }
+
+    // 2. Use your Firebase v2 Proxy
+    // 🎯 REPLACE 'acproxy-xxx' with your actual Firebase URL from the console
+    const proxyUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/acProxy`; 
+    const finalUrl = `${proxyUrl}/?apiKey=${creds.secret}&baseUrl=${encodeURIComponent(baseUrl)}`;
+
+    console.log("📡 Syncing ActiveCampaign Automations...");
+    const response = await fetch(finalUrl);
+    
+    if (!response.ok) {
+        const errTxt = await response.text();
+        throw new Error(`AC Proxy Error: ${errTxt}`);
+    }
+
+    const data = await response.json();
+    const autos = data.automations || [];
+
+    autos.forEach(auto => {
+        OL.upsertExternalResource(client, {
+            id: `ac-${auto.id}`,
+            externalId: auto.id,
             name: `📧 AC: ${auto.name}`,
             type: 'Email Campaign',
             archetype: 'Multi-Level',
             steps: [
-                { name: "Trigger: " + auto.enter_trigger, appName: "ActiveCampaign" },
-                { name: "Drip Sequence Active", appName: "ActiveCampaign" }
+                { id: uid(), name: "Trigger: " + (auto.enter_trigger || "Start"), appName: "ActiveCampaign" },
+                { id: uid(), name: "Automation Flow Sequence", appName: "ActiveCampaign" }
             ]
-        };
-        OL.upsertExternalResource(getActiveClient(), resource);
+        });
     });
+
+    return autos.length;
 };
 
 OL.importMailerLite = async function(client) {
