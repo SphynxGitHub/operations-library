@@ -18157,84 +18157,76 @@ OL.importProcessStreet = async function(client) {
 OL.syncRedtail = async function(client) {
     console.log("🚀 Starting Redtail Sync (Registry Mode)...");
 
-    // 1. Find Redtail Credentials in the Access Registry (Exactly like Wealthbox)
-    const registry = client.projectData.accessRegistry || [];
-    const rtCreds = registry.find(r => {
-        const app = client.projectData.localApps.find(a => a.id === r.appId);
-        // Look for the name Redtail
-        return app?.name.toLowerCase().includes('redtail');
-    });
+    // 🎯 THE FIX: If 'client' is undefined, grab the active one from the state
+    const targetClient = client || OL.state.clients[OL.state.activeClientId];
 
-    if (!rtCreds || !rtCreds.secret) {
-        throw new Error("Redtail Credentials (User:Pass) not found in Registry.");
+    if (!targetClient || !targetClient.projectData) {
+        console.error("❌ Sync Error: Could not find targetClient or projectData.");
+        alert("Please select a client card first!");
+        return;
     }
 
-    // 🎯 For Redtail, the 'secret' in your registry contains the "Username:Password" string
-    const authString = rtCreds.secret;
+    try {
+        // 1. Find Redtail Credentials in the Access Registry (Registry Pattern)
+        const registry = targetClient.projectData.accessRegistry || [];
+        const rtCreds = registry.find(r => {
+            const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
+            return app?.name.toLowerCase().includes('redtail');
+        });
 
-    // 2. Fetch from Proxy
-    const cloudUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}`;
-    
-    console.log("📡 Calling Redtail Proxy...");
-    const response = await fetch(cloudUrl);
-
-    if (!response.ok) {
-        throw new Error(`Proxy Error: ${await response.text()}`);
-    }
-    
-    const result = await response.json();
-    const templates = result.workflow_templates || [];
-
-    console.log(`📥 Redtail: Found ${templates.length} templates.`);
-
-    // 3. Process each template into the Library
-    templates.forEach(wf => {
-        const resourceData = {
-            id: `rt-${wf.id}`,
-            externalId: wf.id,
-            name: `🔴 RT: ${wf.name}`,
-            type: 'Workflow',  
-            visible: true, 
-            category: 'Flows',
-            archetype: 'Multi-Level',
-            isExpanded: true, 
-            steps: [{ id: `rt-step-${wf.id}`, name: "Workflow Template", appName: 'Redtail' }]
-        };
-
-        OL.upsertExternalResource(client, resourceData);
-    
-        // 🟢 Save to localResources
-        if (!client.projectData.localResources) client.projectData.localResources = [];
-        const idx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
-        if (idx > -1) {
-            client.projectData.localResources[idx] = resourceData;
-        } else {
-            client.projectData.localResources.push(resourceData);
+        if (!rtCreds || !rtCreds.secret) {
+            alert("Redtail API Key/Secret not found in your Registry for this client.");
+            return;
         }
-    });
 
-    // 🎯 REUSE YOUR REFRESH LOGIC (The "Sticky Fix")
-    setTimeout(() => {
-        const activeId = OL.state.activeClientId;
-        const clientObj = OL.state.clients[activeId];
+        // 2. Use the Verified Console logic
+        const authString = rtCreds.secret; // This should be your User:Pass string
+        const cloudUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}`;
         
-        if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
+        console.log("📡 Calling Redtail Proxy...");
+        const response = await fetch(cloudUrl);
+        const result = await response.json();
+        const templates = result.workflow_templates || [];
 
-        if (typeof OL.renderResourceManager === 'function') {
-            OL.renderResourceManager(clientObj);
-        } else if (typeof OL.renderLibrary === 'function') {
-            OL.renderLibrary(clientObj);
-        }
+        console.log(`📥 Redtail: Found ${templates.length} templates.`);
 
-        const input = document.getElementById('lib-filter-input');
-        if (input) {
-            input.disabled = false;
-            input.style.opacity = '1';
-        }
-        console.log("✅ Redtail UI Refreshed.");
-    }, 100);
+        // 3. Process each template
+        templates.forEach(wf => {
+            const resourceData = {
+                id: `rt-${wf.id}`,
+                externalId: wf.id,
+                name: `🔴 RT: ${wf.name}`,
+                type: 'Workflow',
+                visible: true,
+                category: 'Flows',
+                isExpanded: true,
+                steps: [{ id: `rt-step-${wf.id}`, name: "Workflow Template", appName: 'Redtail' }]
+            };
 
-    return templates.length;
+            OL.upsertExternalResource(targetClient, resourceData);
+            
+            if (!targetClient.projectData.localResources) targetClient.projectData.localResources = [];
+            const idx = targetClient.projectData.localResources.findIndex(r => r.id === resourceData.id);
+            if (idx > -1) {
+                targetClient.projectData.localResources[idx] = resourceData;
+            } else {
+                targetClient.projectData.localResources.push(resourceData);
+            }
+        });
+
+        // 🎯 REFRESH UI
+        setTimeout(() => {
+            if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
+            if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
+            console.log("✅ Redtail UI Refreshed.");
+        }, 100);
+
+        alert(`🎉 Success! ${templates.length} templates synced.`);
+
+    } catch (e) {
+        console.error("🔥 Sync Failed:", e);
+        alert("Sync Error: " + e.message);
+    }
 };
 
 OL.getCredsForApp = function(client, appSlug) {
