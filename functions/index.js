@@ -180,16 +180,25 @@ exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
     }
 });
 
-// 8. Process Street Proxy (Checklist Workflows)
+// 8. Process Street Proxy (Enhanced for v1.1)
 exports.processStreetProxy = onRequest(proxyOptions, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
+
     try {
-        const response = await axios.get("https://public-api.processstreet.com/v1/workflows", {
-            headers: { 'X-API-KEY': apiKey }
+        const response = await axios.get("https://public-api.process.st/api/v1.1/workflows", {
+            headers: { 
+                'X-API-Key': apiKey,
+                'Accept': 'application/json'
+            }
         });
+        
+        // Log the keys we received to help debug 0-item returns
+        console.log("PS Response Keys:", Object.keys(response.data));
+        
         res.status(200).json(response.data);
     } catch (error) {
-        res.status(500).send(error.message);
+        console.error("Process Street Proxy Error:", error.response?.data || error.message);
+        res.status(error.response?.status || 500).send(error.message);
     }
 });
