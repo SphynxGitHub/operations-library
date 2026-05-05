@@ -161,26 +161,31 @@ exports.ycbmProxy = onRequest(proxyOptions, async (req, res) => {
     }
 });
 
-// 7. Redtail v3 Proxy
+// 7. Redtail v3 Proxy (Corrected Auth & URI)
 exports.redtailProxy = onRequest(proxyOptions, async (req, res) => {
-    const authHeader = req.query.apiKey; // Base64(username:password) 
+    const authHeader = req.query.apiKey; // Expected to be the Base64 string from app.js
+
+    if (!authHeader) return res.status(400).send('Missing Authorization String');
 
     try {
         const response = await axios.get("https://smf.crm3.redtailtechnology.com/api/public/v1/workflows/templates", {
             headers: {
-              'Content-Type': 'application/json',
-              'Authorization': ${authHeader}
+                'Content-Type': 'application/json',
+                // 🚀 AUTH FIX: No "Basic" prefix needed for this endpoint
+                'Authorization': authHeader 
             }
         });
         
         res.status(200).json(response.data);
     } catch (error) {
         console.error("Redtail v3 Error:", error.response?.data || error.message);
-        res.status(error.response?.status || 500).send(error.message);
+        const status = error.response?.status || 500;
+        const msg = error.response?.data?.message || error.message;
+        res.status(status).send(msg);
     }
 });
 
-// 8. Process Street Proxy (Enhanced for v1.1)
+// 8. Process Street Proxy (Final Optimized Version)
 exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, async (req, res) => {
     const apiKey = req.query.apiKey;
     if (!apiKey) return res.status(400).send('Missing API Key');
@@ -190,7 +195,7 @@ exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, asyn
         let nextCursor = null;
         let hasMore = true;
 
-        // --- STEP 1: Paginate through Workflows (Templates) ---
+        // Step 1: Paginate Workflows
         while (hasMore) {
             const url = `https://public-api.process.st/api/v1.1/workflows`;
             const response = await axios.get(url, {
@@ -200,13 +205,11 @@ exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, asyn
 
             const items = response.data.items || [];
             allWorkflows = allWorkflows.concat(items);
-
             nextCursor = response.data.cursor;
-            hasMore = !!nextCursor; // If cursor is null/undefined, stop
+            hasMore = !!nextCursor;
         }
 
-        // --- STEP 2: Fetch Tasks for each Workflow ---
-        // We'll run these in parallel to save time
+        // Step 2: Parallel Fetch Tasks
         const fullData = await Promise.all(allWorkflows.map(async (wf) => {
             try {
                 const taskRes = await axios.get(`https://public-api.process.st/api/v1.1/workflows/${wf.id}/tasks`, {
@@ -214,13 +217,14 @@ exports.processStreetProxy = onRequest({ cors: true, timeoutSeconds: 300 }, asyn
                 });
                 return { ...wf, tasks: taskRes.data.items || [] };
             } catch (e) {
-                return { ...wf, tasks: [] }; // Fallback if task fetch fails
+                return { ...wf, tasks: [] }; 
             }
         }));
 
         res.status(200).json({ items: fullData });
 
     } catch (error) {
+        console.error("PS Proxy Error:", error.message);
         res.status(500).send(error.message);
     }
 });
