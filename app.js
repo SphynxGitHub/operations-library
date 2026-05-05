@@ -18124,20 +18124,31 @@ OL.importProcessStreet = async function(client) {
     const creds = OL.getCredsForApp(client, 'processstreet');
     if (!creds?.secret) throw new Error("Process Street API Key missing.");
 
+    // Using the v1.1 endpoint often yields better results for modern accounts
     const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${creds.secret}`;
+
+    console.log("📡 Syncing Process Street Workflows...");
     const response = await fetch(url);
     const data = await response.json();
-    const workflows = data.workflows || [];
+
+    // 🚀 THE FIX: Process Street can return 'workflows' or 'items' depending on the version
+    const workflows = data.workflows || data.items || (Array.isArray(data) ? data : []);
+
+    if (workflows.length === 0) {
+        console.warn("Process Street returned an empty list. Full Response:", data);
+    }
 
     workflows.forEach(wf => {
         OL.upsertExternalResource(client, {
             id: `ps-${wf.id}`,
+            externalId: wf.id,
             name: `🏁 PS: ${wf.name}`,
             type: 'Checklist',
             externalUrl: `https://app.processstreet.com/workflows/${wf.id}`,
             steps: [{ id: uid(), name: "Run Process Street Checklist", appName: "Process Street" }]
         });
     });
+
     return workflows.length;
 };
 
