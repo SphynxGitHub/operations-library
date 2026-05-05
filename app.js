@@ -18154,63 +18154,87 @@ OL.importProcessStreet = async function(client) {
 };
 
 // Renamed to 'syncRedtail' to break the cache
-OL.syncRedtail = async function() {
-    console.group("🔴 REDTAIL SYSTEM SYNC");
-    
-    try {
-        // 🎯 THE CORRECT PATH: 
-        const clientContext = getActiveClient();
-        const data = clientContext.projectData; // This is what you just found!
+OL.syncRedtail = async function(client) {
+    console.log("🚀 Starting Redtail Sync (Registry Mode)...");
 
-        if (!data) {
-            throw new Error("Could not find projectData inside the active client context.");
-        }
+    // 1. Find Redtail Credentials in the Access Registry (Exactly like Wealthbox)
+    const registry = client.projectData.accessRegistry || [];
+    const rtCreds = registry.find(r => {
+        const app = client.projectData.localApps.find(a => a.id === r.appId);
+        // Look for the name Redtail
+        return app?.name.toLowerCase().includes('redtail');
+    });
 
-        console.log(`✅ Target Identified: ${data.name}`);
-
-        // Pull credentials from the externalIntegrations array inside that data
-        const creds = data.externalIntegrations?.find(i => i.appSlug === 'redtail');
-        
-        if (!creds || !creds.username || !creds.secret) {
-            alert(`Missing Redtail Credentials on card: ${data.name}`);
-            console.groupEnd();
-            return;
-        }
-
-        // 🎯 THE VERIFIED CONSOLE LOGIC
-        const auth = btoa(`${creds.username}:${creds.secret}`);
-        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(auth)}`;
-
-        console.log("📡 Fetching from Proxy...");
-        const res = await fetch(url);
-        const result = await res.json();
-        
-        // Key confirmed in your console test: workflow_templates
-        const list = result.workflow_templates || [];
-
-        console.log(`📦 Received ${list.length} templates.`);
-
-        list.forEach(tpl => {
-            // We pass 'clientContext' (the full object) to the upsert
-            OL.upsertExternalResource(clientContext, {
-                id: `rt-${tpl.id}`,
-                name: `🔴 RT: ${tpl.name}`,
-                type: 'Workflow',
-                steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
-            });
-        });
-
-        // Native persistence
-        if (typeof OL.persist === 'function') OL.persist();
-        if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
-        
-        alert(`🎉 Success! ${list.length} Redtail Workflows synced to ${data.name}`);
-
-    } catch (e) {
-        console.error("🔥 Sync Error:", e);
-        alert("Sync Failed: " + e.message);
+    if (!rtCreds || !rtCreds.secret) {
+        throw new Error("Redtail Credentials (User:Pass) not found in Registry.");
     }
-    console.groupEnd();
+
+    // 🎯 For Redtail, the 'secret' in your registry contains the "Username:Password" string
+    const authString = rtCreds.secret;
+
+    // 2. Fetch from Proxy
+    const cloudUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}`;
+    
+    console.log("📡 Calling Redtail Proxy...");
+    const response = await fetch(cloudUrl);
+
+    if (!response.ok) {
+        throw new Error(`Proxy Error: ${await response.text()}`);
+    }
+    
+    const result = await response.json();
+    const templates = result.workflow_templates || [];
+
+    console.log(`📥 Redtail: Found ${templates.length} templates.`);
+
+    // 3. Process each template into the Library
+    templates.forEach(wf => {
+        const resourceData = {
+            id: `rt-${wf.id}`,
+            externalId: wf.id,
+            name: `🔴 RT: ${wf.name}`,
+            type: 'Workflow',  
+            visible: true, 
+            category: 'Flows',
+            archetype: 'Multi-Level',
+            isExpanded: true, 
+            steps: [{ id: `rt-step-${wf.id}`, name: "Workflow Template", appName: 'Redtail' }]
+        };
+
+        OL.upsertExternalResource(client, resourceData);
+    
+        // 🟢 Save to localResources
+        if (!client.projectData.localResources) client.projectData.localResources = [];
+        const idx = client.projectData.localResources.findIndex(r => r.id === resourceData.id);
+        if (idx > -1) {
+            client.projectData.localResources[idx] = resourceData;
+        } else {
+            client.projectData.localResources.push(resourceData);
+        }
+    });
+
+    // 🎯 REUSE YOUR REFRESH LOGIC (The "Sticky Fix")
+    setTimeout(() => {
+        const activeId = OL.state.activeClientId;
+        const clientObj = OL.state.clients[activeId];
+        
+        if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
+
+        if (typeof OL.renderResourceManager === 'function') {
+            OL.renderResourceManager(clientObj);
+        } else if (typeof OL.renderLibrary === 'function') {
+            OL.renderLibrary(clientObj);
+        }
+
+        const input = document.getElementById('lib-filter-input');
+        if (input) {
+            input.disabled = false;
+            input.style.opacity = '1';
+        }
+        console.log("✅ Redtail UI Refreshed.");
+    }, 100);
+
+    return templates.length;
 };
 
 OL.getCredsForApp = function(client, appSlug) {
