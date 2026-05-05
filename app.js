@@ -9843,7 +9843,8 @@ OL.renderVisualizer = function() {
             const isExpanded = res.isExpanded || false;
             const isInScope = !!OL.isResourceInScope(res.id);
             const hasLogic = (res.steps || []).some(s => (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0));
-
+            const iconName = OL.getStepIcon(s);
+            
             div.id = `v2-node-${res.id}`;
             div.className = `v2-node-card resource-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''} ${isFocused ? 'focused-node' : (OL.focusedResourceId ? 'node-dimmed' : '')}`;
             if (!res.isGlobal && res.coords) { div.style.left = `${res.renderX}px`; div.style.top = `${res.renderY}px`; }
