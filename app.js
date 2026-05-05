@@ -18120,37 +18120,101 @@ OL.importJotform = async function(client) {
     }
 };
 
-OL.importProcessStreet = async function(client) {
-    console.group("🏁 PROCESS STREET SYNC DEBUG");
-    const creds = OL.getCredsForApp(client, 'processstreet');
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${creds.secret}`;
+OL.syncProcessStreet = async function(client) {
+    console.log("🚀 Starting Process Street Sync (Registry Mode)...");
 
-    console.log("📡 1. Requesting URL:", url);
-    const response = await fetch(url);
-    const data = await response.json();
+    // 1. Find the target client using the working state logic
+    const targetClient = client || OL.state.clients[OL.state.activeClientId];
 
-    console.log("📦 2. Raw Data Received:", data);
-    
-    // Check if we got an 'items' array or something else
-    const workflows = data.items || data.workflows || [];
-    console.log(`📊 3. Found ${workflows.length} workflows in response.`);
-
-    if (workflows.length === 0 && data.items) {
-        console.warn("⚠️ Authentication worked, but 'items' is an empty array. Check Folder/Org permissions.");
+    if (!targetClient || !targetClient.projectData) {
+        console.error("❌ Sync Error: Target client context not found.");
+        return;
     }
 
-    workflows.forEach(tpl => {
-        OL.upsertExternalResource(client, {
-            id: `ps-${tpl.id}`,
-            name: `🏁 PS: ${tpl.name}`,
-            type: 'Checklist',
-            steps: (tpl.tasks || []).map(t => ({ id: uid(), name: t.name, appName: "Process Street" }))
+    try {
+        // 2. Find Process Street Credentials in the Access Registry
+        const registry = targetClient.projectData.accessRegistry || [];
+        const psCreds = registry.find(r => {
+            const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
+            return app?.name.toLowerCase().includes('process street');
         });
-    });
 
-    console.log("✅ 4. Sync Finished.");
-    console.groupEnd();
-    return workflows.length;
+        if (!psCreds || !psCreds.secret) {
+            alert("Process Street API Key not found in your Registry.");
+            return;
+        }
+
+        const apiKey = psCreds.secret;
+        let allWorkflows = [];
+        let nextCursor = null;
+        let hasMore = true;
+
+        console.log("📡 Calling Process Street Proxy...");
+
+        // 3. The Pagination Loop (Process Street uses 'cursors' instead of 'pages')
+        while (hasMore) {
+            let url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${apiKey}`;
+            if (nextCursor) url += `&cursor=${nextCursor}`;
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Proxy Error: ${response.status}`);
+            
+            const result = await response.json();
+            
+            // Process Street v1.1 returns data in 'items'
+            const items = result.items || [];
+            allWorkflows = allWorkflows.concat(items);
+
+            // Check if there is another page
+            nextCursor = result.next_cursor; 
+            hasMore = !!nextCursor; 
+            
+            console.log(`📥 Processed ${allWorkflows.length} workflows...`);
+        }
+
+        // 4. Upsert into Library
+        allWorkflows.forEach(wf => {
+            const resourceData = {
+                id: `ps-${wf.id}`,
+                externalId: wf.id,
+                name: `🏁 PS: ${wf.name}`,
+                type: 'Checklist',
+                visible: true,
+                category: 'Flows',
+                isExpanded: true,
+                steps: (wf.tasks || []).map((t, idx) => ({
+                    id: `ps-step-${wf.id}-${idx}`,
+                    name: t.name,
+                    appName: 'Process Street'
+                }))
+            };
+
+            OL.upsertExternalResource(targetClient, resourceData);
+            
+            if (!targetClient.projectData.localResources) targetClient.projectData.localResources = [];
+            const idx = targetClient.projectData.localResources.findIndex(r => r.id === resourceData.id);
+            if (idx > -1) {
+                targetClient.projectData.localResources[idx] = resourceData;
+            } else {
+                targetClient.projectData.localResources.push(resourceData);
+            }
+        });
+
+        // 5. Trigger UI Refresh
+        setTimeout(() => {
+            if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
+            if (typeof OL.renderResourceManager === 'function') {
+                OL.renderResourceManager(targetClient);
+            }
+            console.log("✅ Process Street UI Refreshed.");
+        }, 100);
+
+        alert(`🎉 Success! ${allWorkflows.length} Process Street workflows synced.`);
+
+    } catch (e) {
+        console.error("🔥 Process Street Sync Failed:", e);
+        alert("Process Street Sync Error: " + e.message);
+    }
 };
 
 // Renamed to 'syncRedtail' to break the cache
@@ -18191,12 +18255,12 @@ OL.syncRedtail = async function(client) {
             currentPage++;
         } while (currentPage <= totalPages);
 
-        console.log(`✅ Total Templates Collected: ${allTemplates.length}`);
+       console.log(`✅ Total Templates Collected: ${allTemplates.length}`);
 
-        // Process all collected templates
-        allTemplates.forEach(wf => {
+        allTemplates.forEach((wf, index) => {
             const resourceData = {
-                id: `rt-${wf.id}`,
+                // 🎯 UNIQUE ID: Adding index and a prefix to prevent collisions
+                id: `rt-${wf.id}-${index}`, 
                 externalId: wf.id,
                 name: `🔴 RT: ${wf.name}`,
                 type: 'Workflow',
@@ -18206,10 +18270,13 @@ OL.syncRedtail = async function(client) {
                 steps: [{ id: `rt-step-${wf.id}`, name: "Workflow Template", appName: 'Redtail' }]
             };
 
+            // 1. System Upsert
             OL.upsertExternalResource(targetClient, resourceData);
             
+            // 2. Direct injection into localResources
             if (!targetClient.projectData.localResources) targetClient.projectData.localResources = [];
-            const idx = targetClient.projectData.localResources.findIndex(r => r.id === resourceData.id);
+            
+            const idx = targetClient.projectData.localResources.findIndex(r => r.externalId === wf.id);
             if (idx > -1) {
                 targetClient.projectData.localResources[idx] = resourceData;
             } else {
@@ -18217,13 +18284,25 @@ OL.syncRedtail = async function(client) {
             }
         });
 
-        // UI Refresh logic...
+        // 🎯 THE CRITICAL STEP: Hard-save to the database
+        if (typeof OL.persist === 'function') {
+            OL.persist(); 
+            console.log("💾 Database Persisted.");
+        }
+
+        // 3. UI Refresh logic (Existing)
         setTimeout(() => {
             if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
-            if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
-        }, 100);
+            
+            // Re-fetch the client from state to ensure we have the SAVED version
+            const freshClient = OL.state.clients[OL.state.activeClientId];
+            if (typeof OL.renderResourceManager === 'function') {
+                OL.renderResourceManager(freshClient);
+            }
+            console.log("✅ Redtail UI Refreshed with persistent data.");
+        }, 200);
 
-        alert(`🎉 Success! All ${allTemplates.length} templates synced.`);
+        alert(`🎉 Success! ${allTemplates.length} templates saved permanently.`);
 
     } catch (e) {
         console.error("🔥 Sync Failed:", e);
