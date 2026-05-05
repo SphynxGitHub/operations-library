@@ -419,15 +419,20 @@ window.addEventListener('load', () => {
 OL.toggleTheme = function() {
     const isLight = document.body.classList.toggle('light-mode');
     localStorage.setItem('ol_theme', isLight ? 'light' : 'dark');
-    window.buildLayout(); // ✅ calls the real function directly
-};
+    
+    // 1. Rebuild the sidebar and shell
+    window.buildLayout(); 
 
-// Call this at the very top of your script execution
-(function initTheme() {
-    if (localStorage.getItem('ol_theme') === 'light') {
-        document.body.classList.add('light-mode');
+    // 2. 🚀 THE FIX: Force the map and its custom toolbar to repaint
+    if (window.location.hash.includes('visualizer')) {
+        OL.renderVisualizer();
     }
-})();
+
+    // 3. Re-initialize icons to fix SVG coloring
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+};
 
 
 /*===================== PARTNER ACCESS ==================*/
@@ -9543,9 +9548,14 @@ OL.handleCanvasDrop = async function(e) {
     if (dragId) {
         const data = OL.getCurrentProjectData();
         const res = data.resources.find(r => String(r.id) === String(dragId));
+        const cardWidth = 220; // Default width of your .v2-node-card
+        const cardHeight = 60; // Approximate header height
         
         if (res) {
-            res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
+            res.coords = { 
+                x: Math.round(x - (cardWidth / 2)), 
+                y: Math.round(y - (cardHeight / 2)) 
+            };
             res.isGlobal = false;
             res.isTopShelf = false;
             res.isDeleted = false;
@@ -10088,12 +10098,11 @@ OL.renderWorkbenchItemsOnly = function() {
     const data = OL.getCurrentProjectData();
     const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
-    // 🕵️ BUILD LINKED SET (Scans all steps for Resource AND Guide links)
+    // 🕵️ BUILD LINKED SET
     const linkedIds = new Set();
     resources.forEach(res => {
         (res.steps || []).forEach(step => {
             (step.links || []).forEach(link => linkedIds.add(String(link.id)));
-            // Also check explicit guide IDs if your schema stores them separately
             if (step.howToIds) step.howToIds.forEach(id => linkedIds.add(String(id)));
         });
     });
@@ -10101,105 +10110,70 @@ OL.renderWorkbenchItemsOnly = function() {
     let items = [];
 
     if (activeTab === 'flows') {
-        items = resources.filter(r => {
-            const isFlow = ['Workflow', 'Zap', 'Email Campaign'].includes(r.type);
-            return isFlow && !r.coords && !r.isTopShelf;
-        });
+        items = resources.filter(r => ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords && !r.isTopShelf);
     } else if (activeTab === 'assets') {
-        items = resources.filter(r => {
-            const isAsset = !['Workflow', 'Zap', 'Email Campaign'].includes(r.type);
-            const matchesType = (typeFilter === "All" || r.type === typeFilter);
-            const passesLinkFilter = !hideLinked || !linkedIds.has(String(r.id));
-            return isAsset && matchesType && !r.coords && !r.isTopShelf && passesLinkFilter;
-        });
+        items = resources.filter(r => !['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && (typeFilter === "All" || r.type === typeFilter) && !r.coords && !r.isTopShelf && (!hideLinked || !linkedIds.has(String(r.id))));
     } else if (activeTab === 'guides') {
-        const masterGuides = state.master.howToLibrary || [];
-        const localGuides = getActiveClient()?.projectData?.localHowTo || [];
-        items = [...masterGuides, ...localGuides].filter(g => {
-            const passesLinkFilter = !hideLinked || !linkedIds.has(String(g.id));
-            return passesLinkFilter;
-        });
+        items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])].filter(g => !hideLinked || !linkedIds.has(String(g.id)));
     } else if (activeTab === 'data') {
-        const datapoints = state.master.datapoints || [];
-        
-        // Filter by the sidebar search query
-        items = datapoints.filter(d => 
-            (d.name || "").toLowerCase().includes(query) || 
-            (d.key && d.key.toLowerCase().includes(query))
-        );
-
-        workbenchContents.innerHTML = '';
-        
-        if (items.length === 0) {
-            workbenchContents.innerHTML = `
-                <div class="empty-hint p-10">
-                    No datapoints found. <br>
-                    <a href="javascript:void(0)" onclick="OL.renderGlobalDataManager()" class="accent">Manage Library</a>
-                </div>`; // ⬅️ Changed href to an onclick with OL. prefix
-            return;
-        }
-
-        items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'data-tag-draggable';
-            div.draggable = true;
-            
-            // 🎨 Purple tag styling
-            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; display:flex; justify-content:space-between; align-items:center;`;
-            
-            div.ondragstart = (e) => {
-                e.dataTransfer.setData("application/sphynx-type", "datapoint");
-                e.dataTransfer.setData("application/sphynx-id", item.id);
-            };
-
-            div.innerHTML = `
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <span>${item.isBundle ? '📦' : '🏷️'}</span>
-                    <b>${esc(item.name)}</b>
-                </div>
-                <span class="tiny muted" style="opacity:0.4; font-family:monospace;">${item.key || ''}</span>
-            `;
-            workbenchContents.appendChild(div);
-        });
-        return; // Stop execution here for the data tab
+        items = (state.master.datapoints || []).filter(d => (d.name || "").toLowerCase().includes(query) || (d.key && d.key.toLowerCase().includes(query)));
     }
 
-    // Apply text search
-    if (query.trim()) {
+    if (query.trim() && activeTab !== 'data') {
         items = items.filter(i => (i.name || i.title || "").toLowerCase().includes(query.trim()));
     }
 
     workbenchContents.innerHTML = '';
+    
+    if (items.length === 0) {
+        workbenchContents.innerHTML = `<div class="empty-hint p-10">No items found.</div>`;
+        return;
+    }
+
     items.forEach(item => {
         const div = document.createElement('div');
-        const icon = OL.getRegistryIcon(item.type);
-        const isGuide = activeTab === 'guides';
-        const isInScope = !!OL.isResourceInScope(item.id);
+        div.id = `wb-node-${item.id}`;
         
-        div.id = `v2-node-${item.id}`;
-        div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
-        div.draggable = true;
-        div.ondragstart = (e) => {
-            e.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, name: item.name || item.title, type: item.type }));
-        };
+        // 🎯 Set Drag Logic based on Tab
+        if (activeTab === 'data') {
+            div.className = 'data-tag-draggable';
+            div.draggable = true;
+            div.style = `padding:8px; margin:5px; background:rgba(167, 139, 250, 0.1); border:1px solid #a78bfa; border-radius:4px; font-size:11px; cursor:grab; display:flex; justify-content:space-between; align-items:center; color: var(--text-main);`;
+            
+            div.ondragstart = (e) => {
+                e.dataTransfer.setData("application/sphynx-type", "datapoint");
+                e.dataTransfer.setData("application/sphynx-id", item.id);
+                e.target.style.opacity = "0.5";
+            };
+        } else {
+            const isGuide = activeTab === 'guides';
+            const icon = isGuide ? '📖' : OL.getRegistryIcon(item.type);
+            const isInScope = !!OL.isResourceInScope(item.id);
+            
+            div.className = `v2-node-card on-shelf ${isGuide ? 'guide-card' : ''}`;
+            div.draggable = true;
+            
+            div.ondragstart = (e) => {
+                // For Resources moving to Canvas
+                e.dataTransfer.setData('text/plain', item.id);
+                e.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, name: item.name || item.title, type: item.type }));
+                e.dataTransfer.effectAllowed = "move";
+                e.target.style.opacity = "0.5";
+            };
 
-        div.innerHTML = `
-            <div class="v2-node-header">
-                <div class="header-row-content">
-                    <span style="margin-right: 8px; font-size: 14px;">${isGuide ? '📖' : icon}</span>
-                    <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
-                        <b class="res-name-text" style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(item.name || item.title)}</b>
-                    </div>
-                    <div class="header-badges-wrap" style="display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0;">
-                        ${!isGuide ? `<small class="tiny muted uppercase type-badge" style="font-size: 8px; opacity: 0.6;">${esc(item.type)}</small>` : ''}
-                        <div class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" 
-                             oncontextmenu="event.preventDefault(); event.stopPropagation(); OL.toggleScopingStatus('${item.id}', ${isInScope}); OL.renderWorkbenchItemsOnly();">
-                             $
+            div.innerHTML = `
+                <div class="v2-node-header">
+                    <div class="header-row-content">
+                        <span style="margin-right: 8px; font-size: 14px;">${icon}</span>
+                        <b class="res-name-text" style="font-size: 11px;">${esc(item.name || item.title)}</b>
+                        <div class="header-badges-wrap" style="margin-left: auto;">
+                            <div class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}">$</div>
                         </div>
                     </div>
-                </div>
-            </div>
-        `;
+                </div>`;
+        }
+
+        div.ondragend = (e) => e.target.style.opacity = "1";
         workbenchContents.appendChild(div);
     });
 };
