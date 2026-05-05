@@ -18154,41 +18154,58 @@ OL.importProcessStreet = async function(client) {
 };
 
 OL.importRedtail = async function(client) {
-    console.group("🔴 REDTAIL SYNC DEBUG");
-    const creds = OL.getCredsForApp(client, 'redtail');
-    const authString = btoa(`${creds.username}:${creds.secret}`);
+    console.log("🚀 REDTAIL SYNC START");
     
-    // Exact URL from your successful console test
-    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}`;
-    
-    console.log("📡 1. Requesting URL:", url);
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    console.log("📦 2. Raw Data Received:", data);
-    console.log("🔑 3. Top-level keys found:", Object.keys(data));
+    try {
+        const creds = OL.getCredsForApp(client, 'redtail');
+        if (!creds) {
+            console.error("❌ Error: No credentials found for Redtail on this card.");
+            return 0;
+        }
 
-    // The key we found in console was 'workflow_templates'
-    const templates = data.workflow_templates || [];
-    console.log(`📊 4. Length of 'workflow_templates' array: ${templates.length}`);
+        // Create the encoded string exactly like the console test
+        const authStr = btoa(creds.username + ":" + creds.secret);
+        const proxyBase = "https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy";
+        const finalUrl = proxyBase + "?apiKey=" + encodeURIComponent(authStr);
 
-    if (templates.length === 0) {
-        console.error("❌ ZERO TEMPLATES FOUND. Data structure doesn't match 'workflow_templates' or the array is empty.");
-    }
+        console.log("📡 Attempting Fetch to:", finalUrl);
 
-    templates.forEach(tpl => {
-        OL.upsertExternalResource(client, {
-            id: `rt-${tpl.id}`,
-            name: `🔴 RT: ${tpl.name}`,
-            type: 'Workflow',
-            steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
+        const response = await fetch(finalUrl);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Server Error:", response.status, errorText);
+            throw new Error("Proxy returned error: " + response.status);
+        }
+
+        const data = await response.json();
+        console.log("📦 Raw Data from Server:", data);
+
+        // We use the key confirmed in your console test
+        const list = data.workflow_templates || [];
+        console.log("📊 Templates Found:", list.length);
+
+        list.forEach(tpl => {
+            OL.upsertExternalResource(client, {
+                id: "rt-" + tpl.id,
+                externalId: tpl.id,
+                name: "🔴 RT: " + tpl.name,
+                type: 'Workflow',
+                steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
+            });
         });
-    });
 
-    console.log("✅ 5. Upsert Complete.");
-    console.groupEnd();
-    OL.persist();
-    return templates.length;
+        OL.persist();
+        if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
+        
+        console.log("✅ Sync Finished Successfully");
+        return list.length;
+
+    } catch (err) {
+        console.error("🔥 CRITICAL CRASH IN IMPORT:", err.message);
+        console.error(err.stack); // This will tell us the exact line number of the crash
+        return 0;
+    }
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
