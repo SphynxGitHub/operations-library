@@ -18121,92 +18121,61 @@ OL.importJotform = async function(client) {
 };
 
 OL.syncProcessStreet = async function(client) {
-    console.group("🏁 PROCESS STREET DEBUG SYNC");
-    const targetClient = client || OL.state.clients[OL.state.activeClientId];
-    
+    alert("🟢 PS Sync Fired!"); // If you don't see this, the button isn't connected.
+    console.log("🚀 PS Sync Logic Start...");
+
     try {
+        const targetClient = client || OL.state.clients[OL.state.activeClientId];
         const registry = targetClient.projectData.accessRegistry || [];
+        
         const psCreds = registry.find(r => {
             const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
             return app?.name.toLowerCase().includes('process street');
         });
 
-        if (!psCreds || !psCreds.secret) {
-            console.error("❌ No PS Secret found in Registry.");
-            alert("Process Street API Key is missing from the card's Credentials section.");
+        if (!psCreds?.secret) {
+            alert("Missing PS API Key in Registry.");
             return;
         }
 
-        const apiKey = psCreds.secret;
-        console.log("📡 Step 1: Testing Connection with API Key...");
+        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${psCreds.secret}`;
+        console.log("📡 Fetching from:", url);
 
-        // We check organizations first because if this is empty, workflows will be empty
-        const orgUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${apiKey}&version=orgs`;
-        const orgRes = await fetch(orgUrl);
-        const orgData = await orgRes.json();
+        const res = await fetch(url);
+        const data = await res.json();
         
-        console.log("🏢 Step 2: Organizations Found:", orgData);
+        console.log("📦 PS Data Received:", data);
 
-        if (!orgData.items || orgData.items.length === 0) {
-            console.warn("⚠️ API Key is valid, but sees ZERO organizations. Is the key-holder an Admin in PS?");
-        }
-
-        // Now fetch workflows
-        const wfUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${apiKey}`;
-        console.log("📡 Step 3: Fetching Workflows...");
+        const workflows = data.items || [];
         
-        const wfRes = await fetch(wfUrl);
-        const wfData = await wfRes.json();
-        
-        console.log("📦 Step 4: Raw Workflow Data:", wfData);
-
-        const workflows = wfData.items || [];
-        console.log(`📊 Step 5: Total Workflows to process: ${workflows.length}`);
-
-        if (workflows.length === 0) {
-            alert("Connected to Process Street, but found 0 workflows. Check folder permissions in PS.");
-            return;
-        }
-
-        // 🧹 Wipe old and rebuild
+        // 🧹 Wipe and Rebuild
         targetClient.projectData.localResources = (targetClient.projectData.localResources || [])
             .filter(r => !r.id.startsWith('ps-'));
 
-        workflows.forEach((wf, index) => {
+        workflows.forEach((wf, i) => {
             targetClient.projectData.localResources.push({
-                id: `ps-workflow-${wf.id}-${index}`,
+                id: `ps-workflow-${wf.id}-${i}`,
                 externalId: wf.id,
                 name: `🏁 PS: ${wf.name}`,
                 type: 'Checklist',
                 visible: true,
                 category: 'Flows',
-                steps: (wf.tasks || []).map((t, idx) => ({
-                    id: `ps-step-${wf.id}-${idx}`,
-                    name: t.name,
-                    appName: 'Process Street'
-                }))
+                steps: (wf.tasks || []).map((t, idx) => ({ id: `ps-s-${idx}`, name: t.name, appName: 'PS' }))
             });
         });
 
-        if (typeof OL.persist === 'function') OL.persist();
-
+        OL.persist();
         setTimeout(() => {
-            const activeId = OL.state.activeClientId;
-            if (OL.state.clients[activeId]) {
-                OL.state.clients[activeId].projectData.localResources = targetClient.projectData.localResources;
-            }
             if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
             if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
-            console.log("✅ PS UI Force-Synced.");
-        }, 300);
+        }, 200);
 
-        alert(`🎉 Success! Found ${workflows.length} Process Street workflows.`);
+        alert(`🎉 Success! Found ${workflows.length} workflows.`);
 
-    } catch (e) {
-        console.error("🔥 PS Sync Crash:", e);
-        alert("PS Sync Error: " + e.message);
+    } catch (err) {
+        console.error("🔥 PS Error:", err);
+        alert("PS Error: " + err.message);
     }
-    console.groupEnd();
 };
 
 // Renamed to 'syncRedtail' to break the cache
