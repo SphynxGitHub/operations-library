@@ -9533,48 +9533,23 @@ OL.handleCanvasDrop = async function(e) {
     
     const zoom = state.v2.zoom || 1;
     const rect = canvas.getBoundingClientRect();
-    
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    let dragId = null;
-    try {
-        const jsonData = e.dataTransfer.getData('application/json');
-        dragId = jsonData ? JSON.parse(jsonData).id : null;
-    } catch(err) {
-        dragId = e.dataTransfer.getData('text/plain');
-    }
+    const dragId = e.dataTransfer.getData('text/plain');
 
     if (dragId) {
         const data = OL.getCurrentProjectData();
         const res = data.resources.find(r => String(r.id) === String(dragId));
-        const cardWidth = 220; // Default width of your .v2-node-card
-        const cardHeight = 60; // Approximate header height
         
         if (res) {
-            res.coords = { 
-                x: Math.round(x - (cardWidth / 2)), 
-                y: Math.round(y - (cardHeight / 2)) 
-            };
+            res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
             res.isGlobal = false;
             res.isTopShelf = false;
             res.isDeleted = false;
 
-            const stages = data.stages || [];
-            let accX = 40;
-            for (let s of stages) {
-                const w = s.width || 320;
-                if (x >= accX && x <= accX + w) {
-                    res.stageId = s.id;
-                    res._col = Math.floor(Math.max(0, x - accX) / 300);
-                    break;
-                }
-                accX += w;
-            }
-
             await OL.persist();
-            await OL.autoAlignNodes(false);
-            OL.renderVisualizer();
+            OL.renderVisualizer(); 
         }
     }
 };
