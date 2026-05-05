@@ -18121,90 +18121,74 @@ OL.importJotform = async function(client) {
 };
 
 OL.importProcessStreet = async function(client) {
+    console.group("🏁 PROCESS STREET SYNC DEBUG");
     const creds = OL.getCredsForApp(client, 'processstreet');
     const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${creds.secret}`;
 
+    console.log("📡 1. Requesting URL:", url);
     const response = await fetch(url);
     const data = await response.json();
-    const templates = data.items || [];
 
-    templates.forEach(tpl => {
-        // Map the real PS tasks to our Map Steps format
-        const mappedSteps = tpl.tasks.map(task => ({
-            id: uid(),
-            externalId: task.id,
-            name: task.name,
-            appName: "Process Street"
-        }));
+    console.log("📦 2. Raw Data Received:", data);
+    
+    // Check if we got an 'items' array or something else
+    const workflows = data.items || data.workflows || [];
+    console.log(`📊 3. Found ${workflows.length} workflows in response.`);
 
-        // If no tasks were found, provide a default starting step
-        if (mappedSteps.length === 0) {
-            mappedSteps.push({ id: uid(), name: "Run Checklist", appName: "Process Street" });
-        }
+    if (workflows.length === 0 && data.items) {
+        console.warn("⚠️ Authentication worked, but 'items' is an empty array. Check Folder/Org permissions.");
+    }
 
+    workflows.forEach(tpl => {
         OL.upsertExternalResource(client, {
             id: `ps-${tpl.id}`,
-            externalId: tpl.id,
             name: `🏁 PS: ${tpl.name}`,
             type: 'Checklist',
-            externalUrl: `https://app.process.st/workflows/${tpl.id}`,
-            steps: mappedSteps // 🚀 Real tasks now appear inside the node!
+            steps: (tpl.tasks || []).map(t => ({ id: uid(), name: t.name, appName: "Process Street" }))
         });
     });
 
-    return templates.length;
+    console.log("✅ 4. Sync Finished.");
+    console.groupEnd();
+    return workflows.length;
 };
 
 OL.importRedtail = async function(client) {
+    console.group("🔴 REDTAIL SYNC DEBUG");
     const creds = OL.getCredsForApp(client, 'redtail');
-    if (!creds?.username || !creds?.secret) throw new Error("Missing Redtail Credentials");
-
-    // 🎯 Use the exact {{basic_auth}} logic that worked in your console
-    // If your working console used Username:Password, we do that here.
-    const myFullAuthString = btoa(`${creds.username}:${creds.secret}`); 
+    const authString = btoa(`${creds.username}:${creds.secret}`);
     
-    let allTemplates = [];
-    let page = 1;
-    let hasMore = true;
+    // Exact URL from your successful console test
+    const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(authString)}`;
+    
+    console.log("📡 1. Requesting URL:", url);
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    console.log("📦 2. Raw Data Received:", data);
+    console.log("🔑 3. Top-level keys found:", Object.keys(data));
 
-    console.log("📡 Redtail: Starting sync using verified console logic...");
+    // The key we found in console was 'workflow_templates'
+    const templates = data.workflow_templates || [];
+    console.log(`📊 4. Length of 'workflow_templates' array: ${templates.length}`);
 
-    while (hasMore) {
-        // 🎯 The exact URL structure from your successful console test
-        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/redtailProxy?apiKey=${encodeURIComponent(myFullAuthString)}&page=${page}`;
-
-        const response = await fetch(url);
-        const data = await response.json();
-
-        // 🎯 Using the verified key 'workflow_templates' from your console output
-        const batch = data.workflow_templates || [];
-        allTemplates = allTemplates.concat(batch);
-
-        console.log(`✅ Page ${page}: Found ${batch.length}. Total: ${allTemplates.length}`);
-
-        // Pagination logic based on your console log (total_pages: 2)
-        if (page < (data.total_pages || 1)) {
-            page++;
-        } else {
-            hasMore = false;
-        }
+    if (templates.length === 0) {
+        console.error("❌ ZERO TEMPLATES FOUND. Data structure doesn't match 'workflow_templates' or the array is empty.");
     }
 
-    allTemplates.forEach(tpl => {
+    templates.forEach(tpl => {
         OL.upsertExternalResource(client, {
             id: `rt-${tpl.id}`,
-            externalId: tpl.id,
             name: `🔴 RT: ${tpl.name}`,
             type: 'Workflow',
-            steps: [{ id: uid(), name: "Workflow Template Step", appName: "Redtail" }]
+            steps: [{ id: uid(), name: "Template Step", appName: "Redtail" }]
         });
     });
 
-    // Final UI updates
+    console.log("✅ 5. Upsert Complete.");
+    console.groupEnd();
     OL.persist();
-    if (typeof OL.renderWorkbench === 'function') OL.renderWorkbench();
-
-    return allTemplates.length;
+    return templates.length;
 };
 
 OL.getCredsForApp = function(client, appSearchTerm) {
