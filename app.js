@@ -10096,6 +10096,15 @@ OL.renderWorkbenchItemsOnly = function() {
     const data = OL.getCurrentProjectData();
     const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
+    // 🕵️ BUILD LINKED SET
+    const linkedIds = new Set();
+    resources.forEach(res => {
+        (res.steps || []).forEach(step => {
+            (step.links || []).forEach(link => linkedIds.add(String(link.id)));
+            if (step.howToIds) step.howToIds.forEach(id => linkedIds.add(String(id)));
+        });
+    });
+
     let items = [];
     if (activeTab === 'flows') {
         items = resources.filter(r => ['Workflow', 'Zap', 'Email Campaign'].includes(r.type) && !r.coords);
@@ -10119,7 +10128,6 @@ OL.renderWorkbenchItemsOnly = function() {
         div.className = activeTab === 'data' ? 'data-tag-draggable' : 'v2-node-card on-shelf';
         div.draggable = true;
         
-        // 🎯 THE FIX: Manual Event Binding
         div.addEventListener('dragstart', (e) => {
             if (activeTab === 'data') {
                 e.dataTransfer.setData("application/sphynx-type", "datapoint");
@@ -10133,18 +10141,29 @@ OL.renderWorkbenchItemsOnly = function() {
 
         div.addEventListener('dragend', (e) => { e.target.style.opacity = "1"; });
 
-        // Simple Inner HTML for the card
-        const iconName = OL.getRegistryIcon(res.type);
+        // 🎯 FIXED: Icon Resolution using 'item' instead of 'res'
+        let iconName = "";
+        if (activeTab === 'data') {
+            iconName = item.isBundle ? "package" : "tag";
+        } else {
+            // Using the registry helper we updated earlier
+            iconName = OL.getRegistryIcon(item.type);
+        }
+
         div.innerHTML = `
             <div class="v2-node-header" style="pointer-events: none;">
-                <div class="header-row-content">
-                   <i data-lucide="${iconName}" style="width:16px; height:16px; margin-right:8px; color: var(--accent);"></i>
-                    <b class="res-name-text">${esc(item.name || item.title)}</b>
+                <div class="header-row-content" style="display:flex; align-items:center;">
+                    <i data-lucide="${iconName}" style="width:14px; height:14px; margin-right:8px; color: var(--accent); flex-shrink:0;"></i>
+                    <b class="res-name-text" style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        ${esc(item.name || item.title)}
+                    </b>
                 </div>
             </div>`;
             
         workbenchContents.appendChild(div);
     });
+
+    // 🚀 THE REPAINT TRIGGER
     if (window.lucide) {
         window.lucide.createIcons();
     }
