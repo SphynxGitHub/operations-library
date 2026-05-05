@@ -18128,45 +18128,60 @@ OL.importJotform = async function(client) {
 };
 
 OL.syncProcessStreet = async function(client) {
-    alert("🟢 PS Sync Fired!"); // If you don't see this, the button isn't connected.
-    console.log("🚀 PS Sync Logic Start...");
-
+    console.log("🚀 Starting Process Street v1.1 Sync...");
+    const targetClient = client || OL.state.clients[OL.state.activeClientId];
+    
     try {
-        const targetClient = client || OL.state.clients[OL.state.activeClientId];
         const registry = targetClient.projectData.accessRegistry || [];
-        
         const psCreds = registry.find(r => {
             const app = targetClient.projectData.localApps.find(a => a.id === r.appId);
-            
-            // 🎯 FIX: You must define 'name' before checking .includes()
-            const name = app?.name || ""; 
-            
-            // Now this will work because 'name' is defined
-            return name.toLowerCase().includes('processstreet') || 
-                   name.toLowerCase().includes('process street') || 
-                   name.toLowerCase() === 'ps';
+            const name = app?.name || "";
+            return name.toLowerCase().includes('processstreet') || name.toLowerCase().includes('process street');
         });
 
         if (!psCreds?.secret) {
-            alert("Missing PS API Key in Registry.");
+            alert("Missing Process Street API Key in Registry.");
             return;
         }
 
-        const url = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${psCreds.secret}`;
-        console.log("📡 Fetching from:", url);
+        let allWorkflows = [];
+        // The API defaults to 20 results and uses a 'links' object for the next page
+        let nextUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${psCreds.secret}`;
 
-        const res = await fetch(url);
-        const data = await res.json();
-        
-        console.log("📦 PS Data Received:", data);
+        console.log("📡 Fetching Workflows...");
 
-        const workflows = data.items || [];
-        
+        while (nextUrl) {
+            const res = await fetch(nextUrl);
+            const data = await res.json();
+            
+            // 🎯 THE FIX: v1.1 uses 'workflows' instead of 'items'
+            const pageWorkflows = data.workflows || [];
+            allWorkflows = allWorkflows.concat(pageWorkflows);
+            
+            console.log(`📥 Received ${pageWorkflows.length} workflows...`);
+
+            // Check for pagination in the 'links' section
+            const nextLink = data.links?.find(l => l.rel === 'next' || l.name === 'next');
+            if (nextLink && nextLink.href) {
+                // Construct the next proxy URL
+                nextUrl = `https://us-central1-operations-library-d2fee.cloudfunctions.net/processStreetProxy?apiKey=${psCreds.secret}&next=${encodeURIComponent(nextLink.href)}`;
+            } else {
+                nextUrl = null;
+            }
+        }
+
+        console.log(`✅ Total Collected: ${allWorkflows.length} workflows.`);
+
+        if (allWorkflows.length === 0) {
+            alert("Process Street returned 0 workflows. Verify your account has 'Active' workflows.");
+            return;
+        }
+
         // 🧹 Wipe and Rebuild
         targetClient.projectData.localResources = (targetClient.projectData.localResources || [])
             .filter(r => !r.id.startsWith('ps-'));
 
-        workflows.forEach((wf, i) => {
+        allWorkflows.forEach((wf, i) => {
             targetClient.projectData.localResources.push({
                 id: `ps-workflow-${wf.id}-${i}`,
                 externalId: wf.id,
@@ -18174,21 +18189,27 @@ OL.syncProcessStreet = async function(client) {
                 type: 'Checklist',
                 visible: true,
                 category: 'Flows',
-                steps: (wf.tasks || []).map((t, idx) => ({ id: `ps-s-${idx}`, name: t.name, appName: 'PS' }))
+                isExpanded: true,
+                steps: [] // We can fetch tasks later if needed
             });
         });
 
-        OL.persist();
+        if (typeof OL.persist === 'function') OL.persist();
+
         setTimeout(() => {
+            const activeId = OL.state.activeClientId;
+            if (OL.state.clients[activeId]) {
+                OL.state.clients[activeId].projectData.localResources = targetClient.projectData.localResources;
+            }
             if (typeof OL.syncResourceLibraryFilters === 'function') OL.syncResourceLibraryFilters();
             if (typeof OL.renderResourceManager === 'function') OL.renderResourceManager(targetClient);
-        }, 200);
+        }, 300);
 
-        alert(`🎉 Success! Found ${workflows.length} workflows.`);
+        alert(`🎉 Success! Synced ${allWorkflows.length} Process Street workflows.`);
 
-    } catch (err) {
-        console.error("🔥 PS Error:", err);
-        alert("PS Error: " + err.message);
+    } catch (e) {
+        console.error("🔥 PS v1.1 Sync Error:", e);
+        alert("Sync Failed: " + e.message);
     }
 };
 
