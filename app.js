@@ -9843,7 +9843,6 @@ OL.renderVisualizer = function() {
             const isExpanded = res.isExpanded || false;
             const isInScope = !!OL.isResourceInScope(res.id);
             const hasLogic = (res.steps || []).some(s => (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0));
-            const iconName = OL.getStepIcon(s);
             
             div.id = `v2-node-${res.id}`;
             div.className = `v2-node-card resource-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''} ${isFocused ? 'focused-node' : (OL.focusedResourceId ? 'node-dimmed' : '')}`;
@@ -9875,6 +9874,7 @@ OL.renderVisualizer = function() {
                         const hasTeam = sAssignees.some(a => a.type === "person" || (a.type === "role" && !a.name.includes("Client")));
                         const hasClient = sAssignees.some(a => a.name.includes("Client"));
                         let bStyle = hasTeam ? "2px solid #22c55e" : hasClient ? "2px solid #fbbf24" : "1px solid transparent";
+                        const iconName = OL.getStepIcon(s);
                         return `
                             <div class="v2-step-item" style="border: ${bStyle};" onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${s.id}')">
                                 <span class="step-port port-in" id="port-in-${res.id}-${s.id}"></span>
