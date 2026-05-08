@@ -10551,9 +10551,33 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   const tc = OL._fvGetType(res.type);
   const stepCount = (res.steps || []).length;
   const hasLogic  = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
+  const isExpanded = OL._fv.stepsExpanded || OL._fv._expandedCards?.has(res.id);
+
   const tags = (res.steps || []).slice(0, 2)
     .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
     .join('');
+
+  const stepsPreview = (isExpanded && stepCount > 0) ? `
+    <div class="fv-card-steps-preview">
+      ${(res.steps || []).map((s, i) => {
+        const appLabel  = s.appName
+          ? `<span class="fv-card-step-app">${esc(s.appName.substring(0,10))}</span>`
+          : '';
+        const logicIcon = (s.logic?.out || []).some(l => l.targetId)
+          ? `<span style="color:#3dd9c5;font-size:9px;font-weight:700;">λ</span>`
+          : '';
+        return `
+          <div class="fv-card-step-row"
+               onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}');">
+            <span class="fv-card-step-num-sm">${i+1}</span>
+            <span class="fv-card-step-name">${esc(s.name || 'Unnamed')}</span>
+            ${appLabel}
+            ${logicIcon}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  ` : '';
 
   return `
     <div class="fv-card ${isGlobal ? 'is-global' : ''}"
@@ -10564,7 +10588,9 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
                   this.classList.add('selected');
                   OL.openInspector('${res.id}', null, 'cards');">
+
       <div class="fv-card-accent" style="background:${tc.color};"></div>
+
       <div class="fv-card-body">
         <div class="fv-card-type-row">
           <div class="fv-card-type-icon" style="background:${tc.color};">${tc.abbr}</div>
@@ -10573,46 +10599,26 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
         </div>
         <div class="fv-card-name">${esc(res.name)}</div>
         ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
-        <div class="fv-card-footer">
-          <span class="fv-step-count-btn"
+      </div>
+
+      <div class="fv-card-footer">
+        <span class="fv-step-count-btn"
               onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
               title="Toggle steps">
-          <i data-lucide="${OL._fv._expandedCards?.has(res.id) ? 'chevron-up' : 'chevron-down'}"
+          <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}"
              style="width:10px;height:10px;"></i>
           ${stepCount} step${stepCount!==1?'s':''}
-          </span>
-          <div style="display:flex;gap:4px;align-items:center;">
-            ${isGlobal ? `
-              <span class="fv-global-card-badge">
-                🌐 ×${globalStageCount}
-              </span>` : ''}
-            ${hasLogic ? `
-              <span style="font-size:9px;padding:2px 5px;border-radius:99px;
-                           background:rgba(61,217,197,0.1);color:#3dd9c5;font-weight:700;">λ</span>
-              ` : ''}
-          </div>
-          // ADD inside _fvBuildCard, after the footer div:
-            ${(OL._fv.stepsExpanded || OL._fv._expandedCards?.has(res.id)) && stepCount > 0 ? `
-              <div class="fv-card-steps-preview">
-                ${(res.steps || []).map((s, i) => {
-                  const hasLogicOut = (s.logic?.out || []).some(l => l.targetId);
-                  const hasLogicIn  = (s.logic?.in  || []).length > 0;
-                  const appLabel    = s.appName ? `<span class="fv-card-step-app">${esc(s.appName.substring(0,10))}</span>` : '';
-                  const logicIcon   = hasLogicOut ? `<span style="color:#3dd9c5;font-size:9px;font-weight:700;">λ</span>` : '';
-                  return `
-                    <div class="fv-card-step-row"
-                         onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}');">
-                      <span class="fv-card-step-num-sm">${i+1}</span>
-                      <span class="fv-card-step-name">${esc(s.name || 'Unnamed')}</span>
-                      ${appLabel}
-                      ${logicIcon}
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            ` : ''}
+        </span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+          ${hasLogic ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
+                                     background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                     font-weight:700;">λ</span>` : ''}
         </div>
       </div>
+
+      ${stepsPreview}
+
     </div>
   `;
 };
