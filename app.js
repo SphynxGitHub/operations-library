@@ -9985,6 +9985,16 @@ OL._fvTypes = {
 };
 OL._fvGetType = t => OL._fvTypes[t] || { color: '#6b7280', abbr: (t||'?').substring(0,2).toUpperCase() };
 
+OL._fvNormalizeStepCoords = function() {
+  const data = OL.getCurrentProjectData();
+  (data.resources || []).forEach(res => {
+    (res.steps || []).forEach(step => {
+      if (!step.coords) step.coords = { x: 0, y: 0 };
+      if (step.pinned === undefined) step.pinned = false;
+    });
+  });
+};
+
 // ── SHARED STATE ─────────────────────────────────────────
 if (!OL._fv) OL._fv = {
   layout: 'flowchart',   // 'flowchart' | 'list'
@@ -10007,11 +10017,25 @@ OL.renderVisualizer = function() {
   const stages    = data.stages || [];
   const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
-  // ── BUILD SHELL ─────────────────────────────────────
-  // Always rebuild so filter/layout changes reflect immediately
+  if (!OL._fv) OL._fv = {
+    layout: 'flowchart', zoom: 1,
+    showConnections: true, stageFilter: '',
+    globalsExpanded: false,
+    searchMatches: [], searchIdx: -1,
+    snapToGrid: false, gridSize: 20,
+    _searchQuery: '',
+  };
+
+  // Run layout computation for steps view
+  if (OL._fv.layout === 'steps') {
+    OL._fvNormalizeStepCoords();
+    OL._fvComputeLayout(resources, OL._fv.stageFilter);
+  }
+
   mainArea.innerHTML = `
     <div id="fv-shell">
 
+      <!-- TOPBAR -->
       <div id="fv-topbar">
         <div class="fv-breadcrumb">
           <span>${client ? esc(client.meta.name) : 'Workspace'}</span>
@@ -10022,15 +10046,19 @@ OL.renderVisualizer = function() {
 
         <div class="fv-search-wrap">
           <i data-lucide="search" style="width:13px;height:13px;color:#9ca3af;flex-shrink:0;"></i>
-          <input id="fv-search" type="text" placeholder="Search steps…"
-                 value="${OL._fv._searchQuery || ''}"
-                 oninput="OL.fvSearch(this.value)" autocomplete="off">
+          <input id="fv-search" type="text"
+                 placeholder="Search steps…"
+                 value="${esc(OL._fv._searchQuery || '')}"
+                 oninput="OL.fvSearch(this.value)"
+                 autocomplete="off">
         </div>
-        <div id="fv-search-nav" style="display:${OL._fv.searchMatches?.length ? 'flex' : 'none'};align-items:center;gap:4px;">
+        <div id="fv-search-nav"
+             style="display:${OL._fv.searchMatches?.length ? 'flex' : 'none'};align-items:center;gap:4px;">
           <button class="fv-btn fv-icon" onclick="OL.fvPrevMatch()">
             <i data-lucide="chevron-left"></i>
           </button>
-          <span id="fv-match-count" style="font-size:11px;color:#9ca3af;min-width:32px;text-align:center;"></span>
+          <span id="fv-match-count"
+                style="font-size:11px;color:#9ca3af;min-width:32px;text-align:center;"></span>
           <button class="fv-btn fv-icon" onclick="OL.fvNextMatch()">
             <i data-lucide="chevron-right"></i>
           </button>
@@ -10041,69 +10069,147 @@ OL.renderVisualizer = function() {
 
         <div class="fv-divider"></div>
 
-        <!-- LAYOUT SWITCHER -->
-        <select class="fv-select" onchange="OL._fv.layout = this.value; OL.renderVisualizer();"
-                style="font-weight:600;">
-          <option value="flowchart" ${OL._fv.layout === 'flowchart' ? 'selected' : ''}>
-            🗺 Flowchart
-          </option>
-          <option value="list" ${OL._fv.layout === 'list' ? 'selected' : ''}>
-            📋 List View
-          </option>
+        <!-- Layout switcher -->
+        <select class="fv-select" style="font-weight:600;"
+                onchange="OL._fv.layout = this.value; OL.renderVisualizer();">
+          <option value="flowchart" ${OL._fv.layout==='flowchart'?'selected':''}>🗺 Swimlanes</option>
+          <option value="steps"     ${OL._fv.layout==='steps'    ?'selected':''}>⬡ Steps</option>
+          <option value="list"      ${OL._fv.layout==='list'     ?'selected':''}>📋 List</option>
         </select>
 
+        <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
                 onchange="OL._fv.stageFilter = this.value; OL.renderVisualizer();">
           <option value="">All Stages</option>
           ${stages.map(s => `
-            <option value="${esc(s.id)}" ${OL._fv.stageFilter === s.id ? 'selected' : ''}>
+            <option value="${esc(s.id)}"
+                    ${OL._fv.stageFilter === s.id ? 'selected' : ''}>
               ${esc(s.name)}
             </option>`).join('')}
         </select>
 
-        <button class="fv-toggle-btn ${OL._fv.globalsExpanded ? 'on' : ''}"
-                onclick="OL._fv.globalsExpanded = !OL._fv.globalsExpanded; OL.renderVisualizer();"
-                title="${OL._fv.globalsExpanded ? 'Collapse global resources' : 'Expand global resources'}">
-          <i data-lucide="globe"></i>
-          Globals ${OL._fv.globalsExpanded ? 'On' : 'Off'}
-        </button>
-
+        <!-- Globals toggle (flowchart only) -->
         ${OL._fv.layout === 'flowchart' ? `
-          <button class="fv-btn fv-icon ${OL._fv.showConnections ? 'fv-active' : ''}"
-                  onclick="OL.fvToggleConnections()" title="Toggle connections">
-            <i data-lucide="git-branch"></i>
-          </button>
-          <div class="fv-divider"></div>
-          <button class="fv-zoom-btn fv-btn fv-icon" onclick="OL.fvZoom(-0.12)">
-            <i data-lucide="minus"></i>
-          </button>
-          <span id="fv-zoom-label" style="font-size:11px;font-weight:600;color:#6b7280;min-width:36px;text-align:center;">
-            ${Math.round((OL._fv.zoom||1) * 100)}%
-          </span>
-          <button class="fv-zoom-btn fv-btn fv-icon" onclick="OL.fvZoom(0.12)">
-            <i data-lucide="plus"></i>
+          <button class="fv-toggle-btn ${OL._fv.globalsExpanded ? 'on' : ''}"
+                  onclick="OL._fv.globalsExpanded=!OL._fv.globalsExpanded; OL.renderVisualizer();">
+            <i data-lucide="globe"></i>
+            Globals ${OL._fv.globalsExpanded ? 'On' : 'Off'}
           </button>
         ` : ''}
+
+        <!-- Steps view controls -->
+        ${OL._fv.layout === 'steps' ? `
+          <button class="fv-toggle-btn ${OL._fv.snapToGrid ? 'on' : ''}"
+                  onclick="OL._fv.snapToGrid=!OL._fv.snapToGrid; OL.renderVisualizer();"
+                  title="Snap to grid">
+            <i data-lucide="grid"></i>
+            Grid ${OL._fv.snapToGrid ? 'On' : 'Off'}
+          </button>
+
+          <!-- Tidy dropdown -->
+          <div style="position:relative;display:inline-flex;">
+            <button class="fv-btn" onclick="OL._fvTidy('global')"
+                    title="Tidy layout (respects pinned)">
+              <i data-lucide="align-justify"></i> Tidy
+            </button>
+            <button class="fv-btn fv-icon" style="border-left:none;border-radius:0 8px 8px 0;padding:7px 6px;"
+                    onclick="OL._fvShowTidyMenu(event)">
+              <i data-lucide="chevron-down"></i>
+            </button>
+          </div>
+        ` : ''}
+
+        <div class="fv-divider"></div>
+
+        <!-- Zoom -->
+        <button class="fv-btn fv-icon" onclick="OL.fvZoom(-0.12)">
+          <i data-lucide="minus"></i>
+        </button>
+        <span id="fv-zoom-label"
+              style="font-size:11px;font-weight:600;color:#6b7280;min-width:38px;text-align:center;">
+          ${Math.round((OL._fv.zoom||1)*100)}%
+        </span>
+        <button class="fv-btn fv-icon" onclick="OL.fvZoom(0.12)">
+          <i data-lucide="plus"></i>
+        </button>
       </div>
 
+      <!-- BODY -->
       <div id="fv-body">
-        ${OL._fv.layout === 'flowchart'
-          ? OL._fvBuildFlowchartShell(stages, resources)
-          : OL._fvBuildListShell(stages, resources)
-        }
+
+        <!-- Workbench icon rail -->
+        <div id="fv-wb-rail">
+          <div class="fv-wb-icon ${OL._fv._wbTab==='flows'  ?'active':''}"
+               onclick="OL._fvToggleWb('flows')"   title="Flows">
+            <i data-lucide="workflow"></i>
+          </div>
+          <div class="fv-wb-icon ${OL._fv._wbTab==='assets' ?'active':''}"
+               onclick="OL._fvToggleWb('assets')"  title="Assets">
+            <i data-lucide="database"></i>
+          </div>
+          <div class="fv-wb-icon ${OL._fv._wbTab==='guides' ?'active':''}"
+               onclick="OL._fvToggleWb('guides')"  title="Guides">
+            <i data-lucide="book-open"></i>
+          </div>
+          <div class="fv-wb-icon ${OL._fv._wbTab==='data'   ?'active':''}"
+               onclick="OL._fvToggleWb('data')"    title="Data">
+            <i data-lucide="tag"></i>
+          </div>
+        </div>
+
+        <!-- Workbench drawer -->
+        <div id="fv-wb-drawer" class="${OL._fv._wbTab ? 'open' : ''}">
+          <div class="fv-wb-header">
+            <span class="fv-wb-title">${OL._fv._wbTab ? OL._fv._wbTab.charAt(0).toUpperCase() + OL._fv._wbTab.slice(1) : ''}</span>
+            <button class="fv-btn fv-icon" onclick="OL._fvToggleWb(null)">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <div id="fv-wb-content"></div>
+        </div>
+
+        <!-- Lane rail (flowchart + list only) -->
+        ${OL._fv.layout !== 'steps' ? `
+          <div id="fv-lane-rail"></div>
+        ` : ''}
+
+        <!-- Main canvas -->
+        <div id="fv-canvas-wrap"
+             onclick="OL._fvHandleCanvasClick(event)">
+          <div id="fv-canvas">
+            <svg id="fv-svg-layer"></svg>
+            <div id="fv-content"></div>
+          </div>
+        </div>
+
+        <!-- Inspector -->
         <aside id="v2-inspector-panel">
           <div id="inspector-content"></div>
         </aside>
-      </div>
 
+      </div>
     </div>
   `;
 
   if (window.lucide) lucide.createIcons();
 
+  // Render content based on layout
   if (OL._fv.layout === 'flowchart') {
+    OL._fvRenderFlowchart(stages, resources);
+  } else if (OL._fv.layout === 'steps') {
+    OL._fvRenderSteps(resources);
+  } else {
+    OL._fvRenderList(stages, resources);
+  }
+
+  // Populate workbench if open
+  if (OL._fv._wbTab) OL._fvPopulateWb(OL._fv._wbTab, resources);
+
+  // Setup interactions
+  OL._fvSetupZoom();
+  if (OL._fv.layout !== 'steps') {
     OL._fvSyncRailHeights();
-    OL._fvSetupZoom();
+    OL._fvSetupRailScroll();
   }
 };
 
@@ -10279,6 +10385,107 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   `;
 };
 
+OL._fvComputeLayout = function(resources, stageFilter) {
+  // Gather all steps across all resources
+  const allSteps = [];
+  const stepMap  = {}; // fullId → { step, res }
+
+  resources.forEach(res => {
+    if (stageFilter && res.stageId !== stageFilter) return;
+    (res.steps || []).forEach((step, idx) => {
+      const fullId = `${res.id}-${step.id}`;
+      const entry  = { step, res, fullId, col: -1, row: -1 };
+      allSteps.push(entry);
+      stepMap[fullId] = entry;
+    });
+  });
+
+  if (allSteps.length === 0) return;
+
+  // Build adjacency from logic.out
+  const outEdges = {}; // fullId → [fullId]
+  const inDegree = {}; // fullId → count
+  allSteps.forEach(e => {
+    outEdges[e.fullId] = [];
+    inDegree[e.fullId] = 0;
+  });
+
+  allSteps.forEach(({ step, res }) => {
+    const fromId = `${res.id}-${step.id}`;
+    (step.logic?.out || []).forEach(out => {
+      if (!out.targetId) return;
+      const lastH = String(out.targetId).lastIndexOf('-');
+      if (lastH === -1) return;
+      const tResId  = out.targetId.substring(0, lastH);
+      const tStepId = out.targetId.substring(lastH + 1);
+      // Find matching step
+      const toEntry = allSteps.find(e =>
+        String(e.res.id) === String(tResId) &&
+        String(e.step.id) === String(tStepId)
+      );
+      if (toEntry && outEdges[fromId]) {
+        outEdges[fromId].push(toEntry.fullId);
+        inDegree[toEntry.fullId] = (inDegree[toEntry.fullId] || 0) + 1;
+      }
+    });
+  });
+
+  // Kahn's algorithm — assign columns (depth layers)
+  const queue = allSteps
+    .filter(e => (inDegree[e.fullId] || 0) === 0)
+    .map(e => ({ id: e.fullId, col: 0 }));
+
+  const visited = new Set();
+  while (queue.length > 0) {
+    const { id, col } = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const entry = stepMap[id];
+    if (entry) entry.col = Math.max(entry.col, col);
+    (outEdges[id] || []).forEach(toId => {
+      queue.push({ id: toId, col: col + 1 });
+    });
+  }
+
+  // Any steps not reached (disconnected) get their own columns
+  // grouped by resource
+  let maxCol = Math.max(...allSteps.map(e => e.col), 0);
+  const resColMap = {};
+  allSteps.forEach(e => {
+    if (e.col === -1) {
+      if (resColMap[e.res.id] === undefined) {
+        resColMap[e.res.id] = ++maxCol;
+      }
+      e.col = resColMap[e.res.id];
+    }
+  });
+
+  // Assign rows within each column
+  const colRows = {};
+  allSteps
+    .sort((a, b) => a.col - b.col)
+    .forEach(e => {
+      if (!colRows[e.col]) colRows[e.col] = 0;
+      e.row = colRows[e.col]++;
+    });
+
+  // Convert col/row to pixel coords
+  const COL_W = 240; // horizontal spacing between columns
+  const ROW_H = 160; // vertical spacing between rows
+  const PAD_X = 40;
+  const PAD_Y = 40;
+
+  allSteps.forEach(({ step, col, row }) => {
+    // Only update if not pinned
+    if (!step.pinned) {
+      step.coords = {
+        x: PAD_X + col * COL_W,
+        y: PAD_Y + row * ROW_H,
+      };
+    }
+  });
+};
+
 // ── CARD BUILDER (shared between regular + expanded globals) ──
 OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   const tc = OL._fvGetType(res.type);
@@ -10322,6 +10529,364 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
       </div>
     </div>
   `;
+};
+
+OL._fvRenderSteps = function(resources) {
+  const canvas  = document.getElementById('fv-content');
+  const svg     = document.getElementById('fv-svg-layer');
+  const filter  = OL._fv.stageFilter;
+  if (!canvas || !svg) return;
+
+  canvas.innerHTML = '';
+
+  const filtered = resources.filter(r =>
+    !filter || r.stageId === filter
+  );
+
+  let cardCount = 0;
+
+  // Render step cards
+  filtered.forEach(res => {
+    const tc = OL._fvGetType(res.type);
+    (res.steps || []).forEach((step, idx) => {
+      cardCount++;
+      const x = step.coords?.x || 0;
+      const y = step.coords?.y || 0;
+
+      // App badge
+      const appBadge = step.appName
+        ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">
+             ${esc(step.appName.substring(0,10))}
+           </span>`
+        : '';
+
+      // Assignee badges
+      const assigneeBadges = (step.assignees || []).slice(0,2).map(a =>
+        `<span class="fv-step-badge" style="background:#f5f6f8;color:#6b7280;">
+           ${esc((a.name||'').substring(0,10))}
+         </span>`
+      ).join('');
+
+      // Has links
+      const hasLinks = (step.links || []).length > 0;
+
+      const div = document.createElement('div');
+      div.className = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
+      div.id        = `fv-step-${res.id}-${step.id}`;
+      div.dataset.resId  = res.id;
+      div.dataset.stepId = step.id;
+      div.style.left = x + 'px';
+      div.style.top  = y + 'px';
+
+      div.innerHTML = `
+        <!-- Pin toggle -->
+        <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
+                title="${step.pinned ? 'Unpin (allow auto-layout)' : 'Pin (manual position)'}"
+                onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
+          <i data-lucide="${step.pinned ? 'pin' : 'pin-off'}"></i>
+        </button>
+
+        <!-- Resource tidy -->
+        <button class="fv-res-tidy-btn"
+                title="Tidy this resource"
+                onclick="event.stopPropagation(); OL._fvTidy('resource','${res.id}')">
+          <i data-lucide="align-justify"></i>
+        </button>
+
+        <!-- Accent strip -->
+        <div class="fv-step-card-accent" style="background:${tc.color};"></div>
+
+        <div class="fv-step-card-body"
+             onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
+
+          <!-- Resource badge -->
+          <div class="fv-step-res-badge" style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
+            ${tc.abbr} ${esc(res.name.substring(0,16))}
+          </div>
+
+          <!-- Step name -->
+          <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
+
+          <!-- Badges row -->
+          <div class="fv-step-badges">
+            ${appBadge}${assigneeBadges}
+            ${hasLinks ? `<span class="fv-step-badge" style="background:#f5f6f8;color:#9ca3af;">
+              <i data-lucide="paperclip" style="width:9px;height:9px;"></i>
+            </span>` : ''}
+          </div>
+        </div>
+
+        <!-- Connection ports -->
+        <div class="fv-port fv-port-top"
+             id="port-top-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')">
+        </div>
+        <div class="fv-port fv-port-bottom"
+             id="port-bottom-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')">
+        </div>
+        <div class="fv-port fv-port-left"
+             id="port-left-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')">
+        </div>
+        <div class="fv-port fv-port-right"
+             id="port-right-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')">
+        </div>
+      `;
+
+      // Drag to reposition (auto-pins on first drag)
+      OL._fvSetupCardDrag(div, res.id, step.id);
+
+      canvas.appendChild(div);
+    });
+  });
+
+  // Size canvas to content
+  const maxX = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
+    .map(el => (parseFloat(el.style.left)||0) + 200), 800);
+  const maxY = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
+    .map(el => (parseFloat(el.style.top)||0) + 120), 600);
+  canvas.style.width  = (maxX + 100) + 'px';
+  canvas.style.height = (maxY + 100) + 'px';
+
+  if (window.lucide) lucide.createIcons();
+
+  // Draw connections
+  requestAnimationFrame(() => {
+    OL._fvDrawStepConnections(filtered);
+  });
+};
+
+// Draw connections between step cards
+OL._fvDrawStepConnections = function(resources) {
+  const svg    = document.getElementById('fv-svg-layer');
+  const canvas = document.getElementById('fv-content');
+  if (!svg || !canvas) return;
+
+  const cRect = canvas.getBoundingClientRect();
+
+  svg.innerHTML = `
+    <defs>
+      <marker id="fv-arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#3dd9c5"/>
+      </marker>
+      <marker id="fv-arr-no" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#d4472a"/>
+      </marker>
+    </defs>
+    <g id="fv-lines"></g>
+  `;
+
+  svg.style.width  = canvas.style.width;
+  svg.style.height = canvas.style.height;
+
+  if (!OL._fv.showConnections) return;
+
+  const group = document.getElementById('fv-lines');
+
+  resources.forEach(sourceRes => {
+    (sourceRes.steps || []).forEach(sourceStep => {
+      (sourceStep.logic?.out || []).forEach(outRule => {
+        if (!outRule.targetId) return;
+
+        const lastH = String(outRule.targetId).lastIndexOf('-');
+        if (lastH === -1) return;
+        const tResId  = outRule.targetId.substring(0, lastH);
+        const tStepId = outRule.targetId.substring(lastH + 1);
+
+        const fromEl = document.getElementById(`fv-step-${sourceRes.id}-${sourceStep.id}`);
+        const toEl   = document.getElementById(
+          `fv-step-${tResId}-${tStepId}` ||
+          // fallback: find by resId + step index if id-based lookup fails
+          Array.from(document.querySelectorAll(`[data-res-id="${tResId}"]`))
+            .find(el => el.dataset.stepId === tStepId)?.id
+        );
+
+        if (!fromEl || !toEl) return;
+
+        const fRect = fromEl.getBoundingClientRect();
+        const tRect = toEl.getBoundingClientRect();
+
+        // Determine best anchor based on relative positions
+        const fx_center = fRect.left - cRect.left + fRect.width / 2;
+        const fy_center = fRect.top  - cRect.top  + fRect.height / 2;
+        const tx_center = tRect.left - cRect.left  + tRect.width / 2;
+        const ty_center = tRect.top  - cRect.top   + tRect.height / 2;
+
+        const dx = tx_center - fx_center;
+        const dy = ty_center - fy_center;
+
+        let fx, fy, tx, ty;
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          // Primarily vertical
+          if (dy > 0) {
+            fx = fx_center; fy = fRect.bottom - cRect.top;
+            tx = tx_center; ty = tRect.top    - cRect.top;
+          } else {
+            fx = fx_center; fy = fRect.top    - cRect.top;
+            tx = tx_center; ty = tRect.bottom - cRect.top;
+          }
+        } else {
+          // Primarily horizontal
+          if (dx > 0) {
+            fx = fRect.right - cRect.left; fy = fy_center;
+            tx = tRect.left  - cRect.left; ty = ty_center;
+          } else {
+            fx = fRect.left  - cRect.left; fy = fy_center;
+            tx = tRect.right - cRect.left; ty = ty_center;
+          }
+        }
+
+        const tension = Math.max(50, Math.abs(dy > dx ? dy : dx) * 0.4);
+        const isVert  = Math.abs(dy) >= Math.abs(dx);
+        const cp1x = isVert ? fx : fx + (dx > 0 ?  tension : -tension);
+        const cp1y = isVert ? fy + (dy > 0 ?  tension : -tension) : fy;
+        const cp2x = isVert ? tx : tx + (dx > 0 ? -tension :  tension);
+        const cp2y = isVert ? ty + (dy > 0 ? -tension :  tension) : ty;
+
+        const d = `M ${fx} ${fy} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx} ${ty}`;
+
+        const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
+        const isLoop = outRule.type === 'loop';
+        const color  = isLoop ? '#f5b800' : isNo ? '#d4472a' : '#3dd9c5';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', '1.5');
+        path.setAttribute('stroke-opacity', '0.7');
+        path.setAttribute('marker-end', isNo ? 'url(#fv-arr-no)' : 'url(#fv-arr)');
+        if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
+        group.appendChild(path);
+
+        // Logic icon on line midpoint
+        const hasRule  = outRule.rule?.trim();
+        const hasDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
+        const iconChar = isLoop ? '↺' : hasDelay ? '⏱' : hasRule ? 'λ' : null;
+
+        if (iconChar) {
+          // Find midpoint of bezier curve
+          const mx = (fx + tx) / 2;
+          const my = (fy + ty) / 2;
+
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
+          bg.setAttribute('fill', '#fff');
+          bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
+          group.appendChild(bg);
+
+          const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          txt.setAttribute('x', mx); txt.setAttribute('y', my + 4);
+          txt.setAttribute('text-anchor', 'middle');
+          txt.setAttribute('font-size', iconChar === 'λ' ? '11' : '10');
+          txt.setAttribute('font-weight', '700');
+          txt.setAttribute('fill', color);
+          txt.setAttribute('font-family', 'DM Sans, sans-serif');
+          txt.setAttribute('pointer-events', 'none');
+          txt.textContent = iconChar;
+          group.appendChild(txt);
+
+          // Tooltip on hover showing the rule/delay
+          if (hasRule || hasDelay) {
+            const label = hasDelay
+              ? `⏱ ${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`
+              : outRule.rule;
+            bg.setAttribute('title', label);
+            bg.style.cursor = 'help';
+          }
+        }
+      });
+    });
+  });
+};
+
+OL._fvSetupCardDrag = function(el, resId, stepId) {
+  let startX, startY, startLeft, startTop, hasMoved = false;
+
+  el.addEventListener('mousedown', e => {
+    // Don't drag if clicking interactive elements
+    if (e.target.closest('.fv-pin-btn, .fv-res-tidy-btn, .fv-port, .fv-step-card-body')) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    startX    = e.clientX;
+    startY    = e.clientY;
+    startLeft = parseFloat(el.style.left) || 0;
+    startTop  = parseFloat(el.style.top)  || 0;
+    hasMoved  = false;
+
+    const zoom = OL._fv.zoom || 1;
+
+    const onMove = e => {
+      const dx = (e.clientX - startX) / zoom;
+      const dy = (e.clientY - startY) / zoom;
+
+      if (!hasMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        hasMoved = true;
+        el.classList.add('is-dragging');
+      }
+      if (!hasMoved) return;
+
+      let newX = startLeft + dx;
+      let newY = startTop  + dy;
+
+      // Snap to grid
+      if (OL._fv.snapToGrid) {
+        const g = OL._fv.gridSize || 20;
+        newX = Math.round(newX / g) * g;
+        newY = Math.round(newY / g) * g;
+      }
+
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
+
+      el.style.left = newX + 'px';
+      el.style.top  = newY + 'px';
+
+      // Redraw connections live
+      const data = OL.getCurrentProjectData();
+      const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
+      OL._fvDrawStepConnections(resources);
+    };
+
+    const onUp = async () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',   onUp);
+      el.classList.remove('is-dragging');
+
+      if (!hasMoved) return;
+
+      // Save coords and auto-pin
+      const data = OL.getCurrentProjectData();
+      const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
+      const step = res?.steps?.find(s => String(s.id) === String(stepId));
+
+      if (step) {
+        step.coords = {
+          x: parseFloat(el.style.left) || 0,
+          y: parseFloat(el.style.top)  || 0,
+        };
+        step.pinned = true; // Auto-pin on first drag
+        el.classList.add('is-pinned');
+
+        // Update pin button
+        const pinBtn = el.querySelector('.fv-pin-btn');
+        if (pinBtn) {
+          pinBtn.classList.add('pinned');
+          pinBtn.title = 'Unpin (allow auto-layout)';
+          pinBtn.innerHTML = '<i data-lucide="pin"></i>';
+          if (window.lucide) lucide.createIcons();
+        }
+
+        await OL.persist();
+      }
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+  });
 };
 
 // ── STAGE NAME EDITING ────────────────────────────────────
@@ -10507,6 +11072,231 @@ OL._fvHighlightGlobalConnections = function(resId, on) {
       card.classList.toggle('dimmed', on && !isConnected);
     }
   });
+};
+
+// TIDY FUNCTIONS
+
+OL._fvTidy = async function(scope, resourceId) {
+  const data      = OL.getCurrentProjectData();
+  const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
+
+  if (scope === 'global') {
+    // Unpin only unpinned steps, recompute
+    resources.forEach(res => {
+      (res.steps||[]).forEach(step => {
+        if (!step.pinned) step.coords = { x: 0, y: 0 };
+      });
+    });
+  } else if (scope === 'force') {
+    // Unpin everything
+    resources.forEach(res => {
+      (res.steps||[]).forEach(step => {
+        step.pinned = false;
+        step.coords = { x: 0, y: 0 };
+      });
+    });
+  } else if (scope === 'stage') {
+    const stageId = resourceId; // reusing param
+    resources
+      .filter(r => r.stageId === stageId)
+      .forEach(res => {
+        (res.steps||[]).forEach(step => {
+          if (!step.pinned) step.coords = { x: 0, y: 0 };
+        });
+      });
+  } else if (scope === 'resource') {
+    const res = resources.find(r => String(r.id) === String(resourceId));
+    if (res) {
+      (res.steps||[]).forEach(step => {
+        step.pinned = false;
+        step.coords = { x: 0, y: 0 };
+      });
+    }
+  }
+
+  OL._fvNormalizeStepCoords();
+  OL._fvComputeLayout(resources, OL._fv.stageFilter);
+  await OL.persist();
+  OL.renderVisualizer();
+};
+
+OL._fvShowTidyMenu = function(e) {
+  e.stopPropagation();
+  const existing = document.getElementById('fv-tidy-menu');
+  if (existing) { existing.remove(); return; }
+
+  const btn    = e.currentTarget;
+  const rect   = btn.getBoundingClientRect();
+  const stages = OL.getCurrentProjectData().stages || [];
+
+  const menu = document.createElement('div');
+  menu.id = 'fv-tidy-menu';
+  menu.style.cssText = `
+    position:fixed; top:${rect.bottom+4}px; left:${rect.left}px;
+    background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.1); z-index:1000;
+    min-width:200px; overflow:hidden;
+  `;
+
+  const items = [
+    { label: 'Tidy All (respect pinned)', action: `OL._fvTidy('global')` },
+    { label: 'Force Tidy All', action: `OL._fvTidy('force')`, danger: true },
+    { label: '─────────────────', divider: true },
+    ...stages.map(s => ({
+      label: `Tidy: ${s.name}`,
+      action: `OL._fvTidy('stage','${s.id}')`,
+    })),
+  ];
+
+  items.forEach(item => {
+    if (item.divider) {
+      const d = document.createElement('div');
+      d.style.cssText = 'padding:4px 12px;font-size:10px;color:#d1d5db;';
+      d.textContent = item.label;
+      menu.appendChild(d);
+      return;
+    }
+    const el = document.createElement('div');
+    el.style.cssText = `
+      padding:9px 14px; font-size:12px; cursor:pointer;
+      color:${item.danger ? '#d4472a' : '#374151'};
+      transition:background 0.1s;
+    `;
+    el.textContent = item.label;
+    el.onmouseenter = () => el.style.background = '#f5f6f8';
+    el.onmouseleave = () => el.style.background = '';
+    el.onclick = () => { menu.remove(); eval(item.action); };
+    menu.appendChild(el);
+  });
+
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
+};
+
+OL._fvTogglePin = async function(resId, stepId) {
+  const data = OL.getCurrentProjectData();
+  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
+  const step = res?.steps?.find(s => String(s.id) === String(stepId));
+  if (!step) return;
+
+  step.pinned = !step.pinned;
+  await OL.persist();
+
+  // Surgical update — just update the pin button without full re-render
+  const card = document.getElementById(`fv-step-${resId}-${stepId}`);
+  if (card) {
+    const btn = card.querySelector('.fv-pin-btn');
+    if (btn) {
+      btn.classList.toggle('pinned', step.pinned);
+      btn.title = step.pinned ? 'Unpin (allow auto-layout)' : 'Pin (manual position)';
+      btn.innerHTML = `<i data-lucide="${step.pinned ? 'pin' : 'pin-off'}"></i>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    card.classList.toggle('is-pinned', step.pinned);
+  }
+};
+
+// WORKBENCH PANEL
+
+OL._fvToggleWb = function(tab) {
+  OL._fv._wbTab = OL._fv._wbTab === tab ? null : tab;
+  OL.renderVisualizer();
+};
+
+OL._fvPopulateWb = function(tab, resources) {
+  const content = document.getElementById('fv-wb-content');
+  if (!content) return;
+
+  const client      = getActiveClient();
+  const data        = OL.getCurrentProjectData();
+  const masterGuides = state.master?.howToLibrary || [];
+  const localGuides  = client?.projectData?.localHowTo || [];
+  const datapoints   = state.master?.datapoints || [];
+
+  let items = [];
+
+  if (tab === 'flows') {
+    items = resources.filter(r =>
+      ['Workflow','Zap','Email Campaign'].includes(r.type)
+    );
+  } else if (tab === 'assets') {
+    items = resources.filter(r =>
+      !['Workflow','Zap','Email Campaign'].includes(r.type)
+    );
+  } else if (tab === 'guides') {
+    items = [...masterGuides, ...localGuides];
+  } else if (tab === 'data') {
+    items = datapoints;
+  }
+
+  if (items.length === 0) {
+    content.innerHTML = `
+      <div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;font-style:italic;">
+        No ${tab} found
+      </div>`;
+    return;
+  }
+
+  content.innerHTML = items.map(item => {
+    const tc   = OL._fvGetType(item.type);
+    const name = item.name || item.title || 'Unnamed';
+    const isData = tab === 'data';
+
+    return `
+      <div class="fv-wb-item"
+           draggable="true"
+           data-id="${item.id}"
+           data-type="${tab}"
+           ondragstart="OL._fvWbDragStart(event,'${item.id}','${tab}')"
+           onclick="OL.openInspector('${item.id}', null, 'cards')">
+        <div class="fv-wb-item-icon"
+             style="background:${isData ? 'rgba(124,58,237,0.1)' : tc.color+'18'};
+                    color:${isData ? '#7c3aed' : tc.color};">
+          ${isData ? '🏷' : tc.abbr}
+        </div>
+        <div class="fv-wb-item-info">
+          <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
+          ${!isData ? `<div class="fv-wb-item-type">${esc(item.type||'')}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+};
+
+OL._fvWbDragStart = function(e, id, type) {
+  e.dataTransfer.setData('application/fv-resource', JSON.stringify({ id, type }));
+  e.dataTransfer.effectAllowed = 'copy';
+};
+
+// RAIL SCROLL AND CANVAS CLICK
+OL._fvSetupRailScroll = function() {
+  const wrap = document.getElementById('fv-canvas-wrap');
+  const rail = document.getElementById('fv-lane-rail');
+  if (!wrap || !rail) return;
+
+  wrap.addEventListener('scroll', () => {
+    rail.scrollTop = wrap.scrollTop;
+  }, { passive: true });
+};
+
+OL._fvHandleCanvasClick = function(e) {
+  // Only close if clicking the bare canvas background
+  if (e.target.id === 'fv-canvas-wrap' ||
+      e.target.id === 'fv-canvas'      ||
+      e.target.id === 'fv-content'     ||
+      e.target.classList.contains('fv-swimlane')) {
+    document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
+      .forEach(el => el.classList.remove('selected'));
+    const panel = document.getElementById('v2-inspector-panel');
+    if (panel) panel.classList.remove('open');
+  }
+};
+
+OL._fvSelectStep = function(resId, stepId) {
+  document.querySelectorAll('.fv-step-card.selected').forEach(el => el.classList.remove('selected'));
+  const card = document.getElementById(`fv-step-${resId}-${stepId}`);
+  if (card) card.classList.add('selected');
+  OL.openInspector(resId, stepId);
 };
 
 // ══════════════════════════════════════════════
