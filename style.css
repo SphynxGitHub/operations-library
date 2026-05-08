@@ -5996,3 +5996,60 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   position: absolute; top: 0; left: 0;
   pointer-events: none; z-index: 2; overflow: visible;
 }
+
+/* ── CARD STEPS PREVIEW ── */
+.fv-card-steps-preview {
+  border-top: 1px solid #f3f4f6;
+  padding: 4px 0 2px;
+}
+.fv-card-step-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 12px; cursor: pointer;
+  transition: background 0.1s; font-size: 11px;
+}
+.fv-card-step-row:hover { background: #fafafa; }
+.fv-card-step-num-sm {
+  width: 14px; height: 14px; border-radius: 99px;
+  background: #f5f6f8; font-size: 8px; font-weight: 700;
+  color: #9ca3af; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.fv-card-step-name {
+  flex: 1; color: #374151; font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fv-card-step-app {
+  font-size: 9px; font-weight: 600; padding: 1px 5px;
+  border-radius: 99px; background: rgba(61,217,197,0.1);
+  color: #3dd9c5; flex-shrink: 0;
+}
+.fv-step-count-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; color: #9ca3af; cursor: pointer;
+  padding: 2px 4px; border-radius: 4px;
+  transition: background 0.12s, color 0.12s;
+}
+.fv-step-count-btn:hover { background: #f5f6f8; color: #1b2d3f; }
+
+/* ── LIST RESOURCE HEADER ── */
+.fv-list-res-header {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 12px; margin-bottom: 4px;
+  background: #fff; border: 1px solid #e5e7eb;
+  border-radius: 8px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.fv-list-res-header:hover {
+  border-color: #3dd9c5;
+  background: rgba(61,217,197,0.03);
+}
+.fv-list-res-header-name {
+  font-size: 12px; font-weight: 700; color: #1b2d3f; flex: 1;
+}
+.fv-list-res-header-type {
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.fv-list-res-header-count {
+  font-size: 10px; color: #9ca3af;
+}
