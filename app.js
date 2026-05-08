@@ -10121,6 +10121,16 @@ OL.renderVisualizer = function() {
 
         <div class="fv-divider"></div>
 
+        <!-- Step Expand button-->
+        ${OL._fv.layout === 'flowchart' ? `
+          <button class="fv-toggle-btn ${OL._fv.stepsExpanded ? 'on' : ''}"
+                  onclick="OL._fv.stepsExpanded=!OL._fv.stepsExpanded; OL.renderVisualizer();"
+                  title="Show steps inside cards">
+            <i data-lucide="list"></i>
+            Steps ${OL._fv.stepsExpanded ? 'On' : 'Off'}
+          </button>
+        ` : ''}
+
         <!-- Zoom -->
         <button class="fv-btn fv-icon" onclick="OL.fvZoom(-0.12)">
           <i data-lucide="minus"></i>
@@ -10564,7 +10574,13 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
         <div class="fv-card-name">${esc(res.name)}</div>
         ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
         <div class="fv-card-footer">
-          <span style="font-size:10px;color:#9ca3af;">${stepCount} step${stepCount!==1?'s':''}</span>
+          <span class="fv-step-count-btn"
+              onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
+              title="Toggle steps">
+          <i data-lucide="${OL._fv._expandedCards?.has(res.id) ? 'chevron-up' : 'chevron-down'}"
+             style="width:10px;height:10px;"></i>
+          ${stepCount} step${stepCount!==1?'s':''}
+          </span>
           <div style="display:flex;gap:4px;align-items:center;">
             ${isGlobal ? `
               <span class="fv-global-card-badge">
@@ -10575,10 +10591,90 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
                            background:rgba(61,217,197,0.1);color:#3dd9c5;font-weight:700;">λ</span>
               ` : ''}
           </div>
+          // ADD inside _fvBuildCard, after the footer div:
+            ${(OL._fv.stepsExpanded || OL._fv._expandedCards?.has(res.id)) && stepCount > 0 ? `
+              <div class="fv-card-steps-preview">
+                ${(res.steps || []).map((s, i) => {
+                  const hasLogicOut = (s.logic?.out || []).some(l => l.targetId);
+                  const hasLogicIn  = (s.logic?.in  || []).length > 0;
+                  const appLabel    = s.appName ? `<span class="fv-card-step-app">${esc(s.appName.substring(0,10))}</span>` : '';
+                  const logicIcon   = hasLogicOut ? `<span style="color:#3dd9c5;font-size:9px;font-weight:700;">λ</span>` : '';
+                  return `
+                    <div class="fv-card-step-row"
+                         onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}');">
+                      <span class="fv-card-step-num-sm">${i+1}</span>
+                      <span class="fv-card-step-name">${esc(s.name || 'Unnamed')}</span>
+                      ${appLabel}
+                      ${logicIcon}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : ''}
         </div>
       </div>
     </div>
   `;
+};
+
+OL._fvToggleCardSteps = function(resId) {
+  if (!OL._fv._expandedCards) OL._fv._expandedCards = new Set();
+
+  if (OL._fv._expandedCards.has(resId)) {
+    OL._fv._expandedCards.delete(resId);
+  } else {
+    OL._fv._expandedCards.add(resId);
+  }
+
+  // Surgical re-render of just this card
+  const data = OL.getCurrentProjectData();
+  const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
+  const res = resources.find(r => String(r.id) === resId);
+  if (!res) return;
+
+  const cardEl = document.getElementById(`fv-card-${resId}`);
+  if (!cardEl) return;
+
+  const isExpanded = OL._fv._expandedCards.has(resId);
+  const tc = OL._fvGetType(res.type);
+
+  // Just update the steps preview section
+  let preview = cardEl.querySelector('.fv-card-steps-preview');
+  if (isExpanded && (res.steps || []).length > 0) {
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.className = 'fv-card-steps-preview';
+      cardEl.querySelector('.fv-card-body').appendChild(preview);
+    }
+    preview.innerHTML = (res.steps || []).map((s, i) => {
+      const appLabel  = s.appName ? `<span class="fv-card-step-app">${esc(s.appName.substring(0,10))}</span>` : '';
+      const logicIcon = (s.logic?.out||[]).some(l=>l.targetId)
+        ? `<span style="color:#3dd9c5;font-size:9px;font-weight:700;">λ</span>` : '';
+      return `
+        <div class="fv-card-step-row"
+             onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}');">
+          <span class="fv-card-step-num-sm">${i+1}</span>
+          <span class="fv-card-step-name">${esc(s.name||'Unnamed')}</span>
+          ${appLabel}${logicIcon}
+        </div>
+      `;
+    }).join('');
+  } else if (preview) {
+    preview.remove();
+  }
+
+  // Update chevron
+  const countBtn = cardEl.querySelector('.fv-step-count-btn');
+  if (countBtn) {
+    const icon = countBtn.querySelector('i');
+    if (icon) {
+      icon.setAttribute('data-lucide', isExpanded ? 'chevron-up' : 'chevron-down');
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  // Re-sync rail heights since card height changed
+  OL._fvSyncRailHeights();
 };
 
 OL._fvRenderSteps = function(resources) {
@@ -11330,11 +11426,13 @@ OL._fvSetupRailScroll = function() {
 };
 
 OL._fvHandleCanvasClick = function(e) {
-  // Only close if clicking the bare canvas background
-  if (e.target.id === 'fv-canvas-wrap' ||
-      e.target.id === 'fv-canvas'      ||
-      e.target.id === 'fv-content'     ||
-      e.target.classList.contains('fv-swimlane')) {
+  // Close if clicking anything that isn't a card, step, button or inspector
+  const isCard     = e.target.closest('.fv-card, .fv-step-card, .fv-list-item, .fv-global-chip');
+  const isBtn      = e.target.closest('button, select, input, a');
+  const isInspector = e.target.closest('#v2-inspector-panel');
+  const isWb       = e.target.closest('#fv-wb-rail, #fv-wb-drawer');
+
+  if (!isCard && !isBtn && !isInspector && !isWb) {
     document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
       .forEach(el => el.classList.remove('selected'));
     const panel = document.getElementById('v2-inspector-panel');
@@ -11372,45 +11470,155 @@ OL._fvBuildListShell = function(stages, resources) {
     displayStages.push({ id: '__none__', name: 'Unassigned' });
   }
 
-  const stagesHtml = displayStages.map((stage, si) => {
-    if (filter && stage.id !== filter) return '';
-
-    const stageRes = (byStage[stage.id] || []);
-    if (stageRes.length === 0) return '';
-
-    // Flatten all steps from all resources in this stage, preserving resource context
-    // Each item: { step, res, stepIdx }
-    const allSteps = [];
-    stageRes.forEach(res => {
-      (res.steps || []).forEach((step, stepIdx) => {
-        allSteps.push({ step, res, stepIdx });
-      });
-    });
-
-    const stepsHtml = allSteps.map(({ step, res, stepIdx }) => {
-      return OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0);
+  // REPLACE the allSteps build section inside _fvBuildListShell:
+    const stagesHtml = displayStages.map((stage, si) => {
+      if (filter && stage.id !== filter) return '';
+      const stageRes = (byStage[stage.id] || []);
+      if (stageRes.length === 0) return '';
+    
+      // Build steps grouped by resource, with a clickable resource header
+      const stepsHtml = stageRes.map(res => {
+        const tc = OL._fvGetType(res.type);
+        const steps = res.steps || [];
+    
+        const resHeader = `
+          <div class="fv-list-res-header"
+               onclick="event.stopPropagation(); OL._fvOpenStepsList('${res.id}');">
+            <div class="fv-list-type-dot" style="background:${tc.color};margin-top:0;"></div>
+            <span class="fv-list-res-header-name">${esc(res.name)}</span>
+            <span class="fv-list-res-header-type" style="color:${tc.color};">${esc(res.type||'')}</span>
+            <span class="fv-list-res-header-count">${steps.length} steps</span>
+            <i data-lucide="chevron-right" style="width:11px;height:11px;color:#9ca3af;margin-left:auto;"></i>
+          </div>
+        `;
+    
+        const stepRows = steps.map((step, stepIdx) =>
+          OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
+        ).join('');
+    
+        return resHeader + (stepRows ? `<div class="fv-list-steps">${stepRows}</div>` : '');
+      }).join('');
+    
+      const totalSteps = stageRes.reduce((acc, r) => acc + (r.steps||[]).length, 0);
+    
+      return `
+        <div class="fv-list-stage">
+          <div class="fv-list-stage-header">
+            <div class="fv-list-stage-num">${si + 1}</div>
+            <div class="fv-list-stage-name">${esc(stage.name)}</div>
+            <div class="fv-list-stage-line"></div>
+            <div class="fv-list-stage-count">${totalSteps} steps</div>
+          </div>
+          ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
+        </div>
+      `;
     }).join('');
-
-    return `
-      <div class="fv-list-stage">
-        <div class="fv-list-stage-header">
-          <div class="fv-list-stage-num">${si + 1}</div>
-          <div class="fv-list-stage-name">${esc(stage.name)}</div>
-          <div class="fv-list-stage-line"></div>
-          <div class="fv-list-stage-count">${allSteps.length} steps</div>
-        </div>
-        <div class="fv-list-steps">
-          ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet — add steps to resources in this stage.</div>'}
-        </div>
-      </div>
-    `;
-  }).join('');
 
   return `
     <div id="fv-list-wrap">
       ${stagesHtml || '<div class="fv-loading-state"><i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i><span>No stages or steps found. Assign resources to stages via the inspector.</span></div>'}
     </div>
   `;
+};
+
+OL._fvOpenStepsList = function(resId) {
+  const data = OL.getCurrentProjectData();
+  const res  = (data.resources||[]).find(r => String(r.id) === resId);
+  if (!res) return;
+
+  const panel  = document.getElementById('v2-inspector-panel');
+  const content = document.getElementById('inspector-content');
+  if (!panel || !content) return;
+
+  panel.classList.add('open');
+  const tc = OL._fvGetType(res.type);
+
+  const stepsHtml = (res.steps || []).length > 0
+    ? (res.steps).map((s, i) => {
+        const hasLogic = (s.logic?.out||[]).some(l=>l.targetId);
+        const appBadge = s.appName
+          ? `<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:99px;
+                          background:rgba(61,217,197,0.1);color:#3dd9c5;">
+               ${esc(s.appName.substring(0,12))}
+             </span>`
+          : '';
+        const assignees = (s.assignees||[]).slice(0,2).map(a =>
+          `<span style="font-size:9px;padding:2px 6px;border-radius:99px;
+                        background:#f5f6f8;color:#6b7280;font-weight:600;">
+             ${esc(a.name.substring(0,10))}
+           </span>`
+        ).join('');
+
+        return `
+          <div style="display:flex;align-items:flex-start;gap:8px;
+                      padding:10px 12px;border-bottom:1px solid #f3f4f6;
+                      cursor:pointer;transition:background 0.12s;"
+               onmouseenter="this.style.background='#fafafa'"
+               onmouseleave="this.style.background=''"
+               onclick="OL.openInspector('${res.id}','${s.id}')">
+            <span style="width:18px;height:18px;border-radius:99px;
+                         background:${tc.color}18;color:${tc.color};
+                         font-size:9px;font-weight:800;display:flex;
+                         align-items:center;justify-content:center;
+                         flex-shrink:0;font-family:'Nunito Sans',sans-serif;">
+              ${i+1}
+            </span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:600;color:#1b2d3f;
+                          line-height:1.35;margin-bottom:4px;">
+                ${esc(s.name||'Unnamed Step')}
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;">
+                ${appBadge}${assignees}
+                ${hasLogic ? `<span style="font-size:9px;font-weight:700;
+                                           color:#3dd9c5;">λ logic</span>` : ''}
+              </div>
+            </div>
+            <i data-lucide="chevron-right"
+               style="width:12px;height:12px;color:#d1d5db;flex-shrink:0;margin-top:2px;">
+            </i>
+          </div>
+        `;
+      }).join('')
+    : `<div style="padding:20px;text-align:center;color:#9ca3af;
+                   font-size:12px;font-style:italic;">
+         No steps yet
+       </div>`;
+
+  content.innerHTML = `
+    <div style="border-bottom:1px solid #e5e7eb;padding:14px 16px;
+                display:flex;align-items:center;gap:8px;">
+      <div style="width:28px;height:28px;border-radius:8px;
+                  background:${tc.color}18;display:flex;
+                  align-items:center;justify-content:center;
+                  font-size:10px;font-weight:800;color:${tc.color};
+                  font-family:'Nunito Sans',sans-serif;flex-shrink:0;">
+        ${tc.abbr}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:#1b2d3f;">
+          ${esc(res.name)}
+        </div>
+        <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;
+                    letter-spacing:0.06em;font-weight:600;">
+          ${esc(res.type||'')} · ${(res.steps||[]).length} steps
+        </div>
+      </div>
+      <button onclick="OL.openInspector('${res.id}',null,'cards')"
+              style="font-size:10px;font-weight:600;padding:5px 8px;
+                     border:1px solid #e5e7eb;border-radius:6px;
+                     background:none;cursor:pointer;color:#6b7280;
+                     white-space:nowrap;"
+              title="Edit resource">
+        Edit ⚙️
+      </button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      ${stepsHtml}
+    </div>
+  `;
+
+  if (window.lucide) lucide.createIcons();
 };
 
 OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth) {
