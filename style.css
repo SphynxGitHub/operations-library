@@ -5405,13 +5405,19 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 #fv-lane-rail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
 
 .fv-lane-label {
-  display: flex; align-items: center; gap: 10px;
-  padding: 0 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
-  cursor: pointer; transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  cursor: default;
   position: relative;
+  transition: background 0.15s;
 }
-.fv-lane-label:hover { background: rgba(255,255,255,0.05); }
+.fv-lane-label:hover { background: rgba(255,255,255,0.04); }
 .fv-lane-label.active { background: rgba(61,217,197,0.08); }
+
+.fv-lane-label-body { flex: 1; min-width: 0; padding: 10px 0; }
 .fv-lane-accent {
   width: 3px; border-radius: 0 3px 3px 0;
   background: transparent; position: absolute;
@@ -5425,6 +5431,82 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 }
 .fv-lane-label.active .fv-lane-label-inner { color: #3dd9c5; }
 .fv-lane-count { font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 2px; }
+
+
+.fv-lane-name-text {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: rgba(255,255,255,0.45); line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fv-lane-label.active .fv-lane-name-text { color: #3dd9c5; }
+
+.fv-lane-name-input {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(61,217,197,0.4);
+  border-radius: 4px;
+  color: #fff; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 6px; width: 100%; outline: none;
+  font-family: inherit;
+}
+
+.fv-lane-actions {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.fv-lane-label:hover .fv-lane-actions { display: flex; }
+
+.fv-lane-action-btn {
+  width: 20px; height: 20px;
+  border: none; background: rgba(255,255,255,0.08);
+  border-radius: 4px; cursor: pointer;
+  color: rgba(255,255,255,0.4);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.fv-lane-action-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.fv-lane-action-btn i, .fv-lane-action-btn svg { width: 10px; height: 10px; pointer-events: none; }
+
+/* ── GLOBAL RESOURCE CHIP (collapsed state) ── */
+.fv-global-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 9px; border-radius: 8px;
+  background: #fff; border: 1px solid #e5e7eb;
+  font-size: 11px; font-weight: 500; color: #6b7280;
+  cursor: pointer; flex-shrink: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative; z-index: 6;
+}
+.fv-global-chip:hover {
+  border-color: #7c3aed;
+  box-shadow: 0 2px 8px rgba(124,58,237,0.15);
+  color: #7c3aed;
+}
+.fv-global-chip-icon {
+  width: 16px; height: 16px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 7px; font-weight: 800; color: #fff; flex-shrink: 0;
+  font-family: 'Nunito Sans', sans-serif;
+}
+.fv-global-chip-count {
+  font-size: 9px; font-weight: 700;
+  padding: 1px 5px; border-radius: 99px;
+  background: rgba(124,58,237,0.1); color: #7c3aed;
+  margin-left: 2px;
+}
+
+/* Full card global badge */
+.fv-global-card-badge {
+  font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 999px;
+  background: rgba(124,58,237,0.1); color: #7c3aed;
+  border: 1px solid rgba(124,58,237,0.2);
+}
+
 
 /* ── CANVAS WRAP ── */
 #fv-canvas-wrap {
@@ -5453,17 +5535,37 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   pointer-events: none; z-index: 5; overflow: visible;
 }
 
+.fv-toggle-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 10px; border-radius: 8px;
+  font-size: 11px; font-weight: 600; font-family: inherit;
+  cursor: pointer; border: 1px solid #e5e7eb;
+  background: transparent; color: #6b7280;
+  transition: all 0.15s; white-space: nowrap;
+}
+.fv-toggle-btn.on {
+  background: rgba(124,58,237,0.08);
+  border-color: rgba(124,58,237,0.3);
+  color: #7c3aed;
+}
+.fv-toggle-btn i, .fv-toggle-btn svg { width: 12px; height: 12px; pointer-events: none; }
+
 /* ════════════════════════════════
    FLOWCHART VIEW
    ════════════════════════════════ */
 
 .fv-swimlane {
-  display: flex; align-items: flex-start;
-  padding: 20px 24px; gap: 16px;
-  min-height: 140px; border-bottom: 1px solid #e5e7eb;
-  position: relative; flex-wrap: wrap;
+  display: flex;
+  align-items: flex-start;
+  padding: 16px 20px;
+  gap: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  position: relative;
+  flex-wrap: wrap;
+  /* No min-height — let content drive height */
 }
-.fv-swimlane:nth-child(even) { background: rgba(0,0,0,0.015); }
+.fv-swimlane:nth-child(odd)  { background: #f5f6f8; }
+.fv-swimlane:nth-child(even) { background: #f0f2f5; }
 
 /* ── NODE CARDS ── */
 .fv-card {
