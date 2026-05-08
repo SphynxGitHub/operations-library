@@ -9972,286 +9972,6 @@ document.addEventListener('mousedown', (e) => {
 
 OL.state.v2.viewDepth = 'resource'; // Options: 'resource' (current) or 'step' (broken out)
 
-/*OL.renderVisualizer = function() {
-    const mainArea = document.getElementById('mainContent');
-    if (!mainArea) return;
-
-    const client = getActiveClient();
-    if (!client) return; 
-
-    const data = OL.getCurrentProjectData();
-    const stages = data.stages || [];
-    const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
-
-    // 🏷️ 1. SETUP UI STATE & TOKENS
-    const depth = OL.state.v2.viewDepth || 'resource';
-    const isAnyExpanded = resources.some(r => r.isExpanded);
-    const trayOpen = state.ui.sidebarOpen !== false;
-    const traySearch = document.getElementById('tray-search-input')?.value.toLowerCase() || "";
-
-    // Extract Unique Values for Filter Dropdowns
-    const types = [...new Set(resources.map(r => r.type))].filter(Boolean).sort();
-    const apps = [...new Set(client?.projectData?.localApps || [])].map(a => a.name).sort();
-    const assignees = [...new Set([
-        ...resources.map(r => r.assigneeName),
-        ...resources.flatMap(r => (r.steps || []).map(s => s.assigneeName))
-    ])].filter(Boolean).sort();
-
-    // 🏗️ 2. BUILD THE UI OVERLAY & VIEWPORT
-    if (!document.getElementById('v2-viewport')) {
-        mainArea.innerHTML = `
-            <div class="v2-ui-overlay">
-                <div class="v2-master-toolbar">
-                    <div class="v2-toolbar">
-                        <div class="canvas-search-wrap">
-                            <span class="search-icon" style="color:#a3a3a3; font-size:13px;">⌕</span>
-                            <input class="v2-search-input" type="text" id="canvas-filter-input" 
-                                placeholder="Search map..." 
-                                oninput="OL.syncCanvasFilters(this.value)">
-                        </div>
-                        <div class="v2-search-nav" id="search-nav-controls">
-                            <button class="btn tiny soft" onclick="OL.centerPrevCanvasMatch()">◀</button>
-                            <span id="canvas-match-count" class="tiny muted">0/0</span>
-                            <button class="btn tiny soft" onclick="OL.centerNextCanvasMatch()">▶</button>
-                            <button class="btn tiny danger soft" onclick="OL.clearAllFilters()">✕</button>
-                        </div>
-                        <button id="filter-menu-btn" class="btn tiny soft" onclick="OL.toggleFilterMenu(event)">
-                            <i data-lucide="sliders-horizontal" style="width:13px;height:13px;"></i>
-                            Filter 
-                            <span id="active-filter-count" class="pill tiny accent" style="display:none;">0</span>
-                        </button>
-                         <div class="divider-v"></div>
-                        <button class="btn primary tiny" onclick="OL.addNewResourceToCanvas()">
-                             <i data-lucide="plus" style="width:13px;height:13px;"></i>
-                            Add Resource
-                        </button>
-                        <button class="btn soft tiny" onclick="OL.autoAlignNodes()" title="Tidy Layout">
-                            <i data-lucide="align-justify" style="width:13px;height:13px;"></i>
-                        </button>
-                        <button class="btn soft tiny" onclick="OL.toggleWorkbenchTray()" title="Toggle Sidebar">
-                             <i data-lucide="panel-left" style="width:13px;height:13px;"></i>
-                        </button>
-                        <button class="btn soft tiny" onclick="OL.toggleMasterExpand()" title="Expand All">
-                            <i data-lucide="${isAnyExpanded ? 'folder-open' : 'folder'}" style="width:13px;height:13px;"></i>
-                        </button>
-                        <button class="btn tiny ${depth === 'step' ? 'accent' : 'soft'}" 
-                                onclick="OL.state.v2.viewDepth = (OL.state.v2.viewDepth === 'step' ? 'resource' : 'step'); OL.renderVisualizer();">
-                             <i data-lucide="${depth === 'step' ? 'layout-grid' : 'list'}" style="width:13px;height:13px;"></i>
-                             ${depth === 'step' ? 'Cards' : 'Steps'}
-                        </button>
-                        <div class="divider-v"></div>
-                        <button class="btn soft tiny" onclick="OL.zoom(0.1)">
-                             <i data-lucide="zoom-in" style="width:13px;height:13px;"></i>
-                        </button>
-                        <button class="btn soft tiny" onclick="OL.zoom(-0.1)">
-                            <i data-lucide="zoom-out" style="width:13px;height:13px;"></i>
-                        </button>
-                    </div>
-                </div>
-                <div id="v2-filter-submenu" class="v2-toolbar context-menu" style="display: none; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
-                    <select id="filter-type" class="tiny-select" onchange="OL.syncCanvasFilters()">
-                        <option value="">All Types</option>
-                        ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
-                    </select>
-                    <select id="filter-app" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">
-                        All Apps</option>${apps.map(a => `<option value="${a}">${a}</option>`).join('')}
-                    </select>
-                    <select id="filter-scoped" class="tiny-select" onchange="OL.syncCanvasFilters()"><option value="">
-                        All Scoping</option><option value="scoped">Scoped ($)</option><option value="unscoped">Unscoped</option>
-                    </select>
-                </div>
-            </div>
-            <div id="v2-viewport" class="${trayOpen ? '' : 'tray-closed'}">
-                <aside id="global-shelf" class="global-shelf-container">
-                    <div class="global-shelf-label">GLOBAL RESOURCES</div>
-                    <div id="shelf-contents"></div>
-                </aside>
-                <div id="v2-main-content">
-                    <aside id="v2-workbench-sidebar">
-                        ${OL.renderWorkbenchTabs()}
-                        <div id="workbench-contents" class="workbench-contents"></div>
-                    </aside>
-                    <div id="v2-workspace">
-                        <div id="v2-canvas-scroll-wrap">
-                            <div id="v2-canvas" ondragover="event.preventDefault()" ondrop="OL.handleCanvasDrop(event)">
-                                <div id="v2-stage-layer"></div>
-                                <div id="v2-node-layer"></div>
-                                <svg id="v2-connections"><defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7 Z" fill="var(--accent)" /></marker></defs><g id="line-group"></g></svg>
-                            </div>
-                        </div>
-                    </div>
-                    <aside id="v2-inspector-panel"><div id="inspector-content"></div></aside>
-                </div>
-            </div>`;
-    }
-
-    // 📐 3. DOM & DATA CLEANUP
-    const nodeLayer = document.getElementById('v2-node-layer');
-    const stageLayer = document.getElementById('v2-stage-layer');
-    const shelfContents = document.getElementById('shelf-contents');
-    const workbenchContents = document.getElementById('workbench-contents');
-    const canvas = document.getElementById('v2-canvas');
-    [shelfContents, workbenchContents, nodeLayer, stageLayer].forEach(el => { if(el) el.innerHTML = ''; });
-
-    const milestoneIds = new Set();
-    resources.forEach(r => (r.steps || []).forEach(s => { if (s.targetResourceId) milestoneIds.add(String(s.targetResourceId)); }));
-
-    // --- 📁 4. RENDER STAGES ---
-    stages.forEach((s, idx) => {
-        const inserter = document.createElement('div');
-        inserter.className = 'stage-inserter-v2';
-        inserter.style.top = `${(s.yPos || 0) - 40}px`; 
-        inserter.innerHTML = `<button class="add-stage-btn-v2" onclick="event.stopPropagation(); OL.insertStage(${idx})">+</button>`;
-        stageLayer.appendChild(inserter);
-
-        const div = document.createElement('div');
-        div.className = 'v2-stage-divider';
-        div.style.top = `${s.yPos || 0}px`; 
-        div.innerHTML = `
-            <div class="stage-label-bar-v2">
-                <div class="stage-index-v2" style="background:var(--accent); color:black; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:10px;">${idx + 1}</div>
-                <input type="text" class="stage-name-input-v2" value="${esc(s.name)}" onchange="OL.renameStage('${s.id}', this.value)" />
-                <button class="stage-delete-btn-v2" onclick="event.stopPropagation(); OL.deleteStage('${s.id}')">×</button>
-            </div>`;
-        stageLayer.appendChild(div);
-    });
-
-    // --- 📇 5. PREPARE NODES ---
-    let itemsToRender = [];
-    if (depth === 'step') {
-        resources.filter(r => !r.isGlobal && r.coords).forEach(res => {
-            (res.steps || []).forEach((step, i) => {
-                itemsToRender.push({ ...step, isAtomicStep: true, parentResId: res.id, parentResName: res.name, renderX: res.coords.x, renderY: res.coords.y + (i * 130) });
-            });
-        });
-    } else {
-        itemsToRender = resources.map(r => ({ ...r, isAtomicStep: false, renderX: r.coords?.x || 0, renderY: r.coords?.y || 0 }));
-    }
-
-    // --- 🎨 6. THE RENDER LOOP ---
-    itemsToRender.forEach(node => {
-        const div = document.createElement('div');
-        const isFocused = OL.focusedResourceId === String(node.isAtomicStep ? node.parentResId : node.id);
-
-        if (node.isAtomicStep) {
-            // 🧩 ATOMIC STEP NODE
-            div.id = `v2-step-node-${node.id}`;
-            div.className = `v2-step-node-card ${isFocused ? 'focused-node' : ''}`;
-            div.style.left = `${node.renderX}px`; div.style.top = `${node.renderY}px`;
-            div.innerHTML = `
-                <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${node.parentResId}', '${node.id}')">
-                    <div class="header-row-content">
-                        <small style="display:block; font-size:8px; opacity:0.5; color:var(--accent); text-transform:uppercase;">${esc(node.parentResName)}</small>
-                        <b class="res-name-text" style="font-size:11px;">${esc(node.name)}</b>
-                        <div class="header-badges-wrap"><span class="pill tiny soft" style="font-size:8px;">${node.appName || 'Auto'}</span></div>
-                    </div>
-                </div>`;
-        } else {
-            // 📇 FULL RESOURCE CARD
-            const res = node;
-            const isMilestone = milestoneIds.has(String(res.id));
-            const isExpanded = res.isExpanded || false;
-            const isInScope = !!OL.isResourceInScope(res.id);
-            const hasLogic = (res.steps || []).some(s => (s.logic?.in?.length > 0) || (s.logic?.out?.length > 0));
-            
-            div.id = `v2-node-${res.id}`;
-            div.className = `v2-node-card resource-card ${res.isGlobal ? 'on-shelf' : ''} ${isExpanded ? 'is-expanded' : ''} ${isMilestone ? 'is-milestone' : ''} ${isFocused ? 'focused-node' : (OL.focusedResourceId ? 'node-dimmed' : '')}`;
-            if (!res.isGlobal && res.coords) { div.style.left = `${res.renderX}px`; div.style.top = `${res.renderY}px`; }
-
-            div.innerHTML = `
-                <div class="v2-node-header" onclick="event.stopPropagation(); OL.openInspector('${res.id}', null, 'cards')">
-                    <div class="header-row-content">
-                        <b class="res-name-text">${esc(res.name)}</b>
-                        <div class="header-badges-wrap">
-                            <small class="tiny muted uppercase type-badge">${esc(res.type || 'Resource')}</small>
-                            ${OL.getPartNumberHtml ? OL.getPartNumberHtml(res) : ''}
-                            <a href="#/scoping-sheet?focus=${res.id}" class="v2-scope-badge ${isInScope ? 'is-on' : 'is-off'}" onclick="event.stopPropagation();">$</a>
-                            <div class="v2-logic-trigger-wrap" style="position: relative; display: inline-block;">
-                                <button class="v2-logic-badge ${hasLogic ? 'has-logic': ''}" onclick="event.stopPropagation(); OL.toggleLogicMenu('${res.id}')">λ</button>
-                                <div id="logic-menu-${res.id}" class="v2-logic-menu">
-                                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'in')">📥 Show Inputs</div>
-                                    <div class="dropdown-item" onclick="OL.setTraceMode('${res.id}', 'out')">📤 Show Outputs</div>
-                                    <div class="dropdown-item danger" onclick="OL.setTraceMode(null, null)">🚫 Hide All</div>
-                                </div>
-                            </div>
-                            <div class="v2-duplicate-badge action-duplicate" data-id="${res.id}" onclick="event.stopPropagation(); OL.duplicateResourceV2('${res.id}')">⿻</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="v2-steps-preview" style="display: ${isExpanded ? 'flex' : 'none'}">
-                    ${(res.steps || []).map((s, i) => {
-                        const sAssignees = s.assignees || [];
-                        const hasTeam = sAssignees.some(a => a.type === "person" || (a.type === "role" && !a.name.includes("Client")));
-                        const hasClient = sAssignees.some(a => a.name.includes("Client"));
-                        let bStyle = hasTeam ? "2px solid #22c55e" : hasClient ? "2px solid #fbbf24" : "1px solid transparent";
-                        const iconName = OL.getStepIcon(s);
-                        return `
-                            <div class="v2-step-item" style="border: ${bStyle};" onclick="event.stopPropagation(); OL.openInspector('${res.id}', '${s.id}')">
-                                <span class="step-port port-in" id="port-in-${res.id}-${s.id}"></span>
-                                <span class="step-port port-out" id="port-out-${res.id}-${s.id}"></span>
-                                <div class="step-row-content">
-                                    <span class="drag-handle" draggable="true" ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})">⠿</span>
-                                    <span style="flex: 1; font-size: 11px;">
-                                        <i data-lucide="${iconName}" style="width:12px; height:12px; margin-right:6px; color:var(--accent);"></i>
-                                        ${esc(s.name)}
-                                    </span>
-                                    <span class="delete-step-btn" onclick="event.stopPropagation(); OL.deleteStep('${res.id}', ${i})">✕</span>
-                                </div>
-                            </div>
-                            ${i < res.steps.length - 1 ? `
-                                <div class="v2-step-divider" onclick="event.stopPropagation(); OL.splitCardAtStep('${res.id}', ${i})">
-                                    <div class="split-icon">✂️</div>
-                                </div>` : ''}
-                        `;
-                    }).join('')}
-                </div>
-                <div class="v2-card-footer">
-                    <button class="v2-add-step-btn" onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">+ Add Step</button>
-                    <div class="v2-step-badge" onclick="event.stopPropagation(); OL.toggleSteps('${res.id}')">
-                        ${(res.steps || []).length} Steps ${isExpanded ? '▴' : '▾'}
-                    </div>
-                </div>`;
-        }
-
-        div.onmousedown = (e) => {
-            if (e.target.closest('.v2-logic-badge, .v2-scope-badge, .v2-step-badge, .v2-step-item, .v2-logic-menu, .v2-add-step-btn, .v2-step-divider, .action-duplicate')) return;
-            e.stopPropagation();
-            OL.initWBMotion(e, node.isAtomicStep ? node.parentResId : node.id);
-        };
-
-        if (!node.isAtomicStep && node.isGlobal && node.isTopShelf) shelfContents.appendChild(div);
-        else if (node.renderX || node.coords) nodeLayer.appendChild(div);
-    });
-
-    // --- 🏁 7. FINAL INSERTER & VIEW SYNC ---
-    const lastStage = stages[stages.length - 1];
-    const lastY = lastStage ? (lastStage.yPos || 0) + 400 : 400;
-    const finalInserter = document.createElement('div');
-    finalInserter.className = 'stage-inserter-v2';
-    finalInserter.style.top = `${lastY}px`;
-    finalInserter.style.left = `10px`;
-    finalInserter.innerHTML = `<button class="add-stage-btn-v2" style="width: auto; padding: 0 15px; border-radius: 20px;" onclick="event.stopPropagation(); OL.insertStage(${stages.length})">+ ADD FINAL STAGE</button>`;
-    stageLayer.appendChild(finalInserter);
-
-    if (OL.state.v2.pan && canvas) canvas.style.transform = `translate3d(${OL.state.v2.pan.x}px, ${OL.state.v2.pan.y}px, 0) scale(${OL.state.v2.zoom})`;
-    
-    OL.renderFocusControls();
-    OL.renderWorkbenchItemsOnly();
-    OL.drawConnections();
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
-    
-    // Force toolbar button style recalculation
-    const toolbarButtons = document.querySelectorAll('.v2-toolbar .btn');
-    toolbarButtons.forEach(btn => {
-        // This forces the browser to re-check the CSS variables
-        btn.style.display = 'none';
-        btn.offsetHeight; // trigger reflow
-        btn.style.display = '';
-    });
-};*/
-
 // ── TYPE CONFIG ───────────────────────────────────────────
 OL._fvTypes = {
   'Workflow':       { color: '#1b2d3f', abbr: 'WF' },
@@ -10341,6 +10061,13 @@ OL.renderVisualizer = function() {
             </option>`).join('')}
         </select>
 
+        <button class="fv-toggle-btn ${OL._fv.globalsExpanded ? 'on' : ''}"
+                onclick="OL._fv.globalsExpanded = !OL._fv.globalsExpanded; OL.renderVisualizer();"
+                title="${OL._fv.globalsExpanded ? 'Collapse global resources' : 'Expand global resources'}">
+          <i data-lucide="globe"></i>
+          Globals ${OL._fv.globalsExpanded ? 'On' : 'Off'}
+        </button>
+
         ${OL._fv.layout === 'flowchart' ? `
           <button class="fv-btn fv-icon ${OL._fv.showConnections ? 'fv-active' : ''}"
                   onclick="OL.fvToggleConnections()" title="Toggle connections">
@@ -10385,29 +10112,83 @@ OL.renderVisualizer = function() {
 // ══════════════════════════════════════════════
 
 OL._fvBuildFlowchartShell = function(stages, resources) {
-  const filter = OL._fv.stageFilter;
+  const filter   = OL._fv.stageFilter;
+  const expanded = OL._fv.globalsExpanded || false;
 
+  // Build stageId → resources map
   const byStage = {};
   stages.forEach(s => byStage[s.id] = []);
   byStage['__none__'] = [];
-  resources.forEach(r => {
-    if (r.isGlobal && r.isTopShelf) return;
-    const key = r.stageId && byStage[r.stageId] !== undefined ? r.stageId : '__none__';
-    byStage[key].push(r);
-  });
 
-  const displayStages = [...stages];
-  if (byStage['__none__'].length > 0) {
-    displayStages.push({ id: '__none__', name: 'Unassigned' });
-  }
-
-  // Global resources (appear in multiple stages)
   const globalResources = resources.filter(r => r.isGlobal);
   const globalIds = new Set(globalResources.map(r => String(r.id)));
 
+  // Non-global resources → assigned to their stage
+  resources.forEach(r => {
+    if (globalIds.has(String(r.id))) return; // handled separately
+    const key = r.stageId && byStage[r.stageId] !== undefined
+      ? r.stageId : '__none__';
+    byStage[key].push(r);
+  });
+
+  // Global resources → inject into every stage that references them
+  // A stage "references" a global if any non-global resource in that
+  // stage has a step.logic.out pointing to the global, or vice versa
+  const stageGlobalMap = {}; // stageId → Set of globalIds used
+  stages.forEach(s => stageGlobalMap[s.id] = new Set());
+  stageGlobalMap['__none__'] = new Set();
+
+  resources.forEach(r => {
+    if (globalIds.has(String(r.id))) return;
+    const key = r.stageId && stageGlobalMap[r.stageId] !== undefined
+      ? r.stageId : '__none__';
+    (r.steps || []).forEach(step => {
+      (step.logic?.out || []).forEach(out => {
+        if (!out.targetId) return;
+        const lastH = String(out.targetId).lastIndexOf('-');
+        if (lastH === -1) return;
+        const tResId = out.targetId.substring(0, lastH);
+        if (globalIds.has(tResId)) stageGlobalMap[key].add(tResId);
+      });
+    });
+  });
+
+  // Also check globals pointing INTO non-globals
+  globalResources.forEach(gr => {
+    (gr.steps || []).forEach(step => {
+      (step.logic?.out || []).forEach(out => {
+        if (!out.targetId) return;
+        const lastH = String(out.targetId).lastIndexOf('-');
+        if (lastH === -1) return;
+        const tResId = out.targetId.substring(0, lastH);
+        const tRes = resources.find(r => String(r.id) === tResId);
+        if (tRes && !globalIds.has(tResId)) {
+          const key = tRes.stageId && stageGlobalMap[tRes.stageId] !== undefined
+            ? tRes.stageId : '__none__';
+          stageGlobalMap[key].add(String(gr.id));
+        }
+      });
+    });
+  });
+
+  const displayStages = [...stages];
+  if (byStage['__none__'].length > 0 || stageGlobalMap['__none__']?.size > 0) {
+    displayStages.push({ id: '__none__', name: 'Unassigned' });
+  }
+
+  // Count how many stages each global appears in
+  const globalStageCount = {};
+  globalResources.forEach(gr => {
+    let count = 0;
+    Object.values(stageGlobalMap).forEach(set => {
+      if (set.has(String(gr.id))) count++;
+    });
+    globalStageCount[String(gr.id)] = count;
+  });
+
   let globalCardNum = 0;
   let lanesHtml = '';
-  let railHtml = '';
+  let railHtml  = '';
 
   displayStages.forEach((stage, si) => {
     if (filter && stage.id !== filter) return;
@@ -10415,79 +10196,74 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     const stageRes = (byStage[stage.id] || [])
       .sort((a, b) => (a.coords?.x || 0) - (b.coords?.x || 0));
 
-    const count = stageRes.length;
+    const stageGlobals = [...(stageGlobalMap[stage.id] || new Set())]
+      .map(gid => globalResources.find(r => String(r.id) === gid))
+      .filter(Boolean);
 
+    const totalCount = stageRes.length + stageGlobals.length;
+
+    // ── RAIL LABEL ────────────────────────────────────
     railHtml += `
       <div class="fv-lane-label ${!filter || filter === stage.id ? 'active' : ''}"
-           id="fv-rail-${stage.id}"
-           onclick="OL._fv.stageFilter = OL._fv.stageFilter === '${stage.id}' ? '' : '${stage.id}'; OL.renderVisualizer();">
+           id="fv-rail-${stage.id}">
         <div class="fv-lane-accent"></div>
-        <div>
-          <div class="fv-lane-label-inner">${esc(stage.name)}</div>
-          <div class="fv-lane-count">${count} resource${count !== 1 ? 's' : ''}</div>
+        <div class="fv-lane-label-body">
+          <div class="fv-lane-name-text"
+               id="fv-lane-name-${stage.id}">${esc(stage.name)}</div>
+          <div class="fv-lane-count">${totalCount} resource${totalCount !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="fv-lane-actions">
+          <button class="fv-lane-action-btn"
+                  title="Edit name"
+                  onclick="event.stopPropagation(); OL._fvEditStageName('${stage.id}')">
+            <i data-lucide="pencil"></i>
+          </button>
+          <button class="fv-lane-action-btn"
+                  title="Jump to stage"
+                  onclick="event.stopPropagation(); OL._fvJumpToLane('${stage.id}')">
+            <i data-lucide="arrow-right"></i>
+          </button>
         </div>
       </div>
     `;
 
-    const cardsHtml = stageRes.map(res => {
+    // ── LANE CARDS ────────────────────────────────────
+    const regularCardsHtml = stageRes.map(res => {
       globalCardNum++;
-      const tc = OL._fvGetType(res.type);
-      const isGlobal = globalIds.has(String(res.id));
-      const stepCount = (res.steps || []).length;
-      const hasLogic = (res.steps || []).some(s =>
-        (s.logic?.out || []).some(l => l.targetId)
-      );
+      return OL._fvBuildCard(res, globalCardNum, false, 0);
+    }).join('');
 
-      const tags = (res.steps || []).slice(0, 2)
-        .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
-        .join('');
+    // Global resources for this stage
+    const globalsHtml = stageGlobals.map(gr => {
+      const tc = OL._fvGetType(gr.type);
+      const stageCount = globalStageCount[String(gr.id)] || 1;
 
-      const globalConnCount = isGlobal
-        ? resources.filter(r => (r.steps||[]).some(s =>
-            (s.logic?.out||[]).some(l => {
-              const lastH = String(l.targetId||'').lastIndexOf('-');
-              return lastH > -1 && l.targetId.substring(0, lastH) === String(res.id);
-            })
-          )).length
-        : 0;
-
-      return `
-        <div class="fv-card ${isGlobal ? 'is-global' : ''}"
-             id="fv-card-${res.id}"
-             data-res-id="${res.id}"
-             data-stage-id="${stage.id}"
-             ${isGlobal ? `
-               onmouseenter="OL._fvHighlightGlobalConnections('${res.id}', true)"
-               onmouseleave="OL._fvHighlightGlobalConnections('${res.id}', false)"
-             ` : ''}
-             onclick="event.stopPropagation();
-                      document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
-                      this.classList.add('selected');
-                      OL.openInspector('${res.id}', null, 'cards');">
-          <div class="fv-card-accent" style="background:${tc.color};"></div>
-          <div class="fv-card-body">
-            <div class="fv-card-type-row">
-              <div class="fv-card-type-icon" style="background:${tc.color};">${tc.abbr}</div>
-              <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>
-              <span class="fv-card-step-num">${globalCardNum}</span>
-            </div>
-            <div class="fv-card-name">${esc(res.name)}</div>
-            ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
-            <div class="fv-card-footer">
-              <span style="font-size:10px;color:#9ca3af;">${stepCount} step${stepCount!==1?'s':''}</span>
-              <div style="display:flex;gap:4px;align-items:center;">
-                ${isGlobal ? `<span class="fv-global-badge">🌐 Global${globalConnCount > 0 ? ` ×${globalConnCount}` : ''}</span>` : ''}
-                ${hasLogic ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;background:rgba(61,217,197,0.1);color:#3dd9c5;font-weight:700;">λ</span>` : ''}
-              </div>
-            </div>
+      if (expanded) {
+        // Full card with global badge
+        globalCardNum++;
+        return OL._fvBuildCard(gr, globalCardNum, true, stageCount);
+      } else {
+        // Collapsed chip
+        return `
+          <div class="fv-global-chip"
+               id="fv-chip-${gr.id}-${stage.id}"
+               onclick="OL.openInspector('${gr.id}', null, 'cards')"
+               title="${esc(gr.name)} — used in ${stageCount} stage${stageCount !== 1 ? 's' : ''}">
+            <div class="fv-global-chip-icon" style="background:${tc.color};">${tc.abbr}</div>
+            <span>${esc(gr.name.substring(0, 20))}</span>
+            <span class="fv-global-chip-count">×${stageCount}</span>
           </div>
-        </div>
-      `;
+        `;
+      }
     }).join('');
 
     lanesHtml += `
       <div class="fv-swimlane" id="fv-lane-${stage.id}" data-stage-id="${stage.id}">
-        ${cardsHtml || '<div style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;">No resources — assign resources to this stage via the inspector.</div>'}
+        ${regularCardsHtml}
+        ${globalsHtml}
+        ${(stageRes.length === 0 && stageGlobals.length === 0)
+          ? '<div style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;">No resources — assign via the inspector.</div>'
+          : ''}
       </div>
     `;
   });
@@ -10503,23 +10279,133 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   `;
 };
 
+// ── CARD BUILDER (shared between regular + expanded globals) ──
+OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
+  const tc = OL._fvGetType(res.type);
+  const stepCount = (res.steps || []).length;
+  const hasLogic  = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
+  const tags = (res.steps || []).slice(0, 2)
+    .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
+    .join('');
+
+  return `
+    <div class="fv-card ${isGlobal ? 'is-global' : ''}"
+         id="fv-card-${res.id}"
+         data-res-id="${res.id}"
+         data-stage-id="${res.stageId || '__none__'}"
+         onclick="event.stopPropagation();
+                  document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
+                  this.classList.add('selected');
+                  OL.openInspector('${res.id}', null, 'cards');">
+      <div class="fv-card-accent" style="background:${tc.color};"></div>
+      <div class="fv-card-body">
+        <div class="fv-card-type-row">
+          <div class="fv-card-type-icon" style="background:${tc.color};">${tc.abbr}</div>
+          <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>
+          <span class="fv-card-step-num">${num}</span>
+        </div>
+        <div class="fv-card-name">${esc(res.name)}</div>
+        ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
+        <div class="fv-card-footer">
+          <span style="font-size:10px;color:#9ca3af;">${stepCount} step${stepCount!==1?'s':''}</span>
+          <div style="display:flex;gap:4px;align-items:center;">
+            ${isGlobal ? `
+              <span class="fv-global-card-badge">
+                🌐 ×${globalStageCount}
+              </span>` : ''}
+            ${hasLogic ? `
+              <span style="font-size:9px;padding:2px 5px;border-radius:99px;
+                           background:rgba(61,217,197,0.1);color:#3dd9c5;font-weight:700;">λ</span>
+              ` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+// ── STAGE NAME EDITING ────────────────────────────────────
+OL._fvEditStageName = function(stageId) {
+  const nameEl = document.getElementById(`fv-lane-name-${stageId}`);
+  if (!nameEl) return;
+
+  const data = OL.getCurrentProjectData();
+  const stage = (data.stages || []).find(s => String(s.id) === String(stageId));
+  if (!stage) return;
+
+  const currentName = stage.name;
+
+  // Swap text span for input
+  nameEl.outerHTML = `
+    <input class="fv-lane-name-input"
+           id="fv-lane-name-${stageId}"
+           value="${esc(currentName)}"
+           maxlength="40"
+           onblur="OL._fvCommitStageName('${stageId}', this.value)"
+           onkeydown="if(event.key==='Enter') this.blur(); if(event.key==='Escape') OL.renderVisualizer();">
+  `;
+
+  // Focus + select all
+  const input = document.getElementById(`fv-lane-name-${stageId}`);
+  if (input) {
+    input.focus();
+    input.select();
+  }
+};
+
+OL._fvCommitStageName = async function(stageId, newName) {
+  const name = (newName || '').trim();
+  if (!name) { OL.renderVisualizer(); return; }
+
+  const data = OL.getCurrentProjectData();
+  const stage = (data.stages || []).find(s => String(s.id) === String(stageId));
+  if (!stage) return;
+
+  if (stage.name === name) { OL.renderVisualizer(); return; }
+
+  stage.name = name;
+  await OL.persist();
+  console.log(`✅ Stage renamed to: ${name}`);
+  OL.renderVisualizer();
+};
+
+// ── JUMP TO LANE ─────────────────────────────────────────
+OL._fvJumpToLane = function(stageId) {
+  const lane = document.getElementById(`fv-lane-${stageId}`);
+  if (!lane) return;
+  lane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Flash highlight
+  lane.style.transition = 'background 0.2s';
+  lane.style.background = 'rgba(61,217,197,0.08)';
+  setTimeout(() => { lane.style.background = ''; }, 1200);
+};
+
 // Sync rail label heights to their matching swimlane
 OL._fvSyncRailHeights = function() {
   requestAnimationFrame(() => {
     const data = OL.getCurrentProjectData();
-    const stages = [...(data.stages || []), { id: '__none__', name: 'Unassigned' }];
+    const stages = [
+      ...(data.stages || []),
+      { id: '__none__', name: 'Unassigned' }
+    ];
+
     stages.forEach(stage => {
       const lane = document.getElementById(`fv-lane-${stage.id}`);
       const rail = document.getElementById(`fv-rail-${stage.id}`);
       if (lane && rail) {
-        rail.style.height = lane.offsetHeight + 'px';
-        rail.style.minHeight = lane.offsetHeight + 'px';
+        // +1 for the border-bottom
+        const h = lane.offsetHeight + 1;
+        rail.style.height    = h + 'px';
+        rail.style.minHeight = h + 'px';
       }
     });
 
-    // Draw connections after heights are set
-    const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
+    // Draw connections after heights settle
+    const resources = (data.resources || [])
+      .filter(r => !r.isDeleted && !r.isLocked);
     OL._fvDrawConnections(resources);
+
+    if (window.lucide) lucide.createIcons();
   });
 };
 
