@@ -6318,7 +6318,7 @@ body.is-visualizer #v2-inspector-panel {
 .fvi-header {
   display: flex; align-items: flex-start; gap: 10px;
   border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0;
+  flex-shrink: 0; height: auto;
 }
 .fvi-header-icon {
   width: 36px; height: 36px; border-radius: 10px;
@@ -6355,8 +6355,8 @@ body.is-visualizer #v2-inspector-panel {
    box-sizing: border-box:
    padding-left: 16px;
    padding-right: 16px;
-  min-width: 0;
-  overflow: hidden;
+   min-width: 0;
+   overflow: hidden;
 }
 
 .fvi-label {
