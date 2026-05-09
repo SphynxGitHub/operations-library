@@ -9718,6 +9718,20 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
+document.addEventListener('mousedown', (e) => {
+    // Only fire on the flowchart canvas background or swimlane empty space
+    const isCanvasBg = e.target.id === 'fv-canvas-wrap' 
+                    || e.target.id === 'fv-canvas'
+                    || e.target.classList.contains('fv-swimlane')
+                    || e.target.id === 'fv-lanes-container';
+    
+    if (isCanvasBg) {
+        OL.closeInspectorPanel();
+        document.querySelectorAll('.fv-card.selected, .fv-step-card.selected')
+            .forEach(el => el.classList.remove('selected'));
+    }
+});
+
 const FLOW_COLUMN_VW = 22;   // Width of one card (22% of viewport)
 const FLOW_GAP_VW = 3;      // Gap between columns (3% of viewport)
 const FLOW_SPINE_X_VW = 50;  // The center of the screen
@@ -10465,7 +10479,8 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     }).join('');
 
     lanesHtml += `
-      <div class="fv-swimlane" id="fv-lane-${stage.id}" data-stage-id="${stage.id}">
+      <div class="fv-swimlane" id="fv-lane-${stage.id}" data-stage-id="${stage.id}"
+       onclick="OL._fvHandleCanvasClick(event)">
         ${regularCardsHtml}
         ${globalsHtml}
         ${(stageRes.length === 0 && stageGlobals.length === 0)
@@ -11473,26 +11488,37 @@ OL._fvSetupRailScroll = function() {
 };
 
 OL._fvHandleCanvasClick = function(e) {
-  // Close if clicking anything that isn't a card, step, button or inspector
-  const isCard     = e.target.closest('.fv-card, .fv-step-card, .fv-list-item, .fv-global-chip');
-  const isBtn      = e.target.closest('button, select, input, a');
-  const isInspector = e.target.closest('#v2-inspector-panel, #inspector-panel');
-  const isWb       = e.target.closest('#fv-wb-rail, #fv-wb-drawer');
+  // Don't close if clicking anything interactive
+  const isCard      = e.target.closest('.fv-card, .fv-step-card, .fv-list-item, .fv-global-chip, .fv-card-footer, .fv-card-body, .fv-card-steps-preview');
+  const isBtn       = e.target.closest('button, select, input, a, textarea, label');
+  const isInspector = e.target.closest('#v2-inspector-panel, #inspector-panel, .fvi-panel, .fvi-section, .fvi-header');
+  const isWb        = e.target.closest('#fv-wb-rail, #fv-wb-drawer');
+  const isLaneRail  = e.target.closest('#fv-lane-rail');
+  const isTopbar    = e.target.closest('#fv-topbar');
 
-  if (!isCard && !isBtn && !isInspector && !isWb) {
-    document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
-      .forEach(el => el.classList.remove('selected'));
-    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
-    if (panel) {
-        panel.classList.remove('open');
-        // 3. Force grid to collapse by directly updating the layout
-        const layout = document.querySelector('.three-pane-layout');
-        if (layout) {
-            const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
-            const leftCol = sidebarCollapsed ? '65px' : '240px';
-           layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
-        }
-    }
+  if (isCard || isBtn || isInspector || isWb || isLaneRail || isTopbar) return;
+
+  // Deselect all cards
+  document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
+    .forEach(el => el.classList.remove('selected'));
+
+  // Close inspector
+  OL.closeInspectorPanel();
+};
+
+// 🚀 NEW: Single source of truth for closing the inspector
+OL.closeInspectorPanel = function() {
+  const panel = document.getElementById('v2-inspector-panel') 
+             || document.getElementById('inspector-panel');
+  if (!panel) return;
+  
+  panel.classList.remove('open');
+  
+  const layout = document.querySelector('.three-pane-layout');
+  if (layout) {
+    const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+    const leftCol = sidebarCollapsed ? '65px' : '240px';
+    layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
   }
 };
 
@@ -13633,7 +13659,7 @@ OL.deleteStep = async function(resId, stepIdx) {
         });
 
         OL.renderVisualizer();
-        OL.closeInspector(); 
+        OL.closeInspectorPanel(); 
         console.log(`🧹 Step ${stepIdx} deleted and all logic links scrubbed.`);
     }
 };
@@ -15481,10 +15507,6 @@ OL.clearMirrorLink = function(myFullId, partnerFullId) {
         pStep.logic.in = pStep.logic.in.filter(l => l.sourceId !== myFullId);
         pStep.logic.out = pStep.logic.out.filter(l => l.targetId !== myFullId);
     }
-};
-
-OL.closeInspector = function() {
-    document.getElementById('v2-inspector-panel').classList.remove('open');
 };
 
 // Helper to find the X/Y of a card's edge
