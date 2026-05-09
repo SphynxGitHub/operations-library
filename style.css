@@ -5583,6 +5583,13 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 .fv-swimlane:nth-child(odd)  { background: #f5f6f8; }
 .fv-swimlane:nth-child(even) { background: #f0f2f5; }
 
+/* Swimlane drag target feedback */
+.fv-swimlane.drag-active {
+  background: rgba(61,217,197,0.06) !important;
+  outline: 2px dashed #3dd9c5;
+  outline-offset: -4px;
+}
+
 #fv-lanes-container {
   margin: 0;
   padding: 0;
