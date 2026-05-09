@@ -6318,7 +6318,7 @@ body.is-visualizer #v2-inspector-panel {
 .fvi-header {
   display: flex; align-items: flex-start; gap: 10px;
   border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0; height: auto;
+  flex-shrink: 0;
 }
 .fvi-header-icon {
   width: 36px; height: 36px; border-radius: 10px;
@@ -6333,7 +6333,7 @@ body.is-visualizer #v2-inspector-panel {
   background: transparent; padding: 0;
   font-family: 'DM Sans', sans-serif;
   border-bottom: 2px solid transparent;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s; height: auto;
 }
 .fvi-name-input:focus { border-bottom-color: #3dd9c5; }
 .fvi-header-meta {
