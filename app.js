@@ -11473,13 +11473,13 @@ OL._fvHandleCanvasClick = function(e) {
   // Close if clicking anything that isn't a card, step, button or inspector
   const isCard     = e.target.closest('.fv-card, .fv-step-card, .fv-list-item, .fv-global-chip');
   const isBtn      = e.target.closest('button, select, input, a');
-  const isInspector = e.target.closest('#v2-inspector-panel');
+  const isInspector = e.target.closest('#v2-inspector-panel, #inspector-panel');
   const isWb       = e.target.closest('#fv-wb-rail, #fv-wb-drawer');
 
   if (!isCard && !isBtn && !isInspector && !isWb) {
     document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
       .forEach(el => el.classList.remove('selected'));
-    const panel = document.getElementById('v2-inspector-panel');
+    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     if (panel) panel.classList.remove('open');
   }
 };
