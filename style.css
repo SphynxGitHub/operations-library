@@ -4083,14 +4083,6 @@ ARROWS
     box-shadow: 0 0 10px var(--accent);
 }
 
-.inspector-content {
-    padding: 20px;
-    color: white !important;
-    display:flex;
-    flex-direction: column;
-    width: 100%;
-}
-
 /* Force text wrapping across the app */
 .inspector-content, 
 .asset-mini-card, 
@@ -4895,6 +4887,14 @@ body.light-mode {
 /* 5. Prevent content from squishing during the slide */
 #inspector-content {
     min-width: 300px;  padding: 20px; box-sizing: border-box; height: 100%; overflow-y: auto;
+}
+
+.inspector-content {
+    padding: 20px;
+    color: white !important;
+    display:flex;
+    flex-direction: column;
+    width: 100%;
 }
 
 .inspector-section {
@@ -5882,7 +5882,6 @@ body.is-visualizer #v2-inspector-panel {
 
 /* High-specificity override for visualizer inspector */
 #v2-inspector-panel .inspector-scroll-content #inspector-content {
-    padding: 0 !important;
     height: auto !important;
 }
 
@@ -6165,7 +6164,6 @@ body.is-visualizer #v2-inspector-panel {
 .fvi-panel::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 99px; }
 
 .fvi-panel .inspector-header {
-    padding: 16px;
     border-bottom: 1px solid #e5e7eb;
     background: #fff;
     flex-shrink: 0;
@@ -6310,7 +6308,7 @@ body.is-visualizer #v2-inspector-panel {
 /* Header */
 .fvi-header {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 16px; border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
 }
 .fvi-header-icon {
