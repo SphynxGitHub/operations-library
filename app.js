@@ -862,8 +862,7 @@ window.handleRoute = function () {
     }
 
     console.log("🚦 Route Clear: Proceeding with render...");
-    
-    const hash = window.location.hash || "#/";
+
     window.buildLayout(); 
 
     const main = document.getElementById("mainContent");
