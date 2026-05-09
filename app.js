@@ -11527,8 +11527,8 @@ OL._fvBuildListShell = function(stages, resources) {
 };
 
 OL._fvOpenStepsList = function(resId) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r => String(r.id) === resId);
+  const data   = OL.getCurrentProjectData();
+  const res    = (data.resources||[]).find(r => String(r.id) === resId);
   if (!res) return;
 
   const panel   = document.getElementById('v2-inspector-panel');
@@ -11536,157 +11536,238 @@ OL._fvOpenStepsList = function(resId) {
   if (!panel || !content) return;
 
   panel.classList.add('open');
-  const tc = OL._fvGetType(res.type);
 
-  // App info
-  const appHtml = res.appId
-    ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
-         <span style="font-size:11px;color:#6b7280;">App:</span>
-         <span style="font-size:11px;font-weight:600;color:#1b2d3f;">${esc(res.appName||'')}</span>
-       </div>`
-    : '';
+  const tc     = OL._fvGetType(res.type);
+  const stages = data.stages || [];
+  const client = getActiveClient();
 
-  // Stage name
-  const stages    = OL.getCurrentProjectData().stages || [];
+  // Track steps toggle state per resource
+  if (!OL._fv._stepsOpen) OL._fv._stepsOpen = {};
+  if (OL._fv._stepsOpen[resId] === undefined) OL._fv._stepsOpen[resId] = true;
+  const stepsOpen = OL._fv._stepsOpen[resId];
+
   const stageName = stages.find(s => s.id === res.stageId)?.name || '';
-  const stageHtml = stageName
-    ? `<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
-         <span style="font-size:11px;color:#6b7280;">Stage:</span>
-         <span style="font-size:11px;font-weight:600;color:#1b2d3f;">${esc(stageName)}</span>
-       </div>`
-    : '';
 
-  // External link
-  const linkHtml = res.externalLink
-    ? `<a href="${res.externalLink}" target="_blank"
-          style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;
-                 font-size:11px;color:#3dd9c5;font-weight:600;text-decoration:none;">
-         <i data-lucide="external-link" style="width:11px;height:11px;"></i>
-         Open Link
-       </a>`
-    : '';
+  // ── APP SECTION ──────────────────────────────────────
+  const rawType    = String(res.type || 'General');
+  const typeDef    = (state.master?.resourceTypes||[])
+    .find(t => t.type.toLowerCase() === rawType.toLowerCase());
+  const isZap      = rawType.toLowerCase() === 'zap';
+  const autoApp    = (!isZap && typeDef?.matchedFunctionId)
+    ? OL.getAppByFunction?.(rawType) : null;
 
-  // Steps list
-  const stepsHtml = (res.steps||[]).length > 0
+  const appSection = isZap
+    ? `<div class="fvi-value muted">Multi-app automation.</div>`
+    : res.appId
+      ? `<div style="display:flex;align-items:center;gap:6px;">
+           <div style="display:flex;align-items:center;gap:6px;flex:1;
+                       padding:7px 10px;border:1px solid #e5e7eb;
+                       border-radius:8px;background:#fafafa;">
+             <span style="font-size:12px;font-weight:500;color:#1b2d3f;">
+               ${esc(res.appName||'')}
+             </span>
+           </div>
+           <button onclick="OL.handleResourceSave('${res.id}','appId',null);
+                            OL.handleResourceSave('${res.id}','appName',null);"
+                   style="padding:7px;border:1px solid #e5e7eb;border-radius:8px;
+                          background:#fff;cursor:pointer;color:#9ca3af;
+                          transition:color 0.15s;">
+             <i data-lucide="x" style="width:12px;height:12px;"></i>
+           </button>
+         </div>`
+      : `<div style="position:relative;">
+           <input type="text" class="fvi-input"
+                  placeholder="Search apps…"
+                  onfocus="OL.filterAppSearch('${res.id}',null,true,'')"
+                  oninput="OL.filterAppSearch('${res.id}',null,true,this.value)">
+           <div id="res-app-results" class="search-results-overlay"></div>
+         </div>`;
+
+  // ── STEPS LIST ───────────────────────────────────────
+  const stepsList = (res.steps||[]).length > 0
     ? (res.steps).map((s, i) => {
         const assigneeBadges = (s.assignees||[]).map(a =>
-          `<span style="font-size:10px;font-weight:500;padding:2px 8px;
-                        border-radius:99px;background:#f5f6f8;color:#6b7280;
-                        border:1px solid #e5e7eb;">
-             ${esc(a.name||'')}
-           </span>`
+          `<span class="fvi-badge fvi-badge-gray">${esc(a.name||'')}</span>`
         ).join('');
-
         const appBadge = s.appName
-          ? `<span style="font-size:10px;font-weight:500;padding:2px 8px;
-                          border-radius:99px;color:#0ea5e9;
-                          background:rgba(14,165,233,0.08);
-                          border:1px solid rgba(14,165,233,0.2);">
-               ${esc(s.appName)}
-             </span>`
+          ? `<span class="fvi-badge fvi-badge-blue">${esc(s.appName)}</span>`
           : '';
-
-        const hasBadges = assigneeBadges || appBadge;
+        const logicIcon = (s.logic?.out||[]).some(l=>l.targetId)
+          ? `<span class="fvi-badge" style="background:rgba(61,217,197,0.1);
+                                            color:#3dd9c5;">λ</span>`
+          : '';
+        const hasBadges = s.appName || (s.assignees||[]).length > 0;
 
         return `
-          <div style="display:flex;align-items:flex-start;gap:10px;
-                      padding:12px 16px;border-bottom:1px solid #f3f4f6;
-                      cursor:pointer;transition:background 0.12s;"
-               onmouseenter="this.style.background='#fafafa'"
-               onmouseleave="this.style.background=''"
+          <div class="fvi-step-row"
                onclick="OL.openInspector('${res.id}','${s.id}')">
-
-            <!-- Number circle -->
-            <div style="width:22px;height:22px;border-radius:99px;
-                        background:${tc.color}18;color:${tc.color};
-                        font-size:10px;font-weight:800;
-                        display:flex;align-items:center;justify-content:center;
-                        flex-shrink:0;font-family:'Nunito Sans',sans-serif;
-                        margin-top:1px;">
+            <div class="fvi-step-num" style="background:${tc.color}18;color:${tc.color};">
               ${i+1}
             </div>
-
-            <!-- Name + badges -->
             <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:600;color:#1b2d3f;
-                          line-height:1.4;margin-bottom:${hasBadges?'5px':'0'};">
-                ${esc(s.name||'Unnamed Step')}
-              </div>
+              <div class="fvi-step-name">${esc(s.name||'Unnamed Step')}</div>
               ${hasBadges ? `
-                <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                  ${appBadge}${assigneeBadges}
+                <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">
+                  ${appBadge}${assigneeBadges}${logicIcon}
                 </div>` : ''}
             </div>
-
             <i data-lucide="chevron-right"
-               style="width:12px;height:12px;color:#d1d5db;
-                      flex-shrink:0;margin-top:3px;">
-            </i>
+               style="width:11px;height:11px;color:#d1d5db;flex-shrink:0;"></i>
           </div>
         `;
       }).join('')
-    : `<div style="padding:32px 16px;text-align:center;
-                   color:#9ca3af;font-size:12px;font-style:italic;">
-         No steps yet — add steps via the inspector.
+    : `<div style="padding:16px;text-align:center;color:#9ca3af;
+                   font-size:11px;font-style:italic;">
+         No steps yet
        </div>`;
 
+  // ── FULL PANEL ───────────────────────────────────────
   content.innerHTML = `
-    <!-- Resource header -->
-    <div style="padding:16px;border-bottom:1px solid #e5e7eb;">
-      <div style="display:flex;align-items:flex-start;gap:10px;">
+    <div class="fvi-panel">
 
-        <!-- Type icon -->
-        <div style="width:36px;height:36px;border-radius:10px;
-                    background:${tc.color}18;display:flex;
-                    align-items:center;justify-content:center;
-                    font-size:11px;font-weight:800;color:${tc.color};
-                    font-family:'Nunito Sans',sans-serif;flex-shrink:0;">
+      <!-- HEADER -->
+      <div class="fvi-header">
+        <div class="fvi-header-icon" style="background:${tc.color}18;color:${tc.color};">
           ${tc.abbr}
         </div>
-
-        <!-- Name + meta -->
         <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;color:#1b2d3f;
-                      line-height:1.3;margin-bottom:3px;">
-            ${esc(res.name)}
+          <textarea class="fvi-name-input"
+                    onblur="OL.handleResourceSave('${res.id}','name',this.value)"
+                    rows="1"
+                    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';"
+          >${esc(res.name)}</textarea>
+          <div class="fvi-header-meta">
+            <span style="color:${tc.color};font-weight:700;">${esc(res.type||'')}</span>
+            <span class="fvi-meta-sep">·</span>
+            <span>${(res.steps||[]).length} step${(res.steps||[]).length!==1?'s':''}</span>
+            ${stageName ? `<span class="fvi-meta-sep">·</span><span>${esc(stageName)}</span>` : ''}
           </div>
-          <div style="font-size:10px;font-weight:700;
-                      text-transform:uppercase;letter-spacing:0.06em;
-                      color:${tc.color};">
-            ${esc(res.type||'')}
-            <span style="color:#d1d5db;margin:0 4px;">·</span>
-            <span style="color:#9ca3af;">
-              ${(res.steps||[]).length} STEP${(res.steps||[]).length!==1?'S':''}
-            </span>
-          </div>
-          ${appHtml}
-          ${stageHtml}
-          ${linkHtml}
         </div>
-
-        <!-- Edit button -->
-        <button onclick="OL.openInspector('${res.id}',null,'cards')"
-                style="display:flex;align-items:center;gap:5px;
-                       font-size:11px;font-weight:600;
-                       padding:6px 10px;border:1px solid #e5e7eb;
-                       border-radius:8px;background:#fff;
-                       cursor:pointer;color:#6b7280;white-space:nowrap;
-                       transition:border-color 0.15s,color 0.15s;flex-shrink:0;"
-                onmouseenter="this.style.borderColor='#3dd9c5';this.style.color='#3dd9c5'"
-                onmouseleave="this.style.borderColor='#e5e7eb';this.style.color='#6b7280'">
-          <i data-lucide="settings" style="width:11px;height:11px;"></i>
-          Edit
-        </button>
       </div>
-    </div>
 
-    <!-- Steps list -->
-    <div style="overflow-y:auto;">
-      ${stepsHtml}
+      <!-- PRIMARY APP -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="smartphone" style="width:11px;height:11px;"></i>
+          Primary Application
+        </div>
+        ${appSection}
+      </div>
+
+      <!-- STAGE -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
+          Stage
+        </div>
+        <select class="fvi-select"
+                onchange="OL.handleResourceSave('${res.id}','stageId',this.value)">
+          <option value="">— Unassigned —</option>
+          ${stages.map(s => `
+            <option value="${esc(s.id)}"
+                    ${res.stageId === s.id ? 'selected' : ''}>
+              ${esc(s.name)}
+            </option>`).join('')}
+        </select>
+      </div>
+
+      <!-- CLASSIFICATION -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="folder" style="width:11px;height:11px;"></i>
+          Classification
+        </div>
+        <select class="fvi-select"
+                onchange="OL.handleResourceSave('${res.id}','type',this.value)">
+          <option value="General" ${res.type==='General'?'selected':''}>General</option>
+          ${(state.master?.resourceTypes||[]).map(t =>
+            `<option value="${esc(t.type)}"
+                     ${res.type===t.type?'selected':''}>
+               ${esc(t.type)}
+             </option>`
+          ).join('')}
+        </select>
+      </div>
+
+      <!-- EXTERNAL LINK -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="link" style="width:11px;height:11px;"></i>
+          ${isZap ? 'Zapier Link' : 'External Link'}
+        </div>
+        <input type="url" class="fvi-input"
+               placeholder="https://…"
+               value="${esc(res.externalLink||'')}"
+               onblur="OL.handleResourceSave('${res.id}','externalLink',this.value)">
+      </div>
+
+      <!-- STEPS -->
+      <div class="fvi-section" style="padding-bottom:0;">
+        <div class="fvi-label fvi-label-row">
+          <span style="display:flex;align-items:center;gap:5px;">
+            <i data-lucide="list" style="width:11px;height:11px;"></i>
+            Steps
+          </span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            <button class="fvi-add-step-btn"
+                    onclick="event.stopPropagation(); OL.addNewStepToCard('${res.id}')">
+              <i data-lucide="plus" style="width:11px;height:11px;"></i>
+              Add
+            </button>
+            <button class="fvi-toggle-steps-btn"
+                    onclick="OL._fvToggleStepsPanel('${res.id}')"
+                    title="${stepsOpen ? 'Collapse steps' : 'Expand steps'}">
+              <i data-lucide="${stepsOpen ? 'chevron-up' : 'chevron-down'}"
+                 style="width:12px;height:12px;"></i>
+            </button>
+          </div>
+        </div>
+        <div id="fvi-steps-list-${res.id}"
+             style="display:${stepsOpen ? 'block' : 'none'};">
+          ${stepsList}
+        </div>
+      </div>
+
+      <!-- DESCRIPTION -->
+      <div class="fvi-section">
+        <div class="fvi-label">
+          <i data-lucide="file-text" style="width:11px;height:11px;"></i>
+          Description
+        </div>
+        <textarea class="fvi-textarea"
+                  placeholder="Notes…"
+                  onblur="OL.handleResourceSave('${res.id}','description',this.value)"
+        >${esc(res.description||'')}</textarea>
+      </div>
+
     </div>
   `;
 
   if (window.lucide) lucide.createIcons();
+
+  // Auto-resize name textarea
+  const nameInput = content.querySelector('.fvi-name-input');
+  if (nameInput) {
+    nameInput.style.height = 'auto';
+    nameInput.style.height = nameInput.scrollHeight + 'px';
+  }
+};
+
+// Toggle steps list open/closed without full re-render
+OL._fvToggleStepsPanel = function(resId) {
+  if (!OL._fv._stepsOpen) OL._fv._stepsOpen = {};
+  OL._fv._stepsOpen[resId] = !OL._fv._stepsOpen[resId];
+  const isOpen = OL._fv._stepsOpen[resId];
+
+  const list = document.getElementById(`fvi-steps-list-${resId}`);
+  if (list) list.style.display = isOpen ? 'block' : 'none';
+
+  // Update chevron
+  const btn = list?.previousElementSibling?.querySelector('.fvi-toggle-steps-btn i');
+  if (btn) {
+    btn.setAttribute('data-lucide', isOpen ? 'chevron-up' : 'chevron-down');
+    if (window.lucide) lucide.createIcons();
+  }
 };
 
 OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth) {
@@ -13850,7 +13931,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         const allOptions = this.getAllStepOptions();
 
         content.innerHTML = `
-            <div class="breadcrumb" onclick="OL._fvOpenStepsList('${res.id}')">« Back to Steps</div>
+            <div class="breadcrumb" onclick="OL._fvOpenStepsList('${resId}')">« Back to Resource</div>
             
             <div class="inspector-header">
                 <div class="section-label">EDIT STEP ${currentIdx + 1}</div>
