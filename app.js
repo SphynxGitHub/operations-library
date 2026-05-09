@@ -10480,11 +10480,14 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
 
     lanesHtml += `
       <div class="fv-swimlane" id="fv-lane-${stage.id}" data-stage-id="${stage.id}"
-       onclick="OL._fvHandleCanvasClick(event)">
+           onclick="OL._fvHandleCanvasClick(event)"
+           ondragover="OL._fvLaneDragOver(event)"
+           ondragleave="OL._fvLaneDragLeave(event)"
+           ondrop="OL._fvLaneDrop(event, '${stage.id}')">
         ${regularCardsHtml}
         ${globalsHtml}
         ${(stageRes.length === 0 && stageGlobals.length === 0)
-          ? '<div style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;">No resources — assign via the inspector.</div>'
+          ? '<div class="fv-empty-lane" style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;">No resources — drag one here or assign via the inspector.</div>'
           : ''}
       </div>
     `;
@@ -10499,6 +10502,49 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
       </div>
     </div>
   `;
+};
+
+OL._fvLaneDragOver = function(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const lane = e.currentTarget;
+  lane.style.background = 'rgba(61,217,197,0.08)';
+  lane.style.outline = '2px dashed #3dd9c5';
+  lane.style.outlineOffset = '-4px';
+};
+
+OL._fvLaneDragLeave = function(e) {
+  // Only clear if leaving the lane entirely (not entering a child)
+  const lane = e.currentTarget;
+  if (!lane.contains(e.relatedTarget)) {
+    lane.style.background = '';
+    lane.style.outline = '';
+  }
+};
+
+OL._fvLaneDrop = async function(e, stageId) {
+  e.preventDefault();
+
+  // Clear visual feedback
+  const lane = e.currentTarget;
+  lane.style.background = '';
+  lane.style.outline = '';
+
+  const resId = e.dataTransfer.getData('application/fv-resource');
+  if (!resId) return;
+
+  const data = OL.getCurrentProjectData();
+  const res  = (data.resources || []).find(r => String(r.id) === String(resId));
+  if (!res) return;
+
+  // Assign to this stage
+  await OL.updateAndSync(() => {
+    res.stageId  = stageId;
+    res.isGlobal = false;
+  });
+
+  // Re-render to show card in new lane
+  OL.renderVisualizer();
 };
 
 OL._fvComputeLayout = function(resources, stageFilter) {
@@ -11422,15 +11468,10 @@ OL._fvPopulateWb = function(tab, resources) {
   const datapoints   = state.master?.datapoints || [];
 
   let items = [];
-
   if (tab === 'flows') {
-    items = resources.filter(r =>
-      ['Workflow','Zap','Email Campaign'].includes(r.type)
-    );
+    items = resources.filter(r => ['Workflow','Zap','Email Campaign'].includes(r.type));
   } else if (tab === 'assets') {
-    items = resources.filter(r =>
-      !['Workflow','Zap','Email Campaign'].includes(r.type)
-    );
+    items = resources.filter(r => !['Workflow','Zap','Email Campaign'].includes(r.type));
   } else if (tab === 'guides') {
     items = [...masterGuides, ...localGuides];
   } else if (tab === 'data') {
@@ -11438,10 +11479,7 @@ OL._fvPopulateWb = function(tab, resources) {
   }
 
   if (items.length === 0) {
-    content.innerHTML = `
-      <div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;font-style:italic;">
-        No ${tab} found
-      </div>`;
+    content.innerHTML = `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;font-style:italic;">No ${tab} found</div>`;
     return;
   }
 
@@ -11456,7 +11494,8 @@ OL._fvPopulateWb = function(tab, resources) {
            data-id="${item.id}"
            data-type="${tab}"
            ondragstart="OL._fvWbDragStart(event,'${item.id}','${tab}')"
-           onclick="OL.openInspector('${item.id}', null, 'cards')">
+           onclick="OL.openInspector('${item.id}', null, 'cards')"
+           style="cursor:grab;">
         <div class="fv-wb-item-icon"
              style="background:${isData ? 'rgba(124,58,237,0.1)' : tc.color+'18'};
                     color:${isData ? '#7c3aed' : tc.color};">
@@ -11466,14 +11505,21 @@ OL._fvPopulateWb = function(tab, resources) {
           <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
           ${!isData ? `<div class="fv-wb-item-type">${esc(item.type||'')}</div>` : ''}
         </div>
+        <div style="margin-left:auto;color:rgba(255,255,255,0.2);font-size:10px;">⠿</div>
       </div>
     `;
   }).join('');
 };
 
 OL._fvWbDragStart = function(e, id, type) {
-  e.dataTransfer.setData('application/fv-resource', JSON.stringify({ id, type }));
-  e.dataTransfer.effectAllowed = 'copy';
+  e.dataTransfer.setData('application/fv-resource', id);
+  e.dataTransfer.setData('application/fv-tab', type);
+  e.dataTransfer.effectAllowed = 'move';
+  // Visual feedback
+  e.currentTarget.style.opacity = '0.4';
+  e.currentTarget.addEventListener('dragend', () => {
+    e.currentTarget.style.opacity = '1';
+  }, { once: true });
 };
 
 // RAIL SCROLL AND CANVAS CLICK
