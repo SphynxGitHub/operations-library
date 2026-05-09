@@ -5830,12 +5830,6 @@ body.is-visualizer #v2-inspector-panel {
   box-sizing: border-box;
 }
 
-// ADD this to OL._fvOpenStepsList, right after panel.classList.add('open'):
-document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active');
-
-// ADD the same line to OL.openInspector, right after panel.classList.add('open'):
-document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active');
-
 /* Loading */
 .fv-loading-state {
   display: flex; flex-direction: column;
