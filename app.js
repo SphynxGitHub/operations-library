@@ -660,7 +660,9 @@ window.buildLayout = function () {
                 <main id="mainContent"></main>
                 <aside id="inspector-panel" class="pane-inspector">
                     <div class="sidebar-resizer right-side-handle"></div>
-                    <div class="inspector-scroll-content"></div>
+                    <div class="inspector-scroll-content">
+                        <div id="inspector-content"></div>
+                    </div>
                 </aside>
             </div>`;
         return;
@@ -807,7 +809,9 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
                 <main id="mainContent"></main>
                 <aside id="inspector-panel" class="pane-inspector">
                     <div class="sidebar-resizer right-side-handle"></div>
-                    <div class="inspector-scroll-content"></div>
+                    <div class="inspector-scroll-content">
+                        <div id="inspector-content"></div>
+                    </div>
                 </aside>
             </div>
         `;
@@ -833,6 +837,18 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 };
 
 window.handleRoute = function () {
+    // ✅ ADD THIS BLOCK AT THE VERY TOP:
+    // If we're leaving the visualizer, restore the inspector panel id
+    const wasVisualizer = document.body.classList.contains('is-visualizer');
+    const hash = window.location.hash || "#/";
+    const isVisualizer = hash.includes('visualizer');
+
+    if (wasVisualizer && !isVisualizer) {
+        document.body.classList.remove('is-visualizer');
+        const panel = document.getElementById('v2-inspector-panel');
+        if (panel) panel.id = 'inspector-panel';
+    }
+    
     // 1. Check if the matrix is ACTUALLY visible on screen
     const matrix = document.querySelector('.matrix-table-container');
     
@@ -10213,14 +10229,21 @@ OL.renderVisualizer = function() {
           </div>
         </div>
 
-        <!-- Inspector -->
-        <aside id="v2-inspector-panel">
-          <div id="inspector-content"></div>
-        </aside>
-
       </div>
     </div>
   `;
+
+   const realInspector = document.getElementById('inspector-panel');
+    if (realInspector) {
+      realInspector.id = 'v2-inspector-panel';
+      // Ensure inspector-content exists inside it
+      if (!document.getElementById('inspector-content')) {
+        const scrollContent = realInspector.querySelector('.inspector-scroll-content');
+        if (scrollContent) {
+          scrollContent.innerHTML = '<div id="inspector-content"></div>';
+        }
+      }
+    }
 
   if (window.lucide) lucide.createIcons();
 
