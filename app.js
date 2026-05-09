@@ -408,22 +408,25 @@ OL.toggleSidebar = function() {
     const sidebar = document.querySelector('.sidebar');
     const innerContent = document.querySelector('.sidebar-inner-content');
     const toggleIcon = document.querySelector('.toggle-icon');
-    
     if (!sidebar) return;
 
     const isCollapsed = sidebar.classList.toggle('collapsed');
-    
-    // Toggle the inner visibility
-    if (innerContent) {
-        innerContent.style.display = isCollapsed ? 'none' : 'block';
+    if (innerContent) innerContent.style.display = isCollapsed ? 'none' : 'block';
+    if (toggleIcon) toggleIcon.innerText = isCollapsed ? '▶' : '◀';
+    localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+    // 🚀 Sync the grid — check if inspector is currently open
+    const panel = document.getElementById('v2-inspector-panel') 
+               || document.getElementById('inspector-panel');
+    const inspectorOpen = panel && panel.classList.contains('open');
+    const layout = document.querySelector('.three-pane-layout');
+
+    if (layout) {
+        const leftCol = isCollapsed ? '65px' : '240px';
+        const rightCol = inspectorOpen ? '380px' : '0px';
+        layout.style.gridTemplateColumns = `${leftCol} 1fr ${rightCol}`;
     }
 
-    // Flip the arrow
-    if (toggleIcon) {
-        toggleIcon.innerText = isCollapsed ? '▶' : '◀';
-    }
-    
-    localStorage.setItem('sidebarCollapsed', isCollapsed);
     window.dispatchEvent(new Event('resize'));
 };
 
