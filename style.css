@@ -4876,16 +4876,6 @@ body.light-mode {
 }
 
 /*======================= Inspector Panel */
-#v2-inspector-panel {
-    width: 0; min-width: 0; max-width: 300px; transition: width 0.3s ease; overflow: hidden; 
-    background: var(--bg-panel); border-left: var(--panel-border); flex-shrink: 0;
-    overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; 
-}
-
-#v2-inspector-panel.open {
-    width: 300px; right: 0;
-}
-
 /* 5. Prevent content from squishing during the slide */
 #inspector-content {
     min-width: 300px;  padding: 20px; box-sizing: border-box; height: 100%; overflow-y: auto;
@@ -5790,16 +5780,19 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 
 /* ── INSPECTOR PANEL ── */
 #v2-inspector-panel {
-  width: 0 !important; min-width: 0 !important;
-  background: #fff; border-left: 1px solid #e5e7eb;
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  transition: width 0.25s ease, min-width 0.25s ease;
-  flex-shrink: 0;
+  width: 0;
   min-width: 0;
+  max-width: 300px;
+  background: #fff;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.25s ease;
+  flex-shrink: 0;
 }
 #v2-inspector-panel.open {
-  width: 300px !important; min-width: 300px !important;
+  width: 300px;
 }
 
 /* Loading */
