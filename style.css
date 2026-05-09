@@ -254,6 +254,13 @@ body:has(.sidebar.collapsed) #mainContent {
     margin: 0 auto;
 }
 
+.sidebar.collapsed ~ #mainContent,
+.three-pane-layout:has(.sidebar.collapsed) #mainContent {
+    margin-left: 0 !important;
+    padding-left: 10px !important;
+}
+
+
 /* The Toggle Button Styling */
 .sidebar-toggle {
     background: transparent;
@@ -2865,7 +2872,7 @@ body.is-visualizer #mainContent {
 
 /* 🌙 When Sidebar is Collapsed */
 .three-pane-layout:has(.sidebar.collapsed) {
-    grid-template-columns: 0px 1fr 0px;
+    grid-template-columns: 65px 1fr 0px !important;
 }
 
 .three-pane-layout:has(.sidebar.collapsed):not(.zen-mode-active) {
@@ -5818,6 +5825,8 @@ body.is-visualizer #v2-inspector-panel {
    padding: 0 !important;
    margin: 0 !important;
    box-sizing: border-box;
+   display: flex;
+   flex-direction: column;
 }
 
 #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar { width: 4px; }
@@ -5830,6 +5839,17 @@ body.is-visualizer #v2-inspector-panel {
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
+   padding: 0 !important;
+   margin: 0 !important;
+   display: flex;
+   flex-direction: column;
+   height: 100%;
+}
+
+/* High-specificity override for visualizer inspector */
+#v2-inspector-panel .inspector-scroll-content #inspector-content {
+    padding: 0 !important;
+    height: auto !important;
 }
 
 /* Loading */
@@ -6103,7 +6123,7 @@ body.is-visualizer #v2-inspector-panel {
    ════════════════════════════════════ */
 
 .fvi-panel {
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; margin: 0; padding: 0;
   height: 100%; overflow-y: auto; min-width: 0; box-sizing: border-box;
   font-family: 'DM Sans', sans-serif; width: 100%; overflow-x: hidden;
 }
