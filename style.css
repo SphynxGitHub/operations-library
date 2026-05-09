@@ -5780,9 +5780,8 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 
 /* ── INSPECTOR PANEL ── */
 #v2-inspector-panel {
-  width: 0;
   min-width: 0;
-  max-width: 300px;
+  max-width: 100%;
   background: #fff;
   border-left: 1px solid #e5e7eb;
   display: flex;
@@ -5790,9 +5789,7 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   overflow: hidden;
   transition: width 0.25s ease;
   flex-shrink: 0;
-}
-#v2-inspector-panel.open {
-  width: 300px;
+   height: 100%;
 }
 
 /* ADD to style.css — when visualizer inspector is open, activate grid column 3 */
@@ -5802,6 +5799,27 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 
 .three-pane-layout:has(.sidebar.collapsed):has(#v2-inspector-panel.open) {
   grid-template-columns: 65px 1fr 380px;
+}
+
+/* ADD this to override the translate */
+body.is-visualizer .pane-inspector,
+body.is-visualizer #v2-inspector-panel {
+  transform: none !important;
+  margin-left: 0 !important;
+  transition: none !important;
+}
+
+#v2-inspector-panel .inspector-scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  width: 100%;
+}
+
+#v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar { width: 4px; }
+#v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar-thumb {
+  background: #e5e7eb; border-radius: 99px;
 }
 
 // ADD this to OL._fvOpenStepsList, right after panel.classList.add('open'):
