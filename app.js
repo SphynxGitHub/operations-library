@@ -836,6 +836,18 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
         inspector.innerHTML = `<div class="sidebar-resizer right-side-handle"></div><div class="inspector-scroll-content"></div>`;
         OL.initSideResizers();
     }
+
+    // At the bottom of buildLayout(), before the lucide call:
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout) {
+        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        const leftCol = isCollapsed ? '65px' : '240px';
+        const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
+        const inspectorOpen = panel && panel.classList.contains('open');
+        const rightCol = inspectorOpen ? '380px' : '0px';
+        layout.style.gridTemplateColumns = `${leftCol} 1fr ${rightCol}`;
+    }
+    
     if (window.lucide) window.lucide.createIcons();
 };
 
