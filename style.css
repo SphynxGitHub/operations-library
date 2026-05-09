@@ -4887,7 +4887,7 @@ body.light-mode {
 
 /* 5. Prevent content from squishing during the slide */
 #inspector-content {
-    min-width: 350px;  padding: 20px; box-sizing: border-box; height: 100%; overflow-y: auto;
+    min-width: 300px;  padding: 20px; box-sizing: border-box; height: 100%; overflow-y: auto;
 }
 
 .inspector-section {
