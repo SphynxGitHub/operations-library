@@ -11480,7 +11480,16 @@ OL._fvHandleCanvasClick = function(e) {
     document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
       .forEach(el => el.classList.remove('selected'));
     const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
-    if (panel) panel.classList.remove('open');
+    if (panel) {
+        panel.classList.remove('open');
+        // 3. Force grid to collapse by directly updating the layout
+        const layout = document.querySelector('.three-pane-layout');
+        if (layout) {
+            const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+            const leftCol = sidebarCollapsed ? '65px' : '240px';
+           layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
+        }
+    }
   }
 };
 
@@ -11569,10 +11578,18 @@ OL._fvOpenStepsList = function(resId) {
   const res    = (data.resources||[]).find(r => String(r.id) === resId);
   if (!res) return;
 
-  const panel   = document.getElementById('v2-inspector-panel');
+  const panel   = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
   const content = document.getElementById('inspector-content');
   if (!panel || !content) return;
 
+// 1. Force grid open BEFORE adding content
+  const layout = document.querySelector('.three-pane-layout');
+  if (layout) {
+    const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+    const leftCol = sidebarCollapsed ? '65px' : '240px';
+    layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
+  }
+    
   panel.classList.add('open');
 
   const tc     = OL._fvGetType(res.type);
@@ -11672,6 +11689,7 @@ OL._fvOpenStepsList = function(resId) {
           <textarea class="fvi-name-input"
                     onblur="OL.handleResourceSave('${res.id}','name',this.value)"
                     rows="1"
+                    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';"
           >${esc(res.name)}</textarea>
           <div class="fvi-header-meta">
             <span style="color:${tc.color};font-weight:700;">${esc(res.type||'')}</span>
@@ -11782,12 +11800,15 @@ OL._fvOpenStepsList = function(resId) {
 
   if (window.lucide) lucide.createIcons();
 
-  // Auto-resize name textarea
-  const nameInput = content.querySelector('.fvi-name-input');
-  if (nameInput) {
-    nameInput.style.height = 'auto';
-    nameInput.style.height = nameInput.scrollHeight + 'px';
-  }
+    // 2. Fix textarea height AFTER paint
+  requestAnimationFrame(() => {
+    const nameInput = content.querySelector('.fvi-name-input');
+    if (nameInput) {
+      nameInput.style.height = 'auto';
+      nameInput.style.height = nameInput.scrollHeight + 'px';
+    }
+    if (window.lucide) lucide.createIcons();
+  });
 };
 
 // Toggle steps list open/closed without full re-render
@@ -13931,7 +13952,7 @@ OL.getResourceIcon = function(type) {
 
 // 🔍 Open Inspector
 OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
-    const panel = document.getElementById('v2-inspector-panel');
+    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     const content = document.getElementById('inspector-content');
     if (!panel || !content) return;
 
@@ -13939,6 +13960,14 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
     panel.classList.add('open');
+
+    // Force grid open
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout) {
+        const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+        const leftCol = sidebarCollapsed ? '65px' : '240px';
+        layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
+    }
 
     // 📑 2. STEP DETAIL MODE
     // 🚀 FIX: Using stepTarget to check against null
@@ -14273,6 +14302,15 @@ window.renderStepResources = function(resId, step) {
                    onclick="${deleteAction}">×</b>
             </div>`;
     }).join('');
+
+    requestAnimationFrame(() => {
+        const nameInput = panel.querySelector('.fvi-name-input');
+        if (nameInput) {
+            nameInput.style.height = 'auto';
+            nameInput.style.height = nameInput.scrollHeight + 'px';
+        }
+        if (window.lucide) lucide.createIcons();
+    });
 };
 
 OL.updateAtomicStep = async function(resId, stepId, field, value) {
