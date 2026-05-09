@@ -129,7 +129,7 @@ body {
 }
 
 #mainContent {
-    padding: 40px;
+    padding: 40px 40px 0 40px;
     height: auto;
     /* 🚀 THE FIX: Use variables for the gradient colors */
     background: radial-gradient(circle at top right, var(--accent-glow), transparent);
@@ -5840,7 +5840,7 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   transition: width 0.25s ease;
   flex-shrink: 0;
    height: 100%;
-   padding: 20px;
+   padding: 20px 20px 0 20px;
 }
 
 /* ADD this to override the translate */
