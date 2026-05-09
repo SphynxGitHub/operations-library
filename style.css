@@ -2860,7 +2860,7 @@ body.is-visualizer #mainContent {
 
 /* ☀️ When Inspector is Open */
 .three-pane-layout:not(.zen-mode-active) {
-    grid-template-columns: 240px 1fr 380px;
+    grid-template-columns: 240px 1fr 320px !important;
 }
 
 /* 🌙 When Sidebar is Collapsed */
@@ -2869,7 +2869,7 @@ body.is-visualizer #mainContent {
 }
 
 .three-pane-layout:has(.sidebar.collapsed):not(.zen-mode-active) {
-    grid-template-columns: 65px 1fr 380px;
+    grid-template-columns: 65px 1fr 320px !important;
 }
 
 /* 🎨 THE CANVAS AREA (Slot 2) */
@@ -5815,11 +5815,19 @@ body.is-visualizer #v2-inspector-panel {
   overflow-x: hidden;
   min-width: 0;
   width: 100%;
+   padding: 0;
 }
 
 #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar { width: 4px; }
 #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar-thumb {
   background: #e5e7eb; border-radius: 99px;
+}
+
+#v2-inspector-panel #inspector-content {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 // ADD this to OL._fvOpenStepsList, right after panel.classList.add('open'):
@@ -6100,7 +6108,7 @@ document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active'
 
 .fvi-panel {
   display: flex; flex-direction: column;
-  height: 100%; overflow-y: auto;
+  height: 100%; overflow-y: auto; min-width: 0; box-sizing: border-box;
   font-family: 'DM Sans', sans-serif;
 }
 .fvi-panel::-webkit-scrollbar { width: 4px; }
@@ -6141,6 +6149,12 @@ document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active'
   padding: 12px 16px;
   border-bottom: 1px solid #f3f4f6;
 }
+.fvi-section,
+.fvi-header {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .fvi-label {
   display: flex; align-items: center; gap: 5px;
   font-size: 9px; font-weight: 700;
@@ -6161,6 +6175,14 @@ document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active'
   font-size: 12px; font-family: inherit; color: #1b2d3f;
   background: #fafafa; outline: none;
   transition: border-color 0.15s;
+}
+
+.fvi-input,
+.fvi-select,
+.fvi-textarea,
+.fvi-name-input {
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .fvi-input:focus { border-color: #3dd9c5; background: #fff; }
 .fvi-select {
