@@ -5840,6 +5840,7 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   transition: width 0.25s ease;
   flex-shrink: 0;
    height: 100%;
+   padding: 20px;
 }
 
 /* ADD this to override the translate */
@@ -5856,7 +5857,6 @@ body.is-visualizer #v2-inspector-panel {
   overflow-x: hidden;
   min-width: 0;
   width: 100%;
-   padding: 0 !important;
    margin: 0 !important;
    box-sizing: border-box;
    display: flex;
