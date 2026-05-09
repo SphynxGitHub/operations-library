@@ -254,13 +254,6 @@ body:has(.sidebar.collapsed) #mainContent {
     margin: 0 auto;
 }
 
-.sidebar.collapsed ~ #mainContent,
-.three-pane-layout:has(.sidebar.collapsed) #mainContent {
-    margin-left: 0 !important;
-    padding-left: 10px !important;
-}
-
-
 /* The Toggle Button Styling */
 .sidebar-toggle {
     background: transparent;
@@ -2855,30 +2848,46 @@ body.is-visualizer #mainContent {
     overflow: visible !important;
 }
 
+/* BASE: sidebar open, inspector closed */
 .three-pane-layout {
     display: grid !important;
-    /* [Sidebar] [Central Canvas] [Inspector] */
-    grid-template-columns: 240px 1fr 0px; 
+    grid-template-columns: 240px 1fr 0px;
     width: 100vw;
     height: 100vh;
     overflow: hidden;
     transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ☀️ When Inspector is Open */
+/* Inspector open */
 .three-pane-layout:not(.zen-mode-active) {
-    grid-template-columns: 240px 1fr 320px !important;
+    grid-template-columns: 240px 1fr 380px !important;
 }
 
-/* 🌙 When Sidebar is Collapsed */
+/* Sidebar collapsed, inspector closed */
 .three-pane-layout:has(.sidebar.collapsed) {
     grid-template-columns: 65px 1fr 0px !important;
 }
 
+/* Sidebar collapsed, inspector open */
 .three-pane-layout:has(.sidebar.collapsed):not(.zen-mode-active) {
-    grid-template-columns: 65px 1fr 320px !important;
+    grid-template-columns: 65px 1fr 380px !important;
 }
 
+/* Visualizer: inspector open via #v2-inspector-panel.open */
+.three-pane-layout:has(#v2-inspector-panel.open) {
+    grid-template-columns: 240px 1fr 380px !important;
+}
+
+/* Visualizer: sidebar collapsed + inspector open */
+.three-pane-layout:has(.sidebar.collapsed):has(#v2-inspector-panel.open) {
+    grid-template-columns: 65px 1fr 380px !important;
+}
+
+/* Kill any leftover margin-left on mainContent */
+#mainContent {
+    margin-left: 0 !important;
+    grid-column: 2;
+}
 /* 🎨 THE CANVAS AREA (Slot 2) */
 #mainContent, .v2-workbench-shell, .pane-canvas-wrap {
     flex: 1;
@@ -5797,15 +5806,6 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   transition: width 0.25s ease;
   flex-shrink: 0;
    height: 100%;
-}
-
-/* ADD to style.css — when visualizer inspector is open, activate grid column 3 */
-.three-pane-layout:has(#v2-inspector-panel.open) {
-  grid-template-columns: 240px 1fr 380px;
-}
-
-.three-pane-layout:has(.sidebar.collapsed):has(#v2-inspector-panel.open) {
-  grid-template-columns: 65px 1fr 380px;
 }
 
 /* ADD this to override the translate */
