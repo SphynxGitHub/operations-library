@@ -11672,7 +11672,6 @@ OL._fvOpenStepsList = function(resId) {
           <textarea class="fvi-name-input"
                     onblur="OL.handleResourceSave('${res.id}','name',this.value)"
                     rows="1"
-                    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';"
           >${esc(res.name)}</textarea>
           <div class="fvi-header-meta">
             <span style="color:${tc.color};font-weight:700;">${esc(res.type||'')}</span>
