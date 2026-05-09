@@ -5860,6 +5860,19 @@ body.is-visualizer #v2-inspector-panel {
     height: auto !important;
 }
 
+#v2-inspector-panel.open,
+#inspector-panel.open {
+    min-width: 380px;
+    width: 380px;
+}
+
+#v2-inspector-panel:not(.open),
+#inspector-panel:not(.open) {
+    min-width: 0;
+    width: 0;
+    overflow: hidden;
+}
+
 /* Loading */
 .fv-loading-state {
   display: flex; flex-direction: column;
