@@ -5815,7 +5815,9 @@ body.is-visualizer #v2-inspector-panel {
   overflow-x: hidden;
   min-width: 0;
   width: 100%;
-   padding: 0;
+   padding: 0 !important;
+   margin: 0 !important;
+   box-sizing: border-box;
 }
 
 #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar { width: 4px; }
@@ -6103,7 +6105,7 @@ body.is-visualizer #v2-inspector-panel {
 .fvi-panel {
   display: flex; flex-direction: column;
   height: 100%; overflow-y: auto; min-width: 0; box-sizing: border-box;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'DM Sans', sans-serif; width: 100%; overflow-x: hidden;
 }
 .fvi-panel::-webkit-scrollbar { width: 4px; }
 .fvi-panel::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 99px; }
@@ -6145,6 +6147,10 @@ body.is-visualizer #v2-inspector-panel {
 }
 .fvi-section,
 .fvi-header {
+   width: 100%;
+   box-sizing: border-box:
+   padding-left: 16px;
+   padding-right: 16px;
   min-width: 0;
   overflow: hidden;
 }
