@@ -7029,10 +7029,13 @@ OL.handleResourceSave = function(id, field, value) {
                 // If the main modal is open, just refresh its content
                 OL.openResourceModal(id);
             } else if (inspectorOpen) {
-                OL.openInspector(id, null, 'cards');
-                // If stageId changed, re-render the visualizer lanes in the background
-                if (field === 'stageId' && window.location.hash.includes('visualizer')) {
-                    setTimeout(() => OL.renderVisualizer(), 100);
+                if (window.location.hash.includes('visualizer')) {
+                    OL._fvOpenStepsList(id);
+                    if (field === 'stageId') {
+                        setTimeout(() => OL.renderVisualizer(), 100);
+                    }
+                } else {
+                    OL.openInspector(id, null, 'cards');
                 }
             } else {
                 // Only go back to the map if no detail view is active
