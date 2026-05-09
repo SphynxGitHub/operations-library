@@ -2883,6 +2883,15 @@ body.is-visualizer #mainContent {
     grid-template-columns: 65px 1fr 380px !important;
 }
 
+/* When inspector is NOT open, collapse the third column */
+.three-pane-layout:not(:has(#v2-inspector-panel.open)):not(:has(#inspector-panel.open)) {
+    grid-template-columns: 240px 1fr 0px !important;
+}
+
+.three-pane-layout:has(.sidebar.collapsed):not(:has(#v2-inspector-panel.open)):not(:has(#inspector-panel.open)) {
+    grid-template-columns: 65px 1fr 0px !important;
+}
+
 /* Kill any leftover margin-left on mainContent */
 #mainContent {
     margin-left: 0 !important;
