@@ -10587,7 +10587,7 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
          onclick="event.stopPropagation();
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
                   this.classList.add('selected');
-                  OL.openInspector('${res.id}', null, 'cards');">
+                  OL._fvOpenStepsList('${res.id}');">
 
       <div class="fv-card-accent" style="background:${tc.color};"></div>
 
@@ -11476,7 +11476,6 @@ OL._fvBuildListShell = function(stages, resources) {
     displayStages.push({ id: '__none__', name: 'Unassigned' });
   }
 
-  // REPLACE the allSteps build section inside _fvBuildListShell:
     const stagesHtml = displayStages.map((stage, si) => {
       if (filter && stage.id !== filter) return '';
       const stageRes = (byStage[stage.id] || []);
@@ -11532,94 +11531,157 @@ OL._fvOpenStepsList = function(resId) {
   const res  = (data.resources||[]).find(r => String(r.id) === resId);
   if (!res) return;
 
-  const panel  = document.getElementById('v2-inspector-panel');
+  const panel   = document.getElementById('v2-inspector-panel');
   const content = document.getElementById('inspector-content');
   if (!panel || !content) return;
 
   panel.classList.add('open');
   const tc = OL._fvGetType(res.type);
 
-  const stepsHtml = (res.steps || []).length > 0
+  // App info
+  const appHtml = res.appId
+    ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+         <span style="font-size:11px;color:#6b7280;">App:</span>
+         <span style="font-size:11px;font-weight:600;color:#1b2d3f;">${esc(res.appName||'')}</span>
+       </div>`
+    : '';
+
+  // Stage name
+  const stages    = OL.getCurrentProjectData().stages || [];
+  const stageName = stages.find(s => s.id === res.stageId)?.name || '';
+  const stageHtml = stageName
+    ? `<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+         <span style="font-size:11px;color:#6b7280;">Stage:</span>
+         <span style="font-size:11px;font-weight:600;color:#1b2d3f;">${esc(stageName)}</span>
+       </div>`
+    : '';
+
+  // External link
+  const linkHtml = res.externalLink
+    ? `<a href="${res.externalLink}" target="_blank"
+          style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;
+                 font-size:11px;color:#3dd9c5;font-weight:600;text-decoration:none;">
+         <i data-lucide="external-link" style="width:11px;height:11px;"></i>
+         Open Link
+       </a>`
+    : '';
+
+  // Steps list
+  const stepsHtml = (res.steps||[]).length > 0
     ? (res.steps).map((s, i) => {
-        const hasLogic = (s.logic?.out||[]).some(l=>l.targetId);
-        const appBadge = s.appName
-          ? `<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:99px;
-                          background:rgba(61,217,197,0.1);color:#3dd9c5;">
-               ${esc(s.appName.substring(0,12))}
-             </span>`
-          : '';
-        const assignees = (s.assignees||[]).slice(0,2).map(a =>
-          `<span style="font-size:9px;padding:2px 6px;border-radius:99px;
-                        background:#f5f6f8;color:#6b7280;font-weight:600;">
-             ${esc(a.name.substring(0,10))}
+        const assigneeBadges = (s.assignees||[]).map(a =>
+          `<span style="font-size:10px;font-weight:500;padding:2px 8px;
+                        border-radius:99px;background:#f5f6f8;color:#6b7280;
+                        border:1px solid #e5e7eb;">
+             ${esc(a.name||'')}
            </span>`
         ).join('');
 
+        const appBadge = s.appName
+          ? `<span style="font-size:10px;font-weight:500;padding:2px 8px;
+                          border-radius:99px;color:#0ea5e9;
+                          background:rgba(14,165,233,0.08);
+                          border:1px solid rgba(14,165,233,0.2);">
+               ${esc(s.appName)}
+             </span>`
+          : '';
+
+        const hasBadges = assigneeBadges || appBadge;
+
         return `
-          <div style="display:flex;align-items:flex-start;gap:8px;
-                      padding:10px 12px;border-bottom:1px solid #f3f4f6;
+          <div style="display:flex;align-items:flex-start;gap:10px;
+                      padding:12px 16px;border-bottom:1px solid #f3f4f6;
                       cursor:pointer;transition:background 0.12s;"
                onmouseenter="this.style.background='#fafafa'"
                onmouseleave="this.style.background=''"
                onclick="OL.openInspector('${res.id}','${s.id}')">
-            <span style="width:18px;height:18px;border-radius:99px;
-                         background:${tc.color}18;color:${tc.color};
-                         font-size:9px;font-weight:800;display:flex;
-                         align-items:center;justify-content:center;
-                         flex-shrink:0;font-family:'Nunito Sans',sans-serif;">
+
+            <!-- Number circle -->
+            <div style="width:22px;height:22px;border-radius:99px;
+                        background:${tc.color}18;color:${tc.color};
+                        font-size:10px;font-weight:800;
+                        display:flex;align-items:center;justify-content:center;
+                        flex-shrink:0;font-family:'Nunito Sans',sans-serif;
+                        margin-top:1px;">
               ${i+1}
-            </span>
+            </div>
+
+            <!-- Name + badges -->
             <div style="flex:1;min-width:0;">
               <div style="font-size:12px;font-weight:600;color:#1b2d3f;
-                          line-height:1.35;margin-bottom:4px;">
+                          line-height:1.4;margin-bottom:${hasBadges?'5px':'0'};">
                 ${esc(s.name||'Unnamed Step')}
               </div>
-              <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;">
-                ${appBadge}${assignees}
-                ${hasLogic ? `<span style="font-size:9px;font-weight:700;
-                                           color:#3dd9c5;">λ logic</span>` : ''}
-              </div>
+              ${hasBadges ? `
+                <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                  ${appBadge}${assigneeBadges}
+                </div>` : ''}
             </div>
+
             <i data-lucide="chevron-right"
-               style="width:12px;height:12px;color:#d1d5db;flex-shrink:0;margin-top:2px;">
+               style="width:12px;height:12px;color:#d1d5db;
+                      flex-shrink:0;margin-top:3px;">
             </i>
           </div>
         `;
       }).join('')
-    : `<div style="padding:20px;text-align:center;color:#9ca3af;
-                   font-size:12px;font-style:italic;">
-         No steps yet
+    : `<div style="padding:32px 16px;text-align:center;
+                   color:#9ca3af;font-size:12px;font-style:italic;">
+         No steps yet — add steps via the inspector.
        </div>`;
 
   content.innerHTML = `
-    <div style="border-bottom:1px solid #e5e7eb;padding:14px 16px;
-                display:flex;align-items:center;gap:8px;">
-      <div style="width:28px;height:28px;border-radius:8px;
-                  background:${tc.color}18;display:flex;
-                  align-items:center;justify-content:center;
-                  font-size:10px;font-weight:800;color:${tc.color};
-                  font-family:'Nunito Sans',sans-serif;flex-shrink:0;">
-        ${tc.abbr}
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:700;color:#1b2d3f;">
-          ${esc(res.name)}
+    <!-- Resource header -->
+    <div style="padding:16px;border-bottom:1px solid #e5e7eb;">
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+
+        <!-- Type icon -->
+        <div style="width:36px;height:36px;border-radius:10px;
+                    background:${tc.color}18;display:flex;
+                    align-items:center;justify-content:center;
+                    font-size:11px;font-weight:800;color:${tc.color};
+                    font-family:'Nunito Sans',sans-serif;flex-shrink:0;">
+          ${tc.abbr}
         </div>
-        <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;
-                    letter-spacing:0.06em;font-weight:600;">
-          ${esc(res.type||'')} · ${(res.steps||[]).length} steps
+
+        <!-- Name + meta -->
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:#1b2d3f;
+                      line-height:1.3;margin-bottom:3px;">
+            ${esc(res.name)}
+          </div>
+          <div style="font-size:10px;font-weight:700;
+                      text-transform:uppercase;letter-spacing:0.06em;
+                      color:${tc.color};">
+            ${esc(res.type||'')}
+            <span style="color:#d1d5db;margin:0 4px;">·</span>
+            <span style="color:#9ca3af;">
+              ${(res.steps||[]).length} STEP${(res.steps||[]).length!==1?'S':''}
+            </span>
+          </div>
+          ${appHtml}
+          ${stageHtml}
+          ${linkHtml}
         </div>
+
+        <!-- Edit button -->
+        <button onclick="OL.openInspector('${res.id}',null,'cards')"
+                style="display:flex;align-items:center;gap:5px;
+                       font-size:11px;font-weight:600;
+                       padding:6px 10px;border:1px solid #e5e7eb;
+                       border-radius:8px;background:#fff;
+                       cursor:pointer;color:#6b7280;white-space:nowrap;
+                       transition:border-color 0.15s,color 0.15s;flex-shrink:0;"
+                onmouseenter="this.style.borderColor='#3dd9c5';this.style.color='#3dd9c5'"
+                onmouseleave="this.style.borderColor='#e5e7eb';this.style.color='#6b7280'">
+          <i data-lucide="settings" style="width:11px;height:11px;"></i>
+          Edit
+        </button>
       </div>
-      <button onclick="OL.openInspector('${res.id}',null,'cards')"
-              style="font-size:10px;font-weight:600;padding:5px 8px;
-                     border:1px solid #e5e7eb;border-radius:6px;
-                     background:none;cursor:pointer;color:#6b7280;
-                     white-space:nowrap;"
-              title="Edit resource">
-        Edit ⚙️
-      </button>
     </div>
-    <div style="overflow-y:auto;flex:1;">
+
+    <!-- Steps list -->
+    <div style="overflow-y:auto;">
       ${stepsHtml}
     </div>
   `;
@@ -12319,7 +12381,8 @@ OL.addNewResourceToCanvas = async function() {
             
             // 🚀 OPEN INSPECTOR IMMEDIATELY
             // We pass the newResId and null to open the card-level metadata inspector
-            OL.openInspector(newResId, null, 'cards');
+            //OL.openInspector(newResId, null, 'cards');
+            OL._fvOpenStepsList('${res.id}')
 
             // ⌨️ BONUS: Auto-focus the name field in the inspector if it exists
             const nameInput = document.getElementById('modal-res-name');
@@ -13787,7 +13850,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         const allOptions = this.getAllStepOptions();
 
         content.innerHTML = `
-            <div class="breadcrumb" onclick="OL.openInspector('${resId}', null, 'cards')">« Back to Steps</div>
+            <div class="breadcrumb" onclick="OL._fvOpenStepsList('${res.id}')">« Back to Steps</div>
             
             <div class="inspector-header">
                 <div class="section-label">EDIT STEP ${currentIdx + 1}</div>
