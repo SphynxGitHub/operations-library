@@ -5795,6 +5795,21 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   width: 300px;
 }
 
+/* ADD to style.css — when visualizer inspector is open, activate grid column 3 */
+.three-pane-layout:has(#v2-inspector-panel.open) {
+  grid-template-columns: 240px 1fr 380px;
+}
+
+.three-pane-layout:has(.sidebar.collapsed):has(#v2-inspector-panel.open) {
+  grid-template-columns: 65px 1fr 380px;
+}
+
+// ADD this to OL._fvOpenStepsList, right after panel.classList.add('open'):
+document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active');
+
+// ADD the same line to OL.openInspector, right after panel.classList.add('open'):
+document.querySelector('.three-pane-layout')?.classList.remove('zen-mode-active');
+
 /* Loading */
 .fv-loading-state {
   display: flex; flex-direction: column;
