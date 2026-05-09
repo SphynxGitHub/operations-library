@@ -2858,6 +2858,10 @@ body.is-visualizer #mainContent {
     transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.three-pane-layout:has(.sidebar.collapsed) {
+    grid-template-columns: 65px 1fr 0px;
+}
+
 /* Kill any leftover margin-left on mainContent */
 #mainContent {
     margin-left: 0 !important;
