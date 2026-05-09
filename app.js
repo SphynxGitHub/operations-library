@@ -435,6 +435,24 @@ window.addEventListener('load', () => {
     }
 });
 
+// Recalculate visualizer layout when sidebar collapses/expands
+window.addEventListener('resize', () => {
+  if (!window.location.hash.includes('visualizer')) return;
+
+  const body = document.getElementById('fv-body');
+  if (!body) return;
+
+  // Force flex to recalculate available width
+  body.style.display = 'none';
+  body.offsetHeight; // trigger reflow
+  body.style.display = 'flex';
+
+  // Re-sync rail heights since available width may have changed
+  if (typeof OL._fvSyncRailHeights === 'function') {
+    OL._fvSyncRailHeights();
+  }
+});
+
 OL.toggleTheme = function() {
     const isLight = document.body.classList.toggle('light-mode');
     
