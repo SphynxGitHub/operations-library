@@ -129,7 +129,7 @@ body {
 }
 
 #mainContent {
-    padding: 40px 40px 0 40px;
+    padding: 40px;
     height: auto;
     /* 🚀 THE FIX: Use variables for the gradient colors */
     background: radial-gradient(circle at top right, var(--accent-glow), transparent);
