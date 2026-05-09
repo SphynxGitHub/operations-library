@@ -10268,7 +10268,6 @@ OL.renderVisualizer = function() {
 
 OL._fvRenderFlowchart = function(stages, resources) {
   const body = document.getElementById('fv-body');
-  const inspector = document.getElementById('v2-inspector-panel');
   if (!body) return;
 
   // Remove any previous rail/canvas before injecting fresh ones
@@ -10281,9 +10280,9 @@ OL._fvRenderFlowchart = function(stages, resources) {
   const temp = document.createElement('div');
   temp.innerHTML = html;
 
-  // Insert before the inspector so order is: rail → canvas → inspector
+  // Just append — inspector is now in the grid, not in fv-body
   while (temp.firstChild) {
-    body.insertBefore(temp.firstChild, inspector);
+    body.appendChild(temp.firstChild);
   }
 
   if (window.lucide) lucide.createIcons();
@@ -10293,15 +10292,10 @@ OL._fvRenderFlowchart = function(stages, resources) {
 
 OL._fvRenderList = function(stages, resources) {
   const body = document.getElementById('fv-body');
-  const inspector = document.getElementById('v2-inspector-panel');
   if (!body) return;
 
-  // Remove previous list wrap if present
-  const existing = document.getElementById('fv-list-wrap');
-  if (existing) existing.remove();
-
-  // Also remove rail/canvas if switching from flowchart
-  ['fv-lane-rail', 'fv-canvas-wrap'].forEach(id => {
+  // Remove previous content
+  ['fv-list-wrap', 'fv-lane-rail', 'fv-canvas-wrap'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
@@ -10311,11 +10305,12 @@ OL._fvRenderList = function(stages, resources) {
   temp.innerHTML = html;
 
   while (temp.firstChild) {
-    body.insertBefore(temp.firstChild, inspector);
+    body.appendChild(temp.firstChild);
   }
 
   if (window.lucide) lucide.createIcons();
 };
+
 // ══════════════════════════════════════════════
 // FLOWCHART VIEW
 // ══════════════════════════════════════════════
