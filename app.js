@@ -11931,68 +11931,72 @@ OL._fvBuildListShell = function(stages, resources) {
     ? stages.filter(s => s.id === filter)
     : [...stages, { id: '__none__', name: 'Unassigned' }];
 
-  // Build the complete flat list ONCE upfront
-  const allFlatSteps = [];
-  displayStages.forEach(stage => {
+  // Build flat list ONCE with index baked in — no findIndex later
+  let gIdx = 0;
+  const stageGroups = [];
+
+  displayStages.forEach((stage, si) => {
     const stageRes = resources.filter(r =>
       stage.id === '__none__'
         ? (!r.stageId || r.stageId === '__none__')
         : String(r.stageId) === String(stage.id)
     );
+
+    const stageSteps = [];
     stageRes.forEach(res => {
       (res.steps || []).forEach((step, stepIdx) => {
-        allFlatSteps.push({ step, res, stage, stepIdx });
+        stageSteps.push({ step, res, stepIdx, gIdx: gIdx++ });
       });
     });
+
+    if (stageSteps.length > 0) {
+      stageGroups.push({ stage, si, stageSteps });
+    }
   });
 
-  if (allFlatSteps.length === 0) {
-    return `
-      <div id="fv-list-wrap">
-        <div class="fv-loading-state">
-          <span>No steps found.</span>
-        </div>
-      </div>`;
+  if (stageGroups.length === 0) {
+    return `<div id="fv-list-wrap">
+      <div style="padding:40px;text-align:center;color:#9ca3af;font-size:13px;">
+        No steps found.
+      </div>
+    </div>`;
   }
 
-  // Group by stage for display
-  const stagesHtml = displayStages.map((stage, si) => {
-    const stageSteps = allFlatSteps.filter(s => s.stage.id === stage.id);
-    if (stageSteps.length === 0) return '';
+  const stagesHtml = stageGroups.map(({ stage, si, stageSteps }) => {
 
-    const rowsHtml = stageSteps.map(({ step, res, stepIdx }) => {
-      const tc         = OL._fvGetType(res.type);
-      const outLogic   = step.logic?.out || [];
-      const isDecision = outLogic.filter(l => l.targetId).length > 1;
-      const hasLoop    = outLogic.some(l => l.type === 'loop');
-      const hasCond    = outLogic.some(l => l.rule?.trim());
-      // Use a stable index from allFlatSteps
-      const gIdx = allFlatSteps.findIndex(
-        s => s.res.id === res.id && s.step.id === step.id
-      );
+    const rowsHtml = stageSteps.map(({ step, res, gIdx: idx }) => {
+      const tc       = OL._fvGetType(res.type);
+      const outLogic = step.logic?.out || [];
+      const hasLoop  = outLogic.some(l => l.type === 'loop');
+      const hasCond  = outLogic.some(l => l.rule?.trim());
+      const isMulti  = outLogic.filter(l => l.targetId).length > 1;
 
       const tags = [
-        hasCond    && `<span class="fv-list-tag conditional">λ</span>`,
-        isDecision && `<span class="fv-list-tag conditional">◆</span>`,
-        hasLoop    && `<span class="fv-list-tag loop">↺</span>`,
+        hasCond  && `<span class="fv-list-tag conditional">λ</span>`,
+        isMulti  && `<span class="fv-list-tag conditional">◆</span>`,
+        hasLoop  && `<span class="fv-list-tag loop">↺</span>`,
       ].filter(Boolean).join('');
+
+      // Safe escape IDs for inline handlers
+      const safeResId  = String(res.id).replace(/'/g, "\\'");
+      const safeStepId = String(step.id).replace(/'/g, "\\'");
 
       return `
         <div class="fv-list-item"
-             id="fv-list-step-${esc(step.id)}"
-             data-step-id="${esc(step.id)}"
-             data-res-id="${esc(res.id)}"
-             data-global-idx="${gIdx}"
+             id="fv-list-step-${step.id}"
+             data-step-id="${step.id}"
+             data-res-id="${res.id}"
+             data-global-idx="${idx}"
              draggable="true"
-             ondragstart="OL._fvListDragStart(event,'${esc(res.id)}','${esc(step.id)}',${gIdx})"
+             ondragstart="OL._fvListDragStart(event,'${safeResId}','${safeStepId}',${idx})"
              ondragend="OL._fvListDragEnd(event)"
-             ondragover="OL._fvListDragOver(event,${gIdx})"
+             ondragover="OL._fvListDragOver(event,${idx})"
              ondragleave="OL._fvListDragLeave(event)"
-             ondrop="OL._fvListDrop(event,'${esc(res.id)}','${esc(step.id)}',${gIdx})"
+             ondrop="OL._fvListDrop(event,'${safeResId}','${safeStepId}',${idx})"
              onclick="event.stopPropagation();
                       document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
                       this.classList.add('selected');
-                      OL.openInspector('${esc(res.id)}','${esc(step.id)}')">
+                      OL.openInspector('${safeResId}','${safeStepId}')">
 
           <div class="fv-list-type-dot"
                style="background:${tc.color};margin-top:3px;flex-shrink:0;"></div>
@@ -12032,7 +12036,7 @@ OL._fvBuildListShell = function(stages, resources) {
         </div>
       </div>
     `;
-  }).filter(Boolean).join('');
+  }).join('');
 
   return `
     <div id="fv-list-wrap">
