@@ -5883,7 +5883,7 @@ body.is-visualizer #v2-inspector-panel {
     min-width: 0;
     width: 0;
     overflow: hidden;
-   border: none;
+   border: none !important;
 }
 
 /* Loading */
