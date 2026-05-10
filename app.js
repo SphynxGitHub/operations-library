@@ -10062,11 +10062,14 @@ OL._fvNormalizeStepCoords = function() {
 
 // ── SHARED STATE ─────────────────────────────────────────
 if (!OL._fv) OL._fv = {
-  layout: 'flowchart',   // 'flowchart' | 'list'
+  layout: localStorage.getItem('fv_layout') || 'flowchart',
   zoom: 1,
   showConnections: true,
   stageFilter: '',
+  globalsExpanded: false,
   searchMatches: [], searchIdx: -1,
+  snapToGrid: false, gridSize: 20,
+  _searchQuery: '',
 };
 
 // ── MAIN ENTRY ────────────────────────────────────────────
@@ -10083,13 +10086,15 @@ OL.renderVisualizer = function() {
   const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
   if (!OL._fv) OL._fv = {
-    layout: 'flowchart', zoom: 1,
-    showConnections: true, stageFilter: '',
-    globalsExpanded: false,
-    searchMatches: [], searchIdx: -1,
-    snapToGrid: false, gridSize: 20,
-    _searchQuery: '',
-  };
+      layout: localStorage.getItem('fv_layout') || 'flowchart',
+      zoom: 1,
+      showConnections: true,
+      stageFilter: '',
+      globalsExpanded: false,
+      searchMatches: [], searchIdx: -1,
+      snapToGrid: false, gridSize: 20,
+      _searchQuery: '',
+    };
 
   // Run layout computation for steps view
   if (OL._fv.layout === 'steps') {
@@ -10136,7 +10141,7 @@ OL.renderVisualizer = function() {
 
         <!-- Layout switcher -->
         <select class="fv-select" style="font-weight:600;"
-                onchange="OL._fv.layout = this.value; OL.renderVisualizer();">
+                onchange="OL._fv.layout = this.value; localStorage.setItem('fv_layout', this.value); OL.renderVisualizer();">
           <option value="flowchart" ${OL._fv.layout==='flowchart'?'selected':''}>🗺 Swimlanes</option>
           <option value="steps"     ${OL._fv.layout==='steps'    ?'selected':''}>⬡ Steps</option>
           <option value="list"      ${OL._fv.layout==='list'     ?'selected':''}>📋 List</option>
@@ -11922,97 +11927,100 @@ OL._fvSelectStep = function(resId, stepId) {
 OL._fvBuildListShell = function(stages, resources) {
   const filter = OL._fv.stageFilter;
 
-  // Build flat list of all steps across all stages in order
-  const flatSteps = [];
-  const displayStages = filter 
+  const displayStages = filter
     ? stages.filter(s => s.id === filter)
-    : stages;
+    : [...stages, { id: '__none__', name: 'Unassigned' }];
 
-  displayStages.forEach(stage => {
-    const stageRes = resources.filter(r => r.stageId === stage.id);
+  let globalIdx = 0;
+  const stagesHtml = displayStages.map((stage, si) => {
+
+    // Get all steps from all resources in this stage, in order
+    const stageRes = resources.filter(r =>
+      stage.id === '__none__'
+        ? (!r.stageId || r.stageId === '__none__')
+        : r.stageId === stage.id
+    );
+
+    const flatSteps = [];
     stageRes.forEach(res => {
-      (res.steps || []).forEach((step, idx) => {
-        flatSteps.push({ step, res, stage, stepIdx: idx });
+      (res.steps || []).forEach((step, stepIdx) => {
+        flatSteps.push({ step, res, stepIdx, globalIdx: globalIdx++ });
       });
     });
-  });
 
-  // Also include unassigned
-  if (!filter) {
-    resources.filter(r => !r.stageId || r.stageId === '__none__').forEach(res => {
-      (res.steps || []).forEach((step, idx) => {
-        flatSteps.push({ step, res, stage: { id: '__none__', name: 'Unassigned' }, stepIdx: idx });
-      });
-    });
-  }
+    if (flatSteps.length === 0) return '';
 
-  if (flatSteps.length === 0) {
-    return `
-      <div id="fv-list-wrap">
-        <div class="fv-loading-state">
-          <i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i>
-          <span>No steps found.</span>
-        </div>
-      </div>`;
-  }
+    const rowsHtml = flatSteps.map(({ step, res, stepIdx, globalIdx: gIdx }) => {
+      const tc         = OL._fvGetType(res.type);
+      const isDecision = (step.logic?.out || []).filter(l => l.targetId).length > 1;
+      const hasLoop    = (step.logic?.out || []).some(l => l.type === 'loop');
+      const hasCond    = (step.logic?.out || []).some(l => l.rule?.trim());
 
-  const rowsHtml = flatSteps.map(({ step, res, stage }, globalIdx) => {
-    const tc         = OL._fvGetType(res.type);
-    const isDecision = (step.logic?.out || []).filter(l => l.targetId).length > 1;
-    const hasLoop    = (step.logic?.out || []).some(l => l.type === 'loop');
-    const hasCond    = (step.logic?.out || []).some(l => l.rule?.trim());
+      const tags = [
+        hasCond    && `<span class="fv-list-tag conditional">λ</span>`,
+        isDecision && `<span class="fv-list-tag conditional">◆</span>`,
+        hasLoop    && `<span class="fv-list-tag loop">↺</span>`,
+      ].filter(Boolean).join('');
 
-    const tags = [
-      hasCond && `<span class="fv-list-tag conditional">λ Condition</span>`,
-      isDecision && `<span class="fv-list-tag conditional">◆ Decision</span>`,
-      hasLoop && `<span class="fv-list-tag loop">↺ Loop</span>`,
-    ].filter(Boolean).join('');
+      return `
+        <div class="fv-list-item"
+             id="fv-list-step-${step.id}"
+             data-step-id="${step.id}"
+             data-res-id="${res.id}"
+             data-global-idx="${gIdx}"
+             draggable="true"
+             ondragstart="OL._fvListDragStart(event,'${res.id}','${step.id}',${gIdx})"
+             ondragend="OL._fvListDragEnd(event)"
+             ondragover="OL._fvListDragOver(event,${gIdx})"
+             ondragleave="OL._fvListDragLeave(event)"
+             ondrop="OL._fvListDrop(event,'${res.id}','${step.id}',${gIdx})"
+             onclick="event.stopPropagation();
+                      document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
+                      this.classList.add('selected');
+                      OL.openInspector('${res.id}','${step.id}')">
 
-    return `
-      <div class="fv-list-item"
-           id="fv-list-step-${step.id}"
-           data-step-id="${step.id}"
-           data-res-id="${res.id}"
-           data-global-idx="${globalIdx}"
-           draggable="true"
-           ondragstart="OL._fvListDragStart(event, '${res.id}', '${step.id}', ${globalIdx})"
-           ondragend="OL._fvListDragEnd(event)"
-           ondragover="OL._fvListDragOver(event, ${globalIdx})"
-           ondragleave="OL._fvListDragLeave(event)"
-           ondrop="OL._fvListDrop(event, '${res.id}', '${step.id}', ${globalIdx})"
-           onclick="event.stopPropagation();
-                    document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
-                    this.classList.add('selected');
-                    OL.openInspector('${res.id}','${step.id}')">
+          <div class="fv-list-type-dot" 
+               style="background:${tc.color};margin-top:3px;flex-shrink:0;"></div>
 
-        <div class="fv-list-type-dot" style="background:${tc.color};margin-top:3px;flex-shrink:0;"></div>
-
-        <div style="flex:1;min-width:0;">
-          <div class="fv-list-step-name${isDecision?' decision-name':''}">${esc(step.name||'Unnamed Step')}</div>
-          <div style="display:flex;gap:5px;align-items:center;margin-top:3px;flex-wrap:wrap;">
-            <span class="fv-list-res-badge" 
-                  style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
-              ${esc(res.name.substring(0,20))}
-            </span>
-            <span style="font-size:9px;color:#d1d5db;">·</span>
-            <span style="font-size:9px;color:#9ca3af;">${esc(stage.name)}</span>
-            ${tags}
+          <div style="flex:1;min-width:0;">
+            <div class="fv-list-step-name${isDecision?' decision-name':''}">${esc(step.name||'Unnamed Step')}</div>
+            <div style="display:flex;gap:4px;align-items:center;margin-top:3px;flex-wrap:wrap;">
+              <span class="fv-list-res-badge"
+                    style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
+                ${esc(res.name.substring(0,20))}
+              </span>
+              ${tags}
+            </div>
           </div>
+
+          <div style="color:#d1d5db;font-size:14px;cursor:grab;padding:0 6px;flex-shrink:0;"
+               title="Drag to reorder">⠿</div>
+
+          <i data-lucide="chevron-right" 
+             style="width:11px;height:11px;color:#d1d5db;flex-shrink:0;"></i>
         </div>
+      `;
+    }).join('');
 
-        <!-- Drag handle -->
-        <div style="color:#d1d5db;font-size:14px;cursor:grab;padding:0 4px;flex-shrink:0;"
-             title="Drag to reorder">⠿</div>
-
-        <i data-lucide="chevron-right" style="width:11px;height:11px;color:#d1d5db;flex-shrink:0;"></i>
+    return `
+      <div class="fv-list-stage" data-stage-id="${stage.id}">
+        <div class="fv-list-stage-header">
+          <div class="fv-list-stage-num">${si + 1}</div>
+          <div class="fv-list-stage-name">${esc(stage.name)}</div>
+          <div class="fv-list-stage-line"></div>
+          <div class="fv-list-stage-count">${flatSteps.length} step${flatSteps.length!==1?'s':''}</div>
+        </div>
+        <div class="fv-list-steps">
+          ${rowsHtml}
+        </div>
       </div>
     `;
-  }).join('');
+  }).filter(Boolean).join('');
 
   return `
     <div id="fv-list-wrap">
-      <div id="fv-flat-list" style="display:flex;flex-direction:column;gap:4px;padding:16px;">
-        ${rowsHtml}
+      <div id="fv-flat-list" style="padding:16px;">
+        ${stagesHtml || '<div class="fv-loading-state">No steps found.</div>'}
       </div>
     </div>
   `;
