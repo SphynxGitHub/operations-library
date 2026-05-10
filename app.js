@@ -10558,13 +10558,14 @@ OL._fvLaneDragOver = function(e) {
   const lane = e.currentTarget;
   lane.classList.add('fv-drag-over');
 
-  // Find which card we're hovering over to show placeholder
+  // 🚀 Throttle placeholder updates
+  if (OL._fv._dragThrottle) return;
+  OL._fv._dragThrottle = true;
+  setTimeout(() => { OL._fv._dragThrottle = false; }, 50);
+
   const cards = [...lane.querySelectorAll('.fv-card:not(.fv-dragging):not(.fv-drop-placeholder)')];
-  
-  // Remove existing placeholder
   lane.querySelectorAll('.fv-drop-placeholder').forEach(el => el.remove());
 
-  // Find insertion point based on mouse X position
   let insertBefore = null;
   for (const card of cards) {
     const rect = card.getBoundingClientRect();
@@ -10575,15 +10576,9 @@ OL._fvLaneDragOver = function(e) {
     }
   }
 
-  // Build placeholder
   const ph = document.createElement('div');
   ph.className = 'fv-drop-placeholder';
-
-  if (insertBefore) {
-    lane.insertBefore(ph, insertBefore);
-  } else {
-    lane.appendChild(ph);
-  }
+  insertBefore ? lane.insertBefore(ph, insertBefore) : lane.appendChild(ph);
 };
 
 OL._fvLaneDragLeave = function(e) {
@@ -10598,7 +10593,6 @@ OL._fvLaneDragLeave = function(e) {
 OL._fvLaneDrop = async function(e, targetStageId) {
   e.preventDefault();
 
-  // Clean up visuals
   document.querySelectorAll('.fv-swimlane').forEach(el => {
     el.classList.remove('fv-drag-over');
   });
@@ -10611,50 +10605,39 @@ OL._fvLaneDrop = async function(e, targetStageId) {
   const res       = resources.find(r => String(r.id) === String(resId));
   if (!res) return;
 
-  // Find drop index from placeholder position
+  // Get drop index from placeholder
   const lane = e.currentTarget;
   const ph   = lane.querySelector('.fv-drop-placeholder');
-  let dropIndex = null;
+  let dropIndex = 0;
 
   if (ph) {
-    const cards = [...lane.querySelectorAll('.fv-card:not(.fv-dragging):not(.fv-drop-placeholder)')];
-    dropIndex = cards.indexOf(ph.previousElementSibling?.classList.contains('fv-card')
-      ? ph.previousElementSibling
-      : null);
-    // Actually count position by looking at what's before the placeholder
-    const allLaneItems = [...lane.children];
-    const phIdx = allLaneItems.indexOf(ph);
-    // Count fv-cards before placeholder
-    dropIndex = allLaneItems
-      .slice(0, phIdx)
-      .filter(el => el.classList.contains('fv-card') && !el.classList.contains('fv-dragging'))
-      .length;
+    const beforePh = [...lane.children]
+      .slice(0, [...lane.children].indexOf(ph))
+      .filter(el => el.classList.contains('fv-card') && !el.classList.contains('fv-dragging'));
+    dropIndex = beforePh.length;
     ph.remove();
   }
 
-  await OL.updateAndSync(() => {
-    // 1. Remove from current position in array
-    const oldIdx = resources.findIndex(r => String(r.id) === String(resId));
-    if (oldIdx > -1) resources.splice(oldIdx, 1);
+  // 🚀 Direct state mutation + single persist (no updateAndSync overhead)
+  const oldIdx = resources.findIndex(r => String(r.id) === String(resId));
+  if (oldIdx > -1) resources.splice(oldIdx, 1);
 
-    // 2. Assign new stage
-    res.stageId  = targetStageId;
-    res.isGlobal = false;
+  res.stageId  = targetStageId;
+  res.isGlobal = false;
 
-    // 3. Re-insert at correct position among same-stage resources
-    if (dropIndex !== null) {
-      // Find where this stage's resources start in the full array
-      const stageResources = resources.filter(r => r.stageId === targetStageId);
-      const firstStageIdx  = resources.findIndex(r => r.stageId === targetStageId);
-      const insertAt = firstStageIdx > -1 
-        ? firstStageIdx + Math.min(dropIndex, stageResources.length)
-        : resources.length;
-      resources.splice(insertAt, 0, res);
-    } else {
-      resources.push(res);
-    }
-  });
+  // Find insertion point among same-stage resources
+  const stageResources = resources
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => r.stageId === targetStageId);
 
+  const insertAt = stageResources.length > 0
+    ? (stageResources[Math.min(dropIndex, stageResources.length - 1)]?.i ?? resources.length)
+    : resources.length;
+
+  resources.splice(insertAt, 0, res);
+
+  // 🚀 Persist silently, re-render immediately without waiting
+  OL.persist(); // fire and forget
   OL.renderVisualizer();
 };
 
@@ -10842,6 +10825,108 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount, stageId = '', c
       ${stepsPreview}
     </div>
   `;
+};
+
+OL._fvStartConnection = function(e, resId, stepId, portSide) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const canvas = document.getElementById('fv-content');
+  const svg    = document.getElementById('fv-svg-layer');
+  if (!canvas || !svg) return;
+
+  // Create a temporary line that follows the mouse
+  const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  tempLine.setAttribute('fill', 'none');
+  tempLine.setAttribute('stroke', '#3dd9c5');
+  tempLine.setAttribute('stroke-width', '2');
+  tempLine.setAttribute('stroke-dasharray', '6,3');
+  tempLine.id = 'fv-temp-connection';
+  svg.appendChild(tempLine);
+
+  // Source port center
+  const port   = document.getElementById(`port-${portSide}-${resId}-${stepId}`);
+  const cRect  = canvas.getBoundingClientRect();
+  const pRect  = port.getBoundingClientRect();
+  const zoom   = OL._fv.zoom || 1;
+
+  const sx = (pRect.left - cRect.left + pRect.width  / 2) / zoom;
+  const sy = (pRect.top  - cRect.top  + pRect.height / 2) / zoom;
+
+  OL._fv._connecting = { resId, stepId, portSide, sx, sy };
+
+  const onMove = e => {
+    const mx = (e.clientX - cRect.left) / zoom;
+    const my = (e.clientY - cRect.top)  / zoom;
+    const d  = `M ${sx} ${sy} C ${sx+60} ${sy}, ${mx-60} ${my}, ${mx} ${my}`;
+    tempLine.setAttribute('d', d);
+
+    // Highlight ports being hovered
+    document.querySelectorAll('.fv-port').forEach(p => p.classList.remove('fv-port-target'));
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const targetPort = el?.closest('.fv-port');
+    if (targetPort && !targetPort.id.includes(`${resId}-${stepId}`)) {
+      targetPort.classList.add('fv-port-target');
+    }
+  };
+
+  const onUp = async e => {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup',   onUp);
+    tempLine.remove();
+    document.querySelectorAll('.fv-port-target').forEach(p => p.classList.remove('fv-port-target'));
+
+    // Check if dropped on a port
+    const el         = document.elementFromPoint(e.clientX, e.clientY);
+    const targetPort = el?.closest('.fv-port');
+
+    if (targetPort && targetPort.id !== `port-${portSide}-${resId}-${stepId}`) {
+      // Parse target from port id: port-{side}-{resId}-{stepId}
+      const parts      = targetPort.id.split('-');
+      // port-top-resId-stepId — resId may contain dashes so we need to be careful
+      // Format is: port + side + ...rest
+      const side       = parts[1];
+      // Find target step by scanning
+      const tCard      = targetPort.closest('.fv-step-card');
+      const tResId     = tCard?.dataset.resId;
+      const tStepId    = tCard?.dataset.stepId;
+
+      if (tResId && tStepId && tResId !== resId) {
+        await OL._fvCreateConnection(resId, stepId, tResId, tStepId);
+      }
+    }
+
+    OL._fv._connecting = null;
+  };
+
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup',   onUp);
+};
+
+OL._fvCreateConnection = async function(fromResId, fromStepId, toResId, toStepId) {
+  const data = OL.getCurrentProjectData();
+  const fromRes  = (data.resources||[]).find(r => String(r.id) === String(fromResId));
+  const fromStep = fromRes?.steps?.find(s => String(s.id) === String(fromStepId));
+  if (!fromStep) return;
+
+  if (!fromStep.logic) fromStep.logic = { in: [], out: [] };
+  if (!fromStep.logic.out) fromStep.logic.out = [];
+
+  const targetId = `${toResId}-${toStepId}`;
+
+  // Don't duplicate
+  if (fromStep.logic.out.some(l => l.targetId === targetId)) return;
+
+  // Default to "next" connection
+  fromStep.logic.out.push({
+    targetId,
+    type: 'next',
+    rule: ''
+  });
+
+  OL.syncLogicPorts();
+  await OL.persist();
+  OL._fvRenderSteps((data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked));
 };
 
 OL._fvToggleCardPin = async function(resId) {
@@ -11185,41 +11270,46 @@ OL._fvDrawStepConnections = function(resources) {
         if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
         group.appendChild(path);
 
-        // Logic icon on line midpoint
-        const hasRule  = outRule.rule?.trim();
-        const hasDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
-        const iconChar = isLoop ? '↺' : hasDelay ? '⏱' : hasRule ? 'λ' : null;
-
-        if (iconChar) {
-          // Find midpoint of bezier curve
-          const mx = (fx + tx) / 2;
-          const my = (fy + ty) / 2;
-
-          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
-          bg.setAttribute('fill', '#fff');
-          bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
-          group.appendChild(bg);
-
-          const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          txt.setAttribute('x', mx); txt.setAttribute('y', my + 4);
+        // Draw logic icon at midpoint
+        const pathLength = path.getTotalLength?.() || 0;
+        const mid = pathLength > 0 ? path.getPointAtLength(pathLength / 2) : { x: (fx+tx)/2, y: (fy+ty)/2 };
+        
+        const isLoop  = outRule.type === 'loop';
+        const isDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
+        const hasCond = outRule.rule?.trim();
+        
+        let icon = null;
+        if (isLoop)       icon = '↺';
+        else if (isDelay) icon = '⏱';
+        else if (hasCond) icon = 'λ';
+        
+        if (icon) {
+          // Background circle
+          const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+          circle.setAttribute('cx', mid.x);
+          circle.setAttribute('cy', mid.y);
+          circle.setAttribute('r', '10');
+          circle.setAttribute('fill', '#fff');
+          circle.setAttribute('stroke', color);
+          circle.setAttribute('stroke-width', '1.5');
+          circle.style.cursor = 'pointer';
+          circle.addEventListener('click', e => {
+            e.stopPropagation();
+            OL._fvOpenLineLogicEditor(fromResId, fromStepId, outRule, color);
+          });
+          group.appendChild(circle);
+        
+          // Icon text
+          const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+          txt.setAttribute('x', mid.x);
+          txt.setAttribute('y', mid.y + 4);
           txt.setAttribute('text-anchor', 'middle');
-          txt.setAttribute('font-size', iconChar === 'λ' ? '11' : '10');
+          txt.setAttribute('font-size', '11');
           txt.setAttribute('font-weight', '700');
           txt.setAttribute('fill', color);
-          txt.setAttribute('font-family', 'DM Sans, sans-serif');
           txt.setAttribute('pointer-events', 'none');
-          txt.textContent = iconChar;
+          txt.textContent = icon;
           group.appendChild(txt);
-
-          // Tooltip on hover showing the rule/delay
-          if (hasRule || hasDelay) {
-            const label = hasDelay
-              ? `⏱ ${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`
-              : outRule.rule;
-            bg.setAttribute('title', label);
-            bg.style.cursor = 'help';
-          }
         }
       });
     });
@@ -14355,9 +14445,94 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <div class="section-label">📤 OUTPUT CONDITIONS (To where?)</div>
-                    ${step.logic.out.map((l, i) => OL.renderLogicBlock(resId, step.id, 'out', i, l, allOptions)).join('')}
-                    <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')">+ Add Output Rule</button>
+                  <div class="section-label">📤 NEXT STEP</div>
+                
+                  ${(step.logic?.out || []).map((l, i) => {
+                    const targetId = l.targetId || '';
+                    let targetLabel = '— Select target —';
+                    if (targetId) {
+                      const lastH  = targetId.lastIndexOf('-');
+                      const tResId = targetId.substring(0, lastH);
+                      const tStepId = targetId.substring(lastH + 1);
+                      const tRes  = (OL.getCurrentProjectData().resources||[]).find(r => String(r.id) === tResId);
+                      const tStep = tRes?.steps?.find(s => String(s.id) === tStepId);
+                      if (tRes && tStep) targetLabel = `${esc(tRes.name)} › ${esc(tStep.name||'Step')}`;
+                    }
+                    return `
+                      <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;
+                                  padding:10px 12px;margin-bottom:8px;">
+                
+                        <div style="display:flex;gap:4px;margin-bottom:8px;">
+                          ${['next','condition','loop','delay'].map(t => `
+                            <span onclick="OL._fvSetLogicType('${resId}','${step.id}',${i},'${t}')"
+                                  style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
+                                         cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
+                                         background:${(l.type||'next')===t ? '#3dd9c5' : '#f5f6f8'};
+                                         color:${(l.type||'next')===t ? '#fff' : '#9ca3af'};
+                                         border:1px solid ${(l.type||'next')===t ? '#3dd9c5' : '#e5e7eb'};">
+                              ${t==='next'?'→ Next':t==='condition'?'λ If':t==='loop'?'↺ Loop':'⏱ Delay'}
+                            </span>
+                          `).join('')}
+                        </div>
+                
+                        <div style="position:relative;margin-bottom:${l.type==='condition'||l.type==='delay' ? '8px' : '0'};">
+                          <div onclick="OL._fvOpenTargetPicker('${resId}','${step.id}',${i})"
+                               style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;
+                                      font-size:11px;color:${targetId ? '#1b2d3f' : '#9ca3af'};
+                                      background:#fff;cursor:pointer;display:flex;
+                                      align-items:center;justify-content:space-between;">
+                            <span>${targetLabel}</span>
+                            <i data-lucide="chevron-down" style="width:12px;height:12px;color:#9ca3af;"></i>
+                          </div>
+                          <div id="target-picker-${resId}-${step.id}-${i}"
+                               class="search-results-overlay" style="display:none;max-height:200px;overflow-y:auto;"></div>
+                        </div>
+                
+                        ${l.type==='condition' ? `
+                          <input type="text" class="fvi-input"
+                                 placeholder="Condition (e.g. If approved...)"
+                                 value="${esc(l.rule||'')}"
+                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'rule',this.value)"
+                                 style="margin-top:0;">
+                        ` : ''}
+                
+                        ${l.type==='delay' ? `
+                          <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="number" class="fvi-input" style="width:70px;"
+                                   placeholder="0"
+                                   value="${esc(String(l.delayValue||''))}"
+                                   onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayValue',this.value)">
+                            <select class="fvi-select" style="flex:1;"
+                                    onchange="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayUnit',this.value)">
+                              <option value="hours" ${l.delayUnit==='hours'?'selected':''}>Hours</option>
+                              <option value="days"  ${l.delayUnit==='days' ?'selected':''}>Days</option>
+                              <option value="weeks" ${l.delayUnit==='weeks'?'selected':''}>Weeks</option>
+                            </select>
+                          </div>
+                        ` : ''}
+                
+                        ${l.type==='loop' ? `
+                          <input type="text" class="fvi-input"
+                                 placeholder="Loop limit (e.g. 3 times, or leave blank)"
+                                 value="${esc(l.loopLimit||'')}"
+                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'loopLimit',this.value)"
+                                 style="margin-top:0;">
+                        ` : ''}
+                
+                        <button onclick="OL.removeStepLogic('${resId}','${step.id}','out',${i})"
+                                style="margin-top:8px;width:100%;background:none;border:none;
+                                       color:#ef4444;font-size:10px;cursor:pointer;
+                                       text-align:left;padding:0;font-family:inherit;">
+                          Remove
+                        </button>
+                      </div>
+                    `;
+                  }).join('')}
+                
+                  <button onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')"
+                          class="fvi-add-step-btn" style="margin-top:4px;">
+                    + Add Output
+                  </button>
                 </div>
 
                 <div class="inspector-section">
@@ -14516,6 +14691,62 @@ if (mode === 'cards' && resId) {
     }
 
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
+};
+
+OL._fvSetLogicType = function(resId, stepId, idx, type) {
+  const data = OL.getCurrentProjectData();
+  const res  = (data.resources||[]).find(r=>String(r.id)===String(resId));
+  const step = res?.steps?.find(s=>String(s.id)===String(stepId));
+  if (!step?.logic?.out?.[idx]) return;
+  step.logic.out[idx].type = type;
+  OL.persist();
+  OL.openInspector(resId, stepId);
+};
+
+OL._fvOpenTargetPicker = function(resId, stepId, idx) {
+  const pickerId = `target-picker-${resId}-${stepId}-${idx}`;
+  const picker   = document.getElementById(pickerId);
+  if (!picker) return;
+
+  const isOpen = picker.style.display === 'block';
+  // Close all others first
+  document.querySelectorAll('.search-results-overlay').forEach(el => el.style.display = 'none');
+  if (isOpen) return;
+
+  const data      = OL.getCurrentProjectData();
+  const resources = (data.resources||[]).filter(r=>!r.isDeleted);
+
+  let html = '';
+  resources.forEach(r => {
+    if ((r.steps||[]).length === 0) return;
+    html += `<div style="padding:6px 10px;font-size:10px;font-weight:700;
+                         color:#9ca3af;text-transform:uppercase;background:#f9fafb;">
+               ${esc(r.name)}
+             </div>`;
+    r.steps.forEach(s => {
+      const targetId = `${r.id}-${s.id}`;
+      const isSelf   = r.id === resId && s.id === stepId;
+      if (isSelf) return;
+      html += `
+        <div class="search-result-item"
+             onmousedown="OL.updateStepTarget('${resId}','${stepId}','out',${idx},'${targetId}'); 
+                          document.getElementById('${pickerId}').style.display='none';">
+          ${esc(s.name||'Unnamed Step')}
+        </div>`;
+    });
+  });
+
+  picker.innerHTML = html || '<div class="search-result-item muted">No steps found</div>';
+  picker.style.display = 'block';
+};
+
+OL._fvOpenLineLogicEditor = function(resId, stepId, rule, color) {
+  // Opens inspector for the source step and scrolls to logic section
+  OL.openInspector(resId, stepId);
+  setTimeout(() => {
+    const section = document.querySelector('.inspector-section:last-child');
+    if (section) section.scrollIntoView({ behavior: 'smooth' });
+  }, 100);
 };
 
 window.renderStepResources = function(resId, step) {
