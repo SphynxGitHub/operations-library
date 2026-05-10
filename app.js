@@ -11274,17 +11274,21 @@ OL._fvDrawStepConnections = function(resources) {
         const pathLength = path.getTotalLength?.() || 0;
         const mid = pathLength > 0 ? path.getPointAtLength(pathLength / 2) : { x: (fx+tx)/2, y: (fy+ty)/2 };
         
-        const isLoop  = outRule.type === 'loop';
-        const isDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
-        const hasCond = outRule.rule?.trim();
+        const lineIsLoop  = outRule.type === 'loop';
+        const lineIsDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
+        const lineHasCond = outRule.rule?.trim();
         
         let icon = null;
-        if (isLoop)       icon = '↺';
-        else if (isDelay) icon = '⏱';
-        else if (hasCond) icon = 'λ';
+        if (lineIsLoop)       icon = '↺';
+        else if (lineIsDelay) icon = '⏱';
+        else if (lineHasCond) icon = 'λ';
         
         if (icon) {
-          // Background circle
+          const pathLength = path.getTotalLength?.() || 0;
+          const mid = pathLength > 0 
+            ? path.getPointAtLength(pathLength / 2) 
+            : { x: (fx+tx)/2, y: (fy+ty)/2 };
+        
           const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
           circle.setAttribute('cx', mid.x);
           circle.setAttribute('cy', mid.y);
@@ -11293,13 +11297,12 @@ OL._fvDrawStepConnections = function(resources) {
           circle.setAttribute('stroke', color);
           circle.setAttribute('stroke-width', '1.5');
           circle.style.cursor = 'pointer';
-          circle.addEventListener('click', e => {
-            e.stopPropagation();
+          circle.addEventListener('click', ev => {
+            ev.stopPropagation();
             OL._fvOpenLineLogicEditor(fromResId, fromStepId, outRule, color);
           });
           group.appendChild(circle);
         
-          // Icon text
           const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
           txt.setAttribute('x', mid.x);
           txt.setAttribute('y', mid.y + 4);
