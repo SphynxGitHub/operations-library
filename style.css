@@ -6511,3 +6511,11 @@ body.is-visualizer #v2-inspector-panel {
 .fv-card:hover .fv-card-pin-btn { opacity: 1; }
 .fv-card-pin-btn.pinned { opacity: 1; color: #3dd9c5; }
 .fv-card-pin-btn:hover { background: #f5f6f8; color: #1b2d3f; }
+
+.fv-port.fv-port-target {
+  opacity: 1 !important;
+  border-color: #f5b800 !important;
+  background: #f5b800 !important;
+  transform: translateX(-50%) scale(1.6) !important;
+  box-shadow: 0 0 10px rgba(245,184,0,0.5);
+}
