@@ -2856,6 +2856,7 @@ body.is-visualizer #mainContent {
     height: 100vh;
     overflow: hidden;
     transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: none;
 }
 
 .three-pane-layout:has(.sidebar.collapsed) {
@@ -5882,6 +5883,7 @@ body.is-visualizer #v2-inspector-panel {
     min-width: 0;
     width: 0;
     overflow: hidden;
+   border: none;
 }
 
 /* Loading */
