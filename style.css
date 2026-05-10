@@ -6463,3 +6463,51 @@ body.is-visualizer #v2-inspector-panel {
   outline: 2px dashed #3dd9c5 !important;
   outline-offset: -4px !important;
 }
+
+/* Drop placeholder in swimlane */
+.fv-drop-placeholder {
+  width: 185px;
+  min-width: 185px;
+  min-height: 120px;
+  border: 2px dashed #3dd9c5;
+  border-radius: 12px;
+  background: rgba(61,217,197,0.05);
+  flex-shrink: 0;
+  pointer-events: none;
+  position: relative;
+}
+
+.fv-drop-placeholder::after {
+  content: 'Drop here';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  font-weight: 700;
+  color: #3dd9c5;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Card being dragged */
+.fv-card.fv-dragging {
+  opacity: 0.3;
+  transform: scale(0.95);
+  box-shadow: none !important;
+  border-style: dashed !important;
+  pointer-events: none;
+}
+
+/* Pin button on card */
+.fv-card-pin-btn {
+  width: 18px; height: 18px;
+  border: none; background: none;
+  cursor: pointer; color: #d1d5db;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.fv-card:hover .fv-card-pin-btn { opacity: 1; }
+.fv-card-pin-btn.pinned { opacity: 1; color: #3dd9c5; }
+.fv-card-pin-btn:hover { background: #f5f6f8; color: #1b2d3f; }
