@@ -6448,3 +6448,18 @@ body.is-visualizer #v2-inspector-panel {
   font-family: inherit;
 }
 .fvi-add-step-btn:hover { border-color: #3dd9c5; color: #3dd9c5; }
+
+/* Card being dragged */
+.fv-card.fv-dragging {
+  opacity: 0.35;
+  transform: scale(0.97);
+  box-shadow: none !important;
+  border-style: dashed !important;
+}
+
+/* Swimlane accepting a drop */
+.fv-swimlane.fv-drag-over {
+  background: rgba(61,217,197,0.06) !important;
+  outline: 2px dashed #3dd9c5 !important;
+  outline-offset: -4px !important;
+}
