@@ -10519,43 +10519,40 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
 OL._fvLaneDragOver = function(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  const lane = e.currentTarget;
-  lane.style.background = 'rgba(61,217,197,0.08)';
-  lane.style.outline = '2px dashed #3dd9c5';
-  lane.style.outlineOffset = '-4px';
+  e.currentTarget.classList.add('fv-drag-over');
 };
 
 OL._fvLaneDragLeave = function(e) {
-  // Only clear if leaving the lane entirely (not entering a child)
-  const lane = e.currentTarget;
-  if (!lane.contains(e.relatedTarget)) {
-    lane.style.background = '';
-    lane.style.outline = '';
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('fv-drag-over');
   }
 };
 
 OL._fvLaneDrop = async function(e, stageId) {
   e.preventDefault();
 
-  // Clear visual feedback
-  const lane = e.currentTarget;
-  lane.style.background = '';
-  lane.style.outline = '';
+  // Clear visual feedback on all lanes
+  document.querySelectorAll('.fv-swimlane').forEach(el => {
+    el.style.background = '';
+    el.style.outline = '';
+  });
 
-  const resId = e.dataTransfer.getData('application/fv-resource');
+  const resId  = e.dataTransfer.getData('application/fv-resource');
+  const source = e.dataTransfer.getData('application/fv-source'); // 'canvas' or workbench
   if (!resId) return;
 
   const data = OL.getCurrentProjectData();
   const res  = (data.resources || []).find(r => String(r.id) === String(resId));
   if (!res) return;
 
-  // Assign to this stage
+  // If dropped on its own lane, do nothing
+  if (res.stageId === stageId) return;
+
   await OL.updateAndSync(() => {
     res.stageId  = stageId;
     res.isGlobal = false;
   });
 
-  // Re-render to show card in new lane
   OL.renderVisualizer();
 };
 
@@ -10698,6 +10695,9 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
          id="fv-card-${res.id}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
+         draggable="true"
+         ondragstart="OL._fvCardDragStart(event, '${res.id}')"
+         ondragend="OL._fvCardDragEnd(event)"
          onclick="event.stopPropagation();
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
                   this.classList.add('selected');
@@ -10732,9 +10732,38 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
       </div>
 
       ${stepsPreview}
-
     </div>
   `;
+};
+
+OL._fvCardDragStart = function(e, resId) {
+  // Store what we're dragging
+  e.dataTransfer.setData('application/fv-resource', resId);
+  e.dataTransfer.setData('application/fv-source', 'canvas'); // distinguish from workbench
+  e.dataTransfer.effectAllowed = 'move';
+
+  // Visual: fade the card being dragged
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`fv-card-${resId}`);
+    if (card) card.classList.add('fv-dragging');
+  });
+
+  // Track which card is being dragged
+  OL._fv._draggingResId = resId;
+};
+
+OL._fvCardDragEnd = function(e) {
+  // Remove dragging style from all cards
+  document.querySelectorAll('.fv-card.fv-dragging')
+    .forEach(el => el.classList.remove('fv-dragging'));
+  OL._fv._draggingResId = null;
+
+  // Clear all lane highlights
+  document.querySelectorAll('.fv-swimlane')
+    .forEach(el => {
+      el.style.background = '';
+      el.style.outline = '';
+    });
 };
 
 OL._fvToggleCardSteps = function(resId) {
