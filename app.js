@@ -10463,7 +10463,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     // ── LANE CARDS ────────────────────────────────────
     const regularCardsHtml = stageRes.map(res => {
       globalCardNum++;
-      return OL._fvBuildCard(res, globalCardNum, false, 0);
+      return OL._fvBuildCard(res, globalCardNum, false, 0, stage.id, cardIndex);
     }).join('');
 
     // Global resources for this stage
@@ -10474,7 +10474,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
       if (expanded) {
         // Full card with global badge
         globalCardNum++;
-        return OL._fvBuildCard(gr, globalCardNum, true, stageCount);
+        return OL._fvBuildCard(gr, globalCardNum, true, stageCount, stage.id, globalCardNum);
       } else {
         // Collapsed chip
         return `
@@ -10516,41 +10516,143 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   `;
 };
 
+// ── DRAG STATE ──────────────────────────────────────
+OL._fvDrag = {
+  resId: null,
+  sourceStageId: null,
+  sourceIndex: null,
+};
+
+// ── CARD DRAG START ──────────────────────────────────
+OL._fvCardDragStart = function(e, resId, stageId, index) {
+  e.stopPropagation();
+  e.dataTransfer.setData('application/fv-resource', resId);
+  e.dataTransfer.setData('application/fv-source', 'canvas');
+  e.dataTransfer.effectAllowed = 'move';
+
+  OL._fvDrag.resId        = resId;
+  OL._fvDrag.sourceStageId = stageId;
+  OL._fvDrag.sourceIndex  = index;
+
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`fv-card-${resId}`);
+    if (card) card.classList.add('fv-dragging');
+  });
+};
+
+OL._fvCardDragEnd = function(e) {
+  document.querySelectorAll('.fv-card.fv-dragging, .fv-drop-placeholder')
+    .forEach(el => {
+      if (el.classList.contains('fv-drop-placeholder')) el.remove();
+      else el.classList.remove('fv-dragging');
+    });
+  document.querySelectorAll('.fv-swimlane')
+    .forEach(el => el.classList.remove('fv-drag-over'));
+  OL._fvDrag = { resId: null, sourceStageId: null, sourceIndex: null };
+};
+
+// ── LANE DRAG OVER (show placeholder) ────────────────
 OL._fvLaneDragOver = function(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.classList.add('fv-drag-over');
-};
+  const lane = e.currentTarget;
+  lane.classList.add('fv-drag-over');
 
-OL._fvLaneDragLeave = function(e) {
-  if (!e.currentTarget.contains(e.relatedTarget)) {
-    e.currentTarget.classList.remove('fv-drag-over');
+  // Find which card we're hovering over to show placeholder
+  const cards = [...lane.querySelectorAll('.fv-card:not(.fv-dragging):not(.fv-drop-placeholder)')];
+  
+  // Remove existing placeholder
+  lane.querySelectorAll('.fv-drop-placeholder').forEach(el => el.remove());
+
+  // Find insertion point based on mouse X position
+  let insertBefore = null;
+  for (const card of cards) {
+    const rect = card.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (e.clientX < midX) {
+      insertBefore = card;
+      break;
+    }
+  }
+
+  // Build placeholder
+  const ph = document.createElement('div');
+  ph.className = 'fv-drop-placeholder';
+
+  if (insertBefore) {
+    lane.insertBefore(ph, insertBefore);
+  } else {
+    lane.appendChild(ph);
   }
 };
 
-OL._fvLaneDrop = async function(e, stageId) {
+OL._fvLaneDragLeave = function(e) {
+  const lane = e.currentTarget;
+  if (!lane.contains(e.relatedTarget)) {
+    lane.classList.remove('fv-drag-over');
+    lane.querySelectorAll('.fv-drop-placeholder').forEach(el => el.remove());
+  }
+};
+
+// ── LANE DROP ─────────────────────────────────────────
+OL._fvLaneDrop = async function(e, targetStageId) {
   e.preventDefault();
 
-  // Clear visual feedback on all lanes
+  // Clean up visuals
   document.querySelectorAll('.fv-swimlane').forEach(el => {
-    el.style.background = '';
-    el.style.outline = '';
+    el.classList.remove('fv-drag-over');
   });
 
-  const resId  = e.dataTransfer.getData('application/fv-resource');
-  const source = e.dataTransfer.getData('application/fv-source'); // 'canvas' or workbench
+  const resId = e.dataTransfer.getData('application/fv-resource');
   if (!resId) return;
 
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources || []).find(r => String(r.id) === String(resId));
+  const data      = OL.getCurrentProjectData();
+  const resources = data.resources || [];
+  const res       = resources.find(r => String(r.id) === String(resId));
   if (!res) return;
 
-  // If dropped on its own lane, do nothing
-  if (res.stageId === stageId) return;
+  // Find drop index from placeholder position
+  const lane = e.currentTarget;
+  const ph   = lane.querySelector('.fv-drop-placeholder');
+  let dropIndex = null;
+
+  if (ph) {
+    const cards = [...lane.querySelectorAll('.fv-card:not(.fv-dragging):not(.fv-drop-placeholder)')];
+    dropIndex = cards.indexOf(ph.previousElementSibling?.classList.contains('fv-card')
+      ? ph.previousElementSibling
+      : null);
+    // Actually count position by looking at what's before the placeholder
+    const allLaneItems = [...lane.children];
+    const phIdx = allLaneItems.indexOf(ph);
+    // Count fv-cards before placeholder
+    dropIndex = allLaneItems
+      .slice(0, phIdx)
+      .filter(el => el.classList.contains('fv-card') && !el.classList.contains('fv-dragging'))
+      .length;
+    ph.remove();
+  }
 
   await OL.updateAndSync(() => {
-    res.stageId  = stageId;
+    // 1. Remove from current position in array
+    const oldIdx = resources.findIndex(r => String(r.id) === String(resId));
+    if (oldIdx > -1) resources.splice(oldIdx, 1);
+
+    // 2. Assign new stage
+    res.stageId  = targetStageId;
     res.isGlobal = false;
+
+    // 3. Re-insert at correct position among same-stage resources
+    if (dropIndex !== null) {
+      // Find where this stage's resources start in the full array
+      const stageResources = resources.filter(r => r.stageId === targetStageId);
+      const firstStageIdx  = resources.findIndex(r => r.stageId === targetStageId);
+      const insertAt = firstStageIdx > -1 
+        ? firstStageIdx + Math.min(dropIndex, stageResources.length)
+        : resources.length;
+      resources.splice(insertAt, 0, res);
+    } else {
+      resources.push(res);
+    }
   });
 
   OL.renderVisualizer();
@@ -10658,7 +10760,7 @@ OL._fvComputeLayout = function(resources, stageFilter) {
 };
 
 // ── CARD BUILDER (shared between regular + expanded globals) ──
-OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
+OL._fvBuildCard = function(res, num, isGlobal, globalStageCount, stageId = '', cardIndex = 0) {
   const tc = OL._fvGetType(res.type);
   const stepCount = (res.steps || []).length;
   const hasLogic  = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
@@ -10695,8 +10797,9 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
          id="fv-card-${res.id}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
+         data-card-index="${cardIndex}"
          draggable="true"
-         ondragstart="OL._fvCardDragStart(event, '${res.id}')"
+         ondragstart="OL._fvCardDragStart(event, '${res.id}', '${stageId}', ${cardIndex})"
          ondragend="OL._fvCardDragEnd(event)"
          onclick="event.stopPropagation();
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
@@ -10716,24 +10819,50 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
       </div>
 
       <div class="fv-card-footer">
-        <span class="fv-step-count-btn"
-              onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
-              title="Toggle steps">
-          <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}"
-             style="width:10px;height:10px;"></i>
-          ${stepCount} step${stepCount!==1?'s':''}
-        </span>
-        <div style="display:flex;gap:4px;align-items:center;">
-          ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
-          ${hasLogic ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
-                                     background:rgba(61,217,197,0.1);color:#3dd9c5;
-                                     font-weight:700;">λ</span>` : ''}
+          <span class="fv-step-count-btn"
+                onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
+                title="Toggle steps">
+            <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}"
+               style="width:10px;height:10px;"></i>
+            ${stepCount} step${stepCount!==1?'s':''}
+          </span>
+          <div style="display:flex;gap:4px;align-items:center;">
+            ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+            ${hasLogic ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
+                                       background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                       font-weight:700;">λ</span>` : ''}
+            <button class="fv-card-pin-btn ${res.pinnedInLane ? 'pinned' : ''}"
+                    title="${res.pinnedInLane ? 'Unpin card position' : 'Pin card position'}"
+                    onclick="event.stopPropagation(); OL._fvToggleCardPin('${res.id}')">
+              <i data-lucide="${res.pinnedInLane ? 'pin' : 'pin-off'}" style="width:10px;height:10px;"></i>
+            </button>
+          </div>
         </div>
-      </div>
 
       ${stepsPreview}
     </div>
   `;
+};
+
+OL._fvToggleCardPin = async function(resId) {
+  const data = OL.getCurrentProjectData();
+  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
+  if (!res) return;
+
+  res.pinnedInLane = !res.pinnedInLane;
+  await OL.persist();
+
+  // Surgical update — just toggle the button state
+  const card = document.getElementById(`fv-card-${resId}`);
+  if (card) {
+    const btn = card.querySelector('.fv-card-pin-btn');
+    if (btn) {
+      btn.classList.toggle('pinned', res.pinnedInLane);
+      btn.title = res.pinnedInLane ? 'Unpin card position' : 'Pin card position';
+      btn.innerHTML = `<i data-lucide="${res.pinnedInLane ? 'pin' : 'pin-off'}" style="width:10px;height:10px;"></i>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
 };
 
 OL._fvCardDragStart = function(e, resId) {
@@ -11100,9 +11229,11 @@ OL._fvDrawStepConnections = function(resources) {
 OL._fvSetupCardDrag = function(el, resId, stepId) {
   let startX, startY, startLeft, startTop, hasMoved = false;
 
+  // 🚀 Only attach to the card itself, not the body
   el.addEventListener('mousedown', e => {
-    // Don't drag if clicking interactive elements
-    if (e.target.closest('.fv-pin-btn, .fv-res-tidy-btn, .fv-port, .fv-step-card-body')) return;
+    // Don't drag if clicking ports, buttons, or the body content
+    if (e.target.closest('.fv-port, .fv-pin-btn, .fv-res-tidy-btn, button, input, select')) return;
+    
     e.preventDefault();
     e.stopPropagation();
 
@@ -11118,29 +11249,27 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
       const dx = (e.clientX - startX) / zoom;
       const dy = (e.clientY - startY) / zoom;
 
-      if (!hasMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      if (!hasMoved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
         hasMoved = true;
         el.classList.add('is-dragging');
+        // Bring to front while dragging
+        el.style.zIndex = '1000';
       }
       if (!hasMoved) return;
 
-      let newX = startLeft + dx;
-      let newY = startTop  + dy;
+      let newX = Math.max(0, startLeft + dx);
+      let newY = Math.max(0, startTop  + dy);
 
-      // Snap to grid
       if (OL._fv.snapToGrid) {
         const g = OL._fv.gridSize || 20;
         newX = Math.round(newX / g) * g;
         newY = Math.round(newY / g) * g;
       }
 
-      newX = Math.max(0, newX);
-      newY = Math.max(0, newY);
-
       el.style.left = newX + 'px';
       el.style.top  = newY + 'px';
 
-      // Redraw connections live
+      // Live connection redraw
       const data = OL.getCurrentProjectData();
       const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
       OL._fvDrawStepConnections(resources);
@@ -11150,10 +11279,10 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup',   onUp);
       el.classList.remove('is-dragging');
+      el.style.zIndex = '';
 
       if (!hasMoved) return;
 
-      // Save coords and auto-pin
       const data = OL.getCurrentProjectData();
       const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
       const step = res?.steps?.find(s => String(s.id) === String(stepId));
@@ -11163,10 +11292,9 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
           x: parseFloat(el.style.left) || 0,
           y: parseFloat(el.style.top)  || 0,
         };
-        step.pinned = true; // Auto-pin on first drag
+        step.pinned = true;
         el.classList.add('is-pinned');
 
-        // Update pin button
         const pinBtn = el.querySelector('.fv-pin-btn');
         if (pinBtn) {
           pinBtn.classList.add('pinned');
