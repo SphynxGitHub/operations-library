@@ -10461,7 +10461,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     `;
 
     // ── LANE CARDS ────────────────────────────────────
-    const regularCardsHtml = stageRes.map(res => {
+    const regularCardsHtml = stageRes.map((res, cardIndex) => {
       globalCardNum++;
       return OL._fvBuildCard(res, globalCardNum, false, 0, stage.id, cardIndex);
     }).join('');
