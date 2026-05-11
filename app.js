@@ -10608,7 +10608,7 @@ OL._fvLaneDrop = async function(e, targetStageId) {
   // Get drop index from placeholder
   const lane = e.currentTarget;
   const ph   = lane.querySelector('.fv-drop-placeholder');
-  let dropIndex = 999; // default to end
+  let dropIndex = 0;
 
   if (ph) {
     const beforePh = [...lane.children]
@@ -10618,42 +10618,26 @@ OL._fvLaneDrop = async function(e, targetStageId) {
     ph.remove();
   }
 
-  // 🚀 Build new ordered array cleanly
-  // 1. Get all same-stage resources in current DOM order (reflects user's drop intent)
-  const sameStageCards = [...lane.querySelectorAll('.fv-card:not(.fv-dragging)')]
-    .map(el => el.dataset.resId)
-    .filter(Boolean);
-
-  // 2. Mutate stageId and rebuild order
-  res.stageId  = targetStageId;
-  res.isGlobal = false;
-
-  // 3. Remove dragged item from resources array
+  // 🚀 Direct state mutation + single persist (no updateAndSync overhead)
   const oldIdx = resources.findIndex(r => String(r.id) === String(resId));
   if (oldIdx > -1) resources.splice(oldIdx, 1);
 
-  // 4. Get other stage resources in their new DOM order
-  const newStageOrder = [];
-  sameStageCards.forEach(id => {
-    const r = resources.find(r => String(r.id) === String(id));
-    if (r) newStageOrder.push(r);
-  });
+  res.stageId  = targetStageId;
+  res.isGlobal = false;
 
-  // Insert dragged item at drop position
-  newStageOrder.splice(dropIndex, 0, res);
+  // Find insertion point among same-stage resources
+  const stageResources = resources
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => r.stageId === targetStageId);
 
-  // 5. Remove all same-stage items from resources array
-  newStageOrder.forEach(r => {
-    const i = resources.findIndex(x => String(x.id) === String(r.id));
-    if (i > -1) resources.splice(i, 1);
-  });
+  const insertAt = stageResources.length > 0
+    ? (stageResources[Math.min(dropIndex, stageResources.length - 1)]?.i ?? resources.length)
+    : resources.length;
 
-  // 6. Find a good insertion point (after other stages that come before)
-  // Just append them — order within stage is what matters
-  newStageOrder.forEach(r => resources.push(r));
+  resources.splice(insertAt, 0, res);
 
-  // 7. Persist and re-render
-  await OL.persist();
+  // 🚀 Persist silently, re-render immediately without waiting
+  OL.persist(); // fire and forget
   OL.renderVisualizer();
 };
 
@@ -11070,6 +11054,7 @@ OL._fvRenderSteps = function(resources) {
 
   let cardCount = 0;
 
+  // Render step cards
   filtered.forEach(res => {
     const tc = OL._fvGetType(res.type);
     (res.steps || []).forEach((step, idx) => {
@@ -11077,32 +11062,22 @@ OL._fvRenderSteps = function(resources) {
       const x = step.coords?.x || 0;
       const y = step.coords?.y || 0;
 
+      // App badge
       const appBadge = step.appName
         ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">
              ${esc(step.appName.substring(0,10))}
            </span>`
         : '';
 
-      const assigneeBadges = (step.assignees||[]).slice(0,2).map(a =>
+      // Assignee badges
+      const assigneeBadges = (step.assignees || []).slice(0,2).map(a =>
         `<span class="fv-step-badge" style="background:#f5f6f8;color:#6b7280;">
            ${esc((a.name||'').substring(0,10))}
          </span>`
       ).join('');
 
-      // Build next step options
-      const allStepOptions = [];
-      resources.forEach(r => {
-        (r.steps||[]).forEach(s => {
-          if (r.id === res.id && s.id === step.id) return;
-          allStepOptions.push({ 
-            value: `${r.id}-${s.id}`, 
-            label: `${r.name} › ${s.name||'Step'}` 
-          });
-        });
-      });
-
-      const currentTarget = step.logic?.out?.[0]?.targetId || '';
-      const currentType   = step.logic?.out?.[0]?.type || 'next';
+      // Has links
+      const hasLinks = (step.links || []).length > 0;
 
       const div = document.createElement('div');
       div.className = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
@@ -11115,131 +11090,81 @@ OL._fvRenderSteps = function(resources) {
       div.innerHTML = `
         <!-- Pin toggle -->
         <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
-                title="${step.pinned ? 'Unpin' : 'Pin'}"
+                title="${step.pinned ? 'Unpin (allow auto-layout)' : 'Pin (manual position)'}"
                 onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
           <i data-lucide="${step.pinned ? 'pin' : 'pin-off'}"></i>
         </button>
 
+        <!-- Resource tidy -->
+        <button class="fv-res-tidy-btn"
+                title="Tidy this resource"
+                onclick="event.stopPropagation(); OL._fvTidy('resource','${res.id}')">
+          <i data-lucide="align-justify"></i>
+        </button>
+
         <!-- Accent strip -->
-        <div class="fv-step-card-accent" style="background:${tc.color};border-radius:10px 10px 0 0;"></div>
+        <div class="fv-step-card-accent" style="background:${tc.color};"></div>
 
         <div class="fv-step-card-body"
              onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
+
+          <!-- Resource badge -->
           <div class="fv-step-res-badge" style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
             ${tc.abbr} ${esc(res.name.substring(0,16))}
           </div>
+
+          <!-- Step name -->
           <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
+
+          <!-- Badges row -->
           <div class="fv-step-badges">
             ${appBadge}${assigneeBadges}
+            ${hasLinks ? `<span class="fv-step-badge" style="background:#f5f6f8;color:#9ca3af;">
+              <i data-lucide="paperclip" style="width:9px;height:9px;"></i>
+            </span>` : ''}
           </div>
         </div>
 
-        <!-- Next Step footer -->
-        <div class="fv-step-footer" style="padding:6px 10px;border-top:1px solid #f3f4f6;
-                                            background:#fafafa;border-radius:0 0 10px 10px;">
-          <div style="display:flex;gap:4px;margin-bottom:5px;">
-            ${['next','condition','loop','delay'].map(t => `
-              <span onclick="event.stopPropagation(); OL._fvSetStepOutputType('${res.id}','${step.id}','${t}')"
-                    style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:99px;
-                           cursor:pointer;text-transform:uppercase;
-                           background:${currentType===t?'#3dd9c5':'#f0f0f0'};
-                           color:${currentType===t?'#fff':'#9ca3af'};
-                           border:1px solid ${currentType===t?'#3dd9c5':'#e5e7eb'};">
-                ${t==='next'?'→':t==='condition'?'λ':t==='loop'?'↺':'⏱'}
-              </span>
-            `).join('')}
-          </div>
-          <select onchange="event.stopPropagation(); OL._fvSetStepTarget('${res.id}','${step.id}',this.value)"
-                  onclick="event.stopPropagation()"
-                  style="width:100%;font-size:10px;padding:4px 6px;border:1px solid #e5e7eb;
-                         border-radius:6px;background:#fff;color:#374151;font-family:inherit;
-                         outline:none;cursor:pointer;">
-            <option value="">— Next step —</option>
-            ${allStepOptions.map(o => `
-              <option value="${o.value}" ${currentTarget===o.value?'selected':''}>
-                ${esc(o.label.substring(0,35))}
-              </option>
-            `).join('')}
-          </select>
-
-          ${currentType==='condition' ? `
-            <input type="text" 
-                   onclick="event.stopPropagation()"
-                   placeholder="If condition..."
-                   value="${esc(step.logic?.out?.[0]?.rule||'')}"
-                   onblur="OL._fvSetStepRule('${res.id}','${step.id}',this.value)"
-                   style="width:100%;margin-top:4px;font-size:10px;padding:4px 6px;
-                          border:1px solid #e5e7eb;border-radius:6px;background:#fff;
-                          color:#374151;font-family:inherit;outline:none;box-sizing:border-box;">
-          ` : ''}
+        <!-- Connection ports -->
+        <div class="fv-port fv-port-top"
+             id="port-top-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')">
+        </div>
+        <div class="fv-port fv-port-bottom"
+             id="port-bottom-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')">
+        </div>
+        <div class="fv-port fv-port-left"
+             id="port-left-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')">
+        </div>
+        <div class="fv-port fv-port-right"
+             id="port-right-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')">
         </div>
       `;
 
+      // Drag to reposition (auto-pins on first drag)
       OL._fvSetupCardDrag(div, res.id, step.id);
+
       canvas.appendChild(div);
     });
   });
 
-  // Size canvas
-  const allCards = canvas.querySelectorAll('.fv-step-card');
-  const maxX = Math.max(...[...allCards].map(el => (parseFloat(el.style.left)||0) + 220), 800);
-  const maxY = Math.max(...[...allCards].map(el => (parseFloat(el.style.top)||0) + 160), 600);
+  // Size canvas to content
+  const maxX = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
+    .map(el => (parseFloat(el.style.left)||0) + 200), 800);
+  const maxY = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
+    .map(el => (parseFloat(el.style.top)||0) + 120), 600);
   canvas.style.width  = (maxX + 100) + 'px';
   canvas.style.height = (maxY + 100) + 'px';
 
   if (window.lucide) lucide.createIcons();
 
-  // Draw connections once after render — debounced
-  clearTimeout(OL._fv._connTimer);
-  OL._fv._connTimer = setTimeout(() => {
+  // Draw connections
+  requestAnimationFrame(() => {
     OL._fvDrawStepConnections(filtered);
-  }, 100);
-};
-
-OL._fvSetStepOutputType = async function(resId, stepId, type) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-  const step = res?.steps?.find(s => String(s.id) === String(stepId));
-  if (!step) return;
-
-  if (!step.logic) step.logic = { in: [], out: [] };
-  if (!step.logic.out.length) step.logic.out.push({ type, targetId: '' });
-  else step.logic.out[0].type = type;
-
-  await OL.persist();
-  // Surgical: just re-render steps, don't full renderVisualizer
-  const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
-  OL._fvRenderSteps(resources);
-};
-
-OL._fvSetStepTarget = async function(resId, stepId, targetId) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-  const step = res?.steps?.find(s => String(s.id) === String(stepId));
-  if (!step) return;
-
-  if (!step.logic) step.logic = { in: [], out: [] };
-  if (!step.logic.out.length) step.logic.out.push({ type: 'next', targetId });
-  else step.logic.out[0].targetId = targetId;
-
-  OL.syncLogicPorts();
-  await OL.persist();
-
-  // Just redraw connections — don't re-render cards
-  clearTimeout(OL._fv._connTimer);
-  OL._fv._connTimer = setTimeout(() => {
-    const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
-    OL._fvDrawStepConnections(resources);
-  }, 50);
-};
-
-OL._fvSetStepRule = async function(resId, stepId, rule) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-  const step = res?.steps?.find(s => String(s.id) === String(stepId));
-  if (!step?.logic?.out?.[0]) return;
-  step.logic.out[0].rule = rule;
-  await OL.persist();
+  });
 };
 
 // Draw connections between step cards
@@ -11437,13 +11362,10 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
       el.style.left = newX + 'px';
       el.style.top  = newY + 'px';
 
-      // Live connection redraw but not every pixel
-      clearTimeout(OL._fv._dragConnTimer);
-      OL._fv._dragConnTimer = setTimeout(() => {
-        const data = OL.getCurrentProjectData();
-        const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
-        OL._fvDrawStepConnections(resources);
-      }, 80);
+      // Live connection redraw
+      const data = OL.getCurrentProjectData();
+      const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
+      OL._fvDrawStepConnections(resources);
     };
 
     const onUp = async () => {
@@ -11921,208 +11843,71 @@ OL._fvSelectStep = function(resId, stepId) {
 
 OL._fvBuildListShell = function(stages, resources) {
   const filter = OL._fv.stageFilter;
+  const globalIds = new Set(resources.filter(r => r.isGlobal).map(r => String(r.id)));
 
-  // Build flat list of all steps across all stages in order
-  const flatSteps = [];
-  const displayStages = filter 
-    ? stages.filter(s => s.id === filter)
-    : stages;
-
-  displayStages.forEach(stage => {
-    const stageRes = resources.filter(r => r.stageId === stage.id);
-    stageRes.forEach(res => {
-      (res.steps || []).forEach((step, idx) => {
-        flatSteps.push({ step, res, stage, stepIdx: idx });
-      });
-    });
+  // Build stageId -> resources map
+  const byStage = {};
+  stages.forEach(s => byStage[s.id] = []);
+  byStage['__none__'] = [];
+  resources.forEach(r => {
+    if (r.isGlobal && r.isTopShelf) return;
+    const key = r.stageId && byStage[r.stageId] !== undefined ? r.stageId : '__none__';
+    byStage[key].push(r);
   });
 
-  // Also include unassigned
-  if (!filter) {
-    resources.filter(r => !r.stageId || r.stageId === '__none__').forEach(res => {
-      (res.steps || []).forEach((step, idx) => {
-        flatSteps.push({ step, res, stage: { id: '__none__', name: 'Unassigned' }, stepIdx: idx });
-      });
-    });
+  const displayStages = [...stages];
+  if (byStage['__none__'].length > 0) {
+    displayStages.push({ id: '__none__', name: 'Unassigned' });
   }
 
-  if (flatSteps.length === 0) {
-    return `
-      <div id="fv-list-wrap">
-        <div class="fv-loading-state">
-          <i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i>
-          <span>No steps found.</span>
-        </div>
-      </div>`;
-  }
-
-  const rowsHtml = flatSteps.map(({ step, res, stage }, globalIdx) => {
-    const tc         = OL._fvGetType(res.type);
-    const isDecision = (step.logic?.out || []).filter(l => l.targetId).length > 1;
-    const hasLoop    = (step.logic?.out || []).some(l => l.type === 'loop');
-    const hasCond    = (step.logic?.out || []).some(l => l.rule?.trim());
-
-    const tags = [
-      hasCond && `<span class="fv-list-tag conditional">λ Condition</span>`,
-      isDecision && `<span class="fv-list-tag conditional">◆ Decision</span>`,
-      hasLoop && `<span class="fv-list-tag loop">↺ Loop</span>`,
-    ].filter(Boolean).join('');
-
-    return `
-      <div class="fv-list-item"
-           id="fv-list-step-${step.id}"
-           data-step-id="${step.id}"
-           data-res-id="${res.id}"
-           data-global-idx="${globalIdx}"
-           draggable="true"
-           ondragstart="OL._fvListDragStart(event, '${res.id}', '${step.id}', ${globalIdx})"
-           ondragend="OL._fvListDragEnd(event)"
-           ondragover="OL._fvListDragOver(event, ${globalIdx})"
-           ondragleave="OL._fvListDragLeave(event)"
-           ondrop="OL._fvListDrop(event, '${res.id}', '${step.id}', ${globalIdx})"
-           onclick="event.stopPropagation();
-                    document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
-                    this.classList.add('selected');
-                    OL.openInspector('${res.id}','${step.id}')">
-
-        <div class="fv-list-type-dot" style="background:${tc.color};margin-top:3px;flex-shrink:0;"></div>
-
-        <div style="flex:1;min-width:0;">
-          <div class="fv-list-step-name${isDecision?' decision-name':''}">${esc(step.name||'Unnamed Step')}</div>
-          <div style="display:flex;gap:5px;align-items:center;margin-top:3px;flex-wrap:wrap;">
-            <span class="fv-list-res-badge" 
-                  style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
-              ${esc(res.name.substring(0,20))}
-            </span>
-            <span style="font-size:9px;color:#d1d5db;">·</span>
-            <span style="font-size:9px;color:#9ca3af;">${esc(stage.name)}</span>
-            ${tags}
+    const stagesHtml = displayStages.map((stage, si) => {
+      if (filter && stage.id !== filter) return '';
+      const stageRes = (byStage[stage.id] || []);
+      if (stageRes.length === 0) return '';
+    
+      // Build steps grouped by resource, with a clickable resource header
+      const stepsHtml = stageRes.map(res => {
+        const tc = OL._fvGetType(res.type);
+        const steps = res.steps || [];
+    
+        const resHeader = `
+          <div class="fv-list-res-header"
+               onclick="event.stopPropagation(); OL._fvOpenStepsList('${res.id}');">
+            <div class="fv-list-type-dot" style="background:${tc.color};margin-top:0;"></div>
+            <span class="fv-list-res-header-name">${esc(res.name)}</span>
+            <span class="fv-list-res-header-type" style="color:${tc.color};">${esc(res.type||'')}</span>
+            <span class="fv-list-res-header-count">${steps.length} steps</span>
+            <i data-lucide="chevron-right" style="width:11px;height:11px;color:#9ca3af;margin-left:auto;"></i>
           </div>
+        `;
+    
+        const stepRows = steps.map((step, stepIdx) =>
+          OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
+        ).join('');
+    
+        return resHeader + (stepRows ? `<div class="fv-list-steps">${stepRows}</div>` : '');
+      }).join('');
+    
+      const totalSteps = stageRes.reduce((acc, r) => acc + (r.steps||[]).length, 0);
+    
+      return `
+        <div class="fv-list-stage">
+          <div class="fv-list-stage-header">
+            <div class="fv-list-stage-num">${si + 1}</div>
+            <div class="fv-list-stage-name">${esc(stage.name)}</div>
+            <div class="fv-list-stage-line"></div>
+            <div class="fv-list-stage-count">${totalSteps} steps</div>
+          </div>
+          ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
         </div>
-
-        <!-- Drag handle -->
-        <div style="color:#d1d5db;font-size:14px;cursor:grab;padding:0 4px;flex-shrink:0;"
-             title="Drag to reorder">⠿</div>
-
-        <i data-lucide="chevron-right" style="width:11px;height:11px;color:#d1d5db;flex-shrink:0;"></i>
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
 
   return `
     <div id="fv-list-wrap">
-      <div id="fv-flat-list" style="display:flex;flex-direction:column;gap:4px;padding:16px;">
-        ${rowsHtml}
-      </div>
+      ${stagesHtml || '<div class="fv-loading-state"><i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i><span>No stages or steps found. Assign resources to stages via the inspector.</span></div>'}
     </div>
   `;
-};
-
-OL._fvListDrag = { fromResId: null, fromStepId: null, fromIdx: null };
-
-OL._fvListDragStart = function(e, resId, stepId, idx) {
-  OL._fvListDrag = { fromResId: resId, fromStepId: stepId, fromIdx: idx };
-  e.dataTransfer.effectAllowed = 'move';
-  requestAnimationFrame(() => {
-    const el = document.getElementById(`fv-list-step-${stepId}`);
-    if (el) el.style.opacity = '0.35';
-  });
-};
-
-OL._fvListDragEnd = function(e) {
-  document.querySelectorAll('.fv-list-item').forEach(el => {
-    el.style.opacity = '';
-    el.style.borderTop = '';
-    el.style.borderBottom = '';
-  });
-};
-
-OL._fvListDragOver = function(e, toIdx) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  if (OL._fvListDrag.fromIdx === null) return;
-
-  // Show drop indicator
-  document.querySelectorAll('.fv-list-item').forEach(el => {
-    el.style.borderTop = '';
-    el.style.borderBottom = '';
-  });
-  const el = e.currentTarget;
-  const rect = el.getBoundingClientRect();
-  const isTop = e.clientY < rect.top + rect.height / 2;
-  if (isTop) el.style.borderTop    = '2px solid #3dd9c5';
-  else        el.style.borderBottom = '2px solid #3dd9c5';
-};
-
-OL._fvListDragLeave = function(e) {
-  e.currentTarget.style.borderTop    = '';
-  e.currentTarget.style.borderBottom = '';
-};
-
-OL._fvListDrop = async function(e, toResId, toStepId, toIdx) {
-  e.preventDefault();
-  document.querySelectorAll('.fv-list-item').forEach(el => {
-    el.style.opacity = '';
-    el.style.borderTop = '';
-    el.style.borderBottom = '';
-  });
-
-  const { fromResId, fromStepId, fromIdx } = OL._fvListDrag;
-  if (!fromResId || fromIdx === null || fromIdx === toIdx) return;
-
-  const rect  = e.currentTarget.getBoundingClientRect();
-  const isTop = e.clientY < rect.top + rect.height / 2;
-  const insertIdx = isTop ? toIdx : toIdx + 1;
-
-  const data      = OL.getCurrentProjectData();
-  const resources = data.resources || [];
-
-  // Find source step
-  const fromRes  = resources.find(r => String(r.id) === String(fromResId));
-  const stepIdx  = fromRes?.steps?.findIndex(s => String(s.id) === String(fromStepId));
-  if (!fromRes || stepIdx === -1) return;
-
-  // Build global flat list same way as render
-  const flatSteps = [];
-  const stages = data.stages || [];
-  stages.forEach(stage => {
-    resources.filter(r => r.stageId === stage.id).forEach(res => {
-      (res.steps||[]).forEach((step, idx) => flatSteps.push({ step, res, stepIdx: idx }));
-    });
-  });
-
-  // Remove from source
-  const [movedStep] = fromRes.steps.splice(stepIdx, 1);
-
-  // Find target res/step after removal
-  const adjustedIdx = insertIdx > fromIdx ? insertIdx - 1 : insertIdx;
-  const target = flatSteps[Math.min(adjustedIdx, flatSteps.length - 1)];
-
-  if (target && target.res.id !== fromResId) {
-    // Moving to different resource — append to that resource
-    if (!target.res.steps) target.res.steps = [];
-    const targetStepIdx = isTop ? target.stepIdx : target.stepIdx + 1;
-    target.res.steps.splice(targetStepIdx, 0, movedStep);
-  } else if (target) {
-    // Same resource reorder
-    const newIdx = isTop ? target.stepIdx : target.stepIdx + 1;
-    fromRes.steps.splice(newIdx, 0, movedStep);
-  } else {
-    fromRes.steps.push(movedStep);
-  }
-
-  await OL.persist();
-
-  // Surgical re-render of list only
-  const shell = OL._fvBuildListShell(data.stages || [], 
-    (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked));
-  const body = document.getElementById('fv-body');
-  const existing = document.getElementById('fv-list-wrap');
-  if (existing) existing.remove();
-  const temp = document.createElement('div');
-  temp.innerHTML = shell;
-  while (temp.firstChild) body.appendChild(temp.firstChild);
-  if (window.lucide) lucide.createIcons();
 };
 
 OL._fvOpenStepsList = function(resId) {
