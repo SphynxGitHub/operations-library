@@ -5030,8 +5030,8 @@ OL.renderResourceGroups = function(container, items) {
         return;
     }
 
-    const sphynxPinned = items.filter(res => res.systemPinned);
-    const adminPinned = items.filter(res => res.adminPinned);
+    const sphynxPinned  = items.filter(res => res.systemPinned);
+    const adminPinned   = items.filter(res => res.adminPinned);
     const standardItems = items.filter(res => !res.systemPinned && !res.adminPinned);
 
     const grouped = standardItems.reduce((acc, res) => {
@@ -5053,7 +5053,7 @@ OL.renderResourceGroups = function(container, items) {
                     </div>
                     <div class="cards-grid">${sphynxPinned.map(r => renderResourceCard(r)).join('')}</div>
                 </div>` : ''}
-    
+
             ${adminPinned.length ? `
                 <div class="resource-group" style="margin-bottom: 30px;">
                     <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
@@ -5062,7 +5062,7 @@ OL.renderResourceGroups = function(container, items) {
                     </div>
                     <div class="cards-grid">${adminPinned.map(r => renderResourceCard(r)).join('')}</div>
                 </div>` : ''}
-    
+
             ${sortedTypes.map(type => `
                 <div class="resource-group" style="margin-bottom: 40px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
@@ -5109,7 +5109,7 @@ OL.renderResourceGroups = function(container, items) {
             `).join('')}
         </div>
     `;
-    // 🚀 THE REPAINT
+
     if (window.lucide) window.lucide.createIcons();
 };
 
