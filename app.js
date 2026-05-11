@@ -12008,13 +12008,14 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
              data-res-id="${res.id}"
              draggable="true"
              ondragstart="event.stopPropagation(); OL.handleStepDragStart(event, '${res.id}', ${res.steps.indexOf(step)})"
-             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over')"
              ondragleave="this.classList.remove('drag-over')"
              ondrop="event.stopPropagation(); this.classList.remove('drag-over'); OL.handleStepDrop(event, '${res.id}', ${res.steps.indexOf(step)})"
              onclick="event.stopPropagation();
                       document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
                       this.classList.add('selected');
                       OL.openInspector('${res.id}', '${step.id}');">
+          <span class="drag-handle" style="cursor:grab; opacity:0.25; flex-shrink:0; padding-right:4px; font-size:14px;">⠿</span>
           <div class="fv-list-type-dot" style="background:${tc.color};"></div>
           <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}">${esc(step.name || 'Unnamed Step')}</span>
           ${tags}
