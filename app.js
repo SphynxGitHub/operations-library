@@ -11954,52 +11954,8 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     hasLoop     ? `<span class="fv-list-tag loop">↺ Loop</span>` : '',
   ].filter(Boolean).join('');
 
-  // For decision nodes, render YES and NO branches inline
-  let branchesHtml = '';
-  if (isDecision && outRules.length > 0) {
-    // Separate yes/no based on rule text or index
-    const yesBranch = outRules.find(r => !r.rule || r.rule.toLowerCase().includes('yes') || r.rule === '') || outRules[0];
-    const noBranch  = outRules.find(r => r.rule?.toLowerCase().includes('no')) ||
-                      (outRules.length > 1 ? outRules[1] : null);
-
-    const renderBranch = (rule, kind) => {
-      if (!rule?.targetId) return '';
-      // Find the target step
-      const lastH = String(rule.targetId).lastIndexOf('-');
-      if (lastH === -1) return '';
-      const tResId  = rule.targetId.substring(0, lastH);
-      const tStepId = rule.targetId.substring(lastH + 1);
-      const tRes    = allResources.find(r => String(r.id) === tResId);
-      const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
-      if (!tRes || !tStep) return '';
-
-      const label = rule.rule?.trim() || (kind === 'yes' ? 'Yes' : 'No');
-      const icon  = kind === 'yes' ? '✓' : '✗';
-      const tTc   = OL._fvGetType(tRes.type);
-
-      return `
-        <div class="fv-list-branch ${kind}-branch">
-          <div class="fv-branch-label ${kind}">
-            <span>${icon}</span>
-            <span>${esc(label)}</span>
-          </div>
-          ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
-        </div>
-      `;
-    };
-
-    branchesHtml = renderBranch(yesBranch, 'yes') + renderBranch(noBranch, 'no');
-  }
-
-  // For conditional (non-decision) single-path steps, show the condition rule inline
-  const conditionNote = (!isDecision && isConditional && outRules[0]?.rule)
-    ? `<div style="font-size:10px;color:#a16207;margin-top:3px;padding-left:16px;">
-         ◆ When: ${esc(outRules[0].rule)}
-       </div>`
-    : '';
-
   return `
-    <div style="margin-bottom:${branchesHtml ? '8px' : '4px'};">
+    <div style="margin-bottom:${outRules.length ? '2px' : '4px'};">
       <div class="fv-list-row">
         <div class="fv-tree-connector">${depth > 0 ? '└' : '├'}</div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
@@ -12015,15 +11971,40 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                       document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
                       this.classList.add('selected');
                       OL.openInspector('${res.id}', '${step.id}');">
-          <span class="drag-handle" style="cursor:grab; opacity:0.25; flex-shrink:0; padding-right:4px; font-size:14px;">⠿</span>
+          <span class="drag-handle" style="cursor:grab;opacity:0.25;flex-shrink:0;padding-right:4px;font-size:14px;">⠿</span>
           <div class="fv-list-type-dot" style="background:${tc.color};"></div>
           <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}">${esc(step.name || 'Unnamed Step')}</span>
           ${tags}
           ${resBadge}
         </div>
       </div>
-      ${conditionNote}
-      ${branchesHtml}
+
+      ${outRules.map(rule => {
+        const lastH   = String(rule.targetId).lastIndexOf('-');
+        const tResId  = rule.targetId.substring(0, lastH);
+        const tStepId = rule.targetId.substring(lastH + 1);
+        const tRes    = allResources.find(r => String(r.id) === tResId);
+        const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
+        if (!tRes || !tStep) return '';
+
+        const isLoop  = rule.type === 'loop';
+        const isDelay = rule.type === 'delay';
+        const isCond  = rule.type === 'condition';
+        const tagLabel = isLoop  ? '↺ Loop'
+                       : isDelay ? `⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}`
+                       : isCond  ? `λ ${esc(rule.rule||'If...')}`
+                       : null;
+
+        return `
+          <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);margin-left:16px;padding-left:20px;">
+            ${tagLabel ? `
+              <div class="fv-branch-label" style="color:#3dd9c5;">
+                <span>${tagLabel}</span>
+              </div>` : ''}
+            ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
+          </div>
+        `;
+      }).join('')}
     </div>
   `;
 };
