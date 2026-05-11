@@ -11954,8 +11954,11 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
   const collapseId    = `fv-substeps-${step.id}`;
 
   const resBadgeBg = tc.color + '18';
-  const resBadge   = `<span class="fv-list-res-badge"
-    style="background:${resBadgeBg};color:${tc.color};border:1px solid ${tc.color}30;">
+  const resBadge = `<span class="fv-list-res-badge"
+    style="background:${resBadgeBg};color:${tc.color};border:1px solid ${tc.color}30;cursor:pointer;"
+    onclick="event.stopPropagation();
+             document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
+             OL._fvOpenStepsList('${res.id}');">
     ${tc.abbr} ${esc(res.name.substring(0, 14))}
   </span>`;
 
