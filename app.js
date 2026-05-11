@@ -5046,22 +5046,34 @@ OL.renderResourceGroups = function(container, items) {
     container.innerHTML = `
         <div class="resource-sections-wrapper">
             ${sphynxPinned.length ? `
-                <div class="resource-group" style="margin-bottom: 30px;">
-                    <div style="border-bottom: 2px solid var(--accent); padding: 8px; background: rgba(var(--accent-rgb), 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                        <i data-lucide="gem" style="width:16px; height:16px; color: var(--accent);"></i>
-                        <h3 style="margin:0; font-size:12px; color: var(--accent); letter-spacing:0.05em;">SPHYNX RESOURCES</h3>
+            <div class="resource-group" style="margin-bottom: 30px;">
+                <div style="border-bottom: 2px solid var(--accent); padding: 8px; background: rgba(var(--accent-rgb), 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="gem" style="width:16px; height:16px; color: var(--accent);"></i>
+                    <h3 style="margin:0; font-size:12px; color: var(--accent); letter-spacing:0.05em;">SPHYNX RESOURCES</h3>
+                </div>
+                ${OL.getViewMode('resources') === 'list' ? `
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        ${sphynxPinned.map(res => OL._renderResourceListRow(res)).join('')}
                     </div>
+                ` : `
                     <div class="cards-grid">${sphynxPinned.map(r => renderResourceCard(r)).join('')}</div>
-                </div>` : ''}
-
-            ${adminPinned.length ? `
-                <div class="resource-group" style="margin-bottom: 30px;">
-                    <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                        <i data-lucide="shield-check" style="width:16px; height:16px; color: #94a3b8;"></i>
-                        <h3 style="margin:0; font-size:12px; color: #94a3b8;">ADMIN</h3>
+                `}
+            </div>` : ''}
+        
+        ${adminPinned.length ? `
+            <div class="resource-group" style="margin-bottom: 30px;">
+                <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="shield-check" style="width:16px; height:16px; color: #94a3b8;"></i>
+                    <h3 style="margin:0; font-size:12px; color: #94a3b8;">ADMIN</h3>
+                </div>
+                ${OL.getViewMode('resources') === 'list' ? `
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        ${adminPinned.map(res => OL._renderResourceListRow(res)).join('')}
                     </div>
+                ` : `
                     <div class="cards-grid">${adminPinned.map(r => renderResourceCard(r)).join('')}</div>
-                </div>` : ''}
+                `}
+            </div>` : ''}
 
             ${sortedTypes.map(type => `
                 <div class="resource-group" style="margin-bottom: 40px;">
@@ -5111,6 +5123,33 @@ OL.renderResourceGroups = function(container, items) {
     `;
 
     if (window.lucide) window.lucide.createIcons();
+};
+
+OL._renderResourceListRow = function(res) {
+    const scopeData = OL.getScopingDataForResource(res.id);
+    const statusColors = {'Do Now':'#38bdf8','Done':'#22c55e','Do Later':'#fbbf24',"Don't Do":'#ef4444'};
+    const statusColor = scopeData ? (statusColors[scopeData.status]||'var(--accent)') : 'transparent';
+    return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                    background:var(--panel-soft);border:1px solid var(--panel-border);
+                    border-left:3px solid ${statusColor};
+                    border-radius:8px;cursor:pointer;transition:border-color 0.2s;
+                    opacity:${res.isArchived ? '0.5' : '1'};"
+             onclick="OL.selectResourceCard('${res.id}')"
+             onmouseover="this.style.borderColor='var(--accent)'"
+             onmouseout="this.style.borderColor='var(--panel-border)'">
+            <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+            <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
+            ${res.isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:#6b7280;border:1px solid #6b7280;font-size:8px;">📦 Archived</span>` : ''}
+            <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
+            ${scopeData ? `<span class="pill tiny" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:8px;">${esc(scopeData.status)}</span>` : ''}
+            ${!res.isLocked ? `
+                <button class="card-delete-btn" style="position:static;" 
+                        onclick="event.stopPropagation();OL.universalDelete('${res.id}','resources')">
+                    <i data-lucide="x" style="width:12px;height:12px;"></i>
+                </button>` : ''}
+        </div>
+    `;
 };
 
 OL.clearResourceFilters = function() {
