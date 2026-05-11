@@ -1182,6 +1182,8 @@ window.renderClientDashboard = function() {
     const container = document.getElementById("mainContent");
     if (!container) return;
 
+    container.style.cssText = '';
+
     const activeView = state.dashboardView || 'cards';
     
     // 🚀 FILTER LOGIC
@@ -1379,6 +1381,7 @@ window.renderClientDashboard = function() {
                 </div>`;
             }).join('')}
         </div>
+        '}
     `;
 };
 
