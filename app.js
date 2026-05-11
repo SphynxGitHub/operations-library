@@ -14487,31 +14487,61 @@ OL._fvOpenTargetPicker = function(resId, stepId, idx) {
     if (!picker) return;
 
     const isOpen = picker.style.display === 'block';
-    // Close all open pickers first
     document.querySelectorAll('.search-results-overlay').forEach(el => el.style.display = 'none');
     if (isOpen) return;
 
     const data      = OL.getCurrentProjectData();
     const resources = (data.resources||[]).filter(r => !r.isDeleted && !r.isLocked);
 
-    let html = '';
-    resources.forEach(res => {
-        if (!(res.steps||[]).length) return;
-        html += `<div style="padding:6px 10px;font-size:9px;font-weight:700;
-                             text-transform:uppercase;letter-spacing:0.08em;
-                             color:#9ca3af;background:#fafafa;">
-                   ${esc(res.name)}
-                 </div>`;
-        res.steps.forEach(s => {
-            const fullId = `${res.id}-${s.id}`;
-            html += `<div class="search-result-item"
-                          onmousedown="OL.updateStepTarget('${resId}','${stepId}','out',${idx},'${fullId}')">
-                       ${esc(s.name || 'Unnamed Step')}
+    const buildList = (q) => {
+        let html = '';
+        resources.forEach(res => {
+            if (!(res.steps||[]).length) return;
+            const steps = res.steps.filter(s => 
+                !q || 
+                (s.name||'').toLowerCase().includes(q) || 
+                res.name.toLowerCase().includes(q)
+            );
+            if (!steps.length) return;
+            html += `<div style="padding:6px 10px;font-size:9px;font-weight:700;
+                                 text-transform:uppercase;letter-spacing:0.08em;
+                                 color:#9ca3af;background:#fafafa;">
+                       ${esc(res.name)}
                      </div>`;
+            steps.forEach(s => {
+                const fullId = `${res.id}-${s.id}`;
+                html += `<div class="search-result-item"
+                              onmousedown="OL.updateStepTarget('${resId}','${stepId}','out',${idx},'${fullId}')">
+                           ${esc(s.name || 'Unnamed Step')}
+                         </div>`;
+            });
         });
-    });
+        return html || '<div class="search-result-item muted">No steps found.</div>';
+    };
 
-    picker.innerHTML = html || '<div class="search-result-item muted">No steps found.</div>';
+    picker.innerHTML = `
+        <div style="padding:8px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:#fff;z-index:1;">
+            <input type="text" class="fvi-input" placeholder="Search steps..."
+                   style="margin:0;"
+                   oninput="document.getElementById('${pickerId}-list').innerHTML = 
+                       (function(q){ 
+                           ${resources.map(res => '').join('')}
+                       })(this.value.toLowerCase().trim())"
+                   autofocus>
+        </div>
+        <div id="${pickerId}-list">${buildList('')}</div>
+    `;
+
+    // Wire up the search properly after render
+    const input = picker.querySelector('input');
+    if (input) {
+        input.addEventListener('input', () => {
+            const list = document.getElementById(`${pickerId}-list`);
+            if (list) list.innerHTML = buildList(input.value.toLowerCase().trim());
+        });
+        setTimeout(() => input.focus(), 50);
+    }
+
     picker.style.display = 'block';
 };
 
