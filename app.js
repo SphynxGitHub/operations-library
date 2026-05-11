@@ -3435,7 +3435,7 @@ window.renderFunctionsGrid = function() {
                     </div>
                 `).join('')}
             </div>
-        ` : 
+        ` : `
         <div class="cards-grid">
             ${displayFunctions.map(fn => {
                 const isMasterRef = !!fn.masterRefId || String(fn.id).startsWith('fn-');
