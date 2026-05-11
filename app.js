@@ -1184,7 +1184,8 @@ window.renderClientDashboard = function() {
 
     container.style.cssText = '';
 
-    const activeView = state.dashboardView || 'cards';
+    const activeView = state.dashboardView || localStorage.getItem('ol_dashboard_view') || 'cards';
+    state.dashboardView = activeView; // keep state in sync
     
     // 🚀 FILTER LOGIC
     const activeFilter = state.dashboardFilter || 'All';
@@ -1228,7 +1229,9 @@ window.renderClientDashboard = function() {
             <div class="header-actions"">
                 <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
                 <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>
-                <button class="btn small soft" onclick="state.dashboardView = state.dashboardView === 'list' ? 'cards' : 'list'; renderClientDashboard();"
+                <button class="btn small soft" onclick="state.dashboardView = state.dashboardView === 'list' ? 'cards' : 'list'; 
+                         localStorage.setItem('ol_dashboard_view', state.dashboardView); 
+                         renderClientDashboard();"
                         style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="${activeView === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
                     ${activeView === 'list' ? 'Card View' : 'List View'}
