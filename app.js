@@ -622,6 +622,10 @@ window.buildLayout = function () {
       console.error("❌ ERROR: Could not find 'app-root' in your index.html!");
       return; 
   }
+  const mainEl = document.getElementById('mainContent');
+  if (mainEl && !window.location.hash.includes('visualizer')) {
+      mainEl.style.cssText = '';
+  }
   const client = getActiveClient();
   const hash = location.hash || "#/";
   const urlParams = new URLSearchParams(window.location.search);
@@ -862,6 +866,11 @@ window.handleRoute = function () {
         document.body.classList.remove('is-visualizer');
         const panel = document.getElementById('v2-inspector-panel');
         if (panel) panel.id = 'inspector-panel';
+        // ADD THESE:
+        const main = document.getElementById('mainContent');
+        if (main) main.style.cssText = '';
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
     }
     
     // 1. Check if the matrix is ACTUALLY visible on screen
@@ -1173,6 +1182,8 @@ window.renderClientDashboard = function() {
     const container = document.getElementById("mainContent");
     if (!container) return;
 
+    const activeView = state.dashboardView || 'cards';
+    
     // 🚀 FILTER LOGIC
     const activeFilter = state.dashboardFilter || 'All';
     let clients = state.clients ? Object.values(state.clients) : [];
@@ -1215,6 +1226,11 @@ window.renderClientDashboard = function() {
             <div class="header-actions"">
                 <button class="btn primary" onclick="OL.onboardNewClient()">+ Add Client</button>
                 <button class="btn small warn" onclick="OL.pushFeaturesToAllClients()" title="Sync System Changes">⚙️ Migration</button>
+                <button class="btn small soft" onclick="state.dashboardView = state.dashboardView === 'list' ? 'cards' : 'list'; renderClientDashboard();"
+                        style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="${activeView === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
+                    ${activeView === 'list' ? 'Card View' : 'List View'}
+                </button>
             </div>
         </div>
 
@@ -1228,22 +1244,94 @@ window.renderClientDashboard = function() {
             `).join('')}
         </div>
 
-        <div class="cards-grid">
-            <div class="card vault-card is-clickable" onclick="location.hash='#/vault/apps'" 
-                 style="border: 1px solid var(--accent); background: rgba(var(--accent-rgb), 0.05);">
-                <div class="card-header">
-                    <div class="card-title" style="color: var(--accent);">🏛️ Master Vault</div>
-                    <div class="status-pill accent">System Admin</div>
-                </div>
-                <div class="card-body">
-                    <div class="small muted" style="margin-bottom: 20px;">
-                        Configure global apps, standard rates, and task blueprints.
-                    </div>
-                    <div class="card-footer-actions">
-                        <button class="btn small primary flex-1">Enter Vault Manager</button>
-                    </div>
-                </div>
+        ${activeView === 'list' ? `
+        <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+    
+            <!-- Vault Row -->
+            <div class="fv-list-item" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;
+                        padding:10px 16px;cursor:pointer;margin-bottom:4px;
+                        border-left:3px solid var(--accent);"
+                 onclick="location.hash='#/vault/apps'">
+                <span style="font-size:13px;font-weight:700;color:var(--accent);">🏛️ Master Vault</span>
             </div>
+            ${clients.map(client => {
+                    const tasks = (client.projectData?.clientTasks || []);
+                    const openTasks = tasks.filter(t => t.status !== 'Done');
+                    const doneTasks = tasks.filter(t => t.status === 'Done');
+                    const isExpanded = state.dashboardExpanded?.[client.id] !== false;
+        
+                    return `
+                        <div style="margin-bottom:4px;">
+                            <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;
+                                        background:#fff;border:1px solid #e5e7eb;border-radius:8px;
+                                        cursor:pointer;"
+                                 onclick="OL.switchClient('${client.id}')">
+                                <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
+                                            color:#000;display:flex;align-items:center;justify-content:center;
+                                            font-weight:900;font-size:11px;flex-shrink:0;">
+                                    ${esc(client.meta.name.substring(0,2).toUpperCase())}
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-weight:700;font-size:13px;color:#1b2d3f;">
+                                        ${esc(client.meta.name)}
+                                    </div>
+                                    <div style="font-size:10px;color:#9ca3af;">
+                                        ${openTasks.length} open · ${doneTasks.length} done
+                                    </div>
+                                </div>
+                                <span style="font-size:10px;color:#9ca3af;">${esc(client.meta.status)}</span>
+                                ${openTasks.length ? `
+                                    <span onclick="event.stopPropagation();
+                                                  if(!state.dashboardExpanded) state.dashboardExpanded={};
+                                                  state.dashboardExpanded['${client.id}'] = !${isExpanded};
+                                                  renderClientDashboard();"
+                                          style="width:20px;height:20px;border-radius:4px;
+                                                 background:#f5f6f8;border:1px solid #e5e7eb;
+                                                 display:flex;align-items:center;justify-content:center;
+                                                 font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;">
+                                        ${isExpanded ? '−' : '+'}
+                                    </span>
+                                ` : ''}
+                            </div>
+        
+                            ${isExpanded && openTasks.length ? `
+                                <div style="padding-left:44px;margin-top:2px;display:flex;flex-direction:column;gap:2px;">
+                                    ${openTasks.map(task => {
+                                        const statusColors = {
+                                            'Pending':     '#94a3b8',
+                                            'In Progress': '#3b82f6',
+                                            'Blocked':     '#ef4444',
+                                            'Done':        '#22c55e'
+                                        };
+                                        const color = statusColors[task.status || 'Pending'];
+                                        return `
+                                            <div style="display:flex;align-items:center;gap:8px;
+                                                        padding:7px 12px;background:#fafafa;
+                                                        border:1px solid #f3f4f6;border-radius:6px;
+                                                        cursor:pointer;"
+                                                 onclick="OL.switchClient('${client.id}'); 
+                                                          setTimeout(()=>OL.openTaskModal('${task.id}', false), 200);">
+                                                <div style="width:8px;height:8px;border-radius:50%;
+                                                            background:${color};flex-shrink:0;"></div>
+                                                <span style="font-size:11px;color:#374151;flex:1;">
+                                                    ${esc(task.name || task.title)}
+                                                </span>
+                                                ${task.dueDate ? `
+                                                    <span style="font-size:10px;color:#9ca3af;font-family:monospace;">
+                                                        ${new Date(task.dueDate).toLocaleDateString([],{month:'short',day:'numeric'})}
+                                                    </span>
+                                                ` : ''}
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        ` : `
+            <div class="cards-grid">
 
             ${clients.map(client => {
                 // Get 3 most recent tasks for the hover preview
