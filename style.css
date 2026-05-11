@@ -6530,3 +6530,10 @@ body.is-visualizer #v2-inspector-panel {
   border-top: 2px solid #3dd9c5 !important;
   background: rgba(61,217,197,0.05) !important;
 }
+
+#fv-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
+}
