@@ -5053,7 +5053,7 @@ OL.renderResourceGroups = function(container, items) {
                     </div>
                     <div class="cards-grid">${sphynxPinned.map(r => renderResourceCard(r)).join('')}</div>
                 </div>` : ''}
-
+    
             ${adminPinned.length ? `
                 <div class="resource-group" style="margin-bottom: 30px;">
                     <div style="border-bottom: 2px solid #94a3b8; padding: 8px; background: rgba(148, 163, 184, 0.05); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
@@ -5062,7 +5062,7 @@ OL.renderResourceGroups = function(container, items) {
                     </div>
                     <div class="cards-grid">${adminPinned.map(r => renderResourceCard(r)).join('')}</div>
                 </div>` : ''}
-
+    
             ${sortedTypes.map(type => `
                 <div class="resource-group" style="margin-bottom: 40px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom:15px;">
@@ -5075,8 +5075,8 @@ OL.renderResourceGroups = function(container, items) {
                         <button class="btn tiny soft" onclick="OL.promptBulkReclassify('${type}')">Bulk Move</button>
                     </div>
                     ${OL.getViewMode('resources') === 'list' ? `
-                        <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
-                            ${items.map(res => {
+                        <div style="display:flex;flex-direction:column;gap:2px;">
+                            ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(res => {
                                 const scopeData = OL.getScopingDataForResource(res.id);
                                 const statusColors = {'Do Now':'#38bdf8','Done':'#22c55e','Do Later':'#fbbf24',"Don't Do":'#ef4444'};
                                 const statusColor = scopeData ? (statusColors[scopeData.status]||'var(--accent)') : 'transparent';
@@ -5101,15 +5101,14 @@ OL.renderResourceGroups = function(container, items) {
                             }).join('')}
                         </div>
                     ` : `
-                    <div class="cards-grid">
-                        ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(r => renderResourceCard(r)).join('')}
-                    </div>
+                        <div class="cards-grid">
+                            ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(r => renderResourceCard(r)).join('')}
+                        </div>
+                    `}
                 </div>
             `).join('')}
         </div>
-        `}
     `;
-
     // 🚀 THE REPAINT
     if (window.lucide) window.lucide.createIcons();
 };
