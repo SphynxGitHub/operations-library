@@ -10461,9 +10461,9 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     `;
 
     // ── LANE CARDS ────────────────────────────────────
-    const regularCardsHtml = stageRes.map((res, cardIndex) => {
+    const regularCardsHtml = stageRes.map(res => {
       globalCardNum++;
-      return OL._fvBuildCard(res, globalCardNum, false, 0, stage.id, cardIndex);
+      return OL._fvBuildCard(res, globalCardNum, false, 0);
     }).join('');
 
     // Global resources for this stage
@@ -10474,7 +10474,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
       if (expanded) {
         // Full card with global badge
         globalCardNum++;
-        return OL._fvBuildCard(gr, globalCardNum, true, stageCount, stage.id, globalCardNum);
+        return OL._fvBuildCard(gr, globalCardNum, true, stageCount);
       } else {
         // Collapsed chip
         return `
@@ -10516,128 +10516,43 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   `;
 };
 
-// ── DRAG STATE ──────────────────────────────────────
-OL._fvDrag = {
-  resId: null,
-  sourceStageId: null,
-  sourceIndex: null,
-};
-
-// ── CARD DRAG START ──────────────────────────────────
-OL._fvCardDragStart = function(e, resId, stageId, index) {
-  e.stopPropagation();
-  e.dataTransfer.setData('application/fv-resource', resId);
-  e.dataTransfer.setData('application/fv-source', 'canvas');
-  e.dataTransfer.effectAllowed = 'move';
-
-  OL._fvDrag.resId        = resId;
-  OL._fvDrag.sourceStageId = stageId;
-  OL._fvDrag.sourceIndex  = index;
-
-  requestAnimationFrame(() => {
-    const card = document.getElementById(`fv-card-${resId}`);
-    if (card) card.classList.add('fv-dragging');
-  });
-};
-
-OL._fvCardDragEnd = function(e) {
-  document.querySelectorAll('.fv-card.fv-dragging, .fv-drop-placeholder')
-    .forEach(el => {
-      if (el.classList.contains('fv-drop-placeholder')) el.remove();
-      else el.classList.remove('fv-dragging');
-    });
-  document.querySelectorAll('.fv-swimlane')
-    .forEach(el => el.classList.remove('fv-drag-over'));
-  OL._fvDrag = { resId: null, sourceStageId: null, sourceIndex: null };
-};
-
-// ── LANE DRAG OVER (show placeholder) ────────────────
 OL._fvLaneDragOver = function(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  const lane = e.currentTarget;
-  lane.classList.add('fv-drag-over');
-
-  // 🚀 Throttle placeholder updates
-  if (OL._fv._dragThrottle) return;
-  OL._fv._dragThrottle = true;
-  setTimeout(() => { OL._fv._dragThrottle = false; }, 50);
-
-  const cards = [...lane.querySelectorAll('.fv-card:not(.fv-dragging):not(.fv-drop-placeholder)')];
-  lane.querySelectorAll('.fv-drop-placeholder').forEach(el => el.remove());
-
-  let insertBefore = null;
-  for (const card of cards) {
-    const rect = card.getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    if (e.clientX < midX) {
-      insertBefore = card;
-      break;
-    }
-  }
-
-  const ph = document.createElement('div');
-  ph.className = 'fv-drop-placeholder';
-  insertBefore ? lane.insertBefore(ph, insertBefore) : lane.appendChild(ph);
+  e.currentTarget.classList.add('fv-drag-over');
 };
 
 OL._fvLaneDragLeave = function(e) {
-  const lane = e.currentTarget;
-  if (!lane.contains(e.relatedTarget)) {
-    lane.classList.remove('fv-drag-over');
-    lane.querySelectorAll('.fv-drop-placeholder').forEach(el => el.remove());
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('fv-drag-over');
   }
 };
 
-// ── LANE DROP ─────────────────────────────────────────
-OL._fvLaneDrop = async function(e, targetStageId) {
+OL._fvLaneDrop = async function(e, stageId) {
   e.preventDefault();
 
+  // Clear visual feedback on all lanes
   document.querySelectorAll('.fv-swimlane').forEach(el => {
-    el.classList.remove('fv-drag-over');
+    el.style.background = '';
+    el.style.outline = '';
   });
 
-  const resId = e.dataTransfer.getData('application/fv-resource');
+  const resId  = e.dataTransfer.getData('application/fv-resource');
+  const source = e.dataTransfer.getData('application/fv-source'); // 'canvas' or workbench
   if (!resId) return;
 
-  const data      = OL.getCurrentProjectData();
-  const resources = data.resources || [];
-  const res       = resources.find(r => String(r.id) === String(resId));
+  const data = OL.getCurrentProjectData();
+  const res  = (data.resources || []).find(r => String(r.id) === String(resId));
   if (!res) return;
 
-  // Get drop index from placeholder
-  const lane = e.currentTarget;
-  const ph   = lane.querySelector('.fv-drop-placeholder');
-  let dropIndex = 0;
+  // If dropped on its own lane, do nothing
+  if (res.stageId === stageId) return;
 
-  if (ph) {
-    const beforePh = [...lane.children]
-      .slice(0, [...lane.children].indexOf(ph))
-      .filter(el => el.classList.contains('fv-card') && !el.classList.contains('fv-dragging'));
-    dropIndex = beforePh.length;
-    ph.remove();
-  }
+  await OL.updateAndSync(() => {
+    res.stageId  = stageId;
+    res.isGlobal = false;
+  });
 
-  // 🚀 Direct state mutation + single persist (no updateAndSync overhead)
-  const oldIdx = resources.findIndex(r => String(r.id) === String(resId));
-  if (oldIdx > -1) resources.splice(oldIdx, 1);
-
-  res.stageId  = targetStageId;
-  res.isGlobal = false;
-
-  // Find insertion point among same-stage resources
-  const stageResources = resources
-    .map((r, i) => ({ r, i }))
-    .filter(({ r }) => r.stageId === targetStageId);
-
-  const insertAt = stageResources.length > 0
-    ? (stageResources[Math.min(dropIndex, stageResources.length - 1)]?.i ?? resources.length)
-    : resources.length;
-
-  resources.splice(insertAt, 0, res);
-
-  // 🚀 Persist silently, re-render immediately without waiting
-  OL.persist(); // fire and forget
   OL.renderVisualizer();
 };
 
@@ -10743,7 +10658,7 @@ OL._fvComputeLayout = function(resources, stageFilter) {
 };
 
 // ── CARD BUILDER (shared between regular + expanded globals) ──
-OL._fvBuildCard = function(res, num, isGlobal, globalStageCount, stageId = '', cardIndex = 0) {
+OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   const tc = OL._fvGetType(res.type);
   const stepCount = (res.steps || []).length;
   const hasLogic  = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
@@ -10780,9 +10695,8 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount, stageId = '', c
          id="fv-card-${res.id}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
-         data-card-index="${cardIndex}"
          draggable="true"
-         ondragstart="OL._fvCardDragStart(event, '${res.id}', '${stageId}', ${cardIndex})"
+         ondragstart="OL._fvCardDragStart(event, '${res.id}')"
          ondragend="OL._fvCardDragEnd(event)"
          onclick="event.stopPropagation();
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
@@ -10802,152 +10716,24 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount, stageId = '', c
       </div>
 
       <div class="fv-card-footer">
-          <span class="fv-step-count-btn"
-                onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
-                title="Toggle steps">
-            <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}"
-               style="width:10px;height:10px;"></i>
-            ${stepCount} step${stepCount!==1?'s':''}
-          </span>
-          <div style="display:flex;gap:4px;align-items:center;">
-            ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
-            ${hasLogic ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
-                                       background:rgba(61,217,197,0.1);color:#3dd9c5;
-                                       font-weight:700;">λ</span>` : ''}
-            <button class="fv-card-pin-btn ${res.pinnedInLane ? 'pinned' : ''}"
-                    title="${res.pinnedInLane ? 'Unpin card position' : 'Pin card position'}"
-                    onclick="event.stopPropagation(); OL._fvToggleCardPin('${res.id}')">
-              <i data-lucide="${res.pinnedInLane ? 'pin' : 'pin-off'}" style="width:10px;height:10px;"></i>
-            </button>
-          </div>
+        <span class="fv-step-count-btn"
+              onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
+              title="Toggle steps">
+          <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}"
+             style="width:10px;height:10px;"></i>
+          ${stepCount} step${stepCount!==1?'s':''}
+        </span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+          ${hasLogic ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
+                                     background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                     font-weight:700;">λ</span>` : ''}
         </div>
+      </div>
 
       ${stepsPreview}
     </div>
   `;
-};
-
-OL._fvStartConnection = function(e, resId, stepId, portSide) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  const canvas = document.getElementById('fv-content');
-  const svg    = document.getElementById('fv-svg-layer');
-  if (!canvas || !svg) return;
-
-  // Create a temporary line that follows the mouse
-  const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  tempLine.setAttribute('fill', 'none');
-  tempLine.setAttribute('stroke', '#3dd9c5');
-  tempLine.setAttribute('stroke-width', '2');
-  tempLine.setAttribute('stroke-dasharray', '6,3');
-  tempLine.id = 'fv-temp-connection';
-  svg.appendChild(tempLine);
-
-  // Source port center
-  const port   = document.getElementById(`port-${portSide}-${resId}-${stepId}`);
-  const cRect  = canvas.getBoundingClientRect();
-  const pRect  = port.getBoundingClientRect();
-  const zoom   = OL._fv.zoom || 1;
-
-  const sx = (pRect.left - cRect.left + pRect.width  / 2) / zoom;
-  const sy = (pRect.top  - cRect.top  + pRect.height / 2) / zoom;
-
-  OL._fv._connecting = { resId, stepId, portSide, sx, sy };
-
-  const onMove = e => {
-    const mx = (e.clientX - cRect.left) / zoom;
-    const my = (e.clientY - cRect.top)  / zoom;
-    const d  = `M ${sx} ${sy} C ${sx+60} ${sy}, ${mx-60} ${my}, ${mx} ${my}`;
-    tempLine.setAttribute('d', d);
-
-    // Highlight ports being hovered
-    document.querySelectorAll('.fv-port').forEach(p => p.classList.remove('fv-port-target'));
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const targetPort = el?.closest('.fv-port');
-    if (targetPort && !targetPort.id.includes(`${resId}-${stepId}`)) {
-      targetPort.classList.add('fv-port-target');
-    }
-  };
-
-  const onUp = async e => {
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup',   onUp);
-    tempLine.remove();
-    document.querySelectorAll('.fv-port-target').forEach(p => p.classList.remove('fv-port-target'));
-
-    // Check if dropped on a port
-    const el         = document.elementFromPoint(e.clientX, e.clientY);
-    const targetPort = el?.closest('.fv-port');
-
-    if (targetPort && targetPort.id !== `port-${portSide}-${resId}-${stepId}`) {
-      // Parse target from port id: port-{side}-{resId}-{stepId}
-      const parts      = targetPort.id.split('-');
-      // port-top-resId-stepId — resId may contain dashes so we need to be careful
-      // Format is: port + side + ...rest
-      const side       = parts[1];
-      // Find target step by scanning
-      const tCard      = targetPort.closest('.fv-step-card');
-      const tResId     = tCard?.dataset.resId;
-      const tStepId    = tCard?.dataset.stepId;
-
-      if (tResId && tStepId && tResId !== resId) {
-        await OL._fvCreateConnection(resId, stepId, tResId, tStepId);
-      }
-    }
-
-    OL._fv._connecting = null;
-  };
-
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup',   onUp);
-};
-
-OL._fvCreateConnection = async function(fromResId, fromStepId, toResId, toStepId) {
-  const data = OL.getCurrentProjectData();
-  const fromRes  = (data.resources||[]).find(r => String(r.id) === String(fromResId));
-  const fromStep = fromRes?.steps?.find(s => String(s.id) === String(fromStepId));
-  if (!fromStep) return;
-
-  if (!fromStep.logic) fromStep.logic = { in: [], out: [] };
-  if (!fromStep.logic.out) fromStep.logic.out = [];
-
-  const targetId = `${toResId}-${toStepId}`;
-
-  // Don't duplicate
-  if (fromStep.logic.out.some(l => l.targetId === targetId)) return;
-
-  // Default to "next" connection
-  fromStep.logic.out.push({
-    targetId,
-    type: 'next',
-    rule: ''
-  });
-
-  OL.syncLogicPorts();
-  await OL.persist();
-  OL._fvRenderSteps((data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked));
-};
-
-OL._fvToggleCardPin = async function(resId) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-  if (!res) return;
-
-  res.pinnedInLane = !res.pinnedInLane;
-  await OL.persist();
-
-  // Surgical update — just toggle the button state
-  const card = document.getElementById(`fv-card-${resId}`);
-  if (card) {
-    const btn = card.querySelector('.fv-card-pin-btn');
-    if (btn) {
-      btn.classList.toggle('pinned', res.pinnedInLane);
-      btn.title = res.pinnedInLane ? 'Unpin card position' : 'Pin card position';
-      btn.innerHTML = `<i data-lucide="${res.pinnedInLane ? 'pin' : 'pin-off'}" style="width:10px;height:10px;"></i>`;
-      if (window.lucide) lucide.createIcons();
-    }
-  }
 };
 
 OL._fvCardDragStart = function(e, resId) {
@@ -11270,49 +11056,41 @@ OL._fvDrawStepConnections = function(resources) {
         if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
         group.appendChild(path);
 
-        // Draw logic icon at midpoint
-        const pathLength = path.getTotalLength?.() || 0;
-        const mid = pathLength > 0 ? path.getPointAtLength(pathLength / 2) : { x: (fx+tx)/2, y: (fy+ty)/2 };
-        
-        const lineIsLoop  = outRule.type === 'loop';
-        const lineIsDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
-        const lineHasCond = outRule.rule?.trim();
-        
-        let icon = null;
-        if (lineIsLoop)       icon = '↺';
-        else if (lineIsDelay) icon = '⏱';
-        else if (lineHasCond) icon = 'λ';
-        
-        if (icon) {
-          const pathLength = path.getTotalLength?.() || 0;
-          const mid = pathLength > 0 
-            ? path.getPointAtLength(pathLength / 2) 
-            : { x: (fx+tx)/2, y: (fy+ty)/2 };
-        
-          const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-          circle.setAttribute('cx', mid.x);
-          circle.setAttribute('cy', mid.y);
-          circle.setAttribute('r', '10');
-          circle.setAttribute('fill', '#fff');
-          circle.setAttribute('stroke', color);
-          circle.setAttribute('stroke-width', '1.5');
-          circle.style.cursor = 'pointer';
-          circle.addEventListener('click', ev => {
-            ev.stopPropagation();
-            OL._fvOpenLineLogicEditor(fromResId, fromStepId, outRule, color);
-          });
-          group.appendChild(circle);
-        
-          const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-          txt.setAttribute('x', mid.x);
-          txt.setAttribute('y', mid.y + 4);
+        // Logic icon on line midpoint
+        const hasRule  = outRule.rule?.trim();
+        const hasDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
+        const iconChar = isLoop ? '↺' : hasDelay ? '⏱' : hasRule ? 'λ' : null;
+
+        if (iconChar) {
+          // Find midpoint of bezier curve
+          const mx = (fx + tx) / 2;
+          const my = (fy + ty) / 2;
+
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          bg.setAttribute('cx', mx); bg.setAttribute('cy', my); bg.setAttribute('r', '10');
+          bg.setAttribute('fill', '#fff');
+          bg.setAttribute('stroke', color); bg.setAttribute('stroke-width', '1.5');
+          group.appendChild(bg);
+
+          const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          txt.setAttribute('x', mx); txt.setAttribute('y', my + 4);
           txt.setAttribute('text-anchor', 'middle');
-          txt.setAttribute('font-size', '11');
+          txt.setAttribute('font-size', iconChar === 'λ' ? '11' : '10');
           txt.setAttribute('font-weight', '700');
           txt.setAttribute('fill', color);
+          txt.setAttribute('font-family', 'DM Sans, sans-serif');
           txt.setAttribute('pointer-events', 'none');
-          txt.textContent = icon;
+          txt.textContent = iconChar;
           group.appendChild(txt);
+
+          // Tooltip on hover showing the rule/delay
+          if (hasRule || hasDelay) {
+            const label = hasDelay
+              ? `⏱ ${outRule.delayValue || '?'} ${outRule.delayUnit || 'days'}`
+              : outRule.rule;
+            bg.setAttribute('title', label);
+            bg.style.cursor = 'help';
+          }
         }
       });
     });
@@ -11322,11 +11100,9 @@ OL._fvDrawStepConnections = function(resources) {
 OL._fvSetupCardDrag = function(el, resId, stepId) {
   let startX, startY, startLeft, startTop, hasMoved = false;
 
-  // 🚀 Only attach to the card itself, not the body
   el.addEventListener('mousedown', e => {
-    // Don't drag if clicking ports, buttons, or the body content
-    if (e.target.closest('.fv-port, .fv-pin-btn, .fv-res-tidy-btn, button, input, select')) return;
-    
+    // Don't drag if clicking interactive elements
+    if (e.target.closest('.fv-pin-btn, .fv-res-tidy-btn, .fv-port, .fv-step-card-body')) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -11342,27 +11118,29 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
       const dx = (e.clientX - startX) / zoom;
       const dy = (e.clientY - startY) / zoom;
 
-      if (!hasMoved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+      if (!hasMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
         hasMoved = true;
         el.classList.add('is-dragging');
-        // Bring to front while dragging
-        el.style.zIndex = '1000';
       }
       if (!hasMoved) return;
 
-      let newX = Math.max(0, startLeft + dx);
-      let newY = Math.max(0, startTop  + dy);
+      let newX = startLeft + dx;
+      let newY = startTop  + dy;
 
+      // Snap to grid
       if (OL._fv.snapToGrid) {
         const g = OL._fv.gridSize || 20;
         newX = Math.round(newX / g) * g;
         newY = Math.round(newY / g) * g;
       }
 
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
+
       el.style.left = newX + 'px';
       el.style.top  = newY + 'px';
 
-      // Live connection redraw
+      // Redraw connections live
       const data = OL.getCurrentProjectData();
       const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
       OL._fvDrawStepConnections(resources);
@@ -11372,10 +11150,10 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup',   onUp);
       el.classList.remove('is-dragging');
-      el.style.zIndex = '';
 
       if (!hasMoved) return;
 
+      // Save coords and auto-pin
       const data = OL.getCurrentProjectData();
       const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
       const step = res?.steps?.find(s => String(s.id) === String(stepId));
@@ -11385,9 +11163,10 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
           x: parseFloat(el.style.left) || 0,
           y: parseFloat(el.style.top)  || 0,
         };
-        step.pinned = true;
+        step.pinned = true; // Auto-pin on first drag
         el.classList.add('is-pinned');
 
+        // Update pin button
         const pinBtn = el.querySelector('.fv-pin-btn');
         if (pinBtn) {
           pinBtn.classList.add('pinned');
@@ -14448,94 +14227,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                  <div class="section-label">📤 NEXT STEP</div>
-                
-                  ${(step.logic?.out || []).map((l, i) => {
-                    const targetId = l.targetId || '';
-                    let targetLabel = '— Select target —';
-                    if (targetId) {
-                      const lastH  = targetId.lastIndexOf('-');
-                      const tResId = targetId.substring(0, lastH);
-                      const tStepId = targetId.substring(lastH + 1);
-                      const tRes  = (OL.getCurrentProjectData().resources||[]).find(r => String(r.id) === tResId);
-                      const tStep = tRes?.steps?.find(s => String(s.id) === tStepId);
-                      if (tRes && tStep) targetLabel = `${esc(tRes.name)} › ${esc(tStep.name||'Step')}`;
-                    }
-                    return `
-                      <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;
-                                  padding:10px 12px;margin-bottom:8px;">
-                
-                        <div style="display:flex;gap:4px;margin-bottom:8px;">
-                          ${['next','condition','loop','delay'].map(t => `
-                            <span onclick="OL._fvSetLogicType('${resId}','${step.id}',${i},'${t}')"
-                                  style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
-                                         cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
-                                         background:${(l.type||'next')===t ? '#3dd9c5' : '#f5f6f8'};
-                                         color:${(l.type||'next')===t ? '#fff' : '#9ca3af'};
-                                         border:1px solid ${(l.type||'next')===t ? '#3dd9c5' : '#e5e7eb'};">
-                              ${t==='next'?'→ Next':t==='condition'?'λ If':t==='loop'?'↺ Loop':'⏱ Delay'}
-                            </span>
-                          `).join('')}
-                        </div>
-                
-                        <div style="position:relative;margin-bottom:${l.type==='condition'||l.type==='delay' ? '8px' : '0'};">
-                          <div onclick="OL._fvOpenTargetPicker('${resId}','${step.id}',${i})"
-                               style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;
-                                      font-size:11px;color:${targetId ? '#1b2d3f' : '#9ca3af'};
-                                      background:#fff;cursor:pointer;display:flex;
-                                      align-items:center;justify-content:space-between;">
-                            <span>${targetLabel}</span>
-                            <i data-lucide="chevron-down" style="width:12px;height:12px;color:#9ca3af;"></i>
-                          </div>
-                          <div id="target-picker-${resId}-${step.id}-${i}"
-                               class="search-results-overlay" style="display:none;max-height:200px;overflow-y:auto;"></div>
-                        </div>
-                
-                        ${l.type==='condition' ? `
-                          <input type="text" class="fvi-input"
-                                 placeholder="Condition (e.g. If approved...)"
-                                 value="${esc(l.rule||'')}"
-                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'rule',this.value)"
-                                 style="margin-top:0;">
-                        ` : ''}
-                
-                        ${l.type==='delay' ? `
-                          <div style="display:flex;gap:6px;align-items:center;">
-                            <input type="number" class="fvi-input" style="width:70px;"
-                                   placeholder="0"
-                                   value="${esc(String(l.delayValue||''))}"
-                                   onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayValue',this.value)">
-                            <select class="fvi-select" style="flex:1;"
-                                    onchange="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayUnit',this.value)">
-                              <option value="hours" ${l.delayUnit==='hours'?'selected':''}>Hours</option>
-                              <option value="days"  ${l.delayUnit==='days' ?'selected':''}>Days</option>
-                              <option value="weeks" ${l.delayUnit==='weeks'?'selected':''}>Weeks</option>
-                            </select>
-                          </div>
-                        ` : ''}
-                
-                        ${l.type==='loop' ? `
-                          <input type="text" class="fvi-input"
-                                 placeholder="Loop limit (e.g. 3 times, or leave blank)"
-                                 value="${esc(l.loopLimit||'')}"
-                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'loopLimit',this.value)"
-                                 style="margin-top:0;">
-                        ` : ''}
-                
-                        <button onclick="OL.removeStepLogic('${resId}','${step.id}','out',${i})"
-                                style="margin-top:8px;width:100%;background:none;border:none;
-                                       color:#ef4444;font-size:10px;cursor:pointer;
-                                       text-align:left;padding:0;font-family:inherit;">
-                          Remove
-                        </button>
-                      </div>
-                    `;
-                  }).join('')}
-                
-                  <button onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')"
-                          class="fvi-add-step-btn" style="margin-top:4px;">
-                    + Add Output
-                  </button>
+                    <div class="section-label">📤 OUTPUT CONDITIONS (To where?)</div>
+                    ${step.logic.out.map((l, i) => OL.renderLogicBlock(resId, step.id, 'out', i, l, allOptions)).join('')}
+                    <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')">+ Add Output Rule</button>
                 </div>
 
                 <div class="inspector-section">
@@ -14694,62 +14388,6 @@ if (mode === 'cards' && resId) {
     }
 
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
-};
-
-OL._fvSetLogicType = function(resId, stepId, idx, type) {
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources||[]).find(r=>String(r.id)===String(resId));
-  const step = res?.steps?.find(s=>String(s.id)===String(stepId));
-  if (!step?.logic?.out?.[idx]) return;
-  step.logic.out[idx].type = type;
-  OL.persist();
-  OL.openInspector(resId, stepId);
-};
-
-OL._fvOpenTargetPicker = function(resId, stepId, idx) {
-  const pickerId = `target-picker-${resId}-${stepId}-${idx}`;
-  const picker   = document.getElementById(pickerId);
-  if (!picker) return;
-
-  const isOpen = picker.style.display === 'block';
-  // Close all others first
-  document.querySelectorAll('.search-results-overlay').forEach(el => el.style.display = 'none');
-  if (isOpen) return;
-
-  const data      = OL.getCurrentProjectData();
-  const resources = (data.resources||[]).filter(r=>!r.isDeleted);
-
-  let html = '';
-  resources.forEach(r => {
-    if ((r.steps||[]).length === 0) return;
-    html += `<div style="padding:6px 10px;font-size:10px;font-weight:700;
-                         color:#9ca3af;text-transform:uppercase;background:#f9fafb;">
-               ${esc(r.name)}
-             </div>`;
-    r.steps.forEach(s => {
-      const targetId = `${r.id}-${s.id}`;
-      const isSelf   = r.id === resId && s.id === stepId;
-      if (isSelf) return;
-      html += `
-        <div class="search-result-item"
-             onmousedown="OL.updateStepTarget('${resId}','${stepId}','out',${idx},'${targetId}'); 
-                          document.getElementById('${pickerId}').style.display='none';">
-          ${esc(s.name||'Unnamed Step')}
-        </div>`;
-    });
-  });
-
-  picker.innerHTML = html || '<div class="search-result-item muted">No steps found</div>';
-  picker.style.display = 'block';
-};
-
-OL._fvOpenLineLogicEditor = function(resId, stepId, rule, color) {
-  // Opens inspector for the source step and scrolls to logic section
-  OL.openInspector(resId, stepId);
-  setTimeout(() => {
-    const section = document.querySelector('.inspector-section:last-child');
-    if (section) section.scrollIntoView({ behavior: 'smooth' });
-  }, 100);
 };
 
 window.renderStepResources = function(resId, step) {
