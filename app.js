@@ -439,21 +439,21 @@ window.addEventListener('load', () => {
 });
 
 // Recalculate visualizer layout when sidebar collapses/expands
+let _fvResizeTimer = null;
 window.addEventListener('resize', () => {
   if (!window.location.hash.includes('visualizer')) return;
-
-  const body = document.getElementById('fv-body');
-  if (!body) return;
-
-  // Force flex to recalculate available width
-  body.style.display = 'none';
-  body.offsetHeight; // trigger reflow
-  body.style.display = 'flex';
-
-  // Re-sync rail heights since available width may have changed
-  if (typeof OL._fvSyncRailHeights === 'function') {
-    OL._fvSyncRailHeights();
-  }
+  if (_fvResizeTimer) return; // already scheduled
+  _fvResizeTimer = setTimeout(() => {
+    _fvResizeTimer = null;
+    const body = document.getElementById('fv-body');
+    if (!body) return;
+    body.style.display = 'none';
+    body.offsetHeight;
+    body.style.display = 'flex';
+    if (typeof OL._fvSyncRailHeights === 'function') {
+      OL._fvSyncRailHeights();
+    }
+  }, 150);
 });
 
 OL.toggleTheme = function() {
