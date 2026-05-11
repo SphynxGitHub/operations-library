@@ -10133,6 +10133,10 @@ OL.renderVisualizer = function() {
           <button class="fv-btn fv-icon" onclick="OL.fvClearSearch()">
             <i data-lucide="x"></i>
           </button>
+          <button class="fv-toggle-btn ${OL._fv.showArchived ? 'on' : ''}"
+                    onclick="OL._fv.showArchived = !OL._fv.showArchived; OL.renderVisualizer();">
+              📦 ${OL._fv.showArchived ? 'Hide Archived' : 'Show Archived'}
+            </button>
         </div>
 
         <div class="fv-divider"></div>
@@ -10780,7 +10784,7 @@ OL._fvToggleCardSteps = function(resId) {
 
   // Surgical re-render of just this card
   const data = OL.getCurrentProjectData();
-  const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
+  const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked  && (OL._fv.showArchived || !r.isArchived));
   const res = resources.find(r => String(r.id) === resId);
   if (!res) return;
 
@@ -14124,6 +14128,13 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                       value="${esc(step.name)}" 
                       onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)"
                       placeholder="Step Name">
+                <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
+                        style="padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;
+                               cursor:pointer;border:1px solid ${res.isArchived ? '#ef4444' : '#e5e7eb'};
+                               background:${res.isArchived ? 'rgba(239,68,68,0.08)' : '#fafafa'};
+                               color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                  ${res.isArchived ? '📦 Archived' : 'Archive'}
+                </button>
             </div>
 
             <div class="inspector-body">
