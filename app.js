@@ -11646,27 +11646,13 @@ OL._fvBuildListShell = function(stages, resources) {
     
       // Build steps grouped by resource, with a clickable resource header
       const stepsHtml = stageRes.map(res => {
-        const tc = OL._fvGetType(res.type);
-        const steps = res.steps || [];
-    
-        const resHeader = `
-          <div class="fv-list-res-header"
-               onclick="event.stopPropagation(); OL._fvOpenStepsList('${res.id}');">
-            <div class="fv-list-type-dot" style="background:${tc.color};margin-top:0;"></div>
-            <span class="fv-list-res-header-name">${esc(res.name)}</span>
-            <span class="fv-list-res-header-type" style="color:${tc.color};">${esc(res.type||'')}</span>
-            <span class="fv-list-res-header-count">${steps.length} steps</span>
-            <i data-lucide="chevron-right" style="width:11px;height:11px;color:#9ca3af;margin-left:auto;"></i>
-          </div>
-        `;
-    
-        const stepRows = steps.map((step, stepIdx) =>
-          OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
-        ).join('');
-    
-        return resHeader + (stepRows ? `<div class="fv-list-steps">${stepRows}</div>` : '');
-      }).join('');
-    
+            const steps = res.steps || [];
+            const stepRows = steps.map((step, stepIdx) =>
+              OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
+            ).join('');
+            return stepRows;
+        }).join('');
+            
       const totalSteps = stageRes.reduce((acc, r) => acc + (r.steps||[]).length, 0);
     
       return `
