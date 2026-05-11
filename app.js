@@ -1912,6 +1912,7 @@ window.renderAppsGrid = function() {
               `;
           }).join('') : `<div class="empty-hint">No apps deployed. Use the buttons above to get started.</div>`}
       </div>
+      `}
     `;
 
     // 🚀 Refresh Lucide
