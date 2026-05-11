@@ -10062,11 +10062,14 @@ OL._fvNormalizeStepCoords = function() {
 
 // ── SHARED STATE ─────────────────────────────────────────
 if (!OL._fv) OL._fv = {
-  layout: 'flowchart',   // 'flowchart' | 'list'
-  zoom: 1,
-  showConnections: true,
-  stageFilter: '',
-  searchMatches: [], searchIdx: -1,
+    layout: sessionStorage.getItem('fv_layout') || 'flowchart',
+    zoom: 1,
+    showConnections: true,
+    stageFilter: '',
+    globalsExpanded: false,
+    searchMatches: [], searchIdx: -1,
+    snapToGrid: false, gridSize: 20,
+    _searchQuery: '',
 };
 
 // ── MAIN ENTRY ────────────────────────────────────────────
@@ -10083,14 +10086,14 @@ OL.renderVisualizer = function() {
   const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
 
   if (!OL._fv) OL._fv = {
-    layout: 'flowchart', zoom: 1,
-    showConnections: true, stageFilter: '',
-    globalsExpanded: false,
-    searchMatches: [], searchIdx: -1,
-    snapToGrid: false, gridSize: 20,
-    _searchQuery: '',
-  };
-
+        layout: sessionStorage.getItem('fv_layout') || 'flowchart', zoom: 1,
+        showConnections: true, stageFilter: '',
+        globalsExpanded: false,
+        searchMatches: [], searchIdx: -1,
+        snapToGrid: false, gridSize: 20,
+        _searchQuery: '',
+    };
+    
   // Run layout computation for steps view
   if (OL._fv.layout === 'steps') {
     OL._fvNormalizeStepCoords();
@@ -10136,7 +10139,7 @@ OL.renderVisualizer = function() {
 
         <!-- Layout switcher -->
         <select class="fv-select" style="font-weight:600;"
-                onchange="OL._fv.layout = this.value; OL.renderVisualizer();">
+                onchange="OL._fv.layout = this.value; sessionStorage.setItem('fv_layout', this.value); OL.renderVisualizer()">
           <option value="flowchart" ${OL._fv.layout==='flowchart'?'selected':''}>🗺 Swimlanes</option>
           <option value="steps"     ${OL._fv.layout==='steps'    ?'selected':''}>⬡ Steps</option>
           <option value="list"      ${OL._fv.layout==='list'     ?'selected':''}>📋 List</option>
