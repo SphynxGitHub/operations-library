@@ -11990,11 +11990,11 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const isLoop  = rule.type === 'loop';
         const isDelay = rule.type === 'delay';
         const isCond  = rule.type === 'condition';
-        const tagLabel = isLoop  ? '↺ Loop'
-                       : isDelay ? `⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}`
-                       : isCond  ? `λ ${esc(rule.rule||'If...')}`
-                       : null;
-
+        const tagLabel = isLoop  ? `↺ Loop${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}`
+               : isDelay ? `⏱ Delay: ${rule.delayValue||'?'} ${rule.delayUnit||'days'}`
+               : isCond  ? `λ If: ${esc(rule.rule||'...')}`
+               : null;
+          
         return `
           <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);margin-left:16px;padding-left:20px;">
             ${tagLabel ? `
