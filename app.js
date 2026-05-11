@@ -1381,7 +1381,7 @@ window.renderClientDashboard = function() {
                 </div>`;
             }).join('')}
         </div>
-        '}
+        `}
     `;
 };
 
