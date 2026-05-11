@@ -2843,8 +2843,11 @@ body.is-visualizer #mainContent {
     padding: 10px 10px 0 0 !important; height: 100%; width: 100%; overflow: hidden;
 }
 
-#mainContent:not(.is-visualizer #mainContent) {
-    overflow-y: auto;
+body:not(.is-visualizer) #mainContent {
+    height: auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 40px !important;
 }
 
 /* Ensure the scoping grid itself doesn't trap the scroll */
