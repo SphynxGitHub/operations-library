@@ -3484,6 +3484,7 @@ window.renderFunctionsGrid = function() {
                 `;
             }).join('')}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT
@@ -5106,6 +5107,7 @@ OL.renderResourceGroups = function(container, items) {
                 </div>
             `).join('')}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT
@@ -18092,6 +18094,7 @@ window.renderTeamManager = function () {
             ${memberCardsHtml}
             ${members.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No team members added yet.</div>' : ""}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT: Essential for dynamic card icons
@@ -18723,6 +18726,7 @@ function renderHowToLibrary () {
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
             ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT
