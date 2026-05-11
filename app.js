@@ -11659,16 +11659,26 @@ OL._fvBuildListShell = function(stages, resources) {
       const totalSteps = stageRes.reduce((acc, r) => acc + (r.steps||[]).length, 0);
     
       return `
-        <div class="fv-list-stage">
-          <div class="fv-list-stage-header">
-            <div class="fv-list-stage-num">${si + 1}</div>
-            <div class="fv-list-stage-name">${esc(stage.name)}</div>
-            <div class="fv-list-stage-line"></div>
-            <div class="fv-list-stage-count">${totalSteps} steps</div>
-          </div>
-          ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
+      <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
+        <div class="fv-list-stage-header">
+          <div class="fv-list-stage-num">${si + 1}</div>
+          <div class="fv-list-stage-name">${esc(stage.name)}</div>
+          <div class="fv-list-stage-line"></div>
+          <div class="fv-list-stage-count">${totalSteps} steps</div>
+          <button class="fv-btn" style="padding:3px 8px;font-size:10px;"
+                  onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='none');
+                           document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='+');">
+            Collapse
+          </button>
+          <button class="fv-btn" style="padding:3px 8px;font-size:10px;"
+                  onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='block');
+                           document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='-');">
+            Expand
+          </button>
         </div>
-      `;
+        ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
+      </div>
+    `;
     }).join('');
 
   return `
@@ -11935,29 +11945,55 @@ OL._fvToggleStepsPanel = function(resId) {
 
 OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth) {
   const tc = OL._fvGetType(res.type);
-  const isGlobal    = globalIds.has(String(res.id));
-  const isDecision  = (step.logic?.out || []).filter(l => l.targetId).length > 1;
-  const hasLoop     = (step.logic?.out || []).some(l => l.type === 'loop');
+  const isGlobal      = globalIds.has(String(res.id));
+  const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
+  const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
   const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
-  const outRules    = (step.logic?.out || []).filter(l => l.targetId);
+  const outRules      = (step.logic?.out || []).filter(l => l.targetId);
+  const hasSubSteps   = outRules.length > 0;
+  const collapseId    = `fv-substeps-${step.id}`;
 
-  const resBadgeBg  = tc.color + '18';
-  const resBadge    = `<span class="fv-list-res-badge"
+  const resBadgeBg = tc.color + '18';
+  const resBadge   = `<span class="fv-list-res-badge"
     style="background:${resBadgeBg};color:${tc.color};border:1px solid ${tc.color}30;">
     ${tc.abbr} ${esc(res.name.substring(0, 14))}
   </span>`;
 
   const tags = [
     isConditional && !isDecision ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : '',
-    isDecision ? `<span class="fv-list-tag conditional">◆ Decision</span>` : '',
-    isGlobal    ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
-    hasLoop     ? `<span class="fv-list-tag loop">↺ Loop</span>` : '',
+    isDecision                   ? `<span class="fv-list-tag conditional">◆ Decision</span>`    : '',
+    isGlobal                     ? `<span class="fv-list-tag global">🌐 Global</span>`           : '',
+    hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
   ].filter(Boolean).join('');
 
+  const subStepsHtml = outRules.map(rule => {
+    const lastH   = String(rule.targetId).lastIndexOf('-');
+    const tResId  = rule.targetId.substring(0, lastH);
+    const tStepId = rule.targetId.substring(lastH + 1);
+    const tRes    = allResources.find(r => String(r.id) === tResId);
+    const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
+    if (!tRes || !tStep) return '';
+
+    const isLoop  = rule.type === 'loop';
+    const isDelay = rule.type === 'delay';
+    const isCond  = rule.type === 'condition';
+    const tagLabel = isLoop  ? `↺ Loop${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}`
+                   : isDelay ? `⏱ Delay: ${rule.delayValue||'?'} ${rule.delayUnit||'days'}`
+                   : isCond  ? `λ If: ${esc(rule.rule||'...')}`
+                   : null;
+
+    return `
+      <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);margin-left:16px;padding-left:20px;">
+        ${tagLabel ? `<div class="fv-branch-label" style="color:#3dd9c5;"><span>${tagLabel}</span></div>` : ''}
+        ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
+      </div>
+    `;
+  }).join('');
+
   return `
-    <div style="margin-bottom:${outRules.length ? '2px' : '4px'};">
+    <div style="margin-bottom:${hasSubSteps ? '2px' : '4px'};">
       <div class="fv-list-row">
-        <div class="fv-tree-connector">${depth > 0 ? '└' : '├'}</div>
+        <div class="fv-tree-connector"></div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
              id="fv-list-step-${step.id}"
              data-step-id="${step.id}"
@@ -11976,39 +12012,27 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
           <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}">${esc(step.name || 'Unnamed Step')}</span>
           ${tags}
           ${resBadge}
+          ${hasSubSteps ? `
+            <span class="fv-substep-toggle"
+                  onclick="event.stopPropagation();
+                           const el=document.getElementById('${collapseId}');
+                           const collapsed=el.style.display==='none';
+                           el.style.display=collapsed?'block':'none';
+                           this.textContent=collapsed?'−':'+';
+                           this.title=collapsed?'Collapse':'Expand';"
+                  title="Collapse"
+                  style="margin-left:auto;flex-shrink:0;width:18px;height:18px;
+                         border-radius:4px;background:#f5f6f8;border:1px solid #e5e7eb;
+                         display:flex;align-items:center;justify-content:center;
+                         font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;
+                         line-height:1;">−</span>
+          ` : ''}
         </div>
       </div>
-
-      ${outRules.map(rule => {
-        const lastH   = String(rule.targetId).lastIndexOf('-');
-        const tResId  = rule.targetId.substring(0, lastH);
-        const tStepId = rule.targetId.substring(lastH + 1);
-        const tRes    = allResources.find(r => String(r.id) === tResId);
-        const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
-        if (!tRes || !tStep) return '';
-
-        const isLoop  = rule.type === 'loop';
-        const isDelay = rule.type === 'delay';
-        const isCond  = rule.type === 'condition';
-        const tagLabel = isLoop  ? `↺ Loop${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}`
-               : isDelay ? `⏱ Delay: ${rule.delayValue||'?'} ${rule.delayUnit||'days'}`
-               : isCond  ? `λ If: ${esc(rule.rule||'...')}`
-               : null;
-          
-        return `
-          <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);margin-left:16px;padding-left:20px;">
-            ${tagLabel ? `
-              <div class="fv-branch-label" style="color:#3dd9c5;">
-                <span>${tagLabel}</span>
-              </div>` : ''}
-            ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
-          </div>
-        `;
-      }).join('')}
+      ${hasSubSteps ? `<div id="${collapseId}">${subStepsHtml}</div>` : ''}
     </div>
   `;
 };
-
 // ══════════════════════════════════════════════
 // SHARED CONTROLS
 // ══════════════════════════════════════════════
