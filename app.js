@@ -11672,7 +11672,7 @@ OL._fvBuildListShell = function(stages, resources) {
     }).join('');
 
   return `
-    <div id="fv-list-wrap">
+    <div id="fv-list-wrap" onclick="OL._fvHandleCanvasClick(event)">
       ${stagesHtml || '<div class="fv-loading-state"><i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i><span>No stages or steps found. Assign resources to stages via the inspector.</span></div>'}
     </div>
   `;
@@ -12006,6 +12006,11 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
              id="fv-list-step-${step.id}"
              data-step-id="${step.id}"
              data-res-id="${res.id}"
+             draggable="true"
+             ondragstart="event.stopPropagation(); OL.handleStepDragStart(event, '${res.id}', ${res.steps.indexOf(step)})"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="event.stopPropagation(); this.classList.remove('drag-over'); OL.handleStepDrop(event, '${res.id}', ${res.steps.indexOf(step)})"
              onclick="event.stopPropagation();
                       document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
                       this.classList.add('selected');
