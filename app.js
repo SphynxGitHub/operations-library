@@ -14222,9 +14222,94 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <div class="section-label">📤 OUTPUT CONDITIONS (To where?)</div>
-                    ${step.logic.out.map((l, i) => OL.renderLogicBlock(resId, step.id, 'out', i, l, allOptions)).join('')}
-                    <button class="add-logic-btn" onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')">+ Add Output Rule</button>
+                  <div class="section-label">📤 NEXT STEP</div>
+                
+                  ${(step.logic?.out || []).map((l, i) => {
+                    const targetId = l.targetId || '';
+                    let targetLabel = '— Select target —';
+                    if (targetId) {
+                      const lastH  = targetId.lastIndexOf('-');
+                      const tResId = targetId.substring(0, lastH);
+                      const tStepId = targetId.substring(lastH + 1);
+                      const tRes  = (OL.getCurrentProjectData().resources||[]).find(r => String(r.id) === tResId);
+                      const tStep = tRes?.steps?.find(s => String(s.id) === tStepId);
+                      if (tRes && tStep) targetLabel = `${esc(tRes.name)} › ${esc(tStep.name||'Step')}`;
+                    }
+                    return `
+                      <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;
+                                  padding:10px 12px;margin-bottom:8px;">
+                
+                        <div style="display:flex;gap:4px;margin-bottom:8px;">
+                          ${['next','condition','loop','delay'].map(t => `
+                            <span onclick="OL._fvSetLogicType('${resId}','${step.id}',${i},'${t}')"
+                                  style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
+                                         cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
+                                         background:${(l.type||'next')===t ? '#3dd9c5' : '#f5f6f8'};
+                                         color:${(l.type||'next')===t ? '#fff' : '#9ca3af'};
+                                         border:1px solid ${(l.type||'next')===t ? '#3dd9c5' : '#e5e7eb'};">
+                              ${t==='next'?'→ Next':t==='condition'?'λ If':t==='loop'?'↺ Loop':'⏱ Delay'}
+                            </span>
+                          `).join('')}
+                        </div>
+                
+                        <div style="position:relative;margin-bottom:${l.type==='condition'||l.type==='delay' ? '8px' : '0'};">
+                          <div onclick="OL._fvOpenTargetPicker('${resId}','${step.id}',${i})"
+                               style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;
+                                      font-size:11px;color:${targetId ? '#1b2d3f' : '#9ca3af'};
+                                      background:#fff;cursor:pointer;display:flex;
+                                      align-items:center;justify-content:space-between;">
+                            <span>${targetLabel}</span>
+                            <i data-lucide="chevron-down" style="width:12px;height:12px;color:#9ca3af;"></i>
+                          </div>
+                          <div id="target-picker-${resId}-${step.id}-${i}"
+                               class="search-results-overlay" style="display:none;max-height:200px;overflow-y:auto;"></div>
+                        </div>
+                
+                        ${l.type==='condition' ? `
+                          <input type="text" class="fvi-input"
+                                 placeholder="Condition (e.g. If approved...)"
+                                 value="${esc(l.rule||'')}"
+                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'rule',this.value)"
+                                 style="margin-top:0;">
+                        ` : ''}
+                
+                        ${l.type==='delay' ? `
+                          <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="number" class="fvi-input" style="width:70px;"
+                                   placeholder="0"
+                                   value="${esc(String(l.delayValue||''))}"
+                                   onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayValue',this.value)">
+                            <select class="fvi-select" style="flex:1;"
+                                    onchange="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayUnit',this.value)">
+                              <option value="hours" ${l.delayUnit==='hours'?'selected':''}>Hours</option>
+                              <option value="days"  ${l.delayUnit==='days' ?'selected':''}>Days</option>
+                              <option value="weeks" ${l.delayUnit==='weeks'?'selected':''}>Weeks</option>
+                            </select>
+                          </div>
+                        ` : ''}
+                
+                        ${l.type==='loop' ? `
+                          <input type="text" class="fvi-input"
+                                 placeholder="Loop limit (e.g. 3 times, or leave blank)"
+                                 value="${esc(l.loopLimit||'')}"
+                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'loopLimit',this.value)"
+                                 style="margin-top:0;">
+                        ` : ''}
+                
+                        <button onclick="OL.removeStepLogic('${resId}','${step.id}','out',${i})"
+                                style="margin-top:8px;width:100%;background:none;border:none;
+                                       color:#ef4444;font-size:10px;cursor:pointer;
+                                       text-align:left;padding:0;font-family:inherit;">
+                          Remove
+                        </button>
+                      </div>
+                    `;
+                  }).join('')}
+                
+                  <button onclick="OL.addStepLogic('${resId}', '${step.id}', 'out')"
+                          class="fvi-add-step-btn" style="margin-top:4px;">
+                    + Add Output
+                  </button>
                 </div>
 
                 <div class="inspector-section">
@@ -14383,6 +14468,51 @@ if (mode === 'cards' && resId) {
     }
 
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
+};
+
+OL._fvSetLogicType = function(resId, stepId, idx, type) {
+    const data = OL.getCurrentProjectData();
+    const res  = (data.resources||[]).find(r => String(r.id) === resId);
+    const step = res?.steps?.find(s => String(s.id) === stepId);
+    if (step?.logic?.out?.[idx]) {
+        step.logic.out[idx].type = type;
+        OL.persist();
+        OL.openInspector(resId, stepId);
+    }
+};
+
+OL._fvOpenTargetPicker = function(resId, stepId, idx) {
+    const pickerId = `target-picker-${resId}-${stepId}-${idx}`;
+    const picker   = document.getElementById(pickerId);
+    if (!picker) return;
+
+    const isOpen = picker.style.display === 'block';
+    // Close all open pickers first
+    document.querySelectorAll('.search-results-overlay').forEach(el => el.style.display = 'none');
+    if (isOpen) return;
+
+    const data      = OL.getCurrentProjectData();
+    const resources = (data.resources||[]).filter(r => !r.isDeleted && !r.isLocked);
+
+    let html = '';
+    resources.forEach(res => {
+        if (!(res.steps||[]).length) return;
+        html += `<div style="padding:6px 10px;font-size:9px;font-weight:700;
+                             text-transform:uppercase;letter-spacing:0.08em;
+                             color:#9ca3af;background:#fafafa;">
+                   ${esc(res.name)}
+                 </div>`;
+        res.steps.forEach(s => {
+            const fullId = `${res.id}-${s.id}`;
+            html += `<div class="search-result-item"
+                          onmousedown="OL.updateStepTarget('${resId}','${stepId}','out',${idx},'${fullId}')">
+                       ${esc(s.name || 'Unnamed Step')}
+                     </div>`;
+        });
+    });
+
+    picker.innerHTML = html || '<div class="search-result-item muted">No steps found.</div>';
+    picker.style.display = 'block';
 };
 
 window.renderStepResources = function(resId, step) {
