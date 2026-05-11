@@ -474,6 +474,27 @@ OL.toggleTheme = function() {
     console.log("💾 Theme Preference Saved:", isLight ? 'light' : 'dark');
 };
 
+OL.getViewMode = function(pageKey) {
+    if (!state.viewModes) state.viewModes = {};
+    return state.viewModes[pageKey] || localStorage.getItem(`ol_view_${pageKey}`) || 'cards';
+};
+
+OL.setViewMode = function(pageKey, mode) {
+    if (!state.viewModes) state.viewModes = {};
+    state.viewModes[pageKey] = mode;
+    localStorage.setItem(`ol_view_${pageKey}`, mode);
+};
+
+OL.viewToggleBtn = function(pageKey, refreshFn) {
+    const mode = OL.getViewMode(pageKey);
+    return `<button class="btn small soft" 
+                    onclick="OL.setViewMode('${pageKey}', '${mode === 'list' ? 'cards' : 'list'}'); ${refreshFn}();"
+                    style="display:flex;align-items:center;gap:6px;">
+                <i data-lucide="${mode === 'list' ? 'layout-grid' : 'list'}" style="width:14px;height:14px;"></i>
+                ${mode === 'list' ? 'Card View' : 'List View'}
+            </button>`;
+};
+
 /*===================== PARTNER ACCESS ==================*/
 
 // 🔑 THE TOKEN GENERATOR
@@ -1789,10 +1810,36 @@ window.renderAppsGrid = function() {
                     <i data-lucide="download-cloud" style="width:14px; height:14px; margin-right:6px;"></i> Import from Master
                   </button>
               `}
+              ${OL.viewToggleBtn('apps', 'renderAppsGrid')}
           </div>
       </div>
       ${renderStatusLegendHTML()}
 
+        ${OL.getViewMode('apps') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+                ${displayApps.map(app => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                         onclick="OL.openAppModal('${app.id}')"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='var(--panel-border)'">
+                        <i data-lucide="smartphone" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <span style="font-weight:600;font-size:13px;flex:1;">${esc(app.name)}</span>
+                        <span class="vault-tag" style="font-size:8px;">${app.masterRefId ? 'MASTER' : 'LOCAL'}</span>
+                        <div class="pills-row" style="margin:0;gap:4px;">
+                            ${(app.functionIds||[]).slice(0,3).map(m => {
+                                const fn = [...(state.master.functions||[]),...(client?.projectData?.localFunctions||[])].find(f=>f.id===(m.id||m));
+                                return fn ? `<span class="pill tiny status-${m.status||'available'}">${esc(fn.name)}</span>` : '';
+                            }).join('')}
+                        </div>
+                        <button class="card-delete-btn" style="position:static;" onclick="OL.universalDelete('${app.id}','apps',event)">
+                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `
       <div class="cards-grid">
           ${displayApps.length > 0 ? displayApps.map(app => {
               const isMasterRef = !!app.masterRefId || String(app.id).startsWith('master-');
@@ -1862,6 +1909,7 @@ window.renderAppsGrid = function() {
                           </div>
                       </div>
                   </div>
+                  `}
               `;
           }).join('') : `<div class="empty-hint">No apps deployed. Use the buttons above to get started.</div>`}
       </div>
@@ -3359,10 +3407,35 @@ window.renderFunctionsGrid = function() {
                         <i data-lucide="download-cloud" style="width:14px; height:14px; margin-right:6px;"></i> Import from Master
                     </button>
                 `}
+                ${OL.viewToggleBtn('functions', 'renderFunctionsGrid')}
             </div>
         </div>
         ${renderStatusLegendHTML()}
 
+        ${OL.getViewMode('functions') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+                ${displayFunctions.map(fn => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                         onclick="OL.openFunctionModal('${fn.id}')"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='var(--panel-border)'">
+                        <i data-lucide="component" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <span style="font-weight:600;font-size:13px;flex:1;">${esc(fn.name)}</span>
+                        <span class="vault-tag" style="font-size:8px;">${fn.masterRefId ? 'MASTER' : 'LOCAL'}</span>
+                        <div class="pills-row" style="margin:0;gap:4px;">
+                            ${allRelevantApps.filter(a=>a.functionIds?.some(m=>(m.id||m)===fn.id)).slice(0,3).map(a=>
+                                `<span class="pill tiny soft">${esc(a.name)}</span>`
+                            ).join('')}
+                        </div>
+                        <button class="card-delete-btn" style="position:static;" onclick="OL.universalDelete('${fn.id}','functions',event)">
+                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : 
         <div class="cards-grid">
             ${displayFunctions.map(fn => {
                 const isMasterRef = !!fn.masterRefId || String(fn.id).startsWith('fn-');
@@ -3411,6 +3484,7 @@ window.renderFunctionsGrid = function() {
                 `;
             }).join('')}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT
@@ -4811,6 +4885,7 @@ window.renderResourceManager = function () {
                     <button class="btn small soft" onclick="OL.openResourceTypeManager()" style="display:flex; align-items:center; gap:6px;">
                         <i data-lucide="settings" style="width:14px; height:14px;"></i> Types
                     </button>` : ''}
+                ${OL.viewToggleBtn('resources', 'renderResourceGroups')}
                 
                 <div class="dropdown-plus">
                     <button class="btn primary" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
@@ -4999,9 +5074,37 @@ OL.renderResourceGroups = function(container, items) {
                         </div>
                         <button class="btn tiny soft" onclick="OL.promptBulkReclassify('${type}')">Bulk Move</button>
                     </div>
-                    <div class="cards-grid">
+                    ${OL.getViewMode('resources') === 'list' ? `
+                    <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+                        ${items.map(res => {
+                            const scopeData = OL.getScopingDataForResource(res.id);
+                            const statusColors = {'Do Now':'#38bdf8','Done':'#22c55e','Do Later':'#fbbf24',"Don't Do":'#ef4444'};
+                            const statusColor = scopeData ? (statusColors[scopeData.status]||'var(--accent)') : 'transparent';
+                            return `
+                                <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                            background:var(--panel-soft);border:1px solid var(--panel-border);
+                                            border-left:3px solid ${statusColor};
+                                            border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                                     onclick="OL.selectResourceCard('${res.id}')"
+                                     onmouseover="this.style.borderColor='var(--accent)'"
+                                     onmouseout="this.style.borderColor='var(--panel-border)'">
+                                    <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                                    <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
+                                    <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
+                                    ${scopeData ? `<span class="pill tiny" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:8px;">${esc(scopeData.status)}</span>` : ''}
+                                    ${!res.isLocked ? `
+                                        <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.universalDelete('${res.id}','resources')">
+                                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                                        </button>` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                ` : `
+                <div class="cards-grid">
                         ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(r => renderResourceCard(r)).join('')}
                     </div>
+                    `}
                 </div>
             `).join('')}
         </div>
@@ -17960,12 +18063,38 @@ window.renderTeamManager = function () {
             <button class="btn primary" onclick="OL.promptAddTeamMember()" style="display:flex; align-items:center; gap:6px;">
                 <i data-lucide="user-plus" style="width:16px; height:16px;"></i> Add Member
             </button>
+            ${OL.viewToggleBtn('team', 'renderTeamManager')}
         </div>
-
+        ${OL.getViewMode('team') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+                ${members.map(m => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                         onclick="OL.openTeamMemberModal('${m.id}')"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='var(--panel-border)'">
+                        <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
+                                    color:#000;display:flex;align-items:center;justify-content:center;
+                                    font-weight:900;font-size:11px;flex-shrink:0;">
+                            ${m.name.split(' ').map(n=>n[0]).join('').toUpperCase().substring(0,2)}
+                        </div>
+                        <span style="font-weight:600;font-size:13px;flex:1;">${esc(m.name)}</span>
+                        <div class="pills-row" style="margin:0;gap:4px;">
+                            ${(m.roles||[]).map(r=>`<span class="pill tiny soft" style="font-size:9px;">${esc(r)}</span>`).join('')}
+                        </div>
+                        <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.removeTeamMember('${m.id}')">
+                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `
         <div class="cards-grid" style="margin-top: 20px;">
             ${memberCardsHtml}
             ${members.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No team members added yet.</div>' : ""}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT: Essential for dynamic card icons
@@ -18553,6 +18682,7 @@ function renderHowToLibrary () {
                             onclick="OL.openHowToEditorModal()">
                         <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Create Master SOP
                     </button>
+                    ${OL.viewToggleBtn('howto', 'rendeHowToLibrary')}
                 ` : ''}
 
                 ${!isVaultView ? `
@@ -18568,11 +18698,35 @@ function renderHowToLibrary () {
                 ` : ''}
             </div>
         </div>
-
+        ${OL.getViewMode('howto') === 'list' ? `
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
+                ${visibleGuides.map(ht => `
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                         onclick="OL.openHowToModal('${ht.id}')"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='var(--panel-border)'">
+                        <i data-lucide="book-open" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;font-size:13px;">${esc(ht.name||'Untitled SOP')}</div>
+                            ${ht.summary ? `<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ht.summary)}</div>` : ''}
+                        </div>
+                        <span class="pill tiny ${String(ht.id).includes('local') ? 'soft' : 'vault'}" style="font-size:8px;">
+                            ${String(ht.id).includes('local') ? 'LOCAL' : 'MASTER'}
+                        </span>
+                        <button class="card-delete-btn" style="position:static;" onclick="event.stopPropagation();OL.deleteSOP('${client?.id}','${ht.id}')">
+                            <i data-lucide="x" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        ` : `
         <div class="cards-grid" style="margin-top: 20px;">
             ${visibleGuides.map(ht => renderHowToCard(client?.id, ht, !isVaultView)).join('')}
             ${visibleGuides.length === 0 ? '<div class="empty-hint" style="grid-column: 1/-1; text-align: center; padding: 60px; opacity: 0.5;">No guides found in this library.</div>' : ''}
         </div>
+        `}
     `;
 
     // 🚀 THE REPAINT
