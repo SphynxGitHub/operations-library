@@ -8363,27 +8363,20 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
     }
     state.activeMatrixId = analysisId;
 
-    // Add at the end of OL.openAnalysisMatrix
-    // 🚀 THE INSTANT-EDIT FIX:
-    // We use a timeout of 0 to push the 'heavy' work to the end of the execution queue.
-    // This allows the browser to 'paint' the inputs and make them focusable immediately.
-    setTimeout(() => {
-        // 1. Initialize Auto-Resizing for textareas (Only once UI is drawn)
-        document.querySelectorAll('.matrix-notes-auto').forEach(el => {
-            el.style.height = 'auto';
-            el.style.height = el.scrollHeight + 'px';
+    requestAnimationFrame(() => {
+        // Only resize textareas that are actually in the viewport
+        const textareas = document.querySelectorAll('.matrix-notes-auto');
+        textareas.forEach(el => {
+            el.style.height = '28px'; // Set a fixed small default instead of auto-calculating
         });
     
-        // 2. Calculate Totals (Delayed so it doesn't block typing)
         if (typeof OL.refreshMatrixTotals === 'function') {
             OL.refreshMatrixTotals(analysisId);
         }
-        
+    
+        if (window.lucide) window.lucide.createIcons();
         console.log("⚡ Matrix interactivity initialized.");
-    }, 0);
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
+    });
 }
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
