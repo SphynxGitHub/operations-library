@@ -190,13 +190,12 @@ OL.sync = function() {
         return;
     }
 
-    // 🛡️ THE IRON CLAD MUZZLE (Move this to the top)
-    // Check for the DOM element OR the URL state
-    const matrixContainer = document.querySelector('.matrix-table-container');
+    // 🛡️ THE IRON CLAD MUZZLE
+    const matrixContainer = document.querySelector('.matrix-table-container, .matrix-card-main, .matrix-table');
     const isAnalyzing = window.location.hash.includes('analyze');
     const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
     
-    if (matrixContainer || isAnalyzing && !isAppLoading && !state.isSaving) {
+    if ((matrixContainer || isAnalyzing) && !isAppLoading && !state.isSaving) {
         console.log("🚫 SYNC ABORTED: Matrix or Analyze view is active. Shielding focus.");
         
         // 🚀 CRITICAL: Update the state so calculations stay fresh in memory
@@ -254,6 +253,8 @@ OL.sync = function() {
         window.handleRoute();
     } else if (window.location.hash.includes('visualizer')) {
         if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
+    } else if (window.isMatrixActive || state.activeMatrixId || window.location.hash.includes('analyze')) {
+        console.log("🛡️ Matrix Active: Skipping render.");
     } else {
         console.log("🚦 Route Clear: Proceeding with render...");
         window.handleRoute();
@@ -8159,13 +8160,13 @@ OL.deleteMasterAnalysis = function(anlyId) {
 // 3. OPEN INDIVIDUAL ANALYSIS MATRIX
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     window.isMatrixActive = true;
+    state.activeMatrixId = analysisId;
+    
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
     const anly = source.find(a => a.id === analysisId);
 
     if (!anly) return console.error("Analysis not found:", analysisId);
-
-    state.activeMatrixId = analysisId;
 
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
