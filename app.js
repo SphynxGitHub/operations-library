@@ -8218,7 +8218,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                         <div class="subheader">Scores: 0 (N/A), 1 (<60%), 2 (60-80%), 3 (80%+)</div>
                     </div>
                     <div class="header-actions" style="display:flex; align-items:center; gap:8px;">
-                        ${!isMaster ? `
+                        ${!isMaster && state.adminMode ? `
                             <button class="btn tiny warn" onclick="OL.pushMatrixToMasterLibrary('${analysisId}')" style="display:flex; align-items:center; gap:4px;">
                                 <i data-lucide="upload-cloud" style="width:12px; height:12px;"></i> Push to Vault
                             </button>` : ''}
