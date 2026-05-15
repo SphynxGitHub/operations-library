@@ -126,6 +126,38 @@ OL.persist = async function() {
     }, 1500); // Increased delay slightly to allow UI to breathe
 };
 
+window.addEventListener("load", () => {
+    // 1. Security Check FIRST — before anything else loads
+    const allowed = OL.initializeSecurityContext();
+    if (!allowed) return; // Stop everything if not authorized
+
+    // 2. Admin Verification
+    if (window.location.search.includes('admin=pizza123')) {
+        state.adminMode = true;
+        OL.state.adminMode = true;
+    }
+    
+    // 3. Recall Client
+    const savedClientId = sessionStorage.getItem('lastActiveClientId');
+    if (savedClientId) state.activeClientId = savedClientId;
+
+    // 4. Recall Visualizer depth
+    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
+    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
+
+    const currentHash = location.hash;
+    const isDashboard = currentHash === "" || currentHash === "#/";
+    const isVisualizer = currentHash.includes('visualizer');
+
+    if ((state.focusedWorkflowId || state.focusedResourceId) && 
+        (isDashboard || isVisualizer) && 
+        !currentHash.includes('scoping')) { 
+        const isVault = currentHash.includes('vault');
+        location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
+    } 
+    OL.sync(); 
+});
+
 OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync...");
     // 🛑 STOP: If we already have a listener, don't create another one!
