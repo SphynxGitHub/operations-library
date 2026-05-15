@@ -8339,7 +8339,7 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
                             }).join('')}
                             ${(anly.competitors || []).map(() => `<td style="border: 1px solid var(--line);"></td>`).join('')}
                         </tr>
-                    </tobdy>
+                    </tbody>
                 </table>
 
                 <div class="executive-summary-wrapper" style="margin-top: 30px; padding: 20px; border-radius: 8px; border: 1px solid var(--line);">
@@ -8387,24 +8387,21 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 }
 
 OL.updateAnalysisMeta = async function(anlyId, field, value, isMaster) {
-    // 🚀 THE SHIELD
-    await OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-        const anly = source.find(a => a.id === anlyId);
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === anlyId);
+    if (!anly) return;
 
-        if (anly) {
-            anly[field] = value.trim();
-        }
-    });
+    anly[field] = value.trim();
+    OL.persist();
 
-    // 🔄 Surgical Refresh of the Matrix only
-    OL.openAnalysisMatrix(anlyId, isMaster);
-    
-    // Manual sync for the background card title if the name changed
+    // Only do surgical DOM updates, never re-render the whole matrix
     if (field === 'name') {
         const cardTitle = document.querySelector(`.card-title-${anlyId}`);
         if (cardTitle) cardTitle.innerText = value.trim();
+        // Update the editable span in the matrix header too
+        const nameSpan = document.querySelector(`.m-name-${anlyId}`);
+        if (nameSpan && nameSpan !== document.activeElement) nameSpan.innerText = value.trim();
     }
 };
 
@@ -8736,50 +8733,41 @@ OL.handleMatrixPricingChange = async function(anlyId, appId, featId, value, isMa
 
 // Add a new Tier to a specific App
 OL.addAppTier = async function(anlyId, appId) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        if (app) {
-            if (!app.pricingTiers) app.pricingTiers = [];
-            app.pricingTiers.push({ name: "New Tier", price: 0 });
-        }
-    });
-    OL.openAnalysisMatrix(anlyId); // Refresh to show new input
+    const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+    const app = anly?.apps.find(a => a.appId === appId);
+    if (app) {
+        if (!app.pricingTiers) app.pricingTiers = [];
+        app.pricingTiers.push({ name: "New Tier", price: 0 });
+    }
+    OL.persist();
+    OL.openAnalysisMatrix(anlyId);
 };
 
-// Update an existing Tier (name or price)
 OL.updateAppTier = async function(anlyId, appId, tierIdx, field, value) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        if (app?.pricingTiers?.[tierIdx]) {
-            app.pricingTiers[tierIdx][field] = field === 'price' ? (parseFloat(value) || 0) : value;
-        }
-    });
+    const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+    const app = anly?.apps.find(a => a.appId === appId);
+    if (app?.pricingTiers?.[tierIdx]) {
+        app.pricingTiers[tierIdx][field] = field === 'price' ? (parseFloat(value) || 0) : value;
+    }
+    OL.persist();
 };
 
 OL.removeAppTier = async function(anlyId, appId, idx) {
-    if(!confirm("Remove this pricing tier?")) return;
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        if (app?.pricingTiers) app.pricingTiers.splice(idx, 1);
-    });
+    if (!confirm("Remove this pricing tier?")) return;
+    const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+    const app = anly?.apps.find(a => a.appId === appId);
+    if (app?.pricingTiers) app.pricingTiers.splice(idx, 1);
+    OL.persist();
     OL.openAnalysisMatrix(anlyId);
 };
 
 OL.updateAppFeatAddonPrice = async function(anlyId, appId, featId, value) {
-    await OL.updateAndSync(() => {
-        const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
-        const app = anly?.apps.find(a => a.appId === appId);
-        
-        if (app && app.featPricing && app.featPricing[featId]) {
-            // Convert to float, defaulting to 0 if empty or invalid
-            app.featPricing[featId].addonPrice = parseFloat(value) || 0;
-        }
-    });
-    
-    // Refresh to update the "Est. Monthly Total Cost" at the bottom
+    const anly = OL.getScopedAnalyses().find(a => a.id === anlyId);
+    const app = anly?.apps.find(a => a.appId === appId);
+    if (app?.featPricing?.[featId]) {
+        app.featPricing[featId].addonPrice = parseFloat(value) || 0;
+    }
+    OL.persist();
     OL.openAnalysisMatrix(anlyId);
 };
 
@@ -8876,19 +8864,17 @@ OL.removeAppFromAnalysis = async function(anlyId, appId, isMaster) {
     const client = getActiveClient();
     const source = isMaster ? state.master.analyses : client.projectData.localAnalyses;
     const anly = source.find(a => a.id === anlyId);
+    if (!anly || !anly.apps) return;
+    if (!confirm('Remove this app from the comparison?')) return;
 
-    if (anly && anly.apps) {
-        if (!confirm(`Are you sure you want to remove this app from the comparison?`)) return;
+    // 1. Update data
+    anly.apps = anly.apps.filter(a => a.appId !== appId);
 
-        // 🚀 THE SHIELD: Block sync-engine while deleting
-        await OL.updateAndSync(() => {
-            anly.apps = anly.apps.filter(a => a.appId !== appId);
-        });
+    // 2. Fire and forget
+    OL.persist();
 
-        // 🔄 SURGICAL REFRESH
-        OL.openAnalysisMatrix(anlyId, isMaster);
-        console.log("🗑️ App removed safely under shield.");
-    }
+    // 3. Re-render immediately without waiting for Firebase
+    OL.openAnalysisMatrix(anlyId, isMaster);
 };
 
 // 4b. ADD FEATURE TO ANALYSIS OR REMOVE
@@ -9151,20 +9137,21 @@ OL.removeFeatureFromAnalysis = async function(anlyId, featId, isMaster) {
     const anly = source.find(a => a.id === anlyId);
 
     if (anly) {
-        // 🚀 THE SHIELD: Block sync-engine while deleting
-        await OL.updateAndSync(() => {
-            // 1. Remove the feature row
-            anly.features = (anly.features || []).filter(f => f.id !== featId);
-            
-            // 2. Clear out any scores for this feature in mapped apps
-            (anly.apps || []).forEach(appObj => {
-                if (appObj.scores) delete appObj.scores[featId];
-            });
+        // 1. Remove the feature
+        anly.features = (anly.features || []).filter(f => f.id !== featId);
+        
+        // 2. Clear scores for this feature from all apps
+        (anly.apps || []).forEach(appObj => {
+            if (appObj.scores) delete appObj.scores[featId];
+            if (appObj.featPricing) delete appObj.featPricing[featId];
         });
 
-        // 🔄 SURGICAL REFRESH
+        // 3. Fire and forget
+        OL.persist();
+
+        // 4. Re-render
         OL.openAnalysisMatrix(anlyId, isMaster);
-        console.log("🗑️ Feature removed safely under shield.");
+        console.log("🗑️ Feature removed.");
     }
 };
 
@@ -9329,64 +9316,50 @@ OL.calculateAnalysisScore = function(app, features) {
     return totalWeight > 0 ? (totalScore / totalWeight).toFixed(2) : 0;
 };
 
-OL.updateAnalysisScore = function (anlyId, appId, featId, value, isMaster) {
+OL.updateAnalysisScore = function(anlyId, appId, featId, value, isMaster) {
     let score = parseFloat(value) || 0;
     if (score < 0) score = 0;
     if (score > 3) score = 3;
 
-    OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
-        const anly = source.find((a) => a.id === anlyId);
-
-        if (anly) {
-            const appObj = anly.apps.find((a) => a.appId === appId);
-            if (appObj) {
-                if (!appObj.scores) appObj.scores = {};
-                appObj.scores[featId] = score;
-
-                // 🚀 SURGICAL UPDATE: Update the total score pill in the UI immediately
-                const newTotal = OL.calculateAnalysisScore(appObj, anly.features || []);
-                const scorePill = document.querySelector(`[data-app-total="${appId}"]`);
-                if (scorePill) {
-                    scorePill.innerText = newTotal;
-                    scorePill.className = `pill ${newTotal > 2.5 ? 'accent' : 'soft'}`;
-                }
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : client?.projectData?.localAnalyses || [];
+    const anly = source.find(a => a.id === anlyId);
+    if (anly) {
+        const appObj = anly.apps.find(a => a.appId === appId);
+        if (appObj) {
+            if (!appObj.scores) appObj.scores = {};
+            appObj.scores[featId] = score;
+            const newTotal = OL.calculateAnalysisScore(appObj, anly.features || []);
+            const scorePill = document.querySelector(`[data-app-total="${appId}"]`);
+            if (scorePill) {
+                scorePill.innerText = newTotal;
+                scorePill.className = `pill ${newTotal > 2.5 ? 'accent' : 'soft'}`;
             }
         }
-    });
-    // 🛑 REMOVED: OL.openAnalysisMatrix(anlyId, isMaster); 
+    }
+    OL.persist();
 };
 
 OL.equalizeAnalysisWeights = function(anlyId, isMaster) {
-    OL.updateAndSync(() => {
-        const client = getActiveClient();
-        const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
-        const anly = source.find(a => a.id === anlyId);
+    const client = getActiveClient();
+    const source = isMaster ? state.master.analyses : (client?.projectData?.localAnalyses || []);
+    const anly = source.find(a => a.id === anlyId);
+    if (!anly || !anly.features || anly.features.length === 0) return;
 
-        if (!anly || !anly.features || anly.features.length === 0) return;
-
-        const activeCats = [...new Set(anly.features.map(f => f.category || "General"))];
-        const weightPerCat = 100 / activeCats.length;
-
-        anly.features.forEach(f => {
-            const catFeatures = anly.features.filter(feat => (feat.category || "General") === (f.category || "General"));
-            f.weight = parseFloat((weightPerCat / catFeatures.length).toFixed(2));
-        });
-
-        // 🚀 SURGICAL UI UPDATE: Update every weight input on the screen
-        anly.features.forEach(f => {
-            // This assumes your inputs have a unique way to be identified, 
-            // like an onblur attribute containing the feature ID.
-            const inputs = document.querySelectorAll(`input[onblur*="'${f.id}'"][onblur*="'weight'"]`);
-            inputs.forEach(input => {
-                input.value = f.weight;
-            });
-        });
-
-        OL.persist();
+    const activeCats = [...new Set(anly.features.map(f => f.category || "General"))];
+    const weightPerCat = 100 / activeCats.length;
+    anly.features.forEach(f => {
+        const catFeatures = anly.features.filter(feat => (feat.category || "General") === (f.category || "General"));
+        f.weight = parseFloat((weightPerCat / catFeatures.length).toFixed(2));
     });
-    
+
+    // Surgical UI update
+    anly.features.forEach(f => {
+        const inputs = document.querySelectorAll(`input[onblur*="'${f.id}'"][onblur*="'weight'"]`);
+        inputs.forEach(input => input.value = f.weight);
+    });
+
+    OL.persist();
     console.log(`⚖️ Weights Balanced Surgically.`);
 };
 
@@ -9670,44 +9643,38 @@ OL.finalizeFeatureAddition = async function(anlyId, featName, category, isMaster
     if (!anly) return;
 
     const cleanName = featName.trim();
-    const cleanCat = category.trim() || "General";
+    const cleanCat  = category.trim() || "General";
 
-    // 1. Check if it's already on THIS matrix (The hard stop)
+    // 1. Check if already on this matrix
     const onMatrix = (anly.features || []).some(f => f.name.toLowerCase() === cleanName.toLowerCase());
     if (onMatrix) {
         alert(`🚫 "${cleanName}" is already in this analysis matrix.`);
         return;
     }
 
-    // 🚀 THE FIX: Check if the feature exists in the GLOBAL/LOCAL pool
-    // We look for any feature with this name to "adopt" its description or metadata
-    const allFeatures = OL.getGlobalFeatures(); // Assuming this returns unique names
+    // 2. Adopt standard capitalisation if found in global pool
+    const allFeatures  = OL.getGlobalFeatures();
     const existingEntry = allFeatures.find(f => f.toLowerCase() === cleanName.toLowerCase());
 
-    await OL.updateAndSync(() => {
-        if (!anly.features) anly.features = [];
-        
-        anly.features.push({
-            id: "feat-" + Date.now() + Math.random().toString(36).substr(2, 5),
-            name: existingEntry || cleanName, // Use standard capitalization if found
-            category: cleanCat,
-            weight: 10,
-            description: "" // You could pull existingEntry.description if you have the full object
-        });
+    // 3. Mutate directly
+    if (!anly.features) anly.features = [];
+    anly.features.push({
+        id: "feat-" + Date.now() + Math.random().toString(36).substr(2, 5),
+        name: existingEntry || cleanName,
+        category: cleanCat,
+        weight: 10,
+        description: ""
     });
 
-    // 🔄 UI Reset for Rapid Entry
+    // 4. Fire and forget
+    OL.persist();
+
+    // 5. UI reset for rapid entry
     const nameInput = document.getElementById('feat-name-input');
-    if (nameInput) { 
-        nameInput.value = ''; 
-        nameInput.focus(); 
-    }
-    
+    if (nameInput) { nameInput.value = ''; nameInput.focus(); }
+
     const results = document.getElementById('feat-search-results');
-    if (results) {
-        results.innerHTML = '';
-        results.style.display = 'none';
-    }
+    if (results) { results.innerHTML = ''; results.style.display = 'none'; }
 
     OL.openAnalysisMatrix(anlyId, isMaster);
     console.log("✅ Feature synchronized.");
