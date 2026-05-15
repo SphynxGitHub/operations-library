@@ -8166,6 +8166,12 @@ OL.deleteMasterAnalysis = function(anlyId) {
 // 3. OPEN INDIVIDUAL ANALYSIS MATRIX
 OL.openAnalysisMatrix = function(analysisId, isMaster) {
     window.isMatrixActive = true;
+
+    if (state.activeMatrixId === analysisId && 
+        document.querySelector('.matrix-table')) {
+        return;
+    }
+    
     state.activeMatrixId = analysisId;
     
     const client = getActiveClient();
