@@ -7935,6 +7935,32 @@ OL.deleteAnalysis = async function (anlyId, isVaultMode) {
     console.log("🗑️ Analysis deleted and persisted.");
 };
 
+OL.filterMasterAnalysisImport = function(query) {
+    const listEl = document.getElementById("master-anly-import-results");
+    if (!listEl) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    
+    const existingRefs = (client?.projectData?.localAnalyses || [])
+        .map(a => String(a.masterRefId))
+        .filter(Boolean);
+
+    const available = (state.master.analyses || []).filter(t => 
+        (t.name || "").toLowerCase().includes(q) && 
+        !existingRefs.includes(String(t.id))
+    );
+
+    listEl.innerHTML = available.length ? available.map(anly => `
+        <div class="search-result-item" onmousedown="OL.executeAnalysisImportById('${anly.id}')">
+            <div>
+                <strong>${esc(anly.name)}</strong>
+                <div class="tiny muted">${(anly.apps||[]).length} apps · ${(anly.features||[]).length} features</div>
+            </div>
+        </div>
+    `).join('') : `<div class="search-result-item muted">No templates found.</div>`;
+};
+
 OL.importAnalysisFromVault = function () {
     const html = `
         <div class="modal-head" style="display:flex; align-items:center; gap:12px; padding: 20px;">
