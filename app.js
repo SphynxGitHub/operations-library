@@ -1538,7 +1538,7 @@ OL.provisionSphynxTemplates = function(clientId) {
                 }
             ]
         },
-        { name: "Compliance Documents", type: "Compliance", systemPinned: true, 
+        { name: "Compliance Documents", type: "Compliance", adminPinned: true, 
           isContainer: true, // 🚀 Custom flag for specific UI
           files: [
               { name: "ADV", url: "", id: uid() },
