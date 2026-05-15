@@ -186,7 +186,13 @@ OL.sync = function() {
     const client = getActiveClient();
     if (window.IS_GUEST && client) {
         console.log("🎟️ Guest Token Validated:", client.meta.name);
-        window.handleRoute(); // Force the redirect to their tasks
+        // 🛡️ Don't re-render if matrix is open
+        const matrixOpen = document.querySelector('.matrix-card-main, .matrix-table') || 
+                           window.isMatrixActive || 
+                           state.activeMatrixId;
+        if (!matrixOpen) {
+            window.handleRoute();
+        }
         return;
     }
 
