@@ -7359,28 +7359,27 @@ OL.handleResourceSave = function(id, field, value) {
     if (res) {
         res[field] = value;
         
-        // 💾 Persist to Firebase/DB
         OL.persist().then(() => {
-            // 🚩 THE FIX: Check where we are before redirecting
             const modalOpen = document.getElementById('active-modal-box');
             const inspectorOpen = document.getElementById('v2-inspector-panel')?.classList.contains('open');
+            const isVisualizer = window.location.hash.includes('visualizer');
+            const isResources = window.location.hash.includes('resources');
 
             if (modalOpen) {
-                // If the main modal is open, just refresh its content
                 OL.openResourceModal(id);
-            } else if (inspectorOpen) {
-                if (window.location.hash.includes('visualizer')) {
-                    OL._fvOpenStepsList(id);
-                    if (field === 'stageId') {
-                        setTimeout(() => OL.renderVisualizer(), 100);
-                    }
-                } else {
-                    OL.openInspector(id, null, 'cards');
+            } else if (inspectorOpen && isVisualizer) {
+                OL._fvOpenStepsList(id);
+                if (field === 'stageId') {
+                    setTimeout(() => OL.renderVisualizer(), 100);
                 }
-            } else {
-                // Only go back to the map if no detail view is active
-                OL.renderVisualizer(); 
+            } else if (inspectorOpen && !isVisualizer) {
+                OL.openInspector(id, null, 'cards');
+            } else if (isResources) {
+                renderResourceManager();
+            } else if (isVisualizer) {
+                OL.renderVisualizer();
             }
+            // Otherwise do nothing — let the page stay as-is
         });
     }
 };
@@ -14425,12 +14424,12 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                       value="${esc(step.name)}" 
                       onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)"
                       placeholder="Step Name">
-                <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
-                        style="padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;
-                               cursor:pointer;border:1px solid ${res.isArchived ? '#ef4444' : '#e5e7eb'};
-                               background:${res.isArchived ? 'rgba(239,68,68,0.08)' : '#fafafa'};
-                               color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
-                  ${res.isArchived ? '📦 Archived' : 'Archive'}
+                <button onclick="event.preventDefault(); event.stopPropagation(); 
+                                 OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
+                                 renderResourceManager();"
+                        title="${res.isArchived ? 'Unarchive' : 'Archive'}"
+                        style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                    <i data-lucide="archive" style="width:12px;height:12px;"></i>
                 </button>
             </div>
 
@@ -14773,13 +14772,12 @@ if (mode === 'cards' && resId) {
                             <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
                             ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>`).join('')}
                         </select>
-                        <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); OL.openInspector('${res.id}', null, 'cards');"
-                                style="padding:6px 10px;border-radius:6px;font-size:10px;font-weight:700;
-                                       cursor:pointer;flex-shrink:0;
-                                       border:1px solid ${res.isArchived ? '#ef4444' : '#e5e7eb'};
-                                       background:${res.isArchived ? 'rgba(239,68,68,0.08)' : '#fafafa'};
-                                       color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
-                            ${res.isArchived ? '📦 Unarchive' : 'Archive'}
+                        <button onclick="event.preventDefault(); event.stopPropagation(); 
+                                         OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
+                                         renderResourceManager();"
+                                title="${res.isArchived ? 'Unarchive' : 'Archive'}"
+                                style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                            <i data-lucide="archive" style="width:12px;height:12px;"></i>
                         </button>
                     </div>
                 </div>
