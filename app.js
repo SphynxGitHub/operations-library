@@ -10737,6 +10737,11 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
         </div>
         <div class="fv-lane-actions">
           <button class="fv-lane-action-btn"
+                  title="Add stage before this one"
+                  onclick="event.stopPropagation(); OL.addStageBetween(${si})">
+            <i data-lucide="plus"></i>
+          </button>
+          <button class="fv-lane-action-btn"
                   title="Edit name"
                   onclick="event.stopPropagation(); OL._fvEditStageName('${stage.id}')">
             <i data-lucide="pencil"></i>
@@ -10796,15 +10801,23 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   });
 
   return `
-    <div id="fv-lane-rail">${railHtml}</div>
+    <div id="fv-lane-rail">
+        ${railHtml}
+        <div style="padding:8px 10px;">
+            <button class="fv-lane-action-btn" style="width:100%;justify-content:center;opacity:0.5;"
+                    onclick="OL.addStageBetween(${displayStages.length})"
+                    title="Add stage at end">
+                <i data-lucide="plus"></i>
+            </button>
+        </div>
+    </div>
     <div id="fv-canvas-wrap">
       <div id="fv-canvas">
         <svg id="fv-svg-layer"></svg>
         <div id="fv-lanes-container">${lanesHtml}</div>
       </div>
     </div>
-  `;
-};
+`;
 
 OL._fvLaneDragOver = function(e) {
   e.preventDefault();
