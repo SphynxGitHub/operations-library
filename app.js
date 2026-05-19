@@ -11822,14 +11822,13 @@ OL._fvPopulateWb = function(tab, resources) {
           drawer.style.borderLeft = '';
       };
       drawer.ondrop = (e) => {
-          e.preventDefault();
-          drawer.style.background = '';
-          drawer.style.borderLeft = '';
-          const resId = e.dataTransfer.getData('application/fv-resource') || 
-                        e.dataTransfer.getData('text/plain');
-          if (!resId) return;
-          OL._fvUnmapResource(resId);
-      };
+        e.preventDefault();
+        drawer.style.background = '';
+        drawer.style.borderLeft = '';
+        const resId = e.dataTransfer.getData('application/fv-resource') || 
+                      e.dataTransfer.getData('text/plain');
+        if (resId) OL._fvUnmapResource(resId); // removed the return, just wrap in if
+    };
   }
     
   const client      = getActiveClient();
