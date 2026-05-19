@@ -11946,6 +11946,13 @@ OL._fvBuildListShell = function(stages, resources) {
       const totalSteps = stageRes.reduce((acc, r) => acc + (r.steps||[]).length, 0);
     
       return `
+       <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+            <button class="fv-btn" style="padding:2px 8px;font-size:10px;opacity:0.5;"
+                    onclick="OL.addStageBetween(${si})">
+                <i data-lucide="plus" style="width:10px;height:10px;"></i> Add Stage
+            </button>
+            <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+        </div>
       <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
         <div class="fv-list-stage-header">
           <div class="fv-list-stage-num">${si + 1}</div>
