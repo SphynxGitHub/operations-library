@@ -11814,13 +11814,21 @@ OL._fvPopulateWb = function(tab, resources) {
 
   let items = [];
   if (tab === 'flows') {
-    items = resources.filter(r => ['Workflow','Zap','Email Campaign'].includes(r.type));
-  } else if (tab === 'assets') {
-    items = resources.filter(r => !['Workflow','Zap','Email Campaign'].includes(r.type));
-  } else if (tab === 'guides') {
-    items = [...masterGuides, ...localGuides];
+        items = resources.filter(r => 
+            ['Workflow','Zap','Email Campaign'].includes(r.type) &&
+            !r.isArchived &&
+            (!r.stageId || r.isGlobal)
+        );
+    } else if (tab === 'assets') {
+        items = resources.filter(r => 
+            !['Workflow','Zap','Email Campaign'].includes(r.type) &&
+            !r.isArchived &&
+            (!r.stageId || r.isGlobal)
+        );
+    } else if (tab === 'guides') {
+        items = [...masterGuides, ...localGuides];
   } else if (tab === 'data') {
-    items = datapoints;
+        items = datapoints;
   }
 
   if (items.length === 0) {
