@@ -4924,7 +4924,6 @@ window.renderResourceManager = function () {
                     <button class="btn small soft" onclick="OL.openResourceTypeManager()" style="display:flex; align-items:center; gap:6px;">
                         <i data-lucide="settings" style="width:14px; height:14px;"></i> Types
                     </button>` : ''}
-                ${OL.viewToggleBtn('resources', 'OL.renderResourceGroups')}
 
                 <button class="btn small ${state.showArchivedResources ? 'primary' : 'soft'}"
                         onclick="state.showArchivedResources = !state.showArchivedResources; renderResourceManager();"
@@ -4932,6 +4931,8 @@ window.renderResourceManager = function () {
                     <i data-lucide="archive" style="width:14px;height:14px;"></i>
                     ${state.showArchivedResources ? 'Hide Archived' : 'Show Archived'}
                 </button>
+                
+                ${OL.viewToggleBtn('resources', 'renderResourceManager')}
                 
                 <div class="dropdown-plus">
                     <button class="btn primary" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
