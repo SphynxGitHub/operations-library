@@ -4925,6 +4925,13 @@ window.renderResourceManager = function () {
                         <i data-lucide="settings" style="width:14px; height:14px;"></i> Types
                     </button>` : ''}
                 ${OL.viewToggleBtn('resources', 'renderResourceGroups')}
+
+                <button class="btn small ${state.showArchivedResources ? 'primary' : 'soft'}"
+                        onclick="state.showArchivedResources = !state.showArchivedResources; renderResourceManager();"
+                        style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="archive" style="width:14px;height:14px;"></i>
+                    ${state.showArchivedResources ? 'Hide Archived' : 'Show Archived'}
+                </button>
                 
                 <div class="dropdown-plus">
                     <button class="btn primary" onclick="OL.universalCreate('SOP')" style="display:flex; align-items:center; gap:6px;">
@@ -5032,6 +5039,7 @@ OL.syncResourceLibraryFilters = function() {
     const source = isVault ? (state.master.resources || []) : (client?.projectData?.localResources || []);
 
     const filtered = source.filter(res => {
+         if (!state.showArchivedResources && res.isArchived) return false;
         //if (res.type === 'Workflow') return false;
 
         const matchesQuery = !query || res.name.toLowerCase().includes(query) || (res.description || "").toLowerCase().includes(query);
@@ -11913,15 +11921,15 @@ OL._fvBuildListShell = function(stages, resources) {
   }
 
     const stagesHtml = displayStages.map((stage, si) => {
-      if (filter && stage.id !== filter) return '';
-      const stageRes = (byStage[stage.id] || []);
-      if (stageRes.length === 0) return '';
+        if (filter && stage.id !== filter) return '';
+        const stageRes = (byStage[stage.id] || []).filter(r => OL._fv.showArchived || !r.isArchived);
+        if (stageRes.length === 0) return '';
     
       // Build steps grouped by resource, with a clickable resource header
       const stepsHtml = stageRes.map(res => {
-            const steps = res.steps || [];
+            const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
             const stepRows = steps.map((step, stepIdx) =>
-              OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
+                OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
             ).join('');
             return stepRows;
         }).join('');
@@ -11944,6 +11952,11 @@ OL._fvBuildListShell = function(stages, resources) {
                   onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='block');
                            document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='-');">
             Expand
+          </button>
+          <button class="fv-toggle-btn ${OL._fv.showArchived ? 'on' : ''}"
+                onclick="OL._fv.showArchived = !OL._fv.showArchived; OL.renderVisualizer();">
+            <i data-lucide="archive" style="width:12px;height:12px;"></i>
+            ${OL._fv.showArchived ? 'Hide Archived' : 'Show Archived'}
           </button>
         </div>
         ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
@@ -12219,7 +12232,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
   const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
   const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
   const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
-  const outRules      = (step.logic?.out || []).filter(l => l.targetId);
+  const outRules = (step.logic?.out || []).filter(l => {
+    if (!l.targetId) return false;
+    if (OL._fv.showArchived) return true;
+    // Check if target step's resource is archived
+    const lastH  = String(l.targetId).lastIndexOf('-');
+    const tResId = l.targetId.substring(0, lastH);
+    const tRes   = allResources.find(r => String(r.id) === tResId);
+    return !tRes?.isArchived;
+});
   const hasSubSteps   = outRules.length > 0;
   const collapseId    = `fv-substeps-${step.id}`;
 
