@@ -11981,7 +11981,6 @@ OL._fvBuildListShell = function(stages, resources) {
   });
 
   const displayStages = [...stages];
-  }
 
     const stagesHtml = displayStages.map((stage, si) => {
         if (filter && stage.id !== filter) return '';
