@@ -5119,10 +5119,12 @@ OL.renderResourceGroups = function(container, items) {
                 </div>
                 ${OL.getViewMode('resources') === 'list' ? `
                     <div style="display:flex;flex-direction:column;gap:2px;">
-                        ${adminPinned.map(res => OL._renderResourceListRow(res)).join('')}
+                        ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(res => OL._renderResourceListRow(res)).join('')}
                     </div>
                 ` : `
-                    <div class="cards-grid">${adminPinned.map(r => renderResourceCard(r)).join('')}</div>
+                    <div class="cards-grid">
+                        ${grouped[type].sort((a, b) => a.name.localeCompare(b.name)).map(r => renderResourceCard(r)).join('')}
+                    </div>
                 `}
             </div>` : ''}
 
