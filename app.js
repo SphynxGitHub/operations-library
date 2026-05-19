@@ -5072,6 +5072,10 @@ OL.syncResourceLibraryFilters = function() {
 };
 
 OL.renderResourceGroups = function(container, items) {
+    if (!state.showArchivedResources) {
+        items = items.filter(r => !r.isArchived);
+    }
+    
     if (items.length === 0) {
         container.innerHTML = `<div class="empty-hint" style="padding: 100px; text-align: center; opacity: 0.5;">No resources matching your filters.</div>`;
         return;
@@ -5747,22 +5751,27 @@ window.renderResourceCard = function (res) {
         <div class="card is-clickable ${scopeData ? 'is-priced' : ''} ${isActive ? 'is-active' : ''}" 
              id="res-card-${res.id}"
              onclick="OL.selectResourceCard('${res.id}')"
-             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''}">
+             style="${scopeData ? `border-left: 4px solid ${statusColor} !important;` : ''} opacity:${res.isArchived ? '0.5' : '1'};">
             
             <div class="card-header" style="display:flex; justify-content: space-between; align-items: flex-start;">
                 <div class="card-title" style="flex:1; font-weight:600;">${esc(res.name || "Unnamed")}</div>
                 
                 <div class="card-controls" style="display:flex; align-items:center; gap:6px;">
-                    ${numberingHtml}
-                    
-                    <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 8px; border-radius: 3px; font-weight: bold;">
-                        ${isMaster ? 'MASTER' : 'LOCAL'}
-                    </span>
-
-                    ${res.isLocked ? '' : `<button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
+                        ${numberingHtml}
+                        
+                        <span class="vault-tag" style="${tagStyle} padding: 2px 6px; font-size: 8px; border-radius: 3px; font-weight: bold;">
+                            ${isMaster ? 'MASTER' : 'LOCAL'}
+                        </span>
+                        ${res.isArchived ? `<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">📦 Archived</span>` : ''}
+                        <button class="card-delete-btn" 
+                                onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
+                                title="${res.isArchived ? 'Unarchive' : 'Archive'}"
+                                style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                            <i data-lucide="archive" style="width:12px;height:12px;"></i>
+                        </button>
+                        ${res.isLocked ? '' : `<button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
+                    </div>            
                 </div>
-            </div>
-
             <div class="card-body" style="margin-top: 6px;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-end;">
                     <div>
