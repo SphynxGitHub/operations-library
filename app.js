@@ -10700,7 +10700,6 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   });
 
   const displayStages = [...stages];
-  }
 
   // Count how many stages each global appears in
   const globalStageCount = {};
