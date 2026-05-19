@@ -14767,10 +14767,20 @@ if (mode === 'cards' && resId) {
 
                 <div class="inspector-section">
                     <label class="section-label">📂 CLASSIFICATION</label>
-                    <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'type', this.value); OL.openInspector('${res.id}', null, 'cards');">
-                        <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
-                        ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>`).join('')}
-                    </select>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'type', this.value); OL.openInspector('${res.id}', null, 'cards');">
+                            <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
+                            ${(state.master.resourceTypes || []).map(t => `<option value="${esc(t.type)}" ${res.type === t.type ? 'selected' : ''}>${esc(t.type)}</option>`).join('')}
+                        </select>
+                        <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); OL.openInspector('${res.id}', null, 'cards');"
+                                style="padding:6px 10px;border-radius:6px;font-size:10px;font-weight:700;
+                                       cursor:pointer;flex-shrink:0;
+                                       border:1px solid ${res.isArchived ? '#ef4444' : '#e5e7eb'};
+                                       background:${res.isArchived ? 'rgba(239,68,68,0.08)' : '#fafafa'};
+                                       color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                            ${res.isArchived ? '📦 Unarchive' : 'Archive'}
+                        </button>
+                    </div>
                 </div>
 
                 <div class="inspector-section">
