@@ -4924,7 +4924,7 @@ window.renderResourceManager = function () {
                     <button class="btn small soft" onclick="OL.openResourceTypeManager()" style="display:flex; align-items:center; gap:6px;">
                         <i data-lucide="settings" style="width:14px; height:14px;"></i> Types
                     </button>` : ''}
-                ${OL.viewToggleBtn('resources', 'renderResourceGroups')}
+                ${OL.viewToggleBtn('resources', 'OL.renderResourceGroups')}
 
                 <button class="btn small ${state.showArchivedResources ? 'primary' : 'soft'}"
                         onclick="state.showArchivedResources = !state.showArchivedResources; renderResourceManager();"
