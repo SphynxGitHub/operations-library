@@ -10503,7 +10503,12 @@ OL.renderVisualizer = function() {
       <div id="fv-body">
 
         <!-- Workbench icon rail -->
-        <div id="fv-wb-rail">
+        <div id="fv-wb-rail"
+         ondragover="event.preventDefault(); this.style.background='rgba(61,217,197,0.15)';"
+         ondragleave="this.style.background='';"
+         ondrop="event.preventDefault(); this.style.background=''; 
+                 const id=event.dataTransfer.getData('application/fv-resource'); 
+                 if(id) OL._fvUnmapResource(id);">
           <div class="fv-wb-icon ${OL._fv._wbTab==='flows'  ?'active':''}"
                onclick="OL._fvToggleWb('flows')"   title="Flows">
             <i data-lucide="workflow"></i>
@@ -10695,8 +10700,6 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   });
 
   const displayStages = [...stages];
-  if (byStage['__none__'].length > 0 || stageGlobalMap['__none__']?.size > 0) {
-    displayStages.push({ id: '__none__', name: 'Unassigned' });
   }
 
   // Count how many stages each global appears in
@@ -11806,6 +11809,29 @@ OL._fvPopulateWb = function(tab, resources) {
   const content = document.getElementById('fv-wb-content');
   if (!content) return;
 
+  // Make the whole drawer a drop target to unmap resources
+  const drawer = document.getElementById('fv-wb-drawer');
+  if (drawer) {
+      drawer.ondragover = (e) => {
+          e.preventDefault();
+          drawer.style.background = 'rgba(61,217,197,0.08)';
+          drawer.style.borderLeft = '2px solid #3dd9c5';
+      };
+      drawer.ondragleave = () => {
+          drawer.style.background = '';
+          drawer.style.borderLeft = '';
+      };
+      drawer.ondrop = (e) => {
+          e.preventDefault();
+          drawer.style.background = '';
+          drawer.style.borderLeft = '';
+          const resId = e.dataTransfer.getData('application/fv-resource') || 
+                        e.dataTransfer.getData('text/plain');
+          if (!resId) return;
+          OL._fvUnmapResource(resId);
+      };
+  }
+    
   const client      = getActiveClient();
   const data        = OL.getCurrentProjectData();
   const masterGuides = state.master?.howToLibrary || [];
@@ -11862,6 +11888,16 @@ OL._fvPopulateWb = function(tab, resources) {
       </div>
     `;
   }).join('');
+};
+
+OL._fvUnmapResource = function(resId) {
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
+    res.stageId = null;
+    res.isGlobal = false;
+    OL.persist();
+    OL.renderVisualizer();
 };
 
 OL._fvWbDragStart = function(e, id, type) {
@@ -11947,8 +11983,6 @@ OL._fvBuildListShell = function(stages, resources) {
   });
 
   const displayStages = [...stages];
-  if (byStage['__none__'].length > 0) {
-    displayStages.push({ id: '__none__', name: 'Unassigned' });
   }
 
     const stagesHtml = displayStages.map((stage, si) => {
