@@ -10818,6 +10818,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
       </div>
     </div>
 `;
+};
 
 OL._fvLaneDragOver = function(e) {
   e.preventDefault();
