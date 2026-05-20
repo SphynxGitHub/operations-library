@@ -6668,30 +6668,32 @@ const dependencyHtml = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
-            <div class= "card-section" style="margin-top:20px; display: flex; flex-direction: row;">
+            <div class= "card-section" style="margin-top:20px; display: flex;">
                 <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px;">
                     <i data-lucide="lines" style="width:14px; height:14px;"></i>Hierarchy
                 </label>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
-                    <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
-                            onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
-                        <option value="">— Unassigned —</option>
-                        ${(OL.getCurrentProjectData().stages || []).map(s => `
-                            <option value="${esc(s.id)}" ${res.stageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>
-                        `).join('')}
-                    </select>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
-                    <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
-                            onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
-                        <option value="">-- Standalone --</option>
-                        ${(OL.getCurrentProjectData().resources || [])
-                            .filter(r => ['Workflow','Zap'].includes(r.type) && r.id !== res.id)
-                            .map(r => `<option value="${esc(r.id)}" ${res.parentWorkflowId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`)
-                            .join('')}
-                    </select>
+                <div style="display: flex; flex-direction: row;">
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
+                        <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
+                                onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
+                            <option value="">— Unassigned —</option>
+                            ${(OL.getCurrentProjectData().stages || []).map(s => `
+                                <option value="${esc(s.id)}" ${res.stageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
+                        <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
+                                onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
+                            <option value="">-- Standalone --</option>
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => ['Workflow','Zap'].includes(r.type) && r.id !== res.id)
+                                .map(r => `<option value="${esc(r.id)}" ${res.parentWorkflowId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`)
+                                .join('')}
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="card-section" style="margin-top:20px;">
@@ -6825,7 +6827,7 @@ const dependencyHtml = `
                                border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
                                background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
                                color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
-                    🌐 ${res.isGlobal ? 'Global' : 'Set Global'}
+                    <i data-lucide="globe" style="width:11px;height:11px;"></i> ${res.isGlobal ? 'Global' : 'Set Global'}
                 </button>
                 ${isAdmin && relevantVars?.length > 0 ? `
                     <button onclick="if(!state.v2)state.v2={};state.v2.showPricing=!state.v2.showPricing;OL.openResourceModal('${res.id}')"
