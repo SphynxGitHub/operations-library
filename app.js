@@ -6250,29 +6250,43 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
     const isScopingSheet = hash.includes('scoping-sheet');
-    let roundInputHtml = "";
-    let hierarchyHtml = "";
-    if (lineItem || isScopingSheet) {
-        const activeId = lineItem ? lineItem.id : targetId;
-        const currentRound = lineItem ? (lineItem.round || 1) : 1;
-        roundInputHtml = `
-        <div class="card-section" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); padding: 15px; border-radius: 8px; border: 1px solid var(--accent);">
-            <label class="modal-section-label" style="color: var(--accent); display:flex; align-items:center; gap:6px;">
-                <i data-lucide="milestone" style="width:14px; height:14px;"></i> IMPLEMENTATION STAGE
-            </label>
-            <div class="form-group" style="margin-top: 10px;">
-                <label class="tiny muted uppercase bold">Round / Phase Number</label>
-                <input type="number" class="modal-input" value="${currentRound}" min="1"
-                       onchange="OL.updateLineItem('${activeId}', 'round', this.value)">
+    const activeId = lineItem ? lineItem.id : targetId;
+    const currentRound = lineItem ? (lineItem.round || 1) : 1;
+    const scopeAndRoundHtml = ((lineItem || isScopingSheet) || scopeData) ? `
+        <div class="card-section" style="margin-bottom:20px;background:rgba(var(--accent-rgb),0.05);
+                                          border:1px solid var(--accent);padding:12px 16px;border-radius:8px;">
+            <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+                ${(lineItem || isScopingSheet) ? `
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Round / Phase</label>
+                        <input type="number" class="modal-input tiny" style="width:70px;"
+                               value="${currentRound}" min="1"
+                               onchange="OL.updateLineItem('${activeId}', 'round', this.value)">
+                    </div>
+                ` : ''}
+                ${scopeData ? `
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Scoping Status</label>
+                        <select class="modal-input tiny" style="width:auto;"
+                                onchange="OL.updateLineItem('${scopeData.id}', 'status', this.value)">
+                            ${['Do Now','Do Later',"Don't Do",'Done'].map(s => `
+                                <option value="${s}" ${scopeData.status === s ? 'selected' : ''}>${s}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Responsible Party</label>
+                        <select class="modal-input tiny" style="width:auto;"
+                                onchange="OL.updateLineItem('${scopeData.id}', 'responsibleParty', this.value)">
+                            <option value="Sphynx" ${scopeData.responsibleParty === 'Sphynx' ? 'selected' : ''}>Sphynx</option>
+                            <option value="Client" ${scopeData.responsibleParty === 'Client' ? 'selected' : ''}>Client</option>
+                            <option value="Joint" ${scopeData.responsibleParty === 'Joint' ? 'selected' : ''}>Joint</option>
+                        </select>
+                    </div>
+                ` : ''}
             </div>
-        </div>`
-    }
-    else {
-        hierarchyHtml = `
-            <div class="modal-hierarchy-container" style="margin: 10px 0 20px 36px; max-width: 400px;">
-                ${OL.renderHierarchySelectors(res, isVaultMode)}
-            </div>`;
-    }
+        </div>
+    ` : '';
 
     // --- 📊 SECTION: ADMIN PRICING ---
     const relevantVars = Object.entries(state.master.rates?.variables || {}).filter(([_, v]) => 
@@ -6652,8 +6666,7 @@ const dependencyHtml = `
     else {
         // --- MODE D: STANDARD FULL RESOURCE VIEW ---
        bodyContent = `
-            ${roundInputHtml}
-            ${scopeContextHtml}
+            ${scopeAndRoundHtml}
             ${appMappingHtml}
         
             <div class="card-section" style="margin-top:20px;">
