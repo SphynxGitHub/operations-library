@@ -10859,7 +10859,17 @@ OL._fvLaneDrop = async function(e, stageId) {
     res.isGlobal = false;
   });
 
-  OL.renderVisualizer();
+   const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+    const scrollTop = wrap?.scrollTop || 0;
+    const scrollLeft = wrap?.scrollLeft || 0;
+
+    OL.persist();
+    OL.renderVisualizer();
+
+    requestAnimationFrame(() => {
+        const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+    });
 };
 
 OL._fvComputeLayout = function(resources, stageFilter) {
@@ -11821,71 +11831,118 @@ OL._fvPopulateWb = function(tab, resources) {
           drawer.style.borderLeft = '';
       };
       drawer.ondrop = (e) => {
-        e.preventDefault();
-        drawer.style.background = '';
-        drawer.style.borderLeft = '';
-        const resId = e.dataTransfer.getData('application/fv-resource') || 
-                      e.dataTransfer.getData('text/plain');
-        if (resId) OL._fvUnmapResource(resId); // removed the return, just wrap in if
-    };
+          e.preventDefault();
+          drawer.style.background = '';
+          drawer.style.borderLeft = '';
+          const resId = e.dataTransfer.getData('application/fv-resource') || 
+                        e.dataTransfer.getData('text/plain');
+          if (resId) OL._fvUnmapResource(resId);
+      };
   }
-    
-  const client      = getActiveClient();
-  const data        = OL.getCurrentProjectData();
+
+  const client       = getActiveClient();
+  const data         = OL.getCurrentProjectData();
   const masterGuides = state.master?.howToLibrary || [];
   const localGuides  = client?.projectData?.localHowTo || [];
   const datapoints   = state.master?.datapoints || [];
 
-  let items = [];
+  let allItems = [];
   if (tab === 'flows') {
-        items = resources.filter(r => 
+      allItems = resources.filter(r => 
+          ['Workflow','Zap','Email Campaign'].includes(r.type) &&
+          !r.isArchived && (!r.stageId || r.isGlobal)
+      );
+  } else if (tab === 'assets') {
+      allItems = resources.filter(r => 
+          !['Workflow','Zap','Email Campaign'].includes(r.type) &&
+          !r.isArchived && (!r.stageId || r.isGlobal)
+      );
+  } else if (tab === 'guides') {
+      allItems = [...masterGuides, ...localGuides];
+  } else if (tab === 'data') {
+      allItems = datapoints;
+  }
+
+  const searchId  = `fv-wb-search-${tab}`;
+  const listId    = `fv-wb-items-${tab}`;
+  const showSearch = ['flows','assets','guides','data'].includes(tab);
+
+  content.innerHTML = `
+      ${showSearch ? `
+          <div style="padding:8px 8px 4px;">
+              <input type="text" id="${searchId}"
+                     placeholder="Search..."
+                     oninput="OL._fvFilterWb('${tab}')"
+                     style="width:100%;padding:6px 8px;
+                            border:1px solid rgba(255,255,255,0.1);
+                            border-radius:6px;background:rgba(0,0,0,0.2);
+                            color:#fff;font-size:11px;outline:none;
+                            box-sizing:border-box;font-family:inherit;">
+          </div>
+      ` : ''}
+      <div id="${listId}">
+          ${OL._fvRenderWbItems(allItems, tab)}
+      </div>
+  `;
+};
+
+OL._fvRenderWbItems = function(items, tab) {
+    if (!items.length) return `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;font-style:italic;">No ${tab} found</div>`;
+    return items.map(item => {
+        const tc     = OL._fvGetType(item.type);
+        const name   = item.name || item.title || 'Unnamed';
+        const isData = tab === 'data';
+        return `
+            <div class="fv-wb-item"
+                 draggable="true"
+                 data-id="${item.id}"
+                 data-type="${tab}"
+                 ondragstart="OL._fvWbDragStart(event,'${item.id}','${tab}')"
+                 onclick="OL.openInspector('${item.id}', null, 'cards')"
+                 style="cursor:grab;">
+                <div class="fv-wb-item-icon"
+                     style="background:${isData ? 'rgba(124,58,237,0.1)' : tc.color+'18'};
+                            color:${isData ? '#7c3aed' : tc.color};">
+                    ${isData ? '🏷' : tc.abbr}
+                </div>
+                <div class="fv-wb-item-info">
+                    <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
+                    ${!isData ? `<div class="fv-wb-item-type">${esc(item.type||'')}</div>` : ''}
+                </div>
+                <div style="margin-left:auto;color:rgba(255,255,255,0.2);font-size:10px;">⠿</div>
+            </div>
+        `;
+    }).join('');
+};
+
+OL._fvFilterWb = function(tab) {
+    const input = document.getElementById(`fv-wb-search-${tab}`);
+    const q = (input?.value || '').toLowerCase().trim();
+    const data = OL.getCurrentProjectData();
+    const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
+    const client = getActiveClient();
+
+    let items = [];
+    if (tab === 'flows') {
+        items = resources.filter(r =>
             ['Workflow','Zap','Email Campaign'].includes(r.type) &&
-            !r.isArchived &&
-            (!r.stageId || r.isGlobal)
+            !r.isArchived && (!r.stageId || r.isGlobal)
         );
     } else if (tab === 'assets') {
-        items = resources.filter(r => 
+        items = resources.filter(r =>
             !['Workflow','Zap','Email Campaign'].includes(r.type) &&
-            !r.isArchived &&
-            (!r.stageId || r.isGlobal)
+            !r.isArchived && (!r.stageId || r.isGlobal)
         );
     } else if (tab === 'guides') {
-        items = [...masterGuides, ...localGuides];
-  } else if (tab === 'data') {
-        items = datapoints;
-  }
+        items = [...(state.master?.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
+    } else if (tab === 'data') {
+        items = state.master?.datapoints || [];
+    }
 
-  if (items.length === 0) {
-    content.innerHTML = `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;font-style:italic;">No ${tab} found</div>`;
-    return;
-  }
+    if (q) items = items.filter(i => (i.name || i.title || '').toLowerCase().includes(q));
 
-  content.innerHTML = items.map(item => {
-    const tc   = OL._fvGetType(item.type);
-    const name = item.name || item.title || 'Unnamed';
-    const isData = tab === 'data';
-
-    return `
-      <div class="fv-wb-item"
-           draggable="true"
-           data-id="${item.id}"
-           data-type="${tab}"
-           ondragstart="OL._fvWbDragStart(event,'${item.id}','${tab}')"
-           onclick="OL.openInspector('${item.id}', null, 'cards')"
-           style="cursor:grab;">
-        <div class="fv-wb-item-icon"
-             style="background:${isData ? 'rgba(124,58,237,0.1)' : tc.color+'18'};
-                    color:${isData ? '#7c3aed' : tc.color};">
-          ${isData ? '🏷' : tc.abbr}
-        </div>
-        <div class="fv-wb-item-info">
-          <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
-          ${!isData ? `<div class="fv-wb-item-type">${esc(item.type||'')}</div>` : ''}
-        </div>
-        <div style="margin-left:auto;color:rgba(255,255,255,0.2);font-size:10px;">⠿</div>
-      </div>
-    `;
-  }).join('');
+    const list = document.getElementById(`fv-wb-items-${tab}`);
+    if (list) list.innerHTML = OL._fvRenderWbItems(items, tab);
 };
 
 OL._fvUnmapResource = function(resId) {
@@ -11918,6 +11975,28 @@ OL._fvSetupRailScroll = function() {
   wrap.addEventListener('scroll', () => {
     rail.scrollTop = wrap.scrollTop;
   }, { passive: true });
+};
+
+OL._fvUnmapResource = function(resId) {
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
+    res.stageId = null;
+    res.isGlobal = false;
+    OL.persist();
+
+    // 🚀 Save scroll position before re-render
+    const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+    const scrollTop = wrap?.scrollTop || 0;
+    const scrollLeft = wrap?.scrollLeft || 0;
+
+    OL.renderVisualizer();
+
+    // 🚀 Restore after render
+    requestAnimationFrame(() => {
+        const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+    });
 };
 
 OL._fvHandleCanvasClick = function(e) {
