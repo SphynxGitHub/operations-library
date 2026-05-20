@@ -6252,6 +6252,8 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const isScopingSheet = hash.includes('scoping-sheet');
     const activeId = lineItem ? lineItem.id : targetId;
     const currentRound = lineItem ? (lineItem.round || 1) : 1;
+    const scopeData = OL.getScopingDataForResource(res.id);
+    let scopeContextHtml = "";
     const scopeAndRoundHtml = ((lineItem || isScopingSheet) || scopeData) ? `
         <div class="card-section" style="margin-bottom:20px;background:rgba(var(--accent-rgb),0.05);
                                           border:1px solid var(--accent);padding:12px 16px;border-radius:8px;">
@@ -6444,9 +6446,6 @@ const dependencyHtml = `
 `;
 
   //------- SCOPING STATUS ---------//
-
-  const scopeData = OL.getScopingDataForResource(res.id);
-  let scopeContextHtml = "";
 
   if (scopeData) {
       scopeContextHtml = `
