@@ -6668,7 +6668,7 @@ const dependencyHtml = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
-            <div class= "card-section" style="margin-top:20px;">
+            <div class= "card-section" style="margin-top:20px; display: flex; flex-direction: row;">
                 <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px;">
                     <i data-lucide="lines" style="width:14px; height:14px;"></i>Hierarchy
                 </label>
