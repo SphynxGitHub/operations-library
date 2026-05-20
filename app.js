@@ -6732,25 +6732,21 @@ const dependencyHtml = `
       // --- 🧱 FINAL RENDER ---
     
     const html = `
-        <div class="modal-head" style="padding:14px 20px;border-bottom:0.5px solid var(--line);background:var(--panel-dark);">
+        <div class="modal-head" style="padding:14px 20px;border-bottom:0.5px solid var(--line);
+                                background:var(--panel-dark);
+                                display:flex;flex-direction:column;gap:10px;">
     
-            <!-- Row 1: Icon + Title + pills + link buttons -->
-            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;">
+            <!-- Row 1: Icon + Title + link buttons -->
+            <div style="display:flex;align-items:flex-start;gap:8px;">
                 <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" 
                    style="width:18px;height:18px;color:var(--accent);flex-shrink:0;margin-top:4px;"></i>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:18px;font-weight:700;color:var(--text-main);margin-bottom:6px;
-                                word-break:break-word;line-height:1.3;">
-                        ${esc(res.name)}
-                    </div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                        ${originPill} ${typePill}
-                        ${hasHistory ? `
-                            <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;"
-                                    onclick="OL.navigateBack()">
-                                <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
-                            </button>` : ''}
-                    </div>
+                <div contenteditable="true"
+                     style="flex:1;font-size:18px;font-weight:700;color:var(--text-main);
+                            line-height:1.3;outline:none;word-break:break-word;
+                            border-bottom:1px dashed transparent;transition:border-color 0.2s;"
+                     onfocus="this.style.borderColor='var(--accent)'"
+                     onblur="this.style.borderColor='transparent';OL.handleResourceSave('${res.id}','name',this.innerText.trim())">
+                    ${esc(res.name)}
                 </div>
                 ${res.externalUrl ? `
                     <a href="${res.externalUrl}" target="_blank"
@@ -6768,7 +6764,17 @@ const dependencyHtml = `
                 </button>
             </div>
         
-            <!-- Row 2: Stage + workflow + archive + pricing + promote -->
+            <!-- Row 2: Pills + Back -->
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-left:26px;">
+                ${originPill} ${typePill}
+                ${hasHistory ? `
+                    <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;"
+                            onclick="OL.navigateBack()">
+                        <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
+                    </button>` : ''}
+            </div>
+        
+            <!-- Row 3: Stage + workflow + archive + pricing + promote -->
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:26px;">
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
@@ -6815,7 +6821,7 @@ const dependencyHtml = `
                     </button>` : ''}
             </div>
         </div>
-    
+        
         <!-- Pricing drawer -->
         ${showPricing && adminPricingHtml ? `
             <div style="border-bottom:1px solid var(--panel-border);background:var(--panel-dark);padding:12px 20px;">
