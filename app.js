@@ -6331,12 +6331,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         }
 
         return `
-            <div class="modal-column">
-                <label class="tiny muted">${esc(v.label)} ($${v.value})${badge}</label>
+             <div style="display:flex;flex-direction:column;gap:2px;">
+                <label style="font-size:10px;color:var(--text-muted);">${esc(v.label)}${badge}</label>
                 <input type="number" class="modal-input tiny" 
                     value="${displayVal}" 
                     ${inputProps}
                     oninput="OL.updateResourcePricingData('${activeData.id}', '${varKey}', this.value)">
+                <span style="font-size:9px;color:var(--text-muted);">$${v.value} each</span>
             </div>`;
     }).join("");
 
@@ -6737,9 +6738,9 @@ const dependencyHtml = `
                                 display:flex;flex-direction:column;gap:10px;">
     
             <!-- Row 1: Icon + Title + link buttons -->
-            <div style="display:flex;align-items:flex-start;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
                 <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" 
-                   style="width:18px;height:18px;color:var(--accent);flex-shrink:0;margin-top:4px;"></i>
+                   style="width:18px;height:18px;color:var(--accent);flex-shrink:0;"></i>
                 <div contenteditable="true"
                      style="flex:1;font-size:18px;font-weight:700;color:var(--text-main);
                             line-height:1.3;outline:none;word-break:break-word;
@@ -6748,6 +6749,12 @@ const dependencyHtml = `
                      onblur="this.style.borderColor='transparent';OL.handleResourceSave('${res.id}','name',this.innerText.trim())">
                     ${esc(res.name)}
                 </div>
+                ${originPill} ${typePill}
+                ${hasHistory ? `
+                    <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;"
+                            onclick="OL.navigateBack()">
+                        <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
+                    </button>` : ''}
                 ${res.externalUrl ? `
                     <a href="${res.externalUrl}" target="_blank"
                        style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
@@ -6764,17 +6771,8 @@ const dependencyHtml = `
                 </button>
             </div>
         
-            <!-- Row 2: Pills + Back -->
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-left:26px;">
-                ${originPill} ${typePill}
-                ${hasHistory ? `
-                    <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;"
-                            onclick="OL.navigateBack()">
-                        <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
-                    </button>` : ''}
-            </div>
         
-            <!-- Row 3: Stage + workflow + archive + pricing + promote — ALL ONE LINE -->
+            <!-- Row 2: Stage + workflow + archive + pricing + promote — ALL ONE LINE -->
             <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;padding-left:26px;">
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
