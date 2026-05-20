@@ -6778,7 +6778,7 @@ const dependencyHtml = `
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:26px;">
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
-                    <select class="modal-input tiny" style="padding:4px 8px;min-width:130px;"
+                    <select class="modal-input tiny" style="padding:4px 8px;min-width:130px; width: auto;"
                             onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
                         <option value="">— Unassigned —</option>
                         ${(OL.getCurrentProjectData().stages || []).map(s => `
@@ -6788,7 +6788,7 @@ const dependencyHtml = `
                 </div>
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
-                    <select class="modal-input tiny" style="padding:4px 8px;min-width:130px;"
+                    <select class="modal-input tiny" style="padding:4px 8px;min-width:130px; width: auto;"
                             onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
                         <option value="">-- Standalone --</option>
                         ${(OL.getCurrentProjectData().resources || [])
