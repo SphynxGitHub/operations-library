@@ -6667,7 +6667,34 @@ const dependencyHtml = `
        bodyContent = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
-        
+
+            <div class= "card-section style="margin-top:20px;">
+                <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px;">
+                    <i data-lucide="lines" style="width:14px; height:14px;"></i>Hierarchy
+                </label>
+                <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;padding-left:26px;">
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
+                    <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
+                            onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
+                        <option value="">— Unassigned —</option>
+                        ${(OL.getCurrentProjectData().stages || []).map(s => `
+                            <option value="${esc(s.id)}" ${res.stageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
+                    <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
+                            onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
+                        <option value="">-- Standalone --</option>
+                        ${(OL.getCurrentProjectData().resources || [])
+                            .filter(r => ['Workflow','Zap'].includes(r.type) && r.id !== res.id)
+                            .map(r => `<option value="${esc(r.id)}" ${res.parentWorkflowId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`)
+                            .join('')}
+                    </select>
+                </div>
+            </div>
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
                     <i data-lucide="fingerprint" style="width:14px;height:14px;"></i> Description & Access Notes
@@ -6785,28 +6812,7 @@ const dependencyHtml = `
         
         
             <!-- Row 2: Stage + workflow + archive + pricing + promote — ALL ONE LINE -->
-            <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;padding-left:26px;">
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
-                    <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
-                            onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
-                        <option value="">— Unassigned —</option>
-                        ${(OL.getCurrentProjectData().stages || []).map(s => `
-                            <option value="${esc(s.id)}" ${res.stageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>
-                        `).join('')}
-                    </select>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
-                    <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
-                            onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
-                        <option value="">-- Standalone --</option>
-                        ${(OL.getCurrentProjectData().resources || [])
-                            .filter(r => ['Workflow','Zap'].includes(r.type) && r.id !== res.id)
-                            .map(r => `<option value="${esc(r.id)}" ${res.parentWorkflowId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`)
-                            .join('')}
-                    </select>
-                </div>
+            
                 <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;"></div>
                 <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
@@ -6814,6 +6820,13 @@ const dependencyHtml = `
                                background:${res.isArchived ? 'rgba(239,68,68,0.08)' : 'var(--panel-soft)'};
                                color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
                     ${res.isArchived ? '📦 Unarchive' : 'Archive'}
+                </button>
+                <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openResourceModal('${res.id}');"
+                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                               border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
+                               background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
+                               color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
+                    🌐 ${res.isGlobal ? 'Global' : 'Set Global'}
                 </button>
                 ${isAdmin && relevantVars?.length > 0 ? `
                     <button onclick="if(!state.v2)state.v2={};state.v2.showPricing=!state.v2.showPricing;OL.openResourceModal('${res.id}')"
@@ -15095,6 +15108,19 @@ if (mode === 'cards' && resId) {
                                 title="${res.isArchived ? 'Unarchive' : 'Archive'}"
                                 style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
                             <i data-lucide="archive" style="width:12px;height:12px;"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">🌐 VISIBILITY</label>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openInspector('${res.id}', null, 'cards');"
+                                style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                                       border:1px solid ${res.isGlobal ? '#3dd9c5' : 'var(--panel-border)'};
+                                       background:${res.isGlobal ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
+                                       color:${res.isGlobal ? '#3dd9c5' : 'var(--text-muted)'};">
+                            🌐 ${res.isGlobal ? 'Global (click to unset)' : 'Set as Global'}
                         </button>
                     </div>
                 </div>
