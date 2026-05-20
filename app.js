@@ -6733,26 +6733,30 @@ const dependencyHtml = `
     
     const html = `
         <div class="modal-head" style="padding:14px 20px;border-bottom:0.5px solid var(--line);background:var(--panel-dark);">
-            
-            <!-- Row 1: Title + pills + action buttons -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" style="width:18px;height:18px;color:var(--accent);flex-shrink:0;"></i>
-                <textarea class="header-editable-input" rows="1"
-                    style="background:transparent;border:none;color:inherit;font-size:18px;font-weight:bold;
-                           flex:1;outline:none;resize:none;overflow:hidden;min-width:0;min-height:28px;"
-                    onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
-                ${originPill} ${typePill}
-                ${hasHistory ? `
-                    <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;flex-shrink:0;"
-                            onclick="OL.navigateBack()">
-                        <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
-                    </button>` : ''}
+    
+            <!-- Row 1: Icon + Title + pills + link buttons -->
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;">
+                <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" 
+                   style="width:18px;height:18px;color:var(--accent);flex-shrink:0;margin-top:4px;"></i>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:18px;font-weight:700;color:var(--text-main);margin-bottom:6px;
+                                word-break:break-word;line-height:1.3;">
+                        ${esc(res.name)}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        ${originPill} ${typePill}
+                        ${hasHistory ? `
+                            <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;"
+                                    onclick="OL.navigateBack()">
+                                <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
+                            </button>` : ''}
+                    </div>
+                </div>
                 ${res.externalUrl ? `
                     <a href="${res.externalUrl}" target="_blank"
                        style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
                               border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-soft);
-                              color:var(--text-dim);flex-shrink:0;text-decoration:none;"
-                       title="Open link">
+                              color:var(--text-dim);flex-shrink:0;text-decoration:none;" title="Open link">
                         <i data-lucide="external-link" style="width:12px;height:12px;"></i>
                     </a>` : ''}
                 <button onclick="OL.promptEditLink('${res.id}')"
@@ -6763,9 +6767,9 @@ const dependencyHtml = `
                     <i data-lucide="pencil" style="width:12px;height:12px;"></i>
                 </button>
             </div>
-    
-            <!-- Row 2: Stage + workflow + actions -->
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+        
+            <!-- Row 2: Stage + workflow + archive + pricing + promote -->
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:26px;">
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
                     <select class="modal-input tiny" style="padding:4px 8px;min-width:130px;"
@@ -6787,7 +6791,7 @@ const dependencyHtml = `
                             .join('')}
                     </select>
                 </div>
-                <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;margin:0 2px;"></div>
+                <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;"></div>
                 <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
                                border:1px solid ${res.isArchived ? '#ef4444' : 'var(--panel-border)'};
@@ -6795,13 +6799,14 @@ const dependencyHtml = `
                                color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
                     ${res.isArchived ? '📦 Unarchive' : 'Archive'}
                 </button>
-                <button onclick="if(!state.v2)state.v2={};state.v2.showPricing=!state.v2.showPricing;OL.openResourceModal('${res.id}')"
-                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
-                               border:1px solid ${showPricing ? '#3dd9c5' : 'var(--panel-border)'};
-                               background:${showPricing ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
-                               color:${showPricing ? '#3dd9c5' : 'var(--text-muted)'};">
-                    ${showPricing ? 'Hide pricing' : 'Show pricing'}
-                </button>
+                ${isAdmin && relevantVars?.length > 0 ? `
+                    <button onclick="if(!state.v2)state.v2={};state.v2.showPricing=!state.v2.showPricing;OL.openResourceModal('${res.id}')"
+                            style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                                   border:1px solid ${showPricing ? '#3dd9c5' : 'var(--panel-border)'};
+                                   background:${showPricing ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
+                                   color:${showPricing ? '#3dd9c5' : 'var(--text-muted)'};">
+                        ${showPricing ? 'Hide pricing' : 'Show pricing'}
+                    </button>` : ''}
                 ${canPromote ? `
                     <button style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
                                    background:#fbbf24;color:#000;border:none;display:flex;align-items:center;gap:4px;"
