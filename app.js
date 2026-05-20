@@ -6653,7 +6653,6 @@ const dependencyHtml = `
        bodyContent = `
             ${roundInputHtml}
             ${scopeContextHtml}
-            ${hierarchyHtml}
             ${appMappingHtml}
         
             <div class="card-section" style="margin-top:20px;">
@@ -6738,9 +6737,9 @@ const dependencyHtml = `
             <!-- Row 1: Title + pills + action buttons -->
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
                 <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" style="width:18px;height:18px;color:var(--accent);flex-shrink:0;"></i>
-                <textarea class="header-editable-input"
+                <textarea class="header-editable-input" rows="1"
                     style="background:transparent;border:none;color:inherit;font-size:18px;font-weight:bold;
-                           flex:1;outline:none;resize:none;overflow:hidden;min-width:0;"
+                           flex:1;outline:none;resize:none;overflow:hidden;min-width:0;min-height:28px;"
                     onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
                 ${originPill} ${typePill}
                 ${hasHistory ? `
