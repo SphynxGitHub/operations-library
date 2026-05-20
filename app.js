@@ -6820,7 +6820,8 @@ const dependencyHtml = `
                                border:1px solid ${res.isArchived ? '#ef4444' : 'var(--panel-border)'};
                                background:${res.isArchived ? 'rgba(239,68,68,0.08)' : 'var(--panel-soft)'};
                                color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
-                    ${res.isArchived ? '📦 Unarchive' : 'Archive'}
+                    ${res.isArchived ? ' <i data-lucide="archive-restore" style="width:11px;height:11px;"></i> Unarchive' : 
+                      ' <i data-lucide="archive" style="width:11px;height:11px;"></i>Archive'}
                 </button>
                 <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openResourceModal('${res.id}');"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
@@ -6835,7 +6836,8 @@ const dependencyHtml = `
                                    border:1px solid ${showPricing ? '#3dd9c5' : 'var(--panel-border)'};
                                    background:${showPricing ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
                                    color:${showPricing ? '#3dd9c5' : 'var(--text-muted)'};">
-                        ${showPricing ? 'Hide pricing' : 'Show pricing'}
+                        ${showPricing ?  <i data-lucide="banknote-x" style="width:11px;height:11px;"></i> 'Hide pricing' : 
+                           <i data-lucide="banknote" style="width:11px;height:11px;"></i>'Show pricing'}
                     </button>` : ''}
                 ${canPromote ? `
                     <button style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
