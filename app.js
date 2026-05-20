@@ -6668,11 +6668,10 @@ const dependencyHtml = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
-            <div class= "card-section style="margin-top:20px;">
+            <div class= "card-section" style="margin-top:20px;">
                 <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px;">
                     <i data-lucide="lines" style="width:14px; height:14px;"></i>Hierarchy
                 </label>
-                <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;padding-left:26px;">
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
                     <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
@@ -6812,7 +6811,7 @@ const dependencyHtml = `
         
         
             <!-- Row 2: Stage + workflow + archive + pricing + promote — ALL ONE LINE -->
-            
+            <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
                 <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;"></div>
                 <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
                         style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
