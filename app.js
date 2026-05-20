@@ -6457,6 +6457,7 @@ const dependencyHtml = `
   // Inside OL.openResourceModal...
   const activeTab = state.v2?.activeCommentTab || 'internal';
   const isGuest = !!window.IS_GUEST;
+  const showPricing = state.v2?.showPricing || false;
 
   const sidebarHtml = `
       <aside class="modal-sidebar" style="flex: 1; display: flex; flex-direction: column; background: rgba(0,0,0,0.05); border-left: 1px solid var(--line);">
@@ -6649,158 +6650,228 @@ const dependencyHtml = `
     }
     else {
         // --- MODE D: STANDARD FULL RESOURCE VIEW ---
-       bodyContent =`${roundInputHtml}
-          ${scopeContextHtml}
-          ${hierarchyHtml}
-          ${adminPricingHtml}
-          ${dependencyHtml}
-          ${appMappingHtml}
-          ${containerHtml}
-
-          <div class="card-section" style="margin-top:20px;">
-            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                <i data-lucide="fingerprint" style="width:14px; height:14px;"></i> Description & Access Notes
-            </label>
-            <textarea class="modal-textarea" 
-                      placeholder="Enter login details, account purpose, or specific access instructions..." 
-                      style="min-height: 80px; font-size: 12px; width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 4px; color: white; padding: 10px;"
-                      onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
-        </div>
-          ${OL.renderResourceMiniMaps(res.id)}
-          ${showWorkflowSteps ? `
-            <div class="card-section" style="margin-top:20px; padding-top:20px; border-top: 1px solid var(--line);">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="git-branch" style="width:14px; height:14px;"></i> WORKFLOW STEPS
+       bodyContent = `
+            ${roundInputHtml}
+            ${scopeContextHtml}
+            ${hierarchyHtml}
+            ${appMappingHtml}
+        
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="fingerprint" style="width:14px;height:14px;"></i> Description & Access Notes
                 </label>
-                <div style="display:flex; gap:8px; width: 100%; padding-bottom: 10px;">
-                    <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')" style="display:flex; align-items:center; gap:6px;">
-                        <i data-lucide="mouse-pointer-2" style="width:12px; height:12px;"></i> Visual Editor
-                    </button>
-                    <button class="btn tiny primary" onclick="OL.addNewStepToCard('${res.id}')" style="display:flex; align-items:center; gap:6px;">
-                        <i data-lucide="plus" style="width:12px; height:12px;"></i> Add Step
-                    </button>
-                </div>
-                <div id="sop-step-list">${renderSopStepList(res)}</div>
+                <textarea class="modal-textarea"
+                          placeholder="Enter login details, account purpose, or specific access instructions..."
+                          style="min-height:80px;font-size:12px;width:100%;"
+                          onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
             </div>
-        ` : ''}
-          ${sopLibraryHtml}
-          
-          <div class="card-section" style="margin-top:20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="link-2" style="width:14px; height:14px;"></i> External Link & Source
-                </label>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" class="modal-input tiny" 
-                        style="flex: 1;"
-                        placeholder="https://app.example.com" 
-                        value="${esc(res.externalUrl || '')}" 
-                        onblur="OL.handleResourceSave('${res.id}', 'externalUrl', this.value); OL.openResourceModal('${res.id}')">
-                    
-                    ${res.externalUrl ? `
-                        <button class="btn soft tiny" style="color: black !important; padding: 0 12px; display:flex; align-items:center; gap:6px;" 
-                                onclick="OL.copyToClipboard('${esc(res.externalUrl)}', this)">
-                            <i data-lucide="copy" style="width:12px; height:12px;"></i> Copy
+        
+            ${showWorkflowSteps ? `
+                <div class="card-section" style="margin-top:20px;">
+                    <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="git-branch" style="width:14px;height:14px;"></i> WORKFLOW STEPS
+                    </label>
+                    <div style="display:flex;gap:8px;margin-bottom:10px;">
+                        <button class="btn tiny primary" onclick="OL.goToResourceInMap('${res.id}')" style="display:flex;align-items:center;gap:6px;">
+                            <i data-lucide="mouse-pointer-2" style="width:12px;height:12px;"></i> Visual Editor
                         </button>
-                        <a href="${res.externalUrl}" target="_blank" class="btn primary tiny" 
-                          style="display: flex; align-items: center; gap: 6px; text-decoration: none; background: var(--accent); color: black; font-weight: bold; padding: 0 12px;">
-                            <i data-lucide="external-link" style="width:12px; height:12px;"></i> Open
-                        </a>
-                    ` : ''}
+                        <button class="btn tiny primary" onclick="OL.addNewStepToCard('${res.id}')" style="display:flex;align-items:center;gap:6px;">
+                            <i data-lucide="plus" style="width:12px;height:12px;"></i> Add Step
+                        </button>
+                    </div>
+                    <div id="sop-step-list">${renderSopStepList(res)}</div>
+                </div>
+            ` : ''}
+        
+            ${dependencyHtml}
+            ${sopLibraryHtml}
+            ${containerHtml}
+        
+            <div class="card-section" style="margin-top:20px;">
+                <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="share-2" style="width:14px;height:14px;"></i> Connected Relationships
+                </label>
+                <div style="display:flex;gap:5px;margin:8px 0;overflow-x:auto;padding-bottom:5px;">
+                    ${types.map(t => `
+                        <span onclick="state.ui.relationshipFilter='${t}';OL.openResourceModal('${targetId}')"
+                              style="font-size:9px;padding:2px 8px;border-radius:100px;cursor:pointer;white-space:nowrap;
+                                     background:${activeFilter===t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
+                                     color:${activeFilter===t ? '#000' : '#94a3b8'};
+                                     border:1px solid rgba(255,255,255,0.1);">
+                            ${t.toUpperCase()}
+                        </span>
+                    `).join('')}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
+                        const navAction = window.location.hash.includes('scoping-sheet')
+                            ? `OL.openResourceModal('${conn.id}')`
+                            : `OL.openInspector('${conn.id}')`;
+                        return `
+                            <div class="pill accent is-clickable"
+                                 style="display:flex;align-items:center;justify-content:space-between;
+                                        background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
+                                        cursor:pointer;padding:8px 12px;border-radius:8px;"
+                                 onmousedown="event.preventDefault();event.stopPropagation();if(OL.closeModal)OL.closeModal();${navAction}">
+                                <div style="display:flex;align-items:center;gap:8px;pointer-events:none;">
+                                    <span style="font-size:12px;">${OL.getRegistryIcon(conn.type)}</span>
+                                    <div>
+                                        <div style="font-size:11px;color:#eee;">${esc(conn.name)}</div>
+                                        <div style="font-size:8px;color:var(--accent);">${conn.type.toUpperCase()}</div>
+                                    </div>
+                                </div>
+                                <span style="font-size:9px;opacity:0.5;pointer-events:none;">Inspect →</span>
+                            </div>
+                        `;
+                    }).join('') : `<div class="tiny muted" style="padding:10px;text-align:center;">No connections found.</div>`}
                 </div>
             </div>
-          <div class="card-section" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top:15px;">
-            <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                <i data-lucide="share-2" style="width:14px; height:14px;"></i> Connected Relationships
-            </label>
-              
-              <div style="display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; padding-bottom: 5px;">
-                  ${types.map(t => `
-                      <span onclick="state.ui.relationshipFilter = '${t}'; OL.openResourceModal('${targetId}')" 
-                            style="font-size: 9px; padding: 2px 8px; border-radius: 100px; cursor: pointer; 
-                            background: ${activeFilter === t ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
-                            color: ${activeFilter === t ? '#000' : '#94a3b8'}; border: 1px solid rgba(255,255,255,0.1);">
-                          ${t.toUpperCase()}
-                      </span>
-                  `).join('')}
-              </div>
-          
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                  ${filteredConnections.length > 0 ? filteredConnections.map(conn => {
-                      const isScopingEnv = window.location.hash.includes('scoping-sheet');
-                      const navAction = isScopingEnv 
-                          ? `OL.openResourceModal('${conn.id}')` 
-                          : `OL.openInspector('${conn.id}')`;
-
-                      return ` 
-                          <div class="pill accent is-clickable" 
-                              style="display:flex; align-items:center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); cursor: pointer !important; position: relative; z-index: 9999;"
-                              onmousedown="event.preventDefault(); event.stopPropagation(); if(window.OL.closeModal) OL.closeModal(); ${navAction}">
-
-                              <div style="display: flex; align-items: center; gap: 8px; pointer-events: none;">
-                                  <span style="font-size: 12px;">${OL.getRegistryIcon(conn.type)}</span>
-                                  <div style="display:flex; flex-direction:column;">
-                                      <span style="font-size: 11px; color: #eee;">${esc(conn.name)}</span>
-                                      <span style="font-size: 8px; color: var(--accent); opacity: 0.8;">${conn.type.toUpperCase()}</span>
-                                  </div>
-                              </div>
-                              <span style="font-size: 9px; opacity: 0.5; pointer-events: none;">
-                                  ${isScopingEnv ? 'Open Modal ↗' : 'Inspect ➔'}
-                              </span>
-                          </div>
-                      `;
-                  }).join('') : `
-                      <div class="tiny muted" style="padding: 10px; text-align: center;">
-                          ${activeFilter === 'All' ? 'No connections found.' : `No ${activeFilter} links found.`}
-                      </div>
-                  `}
-              </div>
-          </div>
-
-          ${typeSpecificHtml}`
+        
+            ${typeSpecificHtml}
+        `;
       }
       // --- 🧱 FINAL RENDER ---
+    
     const html = `
-        <div class="modal-head" style="padding: 20px; border-bottom: 1px solid var(--line); background: var(--panel-dark);">
-            <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
-                <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
-                    <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" style="width:24px; height:24px; color:var(--accent);"></i>
-                    <div style="flex-grow: 1;">
-                        <textarea class="header-editable-input" 
-                            style="background: transparent; border: none; color: inherit; font-size: 22px; font-weight: bold; width: 100%; outline: none; resize: none; overflow: hidden;"
-                            onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
-                    </div>
+        <div class="modal-head" style="padding:14px 20px;border-bottom:0.5px solid var(--line);background:var(--panel-dark);">
+            
+            <!-- Row 1: Title + pills + action buttons -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <i data-lucide="${isCompliance ? 'clipboard-check' : 'settings'}" style="width:18px;height:18px;color:var(--accent);flex-shrink:0;"></i>
+                <textarea class="header-editable-input"
+                    style="background:transparent;border:none;color:inherit;font-size:18px;font-weight:bold;
+                           flex:1;outline:none;resize:none;overflow:hidden;min-width:0;"
+                    onblur="OL.handleResourceSave('${res.id}', 'name', this.value)">${esc(res.name)}</textarea>
+                ${originPill} ${typePill}
+                ${hasHistory ? `
+                    <button class="btn tiny soft" style="display:flex;align-items:center;gap:4px;flex-shrink:0;"
+                            onclick="OL.navigateBack()">
+                        <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back
+                    </button>` : ''}
+                ${res.externalUrl ? `
+                    <a href="${res.externalUrl}" target="_blank"
+                       style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+                              border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-soft);
+                              color:var(--text-dim);flex-shrink:0;text-decoration:none;"
+                       title="Open link">
+                        <i data-lucide="external-link" style="width:12px;height:12px;"></i>
+                    </a>` : ''}
+                <button onclick="OL.promptEditLink('${res.id}')"
+                        style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+                               border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-soft);
+                               color:var(--text-dim);cursor:pointer;flex-shrink:0;"
+                        title="${res.externalUrl ? 'Edit link' : 'Add link'}">
+                    <i data-lucide="pencil" style="width:12px;height:12px;"></i>
+                </button>
+            </div>
+    
+            <!-- Row 2: Stage + workflow + actions -->
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
+                    <select class="modal-input tiny" style="padding:4px 8px;min-width:130px;"
+                            onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
+                        <option value="">— Unassigned —</option>
+                        ${(OL.getCurrentProjectData().stages || []).map(s => `
+                            <option value="${esc(s.id)}" ${res.stageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>
+                        `).join('')}
+                    </select>
                 </div>
-                <div style="display: flex; gap: 8px; align-items: center; padding-left: 36px;">
-                    ${originPill} ${typePill}
-                    ${hasHistory ? `
-                        <button class="btn tiny soft" style="display:flex; align-items:center; gap:4px; color:black!important; background:#fff!important;" onclick="OL.navigateBack()">
-                            <i data-lucide="arrow-left" style="width:12px; height:12px;"></i> Back
-                        </button>` : ''}
-                    ${canPromote ? `
-                        <button class="btn tiny primary" style="display:flex; align-items:center; gap:4px; background:#fbbf24!important; color:black!important;" onclick="OL.pushToMaster('${res.id}')">
-                            <i data-lucide="star" style="width:12px; height:12px;"></i> Promote
-                        </button>` : ''}
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
+                    <select class="modal-input tiny" style="padding:4px 8px;min-width:130px;"
+                            onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
+                        <option value="">-- Standalone --</option>
+                        ${(OL.getCurrentProjectData().resources || [])
+                            .filter(r => ['Workflow','Zap'].includes(r.type) && r.id !== res.id)
+                            .map(r => `<option value="${esc(r.id)}" ${res.parentWorkflowId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`)
+                            .join('')}
+                    </select>
                 </div>
+                <div style="width:0.5px;height:28px;background:var(--panel-border);flex-shrink:0;margin:0 2px;"></div>
+                <button onclick="OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived})"
+                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                               border:1px solid ${res.isArchived ? '#ef4444' : 'var(--panel-border)'};
+                               background:${res.isArchived ? 'rgba(239,68,68,0.08)' : 'var(--panel-soft)'};
+                               color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
+                    ${res.isArchived ? '📦 Unarchive' : 'Archive'}
+                </button>
+                <button onclick="if(!state.v2)state.v2={};state.v2.showPricing=!state.v2.showPricing;OL.openResourceModal('${res.id}')"
+                        style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                               border:1px solid ${showPricing ? '#3dd9c5' : 'var(--panel-border)'};
+                               background:${showPricing ? 'rgba(61,217,197,0.1)' : 'var(--panel-soft)'};
+                               color:${showPricing ? '#3dd9c5' : 'var(--text-muted)'};">
+                    ${showPricing ? 'Hide pricing' : 'Show pricing'}
+                </button>
+                ${canPromote ? `
+                    <button style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
+                                   background:#fbbf24;color:#000;border:none;display:flex;align-items:center;gap:4px;"
+                            onclick="OL.pushToMaster('${res.id}')">
+                        <i data-lucide="star" style="width:11px;height:11px;"></i> Promote
+                    </button>` : ''}
             </div>
         </div>
-
-        <div class="modal-layout-wrapper" style="display: flex; height: 75vh; overflow: hidden;">
-            <div class="modal-body" style="flex: 1.5; overflow-y: auto; padding: 20px;">
+    
+        <!-- Pricing drawer -->
+        ${showPricing && adminPricingHtml ? `
+            <div style="border-bottom:1px solid var(--panel-border);background:var(--panel-dark);padding:12px 20px;">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+                            color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:5px;">
+                    <i data-lucide="settings" style="width:12px;height:12px;"></i> Pricing config
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;">
+                    ${pricingRows}
+                </div>
+            </div>
+        ` : ''}
+    
+        <div style="display:flex;height:72vh;overflow:hidden;">
+            <!-- Main body -->
+            <div style="flex:1.6;overflow-y:auto;padding:16px 20px;">
                 ${bodyContent}
             </div>
-
-            <aside class="modal-sidebar" style="flex: 1; display: flex; flex-direction: column; background: rgba(0,0,0,0.05); border-left: 1px solid var(--line);">
-                <div style="display: flex; border-bottom: 1px solid var(--line);">
-                    ${!isGuest ? `<div class="comment-tab ${activeTab === 'internal' ? 'active' : ''}" onclick="state.v2.activeCommentTab='internal'; OL.openResourceModal('${res.id}')" style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'internal' ? 'color:var(--accent); border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">INTERNAL NOTES</div>` : ''}
-                    <div class="comment-tab ${activeTab === 'client' ? 'active' : ''}" onclick="state.v2.activeCommentTab='client'; OL.openResourceModal('${res.id}')" style="flex:1; padding: 12px; text-align:center; font-size:10px; cursor:pointer; font-weight:bold; ${activeTab === 'client' ? 'color:#10b981; border-bottom:2px solid #10b981;' : 'opacity:0.5'}">CLIENT FEEDBACK</div>
+    
+            <!-- Sidebar -->
+            <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0;">
+                <div style="display:flex;border-bottom:1px solid var(--line);">
+                    ${!isGuest ? `
+                        <div onclick="state.v2.activeCommentTab='internal';OL.openResourceModal('${res.id}')"
+                             style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                    cursor:pointer;${activeTab==='internal' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                            INTERNAL NOTES
+                        </div>` : ''}
+                    <div onclick="state.v2.activeCommentTab='client';OL.openResourceModal('${res.id}')"
+                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                cursor:pointer;${activeTab==='client' ? 'color:#10b981;border-bottom:2px solid #10b981;' : 'opacity:0.5'}">
+                        CLIENT FEEDBACK
+                    </div>
+                    <div onclick="state.v2.activeCommentTab='history';OL.openResourceModal('${res.id}')"
+                         style="flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:700;
+                                cursor:pointer;${activeTab==='history' ? 'color:var(--accent);border-bottom:2px solid var(--accent);' : 'opacity:0.5'}">
+                        EDIT HISTORY
+                    </div>
                 </div>
-                <div id="comments-list-${res.id}" style="flex: 1; overflow-y: auto; padding: 15px;">
-                    ${renderCommentsList(res, activeTab)}
+    
+                <div style="flex:1;overflow-y:auto;padding:14px;">
+                    ${activeTab === 'history' ? OL.renderEditHistory(res) : `
+                        <div id="comments-list-${res.id}">
+                            ${renderCommentsList(res, activeTab)}
+                        </div>
+                    `}
                 </div>
-                <div class="comment-input-zone" style="padding: 15px; border-top: 1px solid var(--line);">
-                    <textarea id="new-comment-input-${res.id}" class="modal-textarea" placeholder="Type a message..." style="min-height: 60px; margin-bottom: 8px; font-size: 11px;"></textarea>
-                    <button class="btn tiny full-width" style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'};" onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">Post</button>
-                </div>
+    
+                ${activeTab !== 'history' ? `
+                    <div style="padding:12px;border-top:1px solid var(--line);">
+                        <textarea id="new-comment-input-${res.id}" class="modal-textarea"
+                                  placeholder="Type a ${activeTab === 'client' ? 'message to client' : 'private note'}..."
+                                  style="min-height:60px;margin-bottom:8px;font-size:11px;"></textarea>
+                        <button class="btn tiny full-width"
+                                style="background:${activeTab === 'client' ? '#10b981' : 'var(--accent)'};"
+                                onclick="OL.addResourceComment('${res.id}', ${activeTab === 'client'})">
+                            Post to ${activeTab === 'client' ? 'Client Thread' : 'Internal Stack'}
+                        </button>
+                    </div>
+                ` : ''}
             </aside>
         </div>
     `;
@@ -6814,6 +6885,15 @@ const dependencyHtml = `
     if (window.lucide) {
         window.lucide.createIcons();
     }
+};
+
+OL.promptEditLink = function(resId) {
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
+    const url = prompt('External link URL:', res.externalUrl || '');
+    if (url === null) return;
+    OL.handleResourceSave(resId, 'externalUrl', url.trim());
 };
 
 OL.renderHierarchyTree = function(resId, nodes, path = "") {
@@ -7352,26 +7432,41 @@ OL.copyToClipboard = function(text, btn) {
     });
 };
 
+OL.logResourceEdit = function(resId, field, oldVal, newVal) {
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
+    if (!res.editHistory) res.editHistory = [];
+    const user = state.adminMode ? (state.master?.adminName || 'Admin') : 'You';
+    res.editHistory.unshift({
+        id: 'eh-' + Date.now(),
+        user,
+        field,
+        oldVal: oldVal ?? null,
+        newVal: newVal ?? null,
+        ts: Date.now()
+    });
+    // Keep last 50 entries only
+    if (res.editHistory.length > 50) res.editHistory = res.editHistory.slice(0, 50);
+};
+
 OL.handleResourceSave = function(id, field, value) {
     const data = OL.getCurrentProjectData();
     const res = data.resources.find(r => String(r.id) === String(id));
-    
     if (res) {
+        const oldVal = res[field];
+        OL.logResourceEdit(id, field, oldVal, value);
         res[field] = value;
-        
         OL.persist().then(() => {
             const modalOpen = document.getElementById('active-modal-box');
             const inspectorOpen = document.getElementById('v2-inspector-panel')?.classList.contains('open');
             const isVisualizer = window.location.hash.includes('visualizer');
             const isResources = window.location.hash.includes('resources');
-
             if (modalOpen) {
                 OL.openResourceModal(id);
             } else if (inspectorOpen && isVisualizer) {
                 OL._fvOpenStepsList(id);
-                if (field === 'stageId') {
-                    setTimeout(() => OL.renderVisualizer(), 100);
-                }
+                if (field === 'stageId') setTimeout(() => OL.renderVisualizer(), 100);
             } else if (inspectorOpen && !isVisualizer) {
                 OL.openInspector(id, null, 'cards');
             } else if (isResources) {
@@ -7379,9 +7474,72 @@ OL.handleResourceSave = function(id, field, value) {
             } else if (isVisualizer) {
                 OL.renderVisualizer();
             }
-            // Otherwise do nothing — let the page stay as-is
         });
     }
+};
+
+OL.renderEditHistory = function(res) {
+    const entries = res.editHistory || [];
+    if (!entries.length) return `<div style="font-size:12px;color:var(--color-text-secondary);text-align:center;padding:30px 0;">No changes recorded yet.</div>`;
+
+    const timeAgo = (ts) => {
+        const diff = Date.now() - ts;
+        const m = Math.floor(diff / 60000);
+        const h = Math.floor(diff / 3600000);
+        const d = Math.floor(diff / 86400000);
+        if (m < 1) return 'just now';
+        if (m < 60) return `${m}m ago`;
+        if (h < 24) return `${h}h ago`;
+        if (d < 7) return `${d}d ago`;
+        return new Date(ts).toLocaleDateString([], {month:'short', day:'numeric'});
+    };
+
+    const fieldLabel = (f) => ({
+        name: 'Name', type: 'Type', appId: 'App', appName: 'App',
+        stageId: 'Stage', description: 'Description', externalUrl: 'External link',
+        isArchived: 'Archived', dueDate: 'Due date'
+    }[f] || f);
+
+    return entries.map(e => {
+        const initials = e.user.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+        const isYou = e.user === 'You' || e.user === 'Admin';
+        const avatarBg = isYou ? '#E1F5EE' : '#E6F1FB';
+        const avatarColor = isYou ? '#0F6E56' : '#185FA5';
+
+        let changeHtml = '';
+        if (e.field === 'isArchived') {
+            changeHtml = e.newVal 
+                ? `Resource <strong>archived</strong>` 
+                : `Resource <strong>unarchived</strong>`;
+        } else if (e.oldVal === null || e.oldVal === undefined || e.oldVal === '') {
+            changeHtml = `<span style="color:var(--color-text-secondary)">${fieldLabel(e.field)}</span> set to <span style="color:#0F6E56;font-weight:500">${esc(String(e.newVal || ''))}</span>`;
+        } else if (e.newVal === null || e.newVal === undefined || e.newVal === '') {
+            changeHtml = `<span style="color:var(--color-text-secondary)">${fieldLabel(e.field)}</span> cleared`;
+        } else {
+            changeHtml = `
+                <span style="color:var(--color-text-secondary)">${fieldLabel(e.field)}</span> changed from
+                <span style="text-decoration:line-through;color:var(--color-text-secondary)">${esc(String(e.oldVal))}</span> to
+                <span style="color:#0F6E56;font-weight:500">${esc(String(e.newVal))}</span>
+            `;
+        }
+
+        return `
+            <div style="padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;gap:10px;">
+                <div style="width:24px;height:24px;border-radius:50%;background:${avatarBg};color:${avatarColor};
+                            font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;
+                            flex-shrink:0;margin-top:1px;">
+                    ${initials}
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:11px;font-weight:500;margin-bottom:3px;">
+                        ${esc(e.user)} 
+                        <span style="font-size:10px;color:var(--color-text-secondary);font-weight:400;">${timeAgo(e.ts)}</span>
+                    </div>
+                    <div style="font-size:11px;line-height:1.5;">${changeHtml}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
 };
 
 // 4. RESOURCE CARD & FOLDER RENDERERS
