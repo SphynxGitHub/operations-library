@@ -12471,10 +12471,15 @@ OL._fvOpenStepsList = function(resId) {
         const appBadge = s.appName
           ? `<span class="fvi-badge fvi-badge-blue">${esc(s.appName)}</span>`
           : '';
-        const logicIcon = (s.logic?.out||[]).some(l=>l.targetId)
-          ? `<span class="fvi-badge" style="background:rgba(61,217,197,0.1);
-                                            color:#3dd9c5;">λ</span>`
-          : '';
+        const stepOut = (s.logic?.out || []).filter(l => l.targetId);
+        const icons = [];
+        if (stepOut.some(l => l.type === 'loop'))      icons.push('↺');
+        if (stepOut.some(l => l.type === 'delay'))     icons.push('⏱');
+        if (stepOut.some(l => l.type === 'condition') || stepOut.length > 1) icons.push('◆');
+        else if (stepOut.length === 1 && !icons.length) icons.push('→');
+        const logicIcon = icons.map(ic =>
+            `<span class="fvi-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">${ic}</span>`
+        ).join('');
         const hasBadges = s.appName || (s.assignees||[]).length > 0;
 
         return `
@@ -12668,6 +12673,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     return !tRes?.isArchived;
 });
   const hasSubSteps   = outRules.length > 0;
+  const hasCollapsible = outRules.some(r => r.type === 'condition');
   const collapseId    = `fv-substeps-${step.id}`;
 
   const resBadgeBg = tc.color + '18';
@@ -12697,18 +12703,51 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const isLoop  = rule.type === 'loop';
     const isDelay = rule.type === 'delay';
     const isCond  = rule.type === 'condition';
-    const tagLabel = isLoop  ? `↺ Loop${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}`
-                   : isDelay ? `⏱ Delay: ${rule.delayValue||'?'} ${rule.delayUnit||'days'}`
-                   : isCond  ? `λ If: ${esc(rule.rule||'...')}`
-                   : null;
 
-    return `
-      <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);margin-left:16px;padding-left:20px;">
-        ${tagLabel ? `<div class="fv-branch-label" style="color:#3dd9c5;"><span>${tagLabel}</span></div>` : ''}
-        ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
-      </div>
-    `;
-  }).join('');
+    // Build prefix icons for loop/delay
+    const prefixIcons = [
+        isLoop  ? `<span style="font-size:9px;font-weight:700;color:#f5b800;
+                                padding:1px 5px;border-radius:99px;
+                                background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.3);">
+                        ↺${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}
+                   </span>` : '',
+        isDelay ? `<span style="font-size:9px;font-weight:700;color:#a78bfa;
+                                padding:1px 5px;border-radius:99px;
+                                background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);">
+                        ⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}
+                   </span>` : '',
+    ].filter(Boolean).join('');
+
+    if (isCond) {
+        // Conditional → full nested substep with branch label
+        return `
+            <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);
+                                               margin-left:16px;padding-left:20px;">
+                <div class="fv-branch-label" style="color:#3dd9c5;display:flex;align-items:center;gap:5px;">
+                    <span>◆ If: ${esc(rule.rule||'...')}</span>
+                </div>
+                ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
+            </div>
+        `;
+    } else {
+        // Next/Loop/Delay → flat row, no nesting
+        return `
+            <div style="display:flex;align-items:center;gap:6px;
+                        padding:4px 12px 4px ${16 + (depth * 12)}px;
+                        margin-bottom:2px;">
+                ${prefixIcons || `<span style="font-size:9px;color:#d1d5db;">→</span>`}
+                <span style="font-size:11px;color:#6b7280;font-style:italic;flex:1;
+                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    ${esc(tStep.name || 'Next Step')}
+                </span>
+                <span style="font-size:9px;padding:1px 5px;border-radius:99px;
+                             background:rgba(0,0,0,0.04);color:#9ca3af;flex-shrink:0;">
+                    ${esc(tRes.name.substring(0,14))}
+                </span>
+            </div>
+        `;
+    }
+}).join('');
 
   return `
     <div style="margin-bottom:${hasSubSteps ? '2px' : '4px'};">
@@ -12732,21 +12771,21 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
           <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}">${esc(step.name || 'Unnamed Step')}</span>
           ${tags}
           ${resBadge}
-          ${hasSubSteps ? `
+          ${hasCollapsible ? `
             <span class="fv-substep-toggle"
-                  onclick="event.stopPropagation();
-                           const el=document.getElementById('${collapseId}');
-                           const collapsed=el.style.display==='none';
-                           el.style.display=collapsed?'block':'none';
-                           this.textContent=collapsed?'−':'+';
-                           this.title=collapsed?'Collapse':'Expand';"
-                  title="Collapse"
-                  style="margin-left:auto;flex-shrink:0;width:18px;height:18px;
-                         border-radius:4px;background:#f5f6f8;border:1px solid #e5e7eb;
-                         display:flex;align-items:center;justify-content:center;
-                         font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;
-                         line-height:1;">−</span>
-          ` : ''}
+                      onclick="event.stopPropagation();
+                               const el=document.getElementById('${collapseId}');
+                               const collapsed=el.style.display==='none';
+                               el.style.display=collapsed?'block':'none';
+                               this.textContent=collapsed?'−':'+';
+                               this.title=collapsed?'Collapse':'Expand';"
+                      title="Collapse"
+                      style="margin-left:auto;flex-shrink:0;width:18px;height:18px;
+                             border-radius:4px;background:#f5f6f8;border:1px solid #e5e7eb;
+                             display:flex;align-items:center;justify-content:center;
+                             font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;
+                             line-height:1;">−</span>
+            ` : ''}
         </div>
       </div>
       ${hasSubSteps ? `<div id="${collapseId}">${subStepsHtml}</div>` : ''}
