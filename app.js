@@ -14872,7 +14872,10 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
         const allOptions = this.getAllStepOptions();
 
         content.innerHTML = `
-            <div class="breadcrumb" onclick="OL._fvOpenStepsList('${resId}')">« Back to Resource</div>
+            <div class="breadcrumb" onclick="OL._fvOpenStepsList('${resId}')"
+                 style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                <i data-lucide="arrow-left" style="width:10px;height:10px;"></i> Back to Resource
+            </div>
             
             <div class="inspector-header">
                 <div class="section-label">EDIT STEP ${currentIdx + 1}</div>
@@ -14897,21 +14900,30 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
 
             <div class="inspector-body">
                 <div class="inspector-section">
-                    <div class="section-label">📥 INPUT CONDITIONS (From where?)</div>
+                    <div class="section-label">
+                        <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
+                    </div>
                     ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📝 INTERNAL NOTES</label>
+                    <label class="section-label">
+                        <i data-lucide="notebook-pen" style="width:11px;height:11px;"></i> INTERNAL NOTES
+                    </label>
                     <textarea class="modal-textarea" style="min-height:60px;"
                               onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">🎯 RELATIONAL TARGET (MILESTONE)</label>
+                    <label class="section-label">
+                        <i data-lucide="target" style="width:11px;height:11px;"></i> RELATIONAL TARGET (MILESTONE)
+                    </label>
                     ${step.targetResourceId ? `
                         <div class="pill accent" style="display:flex; justify-content:space-between; align-items:center; background:rgba(var(--accent-rgb), 0.1); border:1px solid var(--accent);">
-                            <span>🎯 ${esc(step.targetResourceName)}</span>
+                            <span style="display:flex;align-items:center;gap:4px;">
+                                <i data-lucide="target" style="width:10px;height:10px;"></i>
+                                ${esc(step.targetResourceName)}
+                            </span>
                             <b class="is-clickable" style="opacity:0.5;" onclick="OL.setStepTargetResource('${resId}', '${step.id}', null, null)">×</b>
                         </div>
                     ` : `
@@ -14925,13 +14937,21 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">👤 ASSIGNEES (WHO?)</label>
+                    <label class="section-label">
+                        <i data-lucide="users" style="width:11px;height:11px;"></i> ASSIGNEES (WHO?)
+                    </label>
                     <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
                         ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
-                            <div class="pill accent" style="display:flex; align-items:center; gap:6px; background:rgba(var(--accent-rgb), 0.1); border: 1px solid var(--accent);">
-                                <span style="font-size:10px;">${a.type === 'person' ? '👤' : a.type === 'role' ? '👥' : '📱'} ${esc(a.name)}</span>
-                                <b class="is-clickable" style="opacity:0.5;" onclick="OL.removeAssignee('${resId}', '${step.id}', ${idx})">×</b>
-                            </div>
+                            <span style="display:inline-flex;align-items:center;gap:5px;
+                                         padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
+                                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                         border:1px solid rgba(61,217,197,0.3);">
+                                <i data-lucide="${a.type==='person' ? 'user' : a.type==='role' ? 'users' : 'smartphone'}" 
+                                   style="width:10px;height:10px;"></i>
+                                ${esc(a.name)}
+                                <span onclick="OL.removeAssignee('${resId}','${step.id}',${idx})"
+                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;">×</span>
+                            </span>
                         `).join('') : '<div class="tiny muted italic" style="padding: 5px;">Unassigned</div>'}
                     </div>
                     <div class="search-map-container">
@@ -14943,17 +14963,20 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📱 PRIMARY APPLICATION (TOOL)</label>
+                    <label class="section-label">
+                        <i data-lucide="smartphone" style="width:11px;height:11px;"></i> PRIMARY APPLICATION (TOOL)
+                    </label>
                     ${step.appId ? `
                         <div class="pill-display" style="margin-bottom:8px;">
-                            <div class="pill primary" 
-                                style="display:flex; justify-content:space-between; align-items:center; background: rgba(var(--accent-rgb), 0.1); 
-                                border: 1px solid var(--accent); padding: 5px 8px; border-radius: 6px;"
-                                onclick="OL.openAppModal('${step.appId}')">
-                                <span style="font-size:10px;">📱 ${esc(step.appName)}</span>
-                                <b class="pill-remove-x" style="opacity:0.5; margin-left: 8px;" 
-                                  onclick="event.stopPropagation(); OL.removeAppFromStep('${resId}', '${step.id}')">×</b>
-                            </div>
+                            <span style="display:inline-flex;align-items:center;gap:5px;
+                                         padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
+                                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                         border:1px solid rgba(61,217,197,0.3);">
+                                <i data-lucide="smartphone" style="width:10px;height:10px;"></i>
+                                ${esc(step.appName)}
+                                <span onclick="OL.removeAppFromStep('${resId}','${step.id}')"
+                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;">×</span>
+                            </span>
                         </div>
                     ` : `
                         <div class="search-map-container">
@@ -14966,7 +14989,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">🔗 ATTACHED GUIDES & ASSETS</label>
+                    <label class="section-label">
+                        <i data-lucide="link-2" style="width:11px;height:11px;"></i> ATTACHED GUIDES & ASSETS
+                    </label>
                     <div id="step-resources-list-${step.id}" style="margin-bottom:8px;">
                         ${renderStepResources(resId, step)}
                     </div>
@@ -14979,7 +15004,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📅 DYNAMIC SCHEDULING</label>
+                    <label class="section-label">
+                        <i data-lucide="calendar-clock" style="width:11px;height:11px;"></i> DYNAMIC SCHEDULING
+                    </label>
                     <div style="display:flex; gap:8px; align-items:center;">
                         <input type="number" class="modal-input tiny" style="width:50px;" 
                                value="${step.timingValue || 0}" 
@@ -14999,7 +15026,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                  <div class="section-label">📤 NEXT STEP</div>
+                  <div class="section-label">
+                    <i data-lucide="arrow-up-from-line" style="width:11px;height:11px;"></i> NEXT STEP
+                </div>
                 
                   ${(step.logic?.out || []).map((l, i) => {
                     const targetId = l.targetId || '';
@@ -15016,17 +15045,28 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                       <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;
                                   padding:10px 12px;margin-bottom:8px;">
                 
-                        <div style="display:flex;gap:4px;margin-bottom:8px;">
-                          ${['next','condition','loop','delay'].map(t => `
-                            <span onclick="OL._fvSetLogicType('${resId}','${step.id}',${i},'${t}')"
-                                  style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
-                                         cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
-                                         background:${(l.type||'next')===t ? '#3dd9c5' : '#f5f6f8'};
-                                         color:${(l.type||'next')===t ? '#fff' : '#9ca3af'};
-                                         border:1px solid ${(l.type||'next')===t ? '#3dd9c5' : '#e5e7eb'};">
-                              ${t==='next'?'→ Next':t==='condition'?'λ If':t==='loop'?'↺ Loop':'⏱ Delay'}
-                            </span>
-                          `).join('')}
+                        <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
+                          ${[
+                            { key:'next',      label:'Next',  icon:'arrow-right' },
+                            { key:'condition', label:'If',    icon:'git-branch'  },
+                            { key:'loop',      label:'Loop',  icon:'repeat'      },
+                            { key:'delay',     label:'Delay', icon:'clock'       },
+                          ].map(t => {
+                            const types = (l.types || [l.type || 'next']);
+                            const isOn  = types.includes(t.key);
+                            return `
+                              <span onclick="event.stopPropagation(); OL._fvToggleLogicType('${resId}','${step.id}',${i},'${t.key}')"
+                                    style="display:inline-flex;align-items:center;gap:4px;
+                                           font-size:9px;font-weight:700;padding:3px 9px;border-radius:99px;
+                                           cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
+                                           background:${isOn ? '#3dd9c5' : '#f5f6f8'};
+                                           color:${isOn ? '#fff' : '#9ca3af'};
+                                           border:1px solid ${isOn ? '#3dd9c5' : '#e5e7eb'};">
+                                <i data-lucide="${t.icon}" style="width:10px;height:10px;pointer-events:none;"></i>
+                                ${t.label}
+                              </span>
+                            `;
+                          }).join('')}
                         </div>
                 
                         <div style="position:relative;margin-bottom:${l.type==='condition'||l.type==='delay' ? '8px' : '0'};">
@@ -15090,7 +15130,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">🏷️ DATA REQUIREMENTS (INPUT/OUTPUT)</label>
+                    <label class="section-label">
+                        <i data-lucide="tag" style="width:11px;height:11px;"></i> DATA REQUIREMENTS (INPUT/OUTPUT)
+                    </label>
                     <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
                         ${step.datapoints && step.datapoints.length > 0 
                             ? OL.renderDataTagPills(resId, step.id, step.datapoints) 
@@ -15146,7 +15188,9 @@ if (mode === 'cards' && resId) {
         <div class="inspector-body">
             <div class="inspector-section no-border">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <label class="section-label" style="margin:0;">📱 PRIMARY APPLICATION</label>
+                    <label class="section-label" style="margin:0;">
+                        <i data-lucide="smartphone" style="width:11px;height:11px;"></i> PRIMARY APPLICATION
+                    </label>
                     ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px; letter-spacing:0.5px;">CUSTOM OVERRIDE</span>' : ''}
                 </div>
 
@@ -15186,19 +15230,28 @@ if (mode === 'cards' && resId) {
             ` : ''}
 
                 <div class="inspector-section no-border">
-                    <label class="section-label">🔗 EXTERNAL LINK (${isZap ? 'ZAPIER' : 'DASHBOARD'})</label>
+                    <label class="section-label">
+                        <i data-lucide="link-2" style="width:11px;height:11px;"></i> EXTERNAL LINK
+                    </label>
                     <input type="url" class="modal-input tiny" placeholder="https://..." value="${esc(res.externalLink || '')}" onblur="OL.handleResourceSave('${res.id}', 'externalLink', this.value)">
                 </div>
 
                 ${!isZap ? `
                 <div class="inspector-section no-border">
-                    <label class="section-label">👤 RESOURCE ASSIGNEE(S)</label>
+                    <label class="section-label">
+                        <i data-lucide="users" style="width:11px;height:11px;"></i> RESOURCE ASSIGNEE(S)
+                    </label>
                     <div id="res-assignee-pills-${res.id}" class="pill-display assignee-row">
                         ${(res.assignees || []).length > 0 ? res.assignees.map((a, idx) => `
-                            <div class="pill accent">
-                                <span class="pill-text">${a.type === 'person' ? '👤' : '👥'} ${esc(a.name)}</span>
-                                <b class="is-clickable pill-remove" onclick="OL.removeResourceAssignee('${res.id}', ${idx})">×</b>
-                            </div>
+                            <span style="display:inline-flex;align-items:center;gap:5px;
+                                         padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
+                                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                         border:1px solid rgba(61,217,197,0.3);">
+                                <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px;height:10px;"></i>
+                                ${esc(a.name)}
+                                <span onclick="OL.removeResourceAssignee('${res.id}', ${idx})"
+                                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;">×</span>
+                            </span>
                         `).join('') : '<div class="tiny muted italic">Unassigned</div>'}
                     </div>
                     <div class="search-map-container">
@@ -15209,12 +15262,16 @@ if (mode === 'cards' && resId) {
                 ` : ''}
 
                 <div class="inspector-section no-border">
-                    <label class="section-label">📅 ${isZap ? 'GO-LIVE DATE' : 'DUE DATE'}</label>
+                    <label class="section-label">
+                        <i data-lucide="calendar" style="width:11px;height:11px;"></i> DUE DATE
+                    </label>
                     <input type="date" class="modal-input tiny" value="${res.dueDate || ''}" onchange="OL.handleResourceSave('${res.id}', 'dueDate', this.value)">
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📍 STAGE</label>
+                    <label class="section-label">
+                        <i data-lucide="milestone" style="width:11px;height:11px;"></i> STAGE
+                    </label>
                     <select class="modal-input tiny"
                             onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
                         <option value="">— Unassigned —</option>
@@ -15228,7 +15285,9 @@ if (mode === 'cards' && resId) {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📂 CLASSIFICATION</label>
+                    <label class="section-label">
+                        <i data-lucide="folder" style="width:11px;height:11px;"></i> CLASSIFICATION
+                    </label>
                     <div style="display:flex;gap:8px;align-items:center;">
                         <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'type', this.value); OL.openInspector('${res.id}', null, 'cards');">
                             <option value="General" ${res.type === 'General' ? 'selected' : ''}>General</option>
@@ -15245,7 +15304,9 @@ if (mode === 'cards' && resId) {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">🌐 VISIBILITY</label>
+                    <label class="section-label">
+                        <i data-lucide="globe" style="width:11px;height:11px;"></i> VISIBILITY
+                    </label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button onclick="OL.handleResourceSave('${res.id}', 'isGlobal', ${!res.isGlobal}); OL.openInspector('${res.id}', null, 'cards');"
                                 style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;
@@ -15258,7 +15319,9 @@ if (mode === 'cards' && resId) {
                 </div>
 
                 <div class="inspector-section">
-                    <label class="section-label">📝 DESCRIPTION</label>
+                    <label class="section-label">
+                        <i data-lucide="file-text" style="width:11px;height:11px;"></i> DESCRIPTION
+                    </label>
                     <textarea class="modal-textarea res-desc-input" placeholder="Notes..." onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
                 </div>
             </div>
@@ -15269,15 +15332,27 @@ if (mode === 'cards' && resId) {
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
 };
 
-OL._fvSetLogicType = function(resId, stepId, idx, type) {
+OL._fvToggleLogicType = function(resId, stepId, idx, type) {
     const data = OL.getCurrentProjectData();
     const res  = (data.resources||[]).find(r => String(r.id) === resId);
     const step = res?.steps?.find(s => String(s.id) === stepId);
-    if (step?.logic?.out?.[idx]) {
-        step.logic.out[idx].type = type;
-        OL.persist();
-        OL.openInspector(resId, stepId);
+    if (!step?.logic?.out?.[idx]) return;
+
+    const rule = step.logic.out[idx];
+    if (!rule.types) rule.types = [rule.type || 'next'];
+
+    const pos = rule.types.indexOf(type);
+    if (pos === -1) {
+        rule.types.push(type);
+    } else {
+        rule.types.splice(pos, 1);
+        if (rule.types.length === 0) rule.types = ['next'];
     }
+    // Keep legacy type field in sync with first type
+    rule.type = rule.types[0];
+
+    OL.persist();
+    OL.openInspector(resId, stepId);
 };
 
 OL._fvOpenTargetPicker = function(resId, stepId, idx) {
