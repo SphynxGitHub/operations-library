@@ -15149,6 +15149,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 </div>
             </div>
         `;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
     // 📑 3. RESOURCE (CARD) DETAIL MODE
@@ -15326,10 +15327,12 @@ if (mode === 'cards' && resId) {
                 </div>
             </div>
         `;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
 
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
+    if (window.lucide) window.lucide.createIcons();
 };
 
 OL._fvToggleLogicType = function(resId, stepId, idx, type) {
