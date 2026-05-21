@@ -15409,41 +15409,30 @@ OL._fvOpenTargetPicker = function(resId, stepId, idx) {
 
 window.renderStepResources = function(resId, step) {
     const links = step.links || [];
-    if (links.length === 0) return '<div class="tiny muted" style="padding: 5px; opacity:0.6;">No linked items.</div>';
+    if (links.length === 0) return '<div class="tiny muted" style="padding:5px;opacity:0.6;">No linked items.</div>';
     
     return links.map((link, idx) => {
-        // Determine Icon based on type
         const isSOP = link.type === 'sop' || link.type === 'guide';
-        const icon = isSOP ? '📖' : '📱';
-        
-        // Navigation Logic
+        const icon = isSOP ? 'book-open' : 'database';
         const openAction = isSOP ? `OL.openHowToModal('${link.id}')` : `OL.openResourceModal('${link.id}')`;
         const deleteAction = `event.stopPropagation(); OL.removeStepLink('${resId}', '${step.id}', ${idx})`;
 
         return `
-            <div class="pill soft is-clickable" 
-                 style="display:flex; align-items:center; gap:8px; margin-bottom:4px; padding:6px 10px; background: rgba(255,255,255,0.05); border-radius: 4px;"
-                 onclick="${openAction}">
-                <span style="font-size:10px;">${icon}</span>
-                <span style="flex:1; font-size:10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <span onclick="${openAction}"
+                  style="display:inline-flex;align-items:center;gap:5px;
+                         padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
+                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                         border:1px solid rgba(61,217,197,0.3);
+                         cursor:pointer;margin-bottom:4px;margin-right:4px;">
+                <i data-lucide="${icon}" style="width:10px;height:10px;pointer-events:none;"></i>
+                <span style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                     ${esc(link.name)}
                 </span>
-                <b class="pill-remove-x" 
-                   style="cursor:pointer; opacity: 0.4; padding: 2px 5px;" 
-                   onmouseover="this.style.opacity='1'; this.style.color='var(--danger)'"
-                   onmouseout="this.style.opacity='0.4'; this.style.color='inherit'"
-                   onclick="${deleteAction}">×</b>
-            </div>`;
+                <span onclick="${deleteAction}"
+                      style="opacity:0.5;cursor:pointer;margin-left:2px;font-size:12px;line-height:1;">×</span>
+            </span>
+        `;
     }).join('');
-
-    requestAnimationFrame(() => {
-        const nameInput = panel.querySelector('.fvi-name-input');
-        if (nameInput) {
-            nameInput.style.height = 'auto';
-            nameInput.style.height = nameInput.scrollHeight + 'px';
-        }
-        if (window.lucide) lucide.createIcons();
-    });
 };
 
 OL.updateAtomicStep = async function(resId, stepId, field, value) {
