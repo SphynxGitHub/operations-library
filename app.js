@@ -5561,9 +5561,13 @@ window.renderSopStepList = function(res) {
 OL.deleteStep = function(resId, stepId) {
     if (!confirm('Delete this step?')) return;
     const data = OL.getCurrentProjectData();
-    const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) return;
+    // Try both keys since your app uses localResources in some places
+    const allRes = [...(data.resources || []), ...(data.localResources || [])];
+    const res = allRes.find(r => String(r.id) === String(resId));
+    if (!res) { console.error('Resource not found:', resId); return; }
+    const before = res.steps?.length;
     res.steps = (res.steps || []).filter(s => String(s.id) !== String(stepId));
+    console.log(`Deleted step ${stepId} from ${res.name}: ${before} → ${res.steps.length}`);
     OL.persist();
     OL.openResourceModal(resId);
 };
@@ -14822,6 +14826,12 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                       value="${esc(step.name)}" 
                       onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'name', this.value)"
                       placeholder="Step Name">
+                <button onclick="OL.deleteStep('${resId}','${step.id}')"
+                        style="padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;
+                               border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);
+                               color:#ef4444;flex-shrink:0;">
+                    Delete step
+                </button>
                 <button onclick="event.preventDefault(); event.stopPropagation(); 
                                  OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
                                  renderResourceManager();"
