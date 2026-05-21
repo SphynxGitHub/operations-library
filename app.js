@@ -5494,9 +5494,8 @@ window.getAllIncomingLinks = function(targetResId, allResources) {
 window.renderSopStepList = function(res) {
     const steps = res.steps || [];
     
-    // 🏗️ 1. Header with Add Button
     let html = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <label class="tiny muted bold uppercase" style="letter-spacing:1px;">Step Sequence</label>
         </div>
     `;
@@ -5505,35 +5504,97 @@ window.renderSopStepList = function(res) {
         return html + `<div class="empty-hint p-10">No steps defined. Click Add Step or use the Visual Editor.</div>`;
     }
 
-    // 🏗️ 2. Interactive Step Rows
     html += steps.map((step, idx) => {
-        const hasLogic = (step.logic?.out?.length > 0 || step.logic?.in?.length > 0);
-        const hasLinks = (step.links?.length > 0);
+        const outRules = (step.logic?.out || []).filter(l => l.targetId);
+        const hasLogic = outRules.length > 0 || (step.logic?.in?.length > 0);
+        const hasLinks = step.links?.length > 0;
+
+        // Smart logic icon
+        let logicIcon = '';
+        if (outRules.length > 0) {
+            const types = [...new Set(outRules.map(l => l.type || 'next'))];
+            if (types.includes('loop'))      logicIcon = '<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">↺</span>';
+            else if (types.includes('delay')) logicIcon = '<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">⏱</span>';
+            else if (types.includes('condition') || outRules.length > 1) logicIcon = '<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">◆</span>';
+            else logicIcon = '<span class="pill tiny soft" style="font-size:7px;padding:0 4px;">→</span>';
+        }
 
         return `
-            <div class="sop-step-row is-clickable" 
-                 onclick="event.stopPropagation(); OL.goToStepFromLibrary('${res.id}', '${step.id}')"
-                 style="display:flex; align-items:flex-start; gap:10px; padding:10px; border-bottom:1px solid var(--line); transition: background 0.2s; border-radius: 4px; margin-bottom: 2px;">
-                
-                <div class="step-number-circle" style="width:20px; height:20px; font-size:10px; flex-shrink:0;">${idx + 1}</div>
-                
-                <div style="flex:1; min-width:0;">
-                    <div class="bold" style="font-size:12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <div class="sop-step-row" 
+                 style="display:flex;align-items:flex-start;gap:10px;padding:10px;
+                        border-bottom:1px solid var(--line);border-radius:4px;margin-bottom:2px;
+                        transition:background 0.2s;">
+                <div class="step-number-circle" style="width:20px;height:20px;font-size:10px;flex-shrink:0;">${idx + 1}</div>
+                <div style="flex:1;min-width:0;cursor:pointer;"
+                     onclick="event.stopPropagation();OL.goToStepFromLibrary('${res.id}','${step.id}')">
+                    <div class="bold" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                         ${esc(step.name || 'Untitled Step')}
                     </div>
-                    <div style="display:flex; gap:6px; align-items:center; margin-top:2px;">
-                        <span class="tiny accent" style="font-size:9px;">${step.appName || 'Auto-Tool'}</span>
-                        ${hasLogic ? '<span class="pill tiny accent" style="font-size:7px; padding:0 3px;">λ</span>' : ''}
-                        ${hasLinks ? '<span class="pill tiny soft" style="font-size:7px; padding:0 3px;">🔗</span>' : ''}
+                    <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+                        <span class="tiny accent" style="font-size:9px;">${esc(step.appName || 'Auto-Tool')}</span>
+                        ${logicIcon}
+                        ${hasLinks ? '<span class="pill tiny soft" style="font-size:7px;padding:0 3px;">🔗</span>' : ''}
                     </div>
                 </div>
-
-                <div style="opacity:0.3; font-size:10px;">Edit ➔</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="opacity:0.3;font-size:10px;cursor:pointer;"
+                          onclick="event.stopPropagation();OL.goToStepFromLibrary('${res.id}','${step.id}')">
+                        Edit →
+                    </span>
+                    <button onclick="event.stopPropagation();OL.deleteStep('${res.id}','${step.id}')"
+                            style="width:18px;height:18px;border:none;background:none;cursor:pointer;
+                                   color:var(--text-muted);display:flex;align-items:center;justify-content:center;
+                                   border-radius:4px;transition:color 0.2s;"
+                            onmouseover="this.style.color='#ef4444'"
+                            onmouseout="this.style.color='var(--text-muted)'"
+                            title="Delete step">
+                        <i data-lucide="x" style="width:11px;height:11px;"></i>
+                    </button>
+                </div>
             </div>
         `;
     }).join('');
 
     return html;
+};
+
+OL.deleteStep = function(resId, stepId) {
+    if (!confirm('Delete this step?')) return;
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
+    res.steps = (res.steps || []).filter(s => String(s.id) !== String(stepId));
+    OL.persist();
+    OL.openResourceModal(resId);
+};
+
+OL.addStepLogic = function(resId, stepId, dir) {
+    const data = OL.getCurrentProjectData();
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (!step) return;
+    if (!step.logic) step.logic = { in: [], out: [] };
+    if (!step.logic[dir]) step.logic[dir] = [];
+
+    // Auto-fill next sequential step as default target
+    let defaultTargetId = '';
+    if (dir === 'out') {
+        const stepIdx = res.steps.indexOf(step);
+        const nextStep = res.steps[stepIdx + 1];
+        if (nextStep) defaultTargetId = `${resId}-${nextStep.id}`;
+    }
+
+    step.logic[dir].push({
+        type: 'next',
+        targetId: defaultTargetId,
+        rule: '',
+        loopLimit: '',
+        delayValue: '',
+        delayUnit: 'days'
+    });
+
+    OL.persist();
+    OL.openInspector(resId, stepId);
 };
 
 OL.goToStepFromLibrary = function(resId, stepId) {
