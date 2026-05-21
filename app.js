@@ -15561,31 +15561,22 @@ OL.filterAppSearch = function(parentId, stepId, query) {
 window.OL.selectAppForStep = async function(parentId, stepId, appId, appName) {
     const res = OL.getResourceById(parentId);
     if (!res) return;
-
     const step = (res.steps || []).find(s => String(s.id) === String(stepId));
-    if (step) {
-        // 1. Update the data
-        step.appId = appId;
-        step.appName = appName;
-        
-        // 2. Persist
-        await OL.persist();
-        
-        // 3. 🚀 THE FIX: Manually find the input and force the new value
-        // This stops the browser from holding onto your 'typed' string.
-        const input = document.querySelector('.inspector-body .search-map-container input');
-        if (input) {
-            input.value = appName;
-            input.blur(); // Remove focus to trigger the UI refresh properly
-        }
+    if (!step) return;
 
-        // 4. Hide the results overlay
-        const resultsOverlay = document.getElementById('app-search-results');
-        if (resultsOverlay) resultsOverlay.style.display = 'none';
-        
-        // 5. Re-render the whole panel string
-        OL.openInspector(stepId, parentId);
-    }
+    // 1. Update data
+    step.appId   = appId;
+    step.appName = appName;
+
+    // 2. Hide overlay immediately
+    const overlay = document.getElementById('app-search-results');
+    if (overlay) overlay.style.display = 'none';
+
+    // 3. Persist
+    OL.persist();
+
+    // 4. Re-render inspector with correct argument order
+    OL.openInspector(parentId, stepId);
 };
 
 window.OL.removeAppFromStep = async function(resId, stepId) {
