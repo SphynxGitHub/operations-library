@@ -14452,67 +14452,31 @@ OL.updateStepName = function(resId, stepIdx, newName) {
     }
 };
 
-OL.deleteStep = async function(resId, stepIdx) {
+OL.deleteStep = function(resId, stepId) {
     const data = OL.getCurrentProjectData();
-    const resources = data.resources || [];
-    const res = resources.find(r => String(r.id) === String(resId));
-    
-    if (res && res.steps && res.steps[stepIdx]) {
-        const stepToDelete = res.steps[stepIdx];
-        const stepFullId = `${resId}-${stepIdx}`;
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
 
-        if (!confirm(`Delete step "${stepToDelete.name}"? This will also remove any logic links connected to it.`)) return;
+    const step = (res.steps || []).find(s => String(s.id) === String(stepId));
+    if (!step) return;
 
-        // 🚀 1. THE CLEANUP CRAWL
-        // Scan every single step in every resource to find links to THIS step
-        resources.forEach(r => {
-            (r.steps || []).forEach(otherStep => {
-                if (otherStep.logic) {
-                    // Remove 'out' links pointing to our deleted step
-                    if (otherStep.logic.out) {
-                        otherStep.logic.out = otherStep.logic.out.filter(link => String(link.targetId) !== stepFullId);
-                    }
-                    // Remove 'in' links coming from our deleted step
-                    if (otherStep.logic.in) {
-                        otherStep.logic.in = otherStep.logic.in.filter(link => String(link.sourceId) !== stepFullId);
-                    }
-                }
-            });
+    if (!confirm(`Delete step "${step.name}"? This will also remove any logic links connected to it.`)) return;
+
+    // 1. Cleanup: remove all logic links pointing to this step
+    const fullId = `${resId}-${stepId}`;
+    (data.resources || []).forEach(r => {
+        (r.steps || []).forEach(s => {
+            if (s.logic?.out) s.logic.out = s.logic.out.filter(l => l.targetId !== fullId);
+            if (s.logic?.in)  s.logic.in  = s.logic.in.filter(l => l.sourceId !== fullId);
         });
+    });
 
-        // 🚀 2. RE-INDEX PROTECTOR
-        // Because steps are stored in an array by index, deleting Step 1 makes Step 2 become the new Step 1.
-        // We must update any logic links that pointed to higher indices in this specific resource.
-        resources.forEach(r => {
-            (r.steps || []).forEach(otherStep => {
-                ['in', 'out'].forEach(dir => {
-                    const key = dir === 'in' ? 'sourceId' : 'targetId';
-                    (otherStep.logic?.[dir] || []).forEach(link => {
-                        const parts = String(link[key]).split('-');
-                        const targetResId = parts.slice(0, -1).join('-');
-                        const targetIdx = parseInt(parts.pop());
+    // 2. Delete the step
+    res.steps = res.steps.filter(s => String(s.id) !== String(stepId));
 
-                        if (targetResId === String(resId) && targetIdx > stepIdx) {
-                            // Shift the index down by 1 to match the new array position
-                            link[key] = `${targetResId}-${targetIdx - 1}`;
-                        }
-                    });
-                });
-            });
-        });
-
-        // 🚀 3. PERFORM THE DELETE
-        res.steps.splice(stepIdx, 1);
-
-        // 💾 4. PERSIST & REFRESH
-        await OL.updateAndSync(() => {
-            OL.autoAlignNodes(false); // Fix vertical gaps
-        });
-
-        OL.renderVisualizer();
-        OL.closeInspectorPanel(); 
-        console.log(`🧹 Step ${stepIdx} deleted and all logic links scrubbed.`);
-    }
+    // 3. Persist and go back to resource view
+    OL.persist();
+    OL._fvOpenStepsList(resId);
 };
 
 OL.toggleSteps = function(id) {
