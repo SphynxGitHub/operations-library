@@ -15082,37 +15082,53 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                                class="search-results-overlay" style="display:none;max-height:200px;overflow-y:auto;"></div>
                         </div>
                 
-                        ${l.type==='condition' ? `
-                          <input type="text" class="fvi-input"
-                                 placeholder="Condition (e.g. If approved...)"
-                                 value="${esc(l.rule||'')}"
-                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'rule',this.value)"
-                                 style="margin-top:0;">
+                        ${(l.types||[l.type||'next']).includes('condition') ? `
+                            <div style="margin-top:6px;">
+                                <label style="font-size:9px;color:#9ca3af;text-transform:uppercase;
+                                               letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                                    <i data-lucide="git-branch" style="width:9px;height:9px;"></i> Condition
+                                </label>
+                                <input type="text" class="fvi-input"
+                                       placeholder="e.g. If approved..."
+                                       value="${esc(l.rule||'')}"
+                                       onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'rule',this.value)">
+                            </div>
                         ` : ''}
-                
-                        ${l.type==='delay' ? `
-                          <div style="display:flex;gap:6px;align-items:center;">
-                            <input type="number" class="fvi-input" style="width:70px;"
-                                   placeholder="0"
-                                   value="${esc(String(l.delayValue||''))}"
-                                   onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayValue',this.value)">
-                            <select class="fvi-select" style="flex:1;"
-                                    onchange="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayUnit',this.value)">
-                              <option value="hours" ${l.delayUnit==='hours'?'selected':''}>Hours</option>
-                              <option value="days"  ${l.delayUnit==='days' ?'selected':''}>Days</option>
-                              <option value="weeks" ${l.delayUnit==='weeks'?'selected':''}>Weeks</option>
-                            </select>
-                          </div>
+                        
+                        ${(l.types||[l.type||'next']).includes('delay') ? `
+                            <div style="margin-top:6px;">
+                                <label style="font-size:9px;color:#9ca3af;text-transform:uppercase;
+                                               letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                                    <i data-lucide="clock" style="width:9px;height:9px;"></i> Delay
+                                </label>
+                                <div style="display:flex;gap:6px;align-items:center;">
+                                    <input type="number" class="fvi-input" style="width:70px;"
+                                           placeholder="0"
+                                           value="${esc(String(l.delayValue||''))}"
+                                           onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayValue',this.value)">
+                                    <select class="fvi-select" style="flex:1;"
+                                            onchange="OL.updateStepLogic('${resId}','${step.id}','out',${i},'delayUnit',this.value)">
+                                        <option value="hours" ${l.delayUnit==='hours'?'selected':''}>Hours</option>
+                                        <option value="days"  ${l.delayUnit==='days' ?'selected':''}>Days</option>
+                                        <option value="weeks" ${l.delayUnit==='weeks'?'selected':''}>Weeks</option>
+                                    </select>
+                                </div>
+                            </div>
                         ` : ''}
-                
-                        ${l.type==='loop' ? `
-                          <input type="text" class="fvi-input"
-                                 placeholder="Loop limit (e.g. 3 times, or leave blank)"
-                                 value="${esc(l.loopLimit||'')}"
-                                 onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'loopLimit',this.value)"
-                                 style="margin-top:0;">
+                        
+                        ${(l.types||[l.type||'next']).includes('loop') ? `
+                            <div style="margin-top:6px;">
+                                <label style="font-size:9px;color:#9ca3af;text-transform:uppercase;
+                                               letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                                    <i data-lucide="repeat" style="width:9px;height:9px;"></i> Loop limit
+                                </label>
+                                <input type="text" class="fvi-input"
+                                       placeholder="e.g. 3 times, or leave blank for infinite"
+                                       value="${esc(l.loopLimit||'')}"
+                                       onblur="OL.updateStepLogic('${resId}','${step.id}','out',${i},'loopLimit',this.value)">
+                            </div>
                         ` : ''}
-                
+                    
                         <button onclick="OL.removeStepLogic('${resId}','${step.id}','out',${i})"
                                 style="margin-top:8px;width:100%;background:none;border:none;
                                        color:#ef4444;font-size:10px;cursor:pointer;
