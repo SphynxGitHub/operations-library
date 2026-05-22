@@ -6548,3 +6548,11 @@ body.is-visualizer #v2-inspector-panel {
 .v2-step-item.is-dragging {
     opacity: 0.3;
 }
+.fvi-step-row.drag-over {
+    border-top: 2px solid #3dd9c5 !important;
+    background: rgba(61,217,197,0.04) !important;
+}
+
+.fvi-step-row.v2-step-item.is-dragging {
+    opacity: 0.3;
+}
