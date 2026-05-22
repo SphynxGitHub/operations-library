@@ -6540,3 +6540,11 @@ body.is-visualizer #v2-inspector-panel {
   z-index: 20;
   background: #fff;
 }
+.sop-step-row.drag-over {
+    border-top: 2px solid #3dd9c5 !important;
+    background: rgba(61,217,197,0.05) !important;
+}
+
+.v2-step-item.is-dragging {
+    opacity: 0.3;
+}
