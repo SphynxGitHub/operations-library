@@ -5511,45 +5511,54 @@ window.renderSopStepList = function(res) {
 
     html += steps.map((step, idx) => {
         const outRules = (step.logic?.out || []).filter(l => l.targetId);
-        const hasLogic = outRules.length > 0 || (step.logic?.in?.length > 0);
         const hasLinks = step.links?.length > 0;
 
-        // Smart logic icon
-        let logicIcon = '';
-        if (outRules.length > 0) {
-            const types = [...new Set(outRules.map(l => l.type || 'next'))];
-            if (types.includes('loop'))      logicIcon = '<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">↺</span>';
-            else if (types.includes('delay')) logicIcon = '<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">⏱</span>';
-            else if (types.includes('condition') || outRules.length > 1) logicIcon = '<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">◆</span>';
-            else logicIcon = '<span class="pill tiny soft" style="font-size:7px;padding:0 4px;">→</span>';
-        }
+        const icons = [];
+        if (outRules.some(l => l.type === 'loop'))      icons.push('↺');
+        if (outRules.some(l => l.type === 'delay'))     icons.push('⏱');
+        if (outRules.some(l => l.type === 'condition') || outRules.length > 1) icons.push('◆');
+        else if (outRules.length === 1 && !icons.length) icons.push('→');
+        const logicIcon = icons.map(ic =>
+            `<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">${ic}</span>`
+        ).join('');
 
         return `
-            <div class="sop-step-row" 
-                 style="display:flex;align-items:flex-start;gap:10px;padding:10px;
+            <div class="v2-step-item sop-step-row"
+                 draggable="true"
+                 ondragstart="OL.handleStepDragStart(event, '${res.id}', ${idx})"
+                 ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over')"
+                 ondragleave="this.classList.remove('drag-over')"
+                 ondrop="this.classList.remove('drag-over'); OL.handleStepDrop(event, '${res.id}', ${idx})"
+                 style="display:flex;align-items:center;gap:8px;padding:8px 10px;
                         border-bottom:1px solid var(--line);border-radius:4px;margin-bottom:2px;
-                        transition:background 0.2s;">
-                <div class="step-number-circle" style="width:20px;height:20px;font-size:10px;flex-shrink:0;">${idx + 1}</div>
+                        transition:background 0.2s;cursor:default;">
+                <span class="drag-handle"
+                      style="cursor:grab;opacity:0.2;flex-shrink:0;font-size:14px;padding-right:2px;
+                             user-select:none;">⠿</span>
+                <div class="step-number-circle"
+                     style="width:20px;height:20px;font-size:10px;flex-shrink:0;">${idx + 1}</div>
                 <div style="flex:1;min-width:0;cursor:pointer;"
                      onclick="event.stopPropagation();OL.goToStepFromLibrary('${res.id}','${step.id}')">
                     <div class="bold" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                         ${esc(step.name || 'Untitled Step')}
                     </div>
-                    <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
-                        <span class="tiny accent" style="font-size:9px;">${esc(step.appName || 'Auto-Tool')}</span>
+                    <div style="display:flex;gap:4px;align-items:center;margin-top:2px;flex-wrap:wrap;">
+                        ${step.appName ? `<span class="tiny accent" style="font-size:9px;">${esc(step.appName)}</span>` : ''}
                         ${logicIcon}
-                        ${hasLinks ? '<span class="pill tiny soft" style="font-size:7px;padding:0 3px;">🔗</span>' : ''}
+                        ${hasLinks ? `<span class="pill tiny soft" style="font-size:7px;padding:0 3px;">
+                            <i data-lucide="link-2" style="width:8px;height:8px;"></i>
+                          </span>` : ''}
                     </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;">
-                    <span style="opacity:0.3;font-size:10px;cursor:pointer;"
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                    <span style="opacity:0.3;font-size:10px;cursor:pointer;white-space:nowrap;"
                           onclick="event.stopPropagation();OL.goToStepFromLibrary('${res.id}','${step.id}')">
                         Edit →
                     </span>
                     <button onclick="event.stopPropagation();OL.deleteStep('${res.id}','${step.id}')"
                             style="width:18px;height:18px;border:none;background:none;cursor:pointer;
-                                   color:var(--text-muted);display:flex;align-items:center;justify-content:center;
-                                   border-radius:4px;transition:color 0.2s;"
+                                   color:var(--text-muted);display:flex;align-items:center;
+                                   justify-content:center;border-radius:4px;transition:color 0.2s;"
                             onmouseover="this.style.color='#ef4444'"
                             onmouseout="this.style.color='var(--text-muted)'"
                             title="Delete step">
@@ -5562,7 +5571,7 @@ window.renderSopStepList = function(res) {
 
     return html;
 };
-
+        
 OL.deleteStep = function(resId, stepId) {
     if (!confirm('Delete this step?')) return;
     const data = OL.getCurrentProjectData();
@@ -12485,23 +12494,44 @@ OL._fvOpenStepsList = function(resId) {
         const logicIcon = icons.map(ic =>
             `<span class="fvi-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">${ic}</span>`
         ).join('');
-        const hasBadges = s.appName || (s.assignees||[]).length > 0;
+        const hasBadges = s.appName || (s.assignees||[]).length > 0 || icons.length > 0;
 
         return `
-          <div class="fvi-step-row"
-               onclick="OL.openInspector('${res.id}','${s.id}')">
+          <div class="fvi-step-row v2-step-item"
+               draggable="true"
+               ondragstart="OL.handleStepDragStart(event, '${res.id}', ${i})"
+               ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="this.classList.remove('drag-over'); OL.handleStepDrop(event, '${res.id}', ${i})"
+               style="cursor:default;">
+            <span class="drag-handle"
+                  style="cursor:grab;opacity:0.2;flex-shrink:0;font-size:14px;
+                         padding-right:4px;user-select:none;">⠿</span>
             <div class="fvi-step-num" style="background:${tc.color}18;color:${tc.color};">
               ${i+1}
             </div>
-            <div style="flex:1;min-width:0;">
+            <div style="flex:1;min-width:0;cursor:pointer;"
+                 onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}')">
               <div class="fvi-step-name">${esc(s.name||'Unnamed Step')}</div>
               ${hasBadges ? `
                 <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">
                   ${appBadge}${assigneeBadges}${logicIcon}
                 </div>` : ''}
             </div>
-            <i data-lucide="chevron-right"
-               style="width:11px;height:11px;color:#d1d5db;flex-shrink:0;"></i>
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+              <i data-lucide="chevron-right"
+                 style="width:11px;height:11px;color:#d1d5db;cursor:pointer;"
+                 onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}')"></i>
+              <button onclick="event.stopPropagation(); OL.deleteStep('${res.id}','${s.id}')"
+                      style="width:16px;height:16px;border:none;background:none;cursor:pointer;
+                             color:#d1d5db;display:flex;align-items:center;justify-content:center;
+                             border-radius:4px;padding:0;transition:color 0.15s;"
+                      onmouseover="this.style.color='#ef4444'"
+                      onmouseout="this.style.color='#d1d5db'"
+                      title="Delete step">
+                <i data-lucide="x" style="width:10px;height:10px;pointer-events:none;"></i>
+              </button>
+            </div>
           </div>
         `;
       }).join('')
@@ -13545,11 +13575,18 @@ OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
         const [movedStep] = res.steps.splice(draggedStepIdx, 1);
         res.steps.splice(droppedOnIdx, 0, movedStep);
         
-        await OL.persist();
-        OL.renderVisualizer();
+        OL.persist();
+    
+        // Refresh whichever view is active
+        if (document.getElementById('active-modal-box')) {
+            OL.openResourceModal(targetResId);
+        } else if (document.getElementById('inspector-content')) {
+            OL._fvOpenStepsList(targetResId);
+        } else {
+            OL.renderVisualizer();
+        }
         return;
     }
-
     // --- 🔵 CASE 2: EXTERNAL RESOURCE DROP ---
     if (sourceResId && sourceResId !== targetResId) {
         
