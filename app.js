@@ -12907,6 +12907,11 @@ OL._fvOpenStepsList = function(resId) {
             ${stageName ? `<span class="fvi-meta-sep">·</span><span>${esc(stageName)}</span>` : ''}
           </div>
         </div>
+        <button class="fvi-add-step-btn"
+                onclick="event.stopPropagation(); OL._fvOpenStepCanvas('${res.id}')">
+            <i data-lucide="workflow" style="width:11px;height:11px;"></i>
+            Flow
+        </button>
       </div>
 
       <!-- PRIMARY APP -->
@@ -13018,6 +13023,288 @@ OL._fvOpenStepsList = function(resId) {
     }
     if (window.lucide) lucide.createIcons();
   });
+};
+
+OL._fvOpenStepCanvas = function(resId, breadcrumb) {
+    const data      = OL.getCurrentProjectData();
+    const resources = data.resources || [];
+    const res       = resources.find(r => String(r.id) === String(resId));
+    if (!res) return;
+
+    const tc     = OL._fvGetType(res.type);
+    const steps  = res.steps || [];
+    const trail  = breadcrumb || [];
+
+    // Save scroll position
+    const canvasWrap = document.getElementById('fv-canvas-wrap');
+    const scrollTop  = canvasWrap?.scrollTop  || 0;
+    const scrollLeft = canvasWrap?.scrollLeft || 0;
+
+    // Build step cards left to right
+    const CARD_W  = 180;
+    const CARD_H  = 100;
+    const GAP_X   = 80;
+    const GAP_Y   = 140;
+    const PAD     = 40;
+
+    // Assign positions — straight line first, branch down for conditionals
+    const posMap  = {}; // stepId → {x, y}
+    const visited = new Set();
+
+    const assignPos = (stepId, x, y) => {
+        if (visited.has(stepId)) return;
+        visited.add(stepId);
+        posMap[stepId] = { x, y };
+        const step    = steps.find(s => String(s.id) === String(stepId));
+        if (!step) return;
+        const outRules = (step.logic?.out || []).filter(l => l.targetId);
+        outRules.forEach((rule, i) => {
+            const lastH   = String(rule.targetId).lastIndexOf('-');
+            const tResId  = rule.targetId.substring(0, lastH);
+            const tStepId = rule.targetId.substring(lastH + 1);
+            if (String(tResId) === String(resId)) {
+                // Same resource — continue the chain
+                assignPos(tStepId, x + CARD_W + GAP_X, y + (i * GAP_Y));
+            }
+        });
+    };
+
+    // Find root steps (no incoming connections within this resource)
+    const hasIncoming = new Set();
+    steps.forEach(s => {
+        (s.logic?.out || []).forEach(rule => {
+            if (!rule.targetId) return;
+            const lastH   = String(rule.targetId).lastIndexOf('-');
+            const tResId  = rule.targetId.substring(0, lastH);
+            const tStepId = rule.targetId.substring(lastH + 1);
+            if (String(tResId) === String(resId)) hasIncoming.add(tStepId);
+        });
+    });
+
+    let startY = PAD;
+    steps.forEach((s, i) => {
+        if (!hasIncoming.has(String(s.id)) && !visited.has(String(s.id))) {
+            assignPos(String(s.id), PAD, startY);
+            startY += GAP_Y;
+        }
+    });
+
+    // Any unvisited steps (disconnected) get placed below
+    steps.forEach((s, i) => {
+        if (!visited.has(String(s.id))) {
+            posMap[String(s.id)] = { x: PAD + i * (CARD_W + GAP_X / 2), y: startY };
+        }
+    });
+
+    // Calculate canvas size
+    const maxX = Math.max(...Object.values(posMap).map(p => p.x), 0) + CARD_W + PAD;
+    const maxY = Math.max(...Object.values(posMap).map(p => p.y), 0) + CARD_H + PAD;
+
+    // Build SVG arrows
+    let svgArrows = '';
+    steps.forEach(s => {
+        const fromPos = posMap[String(s.id)];
+        if (!fromPos) return;
+        (s.logic?.out || []).filter(l => l.targetId).forEach(rule => {
+            const lastH   = String(rule.targetId).lastIndexOf('-');
+            const tResId  = rule.targetId.substring(0, lastH);
+            const tStepId = rule.targetId.substring(lastH + 1);
+            const toPos   = posMap[tStepId];
+            if (!toPos) return;
+
+            const isCross = String(tResId) !== String(resId);
+            const x1 = fromPos.x + CARD_W;
+            const y1 = fromPos.y + CARD_H / 2;
+            const x2 = toPos.x;
+            const y2 = toPos.y + CARD_H / 2;
+            const cx1 = x1 + 40;
+            const cx2 = x2 - 40;
+
+            const color = isCross ? '#a78bfa' :
+                rule.type === 'condition' ? '#f5b800' :
+                rule.type === 'loop'      ? '#f97316' :
+                rule.type === 'delay'     ? '#7c3aed' : '#3dd9c5';
+
+            const dash = isCross ? '6,3' : 
+                rule.type === 'condition' ? '4,3' : 'none';
+
+            svgArrows += `
+                <path d="M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}"
+                      fill="none" stroke="${color}" stroke-width="1.5"
+                      ${dash !== 'none' ? `stroke-dasharray="${dash}"` : ''}
+                      opacity="0.7"/>
+                <circle cx="${x2}" cy="${y2}" r="3" fill="${color}" opacity="0.7"/>
+            `;
+
+            // Label for conditions/delays/loops
+            if (rule.type && rule.type !== 'next') {
+                const mx = (x1 + x2) / 2;
+                const my = (y1 + y2) / 2 - 8;
+                const label = rule.type === 'condition' ? `If: ${(rule.rule||'').substring(0,20)}` :
+                              rule.type === 'delay'     ? `⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}` :
+                              rule.type === 'loop'      ? `↺ ${rule.loopLimit||''}` : '';
+                if (label) svgArrows += `
+                    <rect x="${mx - 30}" y="${my - 8}" width="60" height="14"
+                          rx="3" fill="white" opacity="0.9"/>
+                    <text x="${mx}" y="${my + 2}" text-anchor="middle"
+                          font-size="8" fill="${color}" font-family="inherit">
+                        ${esc(label.substring(0, 18))}
+                    </text>
+                `;
+            }
+        });
+    });
+
+    // Build step cards
+    const cardsHtml = steps.map(s => {
+        const pos = posMap[String(s.id)];
+        if (!pos) return '';
+
+        const outRules   = (s.logic?.out || []).filter(l => l.targetId);
+        const crossLinks = outRules.filter(rule => {
+            const lastH  = String(rule.targetId).lastIndexOf('-');
+            const tResId = rule.targetId.substring(0, lastH);
+            return String(tResId) !== String(resId);
+        });
+
+        // Ghost cards for cross-resource connections
+        const ghostsHtml = crossLinks.map(rule => {
+            const lastH   = String(rule.targetId).lastIndexOf('-');
+            const tResId  = rule.targetId.substring(0, lastH);
+            const tStepId = rule.targetId.substring(lastH + 1);
+            const tRes    = resources.find(r => String(r.id) === tResId);
+            const tStep   = tRes?.steps?.find(st => String(st.id) === tStepId);
+            if (!tRes || !tStep) return '';
+
+            const ghostX = pos.x + CARD_W + GAP_X;
+            const ghostY = pos.y;
+
+            return `
+                <div style="position:absolute;left:${ghostX}px;top:${ghostY}px;
+                            width:${CARD_W}px;
+                            background:#fafafa;border:1.5px dashed #a78bfa;
+                            border-radius:10px;padding:10px;
+                            opacity:0.75;cursor:pointer;"
+                     onclick="OL._fvOpenStepCanvas('${tResId}', ${JSON.stringify([...trail, {resId, name: res.name}])})">
+                    <div style="font-size:8px;font-weight:700;text-transform:uppercase;
+                                letter-spacing:0.06em;color:#a78bfa;margin-bottom:4px;">
+                        🌐 ${esc(tRes.name.substring(0, 16))}
+                    </div>
+                    <div style="font-size:11px;font-weight:500;color:#6b7280;
+                                line-height:1.3;">
+                        ${esc(tStep.name || 'Unnamed')}
+                    </div>
+                    <div style="font-size:9px;color:#a78bfa;margin-top:6px;">
+                        Switch context →
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const icons = [];
+        if (outRules.some(l => l.type === 'loop'))      icons.push('↺');
+        if (outRules.some(l => l.type === 'delay'))     icons.push('⏱');
+        if (outRules.some(l => l.type === 'condition')) icons.push('◆');
+
+        return `
+            ${ghostsHtml}
+            <div style="position:absolute;left:${pos.x}px;top:${pos.y}px;
+                        width:${CARD_W}px;
+                        background:#fff;border:1.5px solid #e5e7eb;
+                        border-radius:10px;overflow:hidden;cursor:pointer;
+                        box-shadow:0 1px 3px rgba(0,0,0,0.06);
+                        transition:border-color 0.15s,box-shadow 0.15s;"
+                 onmouseover="this.style.borderColor='#3dd9c5';this.style.boxShadow='0 4px 14px rgba(61,217,197,0.2)'"
+                 onmouseout="this.style.borderColor='#e5e7eb';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'"
+                 onclick="OL.openInspector('${res.id}','${s.id}')">
+                <div style="height:3px;background:${tc.color};"></div>
+                <div style="padding:8px 10px;">
+                    <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                letter-spacing:0.06em;color:${tc.color};margin-bottom:4px;">
+                        ${tc.abbr} · ${String(steps.indexOf(s) + 1).padStart(2,'0')}
+                    </div>
+                    <div style="font-size:12px;font-weight:500;color:#1b2d3f;
+                                line-height:1.35;margin-bottom:6px;">
+                        ${esc(s.name || 'Unnamed Step')}
+                    </div>
+                    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+                        ${s.appName ? `<span style="font-size:9px;padding:1px 5px;border-radius:99px;
+                                                    background:#f5f6f8;color:#6b7280;">${esc(s.appName)}</span>` : ''}
+                        ${icons.map(ic => `<span style="font-size:9px;padding:1px 5px;border-radius:99px;
+                                                        background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                                        font-weight:700;">${ic}</span>`).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Breadcrumb trail
+    const breadcrumbHtml = trail.length > 0 ? `
+        <div style="position:sticky;top:0;z-index:20;background:#fff;
+                    border-bottom:0.5px solid #e5e7eb;padding:8px 16px;
+                    display:flex;align-items:center;gap:6px;font-size:11px;">
+            <span onclick="OL.renderVisualizer()"
+                  style="color:#9ca3af;cursor:pointer;">
+                <i data-lucide="layout-dashboard" style="width:11px;height:11px;"></i> Map
+            </span>
+            ${trail.map((t, i) => `
+                <span style="color:#d1d5db;">›</span>
+                <span onclick="OL._fvOpenStepCanvas('${t.resId}', ${JSON.stringify(trail.slice(0,i))})"
+                      style="color:#3dd9c5;cursor:pointer;">
+                    ${esc(t.name)}
+                </span>
+            `).join('')}
+            <span style="color:#d1d5db;">›</span>
+            <span style="color:#1b2d3f;font-weight:500;">${esc(res.name)}</span>
+            <button onclick="OL.renderVisualizer()"
+                    class="fv-btn fv-icon" style="margin-left:auto;">
+                <i data-lucide="x" style="width:12px;height:12px;"></i>
+            </button>
+        </div>
+    ` : `
+        <div style="position:sticky;top:0;z-index:20;background:#fff;
+                    border-bottom:0.5px solid #e5e7eb;padding:8px 16px;
+                    display:flex;align-items:center;gap:8px;">
+            <button onclick="OL.renderVisualizer()" class="fv-btn" style="font-size:11px;">
+                <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back to map
+            </button>
+            <div style="width:8px;height:8px;border-radius:50%;background:${tc.color};"></div>
+            <span style="font-size:13px;font-weight:500;color:#1b2d3f;">${esc(res.name)}</span>
+            <span style="font-size:11px;color:#9ca3af;">${steps.length} steps</span>
+            <button onclick="OL.addNewStepToCard('${res.id}')"
+                    class="fv-btn" style="margin-left:auto;font-size:11px;">
+                <i data-lucide="plus" style="width:12px;height:12px;"></i> Add Step
+            </button>
+        </div>
+    `;
+
+    // Replace main canvas content
+    const mainArea = document.getElementById('mainContent');
+    if (!mainArea) return;
+
+    mainArea.innerHTML = `
+        <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+            ${breadcrumbHtml}
+            <div style="flex:1;overflow:auto;position:relative;background:#f5f6f8;">
+                <div style="position:relative;width:${maxX}px;height:${maxY}px;min-width:100%;min-height:100%;">
+                    <svg style="position:absolute;top:0;left:0;width:100%;height:100%;
+                                pointer-events:none;overflow:visible;">
+                        <defs>
+                            <marker id="sc-arrow" markerWidth="6" markerHeight="6"
+                                    refX="5" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L6,3 z" fill="#3dd9c5" opacity="0.7"/>
+                            </marker>
+                        </defs>
+                        ${svgArrows}
+                    </svg>
+                    ${cardsHtml}
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
 };
 
 // Toggle steps list open/closed without full re-render
