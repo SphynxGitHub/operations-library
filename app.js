@@ -11515,10 +11515,9 @@ OL.getWorkflows = function() {
 };
 
 OL.createWorkflow = function(name, stageId, color) {
-    const data = OL.getCurrentProjectData();
-    console.log('createWorkflow data:', data);
-    console.log('workflows before:', data.workflows);
-    if (!data.workflows) data.workflows = [];
+    const client = getActiveClient();
+    const isVault = window.location.hash.includes('vault');
+    
     const wf = {
         id: 'wf-' + Date.now(),
         name: name || 'New Workflow',
@@ -11527,8 +11526,15 @@ OL.createWorkflow = function(name, stageId, color) {
         resourceIds: [],
         description: ''
     };
-    data.workflows.push(wf);
-    console.log('workflows after:', data.workflows);
+
+    if (isVault) {
+        if (!state.master.workflows) state.master.workflows = [];
+        state.master.workflows.push(wf);
+    } else if (client) {
+        if (!client.projectData.workflows) client.projectData.workflows = [];
+        client.projectData.workflows.push(wf);
+    }
+
     OL.persist();
     return wf;
 };
