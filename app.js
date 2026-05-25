@@ -11223,21 +11223,20 @@ OL._fvComputeLayout = function(resources, stageFilter) {
       e.col = resColMap[e.res.id];
     }
   });
-
+    
   // Assign rows within each column
-  const colResRowMap = {}; // `${col}-${resId}` → row count
-    allSteps
-        .sort((a, b) => {
-            if (a.col !== b.col) return a.col - b.col;
-            // Within same column, group by resource
-            if (a.res.id !== b.res.id) return a.res.id.localeCompare(b.res.id);
-            return (a.res.steps||[]).indexOf(a.step) - (a.res.steps||[]).indexOf(b.step);
-        })
-        .forEach(e => {
-            const key = `${e.col}`;
-            if (!colRows[key]) colRows[key] = 0;
-            e.row = colRows[key]++;
-        });
+  const colRows = {};
+  allSteps
+      .sort((a, b) => {
+          if (a.col !== b.col) return a.col - b.col;
+          if (a.res.id !== b.res.id) return String(a.res.id).localeCompare(String(b.res.id));
+          return (a.res.steps||[]).indexOf(a.step) - (b.res.steps||[]).indexOf(b.step);
+      })
+      .forEach(e => {
+          const key = String(e.col);
+          if (colRows[key] === undefined) colRows[key] = 0;
+          e.row = colRows[key]++;
+      });
 
   // Convert col/row to pixel coords
   const COL_W = 200; // horizontal spacing between columns
