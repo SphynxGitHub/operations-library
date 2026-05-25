@@ -10611,15 +10611,15 @@ OL._fvTypes = {
 OL._fvGetType = t => OL._fvTypes[t] || { color: '#6b7280', abbr: (t||'?').substring(0,2).toUpperCase() };
 
 OL._fvNormalizeStepCoords = function() {
-  const data = OL.getCurrentProjectData();
-  (data.resources || []).forEach(res => {
-    (res.steps || []).forEach(step => {
-      if (!step.coords) step.coords = { x: 0, y: 0 };
-      if (step.pinned === undefined) step.pinned = false;
+    const data = OL.getCurrentProjectData();
+    (data.resources || []).forEach(res => {
+        (res.steps || []).forEach(step => {
+            // Don't set 0,0 — leave null so _fvComputeLayout handles it
+            if (!step.coords) step.coords = null;
+            if (step.pinned === undefined) step.pinned = false;
+        });
     });
-  });
 };
-
 // ── SHARED STATE ─────────────────────────────────────────
 if (!OL._fv) OL._fv = {
     layout: sessionStorage.getItem('fv_layout') || 'flowchart',
@@ -11225,19 +11225,25 @@ OL._fvComputeLayout = function(resources, stageFilter) {
   });
 
   // Assign rows within each column
-  const colRows = {};
-  allSteps
-    .sort((a, b) => a.col - b.col)
-    .forEach(e => {
-      if (!colRows[e.col]) colRows[e.col] = 0;
-      e.row = colRows[e.col]++;
-    });
+  const colResRowMap = {}; // `${col}-${resId}` → row count
+    allSteps
+        .sort((a, b) => {
+            if (a.col !== b.col) return a.col - b.col;
+            // Within same column, group by resource
+            if (a.res.id !== b.res.id) return a.res.id.localeCompare(b.res.id);
+            return (a.res.steps||[]).indexOf(a.step) - (a.res.steps||[]).indexOf(b.step);
+        })
+        .forEach(e => {
+            const key = `${e.col}`;
+            if (!colRows[key]) colRows[key] = 0;
+            e.row = colRows[key]++;
+        });
 
   // Convert col/row to pixel coords
-  const COL_W = 240; // horizontal spacing between columns
-  const ROW_H = 160; // vertical spacing between rows
-  const PAD_X = 40;
-  const PAD_Y = 40;
+  const COL_W = 200; // horizontal spacing between columns
+  const ROW_H = 200; // vertical spacing between rows
+  const PAD_X = 60;
+  const PAD_Y = 60;
 
   allSteps.forEach(({ step, col, row }) => {
     // Only update if not pinned
@@ -11984,27 +11990,25 @@ OL._fvTidy = async function(scope, resourceId) {
   const resources = (data.resources||[]).filter(r=>!r.isDeleted&&!r.isLocked);
 
   if (scope === 'global') {
-    // Unpin only unpinned steps, recompute
     resources.forEach(res => {
       (res.steps||[]).forEach(step => {
-        if (!step.pinned) step.coords = { x: 0, y: 0 };
+        if (!step.pinned) step.coords = null;
       });
     });
   } else if (scope === 'force') {
-    // Unpin everything
     resources.forEach(res => {
       (res.steps||[]).forEach(step => {
         step.pinned = false;
-        step.coords = { x: 0, y: 0 };
+        step.coords = null;
       });
     });
   } else if (scope === 'stage') {
-    const stageId = resourceId; // reusing param
+    const stageId = resourceId;
     resources
       .filter(r => r.stageId === stageId)
       .forEach(res => {
         (res.steps||[]).forEach(step => {
-          if (!step.pinned) step.coords = { x: 0, y: 0 };
+          if (!step.pinned) step.coords = null;
         });
       });
   } else if (scope === 'resource') {
@@ -12012,7 +12016,7 @@ OL._fvTidy = async function(scope, resourceId) {
     if (res) {
       (res.steps||[]).forEach(step => {
         step.pinned = false;
-        step.coords = { x: 0, y: 0 };
+        step.coords = null;
       });
     }
   }
