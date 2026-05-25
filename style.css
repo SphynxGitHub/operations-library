@@ -4041,16 +4041,6 @@ ARROWS
     overflow: visible !important; /* Allow resizer to hang off the edge */
 }
 
-.inspector-scroll-content {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    width: 100%;
-    height: 100%;
-    display: block;
-    visibility: visible;
-}
-
 /* 2. The Invisible Resize Handle */
 .inspector-resizer {
     position: absolute;
@@ -4084,11 +4074,6 @@ ARROWS
 .atomic-step-row span {
     display: block;
     line-height: 1.4;
-}
-
-/* Hide the horizontal scrollbar in the inspector */
-.inspector-scroll-content {
-    overflow-x: hidden !important;
 }
 
 .empty-inspector {
@@ -5834,7 +5819,7 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   transition: width 0.25s ease;
   flex-shrink: 0;
    height: 100%;
-   padding: 0;
+   padding: 20px 20px 0 20px;
 }
 
 /* ADD this to override the translate */
@@ -5854,8 +5839,9 @@ body.is-visualizer #v2-inspector-panel {
    height: 100%;
    margin: 0 !important;
    box-sizing: border-box;
-   display: flex;
    flex-direction: column;
+   display: block;
+    visibility: visible;
 }
 
 #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar { width: 4px; }
@@ -5872,7 +5858,7 @@ body.is-visualizer #v2-inspector-panel {
    margin: 0 !important;
    display: flex;
    flex-direction: column;
-   height: auto: !important;
+   height: 100%;
 }
 
 /* High-specificity override for visualizer inspector */
