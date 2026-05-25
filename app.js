@@ -11564,7 +11564,11 @@ OL.removeResourceFromWorkflow = function(wfId, resId) {
 OL.reorderWorkflowResources = function(wfId, fromIdx, toIdx) {
     const wf = OL.getWorkflows().find(w => w.id === wfId);
     if (!wf || !wf.resourceIds) return;
-    const [moved] = wf.resou
+    const [moved] = wf.resourceIds.splice(fromIdx, 1);
+    wf.resourceIds.splice(toIdx, 0, moved);
+    OL.persist();
+    OL.renderVisualizer();
+};
 
 // ── CARD BUILDER (shared between regular + expanded globals) ──
 OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
