@@ -11015,13 +11015,17 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
 
     // ── RAIL: Stage header ───────────────────────────────
     railHtml += `
-      <div style="padding:8px 10px 3px;font-size:9px;font-weight:700;
-                  text-transform:uppercase;letter-spacing:0.1em;
-                  color:rgba(255,255,255,0.25);">
-        ${esc(stage.name)}
+      <div style="padding:8px 10px 3px;display:flex;align-items:center;gap:6px;">
+        <span contenteditable="true"
+              style="font-size:9px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.1em;color:rgba(255,255,255,0.25);
+                     outline:none;flex:1;"
+              onblur="OL._fvEditStageName('${stage.id}', this.innerText.trim())">
+          ${esc(stage.name)}
+        </span>
       </div>
     `;
-
+      
     // ── RAIL: Workflow entries ───────────────────────────
     stageWorkflows.forEach((wf, wfi) => {
       if (filteredWfId && wf.id !== filteredWfId) return;
@@ -11041,11 +11045,15 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
              onmouseout="this.style.background='${isActive ? `${wfColor}15` : 'transparent'}'">
           <div style="width:8px;height:8px;border-radius:50%;
                       background:${wfColor};flex-shrink:0;"></div>
-          <span style="font-size:10px;font-weight:500;
-                       color:${isActive ? wfColor : 'rgba(255,255,255,0.5)'};
-                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">
-            ${esc(wf.name)}
-          </span>
+          <span contenteditable="true"
+              style="font-size:10px;font-weight:500;
+                     color:${isActive ? wfColor : 'rgba(255,255,255,0.5)'};
+                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;
+                     outline:none;"
+              onclick="event.stopPropagation();"
+              onblur="OL.renameWorkflow('${wf.id}', this.innerText.trim())">
+          ${esc(wf.name)}
+        </span>
           <span style="font-size:9px;color:rgba(255,255,255,0.2);">
             ${wfRes.length}
           </span>
@@ -11100,7 +11108,11 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
                     justify-content:center;flex-shrink:0;">
           ${si + 1}
         </div>
-        <span style="font-size:12px;font-weight:500;color:#1b2d3f;">
+        <span contenteditable="true"
+              style="font-size:12px;font-weight:500;color:#1b2d3f;outline:none;
+                     border-bottom:1px dashed transparent;transition:border-color 0.2s;"
+              onfocus="this.style.borderColor='#3dd9c5'"
+              onblur="this.style.borderColor='transparent';OL._fvEditStageName('${stage.id}', this.innerText.trim())">
           ${esc(stage.name)}
         </span>
         <button class="fv-btn" style="margin-left:auto;font-size:10px;"
@@ -12125,48 +12137,24 @@ OL._fvSetupCardDrag = function(el, resId, stepId) {
 };
 
 // ── STAGE NAME EDITING ────────────────────────────────────
-OL._fvEditStageName = function(stageId) {
-  const nameEl = document.getElementById(`fv-lane-name-${stageId}`);
-  if (!nameEl) return;
+OL._fvEditStageName = function(stageId, name) {
+    const data  = OL.getCurrentProjectData();
+    const stage = (data.stages || []).find(s => String(s.id) === String(stageId));
+    if (!stage) return;
 
-  const data = OL.getCurrentProjectData();
-  const stage = (data.stages || []).find(s => String(s.id) === String(stageId));
-  if (!stage) return;
-
-  const currentName = stage.name;
-
-  // Swap text span for input
-  nameEl.outerHTML = `
-    <input class="fv-lane-name-input"
-           id="fv-lane-name-${stageId}"
-           value="${esc(currentName)}"
-           maxlength="40"
-           onblur="OL._fvCommitStageName('${stageId}', this.value)"
-           onkeydown="if(event.key==='Enter') this.blur(); if(event.key==='Escape') OL.renderVisualizer();">
-  `;
-
-  // Focus + select all
-  const input = document.getElementById(`fv-lane-name-${stageId}`);
-  if (input) {
-    input.focus();
-    input.select();
-  }
-};
-
-OL._fvCommitStageName = async function(stageId, newName) {
-  const name = (newName || '').trim();
-  if (!name) { OL.renderVisualizer(); return; }
-
-  const data = OL.getCurrentProjectData();
-  const stage = (data.stages || []).find(s => String(s.id) === String(stageId));
-  if (!stage) return;
-
-  if (stage.name === name) { OL.renderVisualizer(); return; }
-
-  stage.name = name;
-  await OL.persist();
-  console.log(`✅ Stage renamed to: ${name}`);
-  OL.renderVisualizer();
+    if (name && name.trim()) {
+        // Called from contenteditable onblur — just save
+        stage.name = name.trim();
+        OL.persist();
+        // No re-render needed — contenteditable already shows the new name
+    } else if (!name) {
+        // Called from pencil button — show prompt
+        const newName = prompt('Stage name:', stage.name);
+        if (!newName?.trim()) return;
+        stage.name = newName.trim();
+        OL.persist();
+        OL.renderVisualizer();
+    }
 };
 
 // ── JUMP TO LANE ─────────────────────────────────────────
@@ -12926,19 +12914,32 @@ OL._fvOpenStepsList = function(resId) {
       <!-- STAGE -->
       <div class="fvi-section">
         <div class="fvi-label">
-          <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
-          Stage
+            <i data-lucide="map-pin" style="width:11px;height:11px;"></i>
+            Stage & Workflow
         </div>
         <select class="fvi-select"
-                onchange="OL.handleResourceSave('${res.id}','stageId',this.value)">
-          <option value="">— Unassigned —</option>
-          ${stages.map(s => `
-            <option value="${esc(s.id)}"
-                    ${res.stageId === s.id ? 'selected' : ''}>
-              ${esc(s.name)}
-            </option>`).join('')}
+                onchange="OL._fvAssignStageAndWorkflow('${res.id}', this.value)">
+            <option value="">— Unassigned —</option>
+            ${stages.map(s => {
+                const stageWorkflows = (OL.getWorkflows()||[]).filter(w => w.stageId === s.id);
+                const stageVal = `stage:${s.id}`;
+                const stageSelected = res.stageId === s.id && !res.workflowId;
+                return `
+                    <option value="${stageVal}" ${stageSelected ? 'selected' : ''}>
+                        ${esc(s.name)}
+                    </option>
+                    ${stageWorkflows.map(wf => {
+                        const wfSelected = res.workflowId === wf.id;
+                        return `
+                            <option value="wf:${wf.id}:${s.id}" ${wfSelected ? 'selected' : ''}>
+                                &nbsp;&nbsp;↳ ${esc(wf.name)}
+                            </option>
+                        `;
+                    }).join('')}
+                `;
+            }).join('')}
         </select>
-      </div>
+    </div>
 
       <!-- CLASSIFICATION -->
       <div class="fvi-section">
@@ -13023,6 +13024,32 @@ OL._fvOpenStepsList = function(resId) {
     }
     if (window.lucide) lucide.createIcons();
   });
+};
+
+OL._fvAssignStageAndWorkflow = function(resId, value) {
+    const data = OL.getCurrentProjectData();
+    const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
+    if (!res || !value) return;
+
+    if (value.startsWith('stage:')) {
+        const stageId = value.replace('stage:', '');
+        res.stageId = stageId;
+        // Remove from any workflow
+        const prevWf = (data.workflows||[]).find(w => (w.resourceIds||[]).includes(String(resId)));
+        if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
+    } else if (value.startsWith('wf:')) {
+        const [, wfId, stageId] = value.split(':');
+        res.stageId = stageId;
+        // Remove from old workflow first
+        const prevWf = (data.workflows||[]).find(w =>
+            w.id !== wfId && (w.resourceIds||[]).includes(String(resId))
+        );
+        if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
+        OL.addResourceToWorkflow(wfId, resId);
+    }
+
+    OL.persist();
+    OL._fvOpenStepsList(resId);
 };
 
 OL._fvOpenStepCanvas = function(resId, breadcrumb) {
