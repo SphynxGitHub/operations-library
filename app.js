@@ -11170,7 +11170,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
              ondragover="OL._fvLaneDragOver(event)"
              ondragleave="OL._fvLaneDragLeave(event)"
              ondrop="OL._fvLaneDrop(event, '${stage.id}', '${wf.id}')">
-          <div style="display:flex;align-items:center;gap:8px;
+          <div style="display:flex;align-items:center;gap:8px; width: 100%;
                       margin-bottom:10px;padding-bottom:8px;
                       border-bottom:0.5px solid #f3f4f6;">
             <div style="width:10px;height:10px;border-radius:50%;
@@ -11185,7 +11185,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
             </span>
             <button class="fv-btn" style="margin-left:auto;font-size:9px;padding:2px 6px;"
                     onclick="event.stopPropagation(); OL._fvAddResourceToWorkflow('${wf.id}')">
-              <i data-lucide="plus" style="width:10px;height:10px;"></i> Add
+              <i data-lucide="plus" style="width:10px;height:10px;"></i> Add Resource
             </button>
             <button class="fv-btn" style="font-size:9px;padding:2px 6px;color:#ef4444;"
                     onclick="event.stopPropagation(); OL.deleteWorkflow('${wf.id}')">
