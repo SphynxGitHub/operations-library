@@ -10636,6 +10636,7 @@ if (!OL._fv) OL._fv = {
     searchMatches: [], searchIdx: -1,
     snapToGrid: false, gridSize: 20,
     _searchQuery: '',
+    railCollapsed: sessionStorage.getItem('fv_rail_collapsed') === 'true',
 };
 
 // ── MAIN ENTRY ────────────────────────────────────────────
@@ -10677,6 +10678,14 @@ OL.renderVisualizer = function() {
           <span class="fv-current">Flow Map</span>
         </div>
         <div class="fv-spacer"></div>
+
+        <button class="fv-btn fv-icon"
+                onclick="OL._fv.railCollapsed = !OL._fv.railCollapsed; 
+                 sessionStorage.setItem('fv_rail_collapsed', OL._fv.railCollapsed); 
+                 OL.renderVisualizer();"
+                title="${OL._fv.railCollapsed ? 'Expand panel' : 'Collapse panel'}">
+            <i data-lucide="${OL._fv.railCollapsed ? 'panel-left-open' : 'panel-left-close'}"></i>
+        </button>
 
         <div class="fv-search-wrap">
           <i data-lucide="search" style="width:13px;height:13px;color:#9ca3af;flex-shrink:0;"></i>
@@ -11213,24 +11222,65 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   });
 
   // ── ADD STAGE AT END ─────────────────────────────────
-  railHtml += `
-    <div style="padding:8px 10px;">
-      <button class="fv-lane-action-btn" style="width:100%;justify-content:center;opacity:0.5;"
-              onclick="OL.addStageBetween(${displayStages.length})"
-              title="Add stage at end">
-        <i data-lucide="plus"></i>
-      </button>
-    </div>
-  `;
+  const railCollapsed = OL._fv.railCollapsed;
 
   return `
-    <div id="fv-lane-rail">${railHtml}</div>
+    <div id="fv-lane-rail"
+         style="width:${railCollapsed ? '32px' : '140px'};
+                min-width:${railCollapsed ? '32px' : '140px'};
+                transition:width 0.25s ease, min-width 0.25s ease;
+                overflow:hidden;">
+        ${railCollapsed ? `
+            <div style="display:flex;flex-direction:column;align-items:center;
+                        padding:8px 0;gap:4px;">
+                <button onclick="OL._fv.railCollapsed=false;OL.renderVisualizer();"
+                        style="width:24px;height:24px;border:none;
+                               background:rgba(255,255,255,0.08);
+                               border-radius:6px;cursor:pointer;
+                               color:rgba(255,255,255,0.4);
+                               display:flex;align-items:center;justify-content:center;
+                               margin-bottom:6px;">
+                    <i data-lucide="panel-left-open" style="width:13px;height:13px;"></i>
+                </button>
+                ${displayStages.flatMap(stage => {
+                    const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
+                    return stageWorkflows.map((wf, wfi) => {
+                        const wfColor = wf.color || WF_COLORS[wfi % WF_COLORS.length];
+                        return `
+                            <div title="${esc(wf.name)}"
+                                 onclick="OL._fv.stageFilter='${wf.id}';OL._fv.railCollapsed=false;OL.renderVisualizer();"
+                                 style="width:10px;height:10px;border-radius:50%;
+                                        background:${wfColor};cursor:pointer;flex-shrink:0;
+                                        transition:transform 0.15s;"
+                                 onmouseover="this.style.transform='scale(1.4)'"
+                                 onmouseout="this.style.transform='scale(1)'">
+                            </div>
+                        `;
+                    });
+                }).join('')}
+                <div title="Unassigned"
+                     style="width:8px;height:8px;border-radius:50%;
+                            background:#6b7280;opacity:0.4;margin-top:4px;">
+                </div>
+            </div>
+        ` : `
+            ${railHtml}
+            <div style="padding:8px 10px;">
+                <button class="fv-lane-action-btn"
+                        style="width:100%;justify-content:center;opacity:0.5;"
+                        onclick="OL.addStageBetween(${displayStages.length})"
+                        title="Add stage at end">
+                    <i data-lucide="plus"></i>
+                </button>
+            </div>
+        `}
+    </div>
     <div id="fv-canvas-wrap"
          onclick="OL._fvHandleCanvasClick(event)">
-      <div id="fv-canvas">
-        <svg id="fv-svg-layer"></svg>
-        <div id="fv-lanes-container">${lanesHtml}</div>
-      </div>
+        <div id="fv-canvas">
+            <svg id="fv-svg-layer"></svg>
+            <div id="fv-lanes-container">${lanesHtml}</div>
+        </div>
     </div>
   `;
 };
