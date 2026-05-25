@@ -10727,12 +10727,21 @@ OL.renderVisualizer = function() {
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
                 onchange="OL._fv.stageFilter = this.value; OL.renderVisualizer();">
-          <option value="">All Stages</option>
-          ${stages.map(s => `
-            <option value="${esc(s.id)}"
-                    ${OL._fv.stageFilter === s.id ? 'selected' : ''}>
-              ${esc(s.name)}
-            </option>`).join('')}
+          <option value="">All stages & workflows</option>
+          ${stages.map(s => {
+            const stageWorkflows = (OL.getWorkflows() || []).filter(w => w.stageId === s.id);
+            const stageSelected  = OL._fv.stageFilter === `stage-${s.id}`;
+            return `
+              <option value="stage-${esc(s.id)}" ${stageSelected ? 'selected' : ''}>
+                ${esc(s.name)}
+              </option>
+              ${stageWorkflows.map(wf => `
+                <option value="${esc(wf.id)}" ${OL._fv.stageFilter === wf.id ? 'selected' : ''}>
+                  &nbsp;&nbsp;↳ ${esc(wf.name)}
+                </option>
+              `).join('')}
+            `;
+          }).join('')}
         </select>
 
         <!-- Globals toggle (flowchart only) -->
@@ -10979,8 +10988,11 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   const displayStages = [...stages];
 
   displayStages.forEach((stage, si) => {
-    // Stage filter
     if (filteredStageId && stage.id !== filteredStageId) return;
+    if (filteredWfId) {
+        const hasMatchingWf = workflows.some(w => w.stageId === stage.id && w.id === filteredWfId);
+        if (!hasMatchingWf) return;
+    }
 
     // Get workflows for this stage
     const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
@@ -12672,9 +12684,24 @@ OL._fvBuildListShell = function(stages, resources) {
   const displayStages = [...stages];
 
     const stagesHtml = displayStages.map((stage, si) => {
-        if (filter && stage.id !== filter) return '';
-        const stageRes = (byStage[stage.id] || []).filter(r => OL._fv.showArchived || !r.isArchived);
-        if (stageRes.length === 0) return '';
+    if (filter && filter.startsWith('stage-') && stage.id !== filter.replace('stage-', '')) return '';
+    if (filter && !filter.startsWith('stage-') && filter !== '') {
+        // workflow filter — only show stages containing this workflow
+        const wf = (OL.getWorkflows()||[]).find(w => w.id === filter);
+        if (!wf || wf.stageId !== stage.id) return '';
+    }
+        
+    const stageRes = (byStage[stage.id] || []).filter(r => {
+        if (!OL._fv.showArchived && r.isArchived) return false;
+        // If workflow filter active, only show resources in that workflow
+        if (filter && !filter.startsWith('stage-') && filter !== '') {
+            const wf = (OL.getWorkflows()||[]).find(w => w.id === filter);
+            if (wf && !(wf.resourceIds||[]).includes(String(r.id))) return false;
+        }
+        return true;
+    });
+        
+    if (stageRes.length === 0) return '';
     
       // Build steps grouped by resource, with a clickable resource header
       const stepsHtml = stageRes.map(res => {
