@@ -11312,6 +11312,12 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
 OL._fvCreateWorkflow = function(stageId) {
     const name = prompt('Workflow name:');
     if (!name?.trim()) return;
+    
+    const data = OL.getCurrentProjectData();
+    console.log('Creating workflow for client:', getActiveClient()?.meta?.name);
+    console.log('Current workflows:', data.workflows);
+    console.log('stageId:', stageId);
+    
     OL.createWorkflow(name.trim(), stageId);
     OL.renderVisualizer();
 };
@@ -11510,6 +11516,8 @@ OL.getWorkflows = function() {
 
 OL.createWorkflow = function(name, stageId, color) {
     const data = OL.getCurrentProjectData();
+    console.log('createWorkflow data:', data);
+    console.log('workflows before:', data.workflows);
     if (!data.workflows) data.workflows = [];
     const wf = {
         id: 'wf-' + Date.now(),
@@ -11520,6 +11528,7 @@ OL.createWorkflow = function(name, stageId, color) {
         description: ''
     };
     data.workflows.push(wf);
+    console.log('workflows after:', data.workflows);
     OL.persist();
     return wf;
 };
