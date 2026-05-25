@@ -630,7 +630,11 @@ OL.partnerCreateClient = function(partnerKey) {
         projectData: {
             localResources: [],
             localApps: [],
-            scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }]
+            scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }],
+            localFunctions: [],
+            stages: [],
+            workfows: [],
+            clientTasks: [],
         }
     };
 
@@ -1490,6 +1494,8 @@ OL.onboardNewClient = function () {
       scopingSheets: [{ id: "initial", lineItems: [] }],
       clientTasks: [],
       teamMembers: [],
+      stages: [],
+      workflows: [],
     },
     sharedMasterIds: [],
   };
@@ -10917,186 +10923,351 @@ OL._fvRenderList = function(stages, resources) {
 // ══════════════════════════════════════════════
 
 OL._fvBuildFlowchartShell = function(stages, resources) {
-  const filter   = OL._fv.stageFilter;
-  const expanded = OL._fv.globalsExpanded || false;
-
-  // Build stageId → resources map
-  const byStage = {};
-  stages.forEach(s => byStage[s.id] = []);
-  byStage['__none__'] = [];
+  const data      = OL.getCurrentProjectData();
+  if (!data.workflows) data.workflows = [];
+  const workflows = data.workflows;
+  const filter    = OL._fv.stageFilter || '';
+  const expanded  = OL._fv.globalsExpanded || false;
 
   const globalResources = resources.filter(r => r.isGlobal);
-  const globalIds = new Set(globalResources.map(r => String(r.id)));
+  const globalIds       = new Set(globalResources.map(r => String(r.id)));
 
-  // Non-global resources → assigned to their stage
-  resources.forEach(r => {
-    if (globalIds.has(String(r.id))) return; // handled separately
-    const key = r.stageId && byStage[r.stageId] !== undefined
-      ? r.stageId : '__none__';
-    byStage[key].push(r);
-  });
-
-  // Global resources → inject into every stage that references them
-  // A stage "references" a global if any non-global resource in that
-  // stage has a step.logic.out pointing to the global, or vice versa
-  const stageGlobalMap = {}; // stageId → Set of globalIds used
-  stages.forEach(s => stageGlobalMap[s.id] = new Set());
-  stageGlobalMap['__none__'] = new Set();
-
-  resources.forEach(r => {
-    if (globalIds.has(String(r.id))) return;
-    const key = r.stageId && stageGlobalMap[r.stageId] !== undefined
-      ? r.stageId : '__none__';
-    (r.steps || []).forEach(step => {
-      (step.logic?.out || []).forEach(out => {
-        if (!out.targetId) return;
-        const lastH = String(out.targetId).lastIndexOf('-');
-        if (lastH === -1) return;
-        const tResId = out.targetId.substring(0, lastH);
-        if (globalIds.has(tResId)) stageGlobalMap[key].add(tResId);
-      });
-    });
-  });
-
-  // Also check globals pointing INTO non-globals
+  // Build global stage count map
+  const globalStageCount = {};
   globalResources.forEach(gr => {
-    (gr.steps || []).forEach(step => {
-      (step.logic?.out || []).forEach(out => {
-        if (!out.targetId) return;
-        const lastH = String(out.targetId).lastIndexOf('-');
-        if (lastH === -1) return;
-        const tResId = out.targetId.substring(0, lastH);
-        const tRes = resources.find(r => String(r.id) === tResId);
-        if (tRes && !globalIds.has(tResId)) {
-          const key = tRes.stageId && stageGlobalMap[tRes.stageId] !== undefined
-            ? tRes.stageId : '__none__';
-          stageGlobalMap[key].add(String(gr.id));
-        }
-      });
+    globalStageCount[String(gr.id)] = 0;
+    stages.forEach(s => {
+      const stageRes = resources.filter(r => r.stageId === s.id && !globalIds.has(String(r.id)));
+      const referenced = stageRes.some(r =>
+        (r.steps||[]).some(step =>
+          (step.logic?.out||[]).some(out => {
+            const lastH = String(out.targetId||'').lastIndexOf('-');
+            return lastH !== -1 && out.targetId.substring(0, lastH) === String(gr.id);
+          })
+        )
+      );
+      if (referenced) globalStageCount[String(gr.id)]++;
     });
   });
+
+  // Determine which stages/workflows to show based on filter
+  // filter can be 'stage-{id}' or 'wf-{id}' or ''
+  const isWfFilter    = filter.startsWith('wf-');
+  const isStageFilter = filter.startsWith('stage-') || (!isWfFilter && filter !== '');
+  const filteredWfId  = isWfFilter ? filter : null;
+  const filteredStageId = isStageFilter ? filter.replace('stage-', '') : null;
+
+  let railHtml  = '';
+  let lanesHtml = '';
+  let globalCardNum = 0;
+
+  // ── COLORS for workflows ─────────────────────────────
+  const WF_COLORS = [
+    '#3dd9c5','#7c3aed','#f97316','#38bdf8',
+    '#a78bfa','#fb923c','#10b981','#f43f5e'
+  ];
 
   const displayStages = [...stages];
 
-  // Count how many stages each global appears in
-  const globalStageCount = {};
-  globalResources.forEach(gr => {
-    let count = 0;
-    Object.values(stageGlobalMap).forEach(set => {
-      if (set.has(String(gr.id))) count++;
-    });
-    globalStageCount[String(gr.id)] = count;
-  });
-
-  let globalCardNum = 0;
-  let lanesHtml = '';
-  let railHtml  = '';
-
   displayStages.forEach((stage, si) => {
-    if (filter && stage.id !== filter) return;
+    // Stage filter
+    if (filteredStageId && stage.id !== filteredStageId) return;
 
-    const stageRes = (byStage[stage.id] || [])
-      .sort((a, b) => (a.coords?.x || 0) - (b.coords?.x || 0));
+    // Get workflows for this stage
+    const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
 
-    const stageGlobals = [...(stageGlobalMap[stage.id] || new Set())]
-      .map(gid => globalResources.find(r => String(r.id) === gid))
-      .filter(Boolean);
+    // Get unassigned resources for this stage
+    const assignedResIds = new Set(
+      stageWorkflows.flatMap(w => w.resourceIds || [])
+    );
+    const unassignedRes = resources.filter(r =>
+      r.stageId === stage.id &&
+      !globalIds.has(String(r.id)) &&
+      !assignedResIds.has(String(r.id))
+    );
 
-    const totalCount = stageRes.length + stageGlobals.length;
+    // Skip stage if wf filter and no matching workflow
+    if (filteredWfId) {
+      const hasMatchingWf = stageWorkflows.some(w => w.id === filteredWfId);
+      if (!hasMatchingWf) return;
+    }
 
-    // ── RAIL LABEL ────────────────────────────────────
+    // ── RAIL: Stage header ───────────────────────────────
     railHtml += `
-      <div class="fv-lane-label ${!filter || filter === stage.id ? 'active' : ''}"
-           id="fv-rail-${stage.id}">
-        <div class="fv-lane-accent"></div>
-        <div class="fv-lane-label-body">
-          <div class="fv-lane-name-text"
-               id="fv-lane-name-${stage.id}">${esc(stage.name)}</div>
-          <div class="fv-lane-count">${totalCount} resource${totalCount !== 1 ? 's' : ''}</div>
-        </div>
-        <div class="fv-lane-actions">
-          <button class="fv-lane-action-btn"
-                  title="Add stage before this one"
-                  onclick="event.stopPropagation(); OL.addStageBetween(${si})">
-            <i data-lucide="plus"></i>
-          </button>
-          <button class="fv-lane-action-btn"
-                  title="Edit name"
-                  onclick="event.stopPropagation(); OL._fvEditStageName('${stage.id}')">
-            <i data-lucide="pencil"></i>
-          </button>
-          <button class="fv-lane-action-btn"
-                  title="Jump to stage"
-                  onclick="event.stopPropagation(); OL._fvJumpToLane('${stage.id}')">
-            <i data-lucide="arrow-right"></i>
-          </button>
-        </div>
+      <div style="padding:8px 10px 3px;font-size:9px;font-weight:700;
+                  text-transform:uppercase;letter-spacing:0.1em;
+                  color:rgba(255,255,255,0.25);">
+        ${esc(stage.name)}
       </div>
     `;
 
-    // ── LANE CARDS ────────────────────────────────────
-    const regularCardsHtml = stageRes.map(res => {
-      globalCardNum++;
-      return OL._fvBuildCard(res, globalCardNum, false, 0);
-    }).join('');
+    // ── RAIL: Workflow entries ───────────────────────────
+    stageWorkflows.forEach((wf, wfi) => {
+      if (filteredWfId && wf.id !== filteredWfId) return;
+      const wfColor  = wf.color || WF_COLORS[wfi % WF_COLORS.length];
+      const isActive = OL._fv.stageFilter === wf.id;
+      const wfRes    = (wf.resourceIds || [])
+        .map(id => resources.find(r => String(r.id) === id))
+        .filter(Boolean);
 
-    // Global resources for this stage
-    const globalsHtml = stageGlobals.map(gr => {
-      const tc = OL._fvGetType(gr.type);
-      const stageCount = globalStageCount[String(gr.id)] || 1;
+      railHtml += `
+        <div style="padding:5px 10px;display:flex;align-items:center;gap:6px;
+                    cursor:pointer;border-left:3px solid ${isActive ? wfColor : 'transparent'};
+                    background:${isActive ? `${wfColor}15` : 'transparent'};
+                    transition:all 0.15s;"
+             onclick="OL._fv.stageFilter='${wf.id}';OL.renderVisualizer();"
+             onmouseover="this.style.background='rgba(255,255,255,0.04)'"
+             onmouseout="this.style.background='${isActive ? `${wfColor}15` : 'transparent'}'">
+          <div style="width:8px;height:8px;border-radius:50%;
+                      background:${wfColor};flex-shrink:0;"></div>
+          <span style="font-size:10px;font-weight:500;
+                       color:${isActive ? wfColor : 'rgba(255,255,255,0.5)'};
+                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">
+            ${esc(wf.name)}
+          </span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.2);">
+            ${wfRes.length}
+          </span>
+        </div>
+      `;
 
-      if (expanded) {
-        // Full card with global badge
+      // Rail: resources within workflow
+      wfRes.forEach(res => {
+        const tc = OL._fvGetType(res.type);
+        railHtml += `
+          <div style="padding:3px 10px 3px 22px;display:flex;align-items:center;gap:5px;
+                      cursor:pointer;transition:background 0.12s;"
+               onclick="OL._fvOpenStepsList('${res.id}')"
+               onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+               onmouseout="this.style.background='transparent'">
+            <div style="width:5px;height:5px;border-radius:50%;
+                        background:${tc.color};flex-shrink:0;"></div>
+            <span style="font-size:10px;color:rgba(255,255,255,0.3);
+                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${esc(res.name.substring(0, 18))}
+            </span>
+          </div>
+        `;
+      });
+    });
+
+    // Rail: unassigned
+    if (unassignedRes.length > 0 && !filteredWfId) {
+      railHtml += `
+        <div style="padding:5px 10px;display:flex;align-items:center;gap:6px;opacity:0.5;">
+          <div style="width:8px;height:8px;border-radius:50%;
+                      background:#6b7280;flex-shrink:0;"></div>
+          <span style="font-size:10px;color:rgba(255,255,255,0.3);">
+            Unassigned
+          </span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.2);">
+            ${unassignedRes.length}
+          </span>
+        </div>
+      `;
+    }
+
+    // ── CANVAS: Stage header ─────────────────────────────
+    lanesHtml += `
+      <div style="padding:8px 16px;background:#fff;
+                  border-bottom:0.5px solid #e5e7eb;
+                  display:flex;align-items:center;gap:8px;
+                  position:sticky;top:0;z-index:10;">
+        <div style="width:20px;height:20px;border-radius:5px;
+                    background:#3dd9c5;color:#fff;font-size:9px;
+                    font-weight:700;display:flex;align-items:center;
+                    justify-content:center;flex-shrink:0;">
+          ${si + 1}
+        </div>
+        <span style="font-size:12px;font-weight:500;color:#1b2d3f;">
+          ${esc(stage.name)}
+        </span>
+        <button class="fv-btn" style="margin-left:auto;font-size:10px;"
+                onclick="OL._fvCreateWorkflow('${stage.id}')">
+          <i data-lucide="plus" style="width:11px;height:11px;"></i> Workflow
+        </button>
+        <button class="fv-lane-action-btn"
+                title="Add stage before this one"
+                onclick="event.stopPropagation(); OL.addStageBetween(${si})">
+          <i data-lucide="plus"></i>
+        </button>
+        <button class="fv-lane-action-btn"
+                title="Edit name"
+                onclick="event.stopPropagation(); OL._fvEditStageName('${stage.id}')">
+          <i data-lucide="pencil"></i>
+        </button>
+      </div>
+    `;
+
+    // ── CANVAS: Workflow swimlanes ───────────────────────
+    stageWorkflows.forEach((wf, wfi) => {
+      if (filteredWfId && wf.id !== filteredWfId) return;
+      const wfColor = wf.color || WF_COLORS[wfi % WF_COLORS.length];
+      const wfRes   = (wf.resourceIds || [])
+        .map(id => resources.find(r => String(r.id) === id))
+        .filter(Boolean);
+
+      // Build globals for this workflow's resources
+      const wfGlobals = globalResources.filter(gr =>
+        wfRes.some(r =>
+          (r.steps||[]).some(step =>
+            (step.logic?.out||[]).some(out => {
+              const lastH = String(out.targetId||'').lastIndexOf('-');
+              return lastH !== -1 && out.targetId.substring(0, lastH) === String(gr.id);
+            })
+          )
+        )
+      );
+
+      const cardsHtml = wfRes.map(res => {
         globalCardNum++;
-        return OL._fvBuildCard(gr, globalCardNum, true, stageCount);
-      } else {
-        // Collapsed chip
+        return OL._fvBuildCard(res, globalCardNum, false, 0);
+      }).join('');
+
+      const globalsHtml = expanded ? wfGlobals.map(gr => {
+        globalCardNum++;
+        return OL._fvBuildCard(gr, globalCardNum, true, globalStageCount[String(gr.id)] || 1);
+      }).join('') : wfGlobals.map(gr => {
+        const tc = OL._fvGetType(gr.type);
+        const stageCount = globalStageCount[String(gr.id)] || 1;
         return `
           <div class="fv-global-chip"
-               id="fv-chip-${gr.id}-${stage.id}"
                onclick="OL.openInspector('${gr.id}', null, 'cards')"
-               title="${esc(gr.name)} — used in ${stageCount} stage${stageCount !== 1 ? 's' : ''}">
+               title="${esc(gr.name)} — used in ${stageCount} workflow${stageCount !== 1 ? 's' : ''}">
             <div class="fv-global-chip-icon" style="background:${tc.color};">${tc.abbr}</div>
             <span>${esc(gr.name.substring(0, 20))}</span>
             <span class="fv-global-chip-count">×${stageCount}</span>
           </div>
         `;
-      }
-    }).join('');
+      }).join('');
 
-    lanesHtml += `
-      <div class="fv-swimlane" id="fv-lane-${stage.id}" data-stage-id="${stage.id}"
-           onclick="OL._fvHandleCanvasClick(event)"
-           ondragover="OL._fvLaneDragOver(event)"
-           ondragleave="OL._fvLaneDragLeave(event)"
-           ondrop="OL._fvLaneDrop(event, '${stage.id}')">
-        ${regularCardsHtml}
-        ${globalsHtml}
-        ${(stageRes.length === 0 && stageGlobals.length === 0)
-          ? '<div class="fv-empty-lane" style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;">No resources — drag one here or assign via the inspector.</div>'
-          : ''}
-      </div>
-    `;
+      lanesHtml += `
+        <div class="fv-swimlane" id="fv-lane-${wf.id}"
+             data-stage-id="${stage.id}"
+             data-wf-id="${wf.id}"
+             onclick="OL._fvHandleCanvasClick(event)"
+             ondragover="OL._fvLaneDragOver(event)"
+             ondragleave="OL._fvLaneDragLeave(event)"
+             ondrop="OL._fvLaneDrop(event, '${stage.id}', '${wf.id}')">
+          <div style="display:flex;align-items:center;gap:8px;
+                      margin-bottom:10px;padding-bottom:8px;
+                      border-bottom:0.5px solid #f3f4f6;">
+            <div style="width:10px;height:10px;border-radius:50%;
+                        background:${wfColor};flex-shrink:0;"></div>
+            <span contenteditable="true"
+                  style="font-size:11px;font-weight:500;color:#6b7280;outline:none;"
+                  onblur="OL.renameWorkflow('${wf.id}', this.innerText.trim())">
+              ${esc(wf.name)}
+            </span>
+            <span style="font-size:10px;color:#9ca3af;">
+              ${wfRes.length} resource${wfRes.length !== 1 ? 's' : ''}
+            </span>
+            <button class="fv-btn" style="margin-left:auto;font-size:9px;padding:2px 6px;"
+                    onclick="event.stopPropagation(); OL._fvAddResourceToWorkflow('${wf.id}')">
+              <i data-lucide="plus" style="width:10px;height:10px;"></i> Add
+            </button>
+            <button class="fv-btn" style="font-size:9px;padding:2px 6px;color:#ef4444;"
+                    onclick="event.stopPropagation(); OL.deleteWorkflow('${wf.id}')">
+              <i data-lucide="trash-2" style="width:10px;height:10px;"></i>
+            </button>
+          </div>
+          ${cardsHtml}
+          ${globalsHtml}
+          ${(wfRes.length === 0 && wfGlobals.length === 0) ? `
+            <div style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;
+                        border:1px dashed #e5e7eb;border-radius:8px;
+                        text-align:center;padding:20px;">
+              Drag resources here or click + Add
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+
+    // ── CANVAS: Unassigned resources ─────────────────────
+    if (unassignedRes.length > 0 && !filteredWfId) {
+      lanesHtml += `
+        <div class="fv-swimlane" id="fv-lane-unassigned-${stage.id}"
+             data-stage-id="${stage.id}"
+             style="opacity:0.7;"
+             ondragover="OL._fvLaneDragOver(event)"
+             ondragleave="OL._fvLaneDragLeave(event)"
+             ondrop="OL._fvLaneDrop(event, '${stage.id}', null)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="width:8px;height:8px;border-radius:50%;
+                        background:#9ca3af;flex-shrink:0;"></div>
+            <span style="font-size:11px;color:#9ca3af;">Unassigned</span>
+            <span style="font-size:10px;color:#d1d5db;">
+              ${unassignedRes.length} resource${unassignedRes.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            ${unassignedRes.map(res => {
+              globalCardNum++;
+              return OL._fvBuildCard(res, globalCardNum, false, 0);
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
   });
 
-  return `
-    <div id="fv-lane-rail">
-        ${railHtml}
-        <div style="padding:8px 10px;">
-            <button class="fv-lane-action-btn" style="width:100%;justify-content:center;opacity:0.5;"
-                    onclick="OL.addStageBetween(${displayStages.length})"
-                    title="Add stage at end">
-                <i data-lucide="plus"></i>
-            </button>
-        </div>
+  // ── ADD STAGE AT END ─────────────────────────────────
+  railHtml += `
+    <div style="padding:8px 10px;">
+      <button class="fv-lane-action-btn" style="width:100%;justify-content:center;opacity:0.5;"
+              onclick="OL.addStageBetween(${displayStages.length})"
+              title="Add stage at end">
+        <i data-lucide="plus"></i>
+      </button>
     </div>
-    <div id="fv-canvas-wrap">
+  `;
+
+  return `
+    <div id="fv-lane-rail">${railHtml}</div>
+    <div id="fv-canvas-wrap"
+         onclick="OL._fvHandleCanvasClick(event)">
       <div id="fv-canvas">
         <svg id="fv-svg-layer"></svg>
         <div id="fv-lanes-container">${lanesHtml}</div>
       </div>
     </div>
-`;
+  `;
+};
+
+OL._fvCreateWorkflow = function(stageId) {
+    const name = prompt('Workflow name:');
+    if (!name?.trim()) return;
+    OL.createWorkflow(name.trim(), stageId);
+    OL.renderVisualizer();
+};
+
+OL._fvAddResourceToWorkflow = function(wfId) {
+    const data = OL.getCurrentProjectData();
+    const workflows = data.workflows || [];
+    const wf = workflows.find(w => w.id === wfId);
+    if (!wf) return;
+
+    // Show picker of unassigned resources in this workflow's stage
+    const assignedIds = new Set(workflows.flatMap(w => w.resourceIds || []));
+    const available = (data.resources || []).filter(r =>
+        r.stageId === wf.stageId && !assignedIds.has(String(r.id))
+    );
+
+    if (available.length === 0) {
+        alert('No unassigned resources in this stage. Assign a resource to this stage first.');
+        return;
+    }
+
+    const options = available.map((r, i) => `${i + 1}. ${r.name}`).join('\n');
+    const choice = prompt(`Select resource to add:\n\n${options}\n\nEnter number:`);
+    if (!choice) return;
+
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < available.length) {
+        OL.addResourceToWorkflow(wfId, available[idx].id);
+        OL.renderVisualizer();
+    }
 };
 
 OL._fvLaneDragOver = function(e) {
@@ -11111,40 +11282,38 @@ OL._fvLaneDragLeave = function(e) {
   }
 };
 
-OL._fvLaneDrop = async function(e, stageId) {
-  e.preventDefault();
+OL._fvLaneDrop = function(event, stageId, wfId) {
+    event.preventDefault();
+    const resId = event.dataTransfer.getData('application/fv-resource');
+    if (!resId) return;
 
-  // Clear visual feedback on all lanes
-  document.querySelectorAll('.fv-swimlane').forEach(el => {
-    el.style.background = '';
-    el.style.outline = '';
-  });
+    const data = OL.getCurrentProjectData();
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
 
-  const resId  = e.dataTransfer.getData('application/fv-resource');
-  const source = e.dataTransfer.getData('application/fv-source'); // 'canvas' or workbench
-  if (!resId) return;
-
-  const data = OL.getCurrentProjectData();
-  const res  = (data.resources || []).find(r => String(r.id) === String(resId));
-  if (!res) return;
-
-  // If dropped on its own lane, do nothing
-  if (res.stageId === stageId) return;
-
-  await OL.updateAndSync(() => {
-    res.stageId  = stageId;
-    res.isGlobal = false;
-  });
-
-   const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
-    const scrollTop = wrap?.scrollTop || 0;
+    const wrap     = document.getElementById('fv-canvas-wrap');
+    const scrollTop  = wrap?.scrollTop || 0;
     const scrollLeft = wrap?.scrollLeft || 0;
+
+    // Assign to stage
+    res.stageId = stageId;
+
+    // Assign to workflow if dropped on a workflow lane
+    if (wfId) {
+        OL.addResourceToWorkflow(wfId, resId);
+    } else {
+        // Dropped on unassigned — remove from any workflow
+        const prevWf = (data.workflows || []).find(w =>
+            (w.resourceIds || []).includes(String(resId))
+        );
+        if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
+    }
 
     OL.persist();
     OL.renderVisualizer();
 
     requestAnimationFrame(() => {
-        const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+        const newWrap = document.getElementById('fv-canvas-wrap');
         if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
     });
 };
@@ -11254,6 +11423,98 @@ OL._fvComputeLayout = function(resources, stageFilter) {
     }
   });
 };
+
+// ── WORKFLOW HELPERS ─────────────────────────────────
+
+OL.getWorkflows = function() {
+    const data = OL.getCurrentProjectData();
+    const isVault = window.location.hash.includes('vault');
+    return isVault 
+        ? (state.master.workflows || [])
+        : (data.workflows || []);
+};
+
+OL.createWorkflow = function(name, stageId, color) {
+    const data = OL.getCurrentProjectData();
+    if (!data.workflows) data.workflows = [];
+    const wf = {
+        id: 'wf-' + Date.now(),
+        name: name || 'New Workflow',
+        stageId: stageId || '',
+        color: color || '#3dd9c5',
+        resourceIds: [],
+        description: ''
+    };
+    data.workflows.push(wf);
+    OL.persist();
+    return wf;
+};
+
+OL.renameWorkflow = function(wfId, name) {
+    const wf = OL.getWorkflows().find(w => w.id === wfId);
+    if (!wf) return;
+    wf.name = name.trim();
+    OL.persist();
+};
+
+OL.deleteWorkflow = function(wfId) {
+    if (!confirm('Delete this workflow? Resources will become unassigned.')) return;
+    const data = OL.getCurrentProjectData();
+    // Unassign all resources from this workflow
+    (data.resources || []).forEach(r => {
+        if (r.workflowId === wfId) r.workflowId = null;
+    });
+    data.workflows = (data.workflows || []).filter(w => w.id !== wfId);
+    OL.persist();
+    OL.renderVisualizer();
+};
+
+OL.addResourceToWorkflow = function(wfId, resId) {
+    const data = OL.getCurrentProjectData();
+    const wf  = (data.workflows || []).find(w => w.id === wfId);
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!wf || !res) return;
+
+    // Check if resource is already in another workflow
+    const existingWf = (data.workflows || []).find(w => 
+        w.id !== wfId && (w.resourceIds || []).includes(String(resId))
+    );
+
+    if (existingWf) {
+        // Force global if in multiple workflows
+        res.isGlobal = true;
+        console.log(`🌐 ${res.name} is now Global — used in multiple workflows`);
+    }
+
+    if (!wf.resourceIds) wf.resourceIds = [];
+    if (!wf.resourceIds.includes(String(resId))) {
+        wf.resourceIds.push(String(resId));
+    }
+    res.workflowId = wfId;
+    OL.persist();
+};
+
+OL.removeResourceFromWorkflow = function(wfId, resId) {
+    const data = OL.getCurrentProjectData();
+    const wf  = (data.workflows || []).find(w => w.id === wfId);
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!wf) return;
+    wf.resourceIds = (wf.resourceIds || []).filter(id => id !== String(resId));
+    // If no longer in multiple workflows, un-global
+    if (res) {
+        const otherWfs = (data.workflows || []).filter(w => 
+            w.id !== wfId && (w.resourceIds || []).includes(String(resId))
+        );
+        if (otherWfs.length === 0) res.isGlobal = false;
+        if (otherWfs.length <= 1) res.workflowId = otherWfs[0]?.id || null;
+    }
+    OL.persist();
+};
+
+OL.reorderWorkflowResources = function(wfId, fromIdx, toIdx) {
+    const wf = OL.getWorkflows().find(w => w.id === wfId);
+    if (!wf || !wf.resourceIds) return;
+    const [moved] = wf.resou
 
 // ── CARD BUILDER (shared between regular + expanded globals) ──
 OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
@@ -21697,6 +21958,7 @@ OL.syncRedtail = async function(client) {
                 visible: true,
                 category: 'Flows',
                 isExpanded: true,
+                workflowId: null,
                 archetype: 'Multi-Level',
                 steps: [{ id: `step-${uniqueId}`, name: "Workflow Template", appName: 'Redtail' }]
             };
