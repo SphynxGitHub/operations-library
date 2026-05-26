@@ -251,27 +251,24 @@ OL.sync = function() {
 
     console.log(`📋 Sync Complete: ${Object.keys(cloudClients).length} clients loaded.`);
 
-    // 🚀 UI Routing logic (Clean Slate)
+   // 🚀 UI Routing logic (Clean Slate)
     const main = document.getElementById('mainContent');
     
-    // Final check before letting handleRoute fire
     if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
         window.handleRoute();
     } else if (window.location.hash.includes('visualizer')) {
-        // Don't re-render if we just did a local operation
         if (window.lastLocalSave && (Date.now() - window.lastLocalSave < 8000)) {
             console.log("⏳ Skipping visualizer re-render — recent local save.");
             return;
         }
         if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
-    }
     } else if (window.isMatrixActive || state.activeMatrixId || window.location.hash.includes('analyze')) {
         console.log("🛡️ Matrix Active: Skipping render.");
     } else {
         console.log("🚦 Route Clear: Proceeding with render...");
         window.handleRoute();
     }
-});
+    });
 };
 
 OL.updateAndSync = async function(mutationFn) {
