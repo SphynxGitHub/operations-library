@@ -13480,6 +13480,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const isGlobal      = globalIds.has(String(res.id));
     const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
     const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
+    const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
     
     const outRules = (step.logic?.out || []).filter(l => {
         if (!l.targetId) return false;
@@ -13505,7 +13506,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
-    let cardFaceConditionHtml = ''; // Holds the "if August or February" string for the card face
+    let cardFaceConditionHtml = '';
     
     const isIndentedChild = depth > 0;
 
@@ -13522,9 +13523,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
 
         const isLoop  = rule.type === 'loop';
         const isDelay = rule.type === 'delay';
-        
-        // ⚡ CRITICAL RULE SYNTAX LOOKUP:
-        // Treat it as a structural branching condition IF explicitly typed or if it has a custom rule string populated.
         const isCond  = rule.type === 'condition' || (rule.rule && rule.rule.trim().length > 0);
         
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
@@ -13534,7 +13532,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         if (isCond) {
             hasNesting = true;
             
-            // Format custom descriptive text labels clearly on the parent channel link wrapper
             const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional Execution';
             cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 700; color: var(--accent); opacity: 0.8; margin-top: 2px;">↳ condition: "${esc(ruleText)}"</div>`;
 
@@ -13552,7 +13549,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
             let badgeText = `➔ Jump: ${targetLabel}`;
             let clickAction = '';
 
-            // Clickable anchoring mechanism to jump straight to targeted list item rows smoothly
             if (!isSubsequentLocalStep) {
                 clickAction = `onclick="event.stopPropagation(); const targetRow = document.getElementById('${jumpTargetHtmlId}'); if(targetRow) { targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected')); targetRow.classList.add('selected'); targetRow.style.outline='2px solid var(--accent)'; setTimeout(()=>targetRow.style.outline='',1500); }"`;
             }
@@ -13568,7 +13564,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                 badgeText = `🔀 Skip To: ${targetLabel} ➔`;
             }
 
-            // If there's a custom text qualifier statement but it's not structural, prepend it to the label
             if (rule.rule && rule.rule.trim() && !isCond) {
                 badgeText = `[If: "${rule.rule.trim()}"] ${badgeText}`;
             }
@@ -13580,7 +13575,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
-    const isConditionalBlock = isDecision || isConditional;
     const tags = [
         isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
         hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
