@@ -11237,7 +11237,8 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
           ${(wfRes.length === 0 && wfGlobals.length === 0) ? `
             <div style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;
                         border:1px dashed #e5e7eb;border-radius:8px;
-                        text-align:center;padding:20px;">
+                        text-align:center;padding:20px;
+                        pointer-events: none;">
               Drag resources here or click + Add
             </div>
           ` : ''}
@@ -11379,40 +11380,59 @@ OL._fvAddResourceToWorkflow = function(wfId) {
 };
 
 OL._fvLaneDragOver = function(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.classList.add('fv-drag-over');
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const lane = e.currentTarget;
+    lane.style.background = 'rgba(61,217,197,0.06)';
+    lane.style.outline = '2px dashed #3dd9c5';
+    lane.style.outlineOffset = '-4px';
 };
 
 OL._fvLaneDragLeave = function(e) {
-  if (!e.currentTarget.contains(e.relatedTarget)) {
-    e.currentTarget.classList.remove('fv-drag-over');
-  }
+    e.stopPropagation();
+    const lane = e.currentTarget;
+    if (!lane.contains(e.relatedTarget)) {
+        lane.style.background = '';
+        lane.style.outline = '';
+    }
 };
 
 OL._fvLaneDrop = function(event, stageId, wfId) {
     event.preventDefault();
-    const resId = event.dataTransfer.getData('application/fv-resource');
-    if (!resId) return;
+    event.stopPropagation();
+
+    // Clear highlights
+    document.querySelectorAll('.fv-swimlane').forEach(el => {
+        el.style.background = '';
+        el.style.outline = '';
+    });
+
+    // Try both data keys — canvas cards use application/fv-resource,
+    // workbench items also use application/fv-resource
+    const resId = event.dataTransfer.getData('application/fv-resource') ||
+                  event.dataTransfer.getData('text/plain');
+
+    if (!resId) { console.warn('No resId in drop'); return; }
 
     const data = OL.getCurrentProjectData();
-    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) return;
+    const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
+    if (!res) { console.warn('Resource not found:', resId); return; }
 
-    const wrap     = document.getElementById('fv-canvas-wrap');
-    const scrollTop  = wrap?.scrollTop || 0;
+    const wrap       = document.getElementById('fv-canvas-wrap');
+    const scrollTop  = wrap?.scrollTop  || 0;
     const scrollLeft = wrap?.scrollLeft || 0;
 
-    // Assign to stage
+    // Assign stage
     res.stageId = stageId;
 
-    // Assign to workflow if dropped on a workflow lane
-    if (wfId) {
+    // Assign workflow
+    if (wfId && wfId !== 'null') {
         OL.addResourceToWorkflow(wfId, resId);
     } else {
-        // Dropped on unassigned — remove from any workflow
-        const prevWf = (data.workflows || []).find(w =>
-            (w.resourceIds || []).includes(String(resId))
+        // Dropped on unassigned — remove from any existing workflow
+        const prevWf = (data.workflows||[]).find(w =>
+            (w.resourceIds||[]).includes(String(resId))
         );
         if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
     }
@@ -11422,7 +11442,10 @@ OL._fvLaneDrop = function(event, stageId, wfId) {
 
     requestAnimationFrame(() => {
         const newWrap = document.getElementById('fv-canvas-wrap');
-        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+        if (newWrap) {
+            newWrap.scrollTop  = scrollTop;
+            newWrap.scrollLeft = scrollLeft;
+        }
     });
 };
 
