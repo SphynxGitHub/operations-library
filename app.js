@@ -12625,10 +12625,28 @@ OL._fvUnmapResource = function(resId) {
     const data = OL.getCurrentProjectData();
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
     if (!res) return;
-    res.stageId = null;
+
+    res.stageId  = null;
     res.isGlobal = false;
+
+    // Also remove from any workflow
+    const prevWf = (data.workflows||[]).find(w =>
+        (w.resourceIds||[]).includes(String(resId))
+    );
+    if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
+
     OL.persist();
+
+    const wrap       = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+    const scrollTop  = wrap?.scrollTop  || 0;
+    const scrollLeft = wrap?.scrollLeft || 0;
+
     OL.renderVisualizer();
+
+    requestAnimationFrame(() => {
+        const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+    });
 };
 
 OL._fvWbDragStart = function(e, id, type) {
