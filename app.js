@@ -13509,7 +13509,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
     ].filter(Boolean).join('');
 
-    // 🎯 INLINE LOGIC MATRICES (The new card feature engine)
+    // 🎯 INLINE LOGIC MATRICES
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
@@ -13522,7 +13522,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const tStep   = tRes?.steps?.find(s => String(s.id) === String(tStepId));
         if (!tRes || !tStep) return;
 
-        // Determine if this is a standard subsequent step in the local list
         const nextSequentialStep = res.steps[stepIdx + 1];
         const isSubsequentLocalStep = (String(tResId) === String(res.id)) && nextSequentialStep && (String(tStepId) === String(nextSequentialStep.id));
 
@@ -13530,12 +13529,10 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const isDelay = rule.type === 'delay';
         const isCond  = rule.type === 'condition';
         
-        // Target contextual helper values
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
 
-        // 🛑 CONDITION A: If it's a structural conditional branch, build the nested cascade layout
         if (isCond) {
-            hasNesting = true;
+            hasNesting = true; // Sets scope tracking for the button below 
             nestedBranchesHtml += `
                 <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3); margin-left:16px; padding-left:20px;">
                     <div class="fv-branch-label" style="color:#3dd9c5; display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600;">
@@ -13544,7 +13541,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
                 </div>`;
         } 
-        // 🛑 CONDITION B: If it's a loop, a delay, OR a non-sequential jump destination, print it INLINE inside the card
         else if (isLoop || isDelay || !isSubsequentLocalStep) {
             let badgeStyle = "background:#f5f6f8; color:#6b7280; border:1px solid #e5e7eb;";
             let badgeText = `➔ Jump: ${targetLabel}`;
@@ -13595,7 +13591,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
 
           ${tags}
           ${resBadge}
-          ${hasCollapsible ? `
+          ${hasNesting ? `
             <span class="fv-substep-toggle"
                       onclick="event.stopPropagation();
                                const el=document.getElementById('${collapseId}');
