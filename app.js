@@ -13541,7 +13541,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         ${tc.abbr} ${esc(res.name.substring(0, 14))}
       </span>`;
 
-    // 🎯 INLINE LOGIC & CASCADE NESTING ENGINE
+    // 🎯 RE-ARCHITECTING THE NESTING & FLOW LINES
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
@@ -13572,7 +13572,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
             hasNesting = true;
             const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional Execution';
             
-            // Print the clean condition label on the card face
+            // Print the clean condition label on the parent card face
             cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 600; color: #38bdf8; opacity: 0.9; margin-top: 2px;">↳ If: "${esc(ruleText)}"</div>`;
 
             // Nest the target step directly under this branch header wrapper
@@ -13580,7 +13580,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                 <div class="fv-list-branch" style="margin-top: 6px; position: relative;">
                     <div class="fv-branch-label" style="color:#10b981; display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:0.02em; padding-left: ${28 + (depth * 12)}px; margin-bottom: 4px;">
                         <i data-lucide="git-commit" style="width:12px; height:12px; color:#10b981;"></i> 
-                        <span>If: ${esc(ruleText)}</span>
+                        <span>IF: ${esc(ruleText.toUpperCase())}</span>
                     </div>
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
                 </div>`;
@@ -13617,9 +13617,11 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
-    // 🛡️ THE OVERLAP SHIELD
-    if (hasNesting && isIndentedChild) {
-        return nestedBranchesHtml; 
+    // 🛡️ THE BULLETPROOF SINGLE-RENDER SHIELD
+    // If a step has already been assigned to a parent branch layout block higher up,
+    // we bypass rendering its base card representation on this depth layer.
+    if (isIndentedChild && !isConditional) {
+        return ''; 
     }
 
     // Dynamic Tag Generator
