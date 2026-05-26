@@ -256,8 +256,6 @@ OL.sync = function() {
     } else if (window.location.hash.includes('visualizer')) {
             state.clients = cloudClients;
             return;
-        }
-        if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
     } else if (window.isMatrixActive || state.activeMatrixId || window.location.hash.includes('analyze')) {
         console.log("🛡️ Matrix Active: Skipping render.");
     } else {
