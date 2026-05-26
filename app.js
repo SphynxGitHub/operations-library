@@ -230,7 +230,7 @@ OL.sync = function() {
 
     // 🛡️ RECENT SAVE GUARD
     const now = Date.now();
-    if (window.lastLocalSave && (now - window.lastLocalSave < 4000)) {
+    if (window.lastLocalSave && (now - window.lastLocalSave < 8000)) {
         console.log("⏳ Recent local save detected. Skipping sync echo.");
         return;
     }
@@ -258,7 +258,13 @@ OL.sync = function() {
     if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
         window.handleRoute();
     } else if (window.location.hash.includes('visualizer')) {
+        // Don't re-render if we just did a local operation
+        if (window.lastLocalSave && (Date.now() - window.lastLocalSave < 8000)) {
+            console.log("⏳ Skipping visualizer re-render — recent local save.");
+            return;
+        }
         if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
+    }
     } else if (window.isMatrixActive || state.activeMatrixId || window.location.hash.includes('analyze')) {
         console.log("🛡️ Matrix Active: Skipping render.");
     } else {
@@ -12665,20 +12671,12 @@ OL._fvFilterWb = function(tab) {
     if (list) list.innerHTML = OL._fvRenderWbItems(items, tab);
 };
 
-OL._fvUnmapResource = async function(resId) {
+OL._fvUnmapResource = function(resId) {
     const data   = OL.getCurrentProjectData();
     const client = getActiveClient();
     const workflows = client?.projectData?.workflows || data.workflows || [];
     
-    console.log('workflows count:', workflows.length);
-    console.log('looking for resId:', resId);
-    workflows.forEach(w => {
-        const has = (w.resourceIds||[]).some(id => String(id) === String(resId));
-        console.log(w.name, 'has resource:', has, 'ids:', w.resourceIds);
-    });
-
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    console.log('res found:', res?.name);
     if (!res) return;
     
     res.stageId  = null;
@@ -12687,11 +12685,21 @@ OL._fvUnmapResource = async function(resId) {
     const prevWf = workflows.find(w =>
         (w.resourceIds || []).some(id => String(id) === String(resId))
     );
-    console.log('prevWf:', prevWf?.name);
     if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
 
-    await OL.persist();
+    // Fire and forget — don't await
+    OL.persist();
+
+    const wrap       = document.getElementById('fv-canvas-wrap');
+    const scrollTop  = wrap?.scrollTop  || 0;
+    const scrollLeft = wrap?.scrollLeft || 0;
+
     OL.renderVisualizer();
+
+    requestAnimationFrame(() => {
+        const newWrap = document.getElementById('fv-canvas-wrap');
+        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+    });
 };
 
 OL._fvWbDragStart = function(e, id, type) {
