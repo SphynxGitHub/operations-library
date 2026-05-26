@@ -920,6 +920,9 @@ window.handleRoute = function () {
     const wasVisualizer = document.body.classList.contains('is-visualizer');
     const hash = window.location.hash || "#/";
     const isVisualizer = hash.includes('visualizer');
+    if (!isVisualizer) {
+        OL.closeInspectorPanel();
+    }
 
     // 🎯 THE AUTO-CLOSE HOOK: Run cleanup when leaving the Flow Map
     if (wasVisualizer && !isVisualizer) {
@@ -10868,6 +10871,7 @@ if (!OL._fv) OL._fv = {
 
 // ── MAIN ENTRY ────────────────────────────────────────────
 OL.renderVisualizer = function() {
+  const wasOpen = OL._fv._lastInspectorResId;
   const mainArea = document.getElementById('mainContent');
   if (!mainArea) return;
 
@@ -11151,6 +11155,12 @@ OL.renderVisualizer = function() {
   if (OL._fv.layout !== 'steps') {
     OL._fvSyncRailHeights();
     OL._fvSetupRailScroll();
+  }
+
+ if (wasOpen) {
+    requestAnimationFrame(() => {
+        OL._fvOpenStepsList(wasOpen);
+    });
   }
 };
 
@@ -13038,49 +13048,36 @@ OL._fvUnmapResource = function(resId) {
 };
 
 OL._fvHandleCanvasClick = function(e) {
-  // Don't close if clicking anything interactive
-  const isCard      = e.target.closest('.fv-card, .fv-step-card, .fv-list-item, .fv-global-chip, .fv-card-footer, .fv-card-body, .fv-card-steps-preview');
-  const isBtn       = e.target.closest('button, select, input, a, textarea, label');
-  const isInspector = e.target.closest('#v2-inspector-panel, #inspector-panel, .fvi-panel, .fvi-section, .fvi-header');
-  const isWb        = e.target.closest('#fv-wb-rail, #fv-wb-drawer');
-  const isLaneRail  = e.target.closest('#fv-lane-rail');
-  const isTopbar    = e.target.closest('#fv-topbar');
+    const isCard      = e.target.closest('.fv-card, .fv-step-card, .fv-list-item, .fv-card-footer, .fv-card-body, .fv-card-steps-preview');
+    const isBtn       = e.target.closest('button, select, input, a, textarea, label');
+    const isInspector = e.target.closest('#v2-inspector-panel, #inspector-panel');
+    const isWb        = e.target.closest('#fv-wb-rail, #fv-wb-drawer');
+    const isLaneRail  = e.target.closest('#fv-lane-rail');
+    const isTopbar    = e.target.closest('#fv-topbar');
 
-  if (isCard || isBtn || isInspector || isWb || isLaneRail || isTopbar) return;
+    if (isCard || isBtn || isInspector || isWb || isLaneRail || isTopbar) return;
 
-  // Deselect all cards
-  document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
-    .forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.fv-card.selected, .fv-step-card.selected, .fv-list-item.selected')
+        .forEach(el => el.classList.remove('selected'));
 
-  // Close inspector
-  OL.closeInspectorPanel();
+    OL.closeInspectorPanel();
 };
 
-// 🚀 NEW: Single source of truth for closing the inspector
 OL.closeInspectorPanel = function() {
-    const panel = document.getElementById('v2-inspector-panel') 
-                 || document.getElementById('inspector-panel');
-    if (!panel) return;
-    
-    // 🛡️ THE OVERFLOW SHIELD: Instantly hide the contents so they don't break full-width grids
-    panel.style.overflow = 'hidden';
-    const scrollContent = panel.querySelector('.inspector-scroll-content');
-    if (scrollContent) {
-        scrollContent.style.display = 'none'; // Completely stop rendering inner elements
+    OL._fv._lastInspectorResId = null;  // ← add this
+
+    const panel = document.getElementById('v2-inspector-panel');
+    if (panel) {
+        panel.classList.remove('open');
+        panel.id = 'inspector-panel';
     }
-    
-    panel.classList.remove('open');
-    
+
     const layout = document.querySelector('.three-pane-layout');
     if (layout) {
         const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
         const leftCol = sidebarCollapsed ? '65px' : '240px';
         layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
     }
-    
-    // Sync matching app container size rules
-    document.body.classList.remove('inspector-open');
-    console.log("🧼 Inspector internal contents successfully hidden.");
 };
 
 OL._fvSelectStep = function(resId, stepId) {
@@ -13251,21 +13248,28 @@ OL._fvDeleteStage = function(stageId) {
 };
 
 OL._fvOpenStepsList = function(resId) {
+  OL._fv._lastInspectorResId = resId;
   const data   = OL.getCurrentProjectData();
   const res    = (data.resources||[]).find(r => String(r.id) === resId);
   if (!res) return;
 
-  const panel   = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
-  const content = document.getElementById('inspector-content');
-  if (!panel || !content) return;
-
-// 1. Force grid open BEFORE adding content
-  const layout = document.querySelector('.three-pane-layout');
-  if (layout) {
-    const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
-    const leftCol = sidebarCollapsed ? '65px' : '240px';
-    layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
-  }
+  // Ensure correct panel ID in visualizer context
+    const rawPanel = document.getElementById('inspector-panel');
+    if (rawPanel && !document.getElementById('v2-inspector-panel')) {
+        rawPanel.id = 'v2-inspector-panel';
+    }
+    const panel   = document.getElementById('v2-inspector-panel');
+    const content = document.getElementById('inspector-content');
+    if (!panel || !content) return;
+    
+    panel.classList.add('open');
+    
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout) {
+        const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+        const leftCol = sidebarCollapsed ? '65px' : '240px';
+        layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
+    }
     
   panel.classList.add('open');
 
