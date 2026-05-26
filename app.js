@@ -12665,30 +12665,33 @@ OL._fvFilterWb = function(tab) {
     if (list) list.innerHTML = OL._fvRenderWbItems(items, tab);
 };
 
-OL._fvUnmapResource = function(resId) {
-    const data = OL.getCurrentProjectData();
+OL._fvUnmapResource = async function(resId) {
+    const data   = OL.getCurrentProjectData();
+    const client = getActiveClient();
+    const workflows = client?.projectData?.workflows || data.workflows || [];
+    
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) return;
-
+    if (!res) { console.warn('_fvUnmapResource: not found', resId); return; }
+    
     res.stageId  = null;
     res.isGlobal = false;
 
-    // Also remove from any workflow
-    const prevWf = (data.workflows||[]).find(w =>
-        (w.resourceIds||[]).includes(String(resId))
+    const prevWf = workflows.find(w =>
+        (w.resourceIds || []).some(id => String(id) === String(resId))
     );
+    console.log('prevWf found:', prevWf?.name);
     if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
 
-    OL.persist();
+    await OL.persist();
 
-    const wrap       = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+    const wrap       = document.getElementById('fv-canvas-wrap');
     const scrollTop  = wrap?.scrollTop  || 0;
     const scrollLeft = wrap?.scrollLeft || 0;
 
     OL.renderVisualizer();
 
     requestAnimationFrame(() => {
-        const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
+        const newWrap = document.getElementById('fv-canvas-wrap');
         if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
     });
 };
