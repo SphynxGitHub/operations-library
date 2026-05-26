@@ -13492,6 +13492,12 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         return !tRes?.isArchived;
     });
 
+    // 🎯 INITIALIZE TAGS FIRST (Fixed Scope Placement)
+    const tags = [
+        isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
+        hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
+    ].filter(Boolean).join('');
+
     const collapseId = `fv-substeps-${step.id}`;
     const resBadgeBg = tc.color + '18';
     
@@ -13636,7 +13642,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     </div>
   `;
 };
-
 // ══════════════════════════════════════════════
 // SHARED CONTROLS
 // ══════════════════════════════════════════════
