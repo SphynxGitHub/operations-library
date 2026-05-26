@@ -6962,32 +6962,66 @@ const dependencyHtml = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
-            <div class= "card-section" style="margin-top:20px; display: flex;">
-                <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px;">
-                    <i data-lucide="align-start-vertical" style="width:14px; height:14px;"></i>Hierarchy
+            <div class="card-section" style="margin-top:20px; display: flex; flex-direction: column; gap: 8px;">
+                <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 11px;">
+                    <i data-lucide="align-start-vertical" style="width:14px; height:14px; color: var(--accent);"></i> Hierarchy Context
                 </label>
-                <div style="display: flex; flex-direction: row; gap: 8px;">
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <div style="font-size:10px;color:var(--text-muted);">Process stage</div>
-                        <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
-                                onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
-                            <option value="">— Unassigned —</option>
-                            ${(OL.getCurrentProjectData().stages || []).map(s => `
-                                <option value="${esc(s.id)}" ${res.stageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>
-                            `).join('')}
-                        </select>
+                
+                <div class="fv-modal-hierarchy-breadcrumb" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); padding: 8px 12px; border-radius: 6px; margin-bottom: 4px;">
+                    <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted);">
+                        <i data-lucide="layers" style="width: 12px; height: 12px; opacity: 0.6;"></i>
+                        <span style="font-weight: 600; color: ${res.stageId ? 'var(--text-main)' : 'var(--text-muted)'};">
+                            ${(function() {
+                                const stg = (OL.getCurrentProjectData().stages || []).find(s => String(s.id) === String(res.stageId));
+                                return stg ? esc(stg.name.toUpperCase()) : 'UNASSIGNED';
+                            })()}
+                        </span>
                     </div>
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <div style="font-size:10px;color:var(--text-muted);">Parent workflow</div>
-                        <select class="modal-input tiny" style="padding:4px 8px;width:auto;min-width:120px;max-width:160px;"
-                                onchange="OL.handleResourceSave('${res.id}', 'parentWorkflowId', this.value)">
-                            <option value="">-- Standalone --</option>
-                            ${(OL.getCurrentProjectData().resources || [])
-                                .filter(r => ['Workflow','Zap'].includes(r.type) && r.id !== res.id)
-                                .map(r => `<option value="${esc(r.id)}" ${res.parentWorkflowId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`)
-                                .join('')}
-                        </select>
+                    
+                    <i data-lucide="arrow-right" style="width: 10px; height: 10px; opacity: 0.3; color: var(--text-muted);"></i>
+                    
+                    <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted);">
+                        <i data-lucide="git-merge" style="width: 12px; height: 12px; opacity: 0.6;"></i>
+                        <span style="font-weight: 600; color: ${res.workflowId ? 'var(--accent)' : 'var(--text-muted)'};">
+                            ${(function() {
+                                const wfl = (OL.getCurrentProjectData().workflows || []).find(w => String(w.id) === String(res.workflowId));
+                                return wfl ? esc(wfl.name.toUpperCase()) : 'STANDALONE';
+                            })()}
+                        </span>
                     </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 2px; width: 100%;">
+                    <select class="modal-input tiny fv-select" 
+                            style="padding:6px 10px; width:100%; box-sizing: border-box; font-weight: 600; height: 32px; background: var(--bg-input); border: 1px solid var(--line); color: var(--text-main); border-radius: 6px; outline: none; cursor: pointer;"
+                            onchange="OL._fvAssignStageAndWorkflow('${res.id}', this.value); OL.openResourceModal('${res.id}');">
+                        <option value="">▪ WORKBENCH SIDE-TRAY (UNASSIGNED)</option>
+                        ${(function() {
+                            const projectData = OL.getCurrentProjectData();
+                            const currentStages = projectData.stages || [];
+                            const currentWorkflows = projectData.workflows || [];
+                            
+                            return currentStages.map(s => {
+                                const stageWorkflows = currentWorkflows.filter(w => String(w.stageId) === String(s.id));
+                                const isStageSelected = String(res.stageId) === String(s.id) && !res.workflowId;
+                                
+                                return `
+                                    <option value="stage:${s.id}" ${isStageSelected ? 'selected' : ''} style="font-weight: bold; background: #1e1e24; color: var(--accent);">
+                                        ▪ STAGE: ${esc(s.name.toUpperCase())}
+                                    </option>
+                                    
+                                    ${stageWorkflows.map(wf => {
+                                        const isWfSelected = String(res.workflowId) === String(wf.id);
+                                        return `
+                                            <option value="wf:${wf.id}:${s.id}" ${isWfSelected ? 'selected' : ''} style="background: #151518; color: var(--text-main);">
+                                                &nbsp;&nbsp;&nbsp;&nbsp;▫ workflow: ${esc(wf.name)}
+                                            </option>
+                                        `;
+                                    }).join('')}
+                                `;
+                            }).join('');
+                        })()}
+                    </select>
                 </div>
             </div>
             <div class="card-section" style="margin-top:20px;">
