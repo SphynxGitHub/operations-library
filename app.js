@@ -13487,6 +13487,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         if (OL._fv.showArchived) return true;
         const lastH  = String(l.targetId).lastIndexOf('-');
         const tResId = l.targetId.substring(0, lastH);
+        const tStepId = l.targetId.substring(lastH + 1);
         const tRes   = allResources.find(r => String(r.id) === String(tResId));
         return !tRes?.isArchived;
     });
@@ -13502,7 +13503,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         ${tc.abbr} ${esc(res.name.substring(0, 14))}
       </span>`;
 
-    // 🎯 INLINE LOGIC & CASCADE NESTING ENGINE
+    // 🎯 RE-ARCHITECTING THE NESTING & FLOW LINES
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
@@ -13528,22 +13529,25 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
         const jumpTargetHtmlId = `fv-list-step-${tStepId}`;
 
-        // 🛑 SCENARIO A: True Structural Tree Branching Cascade
+        // 🔀 PATH A: Structural Conditional Cascading (Indents the original target step below)
         if (isCond) {
             hasNesting = true;
-            
             const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional Execution';
-            cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 700; color: var(--accent); opacity: 0.8; margin-top: 2px;">↳ condition: "${esc(ruleText)}"</div>`;
+            
+            // Print the clean blue label directly on the card face
+            cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 600; color: #38bdf8; opacity: 0.9; margin-top: 2px;">↳ condition: "${esc(ruleText)}"</div>`;
 
+            // Nest the target step directly under this branch header wrapper
             nestedBranchesHtml += `
-                <div class="fv-list-branch" style="border-left: 2px dashed rgba(61,217,197,0.3); margin-left:14px; padding-left:16px; margin-top: 6px;">
-                    <div class="fv-branch-label" style="color:#3dd9c5; display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom: 4px;">
-                        <i data-lucide="git-commit" style="width:12px; height:12px;"></i> True path ➔ Proceed to:
+                <div class="fv-list-branch" style="margin-top: 6px; position: relative;">
+                    <div class="fv-branch-label" style="color:#10b981; display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:0.02em; padding-left: ${28 + (depth * 12)}px; margin-bottom: 4px;">
+                        <i data-lucide="git-commit" style="width:12px; height:12px; color:#10b981;"></i> 
+                        <span>${esc(ruleText)}</span>
                     </div>
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
                 </div>`;
         } 
-        // 🛑 SCENARIO B: Inline Helper Badges (Loops, Delays, Clickable Jumps)
+        // 🔀 PATH B: Flat Inline Badge Indicators (Loops, Delays, Jumps)
         else if (isLoop || isDelay || !isSubsequentLocalStep) {
             let badgeStyle = "background:rgba(255,255,255,0.03); color:var(--text-muted); border:1px solid var(--line);";
             let badgeText = `➔ Jump: ${targetLabel}`;
@@ -13575,14 +13579,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
-    const tags = [
-        isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
-        hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
-    ].filter(Boolean).join('');
+    // Prevent duplicate entries of the same steps in secondary layers
+    const isStepAlreadyRenderedAsBranch = isIndentedChild && !isConditional;
+    if (isStepAlreadyRenderedAsBranch) {
+        return nestedBranchesHtml; 
+    }
 
     return `
-    <div style="margin-bottom:${hasNesting ? '4px' : '4px'}; margin-left:${isIndentedChild ? '16px' : '0px'};">
-      <div class="fv-list-row" style="${isIndentedChild ? 'border-left: 2px dashed rgba(255,255,255,0.05); padding-left: 12px;' : ''}">
+    <div style="margin-bottom: 4px; margin-left:${isIndentedChild ? '24px' : '0px'};">
+      <div class="fv-list-row" style="${isIndentedChild ? 'border-left: 2px dashed rgba(61,217,197,0.25); padding-left: 12px;' : ''}">
         <div class="fv-tree-connector"></div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
              id="fv-list-step-${step.id}"
