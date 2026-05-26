@@ -10953,12 +10953,37 @@ OL.renderVisualizer = function() {
         <div class="fv-divider"></div>
 
         <!-- Layout switcher -->
-        <select class="fv-select" style="font-weight:600;"
-                onchange="OL._fv.layout = this.value; sessionStorage.setItem('fv_layout', this.value); OL.renderVisualizer()">
-          <option value="flowchart" ${OL._fv.layout==='flowchart'?'selected':''}>🗺 Swimlanes</option>
-          <option value="steps"     ${OL._fv.layout==='steps'    ?'selected':''}>⬡ Steps</option>
-          <option value="list"      ${OL._fv.layout==='list'     ?'selected':''}>📋 List</option>
-        </select>
+        <div class="fv-layout-toggle-group" style="display: inline-flex; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px;">
+            <button class="fv-layout-btn ${OL._fv.layout === 'flowchart' ? 'active' : ''}" 
+                    style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer; transition: all 0.15s; 
+                           background: ${OL._fv.layout === 'flowchart' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
+                           color: ${OL._fv.layout === 'flowchart' ? 'var(--accent)' : 'var(--text-muted)'};"
+                    onclick="OL._fv.layout = 'flowchart'; sessionStorage.setItem('fv_layout', 'flowchart'); OL.renderVisualizer();"
+                    title="Swimlanes View">
+                <i data-lucide="columns-3" style="width: 13px; height: 13px;"></i>
+                <span>Swimlanes</span>
+            </button>
+        
+            <button class="fv-layout-btn ${OL._fv.layout === 'steps' ? 'active' : ''}" 
+                    style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer; transition: all 0.15s; 
+                           background: ${OL._fv.layout === 'steps' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
+                           color: ${OL._fv.layout === 'steps' ? 'var(--accent)' : 'var(--text-muted)'};"
+                    onclick="OL._fv.layout = 'steps'; sessionStorage.setItem('fv_layout', 'steps'); OL.renderVisualizer();"
+                    title="Steps View">
+                <i data-lucide="hexagon" style="width: 13px; height: 13px;"></i>
+                <span>Steps</span>
+            </button>
+        
+            <button class="fv-layout-btn ${OL._fv.layout === 'list' ? 'active' : ''}" 
+                    style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: none; font-size: 11px; font-weight: 600; font-family: inherit; border-radius: 6px; cursor: pointer; transition: all 0.15s; 
+                           background: ${OL._fv.layout === 'list' ? 'rgba(61,217,197,0.15)' : 'transparent'}; 
+                           color: ${OL._fv.layout === 'list' ? 'var(--accent)' : 'var(--text-muted)'};"
+                    onclick="OL._fv.layout = 'list'; sessionStorage.setItem('fv_layout', 'list'); OL.renderVisualizer();"
+                    title="List View">
+                <i data-lucide="list" style="width: 13px; height: 13px;"></i>
+                <span>List</span>
+            </button> 
+        </div>
 
         <!-- Stage filter -->
         <select id="fv-stage-filter" class="fv-select"
