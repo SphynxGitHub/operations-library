@@ -10853,7 +10853,13 @@ OL.renderVisualizer = function() {
         </div>
 
         <!-- Workbench drawer -->
-        <div id="fv-wb-drawer" class="${OL._fv._wbTab ? 'open' : ''}">
+        <div id="fv-wb-drawer" class="${OL._fv._wbTab ? 'open' : ''}"
+             ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='rgba(61,217,197,0.08)';"
+             ondragleave="if(!this.contains(event.relatedTarget)){this.style.background='';}"
+             ondrop="event.preventDefault(); event.stopPropagation(); this.style.background='';
+                     const id=event.dataTransfer.getData('application/fv-resource')||event.dataTransfer.getData('text/plain');
+                     console.log('drawer drop:', id);
+                     if(id) OL._fvUnmapResource(id);">
           <div class="fv-wb-header">
             <span class="fv-wb-title">${OL._fv._wbTab ? OL._fv._wbTab.charAt(0).toUpperCase() + OL._fv._wbTab.slice(1) : ''}</span>
             <button class="fv-btn fv-icon" onclick="OL._fvToggleWb(null)">
@@ -10880,39 +10886,7 @@ OL.renderVisualizer = function() {
       </div>
     </div>
   `;
-
-    // Set up drawer as unmap drop target
-    requestAnimationFrame(() => {
-        const drawer = document.getElementById('fv-wb-drawer');
-        const rail   = document.getElementById('fv-wb-rail');
     
-        [drawer, rail].forEach(el => {
-            if (!el) return;
-            el.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                el.style.background = 'rgba(61,217,197,0.08)';
-                el.style.outline = '2px dashed #3dd9c5';
-            });
-            el.addEventListener('dragleave', (e) => {
-                if (!el.contains(e.relatedTarget)) {
-                    el.style.background = '';
-                    el.style.outline = '';
-                }
-            });
-            el.addEventListener('drop', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                el.style.background = '';
-                el.style.outline = '';
-                const resId = e.dataTransfer.getData('application/fv-resource') ||
-                              e.dataTransfer.getData('text/plain');
-                console.log('Unmap drop resId:', resId);
-                if (resId) OL._fvUnmapResource(resId);
-            });
-        });
-    });
-
    const realInspector = document.getElementById('inspector-panel');
     if (realInspector) {
       realInspector.id = 'v2-inspector-panel';
