@@ -5530,7 +5530,7 @@ window.renderSopStepList = function(res) {
         ).join('');
 
         return `
-            <div style="margin-bottom:6px; background:rgba(255,255,255,0.01); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
+            <div style="margin-bottom:6px; border:1px solid var(--line); border-radius:6px; overflow:hidden;">
                 <div class="v2-step-item sop-step-row"
                      draggable="true"
                      ondragstart="OL.handleStepDragStart(event, '${res.id}', ${idx})"
@@ -5546,16 +5546,17 @@ window.renderSopStepList = function(res) {
                         ${idx + 1}
                     </div>
                     
-                    <div style="flex:1; min-width:0;">
-                        <input type="text" value="${esc(step.name || 'Untitled Action')}"
-                               style="background:transparent; border:none; color:var(--text-main); font-size:12px;
-                                      font-weight:600; width:100%; outline:none; padding:0;"
-                               onclick="event.stopPropagation();"
-                               onchange="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value)">
-                        <div style="display:flex; gap:6px; align-items:center; margin-top:4px; flex-wrap:wrap;">
-                            ${step.appName ? `<span class="pill tiny soft" style="font-size:9px; color:#38bdf8; border:1px solid rgba(56,189,248,0.15);">${esc(step.appName)}</span>` : ''}
+                    <div style="flex:1; min-width:0; cursor:pointer;"
+                         onclick="event.stopPropagation(); OL.toggleInlineStepEditor('${res.id}', '${step.id}')">
+                        <div class="bold" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${esc(step.name || 'Untitled Step')}
+                        </div>
+                        <div style="display:flex; gap:4px; align-items:center; margin-top:2px; flex-wrap:wrap;">
+                            ${step.appName ? `<span class="tiny accent" style="font-size:9px;">${esc(step.appName)}</span>` : ''}
                             ${logicIcon}
-                            ${hasLinks ? `<span class="pill tiny soft" style="padding:2px 4px;"><i data-lucide="link-2" style="width:10px; height:10px; opacity:0.5;"></i></span>` : ''}
+                            ${hasLinks ? `<span class="pill tiny soft" style="font-size:7px; padding:0 3px;">
+                                <i data-lucide="link-2" style="width:8px; height:8px;"></i>
+                            </span>` : ''}
                         </div>
                     </div>
                     
@@ -5576,7 +5577,7 @@ window.renderSopStepList = function(res) {
                 </div>
                 
                 <div id="fvi-inline-step-editor-${step.id}" 
-                     style="display:none; background:rgba(0,0,0,0.15); border-top:1px solid var(--line); padding:15px;"></div>
+                     style="display:none; border-top:1px solid var(--line); padding:15px;"></div>
             </div>
         `;
     }).join('');
