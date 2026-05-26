@@ -11065,7 +11065,6 @@ OL.renderVisualizer = function() {
       <div id="fv-body">
 
         <!-- Workbench icon rail -->
-        /* Inside OL.renderVisualizer template literal string, find the #fv-wb-rail div container: */
         <div id="fv-wb-rail"
              ondragover="event.preventDefault(); this.style.background='rgba(61,217,197,0.15)';"
              ondragleave="this.style.background='';"
