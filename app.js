@@ -11948,35 +11948,35 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
     .join('');
     
   const relTypeConfig = {
-        triggers:   { icon: 'zap',                color: '#f59e0b' },
-        requires:   { icon: 'arrow-down-to-line', color: '#38bdf8' },
-        produces:   { icon: 'arrow-up-from-line', color: '#10b981' },
-        references: { icon: 'link-2',             color: '#a78bfa' },
-    };
-    
-    const linkedAssets = (res.steps || [])
-        .flatMap(s => s.links || [])
-        .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i);
-    
-    const assetIconsHtml = linkedAssets.length > 0 ? `
-        <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
-            ${linkedAssets.map(link => {
-                const cfg = relTypeConfig[link.relType] || { icon: OL.getRegistryIcon(link.type), color: 'var(--accent)' };
-                return `
-                    <div title="${esc(link.relType ? link.relType + ': ' : '')}${esc(link.name)}"
-                         onclick="event.stopPropagation(); OL.openInspector('${link.id}', null, 'cards')"
-                         style="width:22px; height:22px; border-radius:4px; cursor:pointer;
-                                background:${cfg.color}18; border:1px solid ${cfg.color}44;
-                                display:flex; align-items:center; justify-content:center;
-                                transition:all 0.15s;"
-                         onmouseover="this.style.borderColor='${cfg.color}'; this.style.background='${cfg.color}30';"
-                         onmouseout="this.style.borderColor='${cfg.color}44'; this.style.background='${cfg.color}18';">
-                        <i data-lucide="${cfg.icon}" style="width:12px; height:12px; color:${cfg.color};"></i>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    ` : '';
+    triggers:   '#f59e0b',
+    requires:   '#38bdf8',
+    produces:   '#10b981',
+    references: '#a78bfa',
+};
+
+const linkedAssets = (res.steps || [])
+    .flatMap(s => s.links || [])
+    .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i);
+
+const assetIconsHtml = linkedAssets.length > 0 ? `
+    <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
+        ${linkedAssets.map(link => {
+            const color = relTypeConfig[link.relType] || 'var(--accent)';
+            return `
+                <div title="${esc(link.relType ? link.relType + ': ' : '')}${esc(link.name)}"
+                     onclick="event.stopPropagation(); OL.openInspector('${link.id}', null, 'cards')"
+                     style="width:22px; height:22px; border-radius:4px; cursor:pointer;
+                            background:${color}18; border:1px solid ${color}44;
+                            display:flex; align-items:center; justify-content:center;
+                            transition:all 0.15s;"
+                     onmouseover="this.style.borderColor='${color}'; this.style.background='${color}30';"
+                     onmouseout="this.style.borderColor='${color}44'; this.style.background='${color}18';">
+                    <i data-lucide="${OL.getRegistryIcon(link.type)}" style="width:12px; height:12px; color:${color};"></i>
+                </div>
+            `;
+        }).join('')}
+    </div>
+` : '';
     
   const logicTypes = new Set((res.steps || []).flatMap(s => 
     (s.logic?.out || []).filter(l => l.targetId).map(l => l.type || 'next')
