@@ -92,10 +92,8 @@ OL.state = state;
 
 OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
-
-    // 1. Mark as saving locally (The Shield)
     window.lastLocalSave = Date.now();
-
+    window.lastSyncHash = null;
     window.saveTimeout = setTimeout(async () => {
         try {
             const activeId = state.activeClientId;
@@ -113,9 +111,6 @@ OL.persist = async function() {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
                 await db.collection('clients').doc(activeId).set(clientCopy);
             }
-
-            // 🚀 STEP 3: Local Backup
-            localStorage.setItem('OL_FS_TEST', JSON.stringify(state)); 
             
             console.log("✅ Background Sync Complete. Port remains open.");
 
@@ -123,7 +118,7 @@ OL.persist = async function() {
             console.error("💀 Persistence Error:", error);
             // If the port closes, we don't reload; we just log it.
         }
-    }, 1500); // Increased delay slightly to allow UI to breathe
+    }, 1500);
 };
 
 window.addEventListener("load", () => {
@@ -237,6 +232,7 @@ OL.sync = function() {
     }
 
     state.clients = cloudClients;
+    window.lastSyncHash = JSON.stringify(cloudClients);
     
     // 🎯 Restore Active Client Context (Normal Flow)
     const activeId = sessionStorage.getItem('lastActiveClientId');
