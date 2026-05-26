@@ -13543,28 +13543,52 @@ OL._fvOpenStepsList = function(resId) {
 
 OL._fvAssignStageAndWorkflow = function(resId, value) {
     const data = OL.getCurrentProjectData();
-    const res  = (data.resources||[]).find(r => String(r.id) === String(resId));
-    if (!res || !value) return;
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
 
-    if (value.startsWith('stage:')) {
-        const stageId = value.replace('stage:', '');
-        res.stageId = stageId;
-        // Remove from any workflow
-        const prevWf = (data.workflows||[]).find(w => (w.resourceIds||[]).includes(String(resId)));
-        if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
-    } else if (value.startsWith('wf:')) {
-        const [, wfId, stageId] = value.split(':');
-        res.stageId = stageId;
-        // Remove from old workflow first
-        const prevWf = (data.workflows||[]).find(w =>
-            w.id !== wfId && (w.resourceIds||[]).includes(String(resId))
-        );
-        if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
-        OL.addResourceToWorkflow(wfId, resId);
+    console.group(`🎯 Re-assigning Lane Context for: ${res.name}`);
+
+    if (!value) {
+        // Option selected is Unassigned
+        res.stageId = null;
+        res.workflowId = null;
+        res.isGlobal = true;
+        delete res.coords;
+    } 
+    else if (value.startsWith('stage:')) {
+        // Raw Stage lane selected (not assigned to a specific workflow process track)
+        const targetStageId = value.replace('stage:', '');
+        res.stageId = targetStageId;
+        res.workflowId = null;
+        res.isGlobal = false;
+    } 
+    else if (value.startsWith('wf:')) {
+        // Nested Workflow Process track selected
+        const [, wfId, targetStageId] = value.split(':');
+        res.stageId = targetStageId;
+        res.workflowId = wfId;
+        res.isGlobal = false;
+        
+        // Push the resource ID directly into the workflow structure array if missing
+        const targetWf = (data.workflows || []).find(w => String(w.id) === String(wfId));
+        if (targetWf) {
+            if (!targetWf.resourceIds) targetWf.resourceIds = [];
+            if (!targetWf.resourceIds.includes(String(resId))) {
+                targetWf.resourceIds.push(String(resId));
+            }
+        }
     }
 
-    OL.persist();
-    OL._fvOpenStepsList(resId);
+    console.groupEnd();
+
+    // Persist to Firestore and snap layouts back into place safely
+    OL.persist().then(() => {
+        if (typeof OL.autoAlignNodes === 'function') OL.autoAlignNodes();
+        if (typeof OL.syncLogicPorts === 'function') OL.syncLogicPorts();
+        
+        // Re-render open side views cleanly
+        OL._fvOpenStepsList(resId);
+    });
 };
 
 OL._fvOpenStepCanvas = function(resId, breadcrumb) {
@@ -16520,17 +16544,38 @@ if (mode === 'cards' && resId) {
 
                 <div class="inspector-section">
                     <label class="section-label">
-                        <i data-lucide="milestone" style="width:11px;height:11px;"></i> STAGE
+                        <i data-lucide="milestone" style="width:11px;height:11px;"></i> STAGE & WORKFLOW
                     </label>
                     <select class="modal-input tiny"
-                            onchange="OL.handleResourceSave('${res.id}', 'stageId', this.value)">
+                            style="width: 100%; box-sizing: border-box;"
+                            onchange="OL._fvAssignStageAndWorkflow('${res.id}', this.value)">
                         <option value="">— Unassigned —</option>
-                        ${(OL.getCurrentProjectData().stages || []).map(s => `
-                            <option value="${esc(s.id)}" 
-                                    ${res.stageId === s.id ? 'selected' : ''}>
-                                ${esc(s.name)}
-                            </option>
-                        `).join('')}
+                        ${(function() {
+                            const projectData = OL.getCurrentProjectData();
+                            const currentStages = projectData.stages || [];
+                            const currentWorkflows = projectData.workflows || [];
+                            
+                            return currentStages.map(s => {
+                                // Find workflows belonging to this active stage track container
+                                const stageWorkflows = currentWorkflows.filter(w => String(w.stageId) === String(s.id));
+                                const isStageSelected = String(res.stageId) === String(s.id) && !res.workflowId;
+                                
+                                return `
+                                    <option value="stage:${s.id}" ${isStageSelected ? 'selected' : ''} style="font-weight: bold; background: var(--bg-panel); color: var(--accent);">
+                                        📁 ${esc(s.name.toUpperCase())}
+                                    </option>
+                                    
+                                    ${stageWorkflows.map(wf => {
+                                        const isWfSelected = String(res.workflowId) === String(wf.id);
+                                        return `
+                                            <option value="wf:${wf.id}:${s.id}" ${isWfSelected ? 'selected' : ''}>
+                                                &nbsp;&nbsp;&nbsp;&nbsp;↳ 🕸️ ${esc(wf.name)}
+                                            </option>
+                                        `;
+                                    }).join('')}
+                                `;
+                            }).join('');
+                        })()}
                     </select>
                 </div>
 
