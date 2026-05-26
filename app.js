@@ -12931,18 +12931,29 @@ OL._fvHandleCanvasClick = function(e) {
 
 // 🚀 NEW: Single source of truth for closing the inspector
 OL.closeInspectorPanel = function() {
-  const panel = document.getElementById('v2-inspector-panel') 
-             || document.getElementById('inspector-panel');
-  if (!panel) return;
-  
-  panel.classList.remove('open');
-  
-  const layout = document.querySelector('.three-pane-layout');
-  if (layout) {
-    const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
-    const leftCol = sidebarCollapsed ? '65px' : '240px';
-    layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
-  }
+    const panel = document.getElementById('v2-inspector-panel') 
+                 || document.getElementById('inspector-panel');
+    if (!panel) return;
+    
+    // 🛡️ THE OVERFLOW SHIELD: Instantly hide the contents so they don't break full-width grids
+    panel.style.overflow = 'hidden';
+    const scrollContent = panel.querySelector('.inspector-scroll-content');
+    if (scrollContent) {
+        scrollContent.style.display = 'none'; // Completely stop rendering inner elements
+    }
+    
+    panel.classList.remove('open');
+    
+    const layout = document.querySelector('.three-pane-layout');
+    if (layout) {
+        const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+        const leftCol = sidebarCollapsed ? '65px' : '240px';
+        layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
+    }
+    
+    // Sync matching app container size rules
+    document.body.classList.remove('inspector-open');
+    console.log("🧼 Inspector internal contents successfully hidden.");
 };
 
 OL._fvSelectStep = function(resId, stepId) {
@@ -15910,7 +15921,14 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
     const content = document.getElementById('inspector-content');
     if (!panel || !content) return;
 
-    // 🎯 1. Get Context
+    // 🎯 RESTORE INTERNAL SCROLL LAYER VISIBILITY
+    panel.style.overflow = '';
+    const scrollContent = panel.querySelector('.inspector-scroll-content');
+    if (scrollContent) {
+        scrollContent.style.display = 'block'; // Bring it back to life!
+    }
+
+    // 🎯 Get Context Data
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
     panel.classList.add('open');
