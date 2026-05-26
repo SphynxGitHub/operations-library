@@ -6962,45 +6962,87 @@ const dependencyHtml = `
             ${scopeAndRoundHtml}
             ${appMappingHtml}
 
-            <div class="card-section" style="margin-top:20px; display: flex; flex-direction: column; gap: 4px;">
-                <label class="modal-section-label" style="display: flex; align-items: center; gap: 6px;">
-                    <i data-lucide="align-start-vertical" style="width:14px; height:14px;"></i>Hierarchy Context
+            <div class="card-section" style="margin-top:20px; display: flex; flex-direction: column; gap: 4px; position: relative; width: 100%;">
+                <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="align-start-vertical" style="width:14px; height:14px;"></i> Hierarchy Context
                 </label>
-                <select class="modal-input tiny fv-select" style="padding:4px 8px; width:100%; font-weight: 600;"
-                        onchange="
-                            const val = this.value;
-                            if(!val) {
-                                OL.handleResourceSave('${res.id}', 'stageId', '');
-                                OL.handleResourceSave('${res.id}', 'workflowId', '');
-                            } else if(val.startsWith('stage-')) {
-                                OL.handleResourceSave('${res.id}', 'stageId', val.replace('stage-', ''));
-                                OL.handleResourceSave('${res.id}', 'workflowId', '');
-                            } else {
-                                const [wfId, stgId] = val.split(':');
-                                OL.handleResourceSave('${res.id}', 'stageId', stgId);
-                                OL.handleResourceSave('${res.id}', 'workflowId', wfId);
+                
+                <div class="fv-modal-select-trigger" 
+                     onclick="event.stopPropagation(); const menu = this.nextElementSibling; menu.style.display = menu.style.display === 'block' ? 'none' : 'block';"
+                     style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 6px 12px; background: var(--bg-input, var(--bg-panel, #ffffff)); border: 1px solid var(--line, #d1d5db); color: var(--text-main, #1f2937); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; user-select: none;">
+                    <span>
+                        ${(function() {
+                            if (!res.stageId && !res.workflowId) return 'Unassigned (Workbench Side-Tray)';
+                            const projectData = OL.getCurrentProjectData();
+                            if (res.workflowId) {
+                                const wf = (projectData.workflows || []).find(w => String(w.id) === String(res.workflowId));
+                                return wf ? `Workflow: ${esc(wf.name)}` : 'Select Location...';
                             }
-                            OL.openResourceModal('${res.id}');
-                        ">
-                    <option value="">▪ UNASSIGNED (WORKBENCH SIDE-TRAY)</option>
-                    ${(OL.getCurrentProjectData().stages || []).map(s => {
-                        const stageWorkflows = (OL.getCurrentProjectData().workflows || []).filter(w => w.stageId === s.id);
-                        const isStageSelected = res.stageId === s.id && !res.workflowId;
-                        return `
-                            <option value="stage-${esc(s.id)}" ${isStageSelected ? 'selected' : ''} style="font-weight:bold; color:var(--accent);">
-                                ▪ STAGE: ${esc(s.name.toUpperCase())}
-                            </option>
-                            ${stageWorkflows.map(wf => {
-                                const isWfSelected = res.workflowId === wf.id;
-                                return `
-                                    <option value="${esc(wf.id)}:${esc(s.id)}" ${isWfSelected ? 'selected' : ''}>
-                                        &nbsp;&nbsp;▫ workflow: ${esc(wf.name)}
-                                    </option>
-                                `;
-                            }).join('')}
-                        `;
-                    }).join('')}
-                </select>
+                            const stg = (projectData.stages || []).find(s => String(s.id) === String(res.stageId));
+                            return stg ? `Stage: ${esc(stg.name)}` : 'Select Location...';
+                        })()}
+                    </span>
+                    <i data-lucide="chevron-down" style="width: 14px; height: 14px; opacity: 0.6; color: var(--text-muted, #4b5563);"></i>
+                </div>
+            
+                <div class="fv-modal-select-menu" 
+                     style="display: none; position: absolute; top: 100%; left: 0; width: 100%; z-index: 1100; background: var(--bg-panel, #ffffff); border: 1px solid var(--line, #e5e7eb); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 220px; overflow-y: auto; margin-top: 4px; box-sizing: border-box;">
+                    
+                    <div class="fv-custom-option" 
+                         style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #ef4444; cursor: pointer; border-bottom: 1px solid var(--line, #f3f4f6);"
+                         onclick="
+                             OL.handleResourceSave('${res.id}', 'stageId', '');
+                             OL.handleResourceSave('${res.id}', 'workflowId', '');
+                             OL.openResourceModal('${res.id}');
+                             this.parentElement.style.display = 'none';
+                         "
+                         onmouseover="this.style.background='rgba(239,68,68,0.08)';"
+                         onmouseout="this.style.background='transparent';">
+                         Remove Assignment (Workbench Side-Tray)
+                    </div>
+            
+                    ${(function() {
+                        const projectData = OL.getCurrentProjectData();
+                        const currentStages = projectData.stages || [];
+                        const currentWorkflows = projectData.workflows || [];
+                        
+                        return currentStages.map(s => {
+                            const stageWorkflows = currentWorkflows.filter(w => String(w.stageId) === String(s.id));
+                            
+                            return `
+                                <div class="fv-custom-option stage-header-row" 
+                                     style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--text-main, #111827); background: var(--bg-modal, rgba(0,0,0,0.03)); border-bottom: 1px solid var(--line, #f3f4f6); display: flex; align-items: center; gap: 4px; cursor: pointer;"
+                                     onclick="
+                                         OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
+                                         OL.handleResourceSave('${res.id}', 'workflowId', '');
+                                         OL.openResourceModal('${res.id}');
+                                         this.parentElement.style.display = 'none';
+                                     "
+                                     onmouseover="this.style.background='rgba(61,217,197,0.1)';"
+                                     onmouseout="this.style.background='var(--bg-modal, rgba(0,0,0,0.03))';">
+                                     <i data-lucide="folder" style="width:12px; height:12px; color: var(--text-muted, #4b5563);"></i>
+                                     <span>STAGE: ${esc(s.name.toUpperCase())}</span>
+                                </div>
+                                
+                                ${stageWorkflows.map(wf => `
+                                    <div class="fv-custom-option workflow-item-row" 
+                                         style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color: var(--text-main, #374151); cursor: pointer; border-bottom: 1px solid var(--line, #f9fafb); display: flex; align-items: center; gap: 4px; transition: background 0.1s;"
+                                         onclick="
+                                             OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
+                                             OL.handleResourceSave('${res.id}', 'workflowId', '${wf.id}');
+                                             OL.openResourceModal('${res.id}');
+                                             this.parentElement.style.display = 'none';
+                                         "
+                                         onmouseover="this.style.background='rgba(61,217,197,0.15)'; this.style.color='var(--accent, #0d9488)';"
+                                         onmouseout="this.style.background='transparent'; this.style.color='var(--text-main, #374151)';">
+                                         <i data-lucide="git-commit" style="width:12px; height:12px; opacity: 0.5;"></i>
+                                         <span>${esc(wf.name)}</span>
+                                    </div>
+                                `).join('')}
+                            `;
+                        }).join('');
+                    })()}
+                </div>
             </div>
             <div class="card-section" style="margin-top:20px;">
                 <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
@@ -16554,29 +16596,45 @@ if (mode === 'cards' && resId) {
                     <input type="date" class="modal-input tiny" value="${res.dueDate || ''}" onchange="OL.handleResourceSave('${res.id}', 'dueDate', this.value)">
                 </div>
 
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="milestone" style="width:11px;height:11px;"></i> STAGE & WORKFLOW
+                <div class="inspector-section" style="position: relative; width: 100%;">
+                    <label class="section-label" style="display: flex; align-items: center; gap: 6px; font-weight: 700; margin-bottom: 6px;">
+                        <i data-lucide="milestone" style="width:11px; height:11px;"></i> STAGE & WORKFLOW
                     </label>
-                    <select class="modal-input tiny fv-select"
-                            style="width: 100%; box-sizing: border-box; font-weight: 600;"
-                            onchange="
-                                const val = this.value;
-                                if(!val) {
-                                    OL.handleResourceSave('${res.id}', 'stageId', '');
-                                    OL.handleResourceSave('${res.id}', 'workflowId', '');
-                                } else if(val.startsWith('stage-')) {
-                                    OL.handleResourceSave('${res.id}', 'stageId', val.replace('stage-', ''));
-                                    OL.handleResourceSave('${res.id}', 'workflowId', '');
-                                } else {
-                                    const [wfId, stgId] = val.split(':');
-                                    OL.handleResourceSave('${res.id}', 'stageId', stgId);
-                                    OL.handleResourceSave('${res.id}', 'workflowId', wfId);
+                    
+                    <div class="fv-custom-select-trigger" 
+                         onclick="event.stopPropagation(); const menu = this.nextElementSibling; menu.style.display = menu.style.display === 'block' ? 'none' : 'block';"
+                         style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 6px 12px; background: #ffffff; border: 1px solid #d1d5db; color: #1f2937; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; user-select: none;">
+                        <span>
+                            ${(function() {
+                                if (!res.stageId && !res.workflowId) return 'Unassigned (Workbench Side-Tray)';
+                                const projectData = OL.getCurrentProjectData();
+                                if (res.workflowId) {
+                                    const wf = (projectData.workflows || []).find(w => String(w.id) === String(res.workflowId));
+                                    return wf ? `Workflow: ${esc(wf.name)}` : 'Select Location...';
                                 }
-                                // Refresh open step list frame to align coordinates
-                                OL._fvOpenStepsList('${res.id}');
-                            ">
-                        <option value="">▪ UNASSIGNED (WORKBENCH SIDE-TRAY)</option>
+                                const stg = (projectData.stages || []).find(s => String(s.id) === String(res.stageId));
+                                return stg ? `Stage: ${esc(stg.name)}` : 'Select Location...';
+                            })()}
+                        </span>
+                        <i data-lucide="chevron-down" style="width: 14px; height: 14px; opacity: 0.6; color: #4b5563;"></i>
+                    </div>
+                
+                    <div class="fv-custom-select-menu" 
+                         style="display: none; position: absolute; top: 100%; left: 0; width: 100%; z-index: 100; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); max-height: 250px; overflow-y: auto; margin-top: 4px; box-sizing: border-box;">
+                        
+                        <div class="fv-custom-option" 
+                             style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #ef4444; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
+                             onclick="
+                                 OL.handleResourceSave('${res.id}', 'stageId', '');
+                                 OL.handleResourceSave('${res.id}', 'workflowId', '');
+                                 OL._fvOpenStepsList('${res.id}');
+                                 this.parentElement.style.display = 'none';
+                             "
+                             onmouseover="this.style.background='#fef2f2';"
+                             onmouseout="this.style.background='transparent';">
+                             Remove Assignment (Workbench Side-Tray)
+                        </div>
+                
                         ${(function() {
                             const projectData = OL.getCurrentProjectData();
                             const currentStages = projectData.stages || [];
@@ -16584,26 +16642,49 @@ if (mode === 'cards' && resId) {
                             
                             return currentStages.map(s => {
                                 const stageWorkflows = currentWorkflows.filter(w => String(w.stageId) === String(s.id));
-                                const isStageSelected = String(res.stageId) === String(s.id) && !res.workflowId;
                                 
                                 return `
-                                    <option value="stage-${esc(s.id)}" ${isStageSelected ? 'selected' : ''} style="font-weight: bold; color: var(--accent);">
-                                        ▪ STAGE: ${esc(s.name.toUpperCase())}
-                                    </option>
+                                    <div class="fv-custom-option stage-header-row" 
+                                         style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #111827; background: #f9fafb; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 4px; cursor: pointer;"
+                                         onclick="
+                                             OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
+                                             OL.handleResourceSave('${res.id}', 'workflowId', '');
+                                             OL._fvOpenStepsList('${res.id}');
+                                             this.parentElement.style.display = 'none';
+                                         "
+                                         onmouseover="this.style.background='#f3f4f6';"
+                                         onmouseout="this.style.background='#f9fafb';">
+                                         <i data-lucide="folder" style="width:12px; height:12px; color: #4b5563;"></i>
+                                         <span>STAGE: ${esc(s.name.toUpperCase())}</span>
+                                    </div>
                                     
-                                    ${stageWorkflows.map(wf => {
-                                        const isWfSelected = String(res.workflowId) === String(wf.id);
-                                        return `
-                                            <option value="${esc(wf.id)}:${esc(s.id)}" ${isWfSelected ? 'selected' : ''}>
-                                                &nbsp;&nbsp;▫ workflow: ${esc(wf.name)}
-                                            </option>
-                                        `;
-                                    }).join('')}
+                                    ${stageWorkflows.map(wf => `
+                                        <div class="fv-custom-option workflow-item-row" 
+                                             style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color: #374151; cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px; transition: background 0.1s;"
+                                             onclick="
+                                                 OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
+                                                 OL.handleResourceSave('${res.id}', 'workflowId', '${wf.id}');
+                                                 OL._fvOpenStepsList('${res.id}');
+                                                 this.parentElement.style.display = 'none';
+                                             "
+                                             onmouseover="this.style.background='rgba(61,217,197,0.08)'; this.style.color='#0d9488';"
+                                             onmouseout="this.style.background='transparent'; this.style.color='#374151';">
+                                             <i data-lucide="git-commit" style="width:12px; height:12px; opacity: 0.5;"></i>
+                                             <span>${esc(wf.name)}</span>
+                                        </div>
+                                    `).join('')}
                                 `;
                             }).join('');
                         })()}
-                    </select>
+                    </div>
                 </div>
+                
+                <script>
+                    // Global auto-dismiss framework listener loop
+                    document.addEventListener('click', function() {
+                        document.querySelectorAll('.fv-custom-select-menu').forEach(el => el.style.display = 'none');
+                    });
+                </script>
 
                 <div class="inspector-section">
                     <label class="section-label">
