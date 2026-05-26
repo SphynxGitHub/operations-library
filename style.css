@@ -5594,6 +5594,10 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
    position: relative;
    z-index: 1;
 }
+.fv-lanes-container .fv-lane-actions {
+    display: flex !important;
+    opacity: 1;
+}
 
 /* ── NODE CARDS ── */
 .fv-card {
