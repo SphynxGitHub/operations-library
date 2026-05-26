@@ -5611,75 +5611,71 @@ OL.toggleInlineStepEditor = function(resId, stepId) {
     if (!step.assignees) step.assignees = [];
 
     drawer.innerHTML = `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+        <div style="display:flex; flex-direction:column; gap:12px;">
+    
             <div>
-                <label class="modal-section-label" style="font-size:10px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
-                    <i data-lucide="smartphone" style="width:12px; height:12px;"></i> Primary App
-                </label>
+                <label class="modal-section-label">Primary App</label>
                 ${step.appId ? `
-                    <div class="pill primary" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-weight:bold; font-size:11px;">🤖 ${esc(step.appName)}</span>
-                        <i data-lucide="x" class="is-clickable" style="width:14px; height:14px; opacity:0.6;"
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px;
+                                background:rgba(255,255,255,0.04); border:1px solid var(--line); border-radius:6px;">
+                        <span style="font-size:12px;">
+                            <i data-lucide="${a.type === 'person' ? 'user' : a.type === 'app' ? 'smartphone' : 'users'}" 
+                           style="width:10px; height:10px;"></i>
+                        ${esc(a.name)}</span>
+                        <i data-lucide="x" class="is-clickable" style="width:12px; height:12px; opacity:0.4;"
                            onclick="event.stopPropagation(); OL.updateAppMetadataInline('${resId}', '${stepId}', null, null)"></i>
                     </div>
                 ` : `
                     <div style="position:relative;">
-                        <i data-lucide="search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:12px; height:12px; opacity:0.4;"></i>
-                        <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;"
-                               placeholder="Link Tool..."
+                        <input type="text" class="modal-input tiny" style="width:100%; box-sizing:border-box; margin:0;"
+                               placeholder="Search apps..."
                                onfocus="OL.filterInlineAppSearch('${resId}', '${stepId}', '')"
                                oninput="OL.filterInlineAppSearch('${resId}', '${stepId}', this.value)">
-                        <div id="inline-app-results-${stepId}" class="search-results-overlay" style="max-height:150px; overflow-y:auto;"></div>
+                        <div id="inline-app-results-${stepId}" class="search-results-overlay"></div>
                     </div>
                 `}
             </div>
-
+    
             <div>
-                <label class="modal-section-label" style="font-size:10px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
-                    <i data-lucide="users" style="width:12px; height:12px;"></i> Assigned Who
-                </label>
+                <label class="modal-section-label">Assigned To</label>
                 <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
                     ${step.assignees.length > 0 ? step.assignees.map((a, i) => `
-                        <span class="pill tiny accent" style="display:inline-flex; align-items:center; gap:4px; font-size:10px;">
+                        <span class="pill tiny soft" style="display:inline-flex; align-items:center; gap:4px;">
                             ${esc(a.name)}
-                            <b style="cursor:pointer; opacity:0.6;" 
+                            <b style="cursor:pointer; opacity:0.5;"
                                onclick="event.stopPropagation(); OL.removeInlineAssignee('${resId}', '${stepId}', ${i})">×</b>
                         </span>
-                    `).join('') : '<div class="tiny muted italic" style="padding:4px 0;">Unassigned</div>'}
+                    `).join('') : ''}
                 </div>
                 <div style="position:relative;">
-                    <i data-lucide="search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:12px; height:12px; opacity:0.4;"></i>
-                    <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;"
-                           placeholder="Add Assignee..."
+                    <input type="text" class="modal-input tiny" style="width:100%; box-sizing:border-box; margin:0;"
+                           placeholder="Add assignee..."
                            onfocus="OL.filterInlineAssignmentSearch('${resId}', '${stepId}', '')"
                            oninput="OL.filterInlineAssignmentSearch('${resId}', '${stepId}', this.value)">
-                    <div id="inline-assign-results-${stepId}" class="search-results-overlay" style="max-height:150px; overflow-y:auto;"></div>
+                    <div id="inline-assign-results-${stepId}" class="search-results-overlay"></div>
                 </div>
             </div>
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label class="modal-section-label" style="font-size:10px; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
-                <i data-lucide="calendar-clock" style="width:12px; height:12px;"></i> Timing Offset (days)
-            </label>
-            <input type="number" class="modal-input tiny" style="width:60px; margin:0;" value="${step.timingValue || 0}"
-                   onblur="OL.updateAtomicStep('${resId}', '${stepId}', 'timingValue', parseInt(this.value) || 0)">
-        </div>
-
-        <div>
-            <label class="modal-section-label" style="font-size:10px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
-                <i data-lucide="arrow-up-from-line" style="width:12px; height:12px;"></i> Outbound Logic
-            </label>
-            <div style="display:flex; flex-direction:column; gap:6px;">
-                ${(step.logic.out || []).map((l, i) => OL.renderLogicBlock(resId, stepId, 'out', i, l, [])).join('')}
+    
+            <div style="display:flex; align-items:center; gap:10px;">
+                <label class="modal-section-label" style="margin:0; white-space:nowrap;">Timing offset</label>
+                <input type="number" class="modal-input tiny" style="width:60px; margin:0;" value="${step.timingValue || 0}"
+                       onblur="OL.updateAtomicStep('${resId}', '${stepId}', 'timingValue', parseInt(this.value) || 0)">
+                <span class="tiny muted">days after previous</span>
             </div>
-            <button class="btn tiny soft" style="margin-top:6px; display:inline-flex; align-items:center; gap:4px;"
-                    onclick="event.stopPropagation(); OL.addInlineStepLogic('${resId}', '${stepId}', 'out')">
-                <i data-lucide="plus" style="width:12px; height:12px;"></i> Add Output Path
-            </button>
+    
+            <div>
+                <label class="modal-section-label">Outbound logic</label>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    ${(step.logic.out || []).map((l, i) => OL.renderLogicBlock(resId, stepId, 'out', i, l, [])).join('')}
+                </div>
+                <button class="btn tiny soft" style="margin-top:6px; display:inline-flex; align-items:center; gap:4px;"
+                        onclick="event.stopPropagation(); OL.addInlineStepLogic('${resId}', '${stepId}', 'out')">
+                    <i data-lucide="plus" style="width:11px; height:11px;"></i> Add output path
+                </button>
+            </div>
+    
         </div>
     `;
-
     drawer.style.display = 'block';
     if (window.lucide) lucide.createIcons();
 };
