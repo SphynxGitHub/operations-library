@@ -12672,56 +12672,34 @@ OL._fvFilterWb = function(tab) {
 };
 
 OL._fvUnmapResource = function(resId) {
-    const data = OL.getCurrentProjectData();
-    const res = (data.resources || []).filter(r => !r.isDeleted).find(r => String(r.id) === String(resId));
-    
-    if (!res) {
-        console.error("❌ Unmap Failed: Resource object missing from current data pool.");
-        return;
-    }
+    const client = getActiveClient();
+    const data   = client?.projectData;
+    if (!data) { console.error('no projectData'); return; }
 
-    console.group(`🧹 Unmapping Resource: ${res.name}`);
+    const res = (data.resources||[]).find(r => String(r.id) === String(resId));
+    if (!res) { console.error('res not found:', resId); return; }
 
-    // 1. Wipe layout positioning structures so it falls off the canvas grids
-    res.stageId = null;
+    res.stageId    = null;
+    res.isGlobal   = false;
     res.workflowId = null;
-    res.isGlobal = true;      // Mark as True so it shifts safely into the Workbench Tray
-    res.isTopShelf = false;
-    delete res.coords;        // Erase X/Y data so it doesn't leave phantom nodes behind
-    delete res._col;          // Clear out column matrix values
 
-    // 2. Excise this resource from any active workflow structural lanes
-    (data.workflows || []).forEach(wf => {
-        if (wf.resourceIds && wf.resourceIds.includes(String(resId))) {
-            wf.resourceIds = wf.resourceIds.filter(id => String(id) !== String(resId));
-            console.log(`✂️ Excised link from workflow container: ${wf.name}`);
-        }
+    data.workflows.forEach(wf => {
+        wf.resourceIds = (wf.resourceIds||[]).filter(id => String(id) !== String(resId));
     });
 
-    console.groupEnd();
+    console.log('stageId:', res.stageId, 'workflowId:', res.workflowId);
+    const wf = data.workflows.find(w => (w.resourceIds||[]).includes(resId));
+    console.log('still in workflow:', wf?.name);
 
-    // 3. Persist modifications down to Firestore
-    OL.persist().then(() => {
-        // Cache viewport scroll positions to avoid layout jumping
-        const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap') || document.getElementById('v2-canvas-scroll-wrap');
-        const scrollTop = wrap?.scrollTop || 0;
-        const scrollLeft = wrap?.scrollLeft || 0;
+    // Force immediate Firestore save
+    if (window.saveTimeout) clearTimeout(window.saveTimeout);
+    window.lastLocalSave = Date.now();
+    const activeId = state.activeClientId;
+    db.collection('clients').doc(activeId).set(
+        JSON.parse(JSON.stringify(state.clients[activeId]))
+    ).then(() => console.log('✅ Unmap saved'));
 
-        // Re-align remaining canvas nodes and force a redraw
-        if (typeof OL.autoAlignNodes === 'function') OL.autoAlignNodes();
-        if (typeof OL.syncLogicPorts === 'function') OL.syncLogicPorts();
-        
-        OL.renderVisualizer();
-        OL.renderWorkbenchItemsOnly(); // Instantly populates the item back into the tray
-
-        requestAnimationFrame(() => {
-            const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap') || document.getElementById('v2-canvas-scroll-wrap');
-            if (newWrap) { 
-                newWrap.scrollTop = scrollTop; 
-                newWrap.scrollLeft = scrollLeft; 
-            }
-        });
-    });
+    OL.renderVisualizer();
 };
 
 OL._fvWbDragStart = function(e, id, type) {
