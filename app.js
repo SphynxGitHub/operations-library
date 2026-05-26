@@ -10856,10 +10856,7 @@ OL.renderVisualizer = function() {
         <div id="fv-wb-drawer" class="${OL._fv._wbTab ? 'open' : ''}"
              ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='rgba(61,217,197,0.08)';"
              ondragleave="if(!this.contains(event.relatedTarget)){this.style.background='';}"
-             ondrop="event.preventDefault(); event.stopPropagation(); this.style.background='';
-                     const id=event.dataTransfer.getData('application/fv-resource')||event.dataTransfer.getData('text/plain');
-                     console.log('drawer drop:', id);
-                     if(id) OL._fvUnmapResource(id);">
+             ondrop="OL._fvHandleDrawerDrop(event)"">
           <div class="fv-wb-header">
             <span class="fv-wb-title">${OL._fv._wbTab ? OL._fv._wbTab.charAt(0).toUpperCase() + OL._fv._wbTab.slice(1) : ''}</span>
             <button class="fv-btn fv-icon" onclick="OL._fvToggleWb(null)">
@@ -10919,6 +10916,16 @@ OL.renderVisualizer = function() {
     OL._fvSyncRailHeights();
     OL._fvSetupRailScroll();
   }
+};
+
+OL._fvHandleDrawerDrop = function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const drawer = event.currentTarget;
+    drawer.style.background = '';
+    const resId = event.dataTransfer.getData('application/fv-resource') 
+               || event.dataTransfer.getData('text/plain');
+    if (resId) OL._fvUnmapResource(resId);
 };
 
 OL._fvRenderFlowchart = function(stages, resources) {
@@ -12645,38 +12652,6 @@ OL._fvFilterWb = function(tab) {
     if (list) list.innerHTML = OL._fvRenderWbItems(items, tab);
 };
 
-OL._fvUnmapResource = function(resId) {
-    console.log('_fvUnmapResource START', resId);
-    const client = getActiveClient();
-    const data   = client?.projectData;
-    if (!data) { console.error('no projectData'); return; }
-    const res = (data.resources||[]).find(r => String(r.id) === String(resId));
-    if (!res) { console.error('res not found:', resId); return; }
-    
-    console.log('BEFORE stageId:', res.stageId, 'workflowId:', res.workflowId);
-    
-    res.stageId    = null;
-    res.isGlobal   = false;
-    res.workflowId = null;
-    
-    data.workflows.forEach(wf => {
-        const before = wf.resourceIds?.length;
-        wf.resourceIds = (wf.resourceIds||[]).filter(id => String(id) !== String(resId));
-        if (wf.resourceIds.length !== before) console.log('Removed from wf:', wf.name);
-    });
-    
-    console.log('AFTER stageId:', res.stageId, 'workflowId:', res.workflowId);
-    
-    if (window.saveTimeout) clearTimeout(window.saveTimeout);
-    window.lastLocalSave = Date.now();
-    const activeId = state.activeClientId;
-    db.collection('clients').doc(activeId).set(
-        JSON.parse(JSON.stringify(state.clients[activeId]))
-    ).then(() => console.log('✅ Unmap saved'));
-    
-    OL.renderVisualizer();
-};
-
 OL._fvWbDragStart = function(e, id, type) {
   e.dataTransfer.setData('application/fv-resource', id);
   e.dataTransfer.setData('application/fv-tab', type);
@@ -12699,25 +12674,40 @@ OL._fvSetupRailScroll = function() {
   }, { passive: true });
 };
 
-OL._fvUnmapResource = function(resId) {
+OL._fvUnmapResource = async function(resId) {
     const data = OL.getCurrentProjectData();
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) return;
-    res.stageId = null;
-    res.isGlobal = false;
-    OL.persist();
+    
+    if (!res) {
+        console.warn('_fvUnmapResource: resource not found:', resId);
+        return;
+    }
+    
+    await OL.updateAndSync(() => {
+        res.stageId    = null;
+        res.workflowId = null;
+        res.isGlobal   = false;
+        res.isTopShelf = false;
 
-    // 🚀 Save scroll position before re-render
+        // Remove from all workflows
+        (data.workflows || []).forEach(wf => {
+            wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
+        });
+    });
+
+    // Preserve scroll before re-render
     const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
-    const scrollTop = wrap?.scrollTop || 0;
+    const scrollTop  = wrap?.scrollTop  || 0;
     const scrollLeft = wrap?.scrollLeft || 0;
 
     OL.renderVisualizer();
 
-    // 🚀 Restore after render
     requestAnimationFrame(() => {
         const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
-        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+        if (newWrap) {
+            newWrap.scrollTop  = scrollTop;
+            newWrap.scrollLeft = scrollLeft;
+        }
     });
 };
 
