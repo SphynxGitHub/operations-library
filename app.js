@@ -13470,7 +13470,7 @@ OL._fvToggleStepsPanel = function(resId) {
 
 OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth, visited) {
     // Guard against infinite recursion and excessive depth
-    if (depth > 4) return '';
+    if (depth > 5) return '';
     if (!visited) visited = new Set();
     const stepKey = `${res.id}-${step.id}`;
     if (visited.has(stepKey)) return '';
@@ -13480,7 +13480,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const isGlobal      = globalIds.has(String(res.id));
     const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
     const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
-    const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
     
     const outRules = (step.logic?.out || []).filter(l => {
         if (!l.targetId) return false;
@@ -13502,19 +13501,12 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         ${tc.abbr} ${esc(res.name.substring(0, 14))}
       </span>`;
 
-    const tags = [
-        isConditional && !isDecision ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : '',
-        isDecision                   ? `<span class="fv-list-tag conditional">◆ Decision</span>`    : '',
-        isGlobal                     ? `<span class="fv-list-tag global">🌐 Global</span>`           : '',
-        hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
-    ].filter(Boolean).join('');
-
-    // 🎯 INLINE & NESTED LOGIC EVALUATION
+    // 🎯 INLINE LOGIC & CASCADE NESTING ENGINE
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
+    let cardFaceConditionHtml = ''; // Holds the "if August or February" string for the card face
     
-    // Check if this step itself is a dependent child node in a linear chain
     const isIndentedChild = depth > 0;
 
     outRules.forEach(rule => {
@@ -13530,44 +13522,54 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
 
         const isLoop  = rule.type === 'loop';
         const isDelay = rule.type === 'delay';
-        const isCond  = rule.type === 'condition';
+        
+        // ⚡ CRITICAL RULE SYNTAX LOOKUP:
+        // Treat it as a structural branching condition IF explicitly typed or if it has a custom rule string populated.
+        const isCond  = rule.type === 'condition' || (rule.rule && rule.rule.trim().length > 0);
         
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
         const jumpTargetHtmlId = `fv-list-step-${tStepId}`;
 
+        // 🛑 SCENARIO A: True Structural Tree Branching Cascade
         if (isCond) {
             hasNesting = true;
+            
+            // Format custom descriptive text labels clearly on the parent channel link wrapper
+            const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional Execution';
+            cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 700; color: var(--accent); opacity: 0.8; margin-top: 2px;">↳ condition: "${esc(ruleText)}"</div>`;
+
             nestedBranchesHtml += `
-                <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3); margin-left:16px; padding-left:20px;">
-                    <div class="fv-branch-label" style="color:#3dd9c5; display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600;">
-                        <span>◆ If: "${esc(rule.rule || '...')}" ➔ Jump to: ${esc(targetLabel)}</span>
+                <div class="fv-list-branch" style="border-left: 2px dashed rgba(61,217,197,0.3); margin-left:14px; padding-left:16px; margin-top: 6px;">
+                    <div class="fv-branch-label" style="color:#3dd9c5; display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-bottom: 4px;">
+                        <i data-lucide="git-commit" style="width:12px; height:12px;"></i> True path ➔ Proceed to:
                     </div>
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
                 </div>`;
         } 
+        // 🛑 SCENARIO B: Inline Helper Badges (Loops, Delays, Clickable Jumps)
         else if (isLoop || isDelay || !isSubsequentLocalStep) {
-            let badgeStyle = "background:#f5f6f8; color:#6b7280; border:1px solid #e5e7eb;";
+            let badgeStyle = "background:rgba(255,255,255,0.03); color:var(--text-muted); border:1px solid var(--line);";
             let badgeText = `➔ Jump: ${targetLabel}`;
             let clickAction = '';
 
-            // Clickable jumping engine for non-sequential path links
+            // Clickable anchoring mechanism to jump straight to targeted list item rows smoothly
             if (!isSubsequentLocalStep) {
                 clickAction = `onclick="event.stopPropagation(); const targetRow = document.getElementById('${jumpTargetHtmlId}'); if(targetRow) { targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected')); targetRow.classList.add('selected'); targetRow.style.outline='2px solid var(--accent)'; setTimeout(()=>targetRow.style.outline='',1500); }"`;
             }
 
             if (isLoop) {
-                badgeStyle = "background:rgba(245,184,0,0.1); color:#f5b800; border:1px solid rgba(245,184,0,0.3);";
+                badgeStyle = "background:rgba(245,184,0,0.06); color:#f5b800; border:1px solid rgba(245,184,0,0.2);";
                 badgeText = `↺ Loop${rule.loopLimit ? ` (${rule.loopLimit})` : ''} ➔ ${targetLabel}`;
             } else if (isDelay) {
-                badgeStyle = "background:rgba(167,139,250,0.1); color:#a78bfa; border:1px solid rgba(167,139,250,0.3);";
+                badgeStyle = "background:rgba(167,139,250,0.06); color:#a78bfa; border:1px solid rgba(167,139,250,0.2);";
                 badgeText = `⏱ Wait ${rule.delayValue || '?'} ${rule.delayUnit || 'days'} ➔ ${targetLabel}`;
             } else if (!isSubsequentLocalStep) {
-                badgeStyle = "background:rgba(56,189,248,0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); cursor:pointer;";
+                badgeStyle = "background:rgba(56,189,248,0.08); color:#38bdf8; border:1px solid rgba(56,189,248,0.25); cursor:pointer;";
                 badgeText = `🔀 Skip To: ${targetLabel} ➔`;
             }
 
-            // Prefix contextual descriptor logic values inside the tag label
-            if (rule.rule?.trim()) {
+            // If there's a custom text qualifier statement but it's not structural, prepend it to the label
+            if (rule.rule && rule.rule.trim() && !isCond) {
                 badgeText = `[If: "${rule.rule.trim()}"] ${badgeText}`;
             }
 
@@ -13578,9 +13580,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
+    const isConditionalBlock = isDecision || isConditional;
+    const tags = [
+        isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
+        hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
+    ].filter(Boolean).join('');
+
     return `
-    <div style="margin-bottom:${hasNesting ? '2px' : '4px'}; margin-left:${isIndentedChild ? '16px' : '0px'};">
-      <div class="fv-list-row" style="${isIndentedChild ? 'border-left: 2px dashed rgba(61,217,197,0.2); padding-left: 10px;' : ''}">
+    <div style="margin-bottom:${hasNesting ? '4px' : '4px'}; margin-left:${isIndentedChild ? '16px' : '0px'};">
+      <div class="fv-list-row" style="${isIndentedChild ? 'border-left: 2px dashed rgba(255,255,255,0.05); padding-left: 12px;' : ''}">
         <div class="fv-tree-connector"></div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
              id="fv-list-step-${step.id}"
@@ -13596,12 +13604,14 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                       this.classList.add('selected');
                       OL.openInspector('${res.id}', '${step.id}');">
           <span class="drag-handle" style="cursor:grab; opacity:0.25; flex-shrink:0; padding-right:4px; font-size:14px;">⠿</span>
-          <div class="fv-list-type-dot" style="background:${tc.color};"></div>
+          <div class="fv-list-type-dot" style="background:${tc.color}; margin-top:5px;"></div>
           
-          <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:0;">
-              <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600;">${esc(step.name || 'Unnamed Step')}</span>
+          <div style="display:flex; flex-direction:column; gap:1px; flex:1; min-width:0;">
+              <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600; font-size:13px; color:var(--text-main);">${esc(step.name || 'Unnamed Step')}</span>
               
-              ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:2px;">${inlineRoutingBadgesHtml}</div>` : ''}
+              ${cardFaceConditionHtml}
+              
+              ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
           </div>
 
           ${tags}
@@ -13616,9 +13626,9 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                                this.title=collapsed?'Collapse':'Expand';"
                       title="Collapse"
                       style="margin-left:auto; flex-shrink:0; width:18px; height:18px;
-                             border-radius:4px; background:#f5f6f8; border:1px solid #e5e7eb;
+                             border-radius:4px; background:rgba(255,255,255,0.03); border:1px solid var(--line);
                              display:flex; align-items:center; justify-content:center;
-                             font-size:11px; font-weight:700; color:#9ca3af; cursor:pointer;
+                             font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer;
                              line-height:1;">−</span>
             ` : ''}
         </div>
