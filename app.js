@@ -12670,8 +12670,16 @@ OL._fvUnmapResource = async function(resId) {
     const client = getActiveClient();
     const workflows = client?.projectData?.workflows || data.workflows || [];
     
+    console.log('workflows count:', workflows.length);
+    console.log('looking for resId:', resId);
+    workflows.forEach(w => {
+        const has = (w.resourceIds||[]).some(id => String(id) === String(resId));
+        console.log(w.name, 'has resource:', has, 'ids:', w.resourceIds);
+    });
+
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) { console.warn('_fvUnmapResource: not found', resId); return; }
+    console.log('res found:', res?.name);
+    if (!res) return;
     
     res.stageId  = null;
     res.isGlobal = false;
@@ -12679,21 +12687,11 @@ OL._fvUnmapResource = async function(resId) {
     const prevWf = workflows.find(w =>
         (w.resourceIds || []).some(id => String(id) === String(resId))
     );
-    console.log('prevWf found:', prevWf?.name);
+    console.log('prevWf:', prevWf?.name);
     if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
 
     await OL.persist();
-
-    const wrap       = document.getElementById('fv-canvas-wrap');
-    const scrollTop  = wrap?.scrollTop  || 0;
-    const scrollLeft = wrap?.scrollLeft || 0;
-
     OL.renderVisualizer();
-
-    requestAnimationFrame(() => {
-        const newWrap = document.getElementById('fv-canvas-wrap');
-        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
-    });
 };
 
 OL._fvWbDragStart = function(e, id, type) {
