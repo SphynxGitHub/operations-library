@@ -254,8 +254,7 @@ OL.sync = function() {
     if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
         window.handleRoute();
     } else if (window.location.hash.includes('visualizer')) {
-        if (window.lastLocalSave && (Date.now() - window.lastLocalSave < 8000)) {
-            console.log("⏳ Skipping visualizer re-render — recent local save.");
+            state.clients = cloudClients;
             return;
         }
         if (typeof OL.renderVisualizer === 'function') OL.renderVisualizer();
