@@ -5470,7 +5470,7 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   gap: 3px;
   flex-shrink: 0;
 }
-.fv-lane-label:hover .fv-lane-actions { display: flex; }
+.fv-lane-label:hover .fv-lane-actions { display: flex; opacity: 1; }
 
 .fv-lane-action-btn {
   width: 20px; height: 20px;
@@ -5478,8 +5478,9 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
   border-radius: 4px; cursor: pointer;
   color: rgba(255,255,255,0.4);
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
   flex-shrink: 0;
+   opacity: 0.4;
 }
 .fv-lane-action-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 .fv-lane-action-btn i, .fv-lane-action-btn svg { width: 10px; height: 10px; pointer-events: none; }
