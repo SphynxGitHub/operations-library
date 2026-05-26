@@ -12762,6 +12762,12 @@ OL._fvTogglePin = async function(resId, stepId) {
 
 OL._fvToggleWb = function(tab) {
   OL._fv._wbTab = OL._fv._wbTab === tab ? null : tab;
+    if (state.us) {
+        state.ui.sidebarSearchQuery = "";
+    }
+    if (typeof OL.syncResourceLibraryFilters === 'function') {
+        OL.syncResourceLibraryFilters();
+    }
   OL.renderVisualizer();
 };
 
@@ -12769,10 +12775,9 @@ OL._fvPopulateWb = function(tab, resources) {
     const content = document.getElementById('fv-wb-content');
     if (!content) return;
 
-    // Select the workbench drawer container to configure specific drop zone hooks
     const drawer = document.getElementById('fv-wb-drawer');
     if (drawer) {
-        // Reset legacy drop actions so it doesn't try to unmap things when sorting stages
+        // Disengage asset unmapping listeners while sorting stages to prevent path collisions
         if (tab === 'stages') {
             drawer.ondragover = (e) => e.preventDefault();
             drawer.ondragleave = null;
@@ -12780,7 +12785,7 @@ OL._fvPopulateWb = function(tab, resources) {
             drawer.style.background = '';
             drawer.style.borderLeft = '';
         } else {
-            // Restore legacy drag unmapping behaviors for resources/assets tabs
+            // Restore active drop listeners for standard resource tabs
             drawer.ondragover = (e) => {
                 e.preventDefault();
                 drawer.style.background = 'rgba(61,217,197,0.08)';
@@ -12810,7 +12815,7 @@ OL._fvPopulateWb = function(tab, resources) {
 
     let allItems = [];
     
-    // 🎯 ASSIGN WORKING DATA POOLS BASED ON ACTIVE WORKBENCH SELECTION
+    // 🎯 ROUTE PROPER ACTIVE POOLS DOWN TO RE-RENDER ENGINE
     if (tab === 'stages') {
         allItems = stages;
     } else if (tab === 'flows') {
@@ -12872,9 +12877,8 @@ OL._fvRenderWbItems = function(items, tab) {
         const name   = item.name || item.title || 'Unnamed';
         const isData = tab === 'data';
         
-        // 🎯 CUSTOM PATHWAY FOR STAGES WORKSPACE LAYOUT PANELS
+        // 🎯 RENDER LOGIC FOR STAGES TRAY CARDS
         if (tab === 'stages') {
-            // Count total functional processes inside this specific stage lane container
             const stageResCount = resources.filter(r => String(r.stageId) === String(item.id)).length;
             
             return `
@@ -12882,13 +12886,14 @@ OL._fvRenderWbItems = function(items, tab) {
                      draggable="true"
                      data-id="${item.id}"
                      data-stage-idx="${idx}"
+                     id="stage-sort-row-${item.id}"
                      ondragstart="OL.handleStageSortDragStart(event, ${idx})"
                      ondragover="event.preventDefault(); this.style.borderTop='2px solid var(--accent)';"
                      ondragleave="this.style.borderTop='';"
                      ondrop="OL.handleStageSortDrop(event, ${idx})"
                      style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); cursor:grab;">
                     
-                    <div class="fv-wb-item-icon" style="background:rgba(61,217,197,0.1); color:var(--accent); font-weight:bold; font-size:10px;">
+                    <div class="fv-wb-item-icon" style="background:rgba(61,217,197,0.1); color:var(--accent); font-weight:bold; font-size:10px; width:24px; height:24px; border-radius:4px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         #${idx + 1}
                     </div>
                     
@@ -12896,26 +12901,24 @@ OL._fvRenderWbItems = function(items, tab) {
                         <input type="text" value="${esc(name)}" 
                                style="background:transparent; border:none; color:white; font-size:12px; font-weight:600; width:100%; outline:none; padding:0; margin:0;"
                                onchange="OL.renameStage('${item.id}', this.value)">
-                        <div class="fv-wb-item-type" style="font-size:9px; color:var(--text-muted); margin-top:2px;">
-                            ${stageResCount} Linked Resource${stageResCount !== 1 ? 's' : ''}
+                        <div style="font-size:9px; color:var(--text-muted); margin-top:2px;">
+                            ${stageResCount} Resource${stageResCount !== 1 ? 's' : ''}
                         </div>
                     </div>
 
                     <div style="display:flex; gap:2px; align-items:center; flex-shrink:0;">
-                        <button class="btn-icon-tiny" style="color:var(--text-muted);" title="Move Up" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx - 1})" ${idx === 0 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▲</button>
-                        <button class="btn-icon-tiny" style="color:var(--text-muted);" title="Move Down" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx + 1})" ${idx === items.length - 1 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▼</button>
+                        <button class="btn-icon-tiny" title="Move Up" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx - 1})" ${idx === 0 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▲</button>
+                        <button class="btn-icon-tiny" title="Move Down" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx + 1})" ${idx === items.length - 1 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▼</button>
                         <button onclick="event.stopPropagation(); OL.deleteStage('${item.id}')"
-                                style="border:none; background:none; cursor:pointer; color:#9ca3af; display:flex; align-items:center; justify-content:center; padding:2px; margin-left:4px; transition:color 0.15s;"
-                                onmouseover="this.style.color='#ef4444';"
-                                onmouseout="this.style.color='#9ca3af';">
-                            <i data-lucide="trash-2" style="width:11px; height:11px;"></i>
+                                style="border:none; background:none; cursor:pointer; color:#9ca3af; display:flex; align-items:center; justify-content:center; padding:2px; margin-left:4px;">
+                            <i data-lucide="trash-2" style="width:12px; height:12px;"></i>
                         </button>
                     </div>
                 </div>
             `;
         }
 
-        // --- Standard return path loop for files/assets stays exactly unchanged ---
+        // Standard return path fallback loops for assets/flows
         return `
             <div class="fv-wb-item"
                  draggable="true"
