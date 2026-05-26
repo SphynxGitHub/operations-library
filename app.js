@@ -13475,98 +13475,106 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const stepKey = `${res.id}-${step.id}`;
     if (visited.has(stepKey)) return '';
     visited.add(stepKey);
-  const tc = OL._fvGetType(res.type);
-  const isGlobal      = globalIds.has(String(res.id));
-  const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
-  const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
-  const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
-  const outRules = (step.logic?.out || []).filter(l => {
-    if (!l.targetId) return false;
-    if (OL._fv.showArchived) return true;
-    // Check if target step's resource is archived
-    const lastH  = String(l.targetId).lastIndexOf('-');
-    const tResId = l.targetId.substring(0, lastH);
-    const tRes   = allResources.find(r => String(r.id) === tResId);
-    return !tRes?.isArchived;
-});
-  const hasSubSteps   = outRules.length > 0;
-  const hasCollapsible = outRules.some(r => r.type === 'condition');
-  const collapseId    = `fv-substeps-${step.id}`;
+    
+    const tc = OL._fvGetType(res.type);
+    const isGlobal      = globalIds.has(String(res.id));
+    const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
+    const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
+    const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
+    
+    const outRules = (step.logic?.out || []).filter(l => {
+        if (!l.targetId) return false;
+        if (OL._fv.showArchived) return true;
+        
+        // Check if target step's resource is archived
+        const lastH  = String(l.targetId).lastIndexOf('-');
+        const tResId = l.targetId.substring(0, lastH);
+        const tRes   = allResources.find(r => String(r.id) === tResId);
+        return !tRes?.isArchived;
+    });
 
-  const resBadgeBg = tc.color + '18';
-  const resBadge = `<span class="fv-list-res-badge"
-    style="background:${resBadgeBg};color:${tc.color};border:1px solid ${tc.color}30;cursor:pointer;"
-    onclick="event.stopPropagation();
-             document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
-             OL._fvOpenStepsList('${res.id}');">
-    ${tc.abbr} ${esc(res.name.substring(0, 14))}
-  </span>`;
+    // 🎯 THE SUB-STEP FILTER FIX:
+    // Only treat it as an active sub-step if it's a structural branch (Condition, Loop, or Delay).
+    // If it's a plain sequential 'next' link, we don't nest it down as a sub-step layout row.
+    const activeSubStepRules = outRules.filter(r => r.type !== 'next' && r.type !== 'link');
 
-  const tags = [
-    isConditional && !isDecision ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : '',
-    isDecision                   ? `<span class="fv-list-tag conditional">◆ Decision</span>`    : '',
-    isGlobal                     ? `<span class="fv-list-tag global">🌐 Global</span>`           : '',
-    hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
-  ].filter(Boolean).join('');
+    const hasSubSteps   = activeSubStepRules.length > 0;
+    const hasCollapsible = activeSubStepRules.some(r => r.type === 'condition');
+    const collapseId    = `fv-substeps-${step.id}`;
 
-  const subStepsHtml = outRules.map(rule => {
-    const lastH   = String(rule.targetId).lastIndexOf('-');
-    const tResId  = rule.targetId.substring(0, lastH);
-    const tStepId = rule.targetId.substring(lastH + 1);
-    const tRes    = allResources.find(r => String(r.id) === tResId);
-    const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
-    if (!tRes || !tStep) return '';
+    const resBadgeBg = tc.color + '18';
+    const resBadge = `<span class="fv-list-res-badge"
+        style="background:${resBadgeBg};color:${tc.color};border:1px solid ${tc.color}30;cursor:pointer;"
+        onclick="event.stopPropagation();
+                 document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
+                 OL._fvOpenStepsList('${res.id}');">
+        ${tc.abbr} ${esc(res.name.substring(0, 14))}
+      </span>`;
 
-    const isLoop  = rule.type === 'loop';
-    const isDelay = rule.type === 'delay';
-    const isCond  = rule.type === 'condition';
-
-    // Build prefix icons for loop/delay
-    const prefixIcons = [
-        isLoop  ? `<span style="font-size:9px;font-weight:700;color:#f5b800;
-                                padding:1px 5px;border-radius:99px;
-                                background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.3);">
-                        ↺${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}
-                   </span>` : '',
-        isDelay ? `<span style="font-size:9px;font-weight:700;color:#a78bfa;
-                                padding:1px 5px;border-radius:99px;
-                                background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);">
-                        ⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}
-                   </span>` : '',
+    const tags = [
+        isConditional && !isDecision ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : '',
+        isDecision                   ? `<span class="fv-list-tag conditional">◆ Decision</span>`    : '',
+        isGlobal                     ? `<span class="fv-list-tag global">🌐 Global</span>`           : '',
+        hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
     ].filter(Boolean).join('');
 
-    if (isCond) {
-        // Conditional → full nested substep with branch label
-        return `
-            <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);
-                                               margin-left:16px;padding-left:20px;">
-                <div class="fv-branch-label" style="color:#3dd9c5;display:flex;align-items:center;gap:5px;">
-                    <span>◆ If: ${esc(rule.rule||'...')}</span>
-                </div>
-                ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1)}
-            </div>
-        `;
-    } else {
-        // Next/Loop/Delay → flat row, no nesting
-        return `
-            <div style="display:flex;align-items:center;gap:6px;
-                        padding:4px 12px 4px ${16 + (depth * 12)}px;
-                        margin-bottom:2px;">
-                ${prefixIcons || `<span style="font-size:9px;color:#d1d5db;">→</span>`}
-                <span style="font-size:11px;color:#6b7280;font-style:italic;flex:1;
-                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                    ${esc(tStep.name || 'Next Step')}
-                </span>
-                <span style="font-size:9px;padding:1px 5px;border-radius:99px;
-                             background:rgba(0,0,0,0.04);color:#9ca3af;flex-shrink:0;">
-                    ${esc(tRes.name.substring(0,14))}
-                </span>
-            </div>
-        `;
-    }
-}).join('');
+    // Map rows strictly using the filtered array
+    const subStepsHtml = activeSubStepRules.map(rule => {
+        const lastH   = String(rule.targetId).lastIndexOf('-');
+        const tResId  = rule.targetId.substring(0, lastH);
+        const tStepId = rule.targetId.substring(lastH + 1);
+        const tRes    = allResources.find(r => String(r.id) === tResId);
+        const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
+        if (!tRes || !tStep) return '';
 
-  return `
+        const isLoop  = rule.type === 'loop';
+        const isDelay = rule.type === 'delay';
+        const isCond  = rule.type === 'condition';
+
+        // Build prefix icons for loop/delay
+        const prefixIcons = [
+            isLoop  ? `<span style="font-size:9px;font-weight:700;color:#f5b800;
+                                    padding:1px 5px;border-radius:99px;
+                                    background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.3);">
+                            ↺${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}
+                       </span>` : '',
+            isDelay ? `<span style="font-size:9px;font-weight:700;color:#a78bfa;
+                                    padding:1px 5px;border-radius:99px;
+                                    background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);">
+                            ⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}
+                       </span>` : '',
+        ].filter(Boolean).join('');
+
+        if (isCond) {
+            return `
+                <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);
+                                                   margin-left:16px;padding-left:20px;">
+                    <div class="fv-branch-label" style="color:#3dd9c5;display:flex;align-items:center;gap:5px;">
+                        <span>◆ If: ${esc(rule.rule||'...')}</span>
+                    </div>
+                    ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
+                </div>
+            `;
+        } else {
+            return `
+                <div style="display:flex;align-items:center;gap:6px;
+                            padding:4px 12px 4px ${16 + (depth * 12)}px;
+                            margin-bottom:2px;">
+                    ${prefixIcons || `<span style="font-size:9px;color:#d1d5db;">→</span>`}
+                    <span style="font-size:11px;color:#6b7280;font-style:italic;flex:1;
+                                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        ${esc(tStep.name || 'Next Step')}
+                    </span>
+                    <span style="font-size:9px;padding:1px 5px;border-radius:99px;
+                                 background:rgba(0,0,0,0.04);color:#9ca3af;flex-shrink:0;">
+                        ${esc(tRes.name.substring(0,14))}
+                    </span>
+                </div>
+            `;
+        }
+    }).join('');
+
+    return `
     <div style="margin-bottom:${hasSubSteps ? '2px' : '4px'};">
       <div class="fv-list-row">
         <div class="fv-tree-connector"></div>
@@ -13609,6 +13617,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     </div>
   `;
 };
+
 // ══════════════════════════════════════════════
 // SHARED CONTROLS
 // ══════════════════════════════════════════════
