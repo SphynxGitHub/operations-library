@@ -13518,6 +13518,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const isGlobal      = globalIds.has(String(res.id));
     const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
     const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
+    const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
     
     const outRules = (step.logic?.out || []).filter(l => {
         if (!l.targetId) return false;
@@ -13540,7 +13541,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         ${tc.abbr} ${esc(res.name.substring(0, 14))}
       </span>`;
 
-    // 🎯 STRUCTURE AND CASCADE RE-ARCHITECTING
+    // 🎯 INLINE LOGIC & CASCADE NESTING ENGINE
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
@@ -13616,13 +13617,12 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
-    // 🛡️ THE OVERLAP SHIELD: Fixes the broken indentation bug
-    // Suppress secondary rendering ONLY if we have executed a structural branch nesting cascade
+    // 🛡️ THE OVERLAP SHIELD
     if (hasNesting && isIndentedChild) {
         return nestedBranchesHtml; 
     }
 
-    // Dynamic Tag Generator (Wipes out duplicate condition tag when cardFaceConditionHtml handles it)
+    // Dynamic Tag Generator
     const tags = [
         isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
         hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
