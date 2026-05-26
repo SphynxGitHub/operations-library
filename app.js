@@ -5503,13 +5503,14 @@ window.renderSopStepList = function(res) {
     const steps = res.steps || [];
     
     let html = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <label class="tiny muted bold uppercase" style="letter-spacing:1px;">Step Sequence</label>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <label class="tiny muted bold uppercase" style="letter-spacing:1px; font-size:10px;">Step Sequence</label>
+            <span class="tiny muted" style="font-size:9px; opacity:0.6;">💡 Drag items to re-order steps instantly</span>
         </div>
     `;
 
     if (steps.length === 0) {
-        return html + `<div class="empty-hint p-10">No steps defined. Click Add Step or use the Visual Editor.</div>`;
+        return html + `<div class="empty-hint p-10" style="text-align:center; opacity:0.5; font-size:11px; padding:20px;">No steps defined. Click Add Step to build your sequence.</div>`;
     }
 
     html += steps.map((step, idx) => {
@@ -5521,58 +5522,267 @@ window.renderSopStepList = function(res) {
         if (outRules.some(l => l.type === 'delay'))     icons.push('⏱');
         if (outRules.some(l => l.type === 'condition') || outRules.length > 1) icons.push('◆');
         else if (outRules.length === 1 && !icons.length) icons.push('→');
+        
         const logicIcon = icons.map(ic =>
-            `<span class="pill tiny accent" style="font-size:7px;padding:0 4px;">${ic}</span>`
+            `<span class="pill tiny accent" style="font-size:8px; padding:1px 5px; background:rgba(61,217,197,0.1); color:#3dd9c5; border:1px solid rgba(61,217,197,0.2); font-weight:bold;">${ic}</span>`
         ).join('');
 
         return `
-            <div class="v2-step-item sop-step-row"
-                 draggable="true"
-                 ondragstart="OL.handleStepDragStart(event, '${res.id}', ${idx})"
-                 ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over')"
-                 ondragleave="this.classList.remove('drag-over')"
-                 ondrop="this.classList.remove('drag-over'); OL.handleStepDrop(event, '${res.id}', ${idx})"
-                 style="display:flex;align-items:center;gap:8px;padding:8px 10px;
-                        border-bottom:1px solid var(--line);border-radius:4px;margin-bottom:2px;
-                        transition:background 0.2s;cursor:default;">
-                <span class="drag-handle"
-                      style="cursor:grab;opacity:0.2;flex-shrink:0;font-size:14px;padding-right:2px;
-                             user-select:none;">⠿</span>
-                <div class="step-number-circle"
-                     style="width:20px;height:20px;font-size:10px;flex-shrink:0;">${idx + 1}</div>
-                <div style="flex:1;min-width:0;cursor:pointer;"
-                     onclick="event.stopPropagation();OL.goToStepFromLibrary('${res.id}','${step.id}')">
-                    <div class="bold" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        ${esc(step.name || 'Untitled Step')}
+            <div style="margin-bottom: 6px; background: rgba(255,255,255,0.01); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+                <div class="v2-step-item sop-step-row"
+                     id="sop-step-row-${step.id}"
+                     draggable="true"
+                     ondragstart="OL.handleStepDragStart(event, '${res.id}', ${idx})"
+                     ondragover="OL.handleStepDragOver(event)"
+                     ondragleave="OL.handleStepDragLeave(event)"
+                     ondrop="OL.handleStepDrop(event, '${res.id}', ${idx})"
+                     style="display:flex; align-items:center; gap:10px; padding:10px 12px; transition:background 0.2s; user-select:none;">
+                    
+                    <span class="drag-handle" style="cursor:grab; opacity:0.3; font-size:14px; padding-right:2px;">⠿</span>
+                    <div class="step-number-circle" style="width:20px; height:20px; font-size:10px; flex-shrink:0; background:rgba(255,255,255,0.05); border:1px solid var(--line); color:var(--text-muted); display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:bold;">${idx + 1}</div>
+                    
+                    <div style="flex:1; min-width:0; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleInlineStepEditor('${res.id}', '${step.id}')">
+                        <input type="text" class="inline-step-title-input" value="${esc(step.name || 'Untitled Action')}" 
+                               style="background:transparent; border:none; color:var(--text-main); font-size:12px; font-weight:600; width:100%; outline:none; padding:0; margin:0;"
+                               onclick="event.stopPropagation();"
+                               onchange="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value)">
+                        
+                        <div style="display:flex; gap:6px; align-items:center; margin-top:4px; flex-wrap:wrap;">
+                            ${step.appName ? `<span class="pill tiny soft" style="font-size:9px; background:rgba(56,189,248,0.05); color:#38bdf8; border:1px solid rgba(56,189,248,0.15);">${esc(step.appName)}</span>` : ''}
+                            ${logicIcon}
+                            ${hasLinks ? `<span class="pill tiny soft" style="padding:2px 4px; display:inline-flex; align-items:center;"><i data-lucide="link-2" style="width:10px; height:10px; opacity:0.5;"></i></span>` : ''}
+                        </div>
                     </div>
-                    <div style="display:flex;gap:4px;align-items:center;margin-top:2px;flex-wrap:wrap;">
-                        ${step.appName ? `<span class="tiny accent" style="font-size:9px;">${esc(step.appName)}</span>` : ''}
-                        ${logicIcon}
-                        ${hasLinks ? `<span class="pill tiny soft" style="font-size:7px;padding:0 3px;">
-                            <i data-lucide="link-2" style="width:8px;height:8px;"></i>
-                          </span>` : ''}
+                    
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <button class="btn tiny soft" style="font-size:10px; padding:3px 8px; display:flex; align-items:center; gap:4px;"
+                                onclick="event.stopPropagation(); OL.toggleInlineStepEditor('${res.id}', '${step.id}')">
+                            <i data-lucide="sliders-horizontal" style="width:11px; height:11px; opacity:0.6;"></i> Configure
+                        </button>
+                        <button onclick="event.stopPropagation(); OL.deleteStep('${res.id}','${step.id}')"
+                                style="width:20px; height:20px; border:none; background:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center; border-radius:4px; transition:all 0.15s;"
+                                onmouseover="this.style.color='#ef4444'; this.style.background='rgba(239,68,68,0.05)';"
+                                onmouseout="this.style.color='var(--text-muted)'; this.style.background='none';"
+                                title="Delete step">
+                            <i data-lucide="trash-2" style="width:12px; height:12px;"></i>
+                        </button>
                     </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                    <span style="opacity:0.3;font-size:10px;cursor:pointer;white-space:nowrap;"
-                          onclick="event.stopPropagation();OL.goToStepFromLibrary('${res.id}','${step.id}')">
-                        Edit →
-                    </span>
-                    <button onclick="event.stopPropagation();OL.deleteStep('${res.id}','${step.id}')"
-                            style="width:18px;height:18px;border:none;background:none;cursor:pointer;
-                                   color:var(--text-muted);display:flex;align-items:center;
-                                   justify-content:center;border-radius:4px;transition:color 0.2s;"
-                            onmouseover="this.style.color='#ef4444'"
-                            onmouseout="this.style.color='var(--text-muted)'"
-                            title="Delete step">
-                        <i data-lucide="x" style="width:11px;height:11px;"></i>
-                    </button>
-                </div>
+                
+                <div id="fvi-inline-step-editor-${step.id}" class="inline-step-sub-drawer" style="display:none; background:rgba(0,0,0,0.15); border-top:1px solid var(--line); padding:15px; position:relative;"></div>
             </div>
         `;
     }).join('');
 
     return html;
+};
+
+OL.toggleInlineStepEditor = function(resId, stepId) {
+    const drawer = document.getElementById(`fvi-inline-step-editor-${stepId}`);
+    if (!drawer) return;
+
+    const isAlreadyOpen = drawer.style.display === 'block';
+    
+    // Smoothly contract all other open inline editors inside this modal
+    document.querySelectorAll('.inline-step-sub-drawer').forEach(el => {
+        el.style.display = 'none';
+        el.innerHTML = '';
+    });
+
+    if (isAlreadyOpen) {
+        drawer.style.display = 'none';
+        drawer.innerHTML = '';
+        return;
+    }
+
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (!step) return;
+
+    if (!step.logic) step.logic = { in: [], out: [] };
+    if (!step.assignees) step.assignees = [];
+    const allOptions = typeof OL.getAllStepOptions === 'function' ? OL.getAllStepOptions() : [];
+
+    // Construct the inline sub-view workspace
+    drawer.innerHTML = `
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+            <div>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:6px;">
+                    <i data-lucide="smartphone" style="width:12px; height:12px;"></i> Primary App (Tool)
+                </label>
+                ${step.appId ? `
+                    <div class="pill primary" style="display:flex; justify-content:space-between; align-items:center; width:100%; box-sizing:border-box;">
+                        <span style="font-weight:bold; font-size:11px;">🤖 ${esc(step.appName)}</span>
+                        <i data-lucide="x" class="is-clickable" style="width:14px; height:14px; opacity:0.6;" 
+                           onclick="event.stopPropagation(); OL.updateAppMetadataInline('${resId}', '${stepId}', null, null)"></i>
+                    </div>
+                ` : `
+                    <div class="search-map-container" style="position:relative;">
+                        <i data-lucide="search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:12px; height:12px; opacity:0.4;"></i>
+                        <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;" placeholder="Link Tool..."
+                               onfocus="OL.filterInlineAppSearch(event, '${resId}', '${stepId}', '')"
+                               oninput="OL.filterInlineAppSearch(event, '${resId}', '${stepId}', this.value)">
+                        <div id="inline-app-results-${stepId}" class="search-results-overlay" style="max-height:150px; overflow-y:auto;"></div>
+                    </div>
+                `}
+            </div>
+            
+            <div>
+                <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:6px;">
+                    <i data-lucide="users" style="width:12px; height:12px;"></i> Assigned Who
+                </label>
+                <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
+                    ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
+                        <span class="pill tiny accent" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; background:rgba(61,217,197,0.1); border:1px solid rgba(61,217,197,0.3); color:#3dd9c5; padding:2px 8px; border-radius:99px;">
+                            <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px; height:10px;"></i>
+                            ${esc(a.name)}
+                            <b style="cursor:pointer; opacity:0.6; margin-left:2px;" onclick="event.stopPropagation(); OL.removeInlineAssignee('${resId}', '${stepId}', ${idx})">×</b>
+                        </span>
+                    `).join('') : '<div class="tiny muted italic" style="padding:4px 0;">Unassigned</div>'}
+                </div>
+                <div class="search-map-container" style="position:relative;">
+                    <i data-lucide="search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:12px; height:12px; opacity:0.4;"></i>
+                    <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;" placeholder="Add Assignee..."
+                           onfocus="OL.filterInlineAssignmentSearch(event, '${resId}', '${stepId}', '')"
+                           oninput="OL.filterInlineAssignmentSearch(event, '${resId}', '${stepId}', this.value)">
+                    <div id="inline-assign-results-${stepId}" class="search-results-overlay" style="max-height:150px; overflow-y:auto;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-bottom:15px;">
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:4px;">
+                <i data-lucide="calendar-clock" style="width:12px; height:12px;"></i> Timing Offset Value
+            </label>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="number" class="modal-input tiny" style="width:60px; margin:0;" value="${step.timingValue || 0}"
+                       onblur="OL.updateAtomicStep('${resId}', '${stepId}', 'timingValue', parseInt(this.value) || 0)">
+                <span class="tiny muted">days after previous action loop</span>
+            </div>
+        </div>
+
+        <div style="margin-bottom:5px;">
+            <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:6px;">
+                <i data-lucide="arrow-up-from-line" style="width:12px; height:12px;"></i> Outbound Logic Routing Rules
+            </label>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                ${step.logic.out.map((l, idx) => OL.renderLogicBlock(resId, stepId, 'out', idx, l, allOptions)).join('')}
+            </div>
+            <button class="btn tiny soft" style="margin-top:6px; display:inline-flex; align-items:center; gap:4px;" 
+                    onclick="event.stopPropagation(); OL.addInlineStepLogic('${resId}', '${stepId}', 'out')">
+                <i data-lucide="plus" style="width:12px; height:12px;"></i> Add Output Path
+            </button>
+        </div>
+    `;
+
+    drawer.style.display = 'block';
+    if (window.lucide) lucide.createIcons();
+};
+
+// Inline App Search Filter Affirmation
+OL.filterInlineAppSearch = function(e, parentId, stepId, query) {
+    const overlay = document.getElementById(`inline-app-results-${stepId}`);
+    if (!overlay) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const client = getActiveClient();
+    const localApps = client?.projectData?.localApps || [];
+    const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+        overlay.innerHTML = `<div class="p-10 tiny muted">No tools match context.</div>`;
+        overlay.style.display = 'block';
+        return;
+    }
+
+    overlay.innerHTML = matches.map(app => `
+        <div class="search-result-item" style="padding:6px 10px; font-size:11px;"
+             onmousedown="event.preventDefault(); event.stopPropagation(); OL.updateAppMetadataInline('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
+            📱 ${esc(app.name)}
+        </div>
+    `).join('');
+    overlay.style.display = 'block';
+};
+
+OL.updateAppMetadataInline = function(resId, stepId, appId, appName) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (!step) return;
+
+    step.appId = appId;
+    step.appName = appName;
+    OL.persist();
+    
+    // Soft reload the step row to preserve view anchor focus state
+    OL.toggleInlineStepEditor(resId, stepId);
+    OL.toggleInlineStepEditor(resId, stepId);
+};
+
+// Multi-select Assignment Sub-View Controller
+OL.filterInlineAssignmentSearch = function(resId, stepId, query) {
+    const overlay = document.getElementById(`inline-assign-results-${stepId}`);
+    if (!overlay) return;
+
+    const q = (query || "").toLowerCase().trim();
+    const matches = OL.getFilteredAssigneeOptions(q);
+
+    if (matches.length === 0) {
+        overlay.innerHTML = `<div class="p-10 tiny muted">No choices found.</div>`;
+        overlay.style.display = 'block';
+        return;
+    }
+
+    overlay.innerHTML = matches.map(item => `
+        <div class="search-result-item" style="padding:6px 10px; font-size:11px;"
+             onmousedown="event.preventDefault(); event.stopPropagation(); OL.addInlineAssignee('${resId}', '${stepId}', '${item.id}', '${esc(item.name)}', '${item.type}');">
+            ${item.icon} ${esc(item.name)}
+        </div>
+    `).join('');
+    overlay.style.display = 'block';
+};
+
+OL.addInlineAssignee = function(resId, stepId, assigneeId, assigneeName, type) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (!step) return;
+
+    if (!step.assignees) step.assignees = [];
+    if (!step.assignees.some(a => a.id === assigneeId)) {
+        step.assignees.push({ id: assigneeId, name: assigneeName, type: type });
+        OL.persist();
+    }
+    OL.toggleInlineStepEditor(resId, stepId);
+    OL.toggleInlineStepEditor(resId, stepId);
+};
+
+OL.removeInlineAssignee = function(resId, stepId, idx) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (step && step.assignees) {
+        step.assignees.splice(idx, 1);
+        OL.persist();
+        OL.toggleInlineStepEditor(resId, stepId);
+        OL.toggleInlineStepEditor(resId, stepId);
+    }
+};
+
+OL.addInlineStepLogic = function(resId, stepId, direction) {
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(resId));
+    const step = res?.steps?.find(s => String(s.id) === String(stepId));
+    if (!step) return;
+
+    if (!step.logic) step.logic = { in: [], out: [] };
+    step.logic[direction].push({ type: "next", targetId: null, rule: "" });
+
+    OL.persist().then(() => {
+        OL.toggleInlineStepEditor(resId, stepId);
+        OL.toggleInlineStepEditor(resId, stepId);
+    });
 };
         
 OL.deleteStep = function(resId, stepId) {
@@ -14404,16 +14614,13 @@ OL.handleStepDragLeave = function(e) {
 
 OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
     e.preventDefault();
-    e.stopPropagation(); // 🛡️ Stop the event from hitting parent containers
+    e.stopPropagation();
     
-    // 🧹 Clean up visual indicators
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 
-    // 1. Identify Drag Source
     const sourceStepResId = state.draggingStepResId;
     const draggedStepIdx = state.draggingStepIdx;
     
-    // Get external resource data (from Sidebar/Canvas)
     let sourceResId = null;
     try {
         const resourceData = JSON.parse(e.dataTransfer.getData('application/json') || '{}');
@@ -14422,8 +14629,7 @@ OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
         sourceResId = e.dataTransfer.getData('text/plain');
     }
 
-    // --- 🟢 CASE 1: INTERNAL STEP REORDER ---
-    // (Triggered when dragging a step handle within the same card)
+    // --- CASE 1: INTERNAL STEP REORDER ---
     if (sourceStepResId === targetResId && draggedStepIdx !== null) {
         if (draggedStepIdx === droppedOnIdx) return;
         
@@ -14431,18 +14637,27 @@ OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
         const [movedStep] = res.steps.splice(draggedStepIdx, 1);
         res.steps.splice(droppedOnIdx, 0, movedStep);
         
-        OL.persist();
+        await OL.persist();
     
-        // Refresh whichever view is active
+        // 🎯 THE BALANCED ROUTER:
+        // Detects if the action was fired inside the Modal Overlay rather than the map grid.
+        // Re-renders the internal list on the fly without closing the panel window.
         if (document.getElementById('active-modal-box')) {
-            OL.openResourceModal(targetResId);
+            console.log("Surgically updating steps view layer inside active resource modal...");
+            const stepListContainer = document.getElementById('sop-step-list');
+            if (stepListContainer) {
+                stepListContainer.innerHTML = window.renderSopStepList(res);
+            } else {
+                OL.openResourceModal(targetResId);
+            }
         } else if (document.getElementById('inspector-content')) {
             OL._fvOpenStepsList(targetResId);
         } else {
             OL.renderVisualizer();
         }
         return;
-    }
+    };
+    
     // --- 🔵 CASE 2: EXTERNAL RESOURCE DROP ---
     if (sourceResId && sourceResId !== targetResId) {
         
