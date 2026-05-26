@@ -12674,41 +12674,28 @@ OL._fvSetupRailScroll = function() {
   }, { passive: true });
 };
 
-OL._fvUnmapResource = async function(resId) {
-    const data = OL.getCurrentProjectData();
-    const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    
-    if (!res) {
-        console.warn('_fvUnmapResource: resource not found:', resId);
-        return;
-    }
-    
-    await OL.updateAndSync(() => {
-        res.stageId    = null;
-        res.workflowId = null;
-        res.isGlobal   = false;
-        res.isTopShelf = false;
+OL._fvUnmapResource = function(resId) {
+    const client = getActiveClient();
+    if (!client) return;
 
-        // Remove from all workflows
-        (data.workflows || []).forEach(wf => {
-            wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
-        });
-    });
+    const resources = client.projectData.localResources || [];
+    const res = resources.find(r => String(r.id) === String(resId));
+    if (!res) { console.error('Not found:', resId); return; }
 
-    // Preserve scroll before re-render
-    const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
-    const scrollTop  = wrap?.scrollTop  || 0;
-    const scrollLeft = wrap?.scrollLeft || 0;
+    // Mutate directly on the client object — no aliases
+    res.stageId    = null;
+    res.workflowId = null;
+    res.isGlobal   = false;
+    res.isTopShelf = false;
 
+    client.projectData.workflows = (client.projectData.workflows || []).map(wf => ({
+        ...wf,
+        resourceIds: (wf.resourceIds || []).filter(id => String(id) !== String(resId))
+    }));
+
+    console.log('✅ Unmapped. Rendering...');
+    OL.persist();
     OL.renderVisualizer();
-
-    requestAnimationFrame(() => {
-        const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap');
-        if (newWrap) {
-            newWrap.scrollTop  = scrollTop;
-            newWrap.scrollLeft = scrollLeft;
-        }
-    });
 };
 
 OL._fvHandleCanvasClick = function(e) {
