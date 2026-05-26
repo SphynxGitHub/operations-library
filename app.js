@@ -13475,7 +13475,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const stepKey = `${res.id}-${step.id}`;
     if (visited.has(stepKey)) return '';
     visited.add(stepKey);
-    
+
     const tc = OL._fvGetType(res.type);
     const isGlobal      = globalIds.has(String(res.id));
     const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
@@ -13485,24 +13485,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const outRules = (step.logic?.out || []).filter(l => {
         if (!l.targetId) return false;
         if (OL._fv.showArchived) return true;
-        
-        // Check if target step's resource is archived
         const lastH  = String(l.targetId).lastIndexOf('-');
         const tResId = l.targetId.substring(0, lastH);
-        const tRes   = allResources.find(r => String(r.id) === tResId);
+        const tRes   = allResources.find(r => String(r.id) === String(tResId));
         return !tRes?.isArchived;
     });
 
-    // 🎯 THE SUB-STEP FILTER FIX:
-    // Only treat it as an active sub-step if it's a structural branch (Condition, Loop, or Delay).
-    // If it's a plain sequential 'next' link, we don't nest it down as a sub-step layout row.
-    const activeSubStepRules = outRules.filter(r => r.type !== 'next' && r.type !== 'link');
-
-    const hasSubSteps   = activeSubStepRules.length > 0;
-    const hasCollapsible = activeSubStepRules.some(r => r.type === 'condition');
-    const collapseId    = `fv-substeps-${step.id}`;
-
+    const collapseId = `fv-substeps-${step.id}`;
     const resBadgeBg = tc.color + '18';
+    
     const resBadge = `<span class="fv-list-res-badge"
         style="background:${resBadgeBg};color:${tc.color};border:1px solid ${tc.color}30;cursor:pointer;"
         onclick="event.stopPropagation();
@@ -13518,64 +13509,66 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
     ].filter(Boolean).join('');
 
-    // Map rows strictly using the filtered array
-    const subStepsHtml = activeSubStepRules.map(rule => {
+    // 🎯 INLINE LOGIC MATRICES (The new card feature engine)
+    let inlineRoutingBadgesHtml = '';
+    let nestedBranchesHtml = '';
+    let hasNesting = false;
+
+    outRules.forEach(rule => {
         const lastH   = String(rule.targetId).lastIndexOf('-');
         const tResId  = rule.targetId.substring(0, lastH);
         const tStepId = rule.targetId.substring(lastH + 1);
-        const tRes    = allResources.find(r => String(r.id) === tResId);
-        const tStep   = tRes?.steps?.find(s => String(s.id) === tStepId);
-        if (!tRes || !tStep) return '';
+        const tRes    = allResources.find(r => String(r.id) === String(tResId));
+        const tStep   = tRes?.steps?.find(s => String(s.id) === String(tStepId));
+        if (!tRes || !tStep) return;
+
+        // Determine if this is a standard subsequent step in the local list
+        const nextSequentialStep = res.steps[stepIdx + 1];
+        const isSubsequentLocalStep = (String(tResId) === String(res.id)) && nextSequentialStep && (String(tStepId) === String(nextSequentialStep.id));
 
         const isLoop  = rule.type === 'loop';
         const isDelay = rule.type === 'delay';
         const isCond  = rule.type === 'condition';
+        
+        // Target contextual helper values
+        const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
 
-        // Build prefix icons for loop/delay
-        const prefixIcons = [
-            isLoop  ? `<span style="font-size:9px;font-weight:700;color:#f5b800;
-                                    padding:1px 5px;border-radius:99px;
-                                    background:rgba(245,184,0,0.1);border:1px solid rgba(245,184,0,0.3);">
-                            ↺${rule.loopLimit ? ` (${esc(rule.loopLimit)})` : ''}
-                       </span>` : '',
-            isDelay ? `<span style="font-size:9px;font-weight:700;color:#a78bfa;
-                                    padding:1px 5px;border-radius:99px;
-                                    background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);">
-                            ⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}
-                       </span>` : '',
-        ].filter(Boolean).join('');
-
+        // 🛑 CONDITION A: If it's a structural conditional branch, build the nested cascade layout
         if (isCond) {
-            return `
-                <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3);
-                                                   margin-left:16px;padding-left:20px;">
-                    <div class="fv-branch-label" style="color:#3dd9c5;display:flex;align-items:center;gap:5px;">
-                        <span>◆ If: ${esc(rule.rule||'...')}</span>
+            hasNesting = true;
+            nestedBranchesHtml += `
+                <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3); margin-left:16px; padding-left:20px;">
+                    <div class="fv-branch-label" style="color:#3dd9c5; display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600;">
+                        <span>◆ If: ${esc(rule.rule || '...')} ➔ Jump to: ${esc(targetLabel)}</span>
                     </div>
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
-                </div>
-            `;
-        } else {
-            return `
-                <div style="display:flex;align-items:center;gap:6px;
-                            padding:4px 12px 4px ${16 + (depth * 12)}px;
-                            margin-bottom:2px;">
-                    ${prefixIcons || `<span style="font-size:9px;color:#d1d5db;">→</span>`}
-                    <span style="font-size:11px;color:#6b7280;font-style:italic;flex:1;
-                                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        ${esc(tStep.name || 'Next Step')}
-                    </span>
-                    <span style="font-size:9px;padding:1px 5px;border-radius:99px;
-                                 background:rgba(0,0,0,0.04);color:#9ca3af;flex-shrink:0;">
-                        ${esc(tRes.name.substring(0,14))}
-                    </span>
-                </div>
-            `;
+                </div>`;
+        } 
+        // 🛑 CONDITION B: If it's a loop, a delay, OR a non-sequential jump destination, print it INLINE inside the card
+        else if (isLoop || isDelay || !isSubsequentLocalStep) {
+            let badgeStyle = "background:#f5f6f8; color:#6b7280; border:1px solid #e5e7eb;";
+            let badgeText = `➔ Jump: ${targetLabel}`;
+
+            if (isLoop) {
+                badgeStyle = "background:rgba(245,184,0,0.1); color:#f5b800; border:1px solid rgba(245,184,0,0.3);";
+                badgeText = `↺ Loop${rule.loopLimit ? ` (${rule.loopLimit})` : ''} ➔ ${targetLabel}`;
+            } else if (isDelay) {
+                badgeStyle = "background:rgba(167,139,250,0.1); color:#a78bfa; border:1px solid rgba(167,139,250,0.3);";
+                badgeText = `⏱ Wait ${rule.delayValue || '?'} ${rule.delayUnit || 'days'} ➔ ${targetLabel}`;
+            } else if (!isSubsequentLocalStep) {
+                badgeStyle = "background:rgba(56,189,248,0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);";
+                badgeText = `🔀 Skip To: ${targetLabel}`;
+            }
+
+            inlineRoutingBadgesHtml += `
+                <span class="pill tiny" style="display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; ${badgeStyle}">
+                    ${esc(badgeText)}
+                </span>`;
         }
-    }).join('');
+    });
 
     return `
-    <div style="margin-bottom:${hasSubSteps ? '2px' : '4px'};">
+    <div style="margin-bottom:${hasNesting ? '2px' : '4px'};">
       <div class="fv-list-row">
         <div class="fv-tree-connector"></div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
@@ -13591,9 +13584,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                       document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected'));
                       this.classList.add('selected');
                       OL.openInspector('${res.id}', '${step.id}');">
-          <span class="drag-handle" style="cursor:grab;opacity:0.25;flex-shrink:0;padding-right:4px;font-size:14px;">⠿</span>
+          <span class="drag-handle" style="cursor:grab; opacity:0.25; flex-shrink:0; padding-right:4px; font-size:14px;">⠿</span>
           <div class="fv-list-type-dot" style="background:${tc.color};"></div>
-          <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}">${esc(step.name || 'Unnamed Step')}</span>
+          
+          <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:0;">
+              <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600;">${esc(step.name || 'Unnamed Step')}</span>
+              
+              ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:2px;">${inlineRoutingBadgesHtml}</div>` : ''}
+          </div>
+
           ${tags}
           ${resBadge}
           ${hasCollapsible ? `
@@ -13605,15 +13604,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                                this.textContent=collapsed?'−':'+';
                                this.title=collapsed?'Collapse':'Expand';"
                       title="Collapse"
-                      style="margin-left:auto;flex-shrink:0;width:18px;height:18px;
-                             border-radius:4px;background:#f5f6f8;border:1px solid #e5e7eb;
-                             display:flex;align-items:center;justify-content:center;
-                             font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;
+                      style="margin-left:auto; flex-shrink:0; width:18px; height:18px;
+                             border-radius:4px; background:#f5f6f8; border:1px solid #e5e7eb;
+                             display:flex; align-items:center; justify-content:center;
+                             font-size:11px; font-weight:700; color:#9ca3af; cursor:pointer;
                              line-height:1;">−</span>
             ` : ''}
         </div>
       </div>
-      ${hasSubSteps ? `<div id="${collapseId}">${subStepsHtml}</div>` : ''}
+      ${hasNesting ? `<div id="${collapseId}">${nestedBranchesHtml}</div>` : ''}
     </div>
   `;
 };
