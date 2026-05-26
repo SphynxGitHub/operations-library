@@ -633,7 +633,7 @@ OL.partnerCreateClient = function(partnerKey) {
             scopingSheets: [{ id: 'sheet-' + uid(), lineItems: [] }],
             localFunctions: [],
             stages: [],
-            workfows: [],
+            workflows: [],
             clientTasks: [],
         }
     };
@@ -10574,22 +10574,49 @@ OL.getCurrentProjectData = function() {
     
     if (isVault) {
         if (!state.master.stages) state.master.stages = [];
-        return state.master; // Already has .stages and .resources
+        if (!state.master.resources) state.master.resources = [];
+        if (!state.master.workflows) state.master.workflows = [];
+        return state.master; 
     } else {
         const client = getActiveClient();
-        if (!client) return { stages: [], resources: [] };
+        if (!client || !client.projectData) return { stages: [], resources: [], workflows: [] };
 
-        // Ensure stages exists
-        if (!client.projectData.stages) client.projectData.stages = [];
+        const pd = client.projectData;
+
+        // 🩺 AUTOMATIC SANITIZATION: Force proper arrays on the LIVE reference
+        if (!pd.stages) pd.stages = [];
+        if (!pd.localResources) pd.localResources = [];
         
-        // 🎯 THE MAPPING FIX: 
-        // We point .resources to .localResources so the visualizer 
-        // sees the cards it's looking for.
-        return {
-            ...client.projectData,
-            stages: client.projectData.stages,
-            resources: client.projectData.localResources || []
-        };
+        // 🚑 THE TYPO BRIDGE: Heal 'workfows' vs 'workflows' on the fly
+        if (pd.workfows && !pd.workflows) {
+            pd.workflows = pd.workfows;
+        }
+        if (!pd.workflows) pd.workflows = [];
+
+        // 🎯 THE COMPATIBILITY BRIDGE
+        // We attach a live reference link of .localResources to .resources 
+        // so the layout engine finds exactly what it's hunting for.
+        pd.resources = pd.localResources;
+
+        // 🏗️ DAFUALT WORKFLOW GEN: If they have stages but no workflows, 
+        // auto-build a placeholder workflow so their cards don't vanish from Swimlanes
+        if (pd.stages.length > 0 && pd.workflows.length === 0) {
+            pd.stages.forEach(stage => {
+                const hasWf = pd.workflows.some(w => w.stageId === stage.id);
+                if (!hasWf) {
+                    pd.workflows.push({
+                        id: 'wf-auto-' + stage.id,
+                        name: `Main ${stage.name} Process`,
+                        stageId: stage.id,
+                        resourceIds: pd.localResources
+                            .filter(r => r.stageId === stage.id)
+                            .map(r => String(r.id))
+                    });
+                }
+            });
+        }
+
+        return pd; // Return the exact reference object so background edits persist!
     }
 };
 
@@ -20028,7 +20055,7 @@ function renderHowToLibrary () {
                             onclick="OL.openHowToEditorModal()">
                         <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Create Master SOP
                     </button>
-                    ${OL.viewToggleBtn('howto', 'rendeHowToLibrary')}
+                    ${OL.viewToggleBtn('howto', 'renderHowToLibrary')}
                 ` : ''}
 
                 ${!isVaultView ? `
@@ -21391,7 +21418,7 @@ OL.removeStepDatapoint = async function(resId, stepId, idx) {
         // We only splice if they click the '×' (handled in the HTML string below)
         step.datapoints.splice(idx, 1);
         await OL.persist();
-        OL._fvRefreshInspector(resId, stepId;
+        OL._fvRefreshInspector(resId, stepId);
         OL.renderVisualizer();
     }
 };
