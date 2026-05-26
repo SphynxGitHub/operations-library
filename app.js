@@ -11138,25 +11138,36 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
               onblur="this.style.borderColor='transparent';OL._fvEditStageName('${stage.id}', this.innerText.trim())">
           ${esc(stage.name)}
         </span>
-        <button class="fv-btn" style="margin-left:auto;font-size:10px;"
-                onclick="OL._fvCreateWorkflow('${stage.id}')">
-          <i data-lucide="plus" style="width:11px;height:11px;"></i> Workflow
-        </button>
-        <button class="fv-lane-action-btn"
-                title="Add stage before this one"
-                onclick="event.stopPropagation(); OL.addStageBetween(${si})">
-          <i data-lucide="plus"></i>
-        </button>
-        <button class="fv-lane-action-btn"
-                title="Delete stage"
-                onclick="event.stopPropagation(); OL._fvDeleteStage('${stage.id}')">
-            <i data-lucide="trash-2"></i>
-        </button>
-        <button class="fv-lane-action-btn"
-                title="Edit name"
-                onclick="event.stopPropagation(); OL._fvEditStageName('${stage.id}')">
-          <i data-lucide="pencil"></i>
-        </button>
+        <div style="display:flex;align-items:center;gap:4px;margin-left:auto;">
+          <button onclick="OL._fvCreateWorkflow('${stage.id}')"
+                  style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
+                         border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
+                         color:#6b7280;font-size:10px;cursor:pointer;">
+            <i data-lucide="plus" style="width:10px;height:10px;"></i> Workflow
+          </button>
+          <button onclick="OL.addStageBetween(${si})"
+                  style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
+                         border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
+                         color:#6b7280;font-size:10px;cursor:pointer;"
+                  title="Add stage before">
+            <i data-lucide="plus-circle" style="width:10px;height:10px;"></i>
+          </button>
+          <button onclick="OL._fvEditStageName('${stage.id}')"
+                  style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
+                         border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
+                         color:#6b7280;font-size:10px;cursor:pointer;"
+                  title="Rename stage">
+            <i data-lucide="pencil" style="width:10px;height:10px;"></i>
+          </button>
+          <button onclick="OL._fvDeleteStage('${stage.id}')"
+                  style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
+                         border-radius:6px;border:0.5px solid rgba(239,68,68,0.3);
+                         background:rgba(239,68,68,0.06);
+                         color:#ef4444;font-size:10px;cursor:pointer;"
+                  title="Delete stage">
+            <i data-lucide="trash-2" style="width:10px;height:10px;"></i>
+          </button>
+        </div>
       </div>
     `;
 
