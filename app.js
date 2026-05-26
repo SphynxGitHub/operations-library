@@ -5618,7 +5618,7 @@ OL.addStepLogic = function(resId, stepId, dir) {
     });
 
     OL.persist();
-    OL.openInspector(resId, stepId);
+    OL._fvRefreshInspector(resId, stepId);
 };
 
 OL.goToStepFromLibrary = function(resId, stepId) {
@@ -10971,7 +10971,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
   // Determine which stages/workflows to show based on filter
   // filter can be 'stage-{id}' or 'wf-{id}' or ''
   const isWfFilter    = filter.startsWith('wf-');
-  const isStageFilter = filter.startsWith('stage-') || (!isWfFilter && filter !== '');
+  const isStageFilter = filter.startsWith('stage-');
   const filteredWfId  = isWfFilter ? filter : null;
   const filteredStageId = isStageFilter ? filter.replace('stage-', '') : null;
 
@@ -10989,10 +10989,6 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
 
   displayStages.forEach((stage, si) => {
     if (filteredStageId && stage.id !== filteredStageId) return;
-    if (filteredWfId) {
-        const hasMatchingWf = workflows.some(w => w.stageId === stage.id && w.id === filteredWfId);
-        if (!hasMatchingWf) return;
-    }
 
     // Get workflows for this stage
     const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
@@ -12710,7 +12706,7 @@ OL._fvBuildListShell = function(stages, resources) {
       const stepsHtml = stageRes.map(res => {
             const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
             const stepRows = steps.map((step, stepIdx) =>
-                OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0)
+                OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0, new Set())
             ).join('');
             return stepRows;
         }).join('');
@@ -13366,7 +13362,13 @@ OL._fvToggleStepsPanel = function(resId) {
   }
 };
 
-OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth) {
+OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth, visited) {
+    // Guard against infinite recursion and excessive depth
+    if (depth > 4) return '';
+    if (!visited) visited = new Set();
+    const stepKey = `${res.id}-${step.id}`;
+    if (visited.has(stepKey)) return '';
+    visited.add(stepKey);
   const tc = OL._fvGetType(res.type);
   const isGlobal      = globalIds.has(String(res.id));
   const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
@@ -16051,7 +16053,7 @@ OL._fvToggleLogicType = function(resId, stepId, idx, type) {
     rule.type = rule.types[0];
 
     OL.persist();
-    OL.openInspector(resId, stepId);
+    OL._fvRefreshInspector(resId, stepId);
 };
 
 OL._fvOpenTargetPicker = function(resId, stepId, idx) {
@@ -16146,51 +16148,58 @@ window.renderStepResources = function(resId, step) {
     }).join('');
 };
 
-OL.updateAtomicStep = async function(resId, stepId, field, value) {
-    // 1. Get the current project data directly
+OL.updateAtomicStep = function(resId, stepId, field, value) {
     const data = OL.getCurrentProjectData(); 
     const projectResources = data.resources || [];
     
-    // 2. 🔍 Find the specific instance on the map
-    // We use String() to avoid Type mismatches (Number vs String)
-    const res = projectResources.find(r => String(r.id) === String(resId));
-
-    if (!res) {
-        console.error("❌ Resource not found in Project Data:", resId);
-        // Fallback: Check if it's a Master resource being edited in the Library
-        const masterRes = (state.master?.resources || []).find(r => String(r.id) === String(resId));
-        if (!masterRes) return;
-        
-        // If editing a master, point 'res' to that
-        var targetRes = masterRes;
-    } else {
-        var targetRes = res;
+    let targetRes = projectResources.find(r => String(r.id) === String(resId));
+    if (!targetRes) {
+        targetRes = (state.master?.resources || []).find(r => String(r.id) === String(resId));
     }
+    if (!targetRes?.steps) return;
 
-    if (!targetRes.steps) {
-        console.error("❌ This resource has no steps array:", resId);
-        return;
-    }
-
-    // 3. 🎯 Find the Step by ID
     const step = targetRes.steps.find(s => String(s.id) === String(stepId));
-    
-    if (!step) {
-        console.error("❌ Step ID not found in this resource:", stepId);
-        return;
-    }
+    if (!step) return;
 
-    // 4. Update the value
     step[field] = value;
-    console.log(`✅ ${field} updated to: ${value}`);
+    OL.persist();
 
-    // 5. Persist & Refresh
-    await OL.persist();
-    
-    // If we are on the map, redraw to show the new name/desc
-    if (window.location.hash.includes('visualizer')) {
-        OL.renderVisualizer();
+    // Surgical DOM updates — no full re-render
+    if (field === 'name') {
+        // Update step name in list view if visible
+        const stepRow = document.getElementById(`fv-list-step-${stepId}`);
+        if (stepRow) {
+            const nameEl = stepRow.querySelector('.fv-list-step-name');
+            if (nameEl) nameEl.textContent = value;
+        }
+        // Update step in inspector steps list
+        const fviRow = document.querySelector(`[onclick*="'${stepId}'"] .fvi-step-name`);
+        if (fviRow) fviRow.textContent = value;
+        // Update card in flowchart if visible
+        const cardStep = document.querySelector(`.fv-card-step-name[data-step-id="${stepId}"]`);
+        if (cardStep) cardStep.textContent = value;
     }
+    // For all other fields, refresh just the inspector content
+    // preserving scroll position
+    else {
+        OL._fvRefreshInspector(resId, stepId);
+    }
+};
+
+// Add this helper:
+OL._fvRefreshInspector = function(resId, stepId) {
+    // Save scroll position
+    const scrollContent = document.querySelector('.inspector-scroll-content');
+    const scrollTop = scrollContent?.scrollTop || 0;
+    
+    // Re-render inspector content only
+    OL.openInspector(resId, stepId);
+    
+    // Restore scroll
+    requestAnimationFrame(() => {
+        const newScrollContent = document.querySelector('.inspector-scroll-content');
+        if (newScrollContent) newScrollContent.scrollTop = scrollTop;
+    });
 };
 
 OL.filterAppSearch = function(parentId, stepId, query) {
@@ -16257,7 +16266,7 @@ window.OL.removeAppFromStep = async function(resId, stepId) {
         
         // 🔄 Force re-render of the inspector to hide the pill and show the search box
         console.log("🔄 App removed. Re-rendering inspector.");
-        OL.openInspector(resId, stepId);
+        OL._fvRefreshInspector(resId, stepId);
     }
 };
 
@@ -16435,7 +16444,7 @@ OL.setStepTargetResource = async function(resId, stepId, targetId, targetName) {
         // Hide overlay and refresh inspector
         const overlay = document.getElementById('target-search-results');
         if (overlay) overlay.style.display = 'none';
-        OL.openInspector(resId, stepId);
+        OL._fvRefreshInspector(resId, stepId);
     }
 };
 
@@ -16818,7 +16827,7 @@ window.OL.addLinkToStep = async function(resId, stepId, linkId, linkName, type) 
         if (overlay) overlay.style.display = 'none';
         
         // 🔄 Force refresh to show the new pill
-        OL.openInspector(resId, stepId);
+        OL._fvRefreshInspector(resId, stepId);
     }
 };
 
@@ -16838,7 +16847,7 @@ window.OL.removeStepLink = async function(resId, stepId, linkIdx) {
         
         // 🔄 Immediate UI Refresh
         console.log("🗑️ Attachment removed from step:", stepId);
-        OL.openInspector(resId, stepId);
+        OL._fvRefreshInspector(resId, stepId);
     }
 };
 
@@ -21382,7 +21391,7 @@ OL.removeStepDatapoint = async function(resId, stepId, idx) {
         // We only splice if they click the '×' (handled in the HTML string below)
         step.datapoints.splice(idx, 1);
         await OL.persist();
-        OL.openInspector(resId, stepId);
+        OL._fvRefreshInspector(resId, stepId;
         OL.renderVisualizer();
     }
 };
