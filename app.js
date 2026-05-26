@@ -11947,26 +11947,36 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
     .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
     .join('');
     
-  const linkedAssets = (res.steps || [])
-    .flatMap(s => s.links || [])
-    .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i); // dedupe
-
-const assetIconsHtml = linkedAssets.length > 0 ? `
-    <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
-        ${linkedAssets.map(link => `
-            <div title="${esc(link.name)}"
-                 onclick="event.stopPropagation(); OL.openInspector('${link.id}', null, 'cards')"
-                 style="width:22px; height:22px; border-radius:4px; cursor:pointer;
-                        background:rgba(255,255,255,0.06); border:1px solid var(--line);
-                        display:flex; align-items:center; justify-content:center;
-                        transition:all 0.15s;"
-                 onmouseover="this.style.borderColor='var(--accent)'; this.style.background='rgba(61,217,197,0.1)'; document.getElementById('asset-tooltip-${esc(link.id)}')?.style && (document.getElementById('asset-tooltip-${esc(link.id)}').style.display='block')"
-                 onmouseout="this.style.borderColor='var(--line)'; this.style.background='rgba(255,255,255,0.06)'; document.getElementById('asset-tooltip-${esc(link.id)}')?.style && (document.getElementById('asset-tooltip-${esc(link.id)}').style.display='none')">
-                <i data-lucide="${OL.getRegistryIcon(link.type)}" style="width:12px; height:12px; opacity:0.6;"></i>
-            </div>
-        `).join('')}
-    </div>
-` : '';
+  const relTypeConfig = {
+        triggers:   { icon: 'zap',                color: '#f59e0b' },
+        requires:   { icon: 'arrow-down-to-line', color: '#38bdf8' },
+        produces:   { icon: 'arrow-up-from-line', color: '#10b981' },
+        references: { icon: 'link-2',             color: '#a78bfa' },
+    };
+    
+    const linkedAssets = (res.steps || [])
+        .flatMap(s => s.links || [])
+        .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i);
+    
+    const assetIconsHtml = linkedAssets.length > 0 ? `
+        <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
+            ${linkedAssets.map(link => {
+                const cfg = relTypeConfig[link.relType] || { icon: OL.getRegistryIcon(link.type), color: 'var(--accent)' };
+                return `
+                    <div title="${esc(link.relType ? link.relType + ': ' : '')}${esc(link.name)}"
+                         onclick="event.stopPropagation(); OL.openInspector('${link.id}', null, 'cards')"
+                         style="width:22px; height:22px; border-radius:4px; cursor:pointer;
+                                background:${cfg.color}18; border:1px solid ${cfg.color}44;
+                                display:flex; align-items:center; justify-content:center;
+                                transition:all 0.15s;"
+                         onmouseover="this.style.borderColor='${cfg.color}'; this.style.background='${cfg.color}30';"
+                         onmouseout="this.style.borderColor='${cfg.color}44'; this.style.background='${cfg.color}18';">
+                        <i data-lucide="${cfg.icon}" style="width:12px; height:12px; color:${cfg.color};"></i>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    ` : '';
     
   const logicTypes = new Set((res.steps || []).flatMap(s => 
     (s.logic?.out || []).filter(l => l.targetId).map(l => l.type || 'next')
@@ -17522,28 +17532,68 @@ OL.clearAllFilters = function() {
 window.OL.addLinkToStep = async function(resId, stepId, linkId, linkName, type) {
     const res = OL.getResourceById(resId);
     if (!res) return;
-
     const step = (res.steps || []).find(s => String(s.id) === String(stepId));
-    if (step) {
-        if (!step.links) step.links = [];
+    if (!step) return;
 
-        // Avoid duplicate links
-        if (!step.links.some(l => l.id === linkId)) {
-            step.links.push({
-                id: linkId,
-                name: linkName,
-                type: type
-            });
-            await OL.persist();
-        }
-        
-        // Hide overlay and clear input
-        const overlay = document.getElementById(`resource-results-${stepId}`);
-        if (overlay) overlay.style.display = 'none';
-        
-        // 🔄 Force refresh to show the new pill
-        OL._fvRefreshInspector(resId, stepId);
-    }
+    if (step.links?.some(l => l.id === linkId)) return; // already linked
+
+    const relType = await OL.promptLinkType(linkName);
+    if (!relType) return; // user cancelled
+
+    if (!step.links) step.links = [];
+    step.links.push({ id: linkId, name: linkName, type, relType });
+
+    await OL.persist();
+
+    const overlay = document.getElementById(`resource-results-${stepId}`);
+    if (overlay) overlay.style.display = 'none';
+
+    OL._fvRefreshInspector(resId, stepId);
+};
+
+OL.promptLinkType = function(name) {
+    return new Promise(resolve => {
+        const id = 'link-type-picker-' + Date.now();
+        const html = `
+            <div class="modal-head">
+                <div class="modal-title-text">How is "${esc(name)}" used?</div>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    ${[
+                        { key: 'triggers',  icon: 'zap',           label: 'Triggers',  desc: 'This step fires or sends this asset',        color: '#f59e0b' },
+                        { key: 'requires',  icon: 'arrow-down-to-line', label: 'Requires',  desc: 'This step needs this asset to run',          color: '#38bdf8' },
+                        { key: 'produces',  icon: 'arrow-up-from-line', label: 'Produces',  desc: 'This step creates or outputs this asset',    color: '#10b981' },
+                        { key: 'references',icon: 'link-2',        label: 'References', desc: 'This step refers to or reads from this asset', color: '#a78bfa' },
+                    ].map(t => `
+                        <div onclick="window._resolveLinkType('${t.key}')"
+                             style="display:flex; align-items:center; gap:12px; padding:12px;
+                                    border:1px solid var(--line); border-radius:8px; cursor:pointer;
+                                    transition:all 0.15s;"
+                             onmouseover="this.style.borderColor='${t.color}'; this.style.background='${t.color}18';"
+                             onmouseout="this.style.borderColor='var(--line)'; this.style.background='transparent';">
+                            <div style="width:32px; height:32px; border-radius:6px; flex-shrink:0;
+                                        background:${t.color}18; border:1px solid ${t.color}44;
+                                        display:flex; align-items:center; justify-content:center;">
+                                <i data-lucide="${t.icon}" style="width:16px; height:16px; color:${t.color};"></i>
+                            </div>
+                            <div>
+                                <div style="font-weight:600; font-size:13px;">${t.label}</div>
+                                <div class="tiny muted">${t.desc}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        window._resolveLinkType = (val) => {
+            delete window._resolveLinkType;
+            OL.closeModal();
+            resolve(val);
+        };
+        openModal(html);
+        if (window.lucide) lucide.createIcons();
+    });
 };
 
 window.OL.removeStepLink = async function(resId, stepId, linkIdx) {
