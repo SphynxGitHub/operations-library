@@ -11040,28 +11040,37 @@ OL.renderVisualizer = function() {
       <div id="fv-body">
 
         <!-- Workbench icon rail -->
+        /* Inside OL.renderVisualizer template literal string, find the #fv-wb-rail div container: */
         <div id="fv-wb-rail"
-         ondragover="event.preventDefault(); this.style.background='rgba(61,217,197,0.15)';"
-         ondragleave="this.style.background='';"
-         ondrop="event.preventDefault(); this.style.background=''; 
-                 const id=event.dataTransfer.getData('application/fv-resource'); 
-                 if(id) OL._fvUnmapResource(id);">
-          <div class="fv-wb-icon ${OL._fv._wbTab==='flows'  ?'active':''}"
-               onclick="OL._fvToggleWb('flows')"   title="Flows">
-            <i data-lucide="workflow"></i>
-          </div>
-          <div class="fv-wb-icon ${OL._fv._wbTab==='assets' ?'active':''}"
-               onclick="OL._fvToggleWb('assets')"  title="Assets">
-            <i data-lucide="database"></i>
-          </div>
-          <div class="fv-wb-icon ${OL._fv._wbTab==='guides' ?'active':''}"
-               onclick="OL._fvToggleWb('guides')"  title="Guides">
-            <i data-lucide="book-open"></i>
-          </div>
-          <div class="fv-wb-icon ${OL._fv._wbTab==='data'   ?'active':''}"
-               onclick="OL._fvToggleWb('data')"    title="Data">
-            <i data-lucide="tag"></i>
-          </div>
+             ondragover="event.preventDefault(); this.style.background='rgba(61,217,197,0.15)';"
+             ondragleave="this.style.background='';"
+             ondrop="event.preventDefault(); this.style.background=''; 
+                     const id=event.dataTransfer.getData('application/fv-resource'); 
+                     if(id) OL._fvUnmapResource(id);">
+             
+             <div class="fv-wb-icon ${OL._fv._wbTab==='flows' ?'active':''}"
+                   onclick="OL._fvToggleWb('flows')"   title="Flows">
+               <i data-lucide="workflow"></i>
+             </div>
+             
+             <div class="fv-wb-icon ${OL._fv._wbTab==='stages' ?'active':''}"
+                   style="${OL._fv._wbTab==='stages' ? 'color: var(--accent);' : ''}"
+                   onclick="OL._fvToggleWb('stages')"   title="Manage Stages">
+               <i data-lucide="layers"></i>
+             </div>
+        
+             <div class="fv-wb-icon ${OL._fv._wbTab==='assets' ?'active':''}"
+                   onclick="OL._fvToggleWb('assets')"  title="Assets">
+               <i data-lucide="database"></i>
+             </div>
+             <div class="fv-wb-icon ${OL._fv._wbTab==='guides' ?'active':''}"
+                   onclick="OL._fvToggleWb('guides')"  title="Guides">
+               <i data-lucide="book-open"></i>
+             </div>
+             <div class="fv-wb-icon ${OL._fv._wbTab==='data'   ?'active':''}"
+                   onclick="OL._fvToggleWb('data')"    title="Data">
+               <i data-lucide="tag"></i>
+             </div>
         </div>
 
         <!-- Workbench drawer -->
@@ -12766,6 +12775,7 @@ OL._fvPopulateWb = function(tab, resources) {
   const datapoints   = state.master?.datapoints || [];
 
   let allItems = [];
+    
   if (tab === 'flows') {
       allItems = resources.filter(r => 
           ['Workflow','Zap','Email Campaign'].includes(r.type) &&
@@ -12787,30 +12797,87 @@ OL._fvPopulateWb = function(tab, resources) {
   const showSearch = ['flows','assets','guides','data'].includes(tab);
 
   content.innerHTML = `
-      ${showSearch ? `
-          <div style="padding:8px 8px 4px;">
-              <input type="text" id="${searchId}"
-                     placeholder="Search..."
-                     oninput="OL._fvFilterWb('${tab}')"
-                     style="width:100%;padding:6px 8px;
-                            border:1px solid rgba(255,255,255,0.1);
-                            border-radius:6px;background:rgba(0,0,0,0.2);
-                            color:#fff;font-size:11px;outline:none;
-                            box-sizing:border-box;font-family:inherit;">
-          </div>
-      ` : ''}
-      <div id="${listId}">
-          ${OL._fvRenderWbItems(allItems, tab)}
-      </div>
-  `;
+        ${showSearch ? `
+            <div style="padding:8px 8px 4px;">
+                <input type="text" id="${searchId}"
+                       placeholder="Search..."
+                       oninput="OL._fvFilterWb('${tab}')"
+                       style="width:100%; padding:6px 8px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(0,0,0,0.2); color:#fff; font-size:11px; outline:none; box-sizing:border-box; font-family:inherit;">
+            </div>
+        ` : ''}
+        
+        ${tab === 'stages' ? `
+            <div style="padding: 8px 12px 12px; border-bottom: 1px solid var(--line);">
+                <button class="btn primary tiny full-width" style="display:flex; align-items:center; justify-content:center; gap:6px;"
+                        onclick="OL.addStageBetween(${stages.length})">
+                    <i data-lucide="plus-circle" style="width:12px; height:12px;"></i> Onboard New Stage
+                </button>
+            </div>
+        ` : ''}
+
+        <div id="${listId}">
+            ${OL._fvRenderWbItems(allItems, tab)}
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
 };
 
+/* Find OL._fvRenderWbItems and intercept the array string builder loop: */
 OL._fvRenderWbItems = function(items, tab) {
-    if (!items.length) return `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;font-style:italic;">No ${tab} found</div>`;
-    return items.map(item => {
+    if (!items.length) return `<div style="padding:20px; text-align:center; color:#9ca3af; font-size:12px; font-style:italic;">No ${tab} found</div>`;
+    
+    const data = OL.getCurrentProjectData();
+    const resources = data.resources || [];
+
+    return items.map((item, idx) => {
         const tc     = OL._fvGetType(item.type);
         const name   = item.name || item.title || 'Unnamed';
         const isData = tab === 'data';
+        
+        // 🎯 CUSTOM PATHWAY FOR STAGES WORKSPACE LAYOUT PANELS
+        if (tab === 'stages') {
+            // Count total functional processes inside this specific stage lane container
+            const stageResCount = resources.filter(r => String(r.stageId) === String(item.id)).length;
+            
+            return `
+                <div class="fv-wb-item fv-stage-sort-row"
+                     draggable="true"
+                     data-id="${item.id}"
+                     data-stage-idx="${idx}"
+                     ondragstart="OL.handleStageSortDragStart(event, ${idx})"
+                     ondragover="event.preventDefault(); this.style.borderTop='2px solid var(--accent)';"
+                     ondragleave="this.style.borderTop='';"
+                     ondrop="OL.handleStageSortDrop(event, ${idx})"
+                     style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); cursor:grab;">
+                    
+                    <div class="fv-wb-item-icon" style="background:rgba(61,217,197,0.1); color:var(--accent); font-weight:bold; font-size:10px;">
+                        #${idx + 1}
+                    </div>
+                    
+                    <div class="fv-wb-item-info" style="flex:1; min-width:0;">
+                        <input type="text" value="${esc(name)}" 
+                               style="background:transparent; border:none; color:white; font-size:12px; font-weight:600; width:100%; outline:none; padding:0; margin:0;"
+                               onchange="OL.renameStage('${item.id}', this.value)">
+                        <div class="fv-wb-item-type" style="font-size:9px; color:var(--text-muted); margin-top:2px;">
+                            ${stageResCount} Linked Resource${stageResCount !== 1 ? 's' : ''}
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:2px; align-items:center; flex-shrink:0;">
+                        <button class="btn-icon-tiny" style="color:var(--text-muted);" title="Move Up" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx - 1})" ${idx === 0 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▲</button>
+                        <button class="btn-icon-tiny" style="color:var(--text-muted);" title="Move Down" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx + 1})" ${idx === items.length - 1 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▼</button>
+                        <button onclick="event.stopPropagation(); OL.deleteStage('${item.id}')"
+                                style="border:none; background:none; cursor:pointer; color:#9ca3af; display:flex; align-items:center; justify-content:center; padding:2px; margin-left:4px; transition:color 0.15s;"
+                                onmouseover="this.style.color='#ef4444';"
+                                onmouseout="this.style.color='#9ca3af';">
+                            <i data-lucide="trash-2" style="width:11px; height:11px;"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Standard return path loop for files/assets stays exactly unchanged ---
         return `
             <div class="fv-wb-item"
                  draggable="true"
@@ -12828,10 +12895,38 @@ OL._fvRenderWbItems = function(items, tab) {
                     <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
                     ${!isData ? `<div class="fv-wb-item-type">${esc(item.type||'')}</div>` : ''}
                 </div>
-                <div style="margin-left:auto;color:rgba(255,255,255,0.2);font-size:10px;">⠿</div>
+                <div style="margin-left:auto; color:rgba(255,255,255,0.2); font-size:10px;">⠿</div>
             </div>
         `;
     }).join('');
+};
+
+OL.moveStageIndex = async function(fromIdx, toIdx) {
+    const data = OL.getCurrentProjectData();
+    const stages = data.stages || [];
+    
+    if (toIdx < 0 || toIdx >= stages.length) return;
+
+    // 🚀 ATOMIC LIVE DATA ARRAY INDEX MODIFICATION
+    await OL.updateAndSync(() => {
+        const [movedStage] = stages.splice(fromIdx, 1);
+        stages.splice(toIdx, 0, movedStage);
+        console.log(`🔀 Drawer Sync Complete: Shifted stage index ${fromIdx} ➔ ${toIdx}`);
+    });
+
+    // 🚀 REPAINT DRAWER SUB-VIEW PORT
+    // If the drawer tab is open to 'stages', refresh its contents to update numbers
+    if (OL._fv && OL._fv._wbTab === 'stages') {
+        const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
+        OL._fvPopulateWb('stages', resources);
+    }
+
+    // 🧲 RE-ALIGN EVERYTHING ON THE CANVAS
+    if (typeof OL.autoAlignNodes === 'function') {
+        OL.autoAlignNodes(); 
+    } else {
+        OL.renderVisualizer();
+    }
 };
 
 OL._fvFilterWb = function(tab) {
