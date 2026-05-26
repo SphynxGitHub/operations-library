@@ -13509,10 +13509,13 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         hasLoop                      ? `<span class="fv-list-tag loop">↺ Loop</span>`                : '',
     ].filter(Boolean).join('');
 
-    // 🎯 INLINE LOGIC MATRICES
+    // 🎯 INLINE & NESTED LOGIC EVALUATION
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
+    
+    // Check if this step itself is a dependent child node in a linear chain
+    const isIndentedChild = depth > 0;
 
     outRules.forEach(rule => {
         const lastH   = String(rule.targetId).lastIndexOf('-');
@@ -13530,13 +13533,14 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const isCond  = rule.type === 'condition';
         
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
+        const jumpTargetHtmlId = `fv-list-step-${tStepId}`;
 
         if (isCond) {
-            hasNesting = true; // Sets scope tracking for the button below 
+            hasNesting = true;
             nestedBranchesHtml += `
                 <div class="fv-list-branch" style="border-color:rgba(61,217,197,0.3); margin-left:16px; padding-left:20px;">
                     <div class="fv-branch-label" style="color:#3dd9c5; display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600;">
-                        <span>◆ If: ${esc(rule.rule || '...')} ➔ Jump to: ${esc(targetLabel)}</span>
+                        <span>◆ If: "${esc(rule.rule || '...')}" ➔ Jump to: ${esc(targetLabel)}</span>
                     </div>
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
                 </div>`;
@@ -13544,6 +13548,12 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         else if (isLoop || isDelay || !isSubsequentLocalStep) {
             let badgeStyle = "background:#f5f6f8; color:#6b7280; border:1px solid #e5e7eb;";
             let badgeText = `➔ Jump: ${targetLabel}`;
+            let clickAction = '';
+
+            // Clickable jumping engine for non-sequential path links
+            if (!isSubsequentLocalStep) {
+                clickAction = `onclick="event.stopPropagation(); const targetRow = document.getElementById('${jumpTargetHtmlId}'); if(targetRow) { targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.querySelectorAll('.fv-list-item.selected').forEach(e=>e.classList.remove('selected')); targetRow.classList.add('selected'); targetRow.style.outline='2px solid var(--accent)'; setTimeout(()=>targetRow.style.outline='',1500); }"`;
+            }
 
             if (isLoop) {
                 badgeStyle = "background:rgba(245,184,0,0.1); color:#f5b800; border:1px solid rgba(245,184,0,0.3);";
@@ -13552,20 +13562,25 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
                 badgeStyle = "background:rgba(167,139,250,0.1); color:#a78bfa; border:1px solid rgba(167,139,250,0.3);";
                 badgeText = `⏱ Wait ${rule.delayValue || '?'} ${rule.delayUnit || 'days'} ➔ ${targetLabel}`;
             } else if (!isSubsequentLocalStep) {
-                badgeStyle = "background:rgba(56,189,248,0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);";
-                badgeText = `🔀 Skip To: ${targetLabel}`;
+                badgeStyle = "background:rgba(56,189,248,0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); cursor:pointer;";
+                badgeText = `🔀 Skip To: ${targetLabel} ➔`;
+            }
+
+            // Prefix contextual descriptor logic values inside the tag label
+            if (rule.rule?.trim()) {
+                badgeText = `[If: "${rule.rule.trim()}"] ${badgeText}`;
             }
 
             inlineRoutingBadgesHtml += `
-                <span class="pill tiny" style="display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; ${badgeStyle}">
+                <span class="pill tiny split-jump-badge" ${clickAction} style="display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; ${badgeStyle}">
                     ${esc(badgeText)}
                 </span>`;
         }
     });
 
     return `
-    <div style="margin-bottom:${hasNesting ? '2px' : '4px'};">
-      <div class="fv-list-row">
+    <div style="margin-bottom:${hasNesting ? '2px' : '4px'}; margin-left:${isIndentedChild ? '16px' : '0px'};">
+      <div class="fv-list-row" style="${isIndentedChild ? 'border-left: 2px dashed rgba(61,217,197,0.2); padding-left: 10px;' : ''}">
         <div class="fv-tree-connector"></div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
              id="fv-list-step-${step.id}"
