@@ -5613,7 +5613,27 @@ OL.toggleInlineStepEditor = function(resId, stepId) {
 
     drawer.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:12px;">
-    
+            <div>
+                <label class="modal-section-label">Move to resource</label>
+                <select class="modal-input tiny" style="width:100%;"
+                        onchange="if(this.value) OL.executeStepMove('${resId}', '${stepId}', this.value); this.value='';">
+                    <option value="">— Keep in ${esc(res?.name || 'current resource')} —</option>
+                    <optgroup label="Same stage">
+                        ${(OL.getCurrentProjectData().resources || [])
+                            .filter(r => String(r.id) !== String(resId) && r.stageId === res?.stageId)
+                            .sort((a,b) => a.name.localeCompare(b.name))
+                            .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                            .join('')}
+                    </optgroup>
+                    <optgroup label="All resources">
+                        ${(OL.getCurrentProjectData().resources || [])
+                            .filter(r => String(r.id) !== String(resId) && r.stageId !== res?.stageId)
+                            .sort((a,b) => a.name.localeCompare(b.name))
+                            .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                            .join('')}
+                    </optgroup>
+                </select>
+            </div>
             <div>
                 <label class="modal-section-label">Primary App</label>
                 ${step.appId ? `
@@ -16142,6 +16162,31 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                               onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
                 </div>
 
+                <div class="fvi-section">
+                    <div class="fvi-label">
+                        <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
+                        Move to resource
+                    </div>
+                    <select class="fvi-select"
+                            onchange="if(this.value) OL.executeStepMove('${resId}', '${step.id}', this.value); this.value='';">
+                        <option value="">— Keep in ${esc(res.name)} —</option>
+                        <optgroup label="Same stage">
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => String(r.id) !== String(resId) && r.stageId === res.stageId)
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                                .join('')}
+                        </optgroup>
+                        <optgroup label="All resources">
+                            ${(OL.getCurrentProjectData().resources || [])
+                                .filter(r => String(r.id) !== String(resId) && r.stageId !== res.stageId)
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(r => `<option value="${r.id}">${esc(r.name)} (${(r.steps||[]).length} steps)</option>`)
+                                .join('')}
+                        </optgroup>
+                    </select>
+                </div>
+
                 <div class="inspector-section">
                     <label class="section-label">
                         <i data-lucide="target" style="width:11px;height:11px;"></i> RELATIONAL TARGET (MILESTONE)
@@ -16651,6 +16696,30 @@ if (mode === 'cards' && resId) {
 
     content.innerHTML = `<div class="muted-notice">Select a card or step to inspect.</div>`;
     if (window.lucide) window.lucide.createIcons();
+};
+
+OL.executeStepMove = function(fromResId, stepId, toResId) {
+    const data = OL.getCurrentProjectData();
+    const fromRes = data.resources.find(r => String(r.id) === String(fromResId));
+    const toRes   = data.resources.find(r => String(r.id) === String(toResId));
+    if (!fromRes || !toRes) return;
+
+    const stepIdx = (fromRes.steps || []).findIndex(s => String(s.id) === String(stepId));
+    if (stepIdx === -1) return;
+
+    const [movedStep] = fromRes.steps.splice(stepIdx, 1);
+    if (!toRes.steps) toRes.steps = [];
+    toRes.steps.push(movedStep);
+
+    OL.persist();
+
+    // Refresh whichever view is active
+    const modalOpen = document.getElementById('modal-layer')?.style.display === 'flex';
+    if (modalOpen) {
+        OL.openResourceModal(fromResId);
+    } else {
+        OL._fvOpenStepsList(fromResId);
+    }
 };
 
 OL._fvToggleLogicType = function(resId, stepId, idx, type) {
