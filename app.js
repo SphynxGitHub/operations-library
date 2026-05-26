@@ -11674,30 +11674,30 @@ OL.addResourceToWorkflow = function(wfId, resId) {
     OL.persist();
 };
 
-OL.removeResourceFromWorkflow = function(wfId, resId, skipPersist = false) {
-    const data     = OL.getCurrentProjectData();
-    const client   = getActiveClient();
-    const workflows = client?.projectData?.workflows || data.workflows || [];
-    const wf  = workflows.find(w => w.id === wfId);
+OL.removeResourceFromWorkflow = function(wfId, resId) {
+    const data = OL.getCurrentProjectData();
+    const wf = (data.workflows || []).find(w => String(w.id) === String(wfId));
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
     
     if (!wf) return;
-    
+
+    // Direct, reference-safe filtering
     wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
     
     if (res) {
-        const otherWfs = workflows.filter(w => 
-            w.id !== wfId && (w.resourceIds || []).some(id => String(id) === String(resId))
+        // Recalculate if this item belongs to any other active project swimlanes
+        const remainingWfs = (data.workflows || []).filter(w => 
+            String(w.id) !== String(wfId) && (w.resourceIds || []).includes(String(resId))
         );
-        if (otherWfs.length === 0) {
-            res.isGlobal   = false;
+        
+        if (remainingWfs.length === 0) {
             res.workflowId = null;
-        } else if (otherWfs.length === 1) {
-            res.workflowId = otherWfs[0].id;
+        } else {
+            res.workflowId = remainingWfs[0].id;
         }
     }
     
-    if (!skipPersist) OL.persist();
+    OL.persist();
 };
 
 OL.reorderWorkflowResources = function(wfId, fromIdx, toIdx) {
@@ -12672,33 +12672,56 @@ OL._fvFilterWb = function(tab) {
 };
 
 OL._fvUnmapResource = function(resId) {
-    const client    = getActiveClient();
-    const data      = client?.projectData;
-    if (!data) { console.error('no projectData'); return; }
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).filter(r => !r.isDeleted).find(r => String(r.id) === String(resId));
+    
+    if (!res) {
+        console.error("❌ Unmap Failed: Resource object missing from current data pool.");
+        return;
+    }
 
-    const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) { console.error('res not found:', resId); return; }
+    console.group(`🧹 Unmapping Resource: ${res.name}`);
 
-    console.log('BEFORE — stageId:', res.stageId, 'workflowId:', res.workflowId);
-
-    // Clear stage and global
-    res.stageId  = null;
-    res.isGlobal = false;
+    // 1. Wipe layout positioning structures so it falls off the canvas grids
+    res.stageId = null;
     res.workflowId = null;
+    res.isGlobal = true;      // Mark as True so it shifts safely into the Workbench Tray
+    res.isTopShelf = false;
+    delete res.coords;        // Erase X/Y data so it doesn't leave phantom nodes behind
+    delete res._col;          // Clear out column matrix values
 
-    // Remove from workflow resourceIds array
+    // 2. Excise this resource from any active workflow structural lanes
     (data.workflows || []).forEach(wf => {
-        const before = wf.resourceIds?.length;
-        wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
-        if (wf.resourceIds.length !== before) {
-            console.log('Removed from workflow:', wf.name);
+        if (wf.resourceIds && wf.resourceIds.includes(String(resId))) {
+            wf.resourceIds = wf.resourceIds.filter(id => String(id) !== String(resId));
+            console.log(`✂️ Excised link from workflow container: ${wf.name}`);
         }
     });
 
-    console.log('AFTER — stageId:', res.stageId, 'workflowId:', res.workflowId);
+    console.groupEnd();
 
-    OL.persist();
-    OL.renderVisualizer();
+    // 3. Persist modifications down to Firestore
+    OL.persist().then(() => {
+        // Cache viewport scroll positions to avoid layout jumping
+        const wrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap') || document.getElementById('v2-canvas-scroll-wrap');
+        const scrollTop = wrap?.scrollTop || 0;
+        const scrollLeft = wrap?.scrollLeft || 0;
+
+        // Re-align remaining canvas nodes and force a redraw
+        if (typeof OL.autoAlignNodes === 'function') OL.autoAlignNodes();
+        if (typeof OL.syncLogicPorts === 'function') OL.syncLogicPorts();
+        
+        OL.renderVisualizer();
+        OL.renderWorkbenchItemsOnly(); // Instantly populates the item back into the tray
+
+        requestAnimationFrame(() => {
+            const newWrap = document.getElementById('fv-canvas-wrap') || document.getElementById('fv-list-wrap') || document.getElementById('v2-canvas-scroll-wrap');
+            if (newWrap) { 
+                newWrap.scrollTop = scrollTop; 
+                newWrap.scrollLeft = scrollLeft; 
+            }
+        });
+    });
 };
 
 OL._fvWbDragStart = function(e, id, type) {
