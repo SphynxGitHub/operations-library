@@ -224,14 +224,15 @@ OL.sync = function() {
     }
 
     // 🛡️ PERF GUARD: Skip if data hasn't actually changed
-    const currentHash = JSON.stringify(cloudClients).length;
-    if (window.lastSyncHash === currentHash) return; 
+    const currentHash = JSON.stringify(cloudClients);
+    if (window.lastSyncHash === currentHash) return;
     window.lastSyncHash = currentHash;
 
     // 🛡️ RECENT SAVE GUARD
     const now = Date.now();
     if (window.lastLocalSave && (now - window.lastLocalSave < 8000)) {
         console.log("⏳ Recent local save detected. Skipping sync echo.");
+        state.clients = cloudClients;
         return;
     }
 
@@ -11680,21 +11681,30 @@ OL.addResourceToWorkflow = function(wfId, resId) {
     OL.persist();
 };
 
-OL.removeResourceFromWorkflow = function(wfId, resId) {
-    const data = OL.getCurrentProjectData();
-    const wf  = (data.workflows || []).find(w => w.id === wfId);
+OL.removeResourceFromWorkflow = function(wfId, resId, skipPersist = false) {
+    const data     = OL.getCurrentProjectData();
+    const client   = getActiveClient();
+    const workflows = client?.projectData?.workflows || data.workflows || [];
+    const wf  = workflows.find(w => w.id === wfId);
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    
     if (!wf) return;
-    wf.resourceIds = (wf.resourceIds || []).filter(id => id !== String(resId));
-    // If no longer in multiple workflows, un-global
+    
+    wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
+    
     if (res) {
-        const otherWfs = (data.workflows || []).filter(w => 
-            w.id !== wfId && (w.resourceIds || []).includes(String(resId))
+        const otherWfs = workflows.filter(w => 
+            w.id !== wfId && (w.resourceIds || []).some(id => String(id) === String(resId))
         );
-        if (otherWfs.length === 0) res.isGlobal = false;
-        if (otherWfs.length <= 1) res.workflowId = otherWfs[0]?.id || null;
+        if (otherWfs.length === 0) {
+            res.isGlobal   = false;
+            res.workflowId = null;
+        } else if (otherWfs.length === 1) {
+            res.workflowId = otherWfs[0].id;
+        }
     }
-    OL.persist();
+    
+    if (!skipPersist) OL.persist();
 };
 
 OL.reorderWorkflowResources = function(wfId, fromIdx, toIdx) {
@@ -12669,12 +12679,12 @@ OL._fvFilterWb = function(tab) {
 };
 
 OL._fvUnmapResource = function(resId) {
-    const data   = OL.getCurrentProjectData();
-    const client = getActiveClient();
+    const data      = OL.getCurrentProjectData();
+    const client    = getActiveClient();
     const workflows = client?.projectData?.workflows || data.workflows || [];
     
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) return;
+    if (!res) { console.warn('not found:', resId); return; }
     
     res.stageId  = null;
     res.isGlobal = false;
@@ -12682,9 +12692,9 @@ OL._fvUnmapResource = function(resId) {
     const prevWf = workflows.find(w =>
         (w.resourceIds || []).some(id => String(id) === String(resId))
     );
-    if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId);
+    if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId, true); // skipPersist=true
 
-    // Fire and forget — don't await
+    // Single persist after all mutations
     OL.persist();
 
     const wrap       = document.getElementById('fv-canvas-wrap');
@@ -12695,7 +12705,10 @@ OL._fvUnmapResource = function(resId) {
 
     requestAnimationFrame(() => {
         const newWrap = document.getElementById('fv-canvas-wrap');
-        if (newWrap) { newWrap.scrollTop = scrollTop; newWrap.scrollLeft = scrollLeft; }
+        if (newWrap) {
+            newWrap.scrollTop  = scrollTop;
+            newWrap.scrollLeft = scrollLeft;
+        }
     });
 };
 
