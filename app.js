@@ -12745,6 +12745,7 @@ OL._fvSelectStep = function(resId, stepId) {
 // ══════════════════════════════════════════════
 
 OL._fvBuildListShell = function(stages, resources) {
+    window._fvRenderedStepRegistry = new Set();
     const filter = OL._fv.stageFilter;
     const globalIds = new Set(resources.filter(r => r.isGlobal).map(r => String(r.id)));
     const workflows = OL.getWorkflows() || [];
@@ -13545,7 +13546,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
-    let cardFaceConditionHtml = '';
     
     const isIndentedChild = depth > 0;
 
@@ -13567,13 +13567,14 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
         const jumpTargetHtmlId = `fv-list-step-${tStepId}`;
 
-        // 🔀 PATH A: Structural Conditional Cascading (Indents the original target step below)
+        // 🔀 PATH A: Structural Conditional Cascading (Indents original target step below)
         if (isCond) {
             hasNesting = true;
-            const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional Execution';
-            
-            // Print the clean condition label on the parent card face
-            cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 600; color: #38bdf8; opacity: 0.9; margin-top: 2px;">↳ If: "${esc(ruleText)}"</div>`;
+            const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional';
+
+            // Track globally that this specific downstream target step has now been claimed by a nested branch layout container block
+            if (!window._fvRenderedStepRegistry) window._fvRenderedStepRegistry = new Set();
+            window._fvRenderedStepRegistry.add(`${tResId}-${tStepId}`);
 
             // Nest the target step directly under this branch header wrapper
             nestedBranchesHtml += `
@@ -13617,10 +13618,10 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
-    // 🛡️ THE BULLETPROOF SINGLE-RENDER SHIELD
-    // If a step has already been assigned to a parent branch layout block higher up,
-    // we bypass rendering its base card representation on this depth layer.
-    if (isIndentedChild && !isConditional) {
+    // 🛡️ THE ANTI-DUPLICATION SHIELD:
+    // If this step key has already been captured and processed inside an inner branch,
+    // we bypass rendering its root-level instance entirely to eliminate duplication.
+    if (!isIndentedChild && window._fvRenderedStepRegistry && window._fvRenderedStepRegistry.has(`${res.id}-${step.id}`)) {
         return ''; 
     }
 
@@ -13628,8 +13629,8 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const tags = [
         isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
         hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
-        (isDecision && !cardFaceConditionHtml) ? `<span class="fv-list-tag conditional">◆ Decision</span>` : '',
-        (isConditional && !isDecision && !cardFaceConditionHtml) ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : ''
+        (isDecision) ? `<span class="fv-list-tag conditional">◆ Decision</span>` : '',
+        (isConditional && !isDecision) ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : ''
     ].filter(Boolean).join('');
 
     return `
@@ -13654,8 +13655,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
           
           <div style="display:flex; flex-direction:column; gap:1px; flex:1; min-width:0;">
               <span class="fv-list-step-name ${isDecision ? 'decision-name' : ''}" style="font-weight:600; font-size:13px; color:var(--text-main);">${esc(step.name || 'Unnamed Step')}</span>
-              
-              ${cardFaceConditionHtml}
               
               ${inlineRoutingBadgesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">${inlineRoutingBadgesHtml}</div>` : ''}
           </div>
