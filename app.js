@@ -12745,96 +12745,134 @@ OL._fvSelectStep = function(resId, stepId) {
 // ══════════════════════════════════════════════
 
 OL._fvBuildListShell = function(stages, resources) {
-  const filter = OL._fv.stageFilter;
-  const globalIds = new Set(resources.filter(r => r.isGlobal).map(r => String(r.id)));
+    const filter = OL._fv.stageFilter;
+    const globalIds = new Set(resources.filter(r => r.isGlobal).map(r => String(r.id)));
+    const workflows = OL.getWorkflows() || [];
 
-  // Build stageId -> resources map
-  const byStage = {};
-  stages.forEach(s => byStage[s.id] = []);
-  byStage['__none__'] = [];
-  resources.forEach(r => {
-    if (r.isGlobal && r.isTopShelf) return;
-    const key = r.stageId && byStage[r.stageId] !== undefined ? r.stageId : '__none__';
-    byStage[key].push(r);
-  });
-
-  const displayStages = [...stages];
+    const displayStages = [...stages];
 
     const stagesHtml = displayStages.map((stage, si) => {
-    if (filter && filter.startsWith('stage-') && stage.id !== filter.replace('stage-', '')) return '';
-    if (filter && !filter.startsWith('stage-') && filter !== '') {
-        // workflow filter — only show stages containing this workflow
-        const wf = (OL.getWorkflows()||[]).find(w => w.id === filter);
-        if (!wf || wf.stageId !== stage.id) return '';
-    }
+        // Handle explicit stage filtering context paths
+        if (filter && filter.startsWith('stage-') && stage.id !== filter.replace('stage-', '')) return '';
         
-    const stageRes = (byStage[stage.id] || []).filter(r => {
-        if (!OL._fv.showArchived && r.isArchived) return false;
-        // If workflow filter active, only show resources in that workflow
+        // Handle specific workflow context paths
         if (filter && !filter.startsWith('stage-') && filter !== '') {
-            const wf = (OL.getWorkflows()||[]).find(w => w.id === filter);
-            if (wf && !(wf.resourceIds||[]).includes(String(r.id))) return false;
+            const activeWf = workflows.find(w => w.id === filter);
+            if (!activeWf || activeWf.stageId !== stage.id) return '';
         }
-        return true;
-    });
+
+        // Get workflows explicitly tied to this structural stage index lane
+        const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
         
-    if (stageRes.length === 0) return '';
-    
-      // Build steps grouped by resource, with a clickable resource header
-      const stepsHtml = stageRes.map(res => {
-            const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
-            const stepRows = steps.map((step, stepIdx) =>
-                OL._fvRenderListStep(step, res, stepIdx, globalIds, resources, 0, new Set())
-            ).join('');
-            return stepRows;
-        }).join('');
-            
-      const totalSteps = stageRes.reduce((acc, r) => acc + (r.steps||[]).length, 0);
-    
-      return `
-       <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-            <button class="fv-btn" style="padding:2px 8px;font-size:10px;opacity:0.5;"
-                    onclick="OL.addStageBetween(${si})">
-                <i data-lucide="plus" style="width:10px;height:10px;"></i> Add Stage
-            </button>
-            <div style="flex:1;height:1px;background:#e5e7eb;"></div>
-        </div>
-      <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
-        <div class="fv-list-stage-header">
-          <div class="fv-list-stage-num">${si + 1}</div>
-          <div class="fv-list-stage-name">${esc(stage.name)}</div>
-          <div class="fv-list-stage-line"></div>
-          <div class="fv-list-stage-count">${totalSteps} steps</div>
-          <button class="fv-btn" style="padding:3px 8px;font-size:10px;"
-                  onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='none');
-                           document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='+');">
-            Collapse
-          </button>
-          <button class="fv-btn" style="padding:3px 8px;font-size:10px;"
-                  onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='block');
-                           document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='-');">
-            Expand
-          </button>
-          <button class="fv-toggle-btn ${OL._fv.showArchived ? 'on' : ''}"
-                onclick="OL._fv.showArchived = !OL._fv.showArchived; OL.renderVisualizer();">
-            <i data-lucide="archive" style="width:12px;height:12px;"></i>
-            ${OL._fv.showArchived ? 'Hide Archived' : 'Show Archived'}
-          </button>
-          <button class="fv-btn" style="padding:3px 8px;font-size:10px;color:#ef4444;"
-                onclick="OL._fvDeleteStage('${stage.id}')">
-            <i data-lucide="trash-2" style="width:10px;height:10px;"></i>
-        </button>
-        </div>
-        ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
-      </div>
-    `;
+        // Isolate remaining unassigned resource cards for this phase
+        const assignedResIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []));
+        const unassignedResources = resources.filter(r => 
+            r.stageId === stage.id && !globalIds.has(String(r.id)) && !assignedResIds.has(String(r.id))
+        );
+
+        let stageWorkflowsHtml = '';
+        let totalStageStepsCount = 0;
+
+        // 🏢 1. GROUP AND RENDER WORKFLOW BUCKETS UNDER STAGE
+        stageWorkflows.forEach(wf => {
+            if (filter && !filter.startsWith('stage-') && filter !== '' && wf.id !== filter) return;
+
+            const wfResources = (wf.resourceIds || [])
+                .map(id => resources.find(r => String(r.id) === id))
+                .filter(r => r && (OL._fv.showArchived || !r.isArchived));
+
+            if (wfResources.length === 0) return;
+
+            // Map out steps nested directly within this workflow bucket container
+            const wfStepsContentHtml = wfResources.map(res => {
+                const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
+                totalStageStepsCount += steps.length;
+                
+                return steps.map((step, idx) => 
+                    OL._fvRenderListStep(step, res, idx, globalIds, resources, 0, new Set())
+                ).join('');
+            }).join('');
+
+            stageWorkflowsHtml += `
+                <div class="fv-list-workflow-group" style="margin-top: 12px; margin-bottom: 15px; padding-left: 10px; border-left: 2px solid var(--accent);">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; opacity:0.7;">
+                        <i data-lucide="workflow" style="width:12px; height:12px; color:var(--accent);"></i>
+                        <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">
+                            Process: ${esc(wf.name)}
+                        </span>
+                    </div>
+                    ${wfStepsContentHtml}
+                </div>
+            `;
+        });
+
+        // 🏢 2. RENDER UNASSIGNED COMPONENT CORES UNDER STAGE
+        if (unassignedResources.length > 0 && (!filter || filter.startsWith('stage-'))) {
+            const unassignedStepsContentHtml = unassignedResources.map(res => {
+                const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
+                totalStageStepsCount += steps.length;
+                
+                return steps.map((step, idx) => 
+                    OL._fvRenderListStep(step, res, idx, globalIds, resources, 0, new Set())
+                ).join('');
+            }).join('');
+
+            stageWorkflowsHtml += `
+                <div class="fv-list-workflow-group unassigned" style="margin-top: 12px; margin-bottom: 15px; padding-left: 10px; border-left: 2px dashed #6b7280;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; opacity:0.5;">
+                        <i data-lucide="help-circle" style="width:12px; height:12px;"></i>
+                        <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">
+                            Unassigned Resources
+                        </span>
+                    </div>
+                    ${unassignedStepsContentHtml}
+                </div>
+            `;
+        }
+
+        if (totalStageStepsCount === 0) return '';
+
+        return `
+            <div style="display:flex; align-items:center; gap:8px; padding:4px 0;">
+                <button class="fv-btn" style="padding:2px 8px; font-size:10px; opacity:0.5;" onclick="OL.addStageBetween(${si})">
+                    <i data-lucide="plus" style="width:10px; height:10px;"></i> Add Stage
+                </button>
+                <div style="flex:1; height:1px; background:var(--line);"></div>
+            </div>
+            <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
+                <div class="fv-list-stage-header" style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.02); padding:8px 12px; border-radius:6px;">
+                    <div class="fv-list-stage-num" style="background:var(--accent); color:black; font-weight:bold; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:11px;">${si + 1}</div>
+                    <div class="fv-list-stage-name" style="font-weight:bold; font-size:14px; color:var(--text-main);">${esc(stage.name)}</div>
+                    <div class="fv-list-stage-line" style="flex:1; height:1px; background:rgba(255,255,255,0.05); margin:0 10px;"></div>
+                    <div class="fv-list-stage-count" style="font-size:11px; color:var(--text-muted); font-weight:500;">${totalStageStepsCount} steps</div>
+                    
+                    <button class="fv-btn" style="padding:3px 8px; font-size:10px;"
+                            onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='none');
+                                     document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='+');">
+                        Collapse
+                    </button>
+                    <button class="fv-btn" style="padding:3px 8px; font-size:10px;"
+                            onclick="document.querySelectorAll('#fv-list-stage-${stage.id} [id^=fv-substeps-]').forEach(el=>el.style.display='block');
+                                     document.querySelectorAll('#fv-list-stage-${stage.id} .fv-substep-toggle').forEach(b=>b.textContent='-');">
+                        Expand
+                    </button>
+                </div>
+                <div style="padding:5px 0 15px 0;">
+                    ${stageWorkflowsHtml}
+                </div>
+            </div>
+        `;
     }).join('');
 
-  return `
-    <div id="fv-list-wrap" onclick="OL._fvHandleCanvasClick(event)">
-      ${stagesHtml || '<div class="fv-loading-state"><i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i><span>No stages or steps found. Assign resources to stages via the inspector.</span></div>'}
-    </div>
-  `;
+    return `
+        <div id="fv-list-wrap" onclick="OL._fvHandleCanvasClick(event)" style="padding:20px; max-height:100%; overflow-y:auto;">
+            ${stagesHtml || `
+                <div class="fv-loading-state" style="text-align:center; padding:100px; opacity:0.5;">
+                    <i data-lucide="inbox" style="width:32px; height:32px; margin-bottom:10px;"></i>
+                    <div>No stages or steps found. Assign resources to workflows to generate data fields.</div>
+                </div>`}
+        </div>
+    `;
 };
 
 OL._fvDeleteStage = function(stageId) {
@@ -13480,7 +13518,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     const isGlobal      = globalIds.has(String(res.id));
     const isDecision    = (step.logic?.out || []).filter(l => l.targetId).length > 1;
     const hasLoop       = (step.logic?.out || []).some(l => l.type === 'loop');
-    const isConditional = isDecision || (step.logic?.out || []).some(l => l.rule?.trim());
     
     const outRules = (step.logic?.out || []).filter(l => {
         if (!l.targetId) return false;
@@ -13491,12 +13528,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const tRes   = allResources.find(r => String(r.id) === String(tResId));
         return !tRes?.isArchived;
     });
-
-    // 🎯 INITIALIZE TAGS FIRST (Fixed Scope Placement)
-    const tags = [
-        isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
-        hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
-    ].filter(Boolean).join('');
 
     const collapseId = `fv-substeps-${step.id}`;
     const resBadgeBg = tc.color + '18';
@@ -13509,7 +13540,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         ${tc.abbr} ${esc(res.name.substring(0, 14))}
       </span>`;
 
-    // 🎯 RE-ARCHITECTING THE NESTING & FLOW LINES
+    // 🎯 STRUCTURE AND CASCADE RE-ARCHITECTING
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
@@ -13540,15 +13571,15 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
             hasNesting = true;
             const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional Execution';
             
-            // Print the clean blue label directly on the card face
-            cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 600; color: #38bdf8; opacity: 0.9; margin-top: 2px;">↳ condition: "${esc(ruleText)}"</div>`;
+            // Print the clean condition label on the card face
+            cardFaceConditionHtml = `<div class="fv-card-condition-text" style="font-size: 11px; font-weight: 600; color: #38bdf8; opacity: 0.9; margin-top: 2px;">↳ If: "${esc(ruleText)}"</div>`;
 
             // Nest the target step directly under this branch header wrapper
             nestedBranchesHtml += `
                 <div class="fv-list-branch" style="margin-top: 6px; position: relative;">
                     <div class="fv-branch-label" style="color:#10b981; display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:0.02em; padding-left: ${28 + (depth * 12)}px; margin-bottom: 4px;">
                         <i data-lucide="git-commit" style="width:12px; height:12px; color:#10b981;"></i> 
-                        <span>${esc(ruleText)}</span>
+                        <span>If: ${esc(ruleText)}</span>
                     </div>
                     ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
                 </div>`;
@@ -13565,10 +13596,10 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
 
             if (isLoop) {
                 badgeStyle = "background:rgba(245,184,0,0.06); color:#f5b800; border:1px solid rgba(245,184,0,0.2);";
-                badgeText = `↺ Loop${rule.loopLimit ? ` (${rule.loopLimit})` : ''} ➔ ${targetLabel}`;
+                badgeText = `Loop${rule.loopLimit ? ` (${rule.loopLimit})` : ''} ➔ ${targetLabel}`;
             } else if (isDelay) {
                 badgeStyle = "background:rgba(167,139,250,0.06); color:#a78bfa; border:1px solid rgba(167,139,250,0.2);";
-                badgeText = `⏱ Wait ${rule.delayValue || '?'} ${rule.delayUnit || 'days'} ➔ ${targetLabel}`;
+                badgeText = `Delay: ${rule.delayValue || '?'} ${rule.delayUnit || 'days'} ➔ ${targetLabel}`;
             } else if (!isSubsequentLocalStep) {
                 badgeStyle = "background:rgba(56,189,248,0.08); color:#38bdf8; border:1px solid rgba(56,189,248,0.25); cursor:pointer;";
                 badgeText = `🔀 Skip To: ${targetLabel} ➔`;
@@ -13585,11 +13616,19 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         }
     });
 
-    // Prevent duplicate entries of the same steps in secondary layers
-    const isStepAlreadyRenderedAsBranch = isIndentedChild && !isConditional;
-    if (isStepAlreadyRenderedAsBranch) {
+    // 🛡️ THE OVERLAP SHIELD: Fixes the broken indentation bug
+    // Suppress secondary rendering ONLY if we have executed a structural branch nesting cascade
+    if (hasNesting && isIndentedChild) {
         return nestedBranchesHtml; 
     }
+
+    // Dynamic Tag Generator (Wipes out duplicate condition tag when cardFaceConditionHtml handles it)
+    const tags = [
+        isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
+        hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
+        (isDecision && !cardFaceConditionHtml) ? `<span class="fv-list-tag conditional">◆ Decision</span>` : '',
+        (isConditional && !isDecision && !cardFaceConditionHtml) ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : ''
+    ].filter(Boolean).join('');
 
     return `
     <div style="margin-bottom: 4px; margin-left:${isIndentedChild ? '24px' : '0px'};">
@@ -13642,6 +13681,7 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     </div>
   `;
 };
+
 // ══════════════════════════════════════════════
 // SHARED CONTROLS
 // ══════════════════════════════════════════════
