@@ -16149,21 +16149,6 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
             <div class="inspector-body">
                 <div class="inspector-section">
                     <div class="section-label">
-                        <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
-                    </div>
-                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
-                </div>
-
-                <div class="inspector-section">
-                    <label class="section-label">
-                        <i data-lucide="notebook-pen" style="width:11px;height:11px;"></i> INTERNAL NOTES
-                    </label>
-                    <textarea class="modal-textarea" style="min-height:60px;"
-                              onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
-                </div>
-
-                <div class="fvi-section">
-                    <div class="fvi-label">
                         <i data-lucide="corner-right-up" style="width:11px;height:11px;"></i>
                         Move to resource
                     </div>
@@ -16185,6 +16170,21 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                                 .join('')}
                         </optgroup>
                     </select>
+                </div>
+                
+                <div class="inspector-section">
+                    <div class="section-label">
+                        <i data-lucide="arrow-down-to-line" style="width:11px;height:11px;"></i> INPUT CONDITIONS
+                    </div>
+                    ${step.logic.in.map((l, i) => OL.renderLogicBlock(resId, step.id, 'in', i, l, allOptions)).join('')}
+                </div>
+
+                <div class="inspector-section">
+                    <label class="section-label">
+                        <i data-lucide="notebook-pen" style="width:11px;height:11px;"></i> INTERNAL NOTES
+                    </label>
+                    <textarea class="modal-textarea" style="min-height:60px;"
+                              onblur="OL.updateAtomicStep('${resId}', '${step.id}', 'description', this.value)">${esc(step.description || '')}</textarea>
                 </div>
 
                 <div class="inspector-section">
