@@ -6548,3 +6548,46 @@ body.is-visualizer #v2-inspector-panel {
 .fvi-step-row.v2-step-item.is-dragging {
     opacity: 0.3;
 }
+/* Sidebar Workbench Component Layout Variables */
+.fv-stage-sort-row {
+    border-bottom: 1px solid var(--line) !important;
+    background: rgba(255, 255, 255, 0.01);
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.fv-stage-sort-row:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.fv-stage-sort-row.drag-over {
+    border-top: 2px dashed var(--accent) !important;
+    background: rgba(61, 217, 197, 0.05) !important;
+}
+
+/* Draggable Row Control Affordances */
+.btn-icon-tiny {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    border-radius: 4px;
+    width: 20px;
+    height: 20px;
+    font-size: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.1s ease;
+}
+
+.btn-icon-tiny:hover:not([disabled]) {
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
+    background: rgba(61, 217, 197, 0.05) !important;
+}
+
+.drag-handle {
+    user-select: none;
+    -webkit-user-drag: none;
+}
