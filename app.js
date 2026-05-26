@@ -11148,6 +11148,11 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
           <i data-lucide="plus"></i>
         </button>
         <button class="fv-lane-action-btn"
+                title="Delete stage"
+                onclick="event.stopPropagation(); OL._fvDeleteStage('${stage.id}')">
+            <i data-lucide="trash-2"></i>
+        </button>
+        <button class="fv-lane-action-btn"
                 title="Edit name"
                 onclick="event.stopPropagation(); OL._fvEditStageName('${stage.id}')">
           <i data-lucide="pencil"></i>
@@ -12769,6 +12774,10 @@ OL._fvBuildListShell = function(stages, resources) {
             <i data-lucide="archive" style="width:12px;height:12px;"></i>
             ${OL._fv.showArchived ? 'Hide Archived' : 'Show Archived'}
           </button>
+          <button class="fv-btn" style="padding:3px 8px;font-size:10px;color:#ef4444;"
+                onclick="OL._fvDeleteStage('${stage.id}')">
+            <i data-lucide="trash-2" style="width:10px;height:10px;"></i>
+        </button>
         </div>
         ${stepsHtml || '<div style="font-size:11px;color:#9ca3af;padding:8px 0;font-style:italic;">No steps yet.</div>'}
       </div>
@@ -12780,6 +12789,30 @@ OL._fvBuildListShell = function(stages, resources) {
       ${stagesHtml || '<div class="fv-loading-state"><i data-lucide="inbox" style="width:28px;height:28px;opacity:0.3;"></i><span>No stages or steps found. Assign resources to stages via the inspector.</span></div>'}
     </div>
   `;
+};
+
+OL._fvDeleteStage = function(stageId) {
+    const data = OL.getCurrentProjectData();
+    const stage = (data.stages||[]).find(s => s.id === stageId);
+    if (!stage) return;
+
+    const resCount = (data.resources||[]).filter(r => r.stageId === stageId).length;
+    const wfCount  = (data.workflows||[]).filter(w => w.stageId === stageId).length;
+
+    const msg = resCount > 0 || wfCount > 0
+        ? `Delete "${stage.name}"? ${resCount} resource(s) and ${wfCount} workflow(s) will become unassigned.`
+        : `Delete stage "${stage.name}"?`;
+
+    if (!confirm(msg)) return;
+
+    // Unassign resources and workflows
+    (data.resources||[]).forEach(r => { if (r.stageId === stageId) r.stageId = null; });
+    (data.workflows||[]).forEach(w => { if (w.stageId === stageId) w.stageId = null; });
+
+    data.stages = data.stages.filter(s => s.id !== stageId);
+
+    OL.persist();
+    OL.renderVisualizer();
 };
 
 OL._fvOpenStepsList = function(resId) {
