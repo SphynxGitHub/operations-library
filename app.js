@@ -917,36 +917,38 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 };
 
 window.handleRoute = function () {
-    // ✅ ADD THIS BLOCK AT THE VERY TOP:
-    // If we're leaving the visualizer, restore the inspector panel id
     const wasVisualizer = document.body.classList.contains('is-visualizer');
     const hash = window.location.hash || "#/";
     const isVisualizer = hash.includes('visualizer');
 
+    // 🎯 THE AUTO-CLOSE HOOK: Run cleanup when leaving the Flow Map
     if (wasVisualizer && !isVisualizer) {
+        console.log("🧼 Flow Map Exited: Performing surgical layout cleanup...");
         document.body.classList.remove('is-visualizer');
+        
+        // Auto-close the inspector panel to restore full-width grid layouts
+        if (typeof OL.closeInspectorPanel === 'function') {
+            OL.closeInspectorPanel();
+        }
+
         const panel = document.getElementById('v2-inspector-panel');
         if (panel) panel.id = 'inspector-panel';
-        // ADD THESE:
+        
         const main = document.getElementById('mainContent');
         if (main) main.style.cssText = '';
+        
         document.body.style.overflow = '';
         document.documentElement.style.overflow = '';
     }
     
-    // 1. Check if the matrix is ACTUALLY visible on screen
+    // --- 🚦 [Remainder of your standard routing evaluation conditions...] ---
     const matrix = document.querySelector('.matrix-table-container');
-    
-    // 2. Allow the route if we are currently on the "Loading" or "Init" phase
     const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
 
-    // 🛡️ THE REFINED GUARD
     if (matrix && !isAppLoading) {
         console.warn("🛡️ Matrix Active: Blocking Background Refresh to save your focus.");
         return; 
     }
-
-    console.log("🚦 Route Clear: Proceeding with render...");
 
     window.buildLayout(); 
 
