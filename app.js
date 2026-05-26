@@ -5530,148 +5530,150 @@ window.renderSopStepList = function(res) {
         ).join('');
 
         return `
-            <div style="margin-bottom: 6px; background: rgba(255,255,255,0.01); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+            <div style="margin-bottom:6px; background:rgba(255,255,255,0.01); border:1px solid var(--line); border-radius:6px; overflow:hidden;">
                 <div class="v2-step-item sop-step-row"
-                     id="sop-step-row-${step.id}"
                      draggable="true"
                      ondragstart="OL.handleStepDragStart(event, '${res.id}', ${idx})"
-                     ondragover="OL.handleStepDragOver(event)"
-                     ondragleave="OL.handleStepDragLeave(event)"
-                     ondrop="OL.handleStepDrop(event, '${res.id}', ${idx})"
-                     style="display:flex; align-items:center; gap:10px; padding:10px 12px; transition:background 0.2s; user-select:none;">
+                     ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over')"
+                     ondragleave="this.classList.remove('drag-over')"
+                     ondrop="this.classList.remove('drag-over'); OL.handleStepDrop(event, '${res.id}', ${idx})"
+                     style="display:flex; align-items:center; gap:10px; padding:10px 12px; user-select:none;">
                     
-                    <span class="drag-handle" style="cursor:grab; opacity:0.3; font-size:14px; padding-right:2px;">⠿</span>
-                    <div class="step-number-circle" style="width:20px; height:20px; font-size:10px; flex-shrink:0; background:rgba(255,255,255,0.05); border:1px solid var(--line); color:var(--text-muted); display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:bold;">${idx + 1}</div>
+                    <span class="drag-handle" style="cursor:grab; opacity:0.3; font-size:14px;">⠿</span>
+                    <div class="step-number-circle" style="width:20px; height:20px; font-size:10px; flex-shrink:0;
+                         background:rgba(255,255,255,0.05); border:1px solid var(--line); color:var(--text-muted);
+                         display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:bold;">
+                        ${idx + 1}
+                    </div>
                     
-                    <div style="flex:1; min-width:0; cursor:pointer;" onclick="event.stopPropagation(); OL.toggleInlineStepEditor('${res.id}', '${step.id}')">
-                        <input type="text" class="inline-step-title-input" value="${esc(step.name || 'Untitled Action')}" 
-                               style="background:transparent; border:none; color:var(--text-main); font-size:12px; font-weight:600; width:100%; outline:none; padding:0; margin:0;"
+                    <div style="flex:1; min-width:0;">
+                        <input type="text" value="${esc(step.name || 'Untitled Action')}"
+                               style="background:transparent; border:none; color:var(--text-main); font-size:12px;
+                                      font-weight:600; width:100%; outline:none; padding:0;"
                                onclick="event.stopPropagation();"
                                onchange="OL.updateAtomicStep('${res.id}', '${step.id}', 'name', this.value)">
-                        
                         <div style="display:flex; gap:6px; align-items:center; margin-top:4px; flex-wrap:wrap;">
-                            ${step.appName ? `<span class="pill tiny soft" style="font-size:9px; background:rgba(56,189,248,0.05); color:#38bdf8; border:1px solid rgba(56,189,248,0.15);">${esc(step.appName)}</span>` : ''}
+                            ${step.appName ? `<span class="pill tiny soft" style="font-size:9px; color:#38bdf8; border:1px solid rgba(56,189,248,0.15);">${esc(step.appName)}</span>` : ''}
                             ${logicIcon}
-                            ${hasLinks ? `<span class="pill tiny soft" style="padding:2px 4px; display:inline-flex; align-items:center;"><i data-lucide="link-2" style="width:10px; height:10px; opacity:0.5;"></i></span>` : ''}
+                            ${hasLinks ? `<span class="pill tiny soft" style="padding:2px 4px;"><i data-lucide="link-2" style="width:10px; height:10px; opacity:0.5;"></i></span>` : ''}
                         </div>
                     </div>
                     
-                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-                        <button class="btn tiny soft" style="font-size:10px; padding:3px 8px; display:flex; align-items:center; gap:4px;"
-                                onclick="event.stopPropagation(); OL.toggleInlineStepEditor('${res.id}', '${step.id}')">
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                        <button class="btn tiny soft" onclick="event.stopPropagation(); OL.toggleInlineStepEditor('${res.id}', '${step.id}')"
+                                style="font-size:10px; padding:3px 8px; display:flex; align-items:center; gap:4px;">
                             <i data-lucide="sliders-horizontal" style="width:11px; height:11px; opacity:0.6;"></i> Configure
                         </button>
                         <button onclick="event.stopPropagation(); OL.deleteStep('${res.id}','${step.id}')"
-                                style="width:20px; height:20px; border:none; background:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center; border-radius:4px; transition:all 0.15s;"
+                                style="width:20px; height:20px; border:none; background:none; cursor:pointer;
+                                       color:var(--text-muted); display:flex; align-items:center; justify-content:center;
+                                       border-radius:4px; transition:all 0.15s;"
                                 onmouseover="this.style.color='#ef4444'; this.style.background='rgba(239,68,68,0.05)';"
-                                onmouseout="this.style.color='var(--text-muted)'; this.style.background='none';"
-                                title="Delete step">
+                                onmouseout="this.style.color='var(--text-muted)'; this.style.background='none';">
                             <i data-lucide="trash-2" style="width:12px; height:12px;"></i>
                         </button>
                     </div>
                 </div>
                 
-                <div id="fvi-inline-step-editor-${step.id}" class="inline-step-sub-drawer" style="display:none; background:rgba(0,0,0,0.15); border-top:1px solid var(--line); padding:15px; position:relative;"></div>
+                <div id="fvi-inline-step-editor-${step.id}" 
+                     style="display:none; background:rgba(0,0,0,0.15); border-top:1px solid var(--line); padding:15px;"></div>
             </div>
         `;
     }).join('');
 
     return html;
 };
-
 OL.toggleInlineStepEditor = function(resId, stepId) {
     const drawer = document.getElementById(`fvi-inline-step-editor-${stepId}`);
     if (!drawer) return;
 
-    const isAlreadyOpen = drawer.style.display === 'block';
-    
-    // Smoothly contract all other open inline editors inside this modal
-    document.querySelectorAll('.inline-step-sub-drawer').forEach(el => {
-        el.style.display = 'none';
-        el.innerHTML = '';
+    const isOpen = drawer.style.display === 'block';
+
+    document.querySelectorAll('.inline-step-sub-drawer, [id^="fvi-inline-step-editor-"]').forEach(el => {
+        if (el.id !== `fvi-inline-step-editor-${stepId}`) {
+            el.style.display = 'none';
+            el.innerHTML = '';
+        }
     });
 
-    if (isAlreadyOpen) {
+    if (isOpen) {
         drawer.style.display = 'none';
         drawer.innerHTML = '';
         return;
     }
 
     const data = OL.getCurrentProjectData();
-    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
 
     if (!step.logic) step.logic = { in: [], out: [] };
     if (!step.assignees) step.assignees = [];
-    const allOptions = typeof OL.getAllStepOptions === 'function' ? OL.getAllStepOptions() : [];
 
-    // Construct the inline sub-view workspace
     drawer.innerHTML = `
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
             <div>
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:6px;">
-                    <i data-lucide="smartphone" style="width:12px; height:12px;"></i> Primary App (Tool)
+                <label class="modal-section-label" style="font-size:10px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                    <i data-lucide="smartphone" style="width:12px; height:12px;"></i> Primary App
                 </label>
                 ${step.appId ? `
-                    <div class="pill primary" style="display:flex; justify-content:space-between; align-items:center; width:100%; box-sizing:border-box;">
+                    <div class="pill primary" style="display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-weight:bold; font-size:11px;">🤖 ${esc(step.appName)}</span>
-                        <i data-lucide="x" class="is-clickable" style="width:14px; height:14px; opacity:0.6;" 
+                        <i data-lucide="x" class="is-clickable" style="width:14px; height:14px; opacity:0.6;"
                            onclick="event.stopPropagation(); OL.updateAppMetadataInline('${resId}', '${stepId}', null, null)"></i>
                     </div>
                 ` : `
-                    <div class="search-map-container" style="position:relative;">
+                    <div style="position:relative;">
                         <i data-lucide="search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:12px; height:12px; opacity:0.4;"></i>
-                        <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;" placeholder="Link Tool..."
-                               onfocus="OL.filterInlineAppSearch(event, '${resId}', '${stepId}', '')"
-                               oninput="OL.filterInlineAppSearch(event, '${resId}', '${stepId}', this.value)">
+                        <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;"
+                               placeholder="Link Tool..."
+                               onfocus="OL.filterInlineAppSearch('${resId}', '${stepId}', '')"
+                               oninput="OL.filterInlineAppSearch('${resId}', '${stepId}', this.value)">
                         <div id="inline-app-results-${stepId}" class="search-results-overlay" style="max-height:150px; overflow-y:auto;"></div>
                     </div>
                 `}
             </div>
-            
+
             <div>
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:6px;">
+                <label class="modal-section-label" style="font-size:10px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
                     <i data-lucide="users" style="width:12px; height:12px;"></i> Assigned Who
                 </label>
-                <div class="pill-display" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
-                    ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
-                        <span class="pill tiny accent" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; background:rgba(61,217,197,0.1); border:1px solid rgba(61,217,197,0.3); color:#3dd9c5; padding:2px 8px; border-radius:99px;">
-                            <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px; height:10px;"></i>
+                <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
+                    ${step.assignees.length > 0 ? step.assignees.map((a, i) => `
+                        <span class="pill tiny accent" style="display:inline-flex; align-items:center; gap:4px; font-size:10px;">
                             ${esc(a.name)}
-                            <b style="cursor:pointer; opacity:0.6; margin-left:2px;" onclick="event.stopPropagation(); OL.removeInlineAssignee('${resId}', '${stepId}', ${idx})">×</b>
+                            <b style="cursor:pointer; opacity:0.6;" 
+                               onclick="event.stopPropagation(); OL.removeInlineAssignee('${resId}', '${stepId}', ${i})">×</b>
                         </span>
                     `).join('') : '<div class="tiny muted italic" style="padding:4px 0;">Unassigned</div>'}
                 </div>
-                <div class="search-map-container" style="position:relative;">
+                <div style="position:relative;">
                     <i data-lucide="search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:12px; height:12px; opacity:0.4;"></i>
-                    <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;" placeholder="Add Assignee..."
-                           onfocus="OL.filterInlineAssignmentSearch(event, '${resId}', '${stepId}', '')"
-                           oninput="OL.filterInlineAssignmentSearch(event, '${resId}', '${stepId}', this.value)">
+                    <input type="text" class="modal-input tiny" style="padding-left:30px; width:100%; box-sizing:border-box; margin:0;"
+                           placeholder="Add Assignee..."
+                           onfocus="OL.filterInlineAssignmentSearch('${resId}', '${stepId}', '')"
+                           oninput="OL.filterInlineAssignmentSearch('${resId}', '${stepId}', this.value)">
                     <div id="inline-assign-results-${stepId}" class="search-results-overlay" style="max-height:150px; overflow-y:auto;"></div>
                 </div>
             </div>
         </div>
 
         <div style="margin-bottom:15px;">
-            <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:4px;">
-                <i data-lucide="calendar-clock" style="width:12px; height:12px;"></i> Timing Offset Value
+            <label class="modal-section-label" style="font-size:10px; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
+                <i data-lucide="calendar-clock" style="width:12px; height:12px;"></i> Timing Offset (days)
             </label>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <input type="number" class="modal-input tiny" style="width:60px; margin:0;" value="${step.timingValue || 0}"
-                       onblur="OL.updateAtomicStep('${resId}', '${stepId}', 'timingValue', parseInt(this.value) || 0)">
-                <span class="tiny muted">days after previous action loop</span>
-            </div>
+            <input type="number" class="modal-input tiny" style="width:60px; margin:0;" value="${step.timingValue || 0}"
+                   onblur="OL.updateAtomicStep('${resId}', '${stepId}', 'timingValue', parseInt(this.value) || 0)">
         </div>
 
-        <div style="margin-bottom:5px;">
-            <label class="modal-section-label" style="display:flex; align-items:center; gap:5px; font-size:10px; margin-bottom:6px;">
-                <i data-lucide="arrow-up-from-line" style="width:12px; height:12px;"></i> Outbound Logic Routing Rules
+        <div>
+            <label class="modal-section-label" style="font-size:10px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                <i data-lucide="arrow-up-from-line" style="width:12px; height:12px;"></i> Outbound Logic
             </label>
             <div style="display:flex; flex-direction:column; gap:6px;">
-                ${step.logic.out.map((l, idx) => OL.renderLogicBlock(resId, stepId, 'out', idx, l, allOptions)).join('')}
+                ${(step.logic.out || []).map((l, i) => OL.renderLogicBlock(resId, stepId, 'out', i, l, [])).join('')}
             </div>
-            <button class="btn tiny soft" style="margin-top:6px; display:inline-flex; align-items:center; gap:4px;" 
+            <button class="btn tiny soft" style="margin-top:6px; display:inline-flex; align-items:center; gap:4px;"
                     onclick="event.stopPropagation(); OL.addInlineStepLogic('${resId}', '${stepId}', 'out')">
                 <i data-lucide="plus" style="width:12px; height:12px;"></i> Add Output Path
             </button>
@@ -5682,78 +5684,57 @@ OL.toggleInlineStepEditor = function(resId, stepId) {
     if (window.lucide) lucide.createIcons();
 };
 
-// Inline App Search Filter Affirmation
-OL.filterInlineAppSearch = function(e, parentId, stepId, query) {
+OL.filterInlineAppSearch = function(resId, stepId, query) {
     const overlay = document.getElementById(`inline-app-results-${stepId}`);
     if (!overlay) return;
-
-    const q = (query || "").toLowerCase().trim();
+    const q = (query || '').toLowerCase().trim();
     const client = getActiveClient();
-    const localApps = client?.projectData?.localApps || [];
-    const matches = localApps.filter(a => a.name.toLowerCase().includes(q));
+    const matches = (client?.projectData?.localApps || []).filter(a => a.name.toLowerCase().includes(q));
+    overlay.innerHTML = matches.length 
+        ? matches.map(app => `
+            <div class="search-result-item"
+                 onmousedown="event.preventDefault(); OL.updateAppMetadataInline('${resId}', '${stepId}', '${app.id}', '${esc(app.name)}')">
+                📱 ${esc(app.name)}
+            </div>`).join('')
+        : '<div class="p-10 tiny muted">No tools found.</div>';
+    overlay.style.display = 'block';
+};
 
-    if (matches.length === 0) {
-        overlay.innerHTML = `<div class="p-10 tiny muted">No tools match context.</div>`;
-        overlay.style.display = 'block';
-        return;
-    }
-
-    overlay.innerHTML = matches.map(app => `
-        <div class="search-result-item" style="padding:6px 10px; font-size:11px;"
-             onmousedown="event.preventDefault(); event.stopPropagation(); OL.updateAppMetadataInline('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
-            📱 ${esc(app.name)}
-        </div>
-    `).join('');
+OL.filterInlineAssignmentSearch = function(resId, stepId, query) {
+    const overlay = document.getElementById(`inline-assign-results-${stepId}`);
+    if (!overlay) return;
+    const q = (query || '').toLowerCase().trim();
+    const matches = OL.getFilteredAssigneeOptions(q);
+    overlay.innerHTML = matches.length
+        ? matches.map(item => `
+            <div class="search-result-item"
+                 onmousedown="event.preventDefault(); OL.addInlineAssignee('${resId}', '${stepId}', '${item.id}', '${esc(item.name)}', '${item.type}')">
+                ${item.icon} ${esc(item.name)}
+            </div>`).join('')
+        : '<div class="p-10 tiny muted">No matches found.</div>';
     overlay.style.display = 'block';
 };
 
 OL.updateAppMetadataInline = function(resId, stepId, appId, appName) {
     const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
-
-    step.appId = appId;
+    step.appId   = appId;
     step.appName = appName;
     OL.persist();
-    
-    // Soft reload the step row to preserve view anchor focus state
     OL.toggleInlineStepEditor(resId, stepId);
     OL.toggleInlineStepEditor(resId, stepId);
-};
-
-// Multi-select Assignment Sub-View Controller
-OL.filterInlineAssignmentSearch = function(resId, stepId, query) {
-    const overlay = document.getElementById(`inline-assign-results-${stepId}`);
-    if (!overlay) return;
-
-    const q = (query || "").toLowerCase().trim();
-    const matches = OL.getFilteredAssigneeOptions(q);
-
-    if (matches.length === 0) {
-        overlay.innerHTML = `<div class="p-10 tiny muted">No choices found.</div>`;
-        overlay.style.display = 'block';
-        return;
-    }
-
-    overlay.innerHTML = matches.map(item => `
-        <div class="search-result-item" style="padding:6px 10px; font-size:11px;"
-             onmousedown="event.preventDefault(); event.stopPropagation(); OL.addInlineAssignee('${resId}', '${stepId}', '${item.id}', '${esc(item.name)}', '${item.type}');">
-            ${item.icon} ${esc(item.name)}
-        </div>
-    `).join('');
-    overlay.style.display = 'block';
 };
 
 OL.addInlineAssignee = function(resId, stepId, assigneeId, assigneeName, type) {
     const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
-
     if (!step.assignees) step.assignees = [];
     if (!step.assignees.some(a => a.id === assigneeId)) {
-        step.assignees.push({ id: assigneeId, name: assigneeName, type: type });
+        step.assignees.push({ id: assigneeId, name: assigneeName, type });
         OL.persist();
     }
     OL.toggleInlineStepEditor(resId, stepId);
@@ -5762,29 +5743,25 @@ OL.addInlineAssignee = function(resId, stepId, assigneeId, assigneeName, type) {
 
 OL.removeInlineAssignee = function(resId, stepId, idx) {
     const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
-    if (step && step.assignees) {
-        step.assignees.splice(idx, 1);
-        OL.persist();
-        OL.toggleInlineStepEditor(resId, stepId);
-        OL.toggleInlineStepEditor(resId, stepId);
-    }
+    if (!step?.assignees) return;
+    step.assignees.splice(idx, 1);
+    OL.persist();
+    OL.toggleInlineStepEditor(resId, stepId);
+    OL.toggleInlineStepEditor(resId, stepId);
 };
 
 OL.addInlineStepLogic = function(resId, stepId, direction) {
     const data = OL.getCurrentProjectData();
-    const res = data.resources.find(r => String(r.id) === String(resId));
+    const res  = (data.resources || []).find(r => String(r.id) === String(resId));
     const step = res?.steps?.find(s => String(s.id) === String(stepId));
     if (!step) return;
-
     if (!step.logic) step.logic = { in: [], out: [] };
-    step.logic[direction].push({ type: "next", targetId: null, rule: "" });
-
-    OL.persist().then(() => {
-        OL.toggleInlineStepEditor(resId, stepId);
-        OL.toggleInlineStepEditor(resId, stepId);
-    });
+    step.logic[direction].push({ type: 'next', targetId: null, rule: '' });
+    OL.persist();
+    OL.toggleInlineStepEditor(resId, stepId);
+    OL.toggleInlineStepEditor(resId, stepId);
 };
         
 OL.deleteStep = function(resId, stepId) {
