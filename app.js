@@ -153,6 +153,8 @@ window.addEventListener("load", () => {
     OL.sync(); 
 });
 
+
+
 OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync...");
     // 🛑 STOP: If we already have a listener, don't create another one!
@@ -5321,8 +5323,7 @@ OL.promptBulkReclassify = function(oldType) {
 OL.openResourceTypeManager = function () {
     const registry = state.master.resourceTypes || [];
     const masterFunctions = state.master.functions || [];
-    // 🎨 Lucide-friendly icon names
-    const quickIcons = ["zap", "file-text", "mail", "calendar", "plug-2", "book-open", "home", "message-square", "wrench", "target", "bot", "trending-up"];
+    const quickIcons = ["zap", "file-text", "mail", "calendar", "plug-2", "book-open", "home", "message-square", "wrench", "target", "bot", "trending-up", "folder", "table-2", "pen-tool", "clipboard-list", "database", "users", "star", "flag"];
 
     let html = `
         <div class="modal-head" style="display:flex; align-items:center; gap:12px;">
@@ -5330,64 +5331,74 @@ OL.openResourceTypeManager = function () {
             <div class="modal-title-text">Manage Resource Types</div>
         </div>
         <div class="modal-body">
-            <p class="tiny muted mb-20">
-                Define categories, link Lucide icons, and map to Master Functions for auto-locking logic.
+            <p class="tiny muted" style="margin-bottom:20px;">
+                Click an icon in the quick grid to assign it. Changes pull through to all resource cards immediately.
             </p>
             
-            <div class="dp-manager-list custom-scrollbar" style="max-height: 400px; overflow-y: auto;">
+            <div class="dp-manager-list" style="max-height:400px; overflow-y:auto;">
                 ${registry.map(t => {
                     const encType = btoa(t.type);
                     const currentIcon = t.lucideIcon || 'settings';
                     return `
-                    <div class="dp-manager-row type-editor-row" style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
-                        <div style="display:flex; align-items:center; background:var(--bg-card); padding:5px; border-radius:4px; border:1px solid var(--line);">
+                    <div class="dp-manager-row type-editor-row" 
+                         id="type-row-${t.typeKey}"
+                         style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">
+                        
+                        <div id="type-icon-preview-${t.typeKey}"
+                             style="width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+                                    background:rgba(var(--accent-rgb),0.1); border:1px solid var(--accent);
+                                    border-radius:6px; flex-shrink:0; cursor:pointer;"
+                             onclick="OL._openIconPicker('${t.typeKey}')">
                             <i data-lucide="${currentIcon}" style="width:16px; height:16px; color:var(--accent);"></i>
                         </div>
 
-                        <input type="text" class="modal-input tiny" style="width:80px; font-family:monospace; font-size:10px;"
-                               value="${currentIcon}"
-                               placeholder="icon-name"
-                               onblur="OL.updateResourceTypeProp('${t.typeKey}', 'lucideIcon', this.value)">
-
                         <span contenteditable="true" 
-                              class="type-name-edit"
-                              style="flex:1; font-weight:bold; outline:none;"
+                              style="flex:1; font-weight:600; outline:none; font-size:13px;"
                               onblur="OL.renameResourceTypeFlat('${encType}', this.innerText)">
                             ${esc(t.type)}
                         </span>
                         
-                        <select class="modal-input tiny func-match-select" 
-                                style="width:140px;"
+                        <select class="modal-input tiny" style="width:140px;"
                                 onchange="OL.updateResourceTypeProp('${t.typeKey}', 'matchedFunctionId', this.value)">
                             <option value="">-- No Auto-Lock --</option>
                             ${masterFunctions.map(f => `
                                 <option value="${f.id}" ${t.matchedFunctionId === f.id ? 'selected' : ''}>
-                                    Map to: ${esc(f.name)}
+                                    ${esc(f.name)}
                                 </option>
                             `).join('')}
                         </select>
 
-                        <button class="card-delete-btn" style="position:static;" onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">
+                        <button class="card-delete-btn" style="position:static;" 
+                                onclick="OL.removeRegistryTypeByKey('${t.typeKey}')">
                             <i data-lucide="x" style="width:14px; height:14px;"></i>
                         </button>
                     </div>`;
                 }).join('')}
             </div>
 
-            <div class="manager-footer-add" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--line);">
-                <label class="modal-section-label">Quick Add New Type</label>
-                <div class="add-type-form" style="display:flex; gap:10px; margin-bottom:15px;">
-                    <input type="text" id="new-type-icon" class="modal-input icon-input" style="width:100px;" placeholder="Icon (e.g. zap)">
-                    <input type="text" id="new-type-input" class="modal-input name-input" style="flex:1;" placeholder="New Type Name...">
+            <div style="margin-top:20px; padding-top:20px; border-top:1px solid var(--line);">
+                <label class="modal-section-label">Add New Type</label>
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="text" id="new-type-icon" class="modal-input tiny" style="width:100px;" placeholder="Icon (e.g. zap)">
+                    <input type="text" id="new-type-input" class="modal-input" style="flex:1;" placeholder="New Type Name...">
                     <button class="btn primary" onclick="OL.addNewResourceTypeFlat()">Add Type</button>
                 </div>
                 
-                <div class="emoji-quick-grid" style="display:flex; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
                     ${quickIcons.map(icon => `
-                        <div class="emoji-option" 
-                             style="cursor:pointer; padding:6px; background:var(--bg-card); border:1px solid var(--line); border-radius:4px;"
-                             onclick="document.getElementById('new-type-icon').value='${icon}'">
-                             <i data-lucide="${icon}" style="width:14px; height:14px;"></i>
+                        <div style="cursor:pointer; padding:8px; background:var(--bg-card); border:1px solid var(--line); 
+                                    border-radius:6px; display:flex; align-items:center; justify-content:center;
+                                    transition:all 0.15s;"
+                             title="${icon}"
+                             onmouseover="this.style.borderColor='var(--accent)'; this.style.background='rgba(var(--accent-rgb),0.1)';"
+                             onmouseout="this.style.borderColor='var(--line)'; this.style.background='var(--bg-card)';"
+                             onclick="document.getElementById('new-type-icon').value='${icon}'; 
+                                      const active = document.querySelector('.type-editor-row.icon-picker-active');
+                                      if (active) {
+                                          const key = active.id.replace('type-row-','');
+                                          OL.updateResourceTypeProp(key, 'lucideIcon', '${icon}');
+                                      }">
+                            <i data-lucide="${icon}" style="width:14px; height:14px;"></i>
                         </div>
                     `).join('')}
                 </div>
@@ -5395,6 +5406,19 @@ OL.openResourceTypeManager = function () {
         </div>`;
     openModal(html);
     if (window.lucide) window.lucide.createIcons();
+};
+
+OL._openIconPicker = function(typeKey) {
+    // Deactivate all rows
+    document.querySelectorAll('.type-editor-row').forEach(r => r.classList.remove('icon-picker-active'));
+    
+    // Activate this row
+    const row = document.getElementById(`type-row-${typeKey}`);
+    if (row) {
+        row.classList.add('icon-picker-active');
+        row.style.background = 'rgba(var(--accent-rgb), 0.05)';
+        row.style.borderRadius = '6px';
+    }
 };
 
 OL.renderHierarchySelectors = function (res, isVault) {
@@ -5952,9 +5976,21 @@ OL.updateResourceTypeProp = function(typeKey, prop, value) {
     if (entry) {
         entry[prop] = value;
         OL.persist();
-        console.log(`✅ Updated Type Registry: ${entry.type} is now ${value}`);
-        // Refresh the visualizer so the sidebar/inspector immediately reflect the new icon
-        OL.renderVisualizer(location.hash.includes('vault'));
+
+        // Live update the icon preview in the modal if it's open
+        if (prop === 'lucideIcon') {
+            const preview = document.getElementById(`type-icon-preview-${typeKey}`);
+            if (preview) {
+                preview.innerHTML = `<i data-lucide="${value}" style="width:16px; height:16px; color:var(--accent);"></i>`;
+                if (window.lucide) lucide.createIcons();
+            }
+            // Deactivate picker state
+            document.querySelectorAll('.type-editor-row').forEach(r => {
+                r.classList.remove('icon-picker-active');
+                r.style.background = '';
+                r.style.borderRadius = '';
+            });
+        }
     }
 };
 
@@ -6070,8 +6106,9 @@ window.renderResourceCard = function (res) {
                         <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; opacity: 0.8;">
                             ${esc(res.archetype || "Base")}
                         </div>
-                        <div class="tiny muted" style="font-size: 10px; opacity: 0.6;">
-                            ${OL.getRegistryIcon(res.type)} ${esc(res.type || "General")}
+                        <div class="tiny muted" style="font-size: 10px; opacity: 0.6; display:flex; align-items:center; gap:4px;">
+                            <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:11px; height:11px;"></i>
+                            ${esc(res.type || "General")}
                         </div>
                     </div>
 
@@ -6080,8 +6117,9 @@ window.renderResourceCard = function (res) {
                         <div class="pill tiny" style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}44; font-size:8px; font-weight:bold; padding: 1px 5px;">
                             ${(scopeData.status || "PENDING").toUpperCase()}
                         </div>
-                        <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5;">
-                            👤 ${esc(scopeData.responsibleParty || 'TBD')}
+                        <div class="tiny muted bold" style="font-size: 8px; opacity: 0.5; display:flex; align-items:center; gap:3px;">
+                            <i data-lucide="user" style="width:9px; height:9px;"></i>
+                            ${esc(scopeData.responsibleParty || 'TBD')}
                         </div>
                     </div>
                 ` : `
@@ -13096,12 +13134,13 @@ OL._fvHandleCanvasClick = function(e) {
 };
 
 OL.closeInspectorPanel = function() {
-    OL._fv._lastInspectorResId = null;  // ← add this
+    OL._fv._lastInspectorResId = null;
 
-    const panel = document.getElementById('v2-inspector-panel');
+    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
     if (panel) {
         panel.classList.remove('open');
         panel.id = 'inspector-panel';
+        panel.style.width = '0';  // ← add this
     }
 
     const layout = document.querySelector('.three-pane-layout');
