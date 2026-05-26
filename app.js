@@ -11943,10 +11943,27 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   const hasLogic = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
   const isExpanded = OL._fv.stepsExpanded || OL._fv._expandedCards?.has(res.id);
 
-  const tags = (res.steps || []).slice(0, 2)
-    .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
-    .join('');
+  const linkedAssets = (res.steps || [])
+    .flatMap(s => s.links || [])
+    .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i); // dedupe
 
+const assetIconsHtml = linkedAssets.length > 0 ? `
+    <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
+        ${linkedAssets.map(link => `
+            <div title="${esc(link.name)}"
+                 onclick="event.stopPropagation(); OL.openInspector('${link.id}', null, 'cards')"
+                 style="width:22px; height:22px; border-radius:4px; cursor:pointer;
+                        background:rgba(255,255,255,0.06); border:1px solid var(--line);
+                        display:flex; align-items:center; justify-content:center;
+                        transition:all 0.15s;"
+                 onmouseover="this.style.borderColor='var(--accent)'; this.style.background='rgba(61,217,197,0.1)'; document.getElementById('asset-tooltip-${esc(link.id)}')?.style && (document.getElementById('asset-tooltip-${esc(link.id)}').style.display='block')"
+                 onmouseout="this.style.borderColor='var(--line)'; this.style.background='rgba(255,255,255,0.06)'; document.getElementById('asset-tooltip-${esc(link.id)}')?.style && (document.getElementById('asset-tooltip-${esc(link.id)}').style.display='none')">
+                <i data-lucide="${OL.getRegistryIcon(link.type)}" style="width:12px; height:12px; opacity:0.6;"></i>
+            </div>
+        `).join('')}
+    </div>
+` : '';
+    
   const logicTypes = new Set((res.steps || []).flatMap(s => 
     (s.logic?.out || []).filter(l => l.targetId).map(l => l.type || 'next')
   ));
@@ -12007,6 +12024,7 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
         </div>
         <div class="fv-card-name">${esc(res.name)}</div>
         ${tags ? `<div class="fv-card-tags" style="margin-bottom:4px;">${tags}</div>` : ''}
+        ${assetIconsHtml}
       </div>
 
       <div class="fv-card-footer">
