@@ -12679,37 +12679,33 @@ OL._fvFilterWb = function(tab) {
 };
 
 OL._fvUnmapResource = function(resId) {
-    const data      = OL.getCurrentProjectData();
     const client    = getActiveClient();
-    const workflows = client?.projectData?.workflows || data.workflows || [];
-    
+    const data      = client?.projectData;
+    if (!data) { console.error('no projectData'); return; }
+
     const res = (data.resources || []).find(r => String(r.id) === String(resId));
-    if (!res) { console.warn('not found:', resId); return; }
-    
+    if (!res) { console.error('res not found:', resId); return; }
+
+    console.log('BEFORE — stageId:', res.stageId, 'workflowId:', res.workflowId);
+
+    // Clear stage and global
     res.stageId  = null;
     res.isGlobal = false;
+    res.workflowId = null;
 
-    const prevWf = workflows.find(w =>
-        (w.resourceIds || []).some(id => String(id) === String(resId))
-    );
-    if (prevWf) OL.removeResourceFromWorkflow(prevWf.id, resId, true); // skipPersist=true
-
-    // Single persist after all mutations
-    OL.persist();
-
-    const wrap       = document.getElementById('fv-canvas-wrap');
-    const scrollTop  = wrap?.scrollTop  || 0;
-    const scrollLeft = wrap?.scrollLeft || 0;
-
-    OL.renderVisualizer();
-
-    requestAnimationFrame(() => {
-        const newWrap = document.getElementById('fv-canvas-wrap');
-        if (newWrap) {
-            newWrap.scrollTop  = scrollTop;
-            newWrap.scrollLeft = scrollLeft;
+    // Remove from workflow resourceIds array
+    (data.workflows || []).forEach(wf => {
+        const before = wf.resourceIds?.length;
+        wf.resourceIds = (wf.resourceIds || []).filter(id => String(id) !== String(resId));
+        if (wf.resourceIds.length !== before) {
+            console.log('Removed from workflow:', wf.name);
         }
     });
+
+    console.log('AFTER — stageId:', res.stageId, 'workflowId:', res.workflowId);
+
+    OL.persist();
+    OL.renderVisualizer();
 };
 
 OL._fvWbDragStart = function(e, id, type) {
