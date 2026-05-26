@@ -12766,61 +12766,74 @@ OL._fvToggleWb = function(tab) {
 };
 
 OL._fvPopulateWb = function(tab, resources) {
-  const content = document.getElementById('fv-wb-content');
-  if (!content) return;
+    const content = document.getElementById('fv-wb-content');
+    if (!content) return;
 
-  // Make the whole drawer a drop target to unmap resources
-  const drawer = document.getElementById('fv-wb-drawer');
-  if (drawer) {
-      drawer.ondragover = (e) => {
-          e.preventDefault();
-          drawer.style.background = 'rgba(61,217,197,0.08)';
-          drawer.style.borderLeft = '2px solid #3dd9c5';
-      };
-      drawer.ondragleave = () => {
-          drawer.style.background = '';
-          drawer.style.borderLeft = '';
-      };
-      drawer.ondrop = (e) => {
-        e.preventDefault();
-        drawer.style.background = '';
-        drawer.style.borderLeft = '';
-        const resId = e.dataTransfer.getData('application/fv-resource') || 
-                      e.dataTransfer.getData('text/plain');
-        console.log('Drawer drop resId:', resId);
-        if (resId) OL._fvUnmapResource(resId);
-    };
-  }
+    // Select the workbench drawer container to configure specific drop zone hooks
+    const drawer = document.getElementById('fv-wb-drawer');
+    if (drawer) {
+        // Reset legacy drop actions so it doesn't try to unmap things when sorting stages
+        if (tab === 'stages') {
+            drawer.ondragover = (e) => e.preventDefault();
+            drawer.ondragleave = null;
+            drawer.ondrop = null;
+            drawer.style.background = '';
+            drawer.style.borderLeft = '';
+        } else {
+            // Restore legacy drag unmapping behaviors for resources/assets tabs
+            drawer.ondragover = (e) => {
+                e.preventDefault();
+                drawer.style.background = 'rgba(61,217,197,0.08)';
+                drawer.style.borderLeft = '2px solid #3dd9c5';
+            };
+            drawer.ondragleave = () => {
+                drawer.style.background = '';
+                drawer.style.borderLeft = '';
+            };
+            drawer.ondrop = (e) => {
+                e.preventDefault();
+                drawer.style.background = '';
+                drawer.style.borderLeft = '';
+                const resId = e.dataTransfer.getData('application/fv-resource') || 
+                              e.dataTransfer.getData('text/plain');
+                if (resId) OL._fvUnmapResource(resId);
+            };
+        }
+    }
 
-  const client       = getActiveClient();
-  const data         = OL.getCurrentProjectData();
-  const masterGuides = state.master?.howToLibrary || [];
-  const localGuides  = client?.projectData?.localHowTo || [];
-  const datapoints   = state.master?.datapoints || [];
+    const client       = getActiveClient();
+    const data         = OL.getCurrentProjectData();
+    const stages       = data.stages || [];
+    const masterGuides = state.master?.howToLibrary || [];
+    const localGuides  = client?.projectData?.localHowTo || [];
+    const datapoints   = state.master?.datapoints || [];
 
-  let allItems = [];
+    let allItems = [];
     
-  if (tab === 'flows') {
-      allItems = resources.filter(r => 
-          ['Workflow','Zap','Email Campaign'].includes(r.type) &&
-          !r.isArchived && (!r.stageId || r.isGlobal)
-      );
-  } else if (tab === 'assets') {
-      allItems = resources.filter(r => 
-          !['Workflow','Zap','Email Campaign'].includes(r.type) &&
-          !r.isArchived && (!r.stageId || r.isGlobal)
-      );
-  } else if (tab === 'guides') {
-      allItems = [...masterGuides, ...localGuides];
-  } else if (tab === 'data') {
-      allItems = datapoints;
-  }
+    // 🎯 ASSIGN WORKING DATA POOLS BASED ON ACTIVE WORKBENCH SELECTION
+    if (tab === 'stages') {
+        allItems = stages;
+    } else if (tab === 'flows') {
+        allItems = resources.filter(r => 
+            ['Workflow','Zap','Email Campaign'].includes(r.type) &&
+            !r.isArchived && (!r.stageId || r.isGlobal)
+        );
+    } else if (tab === 'assets') {
+        allItems = resources.filter(r => 
+            !['Workflow','Zap','Email Campaign'].includes(r.type) &&
+            !r.isArchived && (!r.stageId || r.isGlobal)
+        );
+    } else if (tab === 'guides') {
+        allItems = [...masterGuides, ...localGuides];
+    } else if (tab === 'data') {
+        allItems = datapoints;
+    }
 
-  const searchId  = `fv-wb-search-${tab}`;
-  const listId    = `fv-wb-items-${tab}`;
-  const showSearch = ['flows','assets','guides','data'].includes(tab);
+    const searchId = `fv-wb-search-${tab}`;
+    const listId   = `fv-wb-items-${tab}`;
+    const showSearch = ['flows','assets','guides','data'].includes(tab);
 
-  content.innerHTML = `
+    content.innerHTML = `
         ${showSearch ? `
             <div style="padding:8px 8px 4px;">
                 <input type="text" id="${searchId}"
@@ -12843,6 +12856,7 @@ OL._fvPopulateWb = function(tab, resources) {
             ${OL._fvRenderWbItems(allItems, tab)}
         </div>
     `;
+    
     if (window.lucide) lucide.createIcons();
 };
 
