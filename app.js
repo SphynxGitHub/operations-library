@@ -12646,33 +12646,34 @@ OL._fvFilterWb = function(tab) {
 };
 
 OL._fvUnmapResource = function(resId) {
+    console.log('_fvUnmapResource START', resId);
     const client = getActiveClient();
     const data   = client?.projectData;
     if (!data) { console.error('no projectData'); return; }
-
     const res = (data.resources||[]).find(r => String(r.id) === String(resId));
     if (!res) { console.error('res not found:', resId); return; }
-
+    
+    console.log('BEFORE stageId:', res.stageId, 'workflowId:', res.workflowId);
+    
     res.stageId    = null;
     res.isGlobal   = false;
     res.workflowId = null;
-
+    
     data.workflows.forEach(wf => {
+        const before = wf.resourceIds?.length;
         wf.resourceIds = (wf.resourceIds||[]).filter(id => String(id) !== String(resId));
+        if (wf.resourceIds.length !== before) console.log('Removed from wf:', wf.name);
     });
-
-    console.log('stageId:', res.stageId, 'workflowId:', res.workflowId);
-    const wf = data.workflows.find(w => (w.resourceIds||[]).includes(resId));
-    console.log('still in workflow:', wf?.name);
-
-    // Force immediate Firestore save
+    
+    console.log('AFTER stageId:', res.stageId, 'workflowId:', res.workflowId);
+    
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
     window.lastLocalSave = Date.now();
     const activeId = state.activeClientId;
     db.collection('clients').doc(activeId).set(
         JSON.parse(JSON.stringify(state.clients[activeId]))
     ).then(() => console.log('✅ Unmap saved'));
-
+    
     OL.renderVisualizer();
 };
 
