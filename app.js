@@ -11953,6 +11953,7 @@ OL.getLucideSVG = function(name, size = 12, color = 'currentColor') {
         'database':     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
         'archive':      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`,
         'corner-right-up': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 9 15 4 20 9"/><path d="M4 20h7a4 4 0 0 0 4-4V4"/></svg>`,
+        'circle-dollar-sign': `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`,
     };
     return icons[name] || icons['settings'];
 };
@@ -12036,6 +12037,15 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
     </div>
   ` : '';
 
+    const scopeData = OL.isResourceInScope(res.id);
+    const scopeColors = {
+        'Do Now':    '#38bdf8',
+        'Done':      '#22c55e', 
+        'Do Later':  '#fbbf24',
+        "Don't Do":  '#ef4444'
+    };
+    const scopeColor = scopeData ? (scopeColors[scopeData.status] || 'var(--accent)') : null;
+
   return `
     <div class="fv-card ${isGlobal ? 'is-global' : ''}"
          id="fv-card-${res.id}"
@@ -12065,22 +12075,40 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
       </div>
 
       <div class="fv-card-footer">
-        <span class="fv-step-count-btn"
-              onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
-              title="Toggle steps">
-          ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down', 10, 'currentColor')}
-          ${stepCount} step${stepCount!==1?'s':''}
-        </span>
-        <div style="display:flex;gap:4px;align-items:center;">
-          ${isGlobal ? `<span class="fv-global-card-badge" style="display:flex;align-items:center;gap:3px;">
-                ${OL.getLucideSVG('globe', 10, 'currentColor')} ×${globalStageCount}
-            </span>` : ''}
-          ${logicBadge ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
-                              background:rgba(61,217,197,0.1);color:#3dd9c5;
-                              font-weight:700;">${logicBadge}</span>` : ''}
+            <span class="fv-step-count-btn"
+                  onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
+                  title="Toggle steps">
+                ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down', 10, 'currentColor')}
+                ${stepCount} step${stepCount!==1?'s':''}
+            </span>
+            <div style="display:flex;gap:4px;align-items:center;">
+                ${scopeColor ? `
+                    <div title="${esc(scopeData.status)} · ${esc(scopeData.responsibleParty || 'TBD')}"
+                         onclick="event.stopPropagation(); 
+                                  state.scopingFilterActive = true; 
+                                  state.scopingTargetId = '${res.id}';
+                                  window.location.hash = '#/scoping-sheet';"
+                         style="display:flex; align-items:center; justify-content:center;
+                                width:18px; height:18px; border-radius:4px; cursor:pointer;
+                                background:${scopeColor}18; border:1px solid ${scopeColor}44;
+                                transition:all 0.15s;"
+                         onmouseover="this.style.borderColor='${scopeColor}'; this.style.background='${scopeColor}30';"
+                         onmouseout="this.style.borderColor='${scopeColor}44'; this.style.background='${scopeColor}18';">
+                        ${OL.getLucideSVG('circle-dollar-sign', 10, scopeColor)}
+                    </div>
+                ` : ''}
+                ${isGlobal ? `
+                    <span class="fv-global-card-badge" style="display:flex;align-items:center;gap:3px;">
+                        ${OL.getLucideSVG('globe', 10, 'currentColor')} ×${globalStageCount}
+                    </span>
+                ` : ''}
+                ${logicBadge ? `
+                    <span style="font-size:9px;padding:2px 5px;border-radius:99px;
+                                 background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                 font-weight:700;">${logicBadge}</span>
+                ` : ''}
+            </div>
         </div>
-      </div>
-
       ${stepsPreview}
     </div>
   `;
