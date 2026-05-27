@@ -13365,11 +13365,22 @@ OL._fvOpenStepsList = function(resId) {
   if (rawPanel && !document.getElementById('v2-inspector-panel')) {
       rawPanel.id = 'v2-inspector-panel';
   }
-  const panel   = document.getElementById('v2-inspector-panel');
-  const content = document.getElementById('inspector-content');
-  if (!panel || !content) return;
+  const panel = document.getElementById('v2-inspector-panel');
+  if (!panel) return;
 
-  // Always clear before re-render
+  // Always get content RELATIVE to panel to avoid stale references
+  let content = panel.querySelector('#inspector-content');
+  if (!content) {
+      const scrollWrap = panel.querySelector('.inspector-scroll-content');
+      if (scrollWrap) {
+          content = document.createElement('div');
+          content.id = 'inspector-content';
+          scrollWrap.innerHTML = '';
+          scrollWrap.appendChild(content);
+      }
+  }
+  if (!content) return;
+
   content.innerHTML = '';
 
   panel.classList.add('open');
