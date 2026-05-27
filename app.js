@@ -14944,13 +14944,12 @@ OL.setTraceMode = function(startId, direction) {
 };
 
 OL.handleStepDragStart = function(e, resId, index) {
-    state.draggingStepResId = resId; // 🎯 TRACK THE CARD ID
+    state.draggingStepResId = resId;
     state.draggingStepIdx = index;
-    
     e.dataTransfer.effectAllowed = 'move';
-    
-    // Target the entire row, not just the handle
-    const row = e.target.closest('.v2-step-item');
+
+    // Fix: list view uses .fv-list-item, not .v2-step-item
+    const row = e.target.closest('.fv-list-item') || e.target.closest('.v2-step-item');
     if (row) row.classList.add('is-dragging');
 };
 
@@ -14989,30 +14988,26 @@ OL.handleStepDrop = async function(e, targetResId, droppedOnIdx) {
         if (draggedStepIdx === droppedOnIdx) return;
         
         const res = OL.getResourceById(targetResId);
+        if (!res || !res.steps) return;
+        
         const [movedStep] = res.steps.splice(draggedStepIdx, 1);
         res.steps.splice(droppedOnIdx, 0, movedStep);
         
         await OL.persist();
     
-        // 🎯 THE BALANCED ROUTER:
-        // Detects if the action was fired inside the Modal Overlay rather than the map grid.
-        // Re-renders the internal list on the fly without closing the panel window.
         if (document.getElementById('active-modal-box')) {
-            console.log("Surgically updating steps view layer inside active resource modal...");
             const stepListContainer = document.getElementById('sop-step-list');
             if (stepListContainer) {
                 stepListContainer.innerHTML = window.renderSopStepList(res);
             } else {
                 OL.openResourceModal(targetResId);
             }
-        } else if (document.getElementById('inspector-content')) {
-            OL._fvOpenStepsList(targetResId);
         } else {
+            // Covers both inspector and list view
             OL.renderVisualizer();
         }
         return;
-    };
-    
+    }
     // --- 🔵 CASE 2: EXTERNAL RESOURCE DROP ---
     if (sourceResId && sourceResId !== targetResId) {
         
