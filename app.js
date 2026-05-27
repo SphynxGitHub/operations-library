@@ -13382,6 +13382,19 @@ OL._fvOpenStepsList = function(resId) {
   if (!content) return;
 
   content.innerHTML = '';
+    console.group('🔍 Inspector Debug');
+    console.log('resId:', resId);
+    console.log('res found:', !!res);
+    console.log('panel el:', panel);
+    console.log('panel.id:', panel?.id);
+    console.log('panel has open class:', panel?.classList.contains('open'));
+    console.log('panel width:', panel?.style.width);
+    console.log('panel offsetWidth:', panel?.offsetWidth);
+    console.log('content el:', content);
+    console.log('content parent:', content?.parentElement);
+    console.log('content in DOM:', document.contains(content));
+    console.log('panel in DOM:', document.contains(panel));
+    console.groupEnd();
 
   panel.classList.add('open');
 
