@@ -11303,17 +11303,23 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
 
     // ── RAIL: Stage header ───────────────────────────────
     railHtml += `
-      <div style="padding:8px 10px 3px;display:flex;align-items:center;gap:6px;">
-        <span contenteditable="true"
-              style="font-size:9px;font-weight:700;text-transform:uppercase;
-                     letter-spacing:0.1em;color:rgba(255,255,255,0.25);
-                     outline:none;flex:1;"
-              onblur="OL._fvEditStageName('${stage.id}', this.innerText.trim())">
-          ${esc(stage.name)}
-        </span>
-      </div>
+      <div class="fv-rail-stage-group"
+           draggable="true"
+           ondragstart="OL._fvRailDragStart(event, 'stage', '${stage.id}')"
+           ondragover="event.preventDefault(); this.classList.add('fv-rail-drag-over')"
+           ondragleave="this.classList.remove('fv-rail-drag-over')"
+           ondrop="this.classList.remove('fv-rail-drag-over'); OL._fvRailDrop(event, 'stage', '${stage.id}')">
+        <div style="padding:8px 10px 3px;display:flex;align-items:center;gap:6px;cursor:grab;">
+          <span style="opacity:0.2;font-size:12px;">⠿</span>
+          <span contenteditable="true"
+                style="font-size:9px;font-weight:700;text-transform:uppercase;
+                       letter-spacing:0.1em;color:rgba(255,255,255,0.25);
+                       outline:none;flex:1;"
+                onblur="OL._fvEditStageName('${stage.id}', this.innerText.trim())">
+            ${esc(stage.name)}
+          </span>
+        </div>
     `;
-      
     // ── RAIL: Workflow entries ───────────────────────────
     stageWorkflows.forEach((wf, wfi) => {
       if (filteredWfId && wf.id !== filteredWfId) return;
@@ -11322,31 +11328,27 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
       const wfRes    = (wf.resourceIds || [])
         .map(id => resources.find(r => String(r.id) === id))
         .filter(Boolean);
-
-      railHtml += `
-        <div style="padding:5px 10px;display:flex;align-items:center;gap:6px;
-                    cursor:pointer;border-left:3px solid ${isActive ? wfColor : 'transparent'};
-                    background:${isActive ? `${wfColor}15` : 'transparent'};
-                    transition:all 0.15s;"
-             onclick="OL._fv.stageFilter='${wf.id}';OL.renderVisualizer();"
-             onmouseover="this.style.background='rgba(255,255,255,0.04)'"
-             onmouseout="this.style.background='${isActive ? `${wfColor}15` : 'transparent'}'">
-          <div style="width:8px;height:8px;border-radius:50%;
-                      background:${wfColor};flex-shrink:0;"></div>
-          <span contenteditable="true"
-              style="font-size:10px;font-weight:500;
-                     color:${isActive ? wfColor : 'rgba(255,255,255,0.5)'};
-                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;
-                     outline:none;"
-              onclick="event.stopPropagation();"
-              onblur="OL.renameWorkflow('${wf.id}', this.innerText.trim())">
-          ${esc(wf.name)}
-        </span>
-          <span style="font-size:9px;color:rgba(255,255,255,0.2);">
-            ${wfRes.length}
-          </span>
-        </div>
-      `;
+        
+        railHtml += `
+          <div class="fv-rail-wf-item"
+               draggable="true"
+               ondragstart="OL._fvRailDragStart(event, 'workflow', '${wf.id}', '${stage.id}')"
+               ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('fv-rail-drag-over')"
+               ondragleave="this.classList.remove('fv-rail-drag-over')"
+               ondrop="event.stopPropagation(); this.classList.remove('fv-rail-drag-over'); OL._fvRailDrop(event, 'workflow', '${wf.id}', '${stage.id}')"
+               style="padding:5px 10px 5px 16px;display:flex;align-items:center;gap:6px;cursor:grab;
+                      border-left:3px solid ${isActive ? wfColor : 'transparent'};
+                      background:${isActive ? `${wfColor}15` : 'transparent'};">
+            <span style="opacity:0.2;font-size:11px;">⠿</span>
+            <div style="width:8px;height:8px;border-radius:50%;background:${wfColor};flex-shrink:0;"></div>
+            <span style="font-size:10px;font-weight:500;color:${isActive ? wfColor : 'rgba(255,255,255,0.5)'};flex:1;
+                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                  onclick="OL._fv.stageFilter='${wf.id}';OL.renderVisualizer();">
+              ${esc(wf.name)}
+            </span>
+            <span style="font-size:9px;color:rgba(255,255,255,0.2);">${wfRes.length}</span>
+          </div>
+        `;
 
       // Rail: resources within workflow
       wfRes.forEach(res => {
@@ -11383,7 +11385,8 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
         </div>
       `;
     }
-
+    railHtml += `</div>`; // close fv-rail-stage-group
+      
     // ── CANVAS: Stage header ─────────────────────────────
     lanesHtml += `
       <div style="padding:8px 16px;background:#fff;
@@ -11612,6 +11615,58 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
         </div>
     </div>
   `;
+};
+
+    OL._fvRailDragStart = function(e, type, id, parentId) {
+    e.stopPropagation();
+    e.dataTransfer.setData('fv-rail-type', type);
+    e.dataTransfer.setData('fv-rail-id', id);
+    if (parentId) e.dataTransfer.setData('fv-rail-parent', parentId);
+    e.dataTransfer.effectAllowed = 'move';
+};
+
+OL._fvRailDrop = function(e, targetType, targetId, targetParentId) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const type     = e.dataTransfer.getData('fv-rail-type');
+    const dragId   = e.dataTransfer.getData('fv-rail-id');
+    const parentId = e.dataTransfer.getData('fv-rail-parent');
+
+    if (dragId === targetId) return;
+
+    const data = OL.getCurrentProjectData();
+
+    if (type === 'stage' && targetType === 'stage') {
+        // Reorder stages
+        const stages = data.stages;
+        const fromIdx = stages.findIndex(s => s.id === dragId);
+        const toIdx   = stages.findIndex(s => s.id === targetId);
+        if (fromIdx === -1 || toIdx === -1) return;
+        const [moved] = stages.splice(fromIdx, 1);
+        stages.splice(toIdx, 0, moved);
+    } 
+    else if (type === 'workflow' && targetType === 'workflow') {
+        // Reorder workflows within same stage
+        if (parentId !== targetParentId) {
+            // Move workflow to different stage
+            const wf = data.workflows.find(w => w.id === dragId);
+            if (wf) wf.stageId = targetParentId;
+        }
+        const workflows = data.workflows.filter(w => w.stageId === (targetParentId || parentId));
+        const fromIdx = workflows.findIndex(w => w.id === dragId);
+        const toIdx   = workflows.findIndex(w => w.id === targetId);
+        if (fromIdx === -1 || toIdx === -1) return;
+        // Apply reorder to the main array
+        const allWfs = data.workflows;
+        const fromGlobal = allWfs.findIndex(w => w.id === dragId);
+        const toGlobal   = allWfs.findIndex(w => w.id === targetId);
+        const [moved] = allWfs.splice(fromGlobal, 1);
+        allWfs.splice(toGlobal, 0, moved);
+    }
+
+    OL.persist();
+    OL.renderVisualizer();
 };
 
 OL._fvCreateWorkflow = function(stageId) {
