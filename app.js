@@ -12332,7 +12332,7 @@ OL._fvRenderSteps = function(resources) {
     (res.steps || []).forEach((step, idx) => {
       cardCount++;
 
-      const hasCoords = step.coords?.x || step.coords?.y;
+      const hasCoords = !OL._fv.resetLayout && step.coords && (step.coords.x || step.coords.y);
       const x = hasCoords ? step.coords.x : PAD + resIndex * (CARD_W + GAP_X);
       const y = hasCoords ? step.coords.y : PAD + idx       * (CARD_H + GAP_Y);
 
