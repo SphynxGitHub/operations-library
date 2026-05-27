@@ -932,9 +932,17 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     }
     
     if (window.lucide) window.lucide.createIcons();
-    
-    // If not on visualizer, always ensure inspector is collapsed
-    if (!window.location.hash.includes('visualizer')) {
+};
+
+window.handleRoute = function () {
+    const wasVisualizer = document.body.classList.contains('is-visualizer');
+    const hash = window.location.hash || "#/";
+    const isVisualizer = hash.includes('visualizer');
+
+    // Only clean up when actually LEAVING the visualizer
+    if (wasVisualizer && !isVisualizer) {
+        document.body.classList.remove('is-visualizer');
+        
         const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
         if (panel) {
             panel.classList.remove('open');
@@ -942,39 +950,16 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
             panel.style.width = '0';
             panel.style.minWidth = '0';
         }
+
         const layout = document.querySelector('.three-pane-layout');
         if (layout) {
             const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
             const leftCol = sidebarCollapsed ? '65px' : '240px';
             layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
         }
-    }
-};
 
-window.handleRoute = function () {
-    const wasVisualizer = document.body.classList.contains('is-visualizer');
-    const hash = window.location.hash || "#/";
-    const isVisualizer = hash.includes('visualizer');
-    if (!isVisualizer) {
-        OL.closeInspectorPanel();
-    }
-
-    // 🎯 THE AUTO-CLOSE HOOK: Run cleanup when leaving the Flow Map
-    if (wasVisualizer && !isVisualizer) {
-        console.log("🧼 Flow Map Exited: Performing surgical layout cleanup...");
-        document.body.classList.remove('is-visualizer');
-        
-        // Auto-close the inspector panel to restore full-width grid layouts
-        if (typeof OL.closeInspectorPanel === 'function') {
-            OL.closeInspectorPanel();
-        }
-
-        const panel = document.getElementById('v2-inspector-panel');
-        if (panel) panel.id = 'inspector-panel';
-        
         const main = document.getElementById('mainContent');
         if (main) main.style.cssText = '';
-        
         document.body.style.overflow = '';
         document.documentElement.style.overflow = '';
     }
