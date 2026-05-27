@@ -948,6 +948,10 @@ window.handleRoute = function () {
             panel.style.width = '0';
             panel.style.minWidth = '0';
         }
+        // ── ADD THIS ──
+        const inspectorContent = document.getElementById('inspector-content');
+        if (inspectorContent) inspectorContent.innerHTML = '';
+        // ─────────────
         if (OL._fv) OL._fv._lastInspectorResId = null;
     
         const layout = document.querySelector('.three-pane-layout');
@@ -957,7 +961,6 @@ window.handleRoute = function () {
             layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
         }
     }
-        
     // --- 🚦 [Remainder of your standard routing evaluation conditions...] ---
     const matrix = document.querySelector('.matrix-table-container');
     const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
