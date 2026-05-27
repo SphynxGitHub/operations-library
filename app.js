@@ -12216,40 +12216,66 @@ OL._fvToggleCardSteps = function(resId) {
 OL._fvRenderSteps = function(resources) {
   const canvas  = document.getElementById('fv-content');
   const svg     = document.getElementById('fv-svg-layer');
-  const filter  = OL._fv.stageFilter;
+  const data    = OL.getCurrentProjectData();
+  const stages  = data.stages || [];
+  const workflows = OL.getWorkflows() || [];
+  
   if (!canvas || !svg) return;
-
   canvas.innerHTML = '';
 
-  const filtered = resources.filter(r =>
-    !filter || r.stageId === filter
-  );
+  // Build ordered resource list exactly like list view does
+  const orderedResources = [];
+  stages.forEach(stage => {
+    const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
+    
+    // Unassigned to workflow but in stage — first
+    const assignedIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []).map(String));
+    const unassigned = resources.filter(r => 
+        r.stageId === stage.id && !assignedIds.has(String(r.id)) && !r.isGlobal
+    );
+    unassigned.forEach(r => orderedResources.push(r));
+
+    // Workflow-ordered
+    stageWorkflows.forEach(wf => {
+        (wf.resourceIds || [])
+            .map(id => resources.find(r => String(r.id) === String(id)))
+            .filter(Boolean)
+            .forEach(r => orderedResources.push(r));
+    });
+  });
+
+  // Anything not placed yet (no stage)
+  const placedIds = new Set(orderedResources.map(r => String(r.id)));
+  resources.filter(r => !placedIds.has(String(r.id)) && !r.isGlobal)
+           .forEach(r => orderedResources.push(r));
+
+  // Now lay them out left-to-right in that order
+  const CARD_W = 180;
+  const CARD_H = 100;
+  const GAP_X  = 80;
+  const PAD    = 40;
 
   let cardCount = 0;
 
-  // Render step cards
-  filtered.forEach(res => {
+  orderedResources.forEach(res => {
     const tc = OL._fvGetType(res.type);
     (res.steps || []).forEach((step, idx) => {
       cardCount++;
       const x = step.coords?.x || 0;
       const y = step.coords?.y || 0;
 
-      // App badge
       const appBadge = step.appName
         ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">
              ${esc(step.appName.substring(0,10))}
            </span>`
         : '';
 
-      // Assignee badges
       const assigneeBadges = (step.assignees || []).slice(0,2).map(a =>
         `<span class="fv-step-badge" style="background:#f5f6f8;color:#6b7280;">
            ${esc((a.name||'').substring(0,10))}
          </span>`
       ).join('');
 
-      // Has links
       const hasLinks = (step.links || []).length > 0;
 
       const div = document.createElement('div');
@@ -12261,70 +12287,45 @@ OL._fvRenderSteps = function(resources) {
       div.style.top  = y + 'px';
 
       div.innerHTML = `
-        <!-- Pin toggle -->
         <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
-                title="${step.pinned ? 'Unpin (allow auto-layout)' : 'Pin (manual position)'}"
+                title="${step.pinned ? 'Unpin' : 'Pin'}"
                 onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
-          <i data-lucide="${step.pinned ? 'pin' : 'pin-off'}"></i>
+          ${OL.getLucideSVG(step.pinned ? 'pin' : 'pin-off', 10, 'currentColor')}
         </button>
-
-        <!-- Resource tidy -->
-        <button class="fv-res-tidy-btn"
-                title="Tidy this resource"
+        <button class="fv-res-tidy-btn" title="Tidy this resource"
                 onclick="event.stopPropagation(); OL._fvTidy('resource','${res.id}')">
-          <i data-lucide="align-justify"></i>
+          ${OL.getLucideSVG('align-justify', 10, 'currentColor')}
         </button>
-
-        <!-- Accent strip -->
         <div class="fv-step-card-accent" style="background:${tc.color};"></div>
-
         <div class="fv-step-card-body"
              onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
-
-          <!-- Resource badge -->
           <div class="fv-step-res-badge" style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
             ${tc.abbr} ${esc(res.name.substring(0,16))}
           </div>
-
-          <!-- Step name -->
           <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
-
-          <!-- Badges row -->
           <div class="fv-step-badges">
             ${appBadge}${assigneeBadges}
             ${hasLinks ? `<span class="fv-step-badge" style="background:#f5f6f8;color:#9ca3af;">
-              <i data-lucide="paperclip" style="width:9px;height:9px;"></i>
+              ${OL.getLucideSVG('paperclip', 9, 'currentColor')}
             </span>` : ''}
           </div>
         </div>
-
-        <!-- Connection ports -->
-        <div class="fv-port fv-port-top"
-             id="port-top-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')">
-        </div>
-        <div class="fv-port fv-port-bottom"
-             id="port-bottom-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')">
-        </div>
-        <div class="fv-port fv-port-left"
-             id="port-left-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')">
-        </div>
-        <div class="fv-port fv-port-right"
-             id="port-right-${res.id}-${step.id}"
-             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')">
-        </div>
+        <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','top')"></div>
+        <div class="fv-port fv-port-bottom" id="port-bottom-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','bottom')"></div>
+        <div class="fv-port fv-port-left"   id="port-left-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','left')"></div>
+        <div class="fv-port fv-port-right"  id="port-right-${res.id}-${step.id}"
+             onmousedown="event.stopPropagation(); OL._fvStartConnection(event,'${res.id}','${step.id}','right')"></div>
       `;
 
-      // Drag to reposition (auto-pins on first drag)
       OL._fvSetupCardDrag(div, res.id, step.id);
-
       canvas.appendChild(div);
     });
   });
 
-  // Size canvas to content
+  // Size canvas
   const maxX = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
     .map(el => (parseFloat(el.style.left)||0) + 200), 800);
   const maxY = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
@@ -12332,14 +12333,10 @@ OL._fvRenderSteps = function(resources) {
   canvas.style.width  = (maxX + 100) + 'px';
   canvas.style.height = (maxY + 100) + 'px';
 
-  if (window.lucide) lucide.createIcons();
-
-  // Draw connections
   requestAnimationFrame(() => {
-    OL._fvDrawStepConnections(filtered);
+    OL._fvDrawStepConnections(orderedResources);
   });
 };
-
 // Draw connections between step cards
 OL._fvDrawStepConnections = function(resources) {
   const svg    = document.getElementById('fv-svg-layer');
