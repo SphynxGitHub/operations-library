@@ -13361,34 +13361,33 @@ OL._fvOpenStepsList = function(resId) {
   if (!res) return;
 
   // Ensure correct panel ID in visualizer context
-    const rawPanel = document.getElementById('inspector-panel');
-    if (rawPanel && !document.getElementById('v2-inspector-panel')) {
-        rawPanel.id = 'v2-inspector-panel';
-    }
-    const panel   = document.getElementById('v2-inspector-panel');
-    const content = document.getElementById('inspector-content');
-    if (!panel || !content) return;
-    
-    panel.classList.add('open');
-    
-    const layout = document.querySelector('.three-pane-layout');
-    if (layout) {
-        const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
-        const leftCol = sidebarCollapsed ? '65px' : '240px';
-        layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
-    }
-    
+  const rawPanel = document.getElementById('inspector-panel');
+  if (rawPanel && !document.getElementById('v2-inspector-panel')) {
+      rawPanel.id = 'v2-inspector-panel';
+  }
+  const panel   = document.getElementById('v2-inspector-panel');
+  const content = document.getElementById('inspector-content');
+  if (!panel || !content) return;
+
+  // Always clear before re-render
+  content.innerHTML = '';
+
   panel.classList.add('open');
+
+  const layout = document.querySelector('.three-pane-layout');
+  if (layout) {
+      const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+      const leftCol = sidebarCollapsed ? '65px' : '240px';
+      layout.style.gridTemplateColumns = `${leftCol} 1fr 380px`;
+  }
 
   const tc     = OL._fvGetType(res.type);
   const stages = data.stages || [];
   const client = getActiveClient();
 
-  // Track steps toggle state per resource
   if (!OL._fv._stepsOpen) OL._fv._stepsOpen = {};
   if (OL._fv._stepsOpen[resId] === undefined) OL._fv._stepsOpen[resId] = true;
   const stepsOpen = OL._fv._stepsOpen[resId];
-
   const stageName = stages.find(s => s.id === res.stageId)?.name || '';
 
   // ── APP SECTION ──────────────────────────────────────
