@@ -12319,20 +12319,22 @@ OL._fvRenderSteps = function(resources) {
   resources.filter(r => !placedIds.has(String(r.id)) && !r.isGlobal)
            .forEach(r => orderedResources.push(r));
 
-  // Now lay them out left-to-right in that order
-  const CARD_W = 180;
-  const CARD_H = 100;
-  const GAP_X  = 80;
+  const CARD_W = 200;
+  const CARD_H = 120;
+  const GAP_X  = 60;
+  const GAP_Y  = 40;
   const PAD    = 40;
 
   let cardCount = 0;
 
-  orderedResources.forEach(res => {
+  orderedResources.forEach((res, resIndex) => {
     const tc = OL._fvGetType(res.type);
     (res.steps || []).forEach((step, idx) => {
       cardCount++;
-      const x = step.coords?.x || 0;
-      const y = step.coords?.y || 0;
+
+      const hasCoords = step.coords?.x || step.coords?.y;
+      const x = hasCoords ? step.coords.x : PAD + resIndex * (CARD_W + GAP_X);
+      const y = hasCoords ? step.coords.y : PAD + idx       * (CARD_H + GAP_Y);
 
       const appBadge = step.appName
         ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">
@@ -12407,6 +12409,7 @@ OL._fvRenderSteps = function(resources) {
     OL._fvDrawStepConnections(orderedResources);
   });
 };
+
 // Draw connections between step cards
 OL._fvDrawStepConnections = function(resources) {
   const svg    = document.getElementById('fv-svg-layer');
