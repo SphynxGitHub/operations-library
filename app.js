@@ -6106,9 +6106,9 @@ window.renderResourceCard = function (res) {
                         <div class="tiny accent bold uppercase" style="font-size: 8px; letter-spacing: 0.5px; opacity: 0.8;">
                             ${esc(res.archetype || "Base")}
                         </div>
-                        <div class="tiny muted" style="font-size: 10px; opacity: 0.6; display:flex; align-items:center; gap:4px;">
-                            <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:11px; height:11px;"></i>
-                            ${esc(res.type || "General")}
+                        <div class="tiny muted" style="font-size:10px; opacity:0.6; display:flex; align-items:center; gap:4px;">
+                            ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'currentColor')}
+                            ${esc(res.type || 'General')}
                         </div>
                     </div>
 
@@ -7074,20 +7074,20 @@ const dependencyHtml = `
                             ? `OL.openResourceModal('${conn.id}')`
                             : `OL.openInspector('${conn.id}')`;
                         return `
-                            <div class="pill accent is-clickable"
-                                 style="display:flex;align-items:center;justify-content:space-between;
-                                        background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
-                                        cursor:pointer;padding:8px 12px;border-radius:8px;"
-                                 onmousedown="event.preventDefault();event.stopPropagation();if(OL.closeModal)OL.closeModal();${navAction}">
-                                <div style="display:flex;align-items:center;gap:8px;pointer-events:none;">
-                                    <span style="font-size:12px;">${OL.getRegistryIcon(conn.type)}</span>
-                                    <div>
-                                        <div style="font-size:11px;color:#eee;">${esc(conn.name)}</div>
-                                        <div style="font-size:8px;color:var(--accent);">${conn.type.toUpperCase()}</div>
-                                    </div>
+                        <div class="pill accent is-clickable"
+                             style="display:flex;align-items:center;justify-content:space-between;
+                                    background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
+                                    cursor:pointer;padding:8px 12px;border-radius:8px;"
+                             onmousedown="event.preventDefault();event.stopPropagation();if(OL.closeModal)OL.closeModal();${navAction}">
+                            <div style="display:flex;align-items:center;gap:8px;pointer-events:none;">
+                                ${OL.getLucideSVG(OL.getRegistryIcon(conn.type), 14, 'var(--accent)')}
+                                <div>
+                                    <div style="font-size:11px;color:#eee;">${esc(conn.name)}</div>
+                                    <div style="font-size:8px;color:var(--accent);">${conn.type.toUpperCase()}</div>
                                 </div>
-                                <span style="font-size:9px;opacity:0.5;pointer-events:none;">Inspect →</span>
                             </div>
+                            <span style="font-size:9px;opacity:0.5;pointer-events:none;">Inspect →</span>
+                        </div>
                         `;
                     }).join('') : `<div class="tiny muted" style="padding:10px;text-align:center;">No connections found.</div>`}
                 </div>
@@ -7595,21 +7595,17 @@ OL.renderResourceMiniMaps = function(targetResId) {
 function renderMiniNode(res, status) {
     if (!res) return "";
     const isActive = status === 'active';
-    const icon = OL.getRegistryIcon(res.type);
+    const iconName = OL.getRegistryIcon(res.type);
     
-    // Milestone Check
-    const isMilestone = (res.steps || []).some(s => s.targetResourceId); 
-
-    // Use RGBA for the tint so it adapts to Light/Dark backgrounds
     const bgTint = isActive ? 'rgba(251, 191, 36, 0.15)' : 'rgba(var(--text-rgb), 0.05)';
-    const borderColor = isMilestone ? '#fbbf24' : (isActive ? 'var(--accent)' : 'var(--line)');
+    const borderColor = isActive ? 'var(--accent)' : 'var(--line)';
 
     return `
         <div class="mini-node ${status} ${isMilestone ? 'is-milestone' : ''}" 
              onclick="event.stopPropagation(); OL.openResourceModal('${res.id}')"
              style="cursor:pointer; padding:8px; border-radius:8px; background:${bgTint}; border:1px solid ${borderColor}; min-width:120px; position:relative;">
             <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                <span style="font-size:14px; color:var(--text-main);">${icon}</span>
+                ${OL.getLucideSVG(iconName, 14, isActive ? 'var(--accent)' : 'currentColor')}
                 <div class="mini-node-text" title="${esc(res.name)}">
                     ${esc(res.name)}
                 </div>
@@ -7620,46 +7616,6 @@ function renderMiniNode(res, status) {
         </div>
     `;
 }
-
-OL.expandFlowMap = function(wfId, activeIdx) {
-    const wf = OL.getResourceById(wfId);
-    if (!wf) return;
-
-    const start = Math.max(0, activeIdx - 2);
-    const end = Math.min(wf.steps.length, activeIdx + 3);
-    const slice = wf.steps.slice(start, end);
-
-    const html = `
-        <div class="modal-head">
-            <div class="modal-title-text">🕸️ Full Sequence: ${esc(wf.name)}</div>
-        </div>
-        <div class="modal-body" style="padding: 80px 40px; display: flex; align-items: center; justify-content: center; overflow-x: auto; background: #050816;">
-            <div style="display: flex; align-items: center; gap: 25px;">
-                ${slice.map((step, i) => {
-                    const isActualTarget = (start + i === activeIdx);
-                    const res = OL.getResourceById(step.resourceLinkId);
-                    const icon = OL.getRegistryIcon(res?.type || 'SOP');
-                    
-                    return `
-                        <div class="mini-node ${isActualTarget ? 'active' : 'muted'}" 
-                             style="width: 150px; font-size: 11px; padding: 20px; min-height: 80px; flex-shrink: 0;">
-                            <div class="mini-node-content">
-                                <div class="mini-icon-circle" style="width: 32px; height: 32px; font-size: 18px;">${icon}</div>
-                                <div>${esc(step.name)}</div>
-                            </div>
-                        </div>
-                        ${(i < slice.length - 1) ? '<div class="mini-arrow" style="font-size: 24px; opacity: 0.8;">→</div>' : ''}
-                    `;
-                }).join('')}
-            </div>
-        </div>
-        <div class="modal-foot">
-            <button class="btn primary full" onclick="OL.closeModal()">Return to SOP</button>
-        </div>
-    `;
-    
-    openModal(html); 
-};
 
 // HANDLE WOKRFLOW VISUALIZER / FULL SCREEN MODE
 // Global Workspace Logic
@@ -12009,7 +11965,7 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
                             transition:all 0.15s;"
                      onmouseover="this.style.borderColor='${color}'; this.style.background='${color}30';"
                      onmouseout="this.style.borderColor='${color}44'; this.style.background='${color}18';">
-                    <i data-lucide="${OL.getRegistryIcon(link.type)}" style="width:12px; height:12px; color:${color};"></i>
+                    ${OL.getLucideSVG(OL.getRegistryIcon(link.type), 12, color)}
                 </div>
             `;
         }).join('')}
@@ -12083,12 +12039,13 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
         <span class="fv-step-count-btn"
               onclick="event.stopPropagation(); OL._fvToggleCardSteps('${res.id}');"
               title="Toggle steps">
-          <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}"
-             style="width:10px;height:10px;"></i>
+          ${OL.getLucideSVG(isExpanded ? 'chevron-up' : 'chevron-down', 10, 'currentColor')}
           ${stepCount} step${stepCount!==1?'s':''}
         </span>
         <div style="display:flex;gap:4px;align-items:center;">
-          ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+          ${isGlobal ? `<span class="fv-global-card-badge" style="display:flex;align-items:center;gap:3px;">
+                ${OL.getLucideSVG('globe', 10, 'currentColor')} ×${globalStageCount}
+            </span>` : ''}
           ${logicBadge ? `<span style="font-size:9px;padding:2px 5px;border-radius:99px;
                               background:rgba(61,217,197,0.1);color:#3dd9c5;
                               font-weight:700;">${logicBadge}</span>` : ''}
@@ -19002,8 +18959,8 @@ function renderScopingRow (item, idx, showUnits) {
     return `
         <div class="grid-row ${isTarget ? 'surgical-focus-row' : ''}" style="border-bottom: 1px solid var(--line); padding: 8px 10px;">
         <div class="col-expand">
-            <div class="row-title is-clickable" onclick="OL.openResourceModal('${item.id}')">
-                <span style="font-size: 1.2em; line-height: 1; margin-top: 2px;">${typeIcon}</span>
+            <div class="row-title is-clickable" style="display:flex; align-items:center; gap:6px;" onclick="OL.openResourceModal('${item.id}')">
+                ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 13, 'var(--accent)')}
                 ${esc(res.name || "Manual Item")}
             </div>
             ${res.description ? `<div class="row-note">${esc(res.description)}</div>` : ""}
@@ -19959,7 +19916,7 @@ function renderDependencyRow(dep, parentId) {
         ? (client?.projectData?.clientTasks || []).find(t => t.id === dep.id)
         : OL.getResourceById(dep.id);
 
-    const icon = isTask ? '📋' : OL.getRegistryIcon(obj?.type);
+    const icon = isTask ? OL.getLucideSVG('clipboard-list', 14, 'currentColor') : OL.getLucideSVG(OL.getRegistryIcon(obj?.type), 14, 'currentColor');
     
     // 🎯 Navigation Logic
     const clickAction = isTask 
@@ -20070,7 +20027,10 @@ OL.filterDependencySearch = function(currentResId, mode, query) {
         );
         html = matches.map(r => `
             <div class="search-result-item" onmousedown="OL.addDependency('${currentResId}', '${r.id}', 'resource')">
-                <span>${OL.getRegistryIcon(r.type)} ${esc(r.name)}</span>
+                <span style="display:flex; align-items:center; gap:6px;">
+                    ${OL.getLucideSVG(OL.getRegistryIcon(r.type), 13, 'var(--accent)')}
+                    ${esc(r.name)}
+                </span>
             </div>
         `).join('');
     }
