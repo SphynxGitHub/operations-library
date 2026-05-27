@@ -12053,7 +12053,9 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
 
       <div class="fv-card-body">
         <div class="fv-card-type-row">
-          <div class="fv-card-type-icon" style="background:${tc.color};">${tc.abbr}</div>
+          <div class="fv-card-type-icon" style="background:${tc.color};">
+                ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, '#fff')}
+            </div>
           <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>
           <span class="fv-card-step-num">${num}</span>
         </div>
@@ -17199,22 +17201,16 @@ OL.setStepTargetResource = async function(resId, stepId, targetId, targetName) {
 OL.filterResourceSearch = function(resId, stepId, query) {
     const resultsOverlay = document.getElementById(`resource-results-${stepId}`);
     if (!resultsOverlay) return;
-
     const q = (query || "").toLowerCase().trim();
     if (!q) {
         resultsOverlay.style.display = 'none';
         return;
     }
-
     const client = getActiveClient();
     
-    // 1. GATHER DATA
-    // All project resources (excluding the one we are currently editing)
     const allResources = [...(state.master.resources || []), ...(client?.projectData?.localResources || [])];
     const filteredRes = allResources.filter(r => r.id !== resId && r.name.toLowerCase().includes(q));
-
-    // All How-To Guides
-    const allHowTos = [...(state.master.howTos || []), ...(client?.projectData?.localHowTos || [])];
+    const allHowTos = [...(state.master.howToLibrary || []), ...(client?.projectData?.localHowTo || [])];
     const filteredHowTos = allHowTos.filter(h => h.name.toLowerCase().includes(q));
 
     if (!filteredRes.length && !filteredHowTos.length) {
@@ -17223,24 +17219,25 @@ OL.filterResourceSearch = function(resId, stepId, query) {
         return;
     }
 
-    // 2. RENDER HTML
     let html = '';
 
-    // Assets/Resources Section
     if (filteredRes.length) {
         html += `<div class="search-category-label">Project Assets</div>`;
         html += filteredRes.map(r => `
-            <div class="search-result-item" onmousedown="event.preventDefault(); OL.addLinkToStep('${resId}', '${stepId}', '${r.id}', '${esc(r.name)}', 'resource')">
-                📱 ${esc(r.name)}
+            <div class="search-result-item" style="display:flex; align-items:center; gap:8px;"
+                 onmousedown="event.preventDefault(); OL.addLinkToStep('${resId}', '${stepId}', '${r.id}', '${esc(r.name)}', '${esc(r.type)}')">
+                ${OL.getLucideSVG(OL.getRegistryIcon(r.type), 13, 'var(--accent)')}
+                ${esc(r.name)}
             </div>`).join('');
     }
 
-    // How-To Guides Section
     if (filteredHowTos.length) {
-        html += `<div class="search-category-label">How-To Guides (SOPs)</div>`;
+        html += `<div class="search-category-label">How-To Guides</div>`;
         html += filteredHowTos.map(h => `
-            <div class="search-result-item" onmousedown="event.preventDefault(); OL.addLinkToStep('${resId}', '${stepId}', '${h.id}', '${esc(h.name)}', 'sop')">
-                📖 ${esc(h.name)}
+            <div class="search-result-item" style="display:flex; align-items:center; gap:8px;"
+                 onmousedown="event.preventDefault(); OL.addLinkToStep('${resId}', '${stepId}', '${h.id}', '${esc(h.name)}', 'SOP')">
+                ${OL.getLucideSVG('book-open', 13, 'var(--accent)')}
+                ${esc(h.name)}
             </div>`).join('');
     }
 
