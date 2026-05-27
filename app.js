@@ -935,32 +935,12 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
 };
 
 window.handleRoute = function () {
-    // ── ALWAYS close inspector on any route change ──────────────
-    const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
-    if (panel) {
-        panel.classList.remove('open');
-        panel.id = 'inspector-panel';
-        panel.style.width = '0';
-        panel.style.minWidth = '0';
-    }
-    if (OL._fv) OL._fv._lastInspectorResId = null;
-
-    const layout = document.querySelector('.three-pane-layout');
-    if (layout && !window.location.hash.includes('visualizer')) {
-        const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
-        const leftCol = sidebarCollapsed ? '65px' : '240px';
-        layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
-    }
-    // ─────────────────────────────────────────────────────────────
-
-    const wasVisualizer = document.body.classList.contains('is-visualizer');
     const hash = window.location.hash || "#/";
     const isVisualizer = hash.includes('visualizer');
-
-    // Only clean up when actually LEAVING the visualizer
+    const wasVisualizer = document.body.classList.contains('is-visualizer');
+    
+    // Only close inspector when LEAVING the visualizer
     if (wasVisualizer && !isVisualizer) {
-        document.body.classList.remove('is-visualizer');
-        
         const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
         if (panel) {
             panel.classList.remove('open');
@@ -968,20 +948,16 @@ window.handleRoute = function () {
             panel.style.width = '0';
             panel.style.minWidth = '0';
         }
-
+        if (OL._fv) OL._fv._lastInspectorResId = null;
+    
         const layout = document.querySelector('.three-pane-layout');
         if (layout) {
             const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
             const leftCol = sidebarCollapsed ? '65px' : '240px';
             layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
         }
-
-        const main = document.getElementById('mainContent');
-        if (main) main.style.cssText = '';
-        document.body.style.overflow = '';
-        document.documentElement.style.overflow = '';
     }
-    
+        
     // --- 🚦 [Remainder of your standard routing evaluation conditions...] ---
     const matrix = document.querySelector('.matrix-table-container');
     const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
