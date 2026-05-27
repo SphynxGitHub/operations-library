@@ -6591,3 +6591,7 @@ body.is-visualizer #v2-inspector-panel {
     user-select: none;
     -webkit-user-drag: none;
 }
+.fv-rail-drag-over {
+    background: rgba(61,217,197,0.12) !important;
+    border-left: 2px solid #3dd9c5 !important;
+}
