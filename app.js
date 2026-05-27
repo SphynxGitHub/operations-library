@@ -13397,6 +13397,8 @@ OL._fvOpenStepsList = function(resId) {
     console.groupEnd();
 
   panel.classList.add('open');
+    panel.style.width = '';
+  panel.style.minWidth = '';
 
   const layout = document.querySelector('.three-pane-layout');
   if (layout) {
