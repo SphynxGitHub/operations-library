@@ -11711,11 +11711,20 @@ OL._fvLaneDrop = function(event, stageId, wfId) {
 };
 
 OL._fvComputeLayout = function(resources, stageFilter) {
-  // Gather all steps across all resources
   const allSteps = [];
-  const stepMap  = {}; // fullId → { step, res }
+  const stepMap  = {};
 
-  resources.forEach(res => {
+  const workflows = OL.getWorkflows() || [];
+  const orderedIds = workflows.flatMap(w => w.resourceIds || []);
+
+  const sortedResources = [
+    ...orderedIds
+        .map(id => resources.find(r => String(r.id) === String(id)))
+        .filter(Boolean),
+    ...resources.filter(r => !orderedIds.map(String).includes(String(r.id)))
+  ];
+
+  sortedResources.forEach(res => {
     if (stageFilter && res.stageId !== stageFilter) return;
     (res.steps || []).forEach((step, idx) => {
       const fullId = `${res.id}-${step.id}`;
@@ -11724,7 +11733,7 @@ OL._fvComputeLayout = function(resources, stageFilter) {
       stepMap[fullId] = entry;
     });
   });
-
+    
   if (allSteps.length === 0) return;
 
   // Build adjacency from logic.out
