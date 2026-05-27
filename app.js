@@ -153,8 +153,6 @@ window.addEventListener("load", () => {
     OL.sync(); 
 });
 
-
-
 OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync...");
     // 🛑 STOP: If we already have a listener, don't create another one!
@@ -261,6 +259,24 @@ OL.sync = function() {
     } else if (window.isMatrixActive || state.activeMatrixId || window.location.hash.includes('analyze')) {
         console.log("🛡️ Matrix Active: Skipping render.");
     } else {
+        // Don't re-render if user is actively editing in the inspector
+        const activeEl = document.activeElement;
+        const isEditingInspector = activeEl && (
+            activeEl.tagName === 'INPUT' || 
+            activeEl.tagName === 'TEXTAREA' || 
+            activeEl.contentEditable === 'true'
+        ) && (
+            activeEl.closest('#v2-inspector-panel') || 
+            activeEl.closest('#inspector-panel') ||
+            activeEl.closest('#modal-layer')
+        );
+    
+        if (isEditingInspector) {
+            console.log("🛡️ User editing inspector — skipping re-render.");
+            state.clients = cloudClients;
+            return;
+        }
+    
         console.log("🚦 Route Clear: Proceeding with render...");
         window.handleRoute();
     }
@@ -916,6 +932,23 @@ const themeLabel = isLightMode ? "Dark Mode" : "Light Mode";
     }
     
     if (window.lucide) window.lucide.createIcons();
+    
+    // If not on visualizer, always ensure inspector is collapsed
+    if (!window.location.hash.includes('visualizer')) {
+        const panel = document.getElementById('v2-inspector-panel') || document.getElementById('inspector-panel');
+        if (panel) {
+            panel.classList.remove('open');
+            panel.id = 'inspector-panel';
+            panel.style.width = '0';
+            panel.style.minWidth = '0';
+        }
+        const layout = document.querySelector('.three-pane-layout');
+        if (layout) {
+            const sidebarCollapsed = document.querySelector('.sidebar.collapsed');
+            const leftCol = sidebarCollapsed ? '65px' : '240px';
+            layout.style.gridTemplateColumns = `${leftCol} 1fr 0px`;
+        }
+    }
 };
 
 window.handleRoute = function () {
@@ -13160,7 +13193,8 @@ OL.closeInspectorPanel = function() {
     if (panel) {
         panel.classList.remove('open');
         panel.id = 'inspector-panel';
-        panel.style.width = '0';  // ← add this
+        panel.style.width = '0';
+        panel.style.minWidth = '0';
     }
 
     const layout = document.querySelector('.three-pane-layout');
