@@ -6675,6 +6675,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
         const isZap = projectRes?.type?.toLowerCase() === 'zap' || v.label?.toLowerCase().includes('zap');
         const isStepVar = v.label?.toLowerCase().includes('step');
+       const isConditionVar = v.label?.toLowerCase().includes('condition');
 
         let displayVal = num(activeData.data?.[varKey]);
         let inputProps = "";
@@ -6695,6 +6696,23 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                 if (!activeData.data) activeData.data = {};
                 activeData.data[varKey] = actualStepCount;
                 OL.updateResourcePricingData(activeData.id, varKey, actualStepCount);
+            }
+        }
+
+       if (isConditionVar) {
+            const actualConditionCount = (projectRes.steps || []).reduce((acc, s) => {
+                return acc + (s.logic?.out || []).filter(l => 
+                    l.targetId && (l.types||[l.type||'next']).includes('condition')
+                ).length;
+            }, 0);
+            displayVal = actualConditionCount;
+            inputProps = "readonly style='background:rgba(255,159,67,0.1);color:#ff9f43;border-color:#ff9f43;cursor:not-allowed;'";
+            badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">⚡ AUTO</span>`;
+        
+            if (num(activeData.data?.[varKey]) !== actualConditionCount) {
+                if (!activeData.data) activeData.data = {};
+                activeData.data[varKey] = actualConditionCount;
+                OL.updateResourcePricingData(activeData.id, varKey, actualConditionCount);
             }
         }
 
