@@ -7848,8 +7848,8 @@ OL.handleResourceSave = function(id, field, value) {
     
     if (res) {
         // 🌐 THE SAFETY SHIELD INTERCEPTOR
-        // If the resource is global and an event is forcing a track lane shift on the root object,
-        // we short-circuit the execution to prevent it from vanishing from other workflows!
+        // If the resource is global and an event forces a track lane shift on the root object,
+        // short-circuit the execution to prevent it from vanishing from other workflows!
         if (res.isGlobal && (field === 'stageId' || field === 'workflowId')) {
             console.warn(`🛡️ Global Protection Guard: Aborted root mutation [${field}: ${value}] on resource "${res.name}". Workflow arrays handle this placement.`);
             
@@ -11783,7 +11783,7 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     e.dataTransfer.effectAllowed = 'move';
 };
 
-OL._fvDropAtIndex = async function(e, targetWfId, targetIndex) {
+OL._fvDropAtIndex = async function(e, targetStageId, targetWfId, targetIndex) {
     if (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -11826,7 +11826,7 @@ OL._fvDropAtIndex = async function(e, targetWfId, targetIndex) {
         
         console.log(`🌐 Global instance safely spliced into Workflow ${targetWfId} at index ${targetIndex}`);
     } else {
-        // 🏠 LOCAL ASSETbehavior (Original Physical Move Logic)
+        // 🏠 LOCAL ASSET behavior (Original Physical Move Logic)
         if (sourceWfId && String(sourceWfId) !== String(targetWfId)) {
             const oldWf = (data.workflows || []).find(w => String(w.id) === String(sourceWfId));
             if (oldWf && oldWf.resourceIds) {
@@ -11836,8 +11836,7 @@ OL._fvDropAtIndex = async function(e, targetWfId, targetIndex) {
 
         // Standard local assignment shifts
         res.workflowId = targetWfId;
-        const matchingWf = (data.workflows || []).find(w => String(w.id) === String(targetWfId));
-        if (matchingWf) res.stageId = matchingWf.stageId;
+        res.stageId = targetStageId;
 
         const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWfId));
         if (targetWf) {
@@ -12426,17 +12425,14 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
 OL._fvCardDragStart = function(e, resId) {
     if (!e || !e.dataTransfer) return;
 
-    // 🎯 1. FIND THE TARGET CARD ELEMENT IN THE DOM
-    // Grabs the exact card clone instance wrapper beneath the cursor click
+    // 🎯 Captures the exact, unique card element instance sitting under your mouse cursor
     const cardElement = e.target.closest('.fv-card');
     
-    // Extract the true context workflow ID directly from the DOM dataset we stamped
+    // Read the true workflow lane context string straight out of the HTML dataset we stamped
     const contextWfId = cardElement ? (cardElement.getAttribute('data-workflow-id') || '') : '';
 
-    // 🎯 2. CLEAN & WRITE THE PAYLOAD
-    // Clear out any old values to prevent collision bugs
+    // Bind data layers to the drag event payload securely
     e.dataTransfer.clearData();
-    
     e.dataTransfer.setData('text/plain', String(resId));
     e.dataTransfer.setData('application/fv-resource', String(resId));
     e.dataTransfer.setData('application/fv-source', 'canvas'); 
@@ -12445,18 +12441,14 @@ OL._fvCardDragStart = function(e, resId) {
     e.dataTransfer.setData('application/fv-context-wf', String(contextWfId));
     e.dataTransfer.effectAllowed = 'move';
 
-    // 🎯 3. APPLY VISUAL DRAGGING STYLES
+    // Apply visual fade classes targeting the correct clicked instance copy
     requestAnimationFrame(() => {
-        if (cardElement) {
-            cardElement.classList.add('fv-dragging');
-        }
+        if (cardElement) cardElement.classList.add('fv-dragging');
     });
 
-    // Track state variables internally
     OL._fv._draggingResId = resId;
     OL._fv._draggingContextWfId = contextWfId;
-    
-    console.log(`🧲 Drag started seamlessly. Target Resource: ${resId} | Origin Workflow: "${contextWfId}"`);
+    console.log(`🧲 Drag started for resource ${resId} out of lane context: "${contextWfId}"`);
 };
 
 OL._fvCardDragEnd = function(e) {
@@ -14148,6 +14140,10 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
             const tResId  = rule.targetId.substring(0, lastH);
             const tStepId = rule.targetId.substring(lastH + 1);
             const toPos   = posMap[tStepId];
+            
+            // 🎯 CONTEXT MATCH CORRECTION:
+            // If the target step exists within our local posMap structure array, use it.
+            // If not, we scan via tracking contexts to resolve cross-card references.
             if (!toPos) return;
 
             const isCross = String(tResId) !== String(resId);
@@ -14244,6 +14240,9 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
         if (outRules.some(l => l.type === 'delay'))     icons.push('⏱');
         if (outRules.some(l => l.type === 'condition')) icons.push('◆');
 
+        // 🎯 UNIQUE ELEMENT REGISTRY: Match contextual id identifiers per copy on step layout canvas
+        const stepContainerHtmlId = res.workflowId ? `fvi-step-${s.id}-${res.workflowId}` : `fvi-step-${s.id}`;
+
         return `
             ${ghostsHtml}
             <div style="position:absolute;left:${pos.x}px;top:${pos.y}px;
@@ -14252,6 +14251,7 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
                         border-radius:10px;overflow:hidden;cursor:pointer;
                         box-shadow:0 1px 3px rgba(0,0,0,0.06);
                         transition:border-color 0.15s,box-shadow 0.15s;"
+                 id="${stepContainerHtmlId}"
                  onmouseover="this.style.borderColor='#3dd9c5';this.style.boxShadow='0 4px 14px rgba(61,217,197,0.2)'"
                  onmouseout="this.style.borderColor='#e5e7eb';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'"
                  onclick="OL.openInspector('${res.id}','${s.id}')">
@@ -14269,8 +14269,8 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
                         ${s.appName ? `<span style="font-size:9px;padding:1px 5px;border-radius:99px;
                                                     background:#f5f6f8;color:var(--text-dim);">${esc(s.appName)}</span>` : ''}
                         ${icons.map(ic => `<span style="font-size:9px;padding:1px 5px;border-radius:99px;
-                                                        background:var(--accent-glow);color:var(--accent);
-                                                        font-weight:700;">${ic}</span>`).join('')}
+                                                    background:var(--accent-glow);color:var(--accent);
+                                                    font-weight:700;">${ic}</span>`).join('')}
                     </div>
                 </div>
             </div>
