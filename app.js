@@ -13387,7 +13387,7 @@ OL._fvBuildListShell = function(stages, resources) {
         // Get workflows explicitly tied to this structural stage index lane
         const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
         
-        // 🎯 THE FIX: Do NOT strip global resources from their assigned visual stage sequence arrays
+        // Isolate remaining local unassigned resource cards for this phase
         const assignedResIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []));
         const unassignedResources = resources.filter(r => 
             r.stageId === stage.id && !assignedResIds.has(String(r.id))
@@ -13400,9 +13400,26 @@ OL._fvBuildListShell = function(stages, resources) {
         stageWorkflows.forEach(wf => {
             if (filter && !filter.startsWith('stage-') && filter !== '' && wf.id !== filter) return;
 
+            // 🎯 THE MULTI-INSTANCE BRIDGE:
+            // Instead of filtering down a single master object array, we compile an 
+            // explicit instance map row for every single ID registered in the workflow path array.
             const wfResources = (wf.resourceIds || [])
-                .map(id => resources.find(r => String(r.id) === id))
-                // Keep global elements inline if they are part of this process lane mapping array
+                .map(id => {
+                    const found = resources.find(r => String(r.id) === id);
+                    if (!found) return null;
+                    
+                    // 🧬 SURGICAL CLONING: If it's a global card, return an isolated execution copy 
+                    // tied exclusively to this workflow and stage instance context path.
+                    if (found.isGlobal) {
+                        return {
+                            ...found,
+                            stageId: stage.id,
+                            workflowId: wf.id,
+                            isGlobalInstanceCopy: true
+                        };
+                    }
+                    return found;
+                })
                 .filter(r => r && (OL._fv.showArchived || !r.isArchived));
 
             if (wfResources.length === 0) return;
@@ -13464,7 +13481,7 @@ OL._fvBuildListShell = function(stages, resources) {
                 <div style="flex:1; height:1px; background:var(--line);"></div>
             </div>
             <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
-                <div class="fv-list-stage-header" style="display:flex; align-items:center; gap:10px; background:var(--panel soft); padding:8px 12px; border-radius:6px;">
+                <div class="fv-list-stage-header" style="display:flex; align-items:center; gap:10px; background:var(--panel-soft); padding:8px 12px; border-radius:6px;">
                     <div class="fv-list-stage-num" style="background:var(--accent); color:black; font-weight:bold; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:11px;">${si + 1}</div>
                     <div class="fv-list-stage-name" style="font-weight:bold; font-size:14px; color:var(--text-main);">${esc(stage.name)}</div>
                     <div class="fv-list-stage-line" style="flex:1; height:1px; background:var(--line); margin:0 10px;"></div>
