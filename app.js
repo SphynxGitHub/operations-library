@@ -12171,7 +12171,6 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   const stepCount = (res.steps || []).length;
   const hasLogic = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
   const isExpanded = OL._fv.stepsExpanded || OL._fv._expandedCards?.has(res.id);
-    const isGlobal = res.isGlobal === true || globalIds.has(String(res.id));
     
   const tags = (res.steps || []).slice(0, 2)
     .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
@@ -12182,13 +12181,13 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
     requires:   '#38bdf8',
     produces:   '#10b981',
     references: '#a78bfa',
-};
+  };
 
-const linkedAssets = (res.steps || [])
+  const linkedAssets = (res.steps || [])
     .flatMap(s => s.links || [])
     .filter((l, i, arr) => arr.findIndex(x => x.id === l.id) === i);
 
-const assetIconsHtml = linkedAssets.length > 0 ? `
+  const assetIconsHtml = linkedAssets.length > 0 ? `
     <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;">
         ${linkedAssets.map(link => {
             const color = relTypeConfig[link.relType] || 'var(--accent)';
@@ -12206,7 +12205,7 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
             `;
         }).join('')}
     </div>
-` : '';
+  ` : '';
     
   const logicTypes = new Set((res.steps || []).flatMap(s => 
     (s.logic?.out || []).filter(l => l.targetId).map(l => l.type || 'next')
@@ -12215,7 +12214,7 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
     logicTypes.has('loop')      ? '↺' :
     logicTypes.has('delay')     ? '⏱' :
     logicTypes.has('condition') ? '◆' :
-    logicTypes.size > 0         ? '→' : '';
+    logicTypes.size > 0          ? '→' : '';
 
   const stepsPreview = (isExpanded && stepCount > 0) ? `
     <div class="fv-card-steps-preview">
@@ -12230,8 +12229,8 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
             stepOut.some(l => l.type === 'condition') ? '◆' :
             stepOut.length > 1                         ? '◆' : '→';
         const logicIcon = stepLogicIcon 
-            ? `<span style="color:var(--accent);font-size:9px;font-weight:700;">${stepLogicIcon}</span>` 
-            : '';
+          ? `<span style="color:var(--accent);font-size:9px;font-weight:700;">${stepLogicIcon}</span>` 
+          : '';
         return `
           <div class="fv-card-step-row"
                onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}');">
@@ -12245,17 +12244,20 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
     </div>
   ` : '';
 
-    const scopeData = OL.isResourceInScope(res.id);
-    const scopeColors = {
-        'Do Now':    '#38bdf8',
-        'Done':      '#22c55e', 
-        'Do Later':  '#fbbf24',
-        "Don't Do":  '#ef4444'
-    };
-    const scopeColor = scopeData ? (scopeColors[scopeData.status] || 'var(--accent)') : null;
+  const scopeData = OL.isResourceInScope(res.id);
+  const scopeColors = {
+      'Do Now':    '#38bdf8',
+      'Done':      '#22c55e', 
+      'Do Later':  '#fbbf24',
+      "Don't Do":  '#ef4444'
+  };
+  const scopeColor = scopeData ? (scopeColors[scopeData.status] || 'var(--accent)') : null;
+
+  // 🎯 THE HIGHLIGHT VERIFICATION: Evaluates locally to bypass parameter scope blocking
+  const renderAsGlobalCard = isGlobal === true || res.isGlobal === true;
 
   return `
-    <div class="fv-card ${isGlobal ? 'is-global' : ''}"
+    <div class="fv-card ${renderAsGlobalCard ? 'is-global' : ''}"
          id="fv-card-${res.id}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
@@ -12305,17 +12307,17 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
                         ${OL.getLucideSVG('circle-dollar-sign', 10, scopeColor)}
                     </div>
                 ` : ''}
-                ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+                ${renderAsGlobalCard ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
                     <button onclick="event.stopPropagation();
-                                     OL.handleResourceSave('${res.id}','isGlobal',${!isGlobal});
+                                     OL.handleResourceSave('${res.id}','isGlobal',${!renderAsGlobalCard});
                                      OL.renderVisualizer();"
-                            title="${isGlobal ? 'Remove global' : 'Set as global'}"
+                            title="${renderAsGlobalCard ? 'Remove global' : 'Set as global'}"
                             style="width:18px;height:18px;border:none;background:none;cursor:pointer;
                                    display:flex;align-items:center;justify-content:center;border-radius:4px;
-                                   color:${isGlobal ? '#7c3aed' : 'var(--text-muted)'};transition:color 0.15s;"
+                                   color:${renderAsGlobalCard ? '#7c3aed' : 'var(--text-muted)'};transition:color 0.15s;"
                             onmouseover="this.style.color='#7c3aed'"
-                            onmouseout="this.style.color='${isGlobal ? '#7c3aed' : '#d1d5db'}'">
-                        ${OL.getLucideSVG('globe', 10, isGlobal ? '#7c3aed' : 'var(--text-muted)')}
+                            onmouseout="this.style.color='${renderAsGlobalCard ? '#7c3aed' : '#d1d5db'}'">
+                        ${OL.getLucideSVG('globe', 10, renderAsGlobalCard ? '#7c3aed' : 'var(--text-muted)')}
                     </button>
                 ${logicBadge ? `
                     <span style="font-size:9px;padding:2px 5px;border-radius:99px;
