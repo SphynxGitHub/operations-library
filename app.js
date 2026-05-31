@@ -1845,6 +1845,8 @@ window.renderAppsGrid = function() {
     const isVaultMode = hash.startsWith('#/vault');
 
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const masterApps = state.master.apps || [];
     const localApps = client ? (client.projectData.localApps || []) : [];
@@ -6682,16 +6684,23 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         let badge = "";
 
         if (isZap && isStepVar) {
-            // 🚀 3. THE TALLY (Pulling from the resolved Master Resource)
-            const actualStepCount = (projectRes.steps || []).length;
+            const allSteps = projectRes.steps || [];
+            const actualStepCount = allSteps.filter((s, idx) => {
+                if (idx === 0) return true; // always count first step (trigger)
+                const assignees = s.assignees || [];
+                const hasHumanAssignee = assignees.some(a => 
+                    a.type === 'person' || a.type === 'role'
+                );
+                if (!hasHumanAssignee) return true; // no human assignee — count it
+                // Has human assignee — only count if app is Zapier Approval
+                const appName = (s.appName || '').toLowerCase();
+                return appName.includes('zapier approval');
+            }).length;
+        
             displayVal = actualStepCount;
-            
-            inputProps = "readonly style='background:rgba(255,159,67,0.1); color:#ff9f43; border-color:#ff9f43; cursor:not-allowed;'";
-            badge = `<span style="color:#ff9f43; font-size:9px; margin-left:5px; font-weight:bold;">⚡ AUTO</span>`;
-
-            // 🚀 4. SYNC BACK TO STORAGE
-            // Note: We save to activeData.id (the Line Item or Resource ID) 
-            // to ensure the price updates on the sheet you are currently looking at.
+            inputProps = "readonly style='background:rgba(255,159,67,0.1);color:#ff9f43;border-color:#ff9f43;cursor:not-allowed;'";
+            badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">⚡ AUTO</span>`;
+        
             if (num(activeData.data?.[varKey]) !== actualStepCount) {
                 if (!activeData.data) activeData.data = {};
                 activeData.data[varKey] = actualStepCount;
