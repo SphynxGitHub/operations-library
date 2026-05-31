@@ -11963,12 +11963,6 @@ OL.addResourceToWorkflow = function(wfId, resId) {
         w.id !== wfId && (w.resourceIds || []).includes(String(resId))
     );
 
-    if (existingWf) {
-        // Force global if in multiple workflows
-        res.isGlobal = true;
-        console.log(`🌐 ${res.name} is now Global — used in multiple workflows`);
-    }
-
     if (!wf.resourceIds) wf.resourceIds = [];
     if (!wf.resourceIds.includes(String(resId))) {
         wf.resourceIds.push(String(resId));
@@ -12179,11 +12173,18 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
                         ${OL.getLucideSVG('circle-dollar-sign', 10, scopeColor)}
                     </div>
                 ` : ''}
-                ${isGlobal ? `
-                    <span class="fv-global-card-badge" style="display:flex;align-items:center;gap:3px;">
-                        ${OL.getLucideSVG('globe', 10, 'currentColor')} ×${globalStageCount}
-                    </span>
-                ` : ''}
+                ${isGlobal ? `<span class="fv-global-card-badge">🌐 ×${globalStageCount}</span>` : ''}
+                    <button onclick="event.stopPropagation();
+                                     OL.handleResourceSave('${res.id}','isGlobal',${!isGlobal});
+                                     OL.renderVisualizer();"
+                            title="${isGlobal ? 'Remove global' : 'Set as global'}"
+                            style="width:18px;height:18px;border:none;background:none;cursor:pointer;
+                                   display:flex;align-items:center;justify-content:center;border-radius:4px;
+                                   color:${isGlobal ? '#7c3aed' : '#d1d5db'};transition:color 0.15s;"
+                            onmouseover="this.style.color='#7c3aed'"
+                            onmouseout="this.style.color='${isGlobal ? '#7c3aed' : '#d1d5db'}'">
+                        ${OL.getLucideSVG('globe', 10, isGlobal ? '#7c3aed' : '#d1d5db')}
+                    </button>
                 ${logicBadge ? `
                     <span style="font-size:9px;padding:2px 5px;border-radius:99px;
                                  background:rgba(61,217,197,0.1);color:#3dd9c5;
