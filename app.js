@@ -13384,10 +13384,10 @@ OL._fvBuildListShell = function(stages, resources) {
         // Get workflows explicitly tied to this structural stage index lane
         const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
         
-        // Isolate remaining unassigned resource cards for this phase
+        // 🎯 THE FIX: Do NOT strip global resources from their assigned visual stage sequence arrays
         const assignedResIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []));
         const unassignedResources = resources.filter(r => 
-            r.stageId === stage.id && !globalIds.has(String(r.id)) && !assignedResIds.has(String(r.id))
+            r.stageId === stage.id && !assignedResIds.has(String(r.id))
         );
 
         let stageWorkflowsHtml = '';
@@ -13399,6 +13399,7 @@ OL._fvBuildListShell = function(stages, resources) {
 
             const wfResources = (wf.resourceIds || [])
                 .map(id => resources.find(r => String(r.id) === id))
+                // Keep global elements inline if they are part of this process lane mapping array
                 .filter(r => r && (OL._fv.showArchived || !r.isArchived));
 
             if (wfResources.length === 0) return;
