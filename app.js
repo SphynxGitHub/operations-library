@@ -21480,15 +21480,39 @@ OL.openGuideEditor = function(htId, draftObj = null) {
                     </div>
 
                     ${canEdit ? `
-                        <div onmousedown="event.preventDefault(); OL._geToggleBlockMenu();"
-                             style="border:1px dashed var(--panel-border);border-radius:10px;
-                                    padding:20px;text-align:center;cursor:pointer;
-                                    color:var(--text-muted);font-size:12px;
-                                    transition:all 0.15s;margin-top:8px;"
-                             onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-                             onmouseout="this.style.borderColor='var(--panel-border)';this.style.color='var(--text-muted)'">
-                            <i data-lucide="plus-circle" style="width:16px;height:16px;margin-bottom:4px;display:block;margin:0 auto 6px;"></i>
-                            Add a block
+                        <div style="position:relative;margin-top:8px;">
+                            <div onmousedown="event.preventDefault(); 
+                                             const m=this.nextElementSibling; 
+                                             m.style.display=m.style.display==='block'?'none':'block';"
+                                 style="border:1px dashed var(--panel-border);border-radius:10px;
+                                        padding:20px;text-align:center;cursor:pointer;
+                                        color:var(--text-muted);font-size:12px;transition:all 0.15s;"
+                                 onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                                 onmouseout="this.style.borderColor='var(--panel-border)';this.style.color='var(--text-muted)'">
+                                <i data-lucide="plus-circle" style="width:16px;height:16px;display:block;margin:0 auto 6px;"></i>
+                                Add a block
+                            </div>
+                            <div style="display:none;position:absolute;top:calc(100% + 6px);left:50%;
+                                        transform:translateX(-50%);background:var(--panel);
+                                        border:1px solid var(--panel-border);border-radius:10px;
+                                        padding:6px;z-index:100;min-width:180px;
+                                        box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+                                ${[
+                                    { type:'text',      icon:'align-left',   label:'Text / HTML' },
+                                    { type:'checklist', icon:'check-square', label:'Checklist' },
+                                    { type:'image',     icon:'image',        label:'Image' },
+                                    { type:'resource',  icon:'link',         label:'Resource Link' },
+                                ].map(b => `
+                                    <div onmousedown="event.preventDefault(); OL._geAddBlock('${b.type}'); this.closest('[style*=position]').style.display='none';"
+                                         style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                                border-radius:7px;cursor:pointer;transition:background 0.12s;"
+                                         onmouseover="this.style.background='var(--panel-soft)'"
+                                         onmouseout="this.style.background='transparent'">
+                                        <i data-lucide="${b.icon}" style="width:13px;height:13px;color:var(--accent);flex-shrink:0;"></i>
+                                        <span style="font-size:12px;font-weight:600;color:var(--text-main);">${b.label}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
                     ` : ''}
                 </div>
