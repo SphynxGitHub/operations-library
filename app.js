@@ -1355,80 +1355,85 @@ window.renderClientDashboard = function() {
                 <span style="font-size:13px;font-weight:700;color:var(--accent);">🏛️ Master Vault</span>
             </div>
             ${clients.map(client => {
-                    const tasks = (client.projectData?.clientTasks || []);
-                    const openTasks = tasks.filter(t => t.status !== 'Done');
-                    const doneTasks = tasks.filter(t => t.status === 'Done');
-                    const isExpanded = state.dashboardExpanded?.[client.id] !== false;
-        
-                    return `
-                        <div style="margin-bottom:4px;">
-                            <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;
-                                        background:#fff;border:1px solid #e5e7eb;border-radius:8px;
-                                        cursor:pointer;"
-                                 onclick="OL.switchClient('${client.id}')">
-                                <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
-                                            color:#000;display:flex;align-items:center;justify-content:center;
-                                            font-weight:900;font-size:11px;flex-shrink:0;">
-                                    ${esc(client.meta.name.substring(0,2).toUpperCase())}
-                                </div>
-                                <div style="flex:1;min-width:0;">
-                                    <div style="font-weight:700;font-size:13px;color:#1b2d3f;">
-                                        ${esc(client.meta.name)}
-                                    </div>
-                                    <div style="font-size:10px;color:#9ca3af;">
-                                        ${openTasks.length} open · ${doneTasks.length} done
-                                    </div>
-                                </div>
-                                <span style="font-size:10px;color:#9ca3af;">${esc(client.meta.status)}</span>
-                                ${openTasks.length ? `
-                                    <span onclick="event.stopPropagation();
-                                                  if(!state.dashboardExpanded) state.dashboardExpanded={};
-                                                  state.dashboardExpanded['${client.id}'] = !${isExpanded};
-                                                  renderClientDashboard();"
-                                          style="width:20px;height:20px;border-radius:4px;
-                                                 background:#f5f6f8;border:1px solid #e5e7eb;
-                                                 display:flex;align-items:center;justify-content:center;
-                                                 font-size:11px;font-weight:700;color:#9ca3af;cursor:pointer;">
-                                        ${isExpanded ? '−' : '+'}
-                                    </span>
-                                ` : ''}
+                const tasks = (client.projectData?.clientTasks || []);
+                const openTasks = tasks.filter(t => t.status !== 'Done');
+                const doneTasks = tasks.filter(t => t.status === 'Done');
+                const isExpanded = state.dashboardExpanded?.[client.id] !== false;
+            
+                return `
+                    <div style="margin-bottom:4px;">
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;
+                                    background:var(--panel-soft);border:1px solid var(--panel-border);
+                                    border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
+                             onclick="OL.switchClient('${client.id}')"
+                             onmouseover="this.style.borderColor='var(--accent)'"
+                             onmouseout="this.style.borderColor='var(--panel-border)'">
+                            <div style="width:28px;height:28px;border-radius:6px;background:var(--accent);
+                                        color:#000;display:flex;align-items:center;justify-content:center;
+                                        font-weight:900;font-size:11px;flex-shrink:0;">
+                                ${esc(client.meta.name.substring(0,2).toUpperCase())}
                             </div>
-        
-                            ${isExpanded && openTasks.length ? `
-                                <div style="padding-left:44px;margin-top:2px;display:flex;flex-direction:column;gap:2px;">
-                                    ${openTasks.map(task => {
-                                        const statusColors = {
-                                            'Pending':     '#94a3b8',
-                                            'In Progress': '#3b82f6',
-                                            'Blocked':     '#ef4444',
-                                            'Done':        '#22c55e'
-                                        };
-                                        const color = statusColors[task.status || 'Pending'];
-                                        return `
-                                            <div style="display:flex;align-items:center;gap:8px;
-                                                        padding:7px 12px;background:#fafafa;
-                                                        border:1px solid #f3f4f6;border-radius:6px;
-                                                        cursor:pointer;"
-                                                 onclick="OL.switchClient('${client.id}'); 
-                                                          setTimeout(()=>OL.openTaskModal('${task.id}', false), 200);">
-                                                <div style="width:8px;height:8px;border-radius:50%;
-                                                            background:${color};flex-shrink:0;"></div>
-                                                <span style="font-size:11px;color:#374151;flex:1;">
-                                                    ${esc(task.name || task.title)}
-                                                </span>
-                                                ${task.dueDate ? `
-                                                    <span style="font-size:10px;color:#9ca3af;font-family:monospace;">
-                                                        ${new Date(task.dueDate).toLocaleDateString([],{month:'short',day:'numeric'})}
-                                                    </span>
-                                                ` : ''}
-                                            </div>
-                                        `;
-                                    }).join('')}
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:700;font-size:13px;color:var(--text-main);">
+                                    ${esc(client.meta.name)}
                                 </div>
+                                <div style="font-size:10px;color:var(--text-dim);">
+                                    ${openTasks.length} open · ${doneTasks.length} done
+                                </div>
+                            </div>
+                            <span style="font-size:10px;color:var(--text-dim);">${esc(client.meta.status)}</span>
+                            ${openTasks.length ? `
+                                <span onclick="event.stopPropagation();
+                                              if(!state.dashboardExpanded) state.dashboardExpanded={};
+                                              state.dashboardExpanded['${client.id}'] = !${isExpanded};
+                                              renderClientDashboard();"
+                                      style="width:20px;height:20px;border-radius:4px;
+                                             background:var(--panel-soft);border:1px solid var(--panel-border);
+                                             display:flex;align-items:center;justify-content:center;
+                                             font-size:11px;font-weight:700;color:var(--text-dim);cursor:pointer;">
+                                    ${isExpanded ? '−' : '+'}
+                                </span>
                             ` : ''}
                         </div>
-                    `;
-                }).join('')}
+            
+                        ${isExpanded && openTasks.length ? `
+                            <div style="padding-left:44px;margin-top:2px;display:flex;flex-direction:column;gap:2px;">
+                                ${openTasks.map(task => {
+                                    const statusColors = {
+                                        'Pending':     '#94a3b8',
+                                        'In Progress': '#3b82f6',
+                                        'Blocked':     '#ef4444',
+                                        'Done':        '#22c55e'
+                                    };
+                                    const color = statusColors[task.status || 'Pending'];
+                                    return `
+                                        <div style="display:flex;align-items:center;gap:8px;
+                                                    padding:7px 12px;
+                                                    background:var(--panel-dark);
+                                                    border:1px solid var(--panel-border);
+                                                    border-radius:6px;cursor:pointer;transition:border-color 0.2s;"
+                                             onclick="OL.switchClient('${client.id}');
+                                                      setTimeout(()=>OL.openTaskModal('${task.id}', false), 200);"
+                                             onmouseover="this.style.borderColor='var(--accent)'"
+                                             onmouseout="this.style.borderColor='var(--panel-border)'">
+                                            <div style="width:8px;height:8px;border-radius:50%;
+                                                        background:${color};flex-shrink:0;"></div>
+                                            <span style="font-size:11px;color:var(--text-main);flex:1;">
+                                                ${esc(task.name || task.title)}
+                                            </span>
+                                            ${task.dueDate ? `
+                                                <span style="font-size:10px;color:var(--text-dim);font-family:monospace;">
+                                                    ${new Date(task.dueDate).toLocaleDateString([],{month:'short',day:'numeric'})}
+                                                </span>
+                                            ` : ''}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('')}
             </div>
         ` : `
             <div class="cards-grid">
