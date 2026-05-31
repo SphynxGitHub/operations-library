@@ -729,10 +729,14 @@ window.buildLayout = function () {
       homeLabel = "My Portfolio";
       homeAction = `window.location.hash='#/partner-dashboard'`;
   } else if (client && client.meta.partnerOwner) {
-      // Sub-client of a partner goes back to the Portfolio
-      homeLabel = "Partner Home";
-      homeAction = `window.location.hash='#/partner-dashboard'`;
-  } else if (isPublic) {
+        // Sub-client of a partner — only show Partner Home to non-guests
+        if (!window.IS_GUEST) {
+            homeLabel = "Partner Home";
+            homeAction = `window.location.hash='#/partner-dashboard'`;
+        } else {
+            showHome = false;
+        }
+    } else if (isPublic) {
       // Direct Clients see no Home button (keeps them in their project)
       showHome = false;
   }
