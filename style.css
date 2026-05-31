@@ -1638,3 +1638,12 @@ body.is-visualizer .pane-inspector, body.is-visualizer #v2-inspector-panel { tra
 
 /* ── STAGE LABEL (v2) ── */
 #v2-node-layer::before { content: ""; position: absolute; left: 40vw; width: 20vw; height: 100%; background: rgba(var(--accent-rgb),0.02); border-left: 1px dashed rgba(var(--accent-rgb),0.1); border-right: 1px dashed rgba(var(--accent-rgb),0.1); pointer-events: none; }
+
+/* ── GUIDE EDITOR ── */
+#ge-shell { font-family: 'DM Sans', var(--font-main), sans-serif; }
+.ge-block { transition: border-color 0.15s, box-shadow 0.15s; }
+.ge-block:hover { border-color: var(--panel-border) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+body.light-mode .ge-block { background: #fff !important; }
+body.light-mode #ge-sidebar { background: #f8fafc !important; border-color: #e5e7eb; }
+body.light-mode #ge-topbar { background: #fff !important; border-color: #e5e7eb; }
+body.light-mode #ge-shell { background: #f1f5f9 !important; }
