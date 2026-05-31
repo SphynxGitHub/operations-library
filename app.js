@@ -11462,10 +11462,29 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
         )
       );
 
-      const cardsHtml = wfRes.map(res => {
-        globalCardNum++;
-        return OL._fvBuildCard(res, globalCardNum, false, 0);
-      }).join('');
+      const cardsHtml = wfRes.map((res, idx) => {
+            globalCardNum++;
+            return `
+                <div class="fv-card-slot"
+                     ondragover="event.preventDefault(); event.stopPropagation();
+                                 this.classList.add('fv-insert-before');"
+                     ondragleave="this.classList.remove('fv-insert-before')"
+                     ondrop="this.classList.remove('fv-insert-before');
+                             OL._fvDropAtIndex(event, '${stage.id}', '${wf.id}', ${idx});"
+                     style="position:relative;">
+                    ${OL._fvBuildCard(res, globalCardNum, false, 0)}
+                </div>
+            `;
+        }).join('') + `
+            <div class="fv-card-slot"
+                 ondragover="event.preventDefault(); event.stopPropagation();
+                             this.classList.add('fv-insert-before');"
+                 ondragleave="this.classList.remove('fv-insert-before')"
+                 ondrop="this.classList.remove('fv-insert-before');
+                         OL._fvDropAtIndex(event, '${stage.id}', '${wf.id}', ${wfRes.length});"
+                 style="position:relative;min-width:20px;min-height:80px;flex-shrink:0;">
+            </div>
+        `;
 
       const globalsHtml = expanded ? wfGlobals.map(gr => {
         globalCardNum++;
@@ -11492,40 +11511,42 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
              ondragover="OL._fvLaneDragOver(event)"
              ondragleave="OL._fvLaneDragLeave(event)"
              ondrop="OL._fvLaneDrop(event, '${stage.id}', '${wf.id}')">
-          <div style="display:flex;align-items:center;gap:8px; width: 100%;
-                      margin-bottom:10px;padding-bottom:8px;
-                      border-bottom:0.5px solid #f3f4f6;">
-            <div style="width:10px;height:10px;border-radius:50%;
-                        background:${wfColor};flex-shrink:0;"></div>
-            <span contenteditable="true"
-                  style="font-size:11px;font-weight:500;color:#6b7280;outline:none;"
-                  onblur="OL.renameWorkflow('${wf.id}', this.innerText.trim())">
-              ${esc(wf.name)}
-            </span>
-            <span style="font-size:10px;color:#9ca3af;">
-              ${wfRes.length} resource${wfRes.length !== 1 ? 's' : ''}
-            </span>
-            <button class="fv-btn" style="margin-left:auto;font-size:9px;padding:2px 6px;"
-                    onclick="event.stopPropagation(); OL._fvAddResourceToWorkflow('${wf.id}')">
-              <i data-lucide="plus" style="width:10px;height:10px;"></i> Add Resource
-            </button>
-            <button class="fv-btn" style="font-size:9px;padding:2px 6px;color:#ef4444;"
-                    onclick="event.stopPropagation(); OL.deleteWorkflow('${wf.id}')">
-              <i data-lucide="trash-2" style="width:10px;height:10px;"></i>
-            </button>
-          </div>
-          ${cardsHtml}
-          ${globalsHtml}
-          ${(wfRes.length === 0 && wfGlobals.length === 0) ? `
-            <div style="font-size:11px;color:#9ca3af;font-style:italic;padding:8px 0;
-                        border:1px dashed #e5e7eb;border-radius:8px;
-                        text-align:center;padding:20px;
-                        pointer-events: none;">
-              Drag resources here or click + Add
+            <div style="display:flex;align-items:center;gap:8px;width:100%;
+                        margin-bottom:10px;padding-bottom:8px;
+                        border-bottom:0.5px solid #f3f4f6;">
+                <div style="width:10px;height:10px;border-radius:50%;
+                            background:${wfColor};flex-shrink:0;"></div>
+                <span contenteditable="true"
+                      style="font-size:11px;font-weight:500;color:#6b7280;outline:none;"
+                      onblur="OL.renameWorkflow('${wf.id}', this.innerText.trim())">
+                    ${esc(wf.name)}
+                </span>
+                <span style="font-size:10px;color:#9ca3af;">
+                    ${wfRes.length} resource${wfRes.length !== 1 ? 's' : ''}
+                </span>
+                <button class="fv-btn" style="margin-left:auto;font-size:9px;padding:2px 6px;"
+                        onclick="event.stopPropagation(); OL._fvAddResourceToWorkflow('${wf.id}')">
+                    <i data-lucide="plus" style="width:10px;height:10px;"></i> Add Resource
+                </button>
+                <button class="fv-btn" style="font-size:9px;padding:2px 6px;color:#ef4444;"
+                        onclick="event.stopPropagation(); OL.deleteWorkflow('${wf.id}')">
+                    <i data-lucide="trash-2" style="width:10px;height:10px;"></i>
+                </button>
             </div>
-          ` : ''}
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">
+                ${cardsHtml}
+                ${globalsHtml}
+            </div>
+            ${(wfRes.length === 0 && wfGlobals.length === 0) ? `
+                <div style="font-size:11px;color:#9ca3af;font-style:italic;
+                            border:1px dashed #e5e7eb;border-radius:8px;
+                            text-align:center;padding:20px;
+                            pointer-events:none;">
+                    Drag resources here or click + Add
+                </div>
+            ` : ''}
         </div>
-      `;
+    `;
     });
 
     // ── CANVAS: Unassigned resources ─────────────────────
@@ -11626,6 +11647,66 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     e.dataTransfer.setData('fv-rail-id', id);
     if (parentId) e.dataTransfer.setData('fv-rail-parent', parentId);
     e.dataTransfer.effectAllowed = 'move';
+};
+
+OL._fvDropAtIndex = function(event, stageId, wfId, insertIdx) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    document.querySelectorAll('.fv-swimlane').forEach(el => {
+        el.style.background = '';
+        el.style.outline = '';
+    });
+
+    const resId  = event.dataTransfer.getData('application/fv-resource') ||
+                   event.dataTransfer.getData('text/plain');
+    const source = event.dataTransfer.getData('application/fv-source');
+    if (!resId) return;
+
+    const client = getActiveClient();
+    const data   = client.projectData;
+    const res    = (data.resources||[]).find(r => String(r.id) === String(resId));
+    if (!res) return;
+
+    const wrap       = document.getElementById('fv-canvas-wrap');
+    const scrollTop  = wrap?.scrollTop  || 0;
+    const scrollLeft = wrap?.scrollLeft || 0;
+
+    const wf = (data.workflows||[]).find(w => w.id === wfId);
+    if (!wf) return;
+
+    // Remove from current position in this workflow if already there
+    const currentIdx = (wf.resourceIds||[]).indexOf(String(resId));
+    if (currentIdx !== -1) {
+        wf.resourceIds.splice(currentIdx, 1);
+        // Adjust insertIdx if removing from before the target
+        if (currentIdx < insertIdx) insertIdx--;
+    } else {
+        // Coming from workbench or different workflow — remove from old workflow
+        const prevWf = (data.workflows||[]).find(w =>
+            w.id !== wfId && (w.resourceIds||[]).includes(String(resId))
+        );
+        if (prevWf) prevWf.resourceIds = prevWf.resourceIds.filter(id => id !== String(resId));
+    }
+
+    // Assign stage and workflow
+    res.stageId    = stageId;
+    res.workflowId = wfId;
+
+    // Insert at position
+    if (!wf.resourceIds) wf.resourceIds = [];
+    wf.resourceIds.splice(insertIdx, 0, String(resId));
+
+    OL.persist();
+    OL.renderVisualizer();
+
+    requestAnimationFrame(() => {
+        const newWrap = document.getElementById('fv-canvas-wrap');
+        if (newWrap) {
+            newWrap.scrollTop  = scrollTop;
+            newWrap.scrollLeft = scrollLeft;
+        }
+    });
 };
 
 OL._fvRailDrop = function(e, targetType, targetId, targetParentId) {
