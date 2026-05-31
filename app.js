@@ -1348,7 +1348,7 @@ window.renderClientDashboard = function() {
         <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
     
             <!-- Vault Row -->
-            <div class="fv-list-item" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;
+            <div class="fv-list-item" style="background:var(--panel-soft);border:1px solid #e5e7eb;border-radius:8px;
                         padding:10px 16px;cursor:pointer;margin-bottom:4px;
                         border-left:3px solid var(--accent);"
                  onclick="location.hash='#/vault/apps'">
