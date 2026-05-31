@@ -11783,64 +11783,72 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
     e.dataTransfer.effectAllowed = 'move';
 };
 
-OL._fvDropAtIndex = function(event, stageId, wfId, insertIdx) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    document.querySelectorAll('.fv-swimlane').forEach(el => {
-        el.style.background = '';
-        el.style.outline = '';
-    });
-
-    const resId  = event.dataTransfer.getData('application/fv-resource') ||
-                   event.dataTransfer.getData('text/plain');
-    const source = event.dataTransfer.getData('application/fv-source');
-    if (!resId) return;
-
-    const client = getActiveClient();
-    const data   = client.projectData;
-    const res    = (data.resources||[]).find(r => String(r.id) === String(resId));
-    if (!res) return;
-
-    const wrap       = document.getElementById('fv-canvas-wrap');
-    const scrollTop  = wrap?.scrollTop  || 0;
-    const scrollLeft = wrap?.scrollLeft || 0;
-
-    const wf = (data.workflows||[]).find(w => w.id === wfId);
-    if (!wf) return;
-
-    // Remove from current position in this workflow if already there
-    const currentIdx = (wf.resourceIds||[]).indexOf(String(resId));
-    if (currentIdx !== -1) {
-        wf.resourceIds.splice(currentIdx, 1);
-        // Adjust insertIdx if removing from before the target
-        if (currentIdx < insertIdx) insertIdx--;
-    } else {
-        // Coming from workbench or different workflow — remove from old workflow
-        const prevWf = (data.workflows||[]).find(w =>
-            w.id !== wfId && (w.resourceIds||[]).includes(String(resId))
-        );
-        if (prevWf) prevWf.resourceIds = prevWf.resourceIds.filter(id => id !== String(resId));
+OL._fvDropAtIndex = async function(e, targetWfId, targetIndex) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
     }
 
-    // Assign stage and workflow
-    res.stageId    = stageId;
-    res.workflowId = wfId;
+    const dragId = e.dataTransfer.getData('application/fv-resource') || e.dataTransfer.getData('text/plain');
+    if (!dragId) return;
 
-    // Insert at position
-    if (!wf.resourceIds) wf.resourceIds = [];
-    wf.resourceIds.splice(insertIdx, 0, String(resId));
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(dragId));
+    if (!res) return;
 
-    OL.persist();
-    OL.renderVisualizer();
+    // Grab the origin workflow context that we bundled during DragStart
+    const sourceWfId = e.dataTransfer.getData('application/fv-context-wf') || OL._fv._draggingContextWfId;
 
-    requestAnimationFrame(() => {
-        const newWrap = document.getElementById('fv-canvas-wrap');
-        if (newWrap) {
-            newWrap.scrollTop  = scrollTop;
-            newWrap.scrollLeft = scrollLeft;
+    // 🎯 THE GLOBAL SAFETY SHIELD:
+    if (res.isGlobal === true) {
+        // 🌐 GLOBAL BLUEPRINT CLONE RULES:
+        // Absolute zero root property mutations allowed. We don't touch res.workflowId.
+        
+        // 1. Remove the instance link from the old workflow array it was dragged out of
+        if (sourceWfId && String(sourceWfId) !== String(targetWfId)) {
+            const oldWf = (data.workflows || []).find(w => String(w.id) === String(sourceWfId));
+            if (oldWf && oldWf.resourceIds) {
+                oldWf.resourceIds = oldWf.resourceIds.filter(id => String(id) !== String(res.id));
+            }
         }
-    });
+
+        // 2. Inject it into the new workflow array index cleanly
+        const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWfId));
+        if (targetWf) {
+            if (!targetWf.resourceIds) targetWf.resourceIds = [];
+            
+            // Remove it first if it somehow exists to prevent internal dupes in the same list
+            targetWf.resourceIds = targetWf.resourceIds.filter(id => String(id) !== String(res.id));
+            
+            // Insert it precisely at the specific index it was dropped onto in the lane sequence!
+            targetWf.resourceIds.splice(targetIndex, 0, String(res.id));
+        }
+        
+        console.log(`🌐 Global instance safely spliced into Workflow ${targetWfId} at index ${targetIndex}`);
+    } else {
+        // 🏠 LOCAL ASSETbehavior (Original Physical Move Logic)
+        if (sourceWfId && String(sourceWfId) !== String(targetWfId)) {
+            const oldWf = (data.workflows || []).find(w => String(w.id) === String(sourceWfId));
+            if (oldWf && oldWf.resourceIds) {
+                oldWf.resourceIds = oldWf.resourceIds.filter(id => String(id) !== String(res.id));
+            }
+        }
+
+        // Standard local assignment shifts
+        res.workflowId = targetWfId;
+        const matchingWf = (data.workflows || []).find(w => String(w.id) === String(targetWfId));
+        if (matchingWf) res.stageId = matchingWf.stageId;
+
+        const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWfId));
+        if (targetWf) {
+            if (!targetWf.resourceIds) targetWf.resourceIds = [];
+            targetWf.resourceIds = targetWf.resourceIds.filter(id => String(id) !== String(res.id));
+            targetWf.resourceIds.splice(targetIndex, 0, String(res.id));
+        }
+    }
+
+    await OL.persist();
+    OL.renderVisualizer();
 };
 
 OL._fvRailDrop = function(e, targetType, targetId, targetParentId) {
@@ -12452,19 +12460,21 @@ OL._fvCardDragStart = function(e, resId) {
 };
 
 OL._fvCardDragEnd = function(e) {
-    // Remove dragging style safely from all element copies
-    document.querySelectorAll('.fv-card.fv-dragging')
-        .forEach(el => el.classList.remove('fv-dragging'));
-        
+    // 🎯 THE FIX: Query via class selectors so it doesn't crash on multi-instance global cards!
+    document.querySelectorAll('.fv-card.fv-dragging').forEach(el => {
+        el.classList.remove('fv-dragging');
+    });
+
     OL._fv._draggingResId = null;
     OL._fv._draggingContextWfId = null;
 
-    // Clear all lane highlights
-    document.querySelectorAll('.fv-swimlane')
-        .forEach(el => {
+    // Clear all swimlane tracking styles safely
+    document.querySelectorAll('.fv-swimlane').forEach(el => {
+        if (el && el.style) {
             el.style.background = '';
             el.style.outline = '';
-        });
+        }
+    });
 };
 
 OL._fvToggleCardSteps = function(resId) {
