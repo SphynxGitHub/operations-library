@@ -2407,7 +2407,7 @@ function renderAppModalInnerContent(app, client) {
             <label class="modal-section-label">📖 Linked How-To Guides</label>
             <div class="pills-row">
                 ${linkedGuides.map(guide => `
-                    <span class="pill tiny soft is-clickable" onclick="OL.openHowToModal('${guide.id}')">
+                    <span class="pill tiny soft is-clickable" onclick="OL.openGuideEditor('${guide.id}')">
                         📖 ${esc(guide.name)}
                     </span>
                 `).join('')}
@@ -4368,7 +4368,7 @@ OL.openTaskModal = function(taskId, isVault) {
                             return `
                                 <span class="pill tiny soft is-clickable" 
                                       style="cursor: pointer;" 
-                                      onclick="OL.openHowToModal('${guide.id}')">
+                                      onclick="OL.openGuideEditor('${guide.id}')">
                                     <i data-lucide="book" style="width:10px; height:10px; margin-right:4px;"></i> ${esc(guide.name)}
                                 </span>`;
                         }).join('')}
@@ -17298,7 +17298,7 @@ window.renderStepResources = function(resId, step) {
     return links.map((link, idx) => {
         const isSOP = link.type === 'sop' || link.type === 'guide';
         const icon = isSOP ? 'book-open' : 'database';
-        const openAction = isSOP ? `OL.openHowToModal('${link.id}')` : `OL.openResourceModal('${link.id}')`;
+        const openAction = isSOP ? `OL.openGuideEditor('${link.id}')` : `OL.openResourceModal('${link.id}')`;
         const deleteAction = `event.stopPropagation(); OL.removeStepLink('${resId}', '${step.id}', ${idx})`;
 
         return `
@@ -21263,7 +21263,7 @@ function renderHowToLibrary () {
                     <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
                                 background:var(--panel-soft);border:1px solid var(--panel-border);
                                 border-radius:8px;cursor:pointer;transition:border-color 0.2s;"
-                         onclick="OL.openHowToModal('${ht.id}')"
+                         onclick="OL.openGuideEditor('${ht.id}')"
                          onmouseover="this.style.borderColor='var(--accent)'"
                          onmouseout="this.style.borderColor='var(--panel-border)'">
                         <i data-lucide="book-open" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
@@ -21308,7 +21308,7 @@ function renderHowToCard(clientId, ht, isClientView) {
     return `
         <div class="card hover-trigger ${isMaster ? (isShared ? 'is-shared' : 'is-private') : 'is-local'}" 
              style="cursor: pointer; position: relative;" 
-             onclick="OL.openHowToModal('${ht.id}')">
+             onclick="OL.openGuideEditor('${ht.id}')">
 
             <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -21350,6 +21350,768 @@ function renderHowToCard(clientId, ht, isClientView) {
     `;
 }
 
+OL.openGuideEditor = function(htId, draftObj = null) {
+    const mainArea = document.getElementById('mainContent');
+    if (!mainArea) return;
+
+    document.body.classList.add('is-visualizer');
+    mainArea.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0;';
+
+    const hash = window.location.hash;
+    const isVaultMode = hash.includes('vault');
+    const client = getActiveClient();
+
+    // 1. Resolve guide
+    let ht = draftObj;
+    if (!ht) ht = (state.master.howToLibrary || []).find(h => h.id === htId);
+    if (!ht && client) ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
+    if (!ht) return;
+
+    // 2. Migrate legacy content to blocks
+    if (!ht.blocks) {
+        ht.blocks = [];
+        if (ht.content && ht.content.trim()) {
+            ht.blocks.push({
+                id: 'blk-' + Date.now(),
+                type: 'text',
+                data: { html: ht.content }
+            });
+        }
+        // don't delete ht.content yet — keep as fallback
+    }
+
+    const isAdmin = window.FORCE_ADMIN === true;
+    const isLocal = String(ht.id).includes('local');
+    const canEdit = isAdmin || isLocal || String(htId).startsWith('draft');
+
+    OL._ge = { htId: ht.id, canEdit };
+
+    mainArea.innerHTML = `
+        <div id="ge-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--bg);">
+
+            <!-- TOPBAR -->
+            <div id="ge-topbar" style="
+                display:flex;align-items:center;gap:10px;
+                padding:10px 20px;flex-shrink:0;
+                background:var(--panel);border-bottom:1px solid var(--panel-border);
+                min-height:56px;">
+
+                <button class="fv-btn" onclick="OL.closeGuideEditor()" style="gap:6px;">
+                    <i data-lucide="arrow-left" style="width:13px;height:13px;"></i>
+                    Back
+                </button>
+
+                <div style="width:1px;height:20px;background:var(--panel-border);"></div>
+
+                <i data-lucide="book-open" style="width:16px;height:16px;color:var(--accent);flex-shrink:0;"></i>
+                <input type="text"
+                       id="ge-title-input"
+                       value="${esc(ht.name || '')}"
+                       placeholder="Guide title..."
+                       ${!canEdit ? 'readonly' : ''}
+                       style="background:transparent;border:none;outline:none;font-size:16px;
+                              font-weight:700;color:var(--text-main);flex:1;font-family:inherit;"
+                       onblur="OL._geSaveField('name', this.value)">
+
+                <div style="flex:1;"></div>
+
+                ${canEdit ? `
+                    <div style="position:relative;">
+                        <button class="fv-btn" id="ge-add-block-btn"
+                                onclick="OL._geToggleBlockMenu()"
+                                style="gap:6px;background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;">
+                            <i data-lucide="plus" style="width:13px;height:13px;"></i>
+                            Add Block
+                        </button>
+                        <div id="ge-block-menu" style="
+                            display:none;position:absolute;top:calc(100% + 6px);right:0;
+                            background:var(--panel);border:1px solid var(--panel-border);
+                            border-radius:10px;padding:6px;z-index:100;min-width:180px;
+                            box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+                            ${[
+                                { type:'text',      icon:'align-left',   label:'Text / HTML' },
+                                { type:'checklist', icon:'check-square', label:'Checklist' },
+                                { type:'image',     icon:'image',        label:'Image' },
+                                { type:'resource',  icon:'link',         label:'Resource Link' },
+                            ].map(b => `
+                                <div onclick="OL._geAddBlock('${b.type}'); OL._geToggleBlockMenu();"
+                                     style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                            border-radius:7px;cursor:pointer;transition:background 0.12s;"
+                                     onmouseover="this.style.background='var(--panel-soft)'"
+                                     onmouseout="this.style.background='transparent'">
+                                    <i data-lucide="${b.icon}" style="width:13px;height:13px;color:var(--accent);flex-shrink:0;"></i>
+                                    <span style="font-size:12px;font-weight:600;color:var(--text-main);">${b.label}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <button class="fv-btn" onclick="OL.closeGuideEditor()"
+                        style="background:var(--panel-soft);color:var(--text-dim);">
+                    <i data-lucide="x" style="width:13px;height:13px;"></i>
+                </button>
+            </div>
+
+            <!-- BODY -->
+            <div id="ge-body" style="display:flex;flex:1;overflow:hidden;">
+
+                <!-- EDITOR COLUMN -->
+                <div id="ge-editor" style="
+                    flex:1;overflow-y:auto;padding:40px;
+                    display:flex;flex-direction:column;gap:12px;
+                    max-width:860px;margin:0 auto;width:100%;">
+
+                    <!-- Summary -->
+                    <input type="text"
+                           placeholder="One-sentence summary..."
+                           value="${esc(ht.summary || '')}"
+                           ${!canEdit ? 'readonly' : ''}
+                           style="background:transparent;border:none;border-bottom:1px solid var(--panel-border);
+                                  outline:none;font-size:13px;color:var(--text-dim);padding:4px 0;
+                                  font-family:inherit;width:100%;"
+                           onblur="OL._geSaveField('summary', this.value)">
+
+                    <div style="height:1px;background:var(--panel-border);margin:8px 0;"></div>
+
+                    <!-- BLOCKS -->
+                    <div id="ge-blocks-container">
+                        ${OL._geRenderAllBlocks(ht)}
+                    </div>
+
+                    ${canEdit ? `
+                        <div onclick="OL._geAddBlock('text')"
+                             style="border:1px dashed var(--panel-border);border-radius:10px;
+                                    padding:20px;text-align:center;cursor:pointer;
+                                    color:var(--text-muted);font-size:12px;
+                                    transition:all 0.15s;margin-top:8px;"
+                             onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                             onmouseout="this.style.borderColor='var(--panel-border)';this.style.color='var(--text-muted)'">
+                            <i data-lucide="plus-circle" style="width:16px;height:16px;margin-bottom:4px;display:block;margin:0 auto 6px;"></i>
+                            Add a block
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- RIGHT SIDEBAR (metadata) -->
+                <div id="ge-sidebar" style="
+                    width:260px;flex-shrink:0;
+                    border-left:1px solid var(--panel-border);
+                    background:var(--panel-soft);
+                    overflow-y:auto;padding:20px;
+                    display:flex;flex-direction:column;gap:16px;">
+
+                    <!-- Video -->
+                    <div>
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="video" style="width:11px;height:11px;"></i> Training Video
+                        </div>
+                        <input type="text" class="fvi-input"
+                               placeholder="YouTube / Loom / Vimeo URL"
+                               value="${esc(ht.videoUrl || '')}"
+                               ${!canEdit ? 'readonly' : ''}
+                               onblur="OL._geSaveField('videoUrl', this.value); OL._geRefreshVideoPreview(this.value);">
+                        <div id="ge-video-preview" style="margin-top:8px;">
+                            ${ht.videoUrl ? OL.parseVideoEmbed(ht.videoUrl) : ''}
+                        </div>
+                    </div>
+
+                    <!-- Category -->
+                    <div>
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="folder" style="width:11px;height:11px;"></i> Category
+                        </div>
+                        <input type="text" class="fvi-input"
+                               value="${esc(ht.category || 'General')}"
+                               ${!canEdit ? 'readonly' : ''}
+                               onblur="OL._geSaveField('category', this.value)">
+                    </div>
+
+                    <!-- Related Apps -->
+                    <div>
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                    letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;
+                                    display:flex;align-items:center;gap:5px;">
+                            <i data-lucide="smartphone" style="width:11px;height:11px;"></i> Related Apps
+                        </div>
+                        <div id="ge-app-pills" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
+                            ${OL._geRenderAppPills(ht)}
+                        </div>
+                        ${canEdit ? `
+                            <div style="position:relative;">
+                                <input type="text" class="fvi-input" placeholder="Search apps..."
+                                       onfocus="OL._geFilterAppSearch('${ht.id}','')"
+                                       oninput="OL._geFilterAppSearch('${ht.id}',this.value)">
+                                <div id="ge-app-results" class="search-results-overlay" style="position:absolute;z-index:50;width:100%;"></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) lucide.createIcons();
+
+    // Close block menu on outside click
+    document.addEventListener('click', OL._geOutsideClick);
+};
+
+OL._geOutsideClick = function(e) {
+    const menu = document.getElementById('ge-block-menu');
+    const btn  = document.getElementById('ge-add-block-btn');
+    if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+    }
+};
+
+OL.closeGuideEditor = function() {
+    document.removeEventListener('click', OL._geOutsideClick);
+    document.body.classList.remove('is-visualizer');
+    const mainArea = document.getElementById('mainContent');
+    if (mainArea) mainArea.style.cssText = '';
+    renderHowToLibrary();
+};
+
+// ── BLOCK MENU TOGGLE ──────────────────────────────
+OL._geToggleBlockMenu = function() {
+    const menu = document.getElementById('ge-block-menu');
+    if (!menu) return;
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+};
+
+// ── SAVE FIELD ─────────────────────────────────────
+OL._geSaveField = function(field, value) {
+    const { htId } = OL._ge;
+    OL.handleHowToSave(htId, field, value);
+};
+
+// ── RESOLVE GUIDE ──────────────────────────────────
+OL._geGetHt = function() {
+    const { htId } = OL._ge;
+    const client = getActiveClient();
+    return (state.master.howToLibrary || []).find(h => h.id === htId)
+        || (client?.projectData?.localHowTo || []).find(h => h.id === htId);
+};
+
+// ── SAVE BLOCKS ────────────────────────────────────
+OL._geSaveBlocks = function() {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    OL.persist();
+};
+
+// ── ADD BLOCK ──────────────────────────────────────
+OL._geAddBlock = function(type) {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    if (!ht.blocks) ht.blocks = [];
+
+    const id = 'blk-' + Date.now();
+    const defaults = {
+        text:      { html: '' },
+        checklist: { items: [] },
+        image:     { url: '', caption: '' },
+        resource:  { resourceId: null, resourceName: '', note: '' },
+    };
+
+    ht.blocks.push({ id, type, data: defaults[type] || {} });
+    OL.persist();
+
+    // Re-render just the blocks container
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
+        // Focus new block
+        requestAnimationFrame(() => {
+            const newBlock = document.getElementById(`ge-blk-${id}`);
+            if (newBlock) {
+                newBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const input = newBlock.querySelector('textarea, input[type="text"]');
+                if (input) input.focus();
+            }
+        });
+    }
+};
+
+// ── DELETE BLOCK ───────────────────────────────────
+OL._geDeleteBlock = function(blockId) {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    ht.blocks = (ht.blocks || []).filter(b => b.id !== blockId);
+    OL.persist();
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── MOVE BLOCK ─────────────────────────────────────
+OL._geMoveBlock = function(blockId, dir) {
+    const ht = OL._geGetHt();
+    if (!ht || !ht.blocks) return;
+    const idx = ht.blocks.findIndex(b => b.id === blockId);
+    if (idx === -1) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= ht.blocks.length) return;
+    const tmp = ht.blocks[idx];
+    ht.blocks[idx] = ht.blocks[newIdx];
+    ht.blocks[newIdx] = tmp;
+    OL.persist();
+    const container = document.getElementById('ge-blocks-container');
+    if (container) {
+        container.innerHTML = OL._geRenderAllBlocks(ht);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── RENDER ALL BLOCKS ──────────────────────────────
+OL._geRenderAllBlocks = function(ht) {
+    const blocks = ht.blocks || [];
+    if (!blocks.length) {
+        return `<div style="text-align:center;padding:60px 20px;color:var(--text-muted);font-size:12px;opacity:0.6;">
+            No blocks yet — click <strong>Add Block</strong> above to get started.
+        </div>`;
+    }
+    return blocks.map((b, i) => OL._geRenderBlock(b, i, blocks.length)).join('');
+};
+
+// ── RENDER SINGLE BLOCK ────────────────────────────
+OL._geRenderBlock = function(block, idx, total) {
+    const { canEdit } = OL._ge || {};
+    const controls = canEdit ? `
+        <div class="ge-block-controls" style="
+            position:absolute;top:10px;right:10px;
+            display:none;align-items:center;gap:4px;z-index:10;">
+            <button onclick="OL._geMoveBlock('${block.id}', -1)"
+                    title="Move up" ${idx === 0 ? 'disabled' : ''}
+                    style="width:24px;height:24px;border:1px solid var(--panel-border);
+                           background:var(--panel-soft);border-radius:5px;cursor:pointer;
+                           color:var(--text-dim);display:flex;align-items:center;justify-content:center;
+                           opacity:${idx === 0 ? '0.3' : '1'};">
+                <i data-lucide="chevron-up" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+            <button onclick="OL._geMoveBlock('${block.id}', 1)"
+                    title="Move down" ${idx === total-1 ? 'disabled' : ''}
+                    style="width:24px;height:24px;border:1px solid var(--panel-border);
+                           background:var(--panel-soft);border-radius:5px;cursor:pointer;
+                           color:var(--text-dim);display:flex;align-items:center;justify-content:center;
+                           opacity:${idx === total-1 ? '0.3' : '1'};">
+                <i data-lucide="chevron-down" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+            <button onclick="OL._geDeleteBlock('${block.id}')"
+                    title="Delete block"
+                    style="width:24px;height:24px;border:1px solid rgba(239,68,68,0.3);
+                           background:rgba(239,68,68,0.06);border-radius:5px;cursor:pointer;
+                           color:#ef4444;display:flex;align-items:center;justify-content:center;">
+                <i data-lucide="trash-2" style="width:11px;height:11px;pointer-events:none;"></i>
+            </button>
+        </div>
+    ` : '';
+
+    const inner = OL._geRenderBlockInner(block, canEdit);
+
+    return `
+        <div id="ge-blk-${block.id}"
+             class="ge-block"
+             style="position:relative;background:var(--panel);border:1px solid var(--panel-border);
+                    border-radius:10px;padding:18px 20px;transition:border-color 0.15s;"
+             onmouseenter="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='flex';"
+             onmouseleave="const c=this.querySelector('.ge-block-controls'); if(c) c.style.display='none';">
+            ${controls}
+            ${inner}
+        </div>
+    `;
+};
+
+// ── RENDER BLOCK INNER BY TYPE ─────────────────────
+OL._geRenderBlockInner = function(block, canEdit) {
+    switch (block.type) {
+
+        case 'text':
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="align-left" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Text</span>
+                </div>
+                ${canEdit ? `
+                    <textarea
+                        style="width:100%;min-height:100px;background:var(--panel-soft);
+                               border:1px solid var(--panel-border);border-radius:8px;
+                               color:var(--text-main);font-size:13px;line-height:1.6;
+                               padding:10px 12px;font-family:inherit;resize:vertical;outline:none;
+                               transition:border-color 0.15s;box-sizing:border-box;"
+                        onfocus="this.style.borderColor='var(--accent)'"
+                        onblur="this.style.borderColor='var(--panel-border)';
+                                OL._geUpdateBlockData('${block.id}', {html: this.value})"
+                        placeholder="Type text or paste HTML..."
+                    >${block.data.html || ''}</textarea>
+                    <div style="font-size:9px;color:var(--text-muted);margin-top:4px;opacity:0.6;">
+                        HTML is supported — paste rich content freely.
+                    </div>
+                ` : `
+                    <div style="font-size:13px;line-height:1.7;color:var(--text-main);">
+                        ${block.data.html || '<em style="opacity:0.4;">Empty text block</em>'}
+                    </div>
+                `}
+            `;
+
+        case 'checklist':
+            const items = block.data.items || [];
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="check-square" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Checklist</span>
+                </div>
+                <div id="ge-cl-${block.id}" style="display:flex;flex-direction:column;gap:4px;">
+                    ${items.map((item, i) => OL._geRenderChecklistItem(block.id, item, i)).join('')}
+                </div>
+                ${canEdit ? `
+                    <button onclick="OL._geAddChecklistItem('${block.id}')"
+                            style="display:flex;align-items:center;gap:6px;margin-top:8px;
+                                   background:none;border:1px dashed var(--panel-border);
+                                   border-radius:7px;padding:6px 12px;cursor:pointer;
+                                   color:var(--text-muted);font-size:11px;font-family:inherit;
+                                   width:100%;transition:all 0.15s;"
+                            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                            onmouseout="this.style.borderColor='var(--panel-border)';this.style.color='var(--text-muted)'">
+                        <i data-lucide="plus" style="width:11px;height:11px;pointer-events:none;"></i>
+                        Add item
+                    </button>
+                ` : ''}
+            `;
+
+        case 'image':
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="image" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Image</span>
+                </div>
+                ${canEdit ? `
+                    <input type="text" class="fvi-input" style="margin-bottom:8px;"
+                           placeholder="Paste image URL..."
+                           value="${esc(block.data.url || '')}"
+                           onblur="OL._geUpdateBlockData('${block.id}', {url: this.value, caption: document.getElementById('ge-img-cap-${block.id}')?.value || ''});
+                                   OL._geRefreshImageBlock('${block.id}', this.value)">
+                ` : ''}
+                <div id="ge-img-preview-${block.id}">
+                    ${block.data.url ? `
+                        <img src="${esc(block.data.url)}" alt=""
+                             style="width:100%;border-radius:8px;border:1px solid var(--panel-border);display:block;">
+                    ` : `
+                        <div style="background:var(--panel-soft);border:1px dashed var(--panel-border);
+                                    border-radius:8px;padding:30px;text-align:center;
+                                    color:var(--text-muted);font-size:12px;">
+                            <i data-lucide="image" style="width:24px;height:24px;margin-bottom:8px;display:block;margin:0 auto 8px;opacity:0.4;"></i>
+                            No image URL set
+                        </div>
+                    `}
+                </div>
+                <input type="text" id="ge-img-cap-${block.id}"
+                       class="fvi-input" style="margin-top:8px;"
+                       placeholder="Caption (optional)..."
+                       value="${esc(block.data.caption || '')}"
+                       ${!canEdit ? 'readonly' : ''}
+                       onblur="OL._geUpdateBlockData('${block.id}', {url: document.querySelector('#ge-blk-${block.id} input[type=text]')?.value || '${esc(block.data.url || '')}', caption: this.value})">
+                ${block.data.caption ? `
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-style:italic;">
+                        ${esc(block.data.caption)}
+                    </div>
+                ` : ''}
+            `;
+
+        case 'resource':
+            return `
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+                    <i data-lucide="link" style="width:12px;height:12px;color:var(--accent);"></i>
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;
+                                 letter-spacing:0.1em;color:var(--text-muted);">Resource Link</span>
+                </div>
+                ${block.data.resourceId ? `
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                                background:var(--panel-soft);border:1px solid var(--panel-border);
+                                border-radius:8px;cursor:pointer;"
+                         onclick="OL.openResourceModal('${block.data.resourceId}')">
+                        <i data-lucide="workflow" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;font-size:12px;color:var(--text-main);">
+                                ${esc(block.data.resourceName || 'Linked Resource')}
+                            </div>
+                            ${block.data.note ? `
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">
+                                    ${esc(block.data.note)}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--text-muted);"></i>
+                        ${canEdit ? `
+                            <button onclick="event.stopPropagation();OL._geUpdateBlockData('${block.id}',{resourceId:null,resourceName:'',note:''})"
+                                    style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;">
+                                <i data-lucide="x" style="width:12px;height:12px;pointer-events:none;"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : (canEdit ? `
+                    <div style="position:relative;">
+                        <input type="text" class="fvi-input"
+                               placeholder="Search resources..."
+                               onfocus="OL._geFilterResourceSearch('${block.id}', '')"
+                               oninput="OL._geFilterResourceSearch('${block.id}', this.value)">
+                        <div id="ge-res-results-${block.id}"
+                             class="search-results-overlay"
+                             style="position:absolute;z-index:50;width:100%;"></div>
+                    </div>
+                    <input type="text" class="fvi-input" style="margin-top:6px;"
+                           placeholder="Note about this resource (optional)..."
+                           id="ge-res-note-${block.id}"
+                           onblur="OL._geUpdateBlockData('${block.id}', {note: this.value})">
+                ` : `
+                    <div style="color:var(--text-muted);font-size:12px;font-style:italic;">No resource linked.</div>
+                `)}
+            `;
+
+        default:
+            return `<div style="color:var(--text-muted);font-size:12px;">Unknown block type: ${block.type}</div>`;
+    }
+};
+
+// ── CHECKLIST ITEM ─────────────────────────────────
+OL._geRenderChecklistItem = function(blockId, item, idx) {
+    const { canEdit } = OL._ge || {};
+    return `
+        <div id="ge-cli-${item.id}" style="display:flex;align-items:center;gap:8px;
+             padding:6px 8px;border-radius:7px;transition:background 0.12s;"
+             onmouseover="this.style.background='var(--panel-soft)'"
+             onmouseout="this.style.background='transparent'">
+            <input type="checkbox"
+                   ${item.checked ? 'checked' : ''}
+                   onchange="OL._geToggleChecklistItem('${blockId}', '${item.id}', this.checked)"
+                   style="width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--accent);">
+            ${canEdit ? `
+                <input type="text"
+                       value="${esc(item.text || '')}"
+                       placeholder="Checklist item..."
+                       style="flex:1;background:transparent;border:none;outline:none;
+                              font-size:13px;color:${item.checked ? 'var(--text-muted)' : 'var(--text-main)'};
+                              font-family:inherit;text-decoration:${item.checked ? 'line-through' : 'none'};"
+                       onblur="OL._geUpdateChecklistItem('${blockId}', '${item.id}', 'text', this.value)"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();OL._geAddChecklistItem('${blockId}');}
+                                  if(event.key==='Backspace'&&this.value===''){event.preventDefault();OL._geDeleteChecklistItem('${blockId}','${item.id}');}">
+                <button onclick="OL._geDeleteChecklistItem('${blockId}', '${item.id}')"
+                        style="background:none;border:none;cursor:pointer;
+                               color:var(--text-muted);padding:2px;opacity:0;transition:opacity 0.15s;"
+                        onmouseenter="this.style.opacity='1';this.style.color='#ef4444'"
+                        onmouseleave="this.style.opacity='0'">
+                    <i data-lucide="x" style="width:11px;height:11px;pointer-events:none;"></i>
+                </button>
+            ` : `
+                <span style="flex:1;font-size:13px;
+                             color:${item.checked ? 'var(--text-muted)' : 'var(--text-main)'};
+                             text-decoration:${item.checked ? 'line-through' : 'none'};">
+                    ${esc(item.text || '')}
+                </span>
+            `}
+        </div>
+    `;
+};
+
+// ── CHECKLIST OPERATIONS ───────────────────────────
+OL._geAddChecklistItem = function(blockId) {
+    const ht = OL._geGetHt();
+    if (!ht) return;
+    const block = (ht.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    if (!block.data.items) block.data.items = [];
+    const newItem = { id: 'cli-' + Date.now(), text: '', checked: false };
+    block.data.items.push(newItem);
+    OL.persist();
+
+    const container = document.getElementById(`ge-cl-${blockId}`);
+    if (container) {
+        container.innerHTML = (block.data.items || [])
+            .map((item, i) => OL._geRenderChecklistItem(blockId, item, i))
+            .join('');
+        if (window.lucide) lucide.createIcons();
+        requestAnimationFrame(() => {
+            const newInput = document.getElementById(`ge-cli-${newItem.id}`)
+                ?.querySelector('input[type=text]');
+            if (newInput) newInput.focus();
+        });
+    }
+};
+
+OL._geToggleChecklistItem = function(blockId, itemId, checked) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    const item = (block?.data?.items || []).find(i => i.id === itemId);
+    if (item) { item.checked = checked; OL.persist(); }
+
+    // Update styling without full re-render
+    const row = document.getElementById(`ge-cli-${itemId}`);
+    if (row) {
+        const input = row.querySelector('input[type=text]');
+        const span  = row.querySelector('span');
+        const el = input || span;
+        if (el) {
+            el.style.color = checked ? 'var(--text-muted)' : 'var(--text-main)';
+            el.style.textDecoration = checked ? 'line-through' : 'none';
+        }
+    }
+};
+
+OL._geUpdateChecklistItem = function(blockId, itemId, field, value) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    const item = (block?.data?.items || []).find(i => i.id === itemId);
+    if (item) { item[field] = value; OL.persist(); }
+};
+
+OL._geDeleteChecklistItem = function(blockId, itemId) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    block.data.items = (block.data.items || []).filter(i => i.id !== itemId);
+    OL.persist();
+
+    const container = document.getElementById(`ge-cl-${blockId}`);
+    if (container) {
+        container.innerHTML = (block.data.items || [])
+            .map((item, i) => OL._geRenderChecklistItem(blockId, item, i))
+            .join('');
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+// ── UPDATE BLOCK DATA ──────────────────────────────
+OL._geUpdateBlockData = function(blockId, newData) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+    Object.assign(block.data, newData);
+    OL.persist();
+
+    // Re-render just this block's inner content
+    const blockEl = document.getElementById(`ge-blk-${blockId}`);
+    if (blockEl) {
+        const inner = blockEl.querySelector('.ge-block-inner');
+        if (inner) {
+            inner.innerHTML = OL._geRenderBlockInner(block, OL._ge?.canEdit);
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+};
+
+// ── IMAGE PREVIEW REFRESH ──────────────────────────
+OL._geRefreshImageBlock = function(blockId, url) {
+    const preview = document.getElementById(`ge-img-preview-${blockId}`);
+    if (!preview) return;
+    preview.innerHTML = url
+        ? `<img src="${esc(url)}" alt="" style="width:100%;border-radius:8px;border:1px solid var(--panel-border);display:block;">`
+        : `<div style="background:var(--panel-soft);border:1px dashed var(--panel-border);border-radius:8px;padding:30px;text-align:center;color:var(--text-muted);font-size:12px;">No image URL set</div>`;
+};
+
+// ── VIDEO PREVIEW REFRESH ──────────────────────────
+OL._geRefreshVideoPreview = function(url) {
+    const preview = document.getElementById('ge-video-preview');
+    if (!preview) return;
+    preview.innerHTML = url ? OL.parseVideoEmbed(url) : '';
+};
+
+// ── APP PILLS ──────────────────────────────────────
+OL._geRenderAppPills = function(ht) {
+    const client = getActiveClient();
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    return (ht.appIds || []).map(appId => {
+        const app = allApps.find(a => a.id === appId);
+        if (!app) return '';
+        return `
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;
+                         border-radius:99px;font-size:10px;font-weight:600;
+                         background:var(--accent-glow);color:var(--accent);
+                         border:1px solid rgba(56,189,248,0.3);">
+                ${esc(app.name)}
+                <span onclick="OL.toggleHTApp('${ht.id}','${appId}');
+                               document.getElementById('ge-app-pills').innerHTML=OL._geRenderAppPills(OL._geGetHt());
+                               if(window.lucide)lucide.createIcons();"
+                      style="opacity:0.5;cursor:pointer;font-size:12px;line-height:1;">×</span>
+            </span>
+        `;
+    }).join('');
+};
+
+OL._geFilterAppSearch = function(htId, query) {
+    const listEl = document.getElementById('ge-app-results');
+    if (!listEl) return;
+    const q = (query || '').toLowerCase();
+    const client = getActiveClient();
+    const ht = OL._geGetHt();
+    const currentIds = ht?.appIds || [];
+    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
+    const matches = allApps.filter(a => a.name.toLowerCase().includes(q) && !currentIds.includes(a.id));
+
+    listEl.innerHTML = matches.slice(0, 8).map(app => `
+        <div class="search-result-item"
+             onmousedown="OL.toggleHTApp('${htId}','${app.id}');
+                          document.getElementById('ge-app-pills').innerHTML=OL._geRenderAppPills(OL._geGetHt());
+                          if(window.lucide)lucide.createIcons();
+                          document.getElementById('ge-app-results').innerHTML='';">
+            ${esc(app.name)}
+        </div>
+    `).join('') || '<div class="search-result-item" style="opacity:0.5;">No matches</div>';
+};
+
+// ── RESOURCE SEARCH ────────────────────────────────
+OL._geFilterResourceSearch = function(blockId, query) {
+    const listEl = document.getElementById(`ge-res-results-${blockId}`);
+    if (!listEl) return;
+    const q = (query || '').toLowerCase();
+    const client = getActiveClient();
+    const resources = (client?.projectData?.resources || []).filter(r =>
+        !r.isArchived && r.name.toLowerCase().includes(q)
+    );
+
+    listEl.innerHTML = resources.slice(0, 8).map(res => `
+        <div class="search-result-item"
+             onmousedown="OL._geSetResourceBlock('${blockId}', '${res.id}', '${esc(res.name)}')">
+            ${esc(res.name)}
+            <span style="font-size:9px;color:var(--text-muted);margin-left:6px;">${esc(res.type || '')}</span>
+        </div>
+    `).join('') || '<div class="search-result-item" style="opacity:0.5;">No resources found</div>';
+};
+
+OL._geSetResourceBlock = function(blockId, resId, resName) {
+    const ht = OL._geGetHt();
+    const block = (ht?.blocks || []).find(b => b.id === blockId);
+    if (!block) return;
+
+    const note = document.getElementById(`ge-res-note-${blockId}`)?.value || '';
+    block.data = { resourceId: resId, resourceName: resName, note };
+    OL.persist();
+
+    // Re-render just this block
+    const blockEl = document.getElementById(`ge-blk-${blockId}`);
+    if (blockEl) {
+        blockEl.innerHTML = (OL._ge?.canEdit ? `
+            <div class="ge-block-controls" style="position:absolute;top:10px;right:10px;display:none;align-items:center;gap:4px;z-index:10;">
+                <button onclick="OL._geDeleteBlock('${blockId}')"
+                        style="width:24px;height:24px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);border-radius:5px;cursor:pointer;color:#ef4444;display:flex;align-items:center;justify-content:center;">
+                    <i data-lucide="trash-2" style="width:11px;height:11px;pointer-events:none;"></i>
+                </button>
+            </div>
+        ` : '') + OL._geRenderBlockInner(block, OL._ge?.canEdit);
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
 OL.getProjectsSharingSOP = function(sopId) {
     return Object.values(state.clients || {}).filter(client => 
         (client.sharedMasterIds || []).includes(sopId)
@@ -21362,205 +22124,20 @@ OL.getProjectsSharingSOP = function(sopId) {
 OL.openLocalHowToEditor = function() {
     const client = getActiveClient();
     if (!client) return;
-
     const draftId = 'draft-local-ht-' + Date.now();
-    const draftHowTo = {
-        id: draftId,
-        name: "",
-        summary: "",
-        content: "",
-        isDraft: true,
-        isLocal: true // 🚀 Flag to tell the saver where to go
-    };
-    OL.openHowToModal(draftId, draftHowTo);
+    const draftHowTo = { id: draftId, name: '', summary: '', content: '', blocks: [], isDraft: true, isLocal: true };
+    // Save draft first
+    if (!client.projectData.localHowTo) client.projectData.localHowTo = [];
+    client.projectData.localHowTo.push(draftHowTo);
+    OL.openGuideEditor(draftId);
 };
 
-// 3. RENDER HOW TO MODAL
-OL.openHowToModal = function(htId, draftObj = null) {
-    const hash = window.location.hash;
-    const isVaultMode = hash.includes('vault'); 
-    const client = getActiveClient();
-    
-    // 1. Resolve Guide Data
-    let ht = draftObj || (state.master.howToLibrary || []).find(h => h.id === htId);
-    if (!ht && client) {
-        ht = (client.projectData.localHowTo || []).find(h => h.id === htId);
-    }
-    if (!ht) return;
-
-    // 2. Identify Permissions & Scope
-    const isAdmin = window.FORCE_ADMIN === true;
-    const isLocal = String(ht.id).includes('local');
-    const isMaster = !isLocal;
-    const isDraft = String(htId).startsWith('draft');
-    const isShared = client?.sharedMasterIds?.includes(ht.id);
-
-    const canEdit = isAdmin || isLocal || isDraft;
-    const canPromote = isAdmin && isLocal && !isVaultMode;
-    const allApps = [...(state.master.apps || []), ...(client?.projectData?.localApps || [])];
-    const backlinks = OL.getSOPBacklinks(ht.id);
-    const sharedProjects = isMaster ? OL.getProjectsSharingSOP(ht.id) : [];
-
-    const html = `
-        <div class="modal-head" style="gap:15px; display:flex; align-items:center; padding: 20px;">
-            <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <i data-lucide="book-open" style="width:20px; height:20px; color:var(--accent);"></i>
-                <input type="text" class="header-editable-input" 
-                       value="${esc(ht.name)}" 
-                       placeholder="Enter SOP Name..."
-                       style="background:transparent; border:none; color:inherit; font-size:18px; font-weight:bold; width:100%; outline:none;"
-                       ${!canEdit ? 'readonly' : ''} 
-                       onblur="OL.handleHowToSave('${ht.id}', 'name', this.value)">
-            </div>
-            
-            <div style="display:flex; align-items:center; gap:10px;">
-                ${canPromote ? `
-                    <button class="btn tiny primary" 
-                            style="background: var(--accent) !important; color: black !important; font-weight: bold; display:flex; align-items:center; gap:6px;" 
-                            onclick="OL.promoteLocalSOPToMaster('${ht.id}')">
-                        <i data-lucide="star" style="width:12px; height:12px;"></i> PROMOTE
-                    </button>
-                ` : ''}
-
-                ${isAdmin && isMaster ? `
-                    <span class="pill tiny ${isShared ? 'accent' : 'soft'}" 
-                        style="font-size: 8px; cursor: pointer; display:flex; align-items:center; gap:4px;"
-                        onclick="OL.toggleSOPSharing('${client?.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
-                        <i data-lucide="${isShared ? 'globe' : 'lock'}" style="width:10px; height:10px;"></i>
-                        ${isShared ? 'Client-Facing' : 'Internal-Only'}
-                    </span>
-                ` : ''}
-                
-                ${!isAdmin && isLocal ? `
-                    <span class="pill tiny soft" style="font-size: 8px; display:flex; align-items:center; gap:4px;">
-                        <i data-lucide="map-pin" style="width:10px; height:10px;"></i> Project-Specific
-                    </span>
-                ` : ''}
-                <button class="btn small soft" onclick="OL.closeModal()">Close</button>
-            </div>
-        </div>
-
-        <div class="modal-body">
-            <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="file-text" style="width:14px; height:14px;"></i> Brief Summary
-                </label>
-                <input type="text" class="modal-input tiny" 
-                       placeholder="One-sentence overview..."
-                       value="${esc(ht.summary || '')}" 
-                       ${!canEdit ? 'readonly' : ''}
-                       onblur="OL.updateHowToField('${ht.id}', 'summary', this.value)">
-            </div>
-
-            <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="video" style="width:14px; height:14px;"></i> Training Video URL
-                </label>
-                ${canEdit ? `
-                    <input type="text" class="modal-input tiny" 
-                           placeholder="Paste link..."
-                           value="${esc(ht.videoUrl || '')}" 
-                           onblur="OL.handleHowToSave('${ht.id}', 'videoUrl', this.value); OL.openHowToModal('${ht.id}')">
-                ` : ''}
-                ${ht.videoUrl ? `<div class="video-preview-wrap" style="margin-top:10px; border-radius:8px; overflow:hidden;">${OL.parseVideoEmbed(ht.videoUrl)}</div>` : ''}
-            </div>
-
-            <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="folder" style="width:14px; height:14px;"></i> Category
-                </label>
-                <input type="text" class="modal-input tiny" 
-                       value="${esc(ht.category || 'General')}" 
-                       ${!canEdit ? 'readonly' : ''}
-                       onblur="OL.handleHowToSave('${ht.id}', 'category', this.value)">
-            </div>
-
-            <div class="card-section" style="margin-top:15px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="smartphone" style="width:14px; height:14px;"></i> Related Applications
-                </label>
-                <div class="pills-row" id="ht-app-pills" style="margin-bottom:8px;">
-                    ${(ht.appIds || []).map(appId => {
-                        const app = allApps.find(a => a.id === appId);
-                        return app ? `<span class="pill tiny accent" style="display:flex; align-items:center; gap:4px;">
-                            <i data-lucide="smartphone" style="width:10px; height:10px;"></i> ${esc(app.name)}
-                        </span>` : '';
-                    }).join('')}
-                </div>
-                ${canEdit ? `
-                    <div class="search-map-container">
-                        <div style="position:relative; display:flex; align-items:center;">
-                            <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
-                            <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Link an app..." 
-                                   onfocus="OL.filterHTAppSearch('${ht.id}', '')"
-                                   oninput="OL.filterHTAppSearch('${ht.id}', this.value)">
-                        </div>
-                        <div id="ht-app-search-results" class="search-results-overlay"></div>
-                    </div>
-                ` : ''}
-            </div>
-
-            <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:20px;">
-                <label class="modal-section-label" style="display:flex; align-items:center; gap:6px;">
-                    <i data-lucide="align-left" style="width:14px; height:14px;"></i> Instructions
-                </label>
-                <textarea class="modal-textarea" rows="12" 
-                          ${!canEdit ? 'readonly' : ''} 
-                          style="${!canEdit ? 'background:transparent; border:none; color:rgba(255,255,255,0.7); line-height:1.6;' : ''}"
-                          onblur="OL.handleHowToSave('${ht.id}', 'content', this.value)">${esc(ht.content || '')}</textarea>
-            </div>
-
-            ${backlinks.length > 0 ? `
-                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
-                    <label class="modal-section-label" style="color: var(--accent); opacity: 1; display:flex; align-items:center; gap:6px;">
-                        <i data-lucide="link" style="width:14px; height:14px;"></i> Mapped to Technical Resources
-                    </label>
-                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-                        ${backlinks.map(link => `
-                            <div class="pill soft is-clickable" 
-                                style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(56, 189, 248, 0.05);"
-                                onclick="OL.openResourceModal('${link.resId}')">
-                                <i data-lucide="${OL.getRegistryIcon(link.resType)}" style="width:14px; height:14px; color:var(--accent);"></i>
-                                <div style="flex: 1;">
-                                    <div style="font-size: 11px; font-weight: bold;">${esc(link.resName)}</div>
-                                    <div style="font-size: 9px; opacity: 0.6;">Linked via ${link.context}: "${esc(link.detail)}"</div>
-                                </div>
-                                <i data-lucide="chevron-right" style="width:14px; height:14px; opacity:0.4;"></i>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            ` : ''}
-
-            ${sharedProjects.length > 0 ? `
-                <div class="card-section" style="margin-top:25px; border-top: 1px solid var(--line); padding-top:20px;">
-                    <label class="modal-section-label" style="color: #10b981; display:flex; align-items:center; gap:6px;">
-                        <i data-lucide="globe" style="width:14px; height:14px;"></i> Shared With Projects
-                    </label>
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
-                        ${sharedProjects.map(p => `
-                            <div class="pill soft" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
-                                <i data-lucide="building" style="width:12px; height:12px;"></i>
-                                <span style="font-size: 10px; font-weight: bold;">${esc(p.name)}</span>
-                                <button class="pill-remove-x" 
-                                        style="cursor:pointer; opacity: 0.5; margin-left: 5px;" 
-                                        onclick="event.stopPropagation(); OL.deleteSOP('${p.id}', '${ht.id}'); OL.openHowToModal('${ht.id}')">
-                                    <i data-lucide="x" style="width:12px; height:12px;"></i>
-                                </button>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            ` : (isMaster ? '<div class="tiny muted" style="margin-top:20px;">This Master SOP is not shared with any projects.</div>' : '')}
-        </div>
-    `;
-    
-    openModal(html);
-
-    // 🚀 REPAINT
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
+OL.openHowToEditorModal = function() {
+    const draftId = 'draft-ht-' + Date.now();
+    const draftHowTo = { id: draftId, name: '', summary: '', content: '', blocks: [], isDraft: true };
+    if (!state.master.howToLibrary) state.master.howToLibrary = [];
+    state.master.howToLibrary.push(draftHowTo);
+    OL.openGuideEditor(draftId);
 };
 
 window.OL.promoteLocalSOPToMaster = function(localId) {
@@ -21643,7 +22220,7 @@ OL.toggleHTApp = function(htId, appId) {
     else ht.appIds.splice(idx, 1);
     
     OL.persist();
-    OL.openHowToModal(htId);
+    OL.openGuideEditor(htId);
 };
 
 OL.filterHTAppSearch = function(htId, query) {
@@ -21717,7 +22294,7 @@ OL.toggleHTResource = function(htId, resId) {
     }
     
     OL.persist(); // This will now save the modified object in whichever array it lives in
-    OL.openHowToModal(htId); 
+    OL.openGuideEditor(htId); 
 };
 
 // Filter the master resource library for the search dropdown
@@ -21756,17 +22333,6 @@ OL.toggleSOPSharing = function(clientId, htId) {
 };
 
 // 5. HANDLE EDIT or REMOVE HOW TO
-OL.openHowToEditorModal = function() {
-    const draftId = 'draft-ht-' + Date.now();
-    const draftHowTo = {
-        id: draftId,
-        name: "",
-        summary: "",
-        content: "",
-        isDraft: true
-    };
-    OL.openHowToModal(draftId, draftHowTo);
-};
 
 // 🚀 REAL-TIME SURGICAL SYNC
 OL.syncHowToName = function(htId, newName) {
@@ -22057,7 +22623,7 @@ OL.addHTRequirement = function(htId) {
     });
 
     OL.persist(); // Sync to storage
-    OL.openHowToModal(htId); // Refresh the modal to show the new row
+    OL.openGuideEditor(htId); // Refresh the modal to show the new row
 };
 
 OL.updateHTReq = function(htId, index, field, value) {
@@ -22071,7 +22637,7 @@ OL.updateHTReq = function(htId, index, field, value) {
     OL.persist();
     
     if (field === 'targetId' || field === 'clientGuideId') {
-        OL.openHowToModal(htId);
+        OL.openGuideEditor(htId);
     }
 };
 
@@ -22083,7 +22649,7 @@ OL.removeHTRequirement = function(htId, index) {
     ht.requirements.splice(index, 1);
     
     OL.persist();
-    OL.openHowToModal(htId);
+    OL.openGuideEditor(htId);
 };
 
 // =========================HOW TO SCOPING OVERLAP=====================================
