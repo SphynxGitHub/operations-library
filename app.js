@@ -714,7 +714,7 @@ window.buildLayout = function () {
   const isPartnerMode = isPartnerProject || (client && !!client.meta.partnerOwner);
   
   const token = urlParams.get("access");
-  const isMaster = hash.startsWith("#/vault");
+    const isMaster = hash.startsWith("#/vault") && !window.IS_GUEST;
 
   let homeLabel = "Dashboard";
   let homeAction = "";
@@ -994,6 +994,10 @@ window.handleRoute = function () {
     }
 
     if (isVault) {
+        if (window.IS_GUEST) {
+            window.location.hash = '#/';
+            return;
+        }
         if (hash.includes("/apps")) renderAppsGrid();
         else if (hash.includes("/functions")) renderFunctionsGrid();
         else if (hash.includes("/resources")) renderResourceManager();
