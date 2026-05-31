@@ -10760,30 +10760,78 @@ window.addEventListener('resize', () => {
 
 OL.handleCanvasDrop = async function(e) {
     e.preventDefault();
-    const canvas = document.getElementById('v2-canvas');
+    const canvas = document.getElementById('v2-canvas') || document.getElementById('fv-canvas');
     if (!canvas) return;
     
-    const zoom = state.v2.zoom || 1;
+    const zoom = (state.v2 && state.v2.zoom) || (OL._fv && OL._fv.zoom) || 1;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    const dragId = e.dataTransfer.getData('text/plain');
+    const dragId = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('application/fv-resource');
+    if (!dragId) return;
 
-    if (dragId) {
-        const data = OL.getCurrentProjectData();
-        const res = data.resources.find(r => String(r.id) === String(dragId));
+    const data = OL.getCurrentProjectData();
+    const res = data.resources.find(r => String(r.id) === String(dragId));
+    if (!res) return;
+
+    // 🎯 1. DETECT THE TARGET WORKFLOW & STAGE LANE BENEATH THE CURSOR
+    let targetStageId = null;
+    let targetWorkflowId = null;
+
+    // Temporarily hide the dragged item indicator if necessary to peer underneath it
+    const elementsUnderCursor = document.elementsFromPoint(e.clientX, e.clientY);
+    
+    for (const el of elementsUnderCursor) {
+        // Look for workflow block elements or group container IDs
+        const wfGroup = el.closest('.fv-list-workflow-group');
+        const stageLane = el.closest('.fv-list-stage') || el.closest('[data-stage-id]');
         
-        if (res) {
-            res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
-            res.isGlobal = false;
-            res.isTopShelf = false;
-            res.isDeleted = false;
+        if (wfGroup && wfGroup.id) {
+            // Assumes your workflow markup blocks expose their ID tags or data attributes
+            targetWorkflowId = wfGroup.id.replace('fv-workflow-group-', ''); 
+        }
+        if (stageLane) {
+            targetStageId = stageLane.id ? stageLane.id.replace('fv-list-stage-', '') : stageLane.getAttribute('data-stage-id');
+        }
+        if (targetStageId || targetWorkflowId) break;
+    }
 
-            await OL.persist();
-            OL.renderVisualizer(); 
+    // Fallback: If dropped into a workflow but stage wasn't resolved, look up the parent workflow context
+    if (targetWorkflowId && !targetStageId) {
+        const matchingWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
+        if (matchingWf) targetStageId = matchingWf.stageId;
+    }
+
+    // 🎯 2. CLEAN UP PHANTOM LINKS FROM OLD CHANNELS
+    if (res.workflowId && String(res.workflowId) !== String(targetWorkflowId)) {
+        const oldWf = (data.workflows || []).find(w => String(w.id) === String(res.workflowId));
+        if (oldWf && oldWf.resourceIds) {
+            oldWf.resourceIds = oldWf.resourceIds.filter(id => String(id) !== String(res.id));
         }
     }
+
+    // 🎯 3. UPDATE DATA ATTRIBUTES SAFELY (WITHOUT DESTROYING ISGLOBAL STATUS)
+    res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
+    res.stageId = targetStageId || res.stageId || null;
+    res.workflowId = targetWorkflowId || null;
+    res.isTopShelf = false;
+    res.isDeleted = false;
+
+    // 🎯 4. POPULATE THE TARGET WORKFLOW ARRAY INDEX FOR RENDER ALIGNMENT
+    if (targetWorkflowId) {
+        const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
+        if (targetWf) {
+            if (!targetWf.resourceIds) targetWf.resourceIds = [];
+            if (!targetWf.resourceIds.includes(String(res.id))) {
+                targetWf.resourceIds.push(String(res.id));
+                console.log(`🧼 Registered resource inside workflow layout array link: ${targetWorkflowId}`);
+            }
+        }
+    }
+
+    await OL.persist();
+    OL.renderVisualizer(); 
 };
 
 OL.autoAlignNodes = async function() {
@@ -13387,11 +13435,9 @@ OL._fvBuildListShell = function(stages, resources) {
         // Get workflows explicitly tied to this structural stage index lane
         const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
         
-        // Isolate remaining local unassigned resource cards for this phase
-        const assignedResIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []));
-        const unassignedResources = resources.filter(r => 
-            r.stageId === stage.id && !assignedResIds.has(String(r.id))
-        );
+        // 🎯 TRACK RENDERED GLOBAL ASSETS
+        // Keep a running record of any global resource ID that successfully renders inside an active workflow group
+        const globalsRenderedInWorkflows = new Set();
 
         let stageWorkflowsHtml = '';
         let totalStageStepsCount = 0;
@@ -13400,17 +13446,14 @@ OL._fvBuildListShell = function(stages, resources) {
         stageWorkflows.forEach(wf => {
             if (filter && !filter.startsWith('stage-') && filter !== '' && wf.id !== filter) return;
 
-            // 🎯 THE MULTI-INSTANCE BRIDGE:
-            // Instead of filtering down a single master object array, we compile an 
-            // explicit instance map row for every single ID registered in the workflow path array.
+            // THE MULTI-INSTANCE BRIDGE:
             const wfResources = (wf.resourceIds || [])
                 .map(id => {
                     const found = resources.find(r => String(r.id) === id);
                     if (!found) return null;
                     
-                    // 🧬 SURGICAL CLONING: If it's a global card, return an isolated execution copy 
-                    // tied exclusively to this workflow and stage instance context path.
                     if (found.isGlobal) {
+                        globalsRenderedInWorkflows.add(String(found.id));
                         return {
                             ...found,
                             stageId: stage.id,
@@ -13429,13 +13472,27 @@ OL._fvBuildListShell = function(stages, resources) {
                 const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
                 totalStageStepsCount += steps.length;
                 
-                return steps.map((step, idx) => 
-                    OL._fvRenderListStep(step, res, idx, globalIds, resources, 0, new Set())
-                ).join('');
+                return steps.map((step, idx) => {
+                    // 🎯 PASS WORKFLOW CONTEXT IF IT'S A GLOBAL CLONE INSTANCE
+                    // This tells the step renderer to append a unique suffix to the HTML IDs 
+                    // (e.g., id="step-${step.id}-${wf.id}") so different copies stay isolated.
+                    const contextWfId = res.isGlobalInstanceCopy ? wf.id : null;
+                    
+                    return OL._fvRenderListStep(
+                        step, 
+                        res, 
+                        idx, 
+                        globalIds, 
+                        resources, 
+                        0, 
+                        new Set(), 
+                        contextWfId // 🚀 Added parameter passing
+                    );
+                }).join('');
             }).join('');
 
             stageWorkflowsHtml += `
-                <div class="fv-list-workflow-group" style="margin-top: 12px; margin-bottom: 15px; padding-left: 10px; border-left: 2px solid var(--accent);">
+                <div class="fv-list-workflow-group" id="fv-workflow-group-${wf.id}" style="margin-top: 12px; margin-bottom: 15px; padding-left: 10px; border-left: 2px solid var(--accent);">
                     <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; opacity:0.7;">
                         <i data-lucide="workflow" style="width:12px; height:12px; color:var(--accent);"></i>
                         <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">
@@ -13446,8 +13503,18 @@ OL._fvBuildListShell = function(stages, resources) {
                 </div>
             `;
         });
-
+        
         // 🏢 2. RENDER UNASSIGNED COMPONENT CORES UNDER STAGE
+        // 🎯 THE SURGICAL DE-DUPLICATION FILTER
+        // A resource qualifies for the fallback bottom tray if it belongs to this stage,
+        // is NOT assigned to a local workflow sequence, and has NOT already been rendered as a global instance copy.
+        const assignedResIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []));
+        const unassignedResources = resources.filter(r => 
+            r.stageId === stage.id && 
+            !assignedResIds.has(String(r.id)) && 
+            !globalsRenderedInWorkflows.has(String(r.id))
+        );
+
         if (unassignedResources.length > 0 && (!filter || filter.startsWith('stage-'))) {
             const unassignedStepsContentHtml = unassignedResources.map(res => {
                 const steps = (res.steps || []).filter(s => OL._fv.showArchived || !s.isArchived);
@@ -14203,11 +14270,15 @@ OL._fvToggleStepsPanel = function(resId) {
   }
 };
 
-OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth, visited) {
+OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, depth, visited, contextWfId = null) {
     // Guard against infinite recursion and excessive depth
     if (depth > 5) return '';
     if (!visited) visited = new Set();
-    const stepKey = `${res.id}-${step.id}`;
+    
+    // 🎯 UNIQUE REGISTRY KEYS FOR GLOBAL COPIES
+    // We add the context ID string to the tracking key so the anti-duplication shield 
+    // treats separate workflow tracks as completely independent lane instances.
+    const stepKey = contextWfId ? `${res.id}-${step.id}-${contextWfId}` : `${res.id}-${step.id}`;
     if (visited.has(stepKey)) return '';
     visited.add(stepKey);
 
@@ -14222,12 +14293,12 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         if (OL._fv.showArchived) return true;
         const lastH  = String(l.targetId).lastIndexOf('-');
         const tResId = l.targetId.substring(0, lastH);
-        const tStepId = l.targetId.substring(lastH + 1);
         const tRes   = allResources.find(r => String(r.id) === String(tResId));
         return !tRes?.isArchived;
     });
 
-    const collapseId = `fv-substeps-${step.id}`;
+    // 🎯 CONTEXT-AWARE HOOK IDENTIFIERS
+    const collapseId = contextWfId ? `fv-substeps-${step.id}-${contextWfId}` : `fv-substeps-${step.id}`;
     const resBadgeBg = tc.color + '18';
     
     const resBadge = `<span class="fv-list-res-badge"
@@ -14238,7 +14309,6 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         ${tc.abbr} ${esc(res.name.substring(0, 14))}
       </span>`;
 
-    // 🎯 RE-ARCHITECTING THE NESTING & FLOW LINES
     let inlineRoutingBadgesHtml = '';
     let nestedBranchesHtml = '';
     let hasNesting = false;
@@ -14261,25 +14331,27 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         const isCond  = rule.type === 'condition' || (rule.rule && rule.rule.trim().length > 0);
         
         const targetLabel = `${tRes.name.substring(0,12)} › ${tStep.name || 'Step'}`;
-        const jumpTargetHtmlId = `fv-list-step-${tStepId}`;
+        
+        // 🎯 TARGET CLONE COPIES IN SCROLL JUMPS
+        // If the current step lives in a workflow context lane, ensure the smooth-scrolling target
+        // looks for its neighboring step copy inside that exact same layout track!
+        const jumpTargetHtmlId = contextWfId ? `fv-list-step-${tStepId}-${contextWfId}` : `fv-list-step-${tStepId}`;
 
-        // 🔀 PATH A: Structural Conditional Cascading (Indents original target step below)
+        // 🔀 PATH A: Structural Conditional Cascading
         if (isCond) {
             hasNesting = true;
             const ruleText = rule.rule && rule.rule.trim() ? rule.rule.trim() : 'Conditional';
 
-            // Track globally that this specific downstream target step has now been claimed by a nested branch layout container block
             if (!window._fvRenderedStepRegistry) window._fvRenderedStepRegistry = new Set();
-            window._fvRenderedStepRegistry.add(`${tResId}-${tStepId}`);
+            window._fvRenderedStepRegistry.add(stepKey);
 
-            // Nest the target step directly under this branch header wrapper
             nestedBranchesHtml += `
                 <div class="fv-list-branch" style="margin-top: 6px; position: relative;">
                     <div class="fv-branch-label" style="color:#10b981; display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:0.02em; padding-left: ${28 + (depth * 12)}px; margin-bottom: 4px;">
                         <i data-lucide="git-commit" style="width:12px; height:12px; color:#10b981;"></i> 
                         <span>IF: ${esc(ruleText.toUpperCase())}</span>
                     </div>
-                    ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited)}
+                    ${OL._fvRenderListStep(tStep, tRes, tRes.steps.indexOf(tStep), globalIds, allResources, depth + 1, visited, contextWfId)}
                 </div>`;
         } 
         // 🔀 PATH B: Flat Inline Badge Indicators (Loops, Delays, Jumps)
@@ -14315,13 +14387,10 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
     });
 
     // 🛡️ THE ANTI-DUPLICATION SHIELD:
-    // If this step key has already been captured and processed inside an inner branch,
-    // we bypass rendering its root-level instance entirely to eliminate duplication.
-    if (!isIndentedChild && window._fvRenderedStepRegistry && window._fvRenderedStepRegistry.has(`${res.id}-${step.id}`)) {
+    if (!isIndentedChild && window._fvRenderedStepRegistry && window._fvRenderedStepRegistry.has(stepKey)) {
         return ''; 
     }
 
-    // Dynamic Tag Generator
     const tags = [
         isGlobal ? `<span class="fv-list-tag global">🌐 Global</span>` : '',
         hasLoop   ? `<span class="fv-list-tag loop">↺ Loop</span>`      : '',
@@ -14329,14 +14398,18 @@ OL._fvRenderListStep = function(step, res, stepIdx, globalIds, allResources, dep
         (isConditional && !isDecision) ? `<span class="fv-list-tag conditional">◆ Conditional</span>` : ''
     ].filter(Boolean).join('');
 
+    // 🎯 CONTEXT-ISOLATED INTERACTION SURFACE
+    const customRowElementHtmlId = contextWfId ? `fv-list-step-${step.id}-${contextWfId}` : `fv-list-step-${step.id}`;
+
     return `
     <div style="margin-bottom: 4px; margin-left:${isIndentedChild ? '24px' : '0px'};">
       <div class="fv-list-row" style="${isIndentedChild ? 'border-left: 2px dashed rgba(61,217,197,0.25); padding-left: 12px;' : ''}">
         <div class="fv-tree-connector"></div>
         <div class="fv-list-item ${isDecision ? 'is-decision' : ''} ${isGlobal ? 'is-global' : ''}"
-             id="fv-list-step-${step.id}"
+             id="${customRowElementHtmlId}"
              data-step-id="${step.id}"
              data-res-id="${res.id}"
+             data-context-wf-id="${contextWfId || ''}"
              draggable="true"
              ondragstart="event.stopPropagation(); OL.handleStepDragStart(event, '${res.id}', ${res.steps.indexOf(step)})"
              ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('drag-over')"
