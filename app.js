@@ -13008,7 +13008,6 @@ OL._fvPopulateWb = function(tab, resources) {
     if (window.lucide) lucide.createIcons();
 };
 
-/* Find OL._fvRenderWbItems and intercept the array string builder loop: */
 OL._fvRenderWbItems = function(items, tab) {
     if (!items.length) return `<div style="padding:20px; text-align:center; color:#9ca3af; font-size:12px; font-style:italic;">No ${tab} found</div>`;
     
@@ -13069,7 +13068,7 @@ OL._fvRenderWbItems = function(items, tab) {
                  data-type="${tab}"
                  ondragstart="OL._fvWbDragStart(event,'${item.id}','${tab}')"
                  onclick="OL.openInspector('${item.id}', null, 'cards')"
-                 style="cursor:grab;">
+                 style="cursor:grab;${item.isGlobal ? 'border:1.5px solid #7c3aed;box-shadow:0 0 0 1px rgba(124,58,237,0.15);' : ''}">
                 <div class="fv-wb-item-icon"
                      style="background:${isData ? 'rgba(124,58,237,0.1)' : tc.color+'18'};
                             color:${isData ? '#7c3aed' : tc.color};">
@@ -13079,10 +13078,15 @@ OL._fvRenderWbItems = function(items, tab) {
                     <div class="fv-wb-item-name">${esc(name.substring(0,24))}</div>
                     ${!isData ? `<div class="fv-wb-item-type">${esc(item.type||'')}</div>` : ''}
                 </div>
-                <div style="margin-left:auto; color:rgba(255,255,255,0.2); font-size:10px;">⠿</div>
+               <div style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+                    ${item.isGlobal ? OL.getLucideSVG('globe', 10, '#7c3aed') : ''}
+                    <span style="color:rgba(255,255,255,0.2);font-size:10px;">⠿</span>
+                </div>
             </div>
         `;
     }).join('');
+    
+    if (window.lucide) lucide.createIcons();
 };
 
 OL.moveStageIndex = async function(fromIdx, toIdx) {
