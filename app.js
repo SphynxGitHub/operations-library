@@ -7845,15 +7845,31 @@ OL.logResourceEdit = function(resId, field, oldVal, newVal) {
 OL.handleResourceSave = function(id, field, value) {
     const data = OL.getCurrentProjectData();
     const res = data.resources.find(r => String(r.id) === String(id));
+    
     if (res) {
+        // 🌐 THE SAFETY SHIELD INTERCEPTOR
+        // If the resource is global and an event is forcing a track lane shift on the root object,
+        // we short-circuit the execution to prevent it from vanishing from other workflows!
+        if (res.isGlobal && (field === 'stageId' || field === 'workflowId')) {
+            console.warn(`🛡️ Global Protection Guard: Aborted root mutation [${field}: ${value}] on resource "${res.name}". Workflow arrays handle this placement.`);
+            
+            // Still force a quick visual refresh to snap the card back into its correct track line if it visually moved
+            if (window.location.hash.includes('visualizer')) {
+                OL.renderVisualizer();
+            }
+            return; 
+        }
+
         const oldVal = res[field];
         OL.logResourceEdit(id, field, oldVal, value);
         res[field] = value;
+        
         OL.persist().then(() => {
             const modalOpen = document.getElementById('active-modal-box');
             const inspectorOpen = document.getElementById('v2-inspector-panel')?.classList.contains('open');
             const isVisualizer = window.location.hash.includes('visualizer');
             const isResources = window.location.hash.includes('resources');
+            
             if (modalOpen) {
                 OL.openResourceModal(id);
             } else if (inspectorOpen && isVisualizer) {
@@ -10759,7 +10775,10 @@ window.addEventListener('resize', () => {
 });
 
 OL.handleCanvasDrop = async function(e) {
+    // 🛑 STOP BOTH BROWSER ACTIONS AND ELEMENT OVERLAPS FROM FIRING MULTIPLE DROPS
     e.preventDefault();
+    e.stopPropagation();
+    
     const canvas = document.getElementById('v2-canvas') || document.getElementById('fv-canvas');
     if (!canvas) return;
     
@@ -10768,14 +10787,14 @@ OL.handleCanvasDrop = async function(e) {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    const dragId = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('application/fv-resource');
+    const dragId = e.dataTransfer.getData('application/fv-resource') || e.dataTransfer.getData('text/plain');
     if (!dragId) return;
 
     const data = OL.getCurrentProjectData();
     const res = data.resources.find(r => String(r.id) === String(dragId));
     if (!res) return;
 
-    // 🎯 1. DETERMINE WHICH WORKFLOW TRAY BOX LIES BENEATH THE MOUSE
+    // 🎯 1. FIND THE TARGET WORKFLOW AND STAGE DIRECTLY BENEATH THE MOUSE CURSOR
     let targetStageId = null;
     let targetWorkflowId = null;
 
@@ -10793,34 +10812,34 @@ OL.handleCanvasDrop = async function(e) {
         if (targetStageId || targetWorkflowId) break;
     }
 
-    // Fallback if dropped inside a workflow box but stage element wasn't resolved directly
     if (targetWorkflowId && !targetStageId) {
         const matchingWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
         if (matchingWf) targetStageId = matchingWf.stageId;
     }
 
-    // Grab the origin workflow context data from the drag start state
+    // Capture the origin workflow context that we bundled during DragStart
     const sourceWfId = e.dataTransfer.getData('application/fv-context-wf') || OL._fv._draggingContextWfId;
 
-    // 🎯 2. PROCESS DROP MECHANICS BASED ON TYPE (GLOBAL CLONE VS LOCAL MOVE)
+    // 🎯 2. PROCESS ENGINES BASED ON GLOBAL BLUEPRINT STATUS
     if (res.isGlobal === true) {
-        // 🌐 GLOBAL ASSET ROUTING RULES (Clone/Stamp Mechanics)
-        // CRITICAL: We NEVER mutate res.stageId or res.workflowId on the master template object!
-        // This ensures existing copies on other parts of the canvas stay exactly where they are.
+        // 🌐 GLOBAL ARTIFACT RULES: ABSOLUTELY ZERO ROOT PROPERTY MUTATIONS ALLOWED
+        // We do NOT write to res.stageId or res.workflowId. This leaves old map copies alone!
         
         if (targetWorkflowId) {
             const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
             if (targetWf) {
                 if (!targetWf.resourceIds) targetWf.resourceIds = [];
-                // Push the ID to the new workflow's tracking array to create the clone stamp instance copy
+                
+                // Add to the new workflow sequence array
                 if (!targetWf.resourceIds.includes(String(res.id))) {
                     targetWf.resourceIds.push(String(res.id));
                 }
             }
+            console.log(`🌐 Global stamped safely onto Workflow Array: ${targetWorkflowId}`);
         }
     } else {
-        // 🏠 LOCAL ASSET ROUTING RULES (Physical Move Mechanics)
-        // If moving a standard local asset from an old workflow, clean up its old array pointer first
+        // 🏠 LOCAL ARTIFACT RULES: STANDARD SINGLE-INSTANCE MOVE
+        // Clean out its tracking reference from its old workflow array lane
         if (sourceWfId && String(sourceWfId) !== String(targetWorkflowId)) {
             const oldWf = (data.workflows || []).find(w => String(w.id) === String(sourceWfId));
             if (oldWf && oldWf.resourceIds) {
@@ -10828,12 +10847,11 @@ OL.handleCanvasDrop = async function(e) {
             }
         }
 
-        // Change its physical master root address properties
+        // Standard root property mutations for local files
         res.stageId = targetStageId || res.stageId || null;
         res.workflowId = targetWorkflowId || null;
         res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
 
-        // Append its ID into the new targeted array list sequence
         if (targetWorkflowId) {
             const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
             if (targetWf) {
@@ -10845,7 +10863,6 @@ OL.handleCanvasDrop = async function(e) {
         }
     }
 
-    // Reset common UI canvas drag parameters
     res.isTopShelf = false;
     res.isDeleted = false;
 
@@ -13552,7 +13569,12 @@ OL._fvBuildListShell = function(stages, resources) {
             }).join('');
 
             stageWorkflowsHtml += `
-                <div class="fv-list-workflow-group" id="fv-workflow-group-${wf.id}" style="margin-top: 12px; margin-bottom: 15px; padding-left: 10px; border-left: 2px solid var(--accent);">
+                <div class="fv-list-workflow-group" 
+                     id="fv-workflow-group-${wf.id}" 
+                     ondragover="event.preventDefault();"
+                     ondrop="OL.handleCanvasDrop(event);"
+                     style="margin-top: 12px; margin-bottom: 15px; padding-left: 10px; border-left: 2px solid var(--accent);">
+                     
                     <div style="display:flex; align-items:center; gap:6px; margin-bottom:10px; opacity:0.7;">
                         <i data-lucide="workflow" style="width:12px; height:12px; color:var(--accent);"></i>
                         <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">
