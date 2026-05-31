@@ -6616,3 +6616,100 @@ body.is-visualizer #v2-inspector-panel {
     border-radius: 99px;
     z-index: 10;
 }
+
+/* ── FLOW MAP THEMING ──────────────────────────────── */
+#fv-shell {
+    background: var(--bg);
+    color: var(--text-main);
+}
+#fv-topbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+}
+#fv-canvas-wrap,
+#fv-lanes-container {
+    background: var(--bg);
+}
+.fv-swimlane {
+    background: var(--panel-soft);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 16px;
+}
+.fv-swimlane:nth-child(even) {
+    background: var(--panel-dark);
+}
+.fv-stage-header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+}
+.fv-card {
+    background: var(--panel);
+    border: 0.5px solid var(--panel-border);
+    color: var(--text-main);
+}
+.fv-card:hover { border-color: var(--accent); }
+.fv-card.is-global { border: 1.5px solid #7c3aed !important; }
+.fv-card-name { color: var(--text-main); }
+.fv-card-footer {
+    border-top: 1px solid var(--line);
+    color: var(--text-dim);
+}
+.fv-card-slot.fv-insert-before::before { background: #7c3aed; }
+.fv-list-item {
+    background: var(--panel);
+    border-color: var(--panel-border);
+    color: var(--text-main);
+}
+.fv-list-item:hover { background: var(--panel-soft); }
+.fv-list-step-name { color: var(--text-main); }
+.fv-list-res-badge {
+    background: var(--panel-soft);
+    border-color: var(--panel-border);
+}
+.fv-wb-drawer {
+    background: var(--panel-dark);
+    border-right: 1px solid var(--panel-border);
+}
+.fv-search-wrap {
+    background: var(--panel-soft);
+    border: 1px solid var(--panel-border);
+}
+.fv-search-wrap input {
+    background: transparent;
+    color: var(--text-main);
+}
+.fv-btn {
+    background: var(--panel-soft);
+    border-color: var(--panel-border);
+    color: var(--text-dim);
+}
+.fv-btn:hover {
+    background: var(--panel);
+    border-color: var(--accent);
+    color: var(--text-main);
+}
+.fv-select {
+    background: var(--panel-soft);
+    border-color: var(--panel-border);
+    color: var(--text-main);
+}
+
+/* ── INSPECTOR THEMING ─────────────────────────────── */
+#v2-inspector-panel {
+    background: var(--panel);
+    border-left: 1px solid var(--panel-border);
+}
+.fvi-step-row { border-bottom: 1px solid var(--line); }
+.fvi-step-row:hover { background: var(--panel-soft); }
+.fvi-step-name { color: var(--text-main); }
+.fvi-section { border-bottom: 1px solid var(--line); }
+.fvi-label { color: var(--text-dim); }
+.fvi-input, .fvi-select, .fvi-textarea {
+    background: var(--panel-soft);
+    border-color: var(--panel-border);
+    color: var(--text-main);
+}
+.fvi-input:focus, .fvi-select:focus, .fvi-textarea:focus {
+    border-color: var(--accent);
+    outline: none;
+}
