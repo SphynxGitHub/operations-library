@@ -11465,20 +11465,20 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
         <div style="display:flex;align-items:center;gap:4px;margin-left:auto;">
           <button onclick="OL._fvCreateWorkflow('${stage.id}')"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
-                         border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
+                         border-radius:6px;border:0.5px solid var(--panel-border);background:var(--panel-soft);
                          color:var(--text-dim);font-size:10px;cursor:pointer;">
             <i data-lucide="plus" style="width:10px;height:10px;"></i> Workflow
           </button>
           <button onclick="OL.addStageBetween(${si})"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
-                         border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
+                         border-radius:6px;border:0.5px solid var(--panel-border);background:var(--panel-soft);
                          color:var(--text-dim);font-size:10px;cursor:pointer;"
                   title="Add stage before">
             <i data-lucide="plus-circle" style="width:10px;height:10px;"></i>
           </button>
           <button onclick="OL._fvEditStageName('${stage.id}')"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
-                         border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
+                         border-radius:6px;border:0.5px solid var(--panel-border);background:var(--panel-soft);
                          color:var(--text-dim);font-size:10px;cursor:pointer;"
                   title="Rename stage">
             <i data-lucide="pencil" style="width:10px;height:10px;"></i>
