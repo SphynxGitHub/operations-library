@@ -10775,20 +10775,16 @@ OL.handleCanvasDrop = async function(e) {
     const res = data.resources.find(r => String(r.id) === String(dragId));
     if (!res) return;
 
-    // 🎯 1. DETECT THE TARGET WORKFLOW & STAGE LANE BENEATH THE CURSOR
+    // 🎯 1. FIND WHAT LANE LIES DIRECTLY UNDER THE MOUSE
     let targetStageId = null;
     let targetWorkflowId = null;
 
-    // Temporarily hide the dragged item indicator if necessary to peer underneath it
     const elementsUnderCursor = document.elementsFromPoint(e.clientX, e.clientY);
-    
     for (const el of elementsUnderCursor) {
-        // Look for workflow block elements or group container IDs
         const wfGroup = el.closest('.fv-list-workflow-group');
         const stageLane = el.closest('.fv-list-stage') || el.closest('[data-stage-id]');
         
         if (wfGroup && wfGroup.id) {
-            // Assumes your workflow markup blocks expose their ID tags or data attributes
             targetWorkflowId = wfGroup.id.replace('fv-workflow-group-', ''); 
         }
         if (stageLane) {
@@ -10797,38 +10793,56 @@ OL.handleCanvasDrop = async function(e) {
         if (targetStageId || targetWorkflowId) break;
     }
 
-    // Fallback: If dropped into a workflow but stage wasn't resolved, look up the parent workflow context
     if (targetWorkflowId && !targetStageId) {
         const matchingWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
         if (matchingWf) targetStageId = matchingWf.stageId;
     }
 
-    // 🎯 2. CLEAN UP PHANTOM LINKS FROM OLD CHANNELS
-    if (res.workflowId && String(res.workflowId) !== String(targetWorkflowId)) {
-        const oldWf = (data.workflows || []).find(w => String(w.id) === String(res.workflowId));
-        if (oldWf && oldWf.resourceIds) {
-            oldWf.resourceIds = oldWf.resourceIds.filter(id => String(id) !== String(res.id));
+    // 🎯 2. PROCESS DROP BASED ON RESOURCE ARCHETYPE (GLOBAL VS LOCAL)
+    if (res.isGlobal === true) {
+        // 🌐 GLOBAL ASSET DROP (STAMP BLUEPRINT MECHANICS)
+        // Do NOT change res.workflowId or res.stageId on the root object!
+        // Leaving them untouched prevents overwriting its presence in other workflows.
+        
+        if (targetWorkflowId) {
+            const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
+            if (targetWf) {
+                if (!targetWf.resourceIds) targetWf.resourceIds = [];
+                if (!targetWf.resourceIds.includes(String(res.id))) {
+                    targetWf.resourceIds.push(String(res.id));
+                }
+            }
         }
-    }
+    } else {
+        // 🏠 LOCAL ASSET DROP (PHYSICAL MOVE MECHANICS)
+        // Clean up its tracking ID from its previous workflow array registration
+        if (res.workflowId && String(res.workflowId) !== String(targetWorkflowId)) {
+            const oldWf = (data.workflows || []).find(w => String(w.id) === String(res.workflowId));
+            if (oldWf && oldWf.resourceIds) {
+                oldWf.resourceIds = oldWf.resourceIds.filter(id => String(id) !== String(res.id));
+            }
+        }
 
-    // 🎯 3. UPDATE DATA ATTRIBUTES SAFELY (WITHOUT DESTROYING ISGLOBAL STATUS)
-    res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
-    res.stageId = targetStageId || res.stageId || null;
-    res.workflowId = targetWorkflowId || null;
-    res.isTopShelf = false;
-    res.isDeleted = false;
+        // Update its single physical home coordinates and lane bindings
+        res.stageId = targetStageId || res.stageId || null;
+        res.workflowId = targetWorkflowId || null;
+        res.coords = { x: Math.round(x - 110), y: Math.round(y - 20) };
 
-    // 🎯 4. POPULATE THE TARGET WORKFLOW ARRAY INDEX FOR RENDER ALIGNMENT
-    if (targetWorkflowId) {
-        const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
-        if (targetWf) {
-            if (!targetWf.resourceIds) targetWf.resourceIds = [];
-            if (!targetWf.resourceIds.includes(String(res.id))) {
-                targetWf.resourceIds.push(String(res.id));
-                console.log(`🧼 Registered resource inside workflow layout array link: ${targetWorkflowId}`);
+        // Register its ID into the new workflow's local sequence list array
+        if (targetWorkflowId) {
+            const targetWf = (data.workflows || []).find(w => String(w.id) === String(targetWorkflowId));
+            if (targetWf) {
+                if (!targetWf.resourceIds) targetWf.resourceIds = [];
+                if (!targetWf.resourceIds.includes(String(res.id))) {
+                    targetWf.resourceIds.push(String(res.id));
+                }
             }
         }
     }
+
+    // Common system state triggers
+    res.isTopShelf = false;
+    res.isDeleted = false;
 
     await OL.persist();
     OL.renderVisualizer(); 
@@ -12309,8 +12323,18 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
          id="fv-card-${res.id}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
+         data-workflow-id="${res.workflowId || ''}"
          draggable="true"
-         ondragstart="OL._fvCardDragStart(event, '${res.id}')"
+         ondragstart="
+            event.stopPropagation();
+            // 🎯 PASS BOTH RESOURCE ID AND WORKFLOW CONTAINER CONTEXT
+            event.dataTransfer.setData('text/plain', '${res.id}');
+            event.dataTransfer.setData('application/fv-resource', '${res.id}');
+            event.dataTransfer.setData('application/fv-context-wf', '${res.workflowId || ''}');
+            if (typeof OL._fvCardDragStart === 'function') {
+                OL._fvCardDragStart(event, '${res.id}');
+            }
+         "
          ondragend="OL._fvCardDragEnd(event)"
          onclick="event.stopPropagation();
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
@@ -13344,27 +13368,46 @@ OL._fvSetupRailScroll = function() {
   }, { passive: true });
 };
 
-OL._fvUnmapResource = function(resId) {
-    const client = getActiveClient();
-    if (!client) return;
+OL._fvUnmapResource = async function(resId, contextWorkflowId = null) {
+    const data = OL.getCurrentProjectData();
+    const res = (data.resources || []).find(r => String(r.id) === String(resId));
+    if (!res) return;
 
-    const resources = client.projectData.localResources || [];
-    const res = resources.find(r => String(r.id) === String(resId));
-    if (!res) { console.error('Not found:', resId); return; }
+    console.group(`🧼 Unmapping Resource: ${res.name}`);
 
-    // Mutate directly on the client object — no aliases
-    res.stageId    = null;
-    res.workflowId = null;
-    res.isGlobal   = false;
-    res.isTopShelf = false;
+    // 🎯 IF WE KNOW EXACTLY WHICH WORKFLOW TRAY IT CAME FROM
+    if (contextWorkflowId) {
+        const wf = (data.workflows || []).find(w => String(w.id) === String(contextWorkflowId));
+        if (wf && wf.resourceIds) {
+            wf.resourceIds = wf.resourceIds.filter(id => String(id) !== String(resId));
+            console.log(`❌ Removed instance reference from Workflow array: ${contextWorkflowId}`);
+        }
+    } 
+    // 🔍 FALLBACK: If dragged to the sidebar rail and contextWorkflowId wasn't passed,
+    // look up which workflow currently holds it under the cursor
+    else {
+        (data.workflows || []).forEach(wf => {
+            if (wf.resourceIds && wf.resourceIds.includes(String(resId))) {
+                // If it's global, we only want to drop it from the workflow we are interacting with.
+                // For safety in a global drag-to-rail fallback without context, we check if it matches the current view state.
+                if (!res.isGlobal || String(wf.id) === String(OL._fv.activeWorkflowId)) {
+                    wf.resourceIds = wf.resourceIds.filter(id => String(id) !== String(resId));
+                }
+            }
+        });
+    }
 
-    client.projectData.workflows = (client.projectData.workflows || []).map(wf => ({
-        ...wf,
-        resourceIds: (wf.resourceIds || []).filter(id => String(id) !== String(resId))
-    }));
+    // 🏠 LOCAL MECHANICS ONLY: Global master attributes remain completely untouched!
+    if (!res.isGlobal) {
+        res.stageId = null;
+        res.workflowId = null;
+        if (res.coords) delete res.coords;
+        console.log("🧹 Local asset wiped clean from root properties.");
+    }
 
-    console.log('✅ Unmapped. Rendering...');
-    OL.persist();
+    console.groupEnd();
+
+    await OL.persist();
     OL.renderVisualizer();
 };
 
