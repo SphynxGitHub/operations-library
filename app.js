@@ -12171,6 +12171,7 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   const stepCount = (res.steps || []).length;
   const hasLogic = (res.steps || []).some(s => (s.logic?.out || []).some(l => l.targetId));
   const isExpanded = OL._fv.stepsExpanded || OL._fv._expandedCards?.has(res.id);
+    const isGlobal = res.isGlobal === true || globalIds.has(String(res.id));
     
   const tags = (res.steps || []).slice(0, 2)
     .map(s => `<span class="fv-card-tag">${esc((s.name||'').substring(0,16))}</span>`)
