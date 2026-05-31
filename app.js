@@ -21480,7 +21480,7 @@ OL.openGuideEditor = function(htId, draftObj = null) {
                     </div>
 
                     ${canEdit ? `
-                        <div onclick="OL._geAddBlock('text')"
+                        <div onmousedown="event.preventDefault(); OL._geToggleBlockMenu();"
                              style="border:1px dashed var(--panel-border);border-radius:10px;
                                     padding:20px;text-align:center;cursor:pointer;
                                     color:var(--text-muted);font-size:12px;
