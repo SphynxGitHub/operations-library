@@ -6675,7 +6675,7 @@ OL.openResourceModal = function (targetId, draftObj = null) {
 
         const isZap = projectRes?.type?.toLowerCase() === 'zap' || v.label?.toLowerCase().includes('zap');
         const isStepVar = v.label?.toLowerCase().includes('step');
-       const isConditionVar = v.label?.toLowerCase().includes('condition');
+       const isLogicVar = v.label?.toLowerCase().includes('logic');
 
         let displayVal = num(activeData.data?.[varKey]);
         let inputProps = "";
@@ -6699,20 +6699,23 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             }
         }
 
-       if (isConditionVar) {
-            const actualConditionCount = (projectRes.steps || []).reduce((acc, s) => {
-                return acc + (s.logic?.out || []).filter(l => 
-                    l.targetId && (l.types||[l.type||'next']).includes('condition')
-                ).length;
+       if (isLogicVar) {
+            const actualLogicCount = (projectRes.steps || []).reduce((acc, s) => {
+                return acc + (s.logic?.out || []).filter(l => {
+                    if (!l.targetId) return false;
+                    const types = l.types || [l.type || 'next'];
+                    // Count any rule that has at least one non-next type
+                    return types.some(t => t !== 'next');
+                }).length;
             }, 0);
-            displayVal = actualConditionCount;
+            displayVal = actualLogicCount;
             inputProps = "readonly style='background:rgba(255,159,67,0.1);color:#ff9f43;border-color:#ff9f43;cursor:not-allowed;'";
             badge = `<span style="color:#ff9f43;font-size:9px;margin-left:5px;font-weight:bold;">⚡ AUTO</span>`;
         
-            if (num(activeData.data?.[varKey]) !== actualConditionCount) {
+            if (num(activeData.data?.[varKey]) !== actualLogicCount) {
                 if (!activeData.data) activeData.data = {};
-                activeData.data[varKey] = actualConditionCount;
-                OL.updateResourcePricingData(activeData.id, varKey, actualConditionCount);
+                activeData.data[varKey] = actualLogicCount;
+                OL.updateResourcePricingData(activeData.id, varKey, actualLogicCount);
             }
         }
 
