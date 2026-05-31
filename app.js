@@ -11136,27 +11136,24 @@ OL.renderVisualizer = function() {
              ondrop="event.preventDefault(); this.style.background=''; 
                      const id=event.dataTransfer.getData('application/fv-resource'); 
                      if(id) OL._fvUnmapResource(id);">
-             
-             <div class="fv-wb-icon ${OL._fv._wbTab==='stages' ?'active':''}"
-                   style="${OL._fv._wbTab==='stages' ? 'color: var(--accent);' : ''}"
-                   onclick="OL._fvToggleWb('stages')"   title="Manage Stages">
-               <i data-lucide="layers"></i>
-             </div>
         
-             <div class="fv-wb-icon ${OL._fv._wbTab==='assets' ?'active':''}"
-                   onclick="OL._fvToggleWb('assets')"  title="Assets">
-               <i data-lucide="database"></i>
-             </div>
-             <div class="fv-wb-icon ${OL._fv._wbTab==='guides' ?'active':''}"
-                   onclick="OL._fvToggleWb('guides')"  title="Guides">
-               <i data-lucide="book-open"></i>
-             </div>
-             <div class="fv-wb-icon ${OL._fv._wbTab==='data'   ?'active':''}"
-                   onclick="OL._fvToggleWb('data')"    title="Data">
-               <i data-lucide="tag"></i>
-             </div>
+            <div class="fv-wb-icon ${OL._fv._wbTab==='flows' ?'active':''}"
+                  onclick="OL._fvToggleWb('flows')" title="Flows">
+              <i data-lucide="workflow"></i>
+            </div>
+            <div class="fv-wb-icon ${OL._fv._wbTab==='assets' ?'active':''}"
+                  onclick="OL._fvToggleWb('assets')" title="Assets">
+              <i data-lucide="database"></i>
+            </div>
+            <div class="fv-wb-icon ${OL._fv._wbTab==='guides' ?'active':''}"
+                  onclick="OL._fvToggleWb('guides')" title="Guides">
+              <i data-lucide="book-open"></i>
+            </div>
+            <div class="fv-wb-icon ${OL._fv._wbTab==='data' ?'active':''}"
+                  onclick="OL._fvToggleWb('data')" title="Data">
+              <i data-lucide="tag"></i>
+            </div>
         </div>
-
         <!-- Workbench drawer -->
         <div id="fv-wb-drawer" class="${OL._fv._wbTab ? 'open' : ''}"
              ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='rgba(61,217,197,0.08)';"
@@ -13235,13 +13232,6 @@ OL.moveStageIndex = async function(fromIdx, toIdx) {
         stages.splice(toIdx, 0, movedStage);
         console.log(`🔀 Drawer Sync Complete: Shifted stage index ${fromIdx} ➔ ${toIdx}`);
     });
-
-    // 🚀 REPAINT DRAWER SUB-VIEW PORT
-    // If the drawer tab is open to 'stages', refresh its contents to update numbers
-    if (OL._fv && OL._fv._wbTab === 'stages') {
-        const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked);
-        OL._fvPopulateWb('stages', resources);
-    }
 
     // 🧲 RE-ALIGN EVERYTHING ON THE CANVAS
     if (typeof OL.autoAlignNodes === 'function') {
