@@ -590,6 +590,8 @@ OL.getPartnerContext = function() {
 
 OL.renderPartnerDashboard = function(leadProject, container) {
     if (!container || !leadProject) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     // 🔍 THE FIX: Ensure we are comparing strings and checking the partnerOwner metadata
     const subClients = Object.values(state.clients).filter(c => 
@@ -1272,6 +1274,8 @@ OL.sync();
 window.renderClientDashboard = function() {
     const container = document.getElementById("mainContent");
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     container.style.cssText = '';
 
@@ -3442,6 +3446,8 @@ window.renderFunctionsGrid = function() {
     const isMasterMode = hash.startsWith('#/vault');
     
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     let displayFunctions = [];
     if (isMasterMode) {
@@ -4014,6 +4020,8 @@ window.renderChecklistModule = function (isVaultMode = false) {
     const isVault = isVaultMode || hash.startsWith('#/vault');
     
     if (!container || (!isVault && !client)) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const allTasks = isVault ? (state.master.taskBlueprints || []) : (client.projectData.clientTasks || []);
     const lineItems = client?.projectData?.scopingSheets?.[0]?.lineItems || [];
@@ -4934,7 +4942,9 @@ window.renderResourceManager = function () {
     const isVaultView = window.location.hash.startsWith('#/vault');
 
     if (!container) return;
-
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
+    
     // 🔓 FIX: Restore standard page scrolling
     document.body.classList.remove('is-visualizer', 'fs-mode-active');
     document.body.style.overflow = 'auto'; 
@@ -5064,6 +5074,8 @@ window.renderResourceManager = function () {
 OL.syncResourceLibraryFilters = function() {
     const container = document.getElementById('resource-library-results');
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const query = document.getElementById('lib-filter-input')?.value.toLowerCase().trim() || "";
     const typeF = document.getElementById('lib-filter-type')?.value || "";
@@ -7921,6 +7933,8 @@ OL.renderEditHistory = function(res) {
 window.renderVaultRatesPage = function () {
   const container = document.getElementById("mainContent");
   if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
   document.body.classList.remove('is-visualizer', 'fs-mode-active');
   document.body.style.overflow = 'auto';
@@ -8302,6 +8316,8 @@ window.renderAnalysisModule = function(isVaultMode = false) {
     
     if (!isActuallyVault && !client) return;
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const masterTemplates = state.master.analyses || [];
     
@@ -8732,6 +8748,8 @@ OL.openAnalysisMatrix = function(analysisId, isMaster) {
 
     const container = document.getElementById("activeAnalysisMatrix");
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     // 🏆 CALCULATIONS
     const totalWeight = (anly.features || []).reduce((sum, f) => sum + (parseFloat(f.weight) || 0), 0);
@@ -18843,6 +18861,8 @@ window.renderScopingSheet = function () {
     const isAdmin = state.adminMode === true;
     
     if (!container || !client) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     // 1. INITIALIZE DATA STRUCTURES
     if (!client.projectData) client.projectData = {};
@@ -21012,6 +21032,8 @@ function renderHowToLibrary () {
     const hash = window.location.hash;
 
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const isAdmin = window.FORCE_ADMIN === true;
     const isVaultView = hash.startsWith('#/vault');
@@ -21769,6 +21791,8 @@ OL.getSOPBacklinks = function(sopId) {
 OL.filterTaskHowToSearch = function(taskId, query, isVault) {
     const container = document.getElementById('task-howto-results');
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const client = getActiveClient();
     const q = (query || "").toLowerCase().trim();
@@ -21964,6 +21988,8 @@ OL.renderGlobalDataManager = function() {
     OL.registerView(OL.renderGlobalDataManager);
     const container = document.getElementById("mainContent");
     if (!container) return;
+    container.style.cssText = '';
+    document.body.classList.remove('is-visualizer');
 
     const isVaultMode = window.location.hash.includes('vault');
     const client = getActiveClient();
