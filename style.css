@@ -6599,3 +6599,20 @@ body.is-visualizer #v2-inspector-panel {
     border: 1.5px solid #7c3aed !important;
     box-shadow: 0 0 0 1px rgba(124,58,237,0.15);
 }
+.fv-card-slot {
+    display: inline-flex;
+    position: relative;
+    transition: padding 0.15s;
+}
+
+.fv-card-slot.fv-insert-before::before {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #7c3aed;
+    border-radius: 99px;
+    z-index: 10;
+}
