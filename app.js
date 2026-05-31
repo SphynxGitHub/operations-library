@@ -1348,7 +1348,7 @@ window.renderClientDashboard = function() {
         <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px;">
     
             <!-- Vault Row -->
-            <div class="fv-list-item" style="background:var(--panel-soft);border:1px solid #e5e7eb;border-radius:8px;
+            <div class="fv-list-item" style="background:var(--panel-soft);border:1px solid var(--panel-border);border-radius:8px;
                         padding:10px 16px;cursor:pointer;margin-bottom:4px;
                         border-left:3px solid var(--accent);"
                  onclick="location.hash='#/vault/apps'">
@@ -5249,7 +5249,7 @@ OL._renderResourceListRow = function(res) {
              onmouseout="this.style.borderColor='var(--panel-border)'">
             <i data-lucide="${OL.getRegistryIcon(res.type)}" style="width:14px;height:14px;color:var(--accent);flex-shrink:0;"></i>
             <span style="font-weight:600;font-size:13px;flex:1;">${esc(res.name)}</span>
-            ${res.isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:#6b7280;border:1px solid #6b7280;font-size:8px;">📦 Archived</span>` : ''}
+            ${res.isArchived ? `<span class="pill tiny" style="background:rgba(107,114,128,0.1);color:var(--text-dim);border:1px solid #6b7280;font-size:8px;">📦 Archived</span>` : ''}
             <span style="font-size:10px;color:var(--text-muted);">${esc(res.type||'General')}</span>
             ${scopeData ? `<span class="pill tiny" style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;font-size:8px;">${esc(scopeData.status)}</span>` : ''}
             ${!res.isLocked ? `
@@ -6136,7 +6136,7 @@ window.renderResourceCard = function (res) {
                         <button class="card-delete-btn" 
                                 onclick="event.stopPropagation(); OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); renderResourceManager();"
                                 title="${res.isArchived ? 'Unarchive' : 'Archive'}"
-                                style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                                style="color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
                             <i data-lucide="archive" style="width:12px;height:12px;"></i>
                         </button>
                         ${res.isLocked ? '' : `<button class="card-delete-btn" onclick="event.stopPropagation(); OL.universalDelete('${res.id}', 'resources')">×</button>`}
@@ -10989,7 +10989,7 @@ OL.renderVisualizer = function() {
         </button>
 
         <div class="fv-search-wrap">
-          <i data-lucide="search" style="width:13px;height:13px;color:#9ca3af;flex-shrink:0;"></i>
+          <i data-lucide="search" style="width:13px;height:13px;color:var(--text-muted);flex-shrink:0;"></i>
           <input id="fv-search" type="text"
                  placeholder="Search steps…"
                  value="${esc(OL._fv._searchQuery || '')}"
@@ -11002,7 +11002,7 @@ OL.renderVisualizer = function() {
             <i data-lucide="chevron-left"></i>
           </button>
           <span id="fv-match-count"
-                style="font-size:11px;color:#9ca3af;min-width:32px;text-align:center;"></span>
+                style="font-size:11px;color:var(--text-muted);min-width:32px;text-align:center;"></span>
           <button class="fv-btn fv-icon" onclick="OL.fvNextMatch()">
             <i data-lucide="chevron-right"></i>
           </button>
@@ -11118,7 +11118,7 @@ OL.renderVisualizer = function() {
           <i data-lucide="minus"></i>
         </button>
         <span id="fv-zoom-label"
-              style="font-size:11px;font-weight:600;color:#6b7280;min-width:38px;text-align:center;">
+              style="font-size:11px;font-weight:600;color:var(--text-dim);min-width:38px;text-align:center;">
           ${Math.round((OL._fv.zoom||1)*100)}%
         </span>
         <button class="fv-btn fv-icon" onclick="OL.fvZoom(0.12)">
@@ -11445,18 +11445,18 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
       
     // ── CANVAS: Stage header ─────────────────────────────
     lanesHtml += `
-      <div style="padding:8px 16px;background:#fff;
-                  border-bottom:0.5px solid #e5e7eb;
+      <div style="padding:8px 16px;background:var(--panel);
+                  border-bottom:0.5px solid var(--panel-border);
                   display:flex;align-items:center;gap:8px;
                   position:sticky;top:0;z-index:10;">
         <div style="width:20px;height:20px;border-radius:5px;
-                    background:#3dd9c5;color:#fff;font-size:9px;
+                    background:#3dd9c5;color:var(--panel);font-size:9px;
                     font-weight:700;display:flex;align-items:center;
                     justify-content:center;flex-shrink:0;">
           ${si + 1}
         </div>
         <span contenteditable="true"
-              style="font-size:12px;font-weight:500;color:#1b2d3f;outline:none;
+              style="font-size:12px;font-weight:500;color:var(--text-main);outline:none;
                      border-bottom:1px dashed transparent;transition:border-color 0.2s;"
               onfocus="this.style.borderColor='#3dd9c5'"
               onblur="this.style.borderColor='transparent';OL._fvEditStageName('${stage.id}', this.innerText.trim())">
@@ -11466,20 +11466,20 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
           <button onclick="OL._fvCreateWorkflow('${stage.id}')"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
                          border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
-                         color:#6b7280;font-size:10px;cursor:pointer;">
+                         color:var(--text-dim);font-size:10px;cursor:pointer;">
             <i data-lucide="plus" style="width:10px;height:10px;"></i> Workflow
           </button>
           <button onclick="OL.addStageBetween(${si})"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
                          border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
-                         color:#6b7280;font-size:10px;cursor:pointer;"
+                         color:var(--text-dim);font-size:10px;cursor:pointer;"
                   title="Add stage before">
             <i data-lucide="plus-circle" style="width:10px;height:10px;"></i>
           </button>
           <button onclick="OL._fvEditStageName('${stage.id}')"
                   style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;
                          border-radius:6px;border:0.5px solid #e5e7eb;background:#f5f6f8;
-                         color:#6b7280;font-size:10px;cursor:pointer;"
+                         color:var(--text-dim);font-size:10px;cursor:pointer;"
                   title="Rename stage">
             <i data-lucide="pencil" style="width:10px;height:10px;"></i>
           </button>
@@ -11566,15 +11566,15 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
              ondrop="OL._fvLaneDrop(event, '${stage.id}', '${wf.id}')">
             <div style="display:flex;align-items:center;gap:8px;width:100%;
                         margin-bottom:10px;padding-bottom:8px;
-                        border-bottom:0.5px solid #f3f4f6;">
+                        border-bottom:0.5px solid var(--line);">
                 <div style="width:10px;height:10px;border-radius:50%;
                             background:${wfColor};flex-shrink:0;"></div>
                 <span contenteditable="true"
-                      style="font-size:11px;font-weight:500;color:#6b7280;outline:none;"
+                      style="font-size:11px;font-weight:500;color:var(--text-dim);outline:none;"
                       onblur="OL.renameWorkflow('${wf.id}', this.innerText.trim())">
                     ${esc(wf.name)}
                 </span>
-                <span style="font-size:10px;color:#9ca3af;">
+                <span style="font-size:10px;color:var(--text-muted);">
                     ${wfRes.length} resource${wfRes.length !== 1 ? 's' : ''}
                 </span>
                 <button class="fv-btn" style="margin-left:auto;font-size:9px;padding:2px 6px;"
@@ -11591,8 +11591,8 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
                 ${globalsHtml}
             </div>
             ${(wfRes.length === 0 && wfGlobals.length === 0) ? `
-                <div style="font-size:11px;color:#9ca3af;font-style:italic;
-                            border:1px dashed #e5e7eb;border-radius:8px;
+                <div style="font-size:11px;color:var(--text-muted);font-style:italic;
+                            border:1px dashed var(--panel-border);border-radius:8px;
                             text-align:center;padding:20px;
                             pointer-events:none;">
                     Drag resources here or click + Add
@@ -11613,9 +11613,9 @@ OL._fvBuildFlowchartShell = function(stages, resources) {
              ondrop="OL._fvLaneDrop(event, '${stage.id}', null)">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
             <div style="width:8px;height:8px;border-radius:50%;
-                        background:#9ca3af;flex-shrink:0;"></div>
-            <span style="font-size:11px;color:#9ca3af;">Unassigned</span>
-            <span style="font-size:10px;color:#d1d5db;">
+                        background:var(--text-muted);flex-shrink:0;"></div>
+            <span style="font-size:11px;color:var(--text-muted);">Unassigned</span>
+            <span style="font-size:10px;color:var(--line);">
               ${unassignedRes.length} resource${unassignedRes.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -12232,7 +12232,7 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
             stepOut.some(l => l.type === 'condition') ? '◆' :
             stepOut.length > 1                         ? '◆' : '→';
         const logicIcon = stepLogicIcon 
-            ? `<span style="color:#3dd9c5;font-size:9px;font-weight:700;">${stepLogicIcon}</span>` 
+            ? `<span style="color:var(--accent);font-size:9px;font-weight:700;">${stepLogicIcon}</span>` 
             : '';
         return `
           <div class="fv-card-step-row"
@@ -12274,7 +12274,7 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
       <div class="fv-card-body">
         <div class="fv-card-type-row">
           <div class="fv-card-type-icon" style="background:${tc.color};">
-                ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, '#fff')}
+                ${OL.getLucideSVG(OL.getRegistryIcon(res.type), 11, 'var(--panel)')}
             </div>
           <span class="fv-card-type-label" style="color:${tc.color};">${esc(res.type||'General')}</span>
           <span class="fv-card-step-num">${num}</span>
@@ -12314,14 +12314,14 @@ const assetIconsHtml = linkedAssets.length > 0 ? `
                             title="${isGlobal ? 'Remove global' : 'Set as global'}"
                             style="width:18px;height:18px;border:none;background:none;cursor:pointer;
                                    display:flex;align-items:center;justify-content:center;border-radius:4px;
-                                   color:${isGlobal ? '#7c3aed' : '#d1d5db'};transition:color 0.15s;"
+                                   color:${isGlobal ? '#7c3aed' : 'var(--text-muted)'};transition:color 0.15s;"
                             onmouseover="this.style.color='#7c3aed'"
                             onmouseout="this.style.color='${isGlobal ? '#7c3aed' : '#d1d5db'}'">
-                        ${OL.getLucideSVG('globe', 10, isGlobal ? '#7c3aed' : '#d1d5db')}
+                        ${OL.getLucideSVG('globe', 10, isGlobal ? '#7c3aed' : 'var(--text-muted)')}
                     </button>
                 ${logicBadge ? `
                     <span style="font-size:9px;padding:2px 5px;border-radius:99px;
-                                 background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                 background:var(--accent-glow);color:var(--accent);
                                  font-weight:700;">${logicBadge}</span>
                 ` : ''}
             </div>
@@ -12475,13 +12475,13 @@ OL._fvRenderSteps = function(resources) {
       const y = hasCoords ? step.coords.y : PAD + idx       * (CARD_H + GAP_Y);
 
       const appBadge = step.appName
-        ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">
+        ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">
              ${esc(step.appName.substring(0,10))}
            </span>`
         : '';
 
       const assigneeBadges = (step.assignees || []).slice(0,2).map(a =>
-        `<span class="fv-step-badge" style="background:#f5f6f8;color:#6b7280;">
+        `<span class="fv-step-badge" style="background:#f5f6f8;color:var(--text-dim);">
            ${esc((a.name||'').substring(0,10))}
          </span>`
       ).join('');
@@ -12515,7 +12515,7 @@ OL._fvRenderSteps = function(resources) {
           <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
           <div class="fv-step-badges">
             ${appBadge}${assigneeBadges}
-            ${hasLinks ? `<span class="fv-step-badge" style="background:#f5f6f8;color:#9ca3af;">
+            ${hasLinks ? `<span class="fv-step-badge" style="background:#f5f6f8;color:var(--text-muted);">
               ${OL.getLucideSVG('paperclip', 9, 'currentColor')}
             </span>` : ''}
           </div>
@@ -12997,7 +12997,7 @@ OL._fvShowTidyMenu = function(e) {
   menu.id = 'fv-tidy-menu';
   menu.style.cssText = `
     position:fixed; top:${rect.bottom+4}px; left:${rect.left}px;
-    background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px;
     box-shadow:0 4px 16px rgba(0,0,0,0.1); z-index:1000;
     min-width:200px; overflow:hidden;
   `;
@@ -13015,7 +13015,7 @@ OL._fvShowTidyMenu = function(e) {
   items.forEach(item => {
     if (item.divider) {
       const d = document.createElement('div');
-      d.style.cssText = 'padding:4px 12px;font-size:10px;color:#d1d5db;';
+      d.style.cssText = 'padding:4px 12px;font-size:10px;color:var(--line);';
       d.textContent = item.label;
       menu.appendChild(d);
       return;
@@ -13143,7 +13143,7 @@ OL._fvPopulateWb = function(tab, resources) {
 };
 
 OL._fvRenderWbItems = function(items, tab) {
-    if (!items.length) return `<div style="padding:20px; text-align:center; color:#9ca3af; font-size:12px; font-style:italic;">No ${tab} found</div>`;
+    if (!items.length) return `<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:12px; font-style:italic;">No ${tab} found</div>`;
     
     const data = OL.getCurrentProjectData();
     const resources = data.resources || [];
@@ -13186,7 +13186,7 @@ OL._fvRenderWbItems = function(items, tab) {
                         <button class="btn-icon-tiny" title="Move Up" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx - 1})" ${idx === 0 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▲</button>
                         <button class="btn-icon-tiny" title="Move Down" onclick="event.stopPropagation(); OL.moveStageIndex(${idx}, ${idx + 1})" ${idx === items.length - 1 ? 'disabled style="opacity:0.2; cursor:not-allowed;"' : ''}>▼</button>
                         <button onclick="event.stopPropagation(); OL.deleteStage('${item.id}')"
-                                style="border:none; background:none; cursor:pointer; color:#9ca3af; display:flex; align-items:center; justify-content:center; padding:2px; margin-left:4px;">
+                                style="border:none; background:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; justify-content:center; padding:2px; margin-left:4px;">
                             <i data-lucide="trash-2" style="width:12px; height:12px;"></i>
                         </button>
                     </div>
@@ -13470,10 +13470,10 @@ OL._fvBuildListShell = function(stages, resources) {
                 <div style="flex:1; height:1px; background:var(--line);"></div>
             </div>
             <div class="fv-list-stage" id="fv-list-stage-${stage.id}">
-                <div class="fv-list-stage-header" style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.02); padding:8px 12px; border-radius:6px;">
+                <div class="fv-list-stage-header" style="display:flex; align-items:center; gap:10px; background:var(--panel soft); padding:8px 12px; border-radius:6px;">
                     <div class="fv-list-stage-num" style="background:var(--accent); color:black; font-weight:bold; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:11px;">${si + 1}</div>
                     <div class="fv-list-stage-name" style="font-weight:bold; font-size:14px; color:var(--text-main);">${esc(stage.name)}</div>
-                    <div class="fv-list-stage-line" style="flex:1; height:1px; background:rgba(255,255,255,0.05); margin:0 10px;"></div>
+                    <div class="fv-list-stage-line" style="flex:1; height:1px; background:var(--line); margin:0 10px;"></div>
                     <div class="fv-list-stage-count" style="font-size:11px; color:var(--text-muted); font-weight:500;">${totalStageStepsCount} steps</div>
                     
                     <button class="fv-btn" style="padding:3px 8px; font-size:10px;"
@@ -13604,16 +13604,16 @@ OL._fvOpenStepsList = function(resId) {
     : res.appId
       ? `<div style="display:flex;align-items:center;gap:6px;">
            <div style="display:flex;align-items:center;gap:6px;flex:1;
-                       padding:7px 10px;border:1px solid #e5e7eb;
-                       border-radius:8px;background:#fafafa;">
-             <span style="font-size:12px;font-weight:500;color:#1b2d3f;">
+                       padding:7px 10px;border:1px solid var(--panel-border);
+                       border-radius:8px;background:var(--panel-soft);">
+             <span style="font-size:12px;font-weight:500;color:var(--text-main);">
                ${esc(res.appName||'')}
              </span>
            </div>
            <button onclick="OL.handleResourceSave('${res.id}','appId',null);
                             OL.handleResourceSave('${res.id}','appName',null);"
-                   style="padding:7px;border:1px solid #e5e7eb;border-radius:8px;
-                          background:#fff;cursor:pointer;color:#9ca3af;
+                   style="padding:7px;border:1px solid var(--panel-border);border-radius:8px;
+                          background:var(--panel);cursor:pointer;color:var(--text-muted);
                           transition:color 0.15s;">
              <i data-lucide="x" style="width:12px;height:12px;"></i>
            </button>
@@ -13642,7 +13642,7 @@ OL._fvOpenStepsList = function(resId) {
         if (stepOut.some(l => l.type === 'condition') || stepOut.length > 1) icons.push('◆');
         else if (stepOut.length === 1 && !icons.length) icons.push('→');
         const logicIcon = icons.map(ic =>
-            `<span class="fvi-badge" style="background:rgba(61,217,197,0.1);color:#3dd9c5;">${ic}</span>`
+            `<span class="fvi-badge" style="background:var(--accent-glow);color:var(--accent);">${ic}</span>`
         ).join('');
         const hasBadges = s.appName || (s.assignees||[]).length > 0 || icons.length > 0;
 
@@ -13670,14 +13670,14 @@ OL._fvOpenStepsList = function(resId) {
             </div>
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
               <i data-lucide="chevron-right"
-                 style="width:11px;height:11px;color:#d1d5db;cursor:pointer;"
+                 style="width:11px;height:11px;color:var(--line);cursor:pointer;"
                  onclick="event.stopPropagation(); OL.openInspector('${res.id}','${s.id}')"></i>
               <button onclick="event.stopPropagation(); OL.deleteStep('${res.id}','${s.id}')"
                       style="width:16px;height:16px;border:none;background:none;cursor:pointer;
-                             color:#d1d5db;display:flex;align-items:center;justify-content:center;
+                             color:var(--line);display:flex;align-items:center;justify-content:center;
                              border-radius:4px;padding:0;transition:color 0.15s;"
                       onmouseover="this.style.color='#ef4444'"
-                      onmouseout="this.style.color='#d1d5db'"
+                      onmouseout="this.style.color='var(--line)'"
                       title="Delete step">
                 <i data-lucide="x" style="width:10px;height:10px;pointer-events:none;"></i>
               </button>
@@ -13685,7 +13685,7 @@ OL._fvOpenStepsList = function(resId) {
           </div>
         `;
       }).join('')
-    : `<div style="padding:16px;text-align:center;color:#9ca3af;
+    : `<div style="padding:16px;text-align:center;color:var(--text-muted);
                    font-size:11px;font-style:italic;">
          No steps yet
        </div>`;
@@ -14050,7 +14050,7 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
             return `
                 <div style="position:absolute;left:${ghostX}px;top:${ghostY}px;
                             width:${CARD_W}px;
-                            background:#fafafa;border:1.5px dashed #a78bfa;
+                            background:var(--panel-soft);border:1.5px dashed #a78bfa;
                             border-radius:10px;padding:10px;
                             opacity:0.75;cursor:pointer;"
                      onclick="OL._fvOpenStepCanvas('${tResId}', ${JSON.stringify([...trail, {resId, name: res.name}])})">
@@ -14058,7 +14058,7 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
                                 letter-spacing:0.06em;color:#a78bfa;margin-bottom:4px;">
                         🌐 ${esc(tRes.name.substring(0, 16))}
                     </div>
-                    <div style="font-size:11px;font-weight:500;color:#6b7280;
+                    <div style="font-size:11px;font-weight:500;color:var(--text-dim);
                                 line-height:1.3;">
                         ${esc(tStep.name || 'Unnamed')}
                     </div>
@@ -14078,7 +14078,7 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
             ${ghostsHtml}
             <div style="position:absolute;left:${pos.x}px;top:${pos.y}px;
                         width:${CARD_W}px;
-                        background:#fff;border:1.5px solid #e5e7eb;
+                        background:var(--panel);border:1.5px solid #e5e7eb;
                         border-radius:10px;overflow:hidden;cursor:pointer;
                         box-shadow:0 1px 3px rgba(0,0,0,0.06);
                         transition:border-color 0.15s,box-shadow 0.15s;"
@@ -14091,15 +14091,15 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
                                 letter-spacing:0.06em;color:${tc.color};margin-bottom:4px;">
                         ${tc.abbr} · ${String(steps.indexOf(s) + 1).padStart(2,'0')}
                     </div>
-                    <div style="font-size:12px;font-weight:500;color:#1b2d3f;
+                    <div style="font-size:12px;font-weight:500;color:var(--text-main);
                                 line-height:1.35;margin-bottom:6px;">
                         ${esc(s.name || 'Unnamed Step')}
                     </div>
                     <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
                         ${s.appName ? `<span style="font-size:9px;padding:1px 5px;border-radius:99px;
-                                                    background:#f5f6f8;color:#6b7280;">${esc(s.appName)}</span>` : ''}
+                                                    background:#f5f6f8;color:var(--text-dim);">${esc(s.appName)}</span>` : ''}
                         ${icons.map(ic => `<span style="font-size:9px;padding:1px 5px;border-radius:99px;
-                                                        background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                                        background:var(--accent-glow);color:var(--accent);
                                                         font-weight:700;">${ic}</span>`).join('')}
                     </div>
                 </div>
@@ -14109,37 +14109,37 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
 
     // Breadcrumb trail
     const breadcrumbHtml = trail.length > 0 ? `
-        <div style="position:sticky;top:0;z-index:20;background:#fff;
-                    border-bottom:0.5px solid #e5e7eb;padding:8px 16px;
+        <div style="position:sticky;top:0;z-index:20;background:var(--panel);
+                    border-bottom:0.5px solid var(--panel-border);padding:8px 16px;
                     display:flex;align-items:center;gap:6px;font-size:11px;">
             <span onclick="OL.renderVisualizer()"
-                  style="color:#9ca3af;cursor:pointer;">
+                  style="color:var(--text-muted);cursor:pointer;">
                 <i data-lucide="layout-dashboard" style="width:11px;height:11px;"></i> Map
             </span>
             ${trail.map((t, i) => `
-                <span style="color:#d1d5db;">›</span>
+                <span style="color:var(--line);">›</span>
                 <span onclick="OL._fvOpenStepCanvas('${t.resId}', ${JSON.stringify(trail.slice(0,i))})"
                       style="color:#3dd9c5;cursor:pointer;">
                     ${esc(t.name)}
                 </span>
             `).join('')}
-            <span style="color:#d1d5db;">›</span>
-            <span style="color:#1b2d3f;font-weight:500;">${esc(res.name)}</span>
+            <span style="color:var(--line);">›</span>
+            <span style="color:var(--text-main);font-weight:500;">${esc(res.name)}</span>
             <button onclick="OL.renderVisualizer()"
                     class="fv-btn fv-icon" style="margin-left:auto;">
                 <i data-lucide="x" style="width:12px;height:12px;"></i>
             </button>
         </div>
     ` : `
-        <div style="position:sticky;top:0;z-index:20;background:#fff;
-                    border-bottom:0.5px solid #e5e7eb;padding:8px 16px;
+        <div style="position:sticky;top:0;z-index:20;background:var(--panel);
+                    border-bottom:0.5px solid var(--panel-border);padding:8px 16px;
                     display:flex;align-items:center;gap:8px;">
             <button onclick="OL.renderVisualizer()" class="fv-btn" style="font-size:11px;">
                 <i data-lucide="arrow-left" style="width:12px;height:12px;"></i> Back to map
             </button>
             <div style="width:8px;height:8px;border-radius:50%;background:${tc.color};"></div>
-            <span style="font-size:13px;font-weight:500;color:#1b2d3f;">${esc(res.name)}</span>
-            <span style="font-size:11px;color:#9ca3af;">${steps.length} steps</span>
+            <span style="font-size:13px;font-weight:500;color:var(--text-main);">${esc(res.name)}</span>
+            <span style="font-size:11px;color:var(--text-muted);">${steps.length} steps</span>
             <button onclick="OL.addNewStepToCard('${res.id}')"
                     class="fv-btn" style="margin-left:auto;font-size:11px;">
                 <i data-lucide="plus" style="width:12px;height:12px;"></i> Add Step
@@ -16447,7 +16447,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                                  OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
                                  renderResourceManager();"
                         title="${res.isArchived ? 'Unarchive' : 'Archive'}"
-                        style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                        style="color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
                     <i data-lucide="archive" style="width:12px;height:12px;"></i>
                 </button>
             </div>
@@ -16523,7 +16523,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                         ${step.assignees.length > 0 ? step.assignees.map((a, idx) => `
                             <span style="display:inline-flex;align-items:center;gap:5px;
                                          padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
-                                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                         background:var(--accent-glow);color:var(--accent);
                                          border:1px solid rgba(61,217,197,0.3);">
                                 <i data-lucide="${a.type==='person' ? 'user' : a.type==='role' ? 'users' : 'smartphone'}" 
                                    style="width:10px;height:10px;"></i>
@@ -16549,7 +16549,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                         <div class="pill-display" style="margin-bottom:8px;">
                             <span style="display:inline-flex;align-items:center;gap:5px;
                                          padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
-                                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                         background:var(--accent-glow);color:var(--accent);
                                          border:1px solid rgba(61,217,197,0.3);">
                                 <i data-lucide="smartphone" style="width:10px;height:10px;"></i>
                                 ${esc(step.appName)}
@@ -16621,7 +16621,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                       if (tRes && tStep) targetLabel = `${esc(tRes.name)} › ${esc(tStep.name||'Step')}`;
                     }
                     return `
-                      <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;
+                      <div style="background:var(--panel-soft);border:1px solid var(--panel-border);border-radius:8px;
                                   padding:10px 12px;margin-bottom:8px;">
                 
                         <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
@@ -16638,9 +16638,9 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                                     style="display:inline-flex;align-items:center;gap:4px;
                                            font-size:9px;font-weight:700;padding:3px 9px;border-radius:99px;
                                            cursor:pointer;text-transform:uppercase;letter-spacing:0.05em;
-                                           background:${isOn ? '#3dd9c5' : '#f5f6f8'};
-                                           color:${isOn ? '#fff' : '#9ca3af'};
-                                           border:1px solid ${isOn ? '#3dd9c5' : '#e5e7eb'};">
+                                           background:${isOn ? 'var(--accent)' : 'var(--panel-soft)'};
+                                           color:${isOn ? 'var(--panel)' : 'var(--text-muted)'};
+                                           border:1px solid ${isOn ? 'var(--accent)' : 'var(--panel-border)'};">
                                 <i data-lucide="${t.icon}" style="width:10px;height:10px;pointer-events:none;"></i>
                                 ${t.label}
                               </span>
@@ -16650,12 +16650,12 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 
                         <div style="position:relative;margin-bottom:${l.type==='condition'||l.type==='delay' ? '8px' : '0'};">
                           <div onclick="OL._fvOpenTargetPicker('${resId}','${step.id}',${i})"
-                               style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;
-                                      font-size:11px;color:${targetId ? '#1b2d3f' : '#9ca3af'};
-                                      background:#fff;cursor:pointer;display:flex;
+                               style="padding:7px 10px;border:1px solid var(--panel-border);border-radius:8px;
+                                      font-size:11px;color:${targetId ? 'var(--text-main)' : 'var(--text-muted)'};
+                                      background:var(--panel);cursor:pointer;display:flex;
                                       align-items:center;justify-content:space-between;">
                             <span>${targetLabel}</span>
-                            <i data-lucide="chevron-down" style="width:12px;height:12px;color:#9ca3af;"></i>
+                            <i data-lucide="chevron-down" style="width:12px;height:12px;color:var(--text-muted);"></i>
                           </div>
                           <div id="target-picker-${resId}-${step.id}-${i}"
                                class="search-results-overlay" style="display:none;max-height:200px;overflow-y:auto;"></div>
@@ -16663,7 +16663,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                 
                         ${(l.types||[l.type||'next']).includes('condition') ? `
                             <div style="margin-top:6px;">
-                                <label style="font-size:9px;color:#9ca3af;text-transform:uppercase;
+                                <label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;
                                                letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
                                     <i data-lucide="git-branch" style="width:9px;height:9px;"></i> Condition
                                 </label>
@@ -16676,7 +16676,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                         
                         ${(l.types||[l.type||'next']).includes('delay') ? `
                             <div style="margin-top:6px;">
-                                <label style="font-size:9px;color:#9ca3af;text-transform:uppercase;
+                                <label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;
                                                letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
                                     <i data-lucide="clock" style="width:9px;height:9px;"></i> Delay
                                 </label>
@@ -16697,7 +16697,7 @@ OL.openInspector = function(resId = null, stepTarget = null, mode = 'steps') {
                         
                         ${(l.types||[l.type||'next']).includes('loop') ? `
                             <div style="margin-top:6px;">
-                                <label style="font-size:9px;color:#9ca3af;text-transform:uppercase;
+                                <label style="font-size:9px;color:var(--text-muted);text-transform:uppercase;
                                                letter-spacing:0.06em;display:flex;align-items:center;gap:4px;margin-bottom:4px;">
                                     <i data-lucide="repeat" style="width:9px;height:9px;"></i> Loop limit
                                 </label>
@@ -16841,7 +16841,7 @@ if (mode === 'cards' && resId) {
                         ${(res.assignees || []).length > 0 ? res.assignees.map((a, idx) => `
                             <span style="display:inline-flex;align-items:center;gap:5px;
                                          padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
-                                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                                         background:var(--accent-glow);color:var(--accent);
                                          border:1px solid rgba(61,217,197,0.3);">
                                 <i data-lucide="${a.type === 'person' ? 'user' : 'users'}" style="width:10px;height:10px;"></i>
                                 ${esc(a.name)}
@@ -16871,7 +16871,7 @@ if (mode === 'cards' && resId) {
                     
                     <div class="fv-custom-select-trigger" 
                          onclick="event.stopPropagation(); const menu = this.nextElementSibling; menu.style.display = menu.style.display === 'block' ? 'none' : 'block';"
-                         style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 6px 12px; background: #ffffff; border: 1px solid #d1d5db; color: #1f2937; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; user-select: none;">
+                         style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 6px 12px; background:var(--panel); border:1px solid var(--panel-border); color:var(--text-main); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 32px; user-select: none;">
                         <span>
                             ${(function() {
                                 if (!res.stageId && !res.workflowId) return 'Unassigned (Workbench Side-Tray)';
@@ -16884,11 +16884,11 @@ if (mode === 'cards' && resId) {
                                 return stg ? `Stage: ${esc(stg.name)}` : 'Select Location...';
                             })()}
                         </span>
-                        <i data-lucide="chevron-down" style="width: 14px; height: 14px; opacity: 0.6; color: #4b5563;"></i>
+                        <i data-lucide="chevron-down" style="width: 14px; height: 14px; opacity: 0.6; color:var(--text-dim);"></i>
                     </div>
                 
                     <div class="fv-custom-select-menu" 
-                         style="display: none; position: absolute; top: 100%; left: 0; width: 100%; z-index: 100; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); max-height: 250px; overflow-y: auto; margin-top: 4px; box-sizing: border-box;">
+                         style="display: none; position: absolute; top: 100%; left: 0; width: 100%; z-index: 100; background:var(--panel); border:1px solid var(--panel-border); border-radius: 6px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); max-height: 250px; overflow-y: auto; margin-top: 4px; box-sizing: border-box;">
                         
                         <div class="fv-custom-option" 
                              style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #ef4444; cursor: pointer; border-bottom: 1px solid #f3f4f6;"
@@ -16898,7 +16898,7 @@ if (mode === 'cards' && resId) {
                                  OL._fvOpenStepsList('${res.id}');
                                  this.parentElement.style.display = 'none';
                              "
-                             onmouseover="this.style.background='#fef2f2';"
+                             onmouseover="this.style.background='rgba(239,68,68,0.08)';"
                              onmouseout="this.style.background='transparent';">
                              Remove Assignment (Workbench Side-Tray)
                         </div>
@@ -16913,22 +16913,22 @@ if (mode === 'cards' && resId) {
                                 
                                 return `
                                     <div class="fv-custom-option stage-header-row" 
-                                         style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #111827; background: #f9fafb; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 4px; cursor: pointer;"
+                                         style="padding: 8px 12px; font-size: 11px; font-weight: 700; color:var(--text-main); background:var(--panel-dark); border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 4px; cursor: pointer;"
                                          onclick="
                                              OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
                                              OL.handleResourceSave('${res.id}', 'workflowId', '');
                                              OL._fvOpenStepsList('${res.id}');
                                              this.parentElement.style.display = 'none';
                                          "
-                                         onmouseover="this.style.background='#f3f4f6';"
-                                         onmouseout="this.style.background='#f9fafb';">
-                                         <i data-lucide="folder" style="width:12px; height:12px; color: #4b5563;"></i>
+                                         onmouseover="this.style.background='var(--panel-soft)';"
+                                         onmouseout="this.style.background='var(--panel-dark)';">
+                                         <i data-lucide="folder" style="width:12px; height:12px; color:var(--text-dim);"></i>
                                          <span>STAGE: ${esc(s.name.toUpperCase())}</span>
                                     </div>
                                     
                                     ${stageWorkflows.map(wf => `
                                         <div class="fv-custom-option workflow-item-row" 
-                                             style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color: #374151; cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px; transition: background 0.1s;"
+                                             style="padding: 8px 12px 8px 24px; font-size: 12px; font-weight: 500; color:var(--text-main); cursor: pointer; border-bottom: 1px solid #f9fafb; display: flex; align-items: center; gap: 4px; transition: background 0.1s;"
                                              onclick="
                                                  OL.handleResourceSave('${res.id}', 'stageId', '${s.id}');
                                                  OL.handleResourceSave('${res.id}', 'workflowId', '${wf.id}');
@@ -16936,7 +16936,7 @@ if (mode === 'cards' && resId) {
                                                  this.parentElement.style.display = 'none';
                                              "
                                              onmouseover="this.style.background='rgba(61,217,197,0.08)'; this.style.color='#0d9488';"
-                                             onmouseout="this.style.background='transparent'; this.style.color='#374151';">
+                                             onmouseout="this.style.background='transparent'; this.style.color='var(--text-main)';">
                                              <i data-lucide="git-commit" style="width:12px; height:12px; opacity: 0.5;"></i>
                                              <span>${esc(wf.name)}</span>
                                         </div>
@@ -16967,7 +16967,7 @@ if (mode === 'cards' && resId) {
                                          OL.handleResourceSave('${res.id}', 'isArchived', ${!res.isArchived}); 
                                          renderResourceManager();"
                                 title="${res.isArchived ? 'Unarchive' : 'Archive'}"
-                                style="color:${res.isArchived ? '#ef4444' : '#9ca3af'};">
+                                style="color:${res.isArchived ? '#ef4444' : 'var(--text-muted)'};">
                             <i data-lucide="archive" style="width:12px;height:12px;"></i>
                         </button>
                     </div>
@@ -17075,7 +17075,7 @@ OL._fvOpenTargetPicker = function(resId, stepId, idx) {
             if (!steps.length) return;
             html += `<div style="padding:6px 10px;font-size:9px;font-weight:700;
                                  text-transform:uppercase;letter-spacing:0.08em;
-                                 color:#9ca3af;background:#fafafa;">
+                                 color:var(--text-muted);background:var(--panel-soft);">
                        ${esc(res.name)}
                      </div>`;
             steps.forEach(s => {
@@ -17090,7 +17090,7 @@ OL._fvOpenTargetPicker = function(resId, stepId, idx) {
     };
 
     picker.innerHTML = `
-        <div style="padding:8px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:#fff;z-index:1;">
+        <div style="padding:8px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:var(--panel);z-index:1;">
             <input type="text" class="fvi-input" placeholder="Search steps..."
                    style="margin:0;"
                    oninput="document.getElementById('${pickerId}-list').innerHTML = 
@@ -17129,7 +17129,7 @@ window.renderStepResources = function(resId, step) {
             <span onclick="${openAction}"
                   style="display:inline-flex;align-items:center;gap:5px;
                          padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;
-                         background:rgba(61,217,197,0.1);color:#3dd9c5;
+                         background:var(--accent-glow);color:var(--accent);
                          border:1px solid rgba(61,217,197,0.3);
                          cursor:pointer;margin-bottom:4px;margin-right:4px;">
                 <i data-lucide="${icon}" style="width:10px;height:10px;pointer-events:none;"></i>
