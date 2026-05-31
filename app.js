@@ -12315,26 +12315,16 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
   };
   const scopeColor = scopeData ? (scopeColors[scopeData.status] || 'var(--accent)') : null;
 
-  // 🎯 THE HIGHLIGHT VERIFICATION: Evaluates locally to bypass parameter scope blocking
   const renderAsGlobalCard = isGlobal === true || res.isGlobal === true;
-
+    
   return `
     <div class="fv-card ${renderAsGlobalCard ? 'is-global' : ''}"
-         id="fv-card-${res.id}"
+         id="fv-card-${res.id}-${res.workflowId || 'unassigned'}"
          data-res-id="${res.id}"
          data-stage-id="${res.stageId || '__none__'}"
          data-workflow-id="${res.workflowId || ''}"
          draggable="true"
-         ondragstart="
-            event.stopPropagation();
-            // 🎯 PASS BOTH RESOURCE ID AND WORKFLOW CONTAINER CONTEXT
-            event.dataTransfer.setData('text/plain', '${res.id}');
-            event.dataTransfer.setData('application/fv-resource', '${res.id}');
-            event.dataTransfer.setData('application/fv-context-wf', '${res.workflowId || ''}');
-            if (typeof OL._fvCardDragStart === 'function') {
-                OL._fvCardDragStart(event, '${res.id}');
-            }
-         "
+         ondragstart="OL._fvCardDragStart(event, '${res.id}')"
          ondragend="OL._fvCardDragEnd(event)"
          onclick="event.stopPropagation();
                   document.querySelectorAll('.fv-card.selected').forEach(e=>e.classList.remove('selected'));
@@ -12404,33 +12394,55 @@ OL._fvBuildCard = function(res, num, isGlobal, globalStageCount) {
 };
 
 OL._fvCardDragStart = function(e, resId) {
-  // Store what we're dragging
-  e.dataTransfer.setData('application/fv-resource', resId);
-  e.dataTransfer.setData('application/fv-source', 'canvas'); // distinguish from workbench
-  e.dataTransfer.effectAllowed = 'move';
+    if (!e || !e.dataTransfer) return;
 
-  // Visual: fade the card being dragged
-  requestAnimationFrame(() => {
-    const card = document.getElementById(`fv-card-${resId}`);
-    if (card) card.classList.add('fv-dragging');
-  });
+    // 🎯 1. FIND THE TARGET CARD ELEMENT IN THE DOM
+    // Grabs the exact card clone instance wrapper beneath the cursor click
+    const cardElement = e.target.closest('.fv-card');
+    
+    // Extract the true context workflow ID directly from the DOM dataset we stamped
+    const contextWfId = cardElement ? (cardElement.getAttribute('data-workflow-id') || '') : '';
 
-  // Track which card is being dragged
-  OL._fv._draggingResId = resId;
+    // 🎯 2. CLEAN & WRITE THE PAYLOAD
+    // Clear out any old values to prevent collision bugs
+    e.dataTransfer.clearData();
+    
+    e.dataTransfer.setData('text/plain', String(resId));
+    e.dataTransfer.setData('application/fv-resource', String(resId));
+    e.dataTransfer.setData('application/fv-source', 'canvas'); 
+    
+    // 🚀 THE FIX: This transfers the correct container context to the workbench drop area cleanly!
+    e.dataTransfer.setData('application/fv-context-wf', String(contextWfId));
+    e.dataTransfer.effectAllowed = 'move';
+
+    // 🎯 3. APPLY VISUAL DRAGGING STYLES
+    requestAnimationFrame(() => {
+        if (cardElement) {
+            cardElement.classList.add('fv-dragging');
+        }
+    });
+
+    // Track state variables internally
+    OL._fv._draggingResId = resId;
+    OL._fv._draggingContextWfId = contextWfId;
+    
+    console.log(`🧲 Drag started seamlessly. Target Resource: ${resId} | Origin Workflow: "${contextWfId}"`);
 };
 
 OL._fvCardDragEnd = function(e) {
-  // Remove dragging style from all cards
-  document.querySelectorAll('.fv-card.fv-dragging')
-    .forEach(el => el.classList.remove('fv-dragging'));
-  OL._fv._draggingResId = null;
+    // Remove dragging style safely from all element copies
+    document.querySelectorAll('.fv-card.fv-dragging')
+        .forEach(el => el.classList.remove('fv-dragging'));
+        
+    OL._fv._draggingResId = null;
+    OL._fv._draggingContextWfId = null;
 
-  // Clear all lane highlights
-  document.querySelectorAll('.fv-swimlane')
-    .forEach(el => {
-      el.style.background = '';
-      el.style.outline = '';
-    });
+    // Clear all lane highlights
+    document.querySelectorAll('.fv-swimlane')
+        .forEach(el => {
+            el.style.background = '';
+            el.style.outline = '';
+        });
 };
 
 OL._fvToggleCardSteps = function(resId) {
