@@ -6595,3 +6595,7 @@ body.is-visualizer #v2-inspector-panel {
     background: rgba(61,217,197,0.12) !important;
     border-left: 2px solid #3dd9c5 !important;
 }
+.fv-card.is-global {
+    border: 1.5px solid #7c3aed !important;
+    box-shadow: 0 0 0 1px rgba(124,58,237,0.15);
+}
