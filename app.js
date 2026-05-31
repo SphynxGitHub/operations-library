@@ -11076,11 +11076,6 @@ OL.renderVisualizer = function() {
                      const id=event.dataTransfer.getData('application/fv-resource'); 
                      if(id) OL._fvUnmapResource(id);">
              
-             <div class="fv-wb-icon ${OL._fv._wbTab==='flows' ?'active':''}"
-                   onclick="OL._fvToggleWb('flows')"   title="Flows">
-               <i data-lucide="workflow"></i>
-             </div>
-             
              <div class="fv-wb-icon ${OL._fv._wbTab==='stages' ?'active':''}"
                    style="${OL._fv._wbTab==='stages' ? 'color: var(--accent);' : ''}"
                    onclick="OL._fvToggleWb('stages')"   title="Manage Stages">
@@ -12938,51 +12933,36 @@ OL._fvToggleWb = function(tab) {
 OL._fvPopulateWb = function(tab, resources) {
     const content = document.getElementById('fv-wb-content');
     if (!content) return;
-
     const drawer = document.getElementById('fv-wb-drawer');
     if (drawer) {
-        // Disengage asset unmapping listeners while sorting stages to prevent path collisions
-        if (tab === 'stages') {
-            drawer.ondragover = (e) => e.preventDefault();
-            drawer.ondragleave = null;
-            drawer.ondrop = null;
+        drawer.ondragover = (e) => {
+            e.preventDefault();
+            drawer.style.background = 'rgba(61,217,197,0.08)';
+            drawer.style.borderLeft = '2px solid #3dd9c5';
+        };
+        drawer.ondragleave = () => {
             drawer.style.background = '';
             drawer.style.borderLeft = '';
-        } else {
-            // Restore active drop listeners for standard resource tabs
-            drawer.ondragover = (e) => {
-                e.preventDefault();
-                drawer.style.background = 'rgba(61,217,197,0.08)';
-                drawer.style.borderLeft = '2px solid #3dd9c5';
-            };
-            drawer.ondragleave = () => {
-                drawer.style.background = '';
-                drawer.style.borderLeft = '';
-            };
-            drawer.ondrop = (e) => {
-                e.preventDefault();
-                drawer.style.background = '';
-                drawer.style.borderLeft = '';
-                const resId = e.dataTransfer.getData('application/fv-resource') || 
-                              e.dataTransfer.getData('text/plain');
-                if (resId) OL._fvUnmapResource(resId);
-            };
-        }
+        };
+        drawer.ondrop = (e) => {
+            e.preventDefault();
+            drawer.style.background = '';
+            drawer.style.borderLeft = '';
+            const resId = e.dataTransfer.getData('application/fv-resource') || 
+                          e.dataTransfer.getData('text/plain');
+            if (resId) OL._fvUnmapResource(resId);
+        };
     }
 
     const client       = getActiveClient();
     const data         = OL.getCurrentProjectData();
-    const stages       = data.stages || [];
     const masterGuides = state.master?.howToLibrary || [];
     const localGuides  = client?.projectData?.localHowTo || [];
     const datapoints   = state.master?.datapoints || [];
 
     let allItems = [];
-    
-    // 🎯 ROUTE PROPER ACTIVE POOLS DOWN TO RE-RENDER ENGINE
-    if (tab === 'stages') {
-        allItems = stages;
-    } else if (tab === 'flows') {
+
+    if (tab === 'flows') {
         allItems = resources.filter(r => 
             ['Workflow','Zap','Email Campaign'].includes(r.type) &&
             !r.isArchived && (!r.stageId || r.isGlobal)
@@ -12993,39 +12973,29 @@ OL._fvPopulateWb = function(tab, resources) {
             !r.isArchived && (!r.stageId || r.isGlobal)
         );
     } else if (tab === 'guides') {
-        allItems = [...masterGuides, ...localGuides];
+        // Only show client-facing guides in the workbench
+        allItems = [...masterGuides, ...localGuides].filter(g => g.isShared === true);
     } else if (tab === 'data') {
         allItems = datapoints;
     }
 
     const searchId = `fv-wb-search-${tab}`;
     const listId   = `fv-wb-items-${tab}`;
-    const showSearch = ['flows','assets','guides','data'].includes(tab);
 
     content.innerHTML = `
-        ${showSearch ? `
-            <div style="padding:8px 8px 4px;">
-                <input type="text" id="${searchId}"
-                       placeholder="Search..."
-                       oninput="OL._fvFilterWb('${tab}')"
-                       style="width:100%; padding:6px 8px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(0,0,0,0.2); color:#fff; font-size:11px; outline:none; box-sizing:border-box; font-family:inherit;">
-            </div>
-        ` : ''}
-        
-        ${tab === 'stages' ? `
-            <div style="padding: 8px 12px 12px; border-bottom: 1px solid var(--line);">
-                <button class="btn primary tiny full-width" style="display:flex; align-items:center; justify-content:center; gap:6px;"
-                        onclick="OL.addStageBetween(${stages.length})">
-                    <i data-lucide="plus-circle" style="width:12px; height:12px;"></i> Onboard New Stage
-                </button>
-            </div>
-        ` : ''}
-
+        <div style="padding:8px 8px 4px;">
+            <input type="text" id="${searchId}"
+                   placeholder="Search..."
+                   oninput="OL._fvFilterWb('${tab}')"
+                   style="width:100%;padding:6px 8px;border:1px solid rgba(255,255,255,0.1);
+                          border-radius:6px;background:rgba(0,0,0,0.2);color:#fff;
+                          font-size:11px;outline:none;box-sizing:border-box;font-family:inherit;">
+        </div>
         <div id="${listId}">
             ${OL._fvRenderWbItems(allItems, tab)}
         </div>
     `;
-    
+
     if (window.lucide) lucide.createIcons();
 };
 
