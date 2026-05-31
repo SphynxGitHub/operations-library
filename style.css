@@ -5642,9 +5642,12 @@ body:has(.sidebar.collapsed) #v2-viewport:not(.tray-closed) #v2-workbench-sideba
 }
 .fv-card-tags { display: flex; flex-wrap: wrap; gap: 3px; }
 .fv-card-tag {
-  font-size: 9px; font-weight: 600;
-  padding: 2px 6px; border-radius: 999px;
-  background: #f5f6f8; color: #6b7280;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--panel-dark);
+    color: var(--text-dim);
 }
 .fv-card-footer {
   margin-top: 8px; padding-top: 7px;
