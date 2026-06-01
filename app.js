@@ -24486,7 +24486,7 @@ OL._printFlowchartHtml = function(stages, resources, workflows) {
     return html;
 };
 
-OL._printCard = function(res) {
+OL._printCard = function(res, allResources) {
     const tc = OL._fvGetType(res.type);
     const steps = (res.steps || []).filter(s => !s.isArchived);
     const assignees = (res.assignees || []).map(a => esc(a.name)).join(', ');
@@ -24503,11 +24503,11 @@ OL._printCard = function(res) {
             <div class="card-name">${esc(res.name)}</div>
             ${appName || assignees ? `
                 <div class="card-meta">
-                    ${appName ? `<span class="card-meta-pill">Applicaton: ${esc(appName)}</span>` : ''}
-                    ${assignees ? `<span class="card-meta-pill">Assignees ${assignees}</span>` : ''}
+                    ${appName ? `<span class="card-meta-pill">${OL._printIcon('smartphone')} ${esc(appName)}</span>` : ''}
+                    ${assignees ? `<span class="card-meta-pill">${OL._printIcon('user')} ${assignees}</span>` : ''}
                 </div>
             ` : ''}
-             ${steps.length ? `
+            ${steps.length ? `
                 <div class="card-steps">
                     ${steps.map((s, i) => {
                         const stepAssignees = (s.assignees || []).map(a => a.name).join(', ');
@@ -24520,39 +24520,37 @@ OL._printCard = function(res) {
                                 const amt   = l.delayAmount || l.amount || '';
                                 const unit  = l.delayUnit  || l.unit   || 'days';
                                 const label = l.rule || l.label || '';
-                                return `<div class="card-step-logic-out">⏱ Delay ${amt ? amt + ' ' + unit : unit}${label ? ' — ' + esc(label) : ''}</div>`;
+                                return `<div class="card-step-logic-out">${OL._printIcon('clock')} Delay ${amt ? amt + ' ' + unit : unit}${label ? ' — ' + esc(label) : ''}</div>`;
                             }
 
                             if (types.includes('loop')) {
                                 const label = l.rule || l.label || l.loopOver || '';
-                                return `<div class="card-step-logic-out">↺ Loop${label ? ' <em>' + esc(label) + '</em>' : ''}</div>`;
+                                return `<div class="card-step-logic-out">${OL._printIcon('repeat')} Loop${label ? ' <em>' + esc(label) + '</em>' : ''}</div>`;
                             }
 
                             if (types.includes('condition')) {
                                 const rule = l.rule || l.label || '';
-                                // resolve target name
-                                const lastH   = String(l.targetId || '').lastIndexOf('-');
+                                const lastH = String(l.targetId || '').lastIndexOf('-');
                                 let targetLabel = '';
                                 if (lastH !== -1) {
-                                    const tRes  = (res._allResources || []).find(r => String(r.id) === l.targetId.substring(0, lastH));
+                                    const tRes  = (allResources || []).find(r => String(r.id) === l.targetId.substring(0, lastH));
                                     const tStep = tRes?.steps?.find(s2 => String(s2.id) === l.targetId.substring(lastH + 1));
                                     if (tStep) targetLabel = ' → ' + esc(tStep.name);
                                     else if (tRes) targetLabel = ' → ' + esc(tRes.name);
                                 }
-                                return `<div class="card-step-logic-out">◆ ${rule ? '<em>' + esc(rule) + '</em>' : 'If condition'}${targetLabel}</div>`;
+                                return `<div class="card-step-logic-out">${OL._printIcon('git-branch')} ${rule ? '<em>' + esc(rule) + '</em>' : 'If condition'}${targetLabel}</div>`;
                             }
 
-                            // next / default
                             const label = l.rule || l.label || '';
-                            return label ? `<div class="card-step-logic-out">→ ${esc(label)}</div>` : '';
+                            return label ? `<div class="card-step-logic-out">${OL._printIcon('arrow-right')} ${esc(label)}</div>` : '';
                         }).filter(Boolean).join('');
 
                         return `<div class="card-step">
                             <div class="card-step-num">${i + 1}</div>
                             <div style="flex:1;">
                                 <div class="card-step-name">${esc(s.name || 'Unnamed')}</div>
-                                ${s.appName ? `<div class="card-step-app">Application: ${esc(s.appName)}</div>` : ''}
-                                ${stepAssignees ? `<div class="card-step-assignees">Assignees: ${stepAssignees}</div>` : ''}
+                                ${s.appName ? `<div class="card-step-app">${OL._printIcon('smartphone')} ${esc(s.appName)}</div>` : ''}
+                                ${stepAssignees ? `<div class="card-step-assignees">${OL._printIcon('user')} ${stepAssignees}</div>` : ''}
                                 ${logicLines}
                             </div>
                         </div>`;
