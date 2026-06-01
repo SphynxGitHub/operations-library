@@ -1071,7 +1071,7 @@ OL.handleGlobalSearch = function(query) {
         html += `<div class="search-category-label">Master Apps</div>`;
         html += matchedApps.map(a => `
             <div class="search-result-item" onclick="OL.openAppModal('${a.id}')">
-                <span>📱 ${esc(a.name)}</span>
+                <span>OL._printIcon(smartphone) ${esc(a.name)}</span>
                 <span class="tiny muted">Master Vault</span>
             </div>
         `).join('');
@@ -3173,7 +3173,7 @@ OL.executeMap = function(targetId, mode) {
             OL.persist();
         }
     } 
-    // --- 📱 SCENARIO 2: PROJECT MAPPING ---
+    // --- OL._printIcon(smartphone) SCENARIO 2: PROJECT MAPPING ---
     else if (client) {
         const fnId = (mode === 'functions') ? targetId : contextId;
         
@@ -4228,7 +4228,7 @@ function renderTaskList(clientId, tasks, isVault = false) {
                 </div>
 
                 <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px;">
-                    ${(task.appIds || []).length > 0 ? `<span class="pill tiny soft" style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); font-size: 9px;">📱 ${(task.appIds || []).length}</span>` : ''}
+                    ${(task.appIds || []).length > 0 ? `<span class="pill tiny soft" style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); font-size: 9px;">OL._printIcon(smartphone) ${(task.appIds || []).length}</span>` : ''}
                     ${(task.howToIds || []).length > 0 ? `<span class="pill tiny soft" style="background: rgba(255,255,255,0.03); border: 1px solid var(--line); font-size: 9px;">📖 ${(task.howToIds || []).length}</span>` : ''}
                     ${(!task.appIds?.length && !task.howToIds?.length) ? '<span class="tiny muted" style="opacity:0.2;">—</span>' : ''}
                 </div>
@@ -5780,7 +5780,7 @@ OL.filterInlineAppSearch = function(resId, stepId, query) {
         ? matches.map(app => `
             <div class="search-result-item"
                  onmousedown="event.preventDefault(); OL.updateAppMetadataInline('${resId}', '${stepId}', '${app.id}', '${esc(app.name)}')">
-                📱 ${esc(app.name)}
+                OL._printIcon(smartphone) ${esc(app.name)}
             </div>`).join('')
         : '<div class="p-10 tiny muted">No tools found.</div>';
     overlay.style.display = 'block';
@@ -9385,7 +9385,7 @@ OL.filterAnalysisAppSearch = function (anlyId, isMaster, query) {
     let html = matches.map(app => `
         <div class="search-result-item" onmousedown="OL.executeAddAppToAnalysis('${anlyId}', '${app.id}', ${isMaster})">
             <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                <span>📱 ${esc(app.name)}</span>
+                <span>OL._printIcon(smartphone) ${esc(app.name)}</span>
                 <span class="tiny-tag ${String(app.id).startsWith('local') ? 'local' : 'vault'}">
                     ${String(app.id).startsWith('local') ? 'LOCAL' : 'MASTER'}
                 </span>
@@ -9411,7 +9411,7 @@ OL.filterAnalysisAppSearch = function (anlyId, isMaster, query) {
 OL.addAppToAnalysis = function (anlyId, isMaster) {
     const html = `
         <div class="modal-head">
-            <div class="modal-title-text">📱 Add App to Matrix</div>
+            <div class="modal-title-text">OL._printIcon(smartphone) Add App to Matrix</div>
             <div class="spacer"></div>
             <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
         </div>
@@ -15739,8 +15739,8 @@ OL.updateQuickAddPreview = function() {
 OL.showSlashMenu = function(query, resId) {
     const menu = document.getElementById('slash-menu');
     const options = [
-        { label: 'Assignee', key: 'Assign:', icon: '👤', sub: 'team' },
-        { label: 'Application', key: 'App:', icon: '📱', sub: 'apps' },
+        { label: 'Assignee', key: 'Assign:', icon: 'OL._printIcon(user)', sub: 'team' },
+        { label: 'Application', key: 'App:', icon: 'OL._printIcon(smartphone)', sub: 'apps' },
         { label: 'Delay', key: 'Delay:', icon: '⏱', sub: null },
         { label: 'Note', key: 'Note:', icon: '📝', sub: null },
         { label: 'Due Date', key: 'Due:', icon: '📅', sub: 'due' }, // ✨ New Option
@@ -15912,9 +15912,9 @@ OL.updateStepPreview = function(val) {
             </div>
             
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                ${s.app ? `<span class="pill status-primary">📱 ${s.app}</span>` : ''}
+                ${s.app ? `<span class="pill status-primary">OL._printIcon(smartphone) ${s.app}</span>` : ''}
                 ${(s.assignee || []).map(a => `
-                    <span class="pill vault-gold" style="font-size: 10px;">👤 ${a.name}</span> `).join('')}
+                    <span class="pill vault-gold" style="font-size: 10px;">OL._printIcon(user) ${a.name}</span> `).join('')}
                 ${s.delay ? `<span class="pill">⏱ ${s.delay}</span>` : ''}
                 ${s.due ? `<span class="pill" style="border: 1px solid #ff4757; color: #ff4757;">📅 ${s.due}</span>` : ''}
                 ${s.rule ? `<span class="pill" style="border: 1px solid var(--warning); color: var(--warning);">λ ${s.rule}</span>` : ''}
@@ -15981,7 +15981,7 @@ OL.showSubMenu = function(subType, filterQuery = "") {
             menuHtml = `<div class="search-category-label">Select Application...</div>`;
             menuHtml += apps.map(a => `
                 <div class="slash-option" onmousedown="event.preventDefault(); OL.selectMenuOption('${esc(a.name)}', null, '${a.id}')">
-                    <span>📱 ${esc(a.name)}</span>
+                    <span>OL._printIcon(smartphone) ${esc(a.name)}</span>
                 </div>
             `).join('');
             break;
@@ -16013,7 +16013,7 @@ OL.showSubMenu = function(subType, filterQuery = "") {
             menuHtml = `<div class="search-category-label">Link Assets/SOPs (Multi)</div>`;
             menuHtml += linkMatches.map(item => {
                 const isSelected = (OL.quickAddState.links || []).some(l => l.id === item.id);
-                const icon = item.type === 'SOP' || item.content !== undefined ? '📖' : '📱';
+                const icon = item.type === 'SOP' || item.content !== undefined ? '📖' : 'OL._printIcon(smartphone)';
                 return `
                     <div class="slash-option ${isSelected ? 'active' : ''}" 
                         onmousedown="event.preventDefault(); OL.selectMultiLink('${item.id}', '${esc(item.name)}', '${item.type || 'sop'}')">
@@ -16193,11 +16193,11 @@ OL.commitQuickStep = async function(resId) {
             id: "step_" + Date.now(),
             name: taskName || "Untitled Action",
             
-            // 📱 App Alignment: Inspector uses .appId
+            // OL._printIcon(smartphone) App Alignment: Inspector uses .appId
             appId: s.appId || null, 
             appName: s.app || null,
 
-            // 👤 Assignee Alignment: Inspector uses .assignees (Array)
+            // OL._printIcon(user) Assignee Alignment: Inspector uses .assignees (Array)
             assignees: Array.isArray(s.assignee) ? s.assignee : [], 
 
             // 📝 Note Alignment: Inspector uses .description
@@ -17441,7 +17441,7 @@ OL.filterAppSearch = function(parentId, stepId, query) {
              style="cursor: pointer; padding: 8px; border-bottom: 1px solid var(--line);"
              onmousedown="event.preventDefault(); event.stopPropagation(); OL.selectAppForStep('${parentId}', '${stepId}', '${app.id}', '${esc(app.name)}');">
             <div style="display:flex; align-items:center; gap:8px;">
-                <span>📱</span>
+                <span>OL._printIcon(smartphone)</span>
                 <div>${esc(app.name)}</div>
             </div>
         </div>
@@ -17497,8 +17497,8 @@ OL.getFilteredAssigneeOptions = function(query) {
     const virtualOptions = [
         { id: 'any-team', name: 'Any Team Member', type: 'role', icon: '👥' },
         { id: 'all-client', name: 'Any Client', type: 'role', icon: '🏠' },
-        { id: 'role-client-1', name: 'Client 1', type: 'role', icon: '👤' },
-        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: '👤' },
+        { id: 'role-client-1', name: 'Client 1', type: 'role', icon: 'OL._printIcon(user)' },
+        { id: 'role-client-2', name: 'Client 2', type: 'role', icon: 'OL._printIcon(user)' },
         { id: 'role-coi', name: 'COI', type: 'role', icon: '👨‍💼' },
         { id: 'role-sphynx', name: 'Sphynx', type: 'role', icon: '👩‍🎤' }
     ];
@@ -17511,8 +17511,8 @@ OL.getFilteredAssigneeOptions = function(query) {
     const teamList = [...(state.master.teamMembers || []), ...(client?.projectData?.teamMembers || [])];
     const inlineRoles = [...new Set(teamList.flatMap(m => m.roles || []))].map(r => ({ id: `role-${r}`, name: r, type: 'role', icon: '🎭' }));
 
-    const people = teamList.map(m => ({ id: m.id, name: m.name, type: 'person', icon: '👤' }));
-    const apps = (client?.projectData?.localApps || []).map(a => ({ id: a.id, name: a.name, type: 'app', icon: '📱' }));
+    const people = teamList.map(m => ({ id: m.id, name: m.name, type: 'person', icon: 'OL._printIcon(user)' }));
+    const apps = (client?.projectData?.localApps || []).map(a => ({ id: a.id, name: a.name, type: 'app', icon: 'OL._printIcon(smartphone)' }));
 
     // 3. Combine and Filter
     const all = [...virtualOptions, ...masterRoles, ...clientRoles, ...inlineRoles, ...people, ...apps];
@@ -21080,7 +21080,7 @@ OL.renderAccessSection = function (ownerId, type) {
                                         style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" 
                                         onclick="${jumpTarget}" 
                                         title="Jump to ${esc(linkedObj?.name)}">
-                                    ${type === "member" ? "📱" : "👨‍💼"} ${esc(linkedObj?.name || "Unknown")}
+                                    ${type === "member" ? "OL._printIcon(smartphone)" : "👨‍💼"} ${esc(linkedObj?.name || "Unknown")}
                                 </strong>
                             </div>
 
@@ -21149,7 +21149,7 @@ OL.filterAccessSearch = function (ownerId, type, query) {
 
     listEl.innerHTML = matches.map(item => `
         <div class="search-result-item" onclick="OL.linkAccess('${ownerId}', '${item.id}', '${type}')">
-            ${type === "member" ? "📱" : "👨‍💼"} ${esc(item.name)}
+            ${type === "member" ? "OL._printIcon(smartphone)" : "👨‍💼"} ${esc(item.name)}
         </div>
     `).join('');
 };
@@ -24432,6 +24432,19 @@ ${bodyHtml}
 };
 
 // ── FLOWCHART (SWIMLANES) ──────────────────────────
+OL._printIcon = function(name, size = 10) {
+    const icons = {
+        'smartphone': '<path d="M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+        'user':       '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        'clock':      '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+        'repeat':     '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+        'git-branch': '<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+        'arrow-right':'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+    };
+    const path = icons[name] || '';
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:3px;">${path}</svg>`;
+};
+
 OL._printFlowchartHtml = function(stages, resources, workflows) {
     const WF_COLORS = ['#3dd9c5','#7c3aed','#f97316','#38bdf8','#a78bfa','#fb923c','#10b981','#f43f5e'];
     let html = '';
@@ -24538,8 +24551,8 @@ OL._printCard = function(res) {
                             <div class="card-step-num">${i + 1}</div>
                             <div style="flex:1;">
                                 <div class="card-step-name">${esc(s.name || 'Unnamed')}</div>
-                                ${s.appName ? `<div class="card-step-app">📱 ${esc(s.appName)}</div>` : ''}
-                                ${stepAssignees ? `<div class="card-step-assignees">👤 ${stepAssignees}</div>` : ''}
+                                ${s.appName ? `<div class="card-step-app">OL._printIcon(smartphone) ${esc(s.appName)}</div>` : ''}
+                                ${stepAssignees ? `<div class="card-step-assignees">OL._printIcon(user) ${stepAssignees}</div>` : ''}
                                 ${logicLines}
                             </div>
                         </div>`;
@@ -24684,7 +24697,7 @@ OL._printStepsHtml = function(stages, resources, workflows) {
                         <div class="res-section-name">${esc(res.name)}</div>
                         <div class="res-section-type" style="color:${tc.color};">${esc(res.type || 'General')}</div>
                     </div>
-                    ${res.appName ? `<span style="margin-left:auto;font-size:9px;color:#64748b;">📱 ${esc(res.appName)}</span>` : ''}
+                    ${res.appName ? `<span style="margin-left:auto;font-size:9px;color:#64748b;">OL._printIcon(smartphone) ${esc(res.appName)}</span>` : ''}
                 </div>
                 ${steps.map((s, i) => {
                     const assignees = (s.assignees || []).map(a => a.name);
@@ -24714,8 +24727,8 @@ OL._printStepsHtml = function(stages, resources, workflows) {
                         <div class="step-content">
                             <div class="step-name">${esc(s.name || 'Unnamed')}</div>
                             <div class="step-details">
-                                ${s.appName ? `<span class="step-detail-pill step-app-pill">📱 ${esc(s.appName)}</span>` : ''}
-                                ${assignees.map(a => `<span class="step-detail-pill step-assignee-pill">👤 ${esc(a)}</span>`).join('')}
+                                ${s.appName ? `<span class="step-detail-pill step-app-pill">OL._printIcon(smartphone) ${esc(s.appName)}</span>` : ''}
+                                ${assignees.map(a => `<span class="step-detail-pill step-assignee-pill">OL._printIcon(user) ${esc(a)}</span>`).join('')}
                                 ${logicTypes.map(t => `<span class="step-detail-pill step-logic-pill">${
                                     t === 'condition' ? '◆ Condition'
                                     : t === 'loop' ? '↺ Loop'
