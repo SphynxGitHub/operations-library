@@ -24496,26 +24496,57 @@ OL._printCard = function(res) {
             <div class="card-name">${esc(res.name)}</div>
             ${appName || assignees ? `
                 <div class="card-meta">
-                    ${appName ? `<span class="card-meta-pill">📱 ${esc(appName)}</span>` : ''}
-                    ${assignees ? `<span class="card-meta-pill">👤 ${assignees}</span>` : ''}
+                    ${appName ? `<span class="card-meta-pill">Applicaton: ${esc(appName)}</span>` : ''}
+                    ${assignees ? `<span class="card-meta-pill">Assignees ${assignees}</span>` : ''}
                 </div>
             ` : ''}
-            ${steps.length ? `
+             ${steps.length ? `
                 <div class="card-steps">
                     ${steps.map((s, i) => {
                         const stepAssignees = (s.assignees || []).map(a => a.name).join(', ');
-                        const logic = (s.logic?.out || []).filter(l => l.targetId);
-                        const logicIcon = logic.some(l => (l.types||[l.type]).includes('condition')) ? '◆'
-                            : logic.some(l => (l.types||[l.type]).includes('loop')) ? '↺'
-                            : logic.some(l => (l.types||[l.type]).includes('delay')) ? '⏱'
-                            : logic.length ? '→' : '';
+                        const logicOuts = (s.logic?.out || []).filter(l => l.targetId || l.type === 'delay');
+
+                        const logicLines = logicOuts.map(l => {
+                            const types = l.types || [l.type || 'next'];
+
+                            if (types.includes('delay')) {
+                                const amt   = l.delayAmount || l.amount || '';
+                                const unit  = l.delayUnit  || l.unit   || 'days';
+                                const label = l.rule || l.label || '';
+                                return `<div class="card-step-logic-out">⏱ Delay ${amt ? amt + ' ' + unit : unit}${label ? ' — ' + esc(label) : ''}</div>`;
+                            }
+
+                            if (types.includes('loop')) {
+                                const label = l.rule || l.label || l.loopOver || '';
+                                return `<div class="card-step-logic-out">↺ Loop${label ? ' <em>' + esc(label) + '</em>' : ''}</div>`;
+                            }
+
+                            if (types.includes('condition')) {
+                                const rule = l.rule || l.label || '';
+                                // resolve target name
+                                const lastH   = String(l.targetId || '').lastIndexOf('-');
+                                let targetLabel = '';
+                                if (lastH !== -1) {
+                                    const tRes  = (res._allResources || []).find(r => String(r.id) === l.targetId.substring(0, lastH));
+                                    const tStep = tRes?.steps?.find(s2 => String(s2.id) === l.targetId.substring(lastH + 1));
+                                    if (tStep) targetLabel = ' → ' + esc(tStep.name);
+                                    else if (tRes) targetLabel = ' → ' + esc(tRes.name);
+                                }
+                                return `<div class="card-step-logic-out">◆ ${rule ? '<em>' + esc(rule) + '</em>' : 'If condition'}${targetLabel}</div>`;
+                            }
+
+                            // next / default
+                            const label = l.rule || l.label || '';
+                            return label ? `<div class="card-step-logic-out">→ ${esc(label)}</div>` : '';
+                        }).filter(Boolean).join('');
+
                         return `<div class="card-step">
                             <div class="card-step-num">${i + 1}</div>
                             <div style="flex:1;">
                                 <div class="card-step-name">${esc(s.name || 'Unnamed')}</div>
-                                ${s.appName ? `<div class="card-step-app">${esc(s.appName)}</div>` : ''}
-                                ${stepAssignees ? `<div class="card-step-assignees">${stepAssignees}</div>` : ''}
-                                ${logicIcon ? `<div class="card-step-logic">${logicIcon}</div>` : ''}
+                                ${s.appName ? `<div class="card-step-app">📱 ${esc(s.appName)}</div>` : ''}
+                                ${stepAssignees ? `<div class="card-step-assignees">👤 ${stepAssignees}</div>` : ''}
+                                ${logicLines}
                             </div>
                         </div>`;
                     }).join('')}
