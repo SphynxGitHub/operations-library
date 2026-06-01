@@ -24335,9 +24335,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
            letter-spacing: 0.06em; color: #6b7280; }
 
 /* ── SWIMLANES VIEW ── */
-.swimlane-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.swimlane-cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 
-.resource-card { width: 185px; border: 1px solid #e5e7eb; border-radius: 10px;
+.resource-card { width: 220px; border: 1px solid #e5e7eb; border-radius: 10px;
                  overflow: hidden; page-break-inside: avoid; break-inside: avoid;
                  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .card-accent { height: 4px; width: 100%; }
