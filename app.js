@@ -24569,32 +24569,59 @@ OL._printListHtml = function(stages, resources, workflows) {
         return out;
     };
 
+    const WF_COLORS = ['#3dd9c5','#7c3aed','#f97316','#38bdf8','#a78bfa','#fb923c','#10b981','#f43f5e'];
+
     stages.forEach((stage, si) => {
-        const stageWfs = workflows.filter(w => w.stageId === stage.id);
+        const stageWfs    = workflows.filter(w => w.stageId === stage.id);
         const assignedIds = new Set(stageWfs.flatMap(w => w.resourceIds || []));
         const unassigned  = resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)));
-        let stageHtml = '';
 
-        stageWfs.forEach(wf => {
-            const wfRes = (wf.resourceIds || [])
-                .map(id => resources.find(r => String(r.id) === id))
-                .filter(Boolean);
-            wfRes.forEach(res => {
-                (res.steps || []).filter(s => !s.isArchived)
-                    .forEach(s => { stageHtml += renderStep(s, res, 0); });
-            });
-        });
+        // Check if stage has any content before rendering header
+        const hasContent = stageWfs.some(wf => (wf.resourceIds || []).some(id => {
+            const res = resources.find(r => String(r.id) === id);
+            return res && (res.steps || []).some(s => !s.isArchived);
+        })) || unassigned.some(r => (r.steps || []).some(s => !s.isArchived));
+        if (!hasContent) return;
 
-        unassigned.forEach(res => {
-            (res.steps || []).filter(s => !s.isArchived)
-                .forEach(s => { stageHtml += renderStep(s, res, 0); });
-        });
-
-        if (!stageHtml) return;
         html += `<div class="stage-header">
             <div class="stage-num">${si + 1}</div>
             <div class="stage-name">${esc(stage.name)}</div>
-        </div>${stageHtml}`;
+        </div>`;
+
+        stageWfs.forEach((wf, wfi) => {
+            const wfColor = wf.color || WF_COLORS[wfi % WF_COLORS.length];
+            const wfRes = (wf.resourceIds || [])
+                .map(id => resources.find(r => String(r.id) === id))
+                .filter(Boolean);
+
+            let wfStepsHtml = '';
+            wfRes.forEach(res => {
+                (res.steps || []).filter(s => !s.isArchived)
+                    .forEach(s => { wfStepsHtml += renderStep(s, res, 0); });
+            });
+
+            if (!wfStepsHtml) return;
+
+            html += `<div class="wf-label">
+                <div class="wf-dot" style="background:${wfColor};"></div>
+                <div class="wf-name">${esc(wf.name)}</div>
+            </div>
+            ${wfStepsHtml}`;
+        });
+
+        let unassignedHtml = '';
+        unassigned.forEach(res => {
+            (res.steps || []).filter(s => !s.isArchived)
+                .forEach(s => { unassignedHtml += renderStep(s, res, 0); });
+        });
+
+        if (unassignedHtml) {
+            html += `<div class="wf-label">
+                <div class="wf-dot" style="background:#9ca3af;"></div>
+                <div class="wf-name">Unassigned</div>
+            </div>
+            ${unassignedHtml}`;
+        }
     });
 
     return html;
@@ -24670,7 +24697,6 @@ OL._printStepsHtml = function(stages, resources, workflows) {
                                     : t === 'delay' ? '⏱ Delay' : t
                                 }</span>`).join('')}
                             </div>
-                            ${s.description ? `<div class="step-desc">${esc(s.description)}</div>` : ''}
                             ${logicOuts.length ? `<div class="logic-out">${logicOuts.join('')}</div>` : ''}
                         </div>
                     </div>`;
