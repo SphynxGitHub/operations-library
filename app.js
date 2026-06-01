@@ -11210,6 +11210,36 @@ OL.renderVisualizer = function() {
         </button>
       </div>
 
+        <div class="fv-divider"></div>
+        <div style="position:relative;display:inline-flex;">
+            <button class="fv-btn" style="gap:6px;"
+                    id="fv-print-btn"
+                    onclick="OL._fvTogglePrintMenu()">
+                <i data-lucide="printer" style="width:13px;height:13px;"></i>
+                Export PDF
+            </button>
+            <div id="fv-print-menu" style="
+                display:none;position:absolute;top:calc(100% + 6px);right:0;
+                background:var(--panel);border:1px solid var(--panel-border);
+                border-radius:10px;padding:6px;z-index:100;min-width:160px;
+                box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+                ${[
+                    { view:'flowchart', icon:'columns-3',   label:'Swimlanes' },
+                    { view:'list',      icon:'list',         label:'List View' },
+                    { view:'steps',     icon:'hexagon',      label:'Steps View' },
+                ].map(v => `
+                    <div onmousedown="event.preventDefault();OL.printFlowMap('${v.view}');document.getElementById('fv-print-menu').style.display='none';"
+                         style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                border-radius:7px;cursor:pointer;transition:background 0.12s;"
+                         onmouseover="this.style.background='var(--panel-soft)'"
+                         onmouseout="this.style.background='transparent'">
+                        <i data-lucide="${v.icon}" style="width:13px;height:13px;color:var(--accent);flex-shrink:0;"></i>
+                        <span style="font-size:12px;font-weight:600;color:var(--text-main);">${v.label}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
       <!-- BODY -->
       <div id="fv-body">
 
@@ -11308,6 +11338,24 @@ OL.renderVisualizer = function() {
         OL._fvOpenStepsList(wasOpen);
     });
   }
+};
+
+OL._fvTogglePrintMenu = function() {
+    const menu = document.getElementById('fv-print-menu');
+    if (!menu) return;
+    const isOpen = menu.style.display === 'block';
+    menu.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        setTimeout(() => {
+            document.addEventListener('click', function closePrintMenu(e) {
+                const btn = document.getElementById('fv-print-btn');
+                if (!menu.contains(e.target) && btn && !btn.contains(e.target)) {
+                    menu.style.display = 'none';
+                    document.removeEventListener('click', closePrintMenu);
+                }
+            });
+        }, 50);
+    }
 };
 
 OL._fvHandleDrawerDrop = function(event) {
@@ -24229,4 +24277,407 @@ OL.getCredsForApp = function(client, appSlug) {
     
     if (!client || !client.externalIntegrations) return null;
     return client.externalIntegrations.find(i => i.appSlug === appSlug);
+};
+
+OL.printFlowMap = function(view) {
+    const client = getActiveClient();
+    const data   = OL.getCurrentProjectData();
+    const stages    = data.stages || [];
+    const resources = (data.resources || []).filter(r => !r.isDeleted && !r.isLocked && !r.isArchived);
+    const workflows = data.workflows || [];
+
+    const clientName = client?.meta?.name || 'Flow Map';
+    const viewLabel  = { flowchart: 'Swimlanes', list: 'List', steps: 'Steps' }[view] || view;
+    const date       = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+    let bodyHtml = '';
+
+    if (view === 'flowchart') {
+        bodyHtml = OL._printFlowchartHtml(stages, resources, workflows);
+    } else if (view === 'list') {
+        bodyHtml = OL._printListHtml(stages, resources, workflows);
+    } else if (view === 'steps') {
+        bodyHtml = OL._printStepsHtml(stages, resources, workflows);
+    }
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${clientName} — Flow Map (${viewLabel})</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, sans-serif; font-size: 11px;
+       color: #1b2d3f; background: #fff; padding: 32px; }
+
+/* ── HEADER ── */
+.print-header { display: flex; justify-content: space-between; align-items: flex-end;
+                border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 28px; }
+.print-header-title { font-size: 20px; font-weight: 800; color: #0f172a; }
+.print-header-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
+.print-header-meta { text-align: right; font-size: 10px; color: #94a3b8; }
+
+/* ── STAGE HEADER ── */
+.stage-header { display: flex; align-items: center; gap: 8px;
+                margin: 28px 0 12px; padding-bottom: 8px;
+                border-bottom: 1.5px solid #e5e7eb; }
+.stage-num { width: 22px; height: 22px; border-radius: 5px; background: #3dd9c5;
+             color: #fff; font-size: 10px; font-weight: 800;
+             display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stage-name { font-size: 13px; font-weight: 700; color: #0f172a; }
+.stage-count { font-size: 10px; color: #94a3b8; margin-left: auto; }
+
+/* ── WORKFLOW LABEL ── */
+.wf-label { display: flex; align-items: center; gap: 6px;
+            margin: 12px 0 8px; padding: 4px 0; }
+.wf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wf-name { font-size: 10px; font-weight: 700; text-transform: uppercase;
+           letter-spacing: 0.06em; color: #6b7280; }
+
+/* ── SWIMLANES VIEW ── */
+.swimlane-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+
+.resource-card { width: 185px; border: 1px solid #e5e7eb; border-radius: 10px;
+                 overflow: hidden; page-break-inside: avoid; break-inside: avoid;
+                 background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.card-accent { height: 4px; width: 100%; }
+.card-body { padding: 9px 11px 10px; }
+.card-type-row { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; }
+.card-type-badge { padding: 1px 5px; border-radius: 3px; font-size: 8px;
+                   font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.card-name { font-size: 11px; font-weight: 700; color: #0f172a;
+             line-height: 1.35; margin-bottom: 6px; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.card-meta-pill { font-size: 9px; padding: 1px 6px; border-radius: 99px;
+                  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.card-steps { border-top: 1px solid #f1f5f9; margin-top: 6px; padding-top: 5px; }
+.card-step { display: flex; align-items: flex-start; gap: 5px;
+             padding: 3px 0; font-size: 9px; color: #374151; }
+.card-step-num { width: 14px; height: 14px; border-radius: 99px; background: #f1f5f9;
+                 font-size: 8px; font-weight: 700; color: #94a3b8; display: flex;
+                 align-items: center; justify-content: center; flex-shrink: 0; }
+.card-step-name { flex: 1; line-height: 1.3; }
+.card-step-app { font-size: 8px; color: #0284c7; }
+.card-step-logic { font-size: 8px; color: #7c3aed; font-weight: 700; }
+.card-step-assignees { font-size: 8px; color: #64748b; }
+.card-step-desc { font-size: 8px; color: #94a3b8; font-style: italic;
+                  margin-top: 2px; line-height: 1.3; }
+
+/* ── LIST VIEW ── */
+.list-step-row { display: flex; align-items: flex-start; gap: 8px;
+                 padding: 7px 10px; border: 1px solid #e5e7eb;
+                 border-radius: 7px; margin-bottom: 4px;
+                 page-break-inside: avoid; break-inside: avoid; }
+.list-type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+.list-step-name { font-size: 11px; font-weight: 600; color: #0f172a; flex: 1; }
+.list-step-meta { font-size: 9px; color: #64748b; margin-top: 2px; }
+.list-step-branch { padding-left: 20px; border-left: 2px solid #e5e7eb; margin-left: 12px; margin-bottom: 4px; }
+.list-branch-label { font-size: 8px; font-weight: 800; text-transform: uppercase;
+                     color: #94a3b8; padding: 3px 0 4px 6px; }
+
+/* ── STEPS VIEW (grouped by resource) ── */
+.res-section { margin-bottom: 24px; page-break-inside: avoid; }
+.res-section-header { display: flex; align-items: center; gap: 8px;
+                      padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; }
+.res-section-name { font-size: 12px; font-weight: 700; color: #0f172a; }
+.res-section-type { font-size: 9px; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: 0.06em; }
+.step-row { display: flex; align-items: flex-start; gap: 8px;
+            padding: 8px 12px; border: 1px solid #e5e7eb;
+            border-radius: 8px; margin-bottom: 4px;
+            page-break-inside: avoid; break-inside: avoid; }
+.step-num { width: 20px; height: 20px; border-radius: 99px;
+            font-size: 9px; font-weight: 800; display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0; }
+.step-content { flex: 1; }
+.step-name { font-size: 11px; font-weight: 600; color: #0f172a; margin-bottom: 3px; }
+.step-details { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.step-detail-pill { font-size: 9px; padding: 1px 6px; border-radius: 99px; border: 1px solid; }
+.step-app-pill { background: rgba(2,132,199,0.08); color: #0284c7; border-color: rgba(2,132,199,0.2); }
+.step-assignee-pill { background: rgba(56,189,248,0.08); color: #0369a1; border-color: rgba(56,189,248,0.2); }
+.step-logic-pill { background: rgba(124,58,237,0.08); color: #7c3aed; border-color: rgba(124,58,237,0.2); }
+.step-desc { font-size: 9px; color: #64748b; margin-top: 4px; line-height: 1.4; font-style: italic; }
+.logic-out { font-size: 9px; color: #7c3aed; margin-top: 3px; }
+.logic-out-item { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.logic-arrow { color: #94a3b8; }
+
+@media print {
+  body { padding: 20px; }
+  .stage-header { break-before: auto; }
+  .res-section { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="print-header">
+    <div>
+        <div class="print-header-title">${clientName}</div>
+        <div class="print-header-sub">Flow Map — ${viewLabel} View</div>
+    </div>
+    <div class="print-header-meta">
+        Generated ${date}<br>
+        ${resources.length} resources · ${stages.length} stages
+    </div>
+</div>
+${bodyHtml}
+</body>
+</html>`;
+
+    // Open in new window and trigger print
+    const win = window.open('', '_blank', 'width=1000,height=800');
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 800);
+};
+
+// ── FLOWCHART (SWIMLANES) ──────────────────────────
+OL._printFlowchartHtml = function(stages, resources, workflows) {
+    const WF_COLORS = ['#3dd9c5','#7c3aed','#f97316','#38bdf8','#a78bfa','#fb923c','#10b981','#f43f5e'];
+    let html = '';
+
+    stages.forEach((stage, si) => {
+        const stageWfs  = workflows.filter(w => w.stageId === stage.id);
+        const assignedIds = new Set(stageWfs.flatMap(w => w.resourceIds || []));
+        const unassigned  = resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)));
+        const totalCards  = stageWfs.reduce((a, w) => a + (w.resourceIds || []).length, 0) + unassigned.length;
+        if (totalCards === 0) return;
+
+        html += `<div class="stage-header">
+            <div class="stage-num">${si + 1}</div>
+            <div class="stage-name">${esc(stage.name)}</div>
+            <div class="stage-count">${totalCards} resource${totalCards !== 1 ? 's' : ''}</div>
+        </div>`;
+
+        stageWfs.forEach((wf, wfi) => {
+            const wfColor = wf.color || WF_COLORS[wfi % WF_COLORS.length];
+            const wfRes = (wf.resourceIds || [])
+                .map(id => resources.find(r => String(r.id) === id))
+                .filter(Boolean);
+            if (!wfRes.length) return;
+
+            html += `<div class="wf-label">
+                <div class="wf-dot" style="background:${wfColor};"></div>
+                <div class="wf-name">${esc(wf.name)}</div>
+            </div>
+            <div class="swimlane-cards">
+                ${wfRes.map(res => OL._printCard(res)).join('')}
+            </div>`;
+        });
+
+        if (unassigned.length) {
+            html += `<div class="wf-label">
+                <div class="wf-dot" style="background:#9ca3af;"></div>
+                <div class="wf-name">Unassigned</div>
+            </div>
+            <div class="swimlane-cards">
+                ${unassigned.map(res => OL._printCard(res)).join('')}
+            </div>`;
+        }
+    });
+
+    return html;
+};
+
+OL._printCard = function(res) {
+    const tc = OL._fvGetType(res.type);
+    const steps = (res.steps || []).filter(s => !s.isArchived);
+    const assignees = (res.assignees || []).map(a => esc(a.name)).join(', ');
+    const appName = res.appName || '';
+
+    return `<div class="resource-card">
+        <div class="card-accent" style="background:${tc.color};"></div>
+        <div class="card-body">
+            <div class="card-type-row">
+                <span class="card-type-badge" style="background:${tc.color}18;color:${tc.color};">
+                    ${esc(res.type || 'General')}
+                </span>
+            </div>
+            <div class="card-name">${esc(res.name)}</div>
+            ${appName || assignees ? `
+                <div class="card-meta">
+                    ${appName ? `<span class="card-meta-pill">📱 ${esc(appName)}</span>` : ''}
+                    ${assignees ? `<span class="card-meta-pill">👤 ${assignees}</span>` : ''}
+                </div>
+            ` : ''}
+            ${steps.length ? `
+                <div class="card-steps">
+                    ${steps.map((s, i) => {
+                        const stepAssignees = (s.assignees || []).map(a => a.name).join(', ');
+                        const logic = (s.logic?.out || []).filter(l => l.targetId);
+                        const logicIcon = logic.some(l => (l.types||[l.type]).includes('condition')) ? '◆'
+                            : logic.some(l => (l.types||[l.type]).includes('loop')) ? '↺'
+                            : logic.some(l => (l.types||[l.type]).includes('delay')) ? '⏱'
+                            : logic.length ? '→' : '';
+                        return `<div class="card-step">
+                            <div class="card-step-num">${i + 1}</div>
+                            <div style="flex:1;">
+                                <div class="card-step-name">${esc(s.name || 'Unnamed')}</div>
+                                ${s.appName ? `<div class="card-step-app">${esc(s.appName)}</div>` : ''}
+                                ${stepAssignees ? `<div class="card-step-assignees">${stepAssignees}</div>` : ''}
+                                ${logicIcon ? `<div class="card-step-logic">${logicIcon}</div>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            ` : ''}
+        </div>
+    </div>`;
+};
+
+// ── LIST VIEW ──────────────────────────────────────
+OL._printListHtml = function(stages, resources, workflows) {
+    let html = '';
+    const renderedSteps = new Set();
+
+    const renderStep = (step, res, depth) => {
+        if (renderedSteps.has(step.id)) return '';
+        renderedSteps.add(step.id);
+        const tc = OL._fvGetType(res.type);
+        const assignees = (step.assignees || []).map(a => a.name).join(', ');
+        const logic = (step.logic?.out || []).filter(l => l.targetId);
+        const conditions = logic.filter(l => (l.types||[l.type||'next']).includes('condition'));
+        const indent = depth > 0 ? `padding-left:${depth * 20}px;` : '';
+
+        let out = `<div class="list-step-row" style="${indent}">
+            <div class="list-type-dot" style="background:${tc.color};"></div>
+            <div style="flex:1;">
+                <div class="list-step-name">${esc(step.name || 'Unnamed')}</div>
+                <div class="list-step-meta">
+                    ${esc(res.name)}
+                    ${step.appName ? ` · ${esc(step.appName)}` : ''}
+                    ${assignees ? ` · ${assignees}` : ''}
+                </div>
+            </div>
+        </div>`;
+
+        conditions.forEach(cond => {
+            const lastH = String(cond.targetId || '').lastIndexOf('-');
+            if (lastH === -1) return;
+            const tResId  = cond.targetId.substring(0, lastH);
+            const tStepId = cond.targetId.substring(lastH + 1);
+            const tRes  = resources.find(r => String(r.id) === tResId);
+            const tStep = tRes?.steps?.find(s => String(s.id) === tStepId);
+            if (tRes && tStep) {
+                out += `<div class="list-step-branch">
+                    <div class="list-branch-label">◆ ${esc(cond.rule || 'If condition')}</div>
+                    ${renderStep(tStep, tRes, depth + 1)}
+                </div>`;
+            }
+        });
+
+        return out;
+    };
+
+    stages.forEach((stage, si) => {
+        const stageWfs = workflows.filter(w => w.stageId === stage.id);
+        const assignedIds = new Set(stageWfs.flatMap(w => w.resourceIds || []));
+        const unassigned  = resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)));
+        let stageHtml = '';
+
+        stageWfs.forEach(wf => {
+            const wfRes = (wf.resourceIds || [])
+                .map(id => resources.find(r => String(r.id) === id))
+                .filter(Boolean);
+            wfRes.forEach(res => {
+                (res.steps || []).filter(s => !s.isArchived)
+                    .forEach(s => { stageHtml += renderStep(s, res, 0); });
+            });
+        });
+
+        unassigned.forEach(res => {
+            (res.steps || []).filter(s => !s.isArchived)
+                .forEach(s => { stageHtml += renderStep(s, res, 0); });
+        });
+
+        if (!stageHtml) return;
+        html += `<div class="stage-header">
+            <div class="stage-num">${si + 1}</div>
+            <div class="stage-name">${esc(stage.name)}</div>
+        </div>${stageHtml}`;
+    });
+
+    return html;
+};
+
+// ── STEPS VIEW (linear, grouped by resource) ───────
+OL._printStepsHtml = function(stages, resources, workflows) {
+    let html = '';
+
+    stages.forEach((stage, si) => {
+        const stageWfs = workflows.filter(w => w.stageId === stage.id);
+        const assignedIds = new Set(stageWfs.flatMap(w => w.resourceIds || []));
+        const stageResources = [
+            ...stageWfs.flatMap(wf =>
+                (wf.resourceIds || []).map(id => resources.find(r => String(r.id) === id)).filter(Boolean)
+            ),
+            ...resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)))
+        ];
+
+        if (!stageResources.length) return;
+
+        html += `<div class="stage-header">
+            <div class="stage-num">${si + 1}</div>
+            <div class="stage-name">${esc(stage.name)}</div>
+        </div>`;
+
+        stageResources.forEach(res => {
+            const steps = (res.steps || []).filter(s => !s.isArchived);
+            if (!steps.length) return;
+            const tc = OL._fvGetType(res.type);
+
+            html += `<div class="res-section">
+                <div class="res-section-header" style="background:${tc.color}12;border-left:3px solid ${tc.color};">
+                    <div>
+                        <div class="res-section-name">${esc(res.name)}</div>
+                        <div class="res-section-type" style="color:${tc.color};">${esc(res.type || 'General')}</div>
+                    </div>
+                    ${res.appName ? `<span style="margin-left:auto;font-size:9px;color:#64748b;">📱 ${esc(res.appName)}</span>` : ''}
+                </div>
+                ${steps.map((s, i) => {
+                    const assignees = (s.assignees || []).map(a => a.name);
+                    const logic = (s.logic?.out || []).filter(l => l.targetId);
+                    const logicTypes = [...new Set(logic.flatMap(l => l.types || [l.type || 'next']))].filter(t => t !== 'next');
+
+                    const logicOuts = logic.map(l => {
+                        const lastH = String(l.targetId || '').lastIndexOf('-');
+                        if (lastH === -1) return null;
+                        const tRes  = resources.find(r => String(r.id) === l.targetId.substring(0, lastH));
+                        const tStep = tRes?.steps?.find(s2 => String(s2.id) === l.targetId.substring(lastH + 1));
+                        if (!tRes || !tStep) return null;
+                        const types = (l.types || [l.type || 'next']);
+                        const icon  = types.includes('condition') ? '◆'
+                            : types.includes('loop') ? '↺'
+                            : types.includes('delay') ? '⏱' : '→';
+                        return `<div class="logic-out-item">
+                            <span class="logic-arrow">${icon}</span>
+                            <span style="color:#7c3aed;font-size:9px;">
+                                ${l.rule ? `<em>${esc(l.rule)}</em> → ` : ''}${esc(tRes.name)} › ${esc(tStep.name || 'Step')}
+                            </span>
+                        </div>`;
+                    }).filter(Boolean);
+
+                    return `<div class="step-row">
+                        <div class="step-num" style="background:${tc.color}18;color:${tc.color};">${i + 1}</div>
+                        <div class="step-content">
+                            <div class="step-name">${esc(s.name || 'Unnamed')}</div>
+                            <div class="step-details">
+                                ${s.appName ? `<span class="step-detail-pill step-app-pill">📱 ${esc(s.appName)}</span>` : ''}
+                                ${assignees.map(a => `<span class="step-detail-pill step-assignee-pill">👤 ${esc(a)}</span>`).join('')}
+                                ${logicTypes.map(t => `<span class="step-detail-pill step-logic-pill">${
+                                    t === 'condition' ? '◆ Condition'
+                                    : t === 'loop' ? '↺ Loop'
+                                    : t === 'delay' ? '⏱ Delay' : t
+                                }</span>`).join('')}
+                            </div>
+                            ${s.description ? `<div class="step-desc">${esc(s.description)}</div>` : ''}
+                            ${logicOuts.length ? `<div class="logic-out">${logicOuts.join('')}</div>` : ''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        });
+    });
+
+    return html;
 };
