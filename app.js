@@ -24551,8 +24551,8 @@ OL._printCard = function(res) {
                             <div class="card-step-num">${i + 1}</div>
                             <div style="flex:1;">
                                 <div class="card-step-name">${esc(s.name || 'Unnamed')}</div>
-                                ${s.appName ? `<div class="card-step-app">ol._printicon('smartphone') ${esc(s.appName)}</div>` : ''}
-                                ${stepAssignees ? `<div class="card-step-assignees">ol._printicon('user') ${stepAssignees}</div>` : ''}
+                                ${s.appName ? `<div class="card-step-app">Application: ${esc(s.appName)}</div>` : ''}
+                                ${stepAssignees ? `<div class="card-step-assignees">Assignees: ${stepAssignees}</div>` : ''}
                                 ${logicLines}
                             </div>
                         </div>`;
