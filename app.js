@@ -164,7 +164,7 @@ OL.sync = function() {
     // 1. Master Registry (Standard Library)
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
-            state.master = doc.data().master;
+            state.master = doc.data();
             console.log("🏛️ Master Registry Synced");
         }
     });
