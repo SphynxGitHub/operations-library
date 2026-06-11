@@ -365,13 +365,21 @@ window.addEventListener("load", () => {
 });
 
 window.getActiveClient = function() {
-    // 1. Check the URL for public access
     const urlParams = new URLSearchParams(window.location.search);
     const accessToken = urlParams.get('access');
 
     if (!state.clients) return null;
 
-    // 2. 🟢 IF WE HAVE A TOKEN: Use the Deep Search (Public View)
+    // 🚀 THE FIX: If activeClientId is set and it's NOT the partner token client,
+    // use it directly (user has switched to a sub-client)
+    if (state.activeClientId && state.clients[state.activeClientId]) {
+        const active = state.clients[state.activeClientId];
+        // If we switched away from the token client, use the switched client
+        if (!accessToken || active.publicToken !== accessToken) {
+            return active;
+        }
+    }
+
     if (accessToken) {
         const foundClient = Object.values(state.clients).find(c => 
             c.publicToken === accessToken || c.id === accessToken
@@ -382,8 +390,6 @@ window.getActiveClient = function() {
         }
     }
 
-    // 3. 🔵 IF NO TOKEN: Use the Standard ID (Admin/Master View)
-    // This allows you to click between clients in the dashboard
     if (state.activeClientId && state.clients[state.activeClientId]) {
         return state.clients[state.activeClientId];
     }
