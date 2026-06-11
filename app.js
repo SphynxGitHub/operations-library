@@ -731,10 +731,10 @@ window.buildLayout = function () {
 } else if (client && client.meta.partnerOwner) {
     if (!window.IS_GUEST) {
         homeLabel = "Partner Home";
-        homeAction = `window.location.hash='#/partner-dashboard'`;
+        homeAction = `window.location.search = window.location.search.replace(/[&?]client=[^&]*/,''); window.location.hash='#/partner-dashboard';`;
     } else {
         homeLabel = "My Portfolio";
-        homeAction = `const url = new URL(window.location.href); url.searchParams.delete('client'); window.history.replaceState({}, '', url.toString()); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
+        homeAction = `window.location.search = window.location.search.replace(/[&?]client=[^&]*/,''); window.location.hash='#/partner-dashboard';`;
     }
 } else if (isPublic) {
     showHome = false;
