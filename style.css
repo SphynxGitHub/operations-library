@@ -142,7 +142,7 @@ body.light-mode #v2-inspector-panel .inspector-scroll-content::-webkit-scrollbar
     justify-content: center;
 }
 .theme-toggle-zone button {
-    width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: calc(100% - 20px); display: flex; align-items: center; justify-content: center; gap: 8px;
     background: var(--panel-soft); border: 1px solid var(--line); color: var(--text-main);
     padding: 8px; border-radius: 6px; cursor: pointer;
 }
