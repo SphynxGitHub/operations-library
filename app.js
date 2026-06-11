@@ -162,7 +162,7 @@ OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync (First & Only Time)...");
 
     // 1. Master Registry (Standard Library)
-    db.collection('systems').doc('master_registry').onSnapshot((doc) => {
+    db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
             state.master = doc.data();
             console.log("🏛️ Master Registry Synced");
