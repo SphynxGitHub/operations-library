@@ -367,14 +367,12 @@ window.addEventListener("load", () => {
 window.getActiveClient = function() {
     const urlParams = new URLSearchParams(window.location.search);
     const accessToken = urlParams.get('access');
-    const clientParam = urlParams.get('client'); // 🚀 Sub-client override
 
     if (!state.clients) return null;
 
-    // 🚀 If a specific client is set in URL, use it (sub-client context)
-    if (clientParam && state.clients[clientParam]) {
-        state.activeClientId = clientParam;
-        return state.clients[clientParam];
+    // 🚀 If we have an explicit activeClientId, use it first
+    if (state.activeClientId && state.clients[state.activeClientId]) {
+        return state.clients[state.activeClientId];
     }
 
     if (accessToken) {
@@ -387,9 +385,6 @@ window.getActiveClient = function() {
         }
     }
 
-    if (state.activeClientId && state.clients[state.activeClientId]) {
-        return state.clients[state.activeClientId];
-    }
     return null;
 };
 
@@ -731,10 +726,10 @@ window.buildLayout = function () {
 } else if (client && client.meta.partnerOwner) {
     if (!window.IS_GUEST) {
         homeLabel = "Partner Home";
-        homeAction = `history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[&?]client=[^&]*/,'')); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
+        homeAction = `window.location.hash='#/partner-dashboard'`;
     } else {
         homeLabel = "My Portfolio";
-        homeAction = `history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[&?]client=[^&]*/,'')); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
+        homeAction = `state.activeClientId=null; sessionStorage.removeItem('lastActiveClientId'); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
     }
 } else if (isPublic) {
     showHome = false;
@@ -1723,12 +1718,6 @@ OL.copyShareLink = function(token) {
 OL.switchClient = function (id) {
     state.activeClientId = id;
     sessionStorage.setItem('lastActiveClientId', id);
-    
-    // 🚀 Add client param without removing the partner access token
-    const url = new URL(window.location.href);
-    url.searchParams.set('client', id);
-    window.history.replaceState({}, '', url.toString());
-    
     window.location.hash = "#/client-tasks";
     window.handleRoute();
 }
