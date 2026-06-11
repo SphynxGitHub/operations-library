@@ -155,132 +155,108 @@ window.addEventListener("load", () => {
 
 OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync...");
-    // 🛑 STOP: If we already have a listener, don't create another one!
     if (window.isSyncInitialized) return;
     window.isSyncInitialized = true;
-
     console.log("📡 Initializing Unified Collection Sync (First & Only Time)...");
 
-    // 1. Master Registry (Standard Library)
+    // 1. Master Registry
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
             state.master = doc.data();
             console.log("🏛️ Master Registry Synced");
+            if (!state.activeClientId) window.handleRoute();
         }
     });
-    
-    // 2. The Entire Clients Collection
 
+    // 2. Active client — full data, real-time
+    const activeId = sessionStorage.getItem('lastActiveClientId');
+    if (activeId) {
+        db.collection('clients').doc(activeId).onSnapshot((doc) => {
+            if (doc.exists) {
+                state.clients[activeId] = doc.data();
+                state.activeClientId = activeId;
+                console.log(`👤 Active Client Loaded: ${doc.data()?.meta?.name}`);
+
+                if (!state.v2) state.v2 = {};
+                const rawSelected = state.clients[activeId].v2?.selectedNodes;
+                state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
+
+                const matrixOpen = window.isMatrixActive || state.activeMatrixId || 
+                                   window.location.hash.includes('analyze');
+                if (!matrixOpen) window.handleRoute();
+            }
+        });
+    }
+
+    // 3. Client index — meta only for dashboard
     db.collection('clients').onSnapshot((querySnapshot) => {
-    // 1. Gather Data immediately
-    const cloudClients = {};
-    querySnapshot.forEach((doc) => {
-        cloudClients[doc.id] = doc.data();
-    });
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (state.clients[doc.id]?.projectData) return;
+            state.clients[doc.id] = {
+                id: doc.id,
+                meta: data.meta,
+                modules: data.modules,
+                permissions: data.permissions,
+                publicToken: data.publicToken,
+                sharedMasterIds: data.sharedMasterIds,
+                _metaOnly: true
+            };
+        });
 
-    const client = getActiveClient();
-    if (window.IS_GUEST && client) {
-        console.log("🎟️ Guest Token Validated:", client.meta.name);
-        // 🛡️ Don't re-render if matrix is open
-        const matrixOpen = document.querySelector('.matrix-card-main, .matrix-table') || 
-                           window.isMatrixActive || 
-                           state.activeMatrixId;
-        if (!matrixOpen) {
+        console.log(`📋 Client Index Loaded: ${querySnapshot.size} clients`);
+
+        if (window.location.hash === '#/' || window.location.hash === '') {
             window.handleRoute();
         }
-        return;
-    }
 
-    // 🛡️ THE IRON CLAD MUZZLE
-    const matrixContainer = document.querySelector('.matrix-table-container, .matrix-card-main, .matrix-table');
-    const isAnalyzing = window.location.hash.includes('analyze');
-    const isAppLoading = document.getElementById('mainContent')?.innerHTML.includes('spinner');
-    
-    if ((matrixContainer || isAnalyzing) && !isAppLoading && !state.isSaving) {
-        console.log("🚫 SYNC ABORTED: Matrix or Analyze view is active. Shielding focus.");
-        
-        // 🚀 CRITICAL: Update the state so calculations stay fresh in memory
-        // but RETURN so handleRoute() is never reached.
-        state.clients = cloudClients;
-        
-        // Quietly update the active client reference
-        const activeId = sessionStorage.getItem('lastActiveClientId');
-        if (activeId && state.clients[activeId]) {
-            state.activeClientId = activeId;
-            // Background data update (no DOM touch)
-            const activeClient = state.clients[activeId];
-            if (!state.v2) state.v2 = {};
-            const rawSelected = activeClient.v2?.selectedNodes;
-            state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
-            const rawExpanded = activeClient.v2?.expandedNodes;
-            state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
+        // Guest token validation
+        if (window.IS_GUEST) {
+            const client = getActiveClient();
+            if (client) {
+                console.log("🎟️ Guest Token Validated:", client.meta.name);
+                const matrixOpen = document.querySelector('.matrix-card-main, .matrix-table') || 
+                                   window.isMatrixActive || state.activeMatrixId;
+                if (!matrixOpen) window.handleRoute();
+            }
         }
-        return; // 🛑 HARD STOP - No rendering allowed
-    }
-
-    // 🛡️ PERF GUARD: Skip if data hasn't actually changed
-    const currentHash = JSON.stringify(cloudClients);
-    if (window.lastSyncHash === currentHash) return;
-    window.lastSyncHash = currentHash;
-
-    // 🛡️ RECENT SAVE GUARD
-    const now = Date.now();
-    if (window.lastLocalSave && (now - window.lastLocalSave < 8000)) {
-        console.log("⏳ Recent local save detected. Skipping sync echo.");
-        state.clients = cloudClients;
-        return;
-    }
-
-    state.clients = cloudClients;
-    window.lastSyncHash = JSON.stringify(cloudClients);
-    
-    // 🎯 Restore Active Client Context (Normal Flow)
-    const activeId = sessionStorage.getItem('lastActiveClientId');
-    if (activeId && state.clients[activeId]) {
-        state.activeClientId = activeId;
-        const activeClient = state.clients[activeId];
-        if (!state.v2) state.v2 = {};
-        const rawSelected = activeClient.v2?.selectedNodes;
-        state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
-        const rawExpanded = activeClient.v2?.expandedNodes;
-        state.v2.expandedNodes = new Set(Array.isArray(rawExpanded) ? rawExpanded : (rawExpanded ? Object.values(rawExpanded) : []));
-    }
-
-    console.log(`📋 Sync Complete: ${Object.keys(cloudClients).length} clients loaded.`);
-
-   // 🚀 UI Routing logic (Clean Slate)
-    const main = document.getElementById('mainContent');
-    
-    if (main && (main.innerHTML.includes('spinner') || main.innerHTML.trim() === "")) {
-        window.handleRoute();
-    } else if (window.location.hash.includes('visualizer')) {
-            state.clients = cloudClients;
-            return;
-    } else if (window.isMatrixActive || state.activeMatrixId || window.location.hash.includes('analyze')) {
-        console.log("🛡️ Matrix Active: Skipping render.");
-    } else {
-        // Don't re-render if user is actively editing in the inspector
-        const activeEl = document.activeElement;
-        const isEditingInspector = activeEl && (
-            activeEl.tagName === 'INPUT' || 
-            activeEl.tagName === 'TEXTAREA' || 
-            activeEl.contentEditable === 'true'
-        ) && (
-            activeEl.closest('#v2-inspector-panel') || 
-            activeEl.closest('#inspector-panel') ||
-            activeEl.closest('#modal-layer')
-        );
-    
-        if (isEditingInspector) {
-            console.log("🛡️ User editing inspector — skipping re-render.");
-            state.clients = cloudClients;
-            return;
-        }
-    
-        console.log("🚦 Route Clear: Proceeding with render...");
-        window.handleRoute();
-    }
     });
+};
+
+OL.loadFullClient = async function(clientId) {
+    // Already have full data
+    if (state.clients[clientId] && !state.clients[clientId]._metaOnly) {
+        return state.clients[clientId];
+    }
+    
+    console.log(`📥 Loading full client data: ${clientId}`);
+    const doc = await db.collection('clients').doc(clientId).get();
+    if (doc.exists) {
+        state.clients[clientId] = doc.data();
+        delete state.clients[clientId]._metaOnly;
+    }
+    return state.clients[clientId];
+};
+
+OL.switchClient = async function(id) {
+    state.activeClientId = id;
+    sessionStorage.setItem('lastActiveClientId', id);
+    
+    // Show loading state immediately
+    const main = document.getElementById('mainContent');
+    if (main) main.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
+            <div style="text-align:center;">
+                <div style="font-size:24px;margin-bottom:10px;">⏳</div>
+                <div>Loading client...</div>
+            </div>
+        </div>`;
+    
+    // Load full client data if needed
+    await OL.loadFullClient(id);
+    
+    window.location.hash = "#/client-tasks";
+    window.handleRoute();
 };
 
 OL.updateAndSync = async function(mutationFn) {
@@ -1716,13 +1692,6 @@ OL.copyShareLink = function(token) {
     navigator.clipboard.writeText(url);
     alert("Share link copied to clipboard!");
 };
-
-OL.switchClient = function (id) {
-    state.activeClientId = id;
-    sessionStorage.setItem('lastActiveClientId', id);
-    window.location.hash = "#/client-tasks";
-    window.handleRoute();
-}
 
 OL.setDashboardFilter = function(filterName) {
     state.dashboardFilter = filterName;
