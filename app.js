@@ -1456,6 +1456,18 @@ window.renderClientDashboard = function() {
         </div>
         `}
     `;
+// 🚀 Backfill full data for meta-only clients
+    setTimeout(() => {
+        const metaOnlyClients = Object.values(state.clients).filter(c => c._metaOnly);
+        if (metaOnlyClients.length > 0) {
+            console.log(`📥 Backfilling ${metaOnlyClients.length} clients...`);
+            Promise.all(metaOnlyClients.map(c => OL.loadFullClient(c.id)))
+                .then(() => {
+                    console.log('✅ All clients loaded');
+                    renderClientDashboard();
+                });
+        }
+    }, 100);
 };
 
 // 2. CREATE CLIENT INCLUDING PROFILE ID FOR PUBLIC LINK
