@@ -600,7 +600,9 @@ OL.renderPartnerDashboard = function(leadProject, container) {
                     <h1 style="margin:0;">🤝 ${esc(leadProject.meta.name)} Portfolio</h1>
                     <p class="tiny accent bold uppercase" style="letter-spacing:1px; margin-top:5px;">Partner Command Center</p>
                 </div>
-                ${!window.IS_GUEST ? `<button class="btn primary" onclick="OL.partnerCreateClient('${leadProject.id}')">+ Onboard New Client</button>` : ''}
+                ${(!window.IS_GUEST || window.location.search.includes('access=')) ? `
+                    <button class="btn primary" onclick="OL.partnerCreateClient('${leadProject.id}')">+ Onboard New Client</button>` : ''
+                }
             </div>
         </div>
 
