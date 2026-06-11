@@ -731,15 +731,15 @@ window.buildLayout = function () {
 } else if (client && client.meta.partnerOwner) {
     if (!window.IS_GUEST) {
         homeLabel = "Partner Home";
-        homeAction = `window.location.search = window.location.search.replace(/[&?]client=[^&]*/,''); window.location.hash='#/partner-dashboard';`;
+        homeAction = `history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[&?]client=[^&]*/,'')); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
     } else {
         homeLabel = "My Portfolio";
-        homeAction = `window.location.search = window.location.search.replace(/[&?]client=[^&]*/,''); window.location.hash='#/partner-dashboard';`;
+        homeAction = `history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[&?]client=[^&]*/,'')); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
     }
 } else if (isPublic) {
     showHome = false;
 }
-
+    
   // 1. Dashboard/Non-Context View
   if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
         // Only render the Dashboard link if no client context exists
