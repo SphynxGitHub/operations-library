@@ -367,17 +367,14 @@ window.addEventListener("load", () => {
 window.getActiveClient = function() {
     const urlParams = new URLSearchParams(window.location.search);
     const accessToken = urlParams.get('access');
+    const clientParam = urlParams.get('client'); // 🚀 Sub-client override
 
     if (!state.clients) return null;
 
-    // 🚀 THE FIX: If activeClientId is set and it's NOT the partner token client,
-    // use it directly (user has switched to a sub-client)
-    if (state.activeClientId && state.clients[state.activeClientId]) {
-        const active = state.clients[state.activeClientId];
-        // If we switched away from the token client, use the switched client
-        if (!accessToken || active.publicToken !== accessToken) {
-            return active;
-        }
+    // 🚀 If a specific client is set in URL, use it (sub-client context)
+    if (clientParam && state.clients[clientParam]) {
+        state.activeClientId = clientParam;
+        return state.clients[clientParam];
     }
 
     if (accessToken) {
@@ -1728,7 +1725,13 @@ OL.copyShareLink = function(token) {
 
 OL.switchClient = function (id) {
     state.activeClientId = id;
-    sessionStorage.setItem('lastActiveClientId', id); // 🚩 Save to browser memory
+    sessionStorage.setItem('lastActiveClientId', id);
+    
+    // 🚀 Add client param without removing the partner access token
+    const url = new URL(window.location.href);
+    url.searchParams.set('client', id);
+    window.history.replaceState({}, '', url.toString());
+    
     window.location.hash = "#/client-tasks";
     window.handleRoute();
 }
