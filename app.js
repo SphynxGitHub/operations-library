@@ -723,25 +723,22 @@ window.buildLayout = function () {
   let showHome = true;
 
   if (isAdmin) {
-      // Master Admin always goes to Global Registry
-      homeLabel = "Global Registry";
-      homeAction = `window.location.hash = '#/'`;
-  } else if (client && client.meta.status === "Partner") {
-      // Partner goes to their Portfolio
-      homeLabel = "My Portfolio";
-      homeAction = `window.location.hash='#/partner-dashboard'`;
-  } else if (client && client.meta.partnerOwner) {
-        // Sub-client of a partner — only show Partner Home to non-guests
-        if (!window.IS_GUEST) {
-            homeLabel = "Partner Home";
-            homeAction = `window.location.hash='#/partner-dashboard'`;
-        } else {
-            showHome = false;
-        }
-    } else if (isPublic) {
-      // Direct Clients see no Home button (keeps them in their project)
-      showHome = false;
-  }
+    homeLabel = "Global Registry";
+    homeAction = `window.location.hash = '#/'`;
+} else if (client && client.meta.status === "Partner") {
+    homeLabel = "My Portfolio";
+    homeAction = `window.location.hash='#/partner-dashboard'`;
+} else if (client && client.meta.partnerOwner) {
+    if (!window.IS_GUEST) {
+        homeLabel = "Partner Home";
+        homeAction = `window.location.hash='#/partner-dashboard'`;
+    } else {
+        homeLabel = "My Portfolio";
+        homeAction = `const url = new URL(window.location.href); url.searchParams.delete('client'); window.history.replaceState({}, '', url.toString()); window.location.hash='#/partner-dashboard'; window.handleRoute();`;
+    }
+} else if (isPublic) {
+    showHome = false;
+}
 
   // 1. Dashboard/Non-Context View
   if (!client && !isMaster && !isPublic && !isPartnerMode && !isAdmin) {
