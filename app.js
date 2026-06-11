@@ -103,7 +103,7 @@ OL.persist = async function() {
 
             // 🚀 STEP 1: Save Master Registry
             const masterCopy = JSON.parse(JSON.stringify(state.master));
-            await db.collection('systems').doc('master_state').set(masterCopy);
+            await db.collection('systems').doc('main_state').set(masterCopy);
 
             // 🚀 STEP 2: Save Only the Active Client
             // This prevents the "Message Port Closed" error by reducing payload size
@@ -164,7 +164,7 @@ OL.sync = function() {
     // 1. Master Registry (Standard Library)
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
-            state.master = doc.data();
+            state.master = doc.data().master;
             console.log("🏛️ Master Registry Synced");
         }
     });
