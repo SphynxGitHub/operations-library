@@ -103,7 +103,7 @@ OL.persist = async function() {
 
             // 🚀 STEP 1: Save Master Registry
             const masterCopy = JSON.parse(JSON.stringify(state.master));
-            await db.collection('systems').doc('master_registry').set(masterCopy);
+            await db.collection('systems').doc('master_state').set(masterCopy);
 
             // 🚀 STEP 2: Save Only the Active Client
             // This prevents the "Message Port Closed" error by reducing payload size
