@@ -6952,7 +6952,7 @@ const dependencyHtml = `
                                         ${tags.map(dp => `
                                         <div onmousedown="event.preventDefault();
                                                          OL._geInsertDataTag('${res.id}', '${dp.key}');
-                                                         setTimeout(()=>{ document.getElementById('data-tag-menu-${res.id}').style.display='none'; }, 50);"
+                                                         setTimeout(function(){ document.getElementById('data-tag-menu-${res.id}').style.display='none'; }, 50);"
                                              style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
                                                     display:flex;justify-content:space-between;align-items:center;"
                                              onmouseover="this.style.background='var(--panel-soft)'"
