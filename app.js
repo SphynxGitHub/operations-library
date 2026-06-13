@@ -6923,31 +6923,52 @@ const dependencyHtml = `
                      <!-- BODY - preview by default, edit toggle -->
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                         <label class="tiny muted bold">EMAIL BODY</label>
-                        <div style="position:relative;">
-                            <button class="btn tiny soft" id="email-edit-btn-${res.id}"
-                                    onclick="document.getElementById('email-edit-menu-${res.id}').style.display='block'">
-                                <i data-lucide="pencil" style="width:10px;height:10px;margin-right:4px;"></i> Edit ▾
-                            </button>
-                            <div id="email-edit-menu-${res.id}"
-                                 style="display:none;position:absolute;right:0;top:calc(100% + 4px);
-                                        background:var(--panel);border:1px solid var(--panel-border);
-                                        border-radius:8px;padding:4px;z-index:50;min-width:140px;
-                                        box-shadow:0 4px 12px rgba(0,0,0,0.3);">
-                                <div onmousedown="event.preventDefault();
-                                                 document.getElementById('email-edit-menu-${res.id}').style.display='none';
-                                                 OL._geToggleEmailBody('${res.id}', 'plain')"
-                                     style="padding:8px 12px;cursor:pointer;font-size:11px;border-radius:6px;"
-                                     onmouseover="this.style.background='var(--panel-soft)'"
-                                     onmouseout="this.style.background='transparent'">
-                                    <i data-lucide="code" style="width:11px;height:11px;margin-right:6px;"></i>Edit as HTML
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <!-- Data Tags picker -->
+                            <div style="position:relative;">
+                                <button class="btn tiny soft" onclick="document.getElementById('data-tag-menu-${res.id}').style.display='block'">
+                                    <i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i> Data Tags ▾
+                                </button>
+                                <div id="data-tag-menu-${res.id}"
+                                     style="display:none;position:absolute;right:0;top:calc(100% + 4px);
+                                            background:var(--panel);border:1px solid var(--panel-border);
+                                            border-radius:8px;padding:4px;z-index:51;min-width:200px;max-height:220px;
+                                            overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                                    ${Object.entries(
+                                        (state.master.datapoints || []).reduce((groups, dp) => {
+                                            (groups[dp.category] = groups[dp.category] || []).push(dp);
+                                            return groups;
+                                        }, {})
+                                    ).map(([cat, tags]) => `
+                                        <div style="padding:4px 8px;font-size:9px;font-weight:700;color:var(--text-dim);
+                                                    text-transform:uppercase;letter-spacing:0.05em;margin-top:4px;">
+                                            ${cat}
+                                        </div>
+                                        ${tags.map(dp => `
+                                            <div onmousedown="event.preventDefault();
+                                                             document.getElementById('data-tag-menu-${res.id}').style.display='none';
+                                                             OL._geInsertDataTag('${res.id}', '${dp.key}')"
+                                                 style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
+                                                        display:flex;justify-content:space-between;align-items:center;"
+                                                 onmouseover="this.style.background='var(--panel-soft)'"
+                                                 onmouseout="this.style.background='transparent'">
+                                                <span>${dp.name}</span>
+                                                <code style="font-size:9px;opacity:0.5;background:rgba(255,255,255,0.05);
+                                                             padding:1px 5px;border-radius:3px;">${dp.key}</code>
+                                            </div>
+                                        `).join('')}
+                                    `).join('')}
                                 </div>
-                                <div onmousedown="event.preventDefault();
-                                                 document.getElementById('email-edit-menu-${res.id}').style.display='none';
-                                                 OL._geToggleEmailBody('${res.id}', 'rich')"
-                                     style="padding:8px 12px;cursor:pointer;font-size:11px;border-radius:6px;"
-                                     onmouseover="this.style.background='var(--panel-soft)'"
-                                     onmouseout="this.style.background='transparent'">
-                                    <i data-lucide="type" style="width:11px;height:11px;margin-right:6px;"></i>Edit as Rich Text
+                            </div>
+                    
+                            <!-- Edit button -->
+                            <div style="position:relative;">
+                                <button class="btn tiny soft" id="email-edit-btn-${res.id}"
+                                        onclick="document.getElementById('email-edit-menu-${res.id}').style.display='block'">
+                                    <i data-lucide="pencil" style="width:10px;height:10px;margin-right:4px;"></i> Edit ▾
+                                </button>
+                                <div id="email-edit-menu-${res.id}" ...>
+                                    ...
                                 </div>
                             </div>
                         </div>
@@ -7433,6 +7454,48 @@ OL._geToggleEmailBody = function(resId, mode) {
         editor.focus();
     }
 };
+
+OL._geInsertDataTag = function(resId, tag) {
+    // Try plain HTML textarea first
+    const editor = document.getElementById(`email-body-edit-${resId}`);
+    const richEl = document.getElementById(`email-body-rich-${resId}`);
+    
+    if (richEl && richEl.style.display !== 'none') {
+        // Rich text — insert at cursor
+        richEl.focus();
+        const sel = window.getSelection();
+        if (sel.rangeCount) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(document.createTextNode(tag));
+            range.collapse(false);
+        } else {
+            richEl.innerHTML += tag;
+        }
+        OL._geSaveEmailBody(resId, richEl.innerHTML);
+    } else if (editor && editor.style.display !== 'none') {
+        // Plain textarea — insert at cursor position
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+        editor.value = editor.value.substring(0, start) + tag + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + tag.length;
+        editor.focus();
+        OL._geSaveEmailBody(resId, editor.value);
+    } else {
+        // Neither editor open — append to saved value
+        const res = OL.getResourceById(resId);
+        const current = res?.emailBody || '';
+        OL._geSaveEmailBody(resId, current + tag);
+    }
+};
+
+document.addEventListener('click', function(e) {
+    ['data-tag-menu-', 'email-edit-menu-'].forEach(prefix => {
+        document.querySelectorAll(`[id^="${prefix}"]`).forEach(el => {
+            if (!el.contains(e.target)) el.style.display = 'none';
+        });
+    });
+});
 
 OL._geSaveEmailBody = function(resId, value) {
     // value could be innerHTML (rich) or plain text (HTML mode)
