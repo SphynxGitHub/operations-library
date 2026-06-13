@@ -7466,7 +7466,6 @@ OL._geToggleEmailBody = function(resId, mode) {
     const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
     if (!preview || !editor) return;
 
-    // Show data tags button whenever editing
     if (tagsBtn) tagsBtn.style.display = 'block';
 
     if (mode === 'rich') {
@@ -7479,9 +7478,14 @@ OL._geToggleEmailBody = function(resId, mode) {
             richEl.contentEditable = 'true';
             richEl.style.cssText = 'min-height:160px;padding:12px;border:1px solid var(--line);border-radius:6px;font-size:12px;line-height:1.6;outline:none;background:rgba(0,0,0,0.1);';
             richEl.innerHTML = editor.value || '';
-            richEl.onblur = () => OL._geSaveEmailBody(resId, richEl.innerHTML);
             editor.parentNode.appendChild(richEl);
         }
+        // 🚀 Blur checks dropdown before saving
+        richEl.onblur = () => {
+            const menu = document.getElementById(`data-tag-menu-${resId}`);
+            if (menu && menu.style.display === 'block') return;
+            OL._geSaveEmailBody(resId, richEl.innerHTML);
+        };
         richEl.style.display = 'block';
         richEl.focus();
     } else {
@@ -7489,17 +7493,21 @@ OL._geToggleEmailBody = function(resId, mode) {
         if (richEl) richEl.style.display = 'none';
         preview.style.display = 'none';
         editor.style.display = 'block';
+        // 🚀 Blur checks dropdown before saving
+        editor.onblur = () => {
+            const menu = document.getElementById(`data-tag-menu-${resId}`);
+            if (menu && menu.style.display === 'block') return;
+            OL._geSaveEmailBody(resId, editor.value);
+        };
         editor.focus();
     }
 };
 
 OL._geInsertDataTag = function(resId, tag) {
-    // Try plain HTML textarea first
     const editor = document.getElementById(`email-body-edit-${resId}`);
     const richEl = document.getElementById(`email-body-rich-${resId}`);
     
     if (richEl && richEl.style.display !== 'none') {
-        // Rich text — insert at cursor
         richEl.focus();
         const sel = window.getSelection();
         if (sel.rangeCount) {
@@ -7510,20 +7518,16 @@ OL._geInsertDataTag = function(resId, tag) {
         } else {
             richEl.innerHTML += tag;
         }
-        OL._geSaveEmailBody(resId, richEl.innerHTML);
+        // 🚀 Silent save — don't close editor
+        OL.handleResourceSave(resId, 'emailBody', richEl.innerHTML);
     } else if (editor && editor.style.display !== 'none') {
-        // Plain textarea — insert at cursor position
         const start = editor.selectionStart;
         const end = editor.selectionEnd;
         editor.value = editor.value.substring(0, start) + tag + editor.value.substring(end);
         editor.selectionStart = editor.selectionEnd = start + tag.length;
         editor.focus();
-        OL._geSaveEmailBody(resId, editor.value);
-    } else {
-        // Neither editor open — append to saved value
-        const res = OL.getResourceById(resId);
-        const current = res?.emailBody || '';
-        OL._geSaveEmailBody(resId, current + tag);
+        // 🚀 Silent save — don't close editor
+        OL.handleResourceSave(resId, 'emailBody', editor.value);
     }
 };
 
