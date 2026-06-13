@@ -6545,7 +6545,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const resDeps = allDeps.filter(d => d.type === 'resource');
     
     const resType = (res.type || "General").toLowerCase();
-        let typeSpecificHtml = "";
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
@@ -7227,8 +7226,6 @@ const dependencyHtml = `
                     }).join('') : `<div class="tiny muted" style="padding:10px;text-align:center;">No connections found.</div>`}
                 </div>
             </div>
-        
-            ${typeSpecificHtml}
         `;
       }
       // --- 🧱 FINAL RENDER ---
