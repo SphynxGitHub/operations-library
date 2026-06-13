@@ -6523,6 +6523,20 @@ OL.openResourceModal = function (targetId, draftObj = null) {
             ⬅ Back to Flow
         </button>
     ` : '';
+
+    // --- SECTION: INCOMING LINKS ---
+      const allResources = isVaultMode ? state.master.resources : (client?.projectData?.localResources || []);
+      const allConnections = getAllIncomingLinks(res.id, allResources);
+      
+      // State for filtering (you can persist this in state.ui if desired)
+      const activeFilter = state.ui.relationshipFilter || 'All';
+      const filteredConnections = allConnections.filter(c => 
+          activeFilter === 'All' || c.type === activeFilter
+      );
+      
+      const types = (allConnections.length > 0) 
+            ? ['All', ...new Set(allConnections.map(c => c.type))] 
+            : [];
    
     const resType = (res.type || "General").toLowerCase();
         let typeSpecificHtml = "";
@@ -6855,20 +6869,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </span>`}
             </div>
         </div>`;
-
-  // --- SECTION: INCOMING LINKS ---
-  const allResources = isVaultMode ? state.master.resources : (client?.projectData?.localResources || []);
-  const allConnections = getAllIncomingLinks(res.id, allResources);
-  
-  // State for filtering (you can persist this in state.ui if desired)
-  const activeFilter = state.ui.relationshipFilter || 'All';
-  const filteredConnections = allConnections.filter(c => 
-      activeFilter === 'All' || c.type === activeFilter
-  );
-  
-  const types = (allConnections.length > 0) 
-        ? ['All', ...new Set(allConnections.map(c => c.type))] 
-        : [];
 
   // --- 🔗 SPLIT DEPENDENCIES ---
 const allDeps = res.dependencies || [];
