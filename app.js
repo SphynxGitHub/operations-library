@@ -6483,39 +6483,35 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     
       // 🎯 NEW: AUTO-MAPPING SECTION
       const appMappingHtml = `
-      <div class="card-section" style="margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; margin:0;">
-                <i data-lucide="smartphone" style="width:12px; height:12px;"></i> PRIMARY APPLICATION
-              </label>
-              ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px;">CUSTOM OVERRIDE</span>' : ''}
-          </div>
-
-          <div id="modal-app-pill-container">
-              ${isZap ? `<div class="pill soft tiny muted" style="width:100%; border-style:dashed; justify-content:center; gap:6px;">
-                            <i data-lucide="zap" style="width:12px; height:12px;"></i> Multi-App Automation
-                         </div>` : 
-                res.appId ? `
-                  <div class="pill ${isManualOverride ? 'accent' : 'primary'}" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                      <div style="display:flex; align-items:center; gap:8px;">
-                          <i data-lucide="${isManualOverride ? 'edit-3' : 'bot'}" style="width:14px; height:14px;"></i>
-                          <span style="font-weight:bold;">${esc(res.appName)}</span>
-                      </div>
-                      <i data-lucide="x" class="is-clickable" style="width:14px; height:14px; opacity: 0.5;" 
-                        onclick="OL.handleResourceSave('${res.id}', 'appId', null); OL.handleResourceSave('${res.id}', 'appName', null); OL.openResourceModal('${res.id}')">
-                      </i>
-                  </div>
-              ` : `
-                  <div class="search-map-container" style="position:relative; display:flex; align-items:center;">
-                      <i data-lucide="search" style="position:absolute; left:10px; width:12px; height:12px; opacity:0.4;"></i>
-                      <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search Apps to Override..." 
-                             onfocus="OL.filterAppSearch('${res.id}', null, true, '')"
-                             oninput="OL.filterAppSearch('${res.id}', null, true, this.value)">
-                      <div id="res-app-results" class="search-results-overlay"></div>
-                  </div>
-              `}
-          </div>
-      </div>`;
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:10px 14px;border:1px solid var(--line);border-radius:8px;margin-bottom:16px;">
+            <label class="modal-section-label" style="margin:0;display:flex;align-items:center;gap:6px;">
+                <i data-lucide="smartphone" style="width:12px;height:12px;"></i> PRIMARY APPLICATION
+                ${isManualOverride ? '<span class="tiny accent bold" style="font-size:8px;margin-left:6px;">CUSTOM OVERRIDE</span>' : ''}
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;">
+                ${isZap ? `
+                    <span class="pill soft tiny muted" style="display:flex;align-items:center;gap:4px;">
+                        <i data-lucide="zap" style="width:10px;height:10px;"></i> Multi-App
+                    </span>
+                ` : res.appId ? `
+                    <span class="pill ${isManualOverride ? 'accent' : 'primary'}" style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="${isManualOverride ? 'edit-3' : 'bot'}" style="width:11px;height:11px;"></i>
+                        ${esc(res.appName)}
+                        <i data-lucide="x" class="is-clickable" style="width:11px;height:11px;opacity:0.5;"
+                           onclick="OL.handleResourceSave('${res.id}','appId',null);OL.handleResourceSave('${res.id}','appName',null);OL.openResourceModal('${res.id}')"></i>
+                    </span>
+                ` : `
+                    <div style="position:relative;">
+                        <input type="text" class="modal-input tiny" style="width:180px;" placeholder="Search apps..."
+                               onfocus="OL.filterAppSearch('${res.id}',null,true,'')"
+                               oninput="OL.filterAppSearch('${res.id}',null,true,this.value)">
+                        <div id="res-app-results" class="search-results-overlay"></div>
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
 
     // Back button to go back to flow map if jumped from scope button
     const backBtn = state.v2.returnTo ? `
@@ -6866,11 +6862,7 @@ const dependencyHtml = `
     let bodyContent = "";
     if (resType === "email") {
          bodyContent = `
-                <!-- PRIMARY APP + TYPE TAG on one line -->
-                <div class="card-section" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;">
-                    <div style="flex:1;">${appMappingHtml}</div>
-                    ${typePill}
-                </div>
+                ${appMappingHtml}
         
                 <!-- DESCRIPTION - half height -->
                 <div class="card-section" style="margin-bottom:16px;">
@@ -6929,26 +6921,37 @@ const dependencyHtml = `
                     </div>
         
                     <!-- BODY - preview by default, edit toggle -->
-                    <div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <label class="tiny muted bold">EMAIL BODY</label>
-                            <button class="btn tiny soft" onclick="OL._geToggleEmailBody('${res.id}')">
-                                <i data-lucide="pencil" style="width:10px;height:10px;margin-right:4px;"></i> Edit
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <label class="tiny muted bold">EMAIL BODY</label>
+                        <div style="position:relative;">
+                            <button class="btn tiny soft" id="email-edit-btn-${res.id}"
+                                    onclick="document.getElementById('email-edit-menu-${res.id}').style.display='block'">
+                                <i data-lucide="pencil" style="width:10px;height:10px;margin-right:4px;"></i> Edit ▾
                             </button>
+                            <div id="email-edit-menu-${res.id}"
+                                 style="display:none;position:absolute;right:0;top:calc(100% + 4px);
+                                        background:var(--panel);border:1px solid var(--panel-border);
+                                        border-radius:8px;padding:4px;z-index:50;min-width:140px;
+                                        box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                                <div onmousedown="event.preventDefault();
+                                                 document.getElementById('email-edit-menu-${res.id}').style.display='none';
+                                                 OL._geToggleEmailBody('${res.id}', 'plain')"
+                                     style="padding:8px 12px;cursor:pointer;font-size:11px;border-radius:6px;"
+                                     onmouseover="this.style.background='var(--panel-soft)'"
+                                     onmouseout="this.style.background='transparent'">
+                                    <i data-lucide="code" style="width:11px;height:11px;margin-right:6px;"></i>Edit as HTML
+                                </div>
+                                <div onmousedown="event.preventDefault();
+                                                 document.getElementById('email-edit-menu-${res.id}').style.display='none';
+                                                 OL._geToggleEmailBody('${res.id}', 'rich')"
+                                     style="padding:8px 12px;cursor:pointer;font-size:11px;border-radius:6px;"
+                                     onmouseover="this.style.background='var(--panel-soft)'"
+                                     onmouseout="this.style.background='transparent'">
+                                    <i data-lucide="type" style="width:11px;height:11px;margin-right:6px;"></i>Edit as Rich Text
+                                </div>
+                            </div>
                         </div>
-                        <div id="email-body-preview-${res.id}"
-                             style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
-                                    padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
-                                    min-height:80px;white-space:pre-wrap;">
-                            ${res.emailBody ? esc(res.emailBody) : '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'}
-                        </div>
-                        <textarea id="email-body-edit-${res.id}"
-                                  class="modal-textarea"
-                                  style="display:none;min-height:160px;"
-                                  placeholder="Write email body..."
-                                  onblur="OL._geSaveEmailBody('${res.id}', this.value)">${esc(res.emailBody || '')}</textarea>
                     </div>
-                </div>
         
                 <!-- CONNECTED RELATIONSHIPS -->
                 <div class="card-section" style="margin-bottom:16px;">
@@ -7385,14 +7388,36 @@ const dependencyHtml = `
     }
 };
 
-OL._geToggleEmailBody = function(resId) {
+OL._geToggleEmailBody = function(resId, mode) {
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
     if (!preview || !editor) return;
-    const isEditing = editor.style.display === 'block';
-    preview.style.display = isEditing ? 'block' : 'none';
-    editor.style.display  = isEditing ? 'none'  : 'block';
-    if (!isEditing) editor.focus();
+
+    if (mode === 'rich') {
+        // Rich text — use contenteditable div
+        preview.style.display = 'none';
+        editor.style.display = 'none';
+        
+        let richEl = document.getElementById(`email-body-rich-${resId}`);
+        if (!richEl) {
+            richEl = document.createElement('div');
+            richEl.id = `email-body-rich-${resId}`;
+            richEl.contentEditable = 'true';
+            richEl.style.cssText = 'min-height:160px;padding:12px;border:1px solid var(--line);border-radius:6px;font-size:12px;line-height:1.6;outline:none;background:rgba(0,0,0,0.1);';
+            richEl.innerHTML = editor.value || '';
+            richEl.onblur = () => OL._geSaveEmailBody(resId, richEl.innerHTML);
+            editor.parentNode.appendChild(richEl);
+        }
+        richEl.style.display = 'block';
+        richEl.focus();
+    } else {
+        // Plain HTML mode
+        const richEl = document.getElementById(`email-body-rich-${resId}`);
+        if (richEl) richEl.style.display = 'none';
+        preview.style.display = 'none';
+        editor.style.display = 'block';
+        editor.focus();
+    }
 };
 
 OL._geSaveEmailBody = function(resId, value) {
