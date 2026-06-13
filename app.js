@@ -7022,8 +7022,7 @@ const dependencyHtml = `
                     <textarea id="email-body-edit-${res.id}"
                               class="modal-textarea"
                               style="display:none;min-height:160px;"
-                              placeholder="Write email body..."
-                              onblur="OL._geSaveEmailBody('${res.id}', this.value)">${esc(res.emailBody || '')}</textarea>
+                              placeholder="Write email body...">${esc(res.emailBody || '')}</textarea>
 
                 </div>
                 <!-- CONNECTED RELATIONSHIPS -->
