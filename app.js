@@ -6957,8 +6957,8 @@ const dependencyHtml = `
                     <div id="email-body-preview-${res.id}"
                          style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
                                 padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
-                                min-height:80px;white-space:pre-wrap;">
-                        ${res.emailBody ? esc(res.emailBody) : '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'}
+                                min-height:80px;">
+                        ${res.emailBody || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'}
                     </div>
                     <textarea id="email-body-edit-${res.id}"
                               class="modal-textarea"
@@ -7435,12 +7435,20 @@ OL._geToggleEmailBody = function(resId, mode) {
 };
 
 OL._geSaveEmailBody = function(resId, value) {
+    // value could be innerHTML (rich) or plain text (HTML mode)
     OL.handleResourceSave(resId, 'emailBody', value);
+    
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
-    if (preview) preview.innerHTML = value ? esc(value) : '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
+    
+    // 🚀 Preview renders as HTML
+    if (preview) preview.innerHTML = value || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
     if (preview) preview.style.display = 'block';
     if (editor)  editor.style.display  = 'none';
+    
+    // Hide rich text editor too
+    const richEl = document.getElementById(`email-body-rich-${resId}`);
+    if (richEl) richEl.style.display = 'none';
 };
 
 OL.promptEditLink = function(resId) {
