@@ -6926,7 +6926,9 @@ const dependencyHtml = `
                         <div style="display:flex;gap:6px;align-items:center;">
                             <!-- Data Tags picker -->
                             <div style="position:relative;">
-                                <button class="btn tiny soft" onclick="document.getElementById('data-tag-menu-${res.id}').style.display='block'">
+                                <button class="btn tiny soft" id="data-tags-btn-${res.id}" 
+                                        style="display:none;"
+                                        onclick="document.getElementById('data-tag-menu-${res.id}').style.display='block'">
                                     <i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i> Data Tags ▾
                                 </button>
                                 <div id="data-tag-menu-${res.id}"
@@ -6947,7 +6949,7 @@ const dependencyHtml = `
                                         ${tags.map(dp => `
                                             <div onmousedown="event.preventDefault();
                                                              document.getElementById('data-tag-menu-${res.id}').style.display='none';
-                                                             OL._geInsertDataTag('${res.id}', '${dp.key}')"
+                                                             OL.openDataDetailModal('${dp.id}')"
                                                  style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
                                                         display:flex;justify-content:space-between;align-items:center;"
                                                  onmouseover="this.style.background='var(--panel-soft)'"
@@ -6967,8 +6969,27 @@ const dependencyHtml = `
                                         onclick="document.getElementById('email-edit-menu-${res.id}').style.display='block'">
                                     <i data-lucide="pencil" style="width:10px;height:10px;margin-right:4px;"></i> Edit ▾
                                 </button>
-                                <div id="email-edit-menu-${res.id}" ...>
-                                    ...
+                                <div id="email-edit-menu-${res.id}"
+                                     style="display:none;position:absolute;right:0;top:calc(100% + 4px);
+                                            background:var(--panel);border:1px solid var(--panel-border);
+                                            border-radius:8px;padding:4px;z-index:50;min-width:140px;
+                                            box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                                    <div onmousedown="event.preventDefault();
+                                                     document.getElementById('email-edit-menu-${res.id}').style.display='none';
+                                                     OL._geToggleEmailBody('${res.id}', 'plain')"
+                                         style="padding:8px 12px;cursor:pointer;font-size:11px;border-radius:6px;"
+                                         onmouseover="this.style.background='var(--panel-soft)'"
+                                         onmouseout="this.style.background='transparent'">
+                                        <i data-lucide="code" style="width:11px;height:11px;margin-right:6px;"></i>Edit as HTML
+                                    </div>
+                                    <div onmousedown="event.preventDefault();
+                                                     document.getElementById('email-edit-menu-${res.id}').style.display='none';
+                                                     OL._geToggleEmailBody('${res.id}', 'rich')"
+                                         style="padding:8px 12px;cursor:pointer;font-size:11px;border-radius:6px;"
+                                         onmouseover="this.style.background='var(--panel-soft)'"
+                                         onmouseout="this.style.background='transparent'">
+                                        <i data-lucide="type" style="width:11px;height:11px;margin-right:6px;"></i>Edit as Rich Text
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -7426,13 +7447,15 @@ const dependencyHtml = `
 OL._geToggleEmailBody = function(resId, mode) {
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
+    const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
     if (!preview || !editor) return;
 
+    // Show data tags button whenever editing
+    if (tagsBtn) tagsBtn.style.display = 'block';
+
     if (mode === 'rich') {
-        // Rich text — use contenteditable div
         preview.style.display = 'none';
         editor.style.display = 'none';
-        
         let richEl = document.getElementById(`email-body-rich-${resId}`);
         if (!richEl) {
             richEl = document.createElement('div');
@@ -7446,7 +7469,6 @@ OL._geToggleEmailBody = function(resId, mode) {
         richEl.style.display = 'block';
         richEl.focus();
     } else {
-        // Plain HTML mode
         const richEl = document.getElementById(`email-body-rich-${resId}`);
         if (richEl) richEl.style.display = 'none';
         preview.style.display = 'none';
@@ -7498,20 +7520,16 @@ document.addEventListener('click', function(e) {
 });
 
 OL._geSaveEmailBody = function(resId, value) {
-    // value could be innerHTML (rich) or plain text (HTML mode)
     OL.handleResourceSave(resId, 'emailBody', value);
-    
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
-    
-    // 🚀 Preview renders as HTML
-    if (preview) preview.innerHTML = value || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
-    if (preview) preview.style.display = 'block';
+    const richEl  = document.getElementById(`email-body-rich-${resId}`);
+    const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
+
+    if (preview) { preview.innerHTML = value || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'; preview.style.display = 'block'; }
     if (editor)  editor.style.display  = 'none';
-    
-    // Hide rich text editor too
-    const richEl = document.getElementById(`email-body-rich-${resId}`);
-    if (richEl) richEl.style.display = 'none';
+    if (richEl)  richEl.style.display  = 'none';
+    if (tagsBtn) tagsBtn.style.display = 'none';
 };
 
 OL.promptEditLink = function(resId) {
