@@ -6920,7 +6920,7 @@ const dependencyHtml = `
                                onblur="OL.handleResourceSave('${res.id}', 'emailSubject', this.value)">
                     </div>
         
-                    <!-- BODY - preview by default, edit toggle -->
+                     <!-- BODY - preview by default, edit toggle -->
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                         <label class="tiny muted bold">EMAIL BODY</label>
                         <div style="position:relative;">
@@ -6952,7 +6952,21 @@ const dependencyHtml = `
                             </div>
                         </div>
                     </div>
-        
+
+                    <!-- Body preview + editor -->
+                    <div id="email-body-preview-${res.id}"
+                         style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
+                                padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
+                                min-height:80px;white-space:pre-wrap;">
+                        ${res.emailBody ? esc(res.emailBody) : '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'}
+                    </div>
+                    <textarea id="email-body-edit-${res.id}"
+                              class="modal-textarea"
+                              style="display:none;min-height:160px;"
+                              placeholder="Write email body..."
+                              onblur="OL._geSaveEmailBody('${res.id}', this.value)">${esc(res.emailBody || '')}</textarea>
+
+                </div>
                 <!-- CONNECTED RELATIONSHIPS -->
                 <div class="card-section" style="margin-bottom:16px;">
                     <label class="modal-section-label">
