@@ -7328,12 +7328,12 @@ const dependencyHtml = `
     
         <div style="display:flex;height:72vh;overflow:hidden;">
             <!-- Main body -->
-            <div style="flex:1.6;overflow-y:auto;padding:16px 20px;">
+            <div style="flex:1.6;overflow-y:auto;padding:16px 20px; height: 100%;">
                 ${bodyContent}
             </div>
     
             <!-- Sidebar -->
-            <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0;">
+            <aside style="flex:1;display:flex;flex-direction:column;border-left:1px solid var(--line);min-width:0; height:100%;">
                 <div style="display:flex;border-bottom:1px solid var(--line);">
                     ${!isGuest ? `
                         <div onclick="state.v2.activeCommentTab='internal';OL.openResourceModal('${res.id}')"
