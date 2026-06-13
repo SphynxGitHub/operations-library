@@ -6950,18 +6950,17 @@ const dependencyHtml = `
                                             ${cat}
                                         </div>
                                         ${tags.map(dp => `
-                                            <div onmousedown="event.preventDefault();
-                                                 document.getElementById('data-tag-menu-${res.id}').style.display='none';
-                                                 OL._geInsertDataTag('${res.id}', '${dp.key}')"
-                                                 style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
-                                                        display:flex;justify-content:space-between;align-items:center;"
-                                                 onmouseover="this.style.background='var(--panel-soft)'"
-                                                 onmouseout="this.style.background='transparent'">
-                                                <span>${dp.name}</span>
-                                                <code style="font-size:9px;opacity:0.5;background:rgba(255,255,255,0.05);
-                                                             padding:1px 5px;border-radius:3px;">${dp.key}</code>
-                                            </div>
-                                        `).join('')}
+                                        <div onmousedown="event.preventDefault();
+                                                         OL._geInsertDataTag('${res.id}', '${dp.key}');
+                                                         setTimeout(()=>{ document.getElementById('data-tag-menu-${res.id}').style.display='none'; }, 50);"
+                                             style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
+                                                    display:flex;justify-content:space-between;align-items:center;"
+                                             onmouseover="this.style.background='var(--panel-soft)'"
+                                             onmouseout="this.style.background='transparent'">
+                                            <span>${dp.name}</span>
+                                            <code style="font-size:9px;opacity:0.5;background:rgba(255,255,255,0.05);
+                                                         padding:1px 5px;border-radius:3px;">${dp.key}</code>
+                                        </div>
                                     `).join('')}
                                 </div>
                             </div>
@@ -7508,7 +7507,6 @@ OL._geInsertDataTag = function(resId, tag) {
     const richEl = document.getElementById(`email-body-rich-${resId}`);
     
     if (richEl && richEl.style.display !== 'none') {
-        richEl.focus();
         const sel = window.getSelection();
         if (sel.rangeCount) {
             const range = sel.getRangeAt(0);
@@ -7518,16 +7516,15 @@ OL._geInsertDataTag = function(resId, tag) {
         } else {
             richEl.innerHTML += tag;
         }
-        // 🚀 Silent save — don't close editor
         OL.handleResourceSave(resId, 'emailBody', richEl.innerHTML);
+        setTimeout(() => richEl.focus(), 10);
     } else if (editor && editor.style.display !== 'none') {
         const start = editor.selectionStart;
         const end = editor.selectionEnd;
         editor.value = editor.value.substring(0, start) + tag + editor.value.substring(end);
         editor.selectionStart = editor.selectionEnd = start + tag.length;
-        editor.focus();
-        // 🚀 Silent save — don't close editor
         OL.handleResourceSave(resId, 'emailBody', editor.value);
+        setTimeout(() => editor.focus(), 10);
     }
 };
 
