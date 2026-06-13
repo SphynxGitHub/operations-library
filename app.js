@@ -6935,7 +6935,7 @@ const dependencyHtml = `
                                             border-radius:8px;padding:4px;z-index:51;min-width:200px;max-height:220px;
                                             overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
                                     ${Object.entries(
-                                        (state.master.datapoints || []).reduce((groups, dp) => {
+                                        (client?.projectData?.localDatapoints?.length ? client.projectData.localDatapoints : state.master.datapoints || []).reduce((groups, dp) => {
                                             (groups[dp.category] = groups[dp.category] || []).push(dp);
                                             return groups;
                                         }, {})
@@ -15081,7 +15081,10 @@ OL.renderWorkbenchItemsOnly = function() {
     } else if (activeTab === 'guides') {
         items = [...(state.master.howToLibrary || []), ...(getActiveClient()?.projectData?.localHowTo || [])];
     } else if (activeTab === 'data') {
-        items = state.master.datapoints || [];
+        const client = getActiveClient();
+        items = client?.projectData?.localDatapoints?.length 
+            ? client.projectData.localDatapoints 
+            : (state.master.datapoints || []);
     }
 
     if (query.trim()) {
