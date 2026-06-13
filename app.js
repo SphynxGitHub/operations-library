@@ -6537,7 +6537,13 @@ OL.openResourceModal = function (targetId, draftObj = null) {
       const types = (allConnections.length > 0) 
             ? ['All', ...new Set(allConnections.map(c => c.type))] 
             : [];
-   
+
+    
+  // --- 🔗 SPLIT DEPENDENCIES ---
+    const allDeps = res.dependencies || [];
+    const taskDeps = allDeps.filter(d => d.type === 'task');
+    const resDeps = allDeps.filter(d => d.type === 'resource');
+    
     const resType = (res.type || "General").toLowerCase();
         let typeSpecificHtml = "";
 
@@ -6869,11 +6875,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
                     </span>`}
             </div>
         </div>`;
-
-  // --- 🔗 SPLIT DEPENDENCIES ---
-const allDeps = res.dependencies || [];
-const taskDeps = allDeps.filter(d => d.type === 'task');
-const resDeps = allDeps.filter(d => d.type === 'resource');
 
 const dependencyHtml = `
     <div class="card-section" style="margin-top:20px; border-top: 1px solid var(--line); padding-top:15px;">
