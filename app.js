@@ -6950,8 +6950,8 @@ const dependencyHtml = `
                                         </div>
                                         ${tags.map(dp => `
                                             <div onmousedown="event.preventDefault();
-                                                             document.getElementById('data-tag-menu-${res.id}').style.display='none';
-                                                             OL.openDataDetailModal('${dp.id}')"
+                                                 document.getElementById('data-tag-menu-${res.id}').style.display='none';
+                                                 OL._geInsertDataTag('${res.id}', '${dp.key}')"
                                                  style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
                                                         display:flex;justify-content:space-between;align-items:center;"
                                                  onmouseover="this.style.background='var(--panel-soft)'"
@@ -7002,7 +7002,21 @@ const dependencyHtml = `
                          style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
                                 padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
                                 min-height:80px;">
-                        ${res.emailBody || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'}
+                        ${(() => {
+                            const datapoints = client?.projectData?.localDatapoints?.length
+                                ? client.projectData.localDatapoints
+                                : (state.master.datapoints || []);
+                            return (res.emailBody || '').replace(/\{[^}]+\}/g, match => {
+                                const dp = datapoints.find(d => d.key === match);
+                                if (dp) return `<span class="pill tiny accent is-clickable" 
+                                                      style="display:inline-flex;align-items:center;gap:4px;font-size:10px;
+                                                             vertical-align:middle;cursor:pointer;"
+                                                      onclick="OL.openDataDetailModal('${dp.id}')">
+                                                    <i data-lucide="tag" style="width:9px;height:9px;"></i>${dp.name}
+                                                </span>`;
+                                return `<span class="pill tiny soft" style="display:inline-flex;font-size:10px;vertical-align:middle;">${match}</span>`;
+                            }) || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
+                        })()}
                     </div>
                     <textarea id="email-body-edit-${res.id}"
                               class="modal-textarea"
@@ -7528,7 +7542,29 @@ OL._geSaveEmailBody = function(resId, value) {
     const richEl  = document.getElementById(`email-body-rich-${resId}`);
     const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
 
-    if (preview) { preview.innerHTML = value || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'; preview.style.display = 'block'; }
+    // 🚀 Convert {tags} to clickable pills in preview
+    const datapoints = getActiveClient()?.projectData?.localDatapoints?.length
+        ? getActiveClient().projectData.localDatapoints
+        : (state.master.datapoints || []);
+
+    const previewHtml = (value || '').replace(/\{[^}]+\}/g, match => {
+        const dp = datapoints.find(d => d.key === match);
+        if (dp) {
+            return `<span class="pill tiny accent is-clickable" 
+                          style="display:inline-flex;align-items:center;gap:4px;font-size:10px;
+                                 vertical-align:middle;cursor:pointer;"
+                          onclick="OL.openDataDetailModal('${dp.id}')">
+                        <i data-lucide="tag" style="width:9px;height:9px;"></i>${dp.name}
+                    </span>`;
+        }
+        return `<span class="pill tiny soft" style="display:inline-flex;font-size:10px;vertical-align:middle;">${match}</span>`;
+    });
+
+    if (preview) { 
+        preview.innerHTML = previewHtml || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'; 
+        preview.style.display = 'block';
+        if (window.lucide) window.lucide.createIcons();
+    }
     if (editor)  editor.style.display  = 'none';
     if (richEl)  richEl.style.display  = 'none';
     if (tagsBtn) tagsBtn.style.display = 'none';
