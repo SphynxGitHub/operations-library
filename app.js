@@ -6528,70 +6528,160 @@ OL.openResourceModal = function (targetId, draftObj = null) {
         let typeSpecificHtml = "";
 
         if (resType === "email") {
-            const team = client?.projectData?.teamMembers || [];
-            
-            typeSpecificHtml = `
-            <div class="card-section" style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid var(--line); margin-top: 20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
-                    <label class="modal-section-label" style="display:flex; align-items:center; gap:6px; color: var(--accent); margin:0;">
-                        <i data-lucide="mail" style="width:14px; height:14px;"></i> EMAIL COMPOSITION
+            bodyContent = `
+                <!-- PRIMARY APP + TYPE TAG on one line -->
+                <div class="card-section" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+                    <div style="flex:1;">${appMappingHtml}</div>
+                    ${typePill}
+                </div>
+        
+                <!-- DESCRIPTION - half height -->
+                <div class="card-section" style="margin-bottom:16px;">
+                    <label class="modal-section-label">Description & Access Notes</label>
+                    <textarea class="modal-textarea"
+                              style="min-height:48px;max-height:60px;resize:none;"
+                              placeholder="Enter login details, account purpose, or specific access instructions..."
+                              onblur="OL.handleResourceSave('${res.id}', 'description', this.value)">${esc(res.description || '')}</textarea>
+                </div>
+        
+                <!-- EMAIL COMPOSITION -->
+                <div class="card-section" style="margin-bottom:16px;background:rgba(255,255,255,0.02);padding:15px;border-radius:8px;border:1px solid var(--line);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                        <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;color:var(--accent);margin:0;">
+                            <i data-lucide="mail" style="width:14px;height:14px;"></i> EMAIL COMPOSITION
+                        </label>
+                        <button class="btn tiny primary" onclick="OL.previewEmailTemplate('${res.id}')">
+                            <i data-lucide="eye" style="width:12px;height:12px;margin-right:4px;"></i> Preview
+                        </button>
+                    </div>
+        
+                    <!-- FROM + TO on one line -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                        <div>
+                            <label class="tiny muted bold" style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                                <i data-lucide="user-round" style="width:10px;height:10px;"></i> FROM
+                            </label>
+                            <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailFrom', this.value)">
+                                <option value="">Select Sender...</option>
+                                ${(client?.projectData?.teamMembers || []).map(m => `
+                                    <option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>${esc(m.name)}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="tiny muted bold" style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+                                <i data-lucide="users" style="width:10px;height:10px;"></i> TO
+                            </label>
+                            <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailToType', this.value)">
+                                <option value="">Select Recipient...</option>
+                                <option value="Household" ${res.emailToType === 'Household' ? 'selected' : ''}>Household</option>
+                                <option value="Client 1" ${res.emailToType === 'Client 1' ? 'selected' : ''}>Client 1</option>
+                                <option value="Client 2" ${res.emailToType === 'Client 2' ? 'selected' : ''}>Client 2</option>
+                                <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>COI (Professional)</option>
+                            </select>
+                        </div>
+                    </div>
+        
+                    <!-- SUBJECT full width -->
+                    <div style="margin-bottom:12px;">
+                        <label class="tiny muted bold" style="display:block;margin-bottom:4px;">SUBJECT LINE</label>
+                        <input type="text" class="modal-input" style="width:100%;"
+                               placeholder="Enter email subject..."
+                               value="${esc(res.emailSubject || '')}"
+                               onblur="OL.handleResourceSave('${res.id}', 'emailSubject', this.value)">
+                    </div>
+        
+                    <!-- BODY - preview by default, edit toggle -->
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                            <label class="tiny muted bold">EMAIL BODY</label>
+                            <button class="btn tiny soft" onclick="OL._geToggleEmailBody('${res.id}')">
+                                <i data-lucide="pencil" style="width:10px;height:10px;margin-right:4px;"></i> Edit
+                            </button>
+                        </div>
+                        <div id="email-body-preview-${res.id}"
+                             style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
+                                    padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
+                                    min-height:80px;white-space:pre-wrap;">
+                            ${res.emailBody ? esc(res.emailBody) : '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'}
+                        </div>
+                        <textarea id="email-body-edit-${res.id}"
+                                  class="modal-textarea"
+                                  style="display:none;min-height:160px;"
+                                  placeholder="Write email body..."
+                                  onblur="OL._geSaveEmailBody('${res.id}', this.value)">${esc(res.emailBody || '')}</textarea>
+                    </div>
+                </div>
+        
+                <!-- CONNECTED RELATIONSHIPS -->
+                <div class="card-section" style="margin-bottom:16px;">
+                    <label class="modal-section-label">
+                        <i data-lucide="share-2" style="width:14px;height:14px;"></i> Connected Relationships
                     </label>
-                    <button class="btn tiny primary" onclick="OL.previewEmailTemplate('${res.id}')">
-                        <i data-lucide="eye" style="width:12px; height:12px; margin-right:4px;"></i> Preview
-                    </button>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                    <div class="modal-column">
-                        <label class="tiny muted bold" style="display:flex; align-items:center; gap:4px;">
-                            <i data-lucide="user-round" style="width:10px; height:10px;"></i> FROM (Team Member)
-                        </label>
-                        <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailFrom', this.value)">
-                            <option value="">Select Sender...</option>
-                            ${team.map(m => `
-                                <option value="${m.id}" ${res.emailFrom === m.id ? 'selected' : ''}>
-                                    ${esc(m.name)}
-                                </option>
-                            `).join('')}
-                        </select>
+                    <div style="display:flex;gap:5px;margin:8px 0;overflow-x:auto;padding-bottom:5px;">
+                        ${['All',...new Set(allConnections.map(c=>c.type))].map(t => `
+                            <span onclick="state.ui.relationshipFilter='${t}';OL.openResourceModal('${targetId}')"
+                                  style="font-size:9px;padding:2px 8px;border-radius:100px;cursor:pointer;white-space:nowrap;
+                                         background:${activeFilter===t?'var(--accent)':'rgba(255,255,255,0.05)'};
+                                         color:${activeFilter===t?'#000':'#94a3b8'};
+                                         border:1px solid rgba(255,255,255,0.1);">
+                                ${t.toUpperCase()}
+                            </span>
+                        `).join('')}
                     </div>
-                    <div class="modal-column">
-                        <label class="tiny muted bold" style="display:flex; align-items:center; gap:4px;">
-                            <i data-lucide="users" style="width:10px; height:10px;"></i> TO (Contact Type)
-                        </label>
-                        <select class="modal-input tiny" onchange="OL.handleResourceSave('${res.id}', 'emailToType', this.value)">
-                            <option value="">Select Recipient...</option>
-                            <option value="Household" ${res.emailToType === 'Household' ? 'selected' : ''}>Household</option>
-                            <option value="Client 1" ${res.emailToType === 'Client 1' ? 'selected' : ''}>Client 1</option>
-                            <option value="Client 2" ${res.emailToType === 'Client 2' ? 'selected' : ''}>Client 2</option>
-                            <option value="COI" ${res.emailToType === 'COI' ? 'selected' : ''}>COI (Professional)</option>
-                        </select>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        ${filteredConnections.length > 0 ? filteredConnections.map(conn => `
+                            <div class="pill accent is-clickable"
+                                 style="display:flex;align-items:center;justify-content:space-between;
+                                        background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);
+                                        cursor:pointer;padding:8px 12px;border-radius:8px;"
+                                 onmousedown="event.preventDefault();event.stopPropagation();if(OL.closeModal)OL.closeModal();OL.openInspector('${conn.id}')">
+                                <div style="display:flex;align-items:center;gap:8px;pointer-events:none;">
+                                    ${OL.getLucideSVG(OL.getRegistryIcon(conn.type),14,'var(--accent)')}
+                                    <div>
+                                        <div style="font-size:11px;color:#eee;">${esc(conn.name)}</div>
+                                        <div style="font-size:8px;color:var(--accent);">${conn.type.toUpperCase()}</div>
+                                    </div>
+                                </div>
+                                <span style="font-size:9px;opacity:0.5;pointer-events:none;">Inspect →</span>
+                            </div>
+                        `).join('') : `<div class="tiny muted" style="padding:10px;text-align:center;">No connections found.</div>`}
                     </div>
                 </div>
-
-                <div style="margin-top: 12px;">
-                    <label class="tiny muted bold">SUBJECT LINE</label>
-                    <input type="text" class="modal-input" placeholder="Enter email subject..." 
-                        value="${esc(res.emailSubject || '')}" 
-                        onblur="OL.handleResourceSave('${res.id}', 'emailSubject', this.value)">
-                </div>
-
-                <div style="margin-top: 12px;">
-                    <label class="tiny muted bold">EMAIL BODY</label>
-                    <textarea class="modal-textarea" style="min-height: 180px; font-family: 'Inter', sans-serif; font-size: 13px;" 
-                            placeholder="Write email template here..."
-                            onblur="OL.handleResourceSave('${res.id}', 'emailBody', this.value)">${esc(res.emailBody || '')}</textarea>
-                </div>
-
-                <div style="margin-top: 12px; padding: 8px; background: rgba(var(--accent-rgb), 0.05); border-radius: 4px;">
-                    <label class="tiny muted bold">SIGNATURE STATUS</label>
-                    <div class="tiny">
-                        ${res.emailFrom ? '✅ Signature will be pulled from selected Team Member.' : '⚠️ Select a "FROM" sender to enable signature preview.'}
+        
+                <!-- TASK DEPENDENCIES -->
+                <div class="card-section" style="margin-top:16px;border-top:1px solid var(--line);padding-top:15px;">
+                    <label class="modal-section-label" style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="list-checks" style="width:14px;height:14px;"></i> TASK DEPENDENCIES
+                    </label>
+                    <div class="dp-manager-list" id="task-dependency-list">
+                        ${taskDeps.map(dep => renderDependencyRow(dep, res.id)).join('') || '<div class="tiny muted p-10">No tasks linked.</div>'}
+                    </div>
+                    <div class="search-map-container" style="margin-top:8px;position:relative;display:flex;align-items:center;">
+                        <i data-lucide="search" style="position:absolute;left:10px;width:12px;height:12px;opacity:0.4;"></i>
+                        <input type="text" class="modal-input tiny" style="padding-left:30px;" placeholder="Search or Create Task..."
+                               onfocus="OL.filterDependencySearch('${res.id}', 'task', '')"
+                               oninput="OL.filterDependencySearch('${res.id}', 'task', this.value)">
+                        <div id="task-dep-results" class="search-results-overlay"></div>
                     </div>
                 </div>
-            </div>
-        `;
-    }
+        
+                <!-- LINKED MASTER GUIDES -->
+                <div class="card-section" style="margin-top:16px;">
+                    <label class="modal-section-label">
+                        <i data-lucide="library" style="width:14px;height:14px;"></i> LINKED MASTER GUIDES
+                    </label>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+                        ${linkedSOPs.length > 0 ? linkedSOPs.map(sop => `
+                            <span class="pill soft tiny" style="display:flex;align-items:center;gap:4px;">
+                                <i data-lucide="book-open" style="width:10px;height:10px;"></i>
+                                ${esc(sop.name)}
+                            </span>`).join('') : `
+                            <span class="tiny muted">No guides linked to this resource.</span>`}
+                    </div>
+                </div>
+            `;
+        }
 
     // --- 🗓️ SECTION: WORKFLOW PHASE ---
     const hash = window.location.hash;
@@ -7296,6 +7386,25 @@ const dependencyHtml = `
     if (window.lucide) {
         window.lucide.createIcons();
     }
+};
+
+OL._geToggleEmailBody = function(resId) {
+    const preview = document.getElementById(`email-body-preview-${resId}`);
+    const editor  = document.getElementById(`email-body-edit-${resId}`);
+    if (!preview || !editor) return;
+    const isEditing = editor.style.display === 'block';
+    preview.style.display = isEditing ? 'block' : 'none';
+    editor.style.display  = isEditing ? 'none'  : 'block';
+    if (!isEditing) editor.focus();
+};
+
+OL._geSaveEmailBody = function(resId, value) {
+    OL.handleResourceSave(resId, 'emailBody', value);
+    const preview = document.getElementById(`email-body-preview-${resId}`);
+    const editor  = document.getElementById(`email-body-edit-${resId}`);
+    if (preview) preview.innerHTML = value ? esc(value) : '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
+    if (preview) preview.style.display = 'block';
+    if (editor)  editor.style.display  = 'none';
 };
 
 OL.promptEditLink = function(resId) {
