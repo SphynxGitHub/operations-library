@@ -6934,6 +6934,7 @@ const dependencyHtml = `
                                     <i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i> Data Tags ▾
                                 </button>
                                 <div id="data-tag-menu-${res.id}"
+                                    onmousedown="event.preventDefault();"
                                      style="display:none;position:absolute;right:0;top:calc(100% + 4px);
                                             background:var(--panel);border:1px solid var(--panel-border);
                                             border-radius:8px;padding:4px;z-index:51;min-width:200px;max-height:220px;
