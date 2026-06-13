@@ -6928,7 +6928,9 @@ const dependencyHtml = `
                             <div style="position:relative;">
                                 <button class="btn tiny soft" id="data-tags-btn-${res.id}" 
                                         style="display:none;"
-                                        onclick="document.getElementById('data-tag-menu-${res.id}').style.display='block'">
+                                        onmousedown="event.preventDefault();"
+                                        onclick="event.stopPropagation(); const m=document.getElementById('data-tag-menu-${res.id}'); 
+                                                m.style.display=m.style.display==='none'?'block':'none';">
                                     <i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i> Data Tags ▾
                                 </button>
                                 <div id="data-tag-menu-${res.id}"
