@@ -6971,6 +6971,38 @@ const dependencyHtml = `
                                         `).join('')}
                                     `).join('')}
                                 </div>
+                                <!-- Resource Links picker -->
+                                <div style="position:relative;">
+                                    <button class="btn tiny soft" id="res-tags-btn-${res.id}" 
+                                            style="display:none;"
+                                            onmousedown="event.preventDefault();"
+                                            onclick="event.stopPropagation(); const m=document.getElementById('res-tag-menu-${res.id}'); m.style.display=m.style.display==='none'?'block':'none';">
+                                        <i data-lucide="link" style="width:10px;height:10px;margin-right:4px;"></i> Resources ▾
+                                    </button>
+                                    <div id="res-tag-menu-${res.id}"
+                                         onmousedown="event.preventDefault();"
+                                         style="display:none;position:absolute;right:0;top:calc(100% + 4px);
+                                                background:var(--panel);border:1px solid var(--panel-border);
+                                                border-radius:8px;padding:4px;z-index:51;min-width:220px;max-height:220px;
+                                                overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                                        ${OL.getResourceDatapoints().map(dp => `
+                                            <div onmousedown="event.preventDefault();
+                                                             OL._geInsertDataTag('${res.id}', '${dp.key}');
+                                                             setTimeout(function(){ document.getElementById('res-tag-menu-${res.id}').style.display='none'; }, 50);"
+                                                 style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
+                                                        display:flex;justify-content:space-between;align-items:center;"
+                                                 onmouseover="this.style.background='var(--panel-soft)'"
+                                                 onmouseout="this.style.background='transparent'">
+                                                <span style="display:flex;align-items:center;gap:6px;">
+                                                    <i data-lucide="link" style="width:10px;height:10px;opacity:0.5;"></i>
+                                                    ${dp.name}
+                                                </span>
+                                                <code style="font-size:9px;opacity:0.5;background:rgba(255,255,255,0.05);
+                                                             padding:1px 5px;border-radius:3px;">${dp.key}</code>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
                             </div>
                     
                             <!-- Edit button -->
@@ -7522,13 +7554,14 @@ OL._geToggleEmailBody = function(resId, mode) {
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
     const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
+    const resTagsBtn = document.getElementById(`res-tags-btn-${resId}`);
+    const doneBtn = document.getElementById(`email-body-done-${resId}`);
     if (!preview || !editor) return;
 
     if (tagsBtn) tagsBtn.style.display = 'block';
-    
-    const doneBtn = document.getElementById(`email-body-done-${resId}`);
     if (doneBtn) doneBtn.style.display = 'block';
-    
+    if (resTagsBtn) resTagsBtn.style.display = 'block';
+
     if (mode === 'rich') {
         preview.style.display = 'none';
         editor.style.display = 'none';
@@ -7541,6 +7574,13 @@ OL._geToggleEmailBody = function(resId, mode) {
             richEl.innerHTML = editor.value || '';
             editor.parentNode.appendChild(richEl);
         }
+        // 🚀 Blur closes editor only if tag menu is closed
+        richEl.onblur = function() {
+            const menu = document.getElementById(`data-tag-menu-${resId}`);
+            if (menu && menu.style.display === 'block') return;
+            if (window._tagInserting) return;
+            OL._geSaveEmailBody(resId, richEl.innerHTML);
+        };
         richEl.style.display = 'block';
         richEl.focus();
     } else {
@@ -7548,6 +7588,13 @@ OL._geToggleEmailBody = function(resId, mode) {
         if (richEl) richEl.style.display = 'none';
         preview.style.display = 'none';
         editor.style.display = 'block';
+        // 🚀 Blur closes editor only if tag menu is closed
+        editor.onblur = function() {
+            const menu = document.getElementById(`data-tag-menu-${resId}`);
+            if (menu && menu.style.display === 'block') return;
+            if (window._tagInserting) return;
+            OL._geSaveEmailBody(resId, editor.value);
+        };
         editor.focus();
     }
 };
@@ -7623,12 +7670,15 @@ OL._geInsertDataTag = function(resId, tag) {
 };
 
 document.addEventListener('click', function(e) {
-    // Only close menus if clicking outside them AND outside their trigger buttons
     if (!e.target.closest('[id^="data-tag-menu-"]') && !e.target.closest('[id^="data-tags-btn-"]')) {
         document.querySelectorAll('[id^="data-tag-menu-"]').forEach(el => el.style.display = 'none');
     }
     if (!e.target.closest('[id^="email-edit-menu-"]') && !e.target.closest('[id^="email-edit-btn-"]')) {
         document.querySelectorAll('[id^="email-edit-menu-"]').forEach(el => el.style.display = 'none');
+    }
+    // 🚀 Resource tags menu
+    if (!e.target.closest('[id^="res-tag-menu-"]') && !e.target.closest('[id^="res-tags-btn-"]')) {
+        document.querySelectorAll('[id^="res-tag-menu-"]').forEach(el => el.style.display = 'none');
     }
 });
 
@@ -7641,6 +7691,7 @@ OL._geSaveEmailBody = function(resId, value) {
     const richEl  = document.getElementById(`email-body-rich-${resId}`);
     const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
     const doneBtn = document.getElementById(`email-body-done-${resId}`);
+    const resTagsBtn = document.getElementById(`res-tags-btn-${resId}`);
 
     const client = getActiveClient();
     const datapoints = [
@@ -7661,6 +7712,7 @@ OL._geSaveEmailBody = function(resId, value) {
     if (richEl)  richEl.style.display  = 'none';
     if (tagsBtn) tagsBtn.style.display = 'none';
     if (doneBtn) doneBtn.style.display = 'none';
+    if (resTagsBtn) resTagsBtn.style.display = 'none';
 };
 
 OL.promptEditLink = function(resId) {
