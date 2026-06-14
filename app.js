@@ -160,11 +160,13 @@ OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync (First & Only Time)...");
 
     // 1. Master Registry
-    db.collection('systems').doc('main_state').onSnapshot((doc) => {
+   db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
             state.master = doc.data();
             console.log("🏛️ Master Registry Synced");
-            if (!state.activeClientId) window.handleRoute();
+            // 🚀 Don't re-render if modal is open
+            const modalOpen = !!document.getElementById('modal-overlay');
+            if (!state.activeClientId && !modalOpen) window.handleRoute();
         }
     });
 
@@ -185,6 +187,7 @@ OL.sync = function() {
                 const modalOpen = !!document.getElementById('modal-overlay');
                 const matrixOpen = window.isMatrixActive || state.activeMatrixId || 
                                    window.location.hash.includes('analyze');
+                console.log('🔍 Snapshot fired. Modal open:', modalOpen, document.getElementById('modal-overlay'));
                 if (!modalOpen && !matrixOpen) window.handleRoute();
             }
         });
@@ -205,21 +208,22 @@ OL.sync = function() {
                 _metaOnly: true
             };
         });
-
+    
         console.log(`📋 Client Index Loaded: ${querySnapshot.size} clients`);
-
-        if (window.location.hash === '#/' || window.location.hash === '') {
+    
+        // 🚀 Don't re-render if modal is open
+        const modalOpen = !!document.getElementById('modal-overlay');
+        if (!modalOpen && (window.location.hash === '#/' || window.location.hash === '')) {
             window.handleRoute();
         }
-
-        // Guest token validation
+    
         if (window.IS_GUEST) {
             const client = getActiveClient();
             if (client) {
                 console.log("🎟️ Guest Token Validated:", client.meta.name);
                 const matrixOpen = document.querySelector('.matrix-card-main, .matrix-table') || 
                                    window.isMatrixActive || state.activeMatrixId;
-                if (!matrixOpen) window.handleRoute();
+                if (!modalOpen && !matrixOpen) window.handleRoute();
             }
         }
     });
