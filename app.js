@@ -7535,15 +7535,16 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
     });
 
     // Convert <a data-dp-key> anchors to pills (rich text mode stored as HTML)
-    html = html.replace(/<a\s+[^>]*data-dp-key="([^"]*)"[^>]*>([^<]*)<\/a>/g, (fullMatch, dpKey, label) => {
+    html = html.replace(/<a\s+[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>/g, (fullMatch, dpKey) => {
         const dp = datapoints.find(d => d.key === dpKey);
+        const data = OL.getCurrentProjectData();
         const linkedRes = dp?.linkToResource 
-            ? allResources.find(r => r.name === dp.linkToResource) : null;
+            ? (data.resources || []).find(r => r.name === dp.linkToResource) : null;
         const url = linkedRes?.externalUrl;
         return `<span class="pill tiny accent is-clickable" 
                       style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
-                      onclick="${url ? `window.open('${url}','_blank')` : `OL.openDataDetailModal('${dp?.id}')`}">
-                    <i data-lucide="link" style="width:9px;height:9px;"></i>${label}
+                      onclick="${url ? `window.open('${url}','_blank')` : dp ? `OL.openDataDetailModal('${dp.id}')` : ''}">
+                    <i data-lucide="link" style="width:9px;height:9px;"></i>${dp?.name || dpKey}
                 </span>`;
     });
 
@@ -7735,7 +7736,7 @@ OL.getResourceDatapoints = function() {
     return resources.map(r => ({
         id: `res-tag-${r.id}`,
         name: r.name,
-        key: `{${r.name.replace(/\s+/g, '')}}`,
+        key: `{${r.name.replace(/[^a-zA-Z0-9]/g, '')}}`,
         category: 'Resources',
         linkToResource: r.name,
         _isResourceTag: true // flag so we know it's virtual
