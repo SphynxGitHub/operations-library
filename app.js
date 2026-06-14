@@ -7023,7 +7023,6 @@ const dependencyHtml = `
                               class="modal-textarea"
                               style="display:none;min-height:160px;"
                               placeholder="Write email body...">${esc(res.emailBody || '')}</textarea>
-                    // Add after the textarea in the email bodyContent:
                     <button id="email-body-done-${res.id}"
                             style="display:none;margin-top:8px;"
                             class="btn tiny soft"
@@ -7540,11 +7539,13 @@ OL._geInsertDataTag = function(resId, tag) {
 };
 
 document.addEventListener('click', function(e) {
-    ['data-tag-menu-', 'email-edit-menu-'].forEach(prefix => {
-        document.querySelectorAll(`[id^="${prefix}"]`).forEach(el => {
-            if (!el.contains(e.target)) el.style.display = 'none';
-        });
-    });
+    // Only close menus if clicking outside them AND outside their trigger buttons
+    if (!e.target.closest('[id^="data-tag-menu-"]') && !e.target.closest('[id^="data-tags-btn-"]')) {
+        document.querySelectorAll('[id^="data-tag-menu-"]').forEach(el => el.style.display = 'none');
+    }
+    if (!e.target.closest('[id^="email-edit-menu-"]') && !e.target.closest('[id^="email-edit-btn-"]')) {
+        document.querySelectorAll('[id^="email-edit-menu-"]').forEach(el => el.style.display = 'none');
+    }
 });
 
 OL._geSaveEmailBody = function(resId, value) {
