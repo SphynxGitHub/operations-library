@@ -7549,6 +7549,7 @@ document.addEventListener('click', function(e) {
 });
 
 OL._geSaveEmailBody = function(resId, value) {
+    console.trace('_geSaveEmailBody called');
     OL.handleResourceSave(resId, 'emailBody', value);
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
