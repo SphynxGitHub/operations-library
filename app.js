@@ -7686,7 +7686,8 @@ document.addEventListener('click', function(e) {
 OL._geSanitizeEmailHtml = function(html) {
     // Fix unquoted attributes: href=https://... → href="https://..."
     return html
-        .replace(/(\s(?:href|src|target|data-dp-key|class|style|id))\s*=\s*(?!"')([^\s>]+)/g, '$1="$2"')
+        // Changed (?!"') to (?!["']) to correctly ignore existing quotes
+        .replace(/(\s(?:href|src|target|data-dp-key|class|style|id))\s*=\s*(?!["'])([^\s>]+)/g, '$1="$2"')
         // Fix self-closing tags etc
         .replace(/="([^"]*)""/g, '="$1"'); // remove double quotes if any
 };
