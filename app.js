@@ -8154,7 +8154,11 @@ OL.handleResourceSave = function(id, field, value) {
             const isResources = window.location.hash.includes('resources');
             
             if (modalOpen) {
-                OL.openResourceModal(id);
+                // 🚀 Don't re-render modal for email body edits — it destroys the editor
+                const emailFields = ['emailBody', 'emailFrom', 'emailToType', 'emailSubject'];
+                if (!emailFields.includes(field)) {
+                    OL.openResourceModal(id);
+                }
             } else if (inspectorOpen && isVisualizer) {
                 OL._fvOpenStepsList(id);
                 if (field === 'stageId') setTimeout(() => OL.renderVisualizer(), 100);
