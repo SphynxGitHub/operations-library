@@ -6381,6 +6381,7 @@ OL.getResourceById = function(id) {
 
 // 3c. OPEN RESOURCE MODAL
 OL.openResourceModal = function (targetId, draftObj = null) {
+    console.trace('🚨 openResourceModal called:', targetId);
     if (!state.v2) state.v2 = {}; 
     if (!state.v2.activeCommentTab) state.v2.activeCommentTab = 'internal';
     if (!targetId) return;
