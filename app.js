@@ -7481,7 +7481,8 @@ OL._geToggleEmailBody = function(resId, mode) {
             editor.parentNode.appendChild(richEl);
         }
         // 🚀 Blur checks dropdown before saving
-        richEl.onblur = () => {
+        richEl.onblur = function() {
+            if (window._tagInserting) return;
             const menu = document.getElementById(`data-tag-menu-${resId}`);
             if (menu && menu.style.display === 'block') return;
             OL._geSaveEmailBody(resId, richEl.innerHTML);
@@ -7494,7 +7495,8 @@ OL._geToggleEmailBody = function(resId, mode) {
         preview.style.display = 'none';
         editor.style.display = 'block';
         // 🚀 Blur checks dropdown before saving
-        editor.onblur = () => {
+        editor.onblur = function() {
+            if (window._tagInserting) return;
             const menu = document.getElementById(`data-tag-menu-${resId}`);
             if (menu && menu.style.display === 'block') return;
             OL._geSaveEmailBody(resId, editor.value);
@@ -7504,6 +7506,8 @@ OL._geToggleEmailBody = function(resId, mode) {
 };
 
 OL._geInsertDataTag = function(resId, tag) {
+    window._tagInserting = true;
+    
     const editor = document.getElementById(`email-body-edit-${resId}`);
     const richEl = document.getElementById(`email-body-rich-${resId}`);
     
@@ -7518,14 +7522,22 @@ OL._geInsertDataTag = function(resId, tag) {
             richEl.innerHTML += tag;
         }
         OL.handleResourceSave(resId, 'emailBody', richEl.innerHTML);
-        setTimeout(() => richEl.focus(), 10);
+        setTimeout(function() { 
+            richEl.focus(); 
+            window._tagInserting = false;
+        }, 50);
     } else if (editor && editor.style.display !== 'none') {
         const start = editor.selectionStart;
         const end = editor.selectionEnd;
         editor.value = editor.value.substring(0, start) + tag + editor.value.substring(end);
         editor.selectionStart = editor.selectionEnd = start + tag.length;
         OL.handleResourceSave(resId, 'emailBody', editor.value);
-        setTimeout(() => editor.focus(), 10);
+        setTimeout(function() { 
+            editor.focus(); 
+            window._tagInserting = false;
+        }, 50);
+    } else {
+        window._tagInserting = false;
     }
 };
 
