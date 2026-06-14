@@ -7523,7 +7523,7 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
     html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/gi, (fullMatch, url1, key1, key2, url2) => {
         const url = url1 || url2;
         const dpKey = (key1 || key2 || '').toLowerCase();
-        const dp = datapoints.find(d => d.key.toLowerCase() === dpKey);
+        const dp = datapoints.find(d => d.key && d.key.toLowerCase() === dpKey);
         return `<span class="pill tiny accent is-clickable" 
                       style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
                       onclick="window.open('${url}','_blank')">
