@@ -7520,10 +7520,10 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
     let html = value;
 
     // 1. FIRST: Convert <a data-dp-key> anchors to pills (This prevents tags inside attributes from being mangled)
-    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/g, (fullMatch, url1, key1, key2, url2) => {
+    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/gi, (fullMatch, url1, key1, key2, url2) => {
         const url = url1 || url2;
-        const dpKey = key1 || key2;
-        const dp = datapoints.find(d => d.key === dpKey);
+        const dpKey = (key1 || key2 || '').toLowerCase();
+        const dp = datapoints.find(d => d.key.toLowerCase() === dpKey);
         return `<span class="pill tiny accent is-clickable" 
                       style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
                       onclick="window.open('${url}','_blank')">
@@ -7686,12 +7686,10 @@ document.addEventListener('click', function(e) {
 });
 
 OL._geSanitizeEmailHtml = function(html) {
-    // Fix unquoted attributes: href=https://... → href="https://..."
-    return html
-        // Changed (?!"') to (?!["']) to correctly ignore existing quotes
-        .replace(/(\s(?:href|src|target|data-dp-key|class|style|id))\s*=\s*(?!["'])([^\s>]+)/g, '$1="$2"')
-        // Fix self-closing tags etc
-        .replace(/="([^"]*)""/g, '="$1"'); // remove double quotes if any
+    // Use DOMParser to properly parse and re-serialize the HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+    return doc.body.firstChild.innerHTML;
 };
 
 OL._geSaveEmailBody = function(resId, value) {
@@ -7738,20 +7736,18 @@ OL.promptEditLink = function(resId) {
 };
 
 OL.getResourceDatapoints = function() {
-    const client = getActiveClient();
     const data = OL.getCurrentProjectData();
     const resources = (data.resources || data.localResources || []).filter(r => 
         !r.isDeleted && 
         !['Workflow', 'Zap', 'Email Campaign'].includes(r.type)
     );
-    
     return resources.map(r => ({
         id: `res-tag-${r.id}`,
         name: r.name,
-        key: `{${r.name.replace(/[^a-zA-Z0-9]/g, '')}}`,
+        key: `{${r.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}}`,
         category: 'Resources',
         linkToResource: r.name,
-        _isResourceTag: true // flag so we know it's virtual
+        _isResourceTag: true
     }));
 };
 
