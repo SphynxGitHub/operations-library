@@ -7635,32 +7635,25 @@ document.addEventListener('click', function(e) {
 OL._geSaveEmailBody = function(resId, value) {
     console.trace('_geSaveEmailBody called');
     OL.handleResourceSave(resId, 'emailBody', value);
+    
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
     const richEl  = document.getElementById(`email-body-rich-${resId}`);
     const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
     const doneBtn = document.getElementById(`email-body-done-${resId}`);
 
-    // 🚀 Convert {tags} to clickable pills in preview
-    const datapoints = getActiveClient()?.projectData?.localDatapoints?.length
-        ? getActiveClient().projectData.localDatapoints
-        : (state.master.datapoints || []);
+    const client = getActiveClient();
+    const datapoints = [
+        ...(client?.projectData?.localDatapoints?.length 
+            ? client.projectData.localDatapoints 
+            : (state.master.datapoints || [])),
+        ...OL.getResourceDatapoints()
+    ];
 
     const previewHtml = OL._geRenderEmailPreview(value, datapoints, client);
-    const dp = datapoints.find(d => d.key === match);
-        if (dp) {
-            return `<span class="pill tiny accent is-clickable" 
-                          style="display:inline-flex;align-items:center;gap:4px;font-size:10px;
-                                 vertical-align:middle;cursor:pointer;"
-                          onclick="OL.openDataDetailModal('${dp.id}')">
-                        <i data-lucide="tag" style="width:9px;height:9px;"></i>${dp.name}
-                    </span>`;
-        }
-        return `<span class="pill tiny soft" style="display:inline-flex;font-size:10px;vertical-align:middle;">${match}</span>`;
-    });
 
     if (preview) { 
-        preview.innerHTML = previewHtml || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>'; 
+        preview.innerHTML = previewHtml;
         preview.style.display = 'block';
         if (window.lucide) window.lucide.createIcons();
     }
