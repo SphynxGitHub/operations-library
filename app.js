@@ -176,14 +176,17 @@ OL.sync = function() {
                 state.clients[activeId] = doc.data();
                 state.activeClientId = activeId;
                 console.log(`👤 Active Client Loaded: ${doc.data()?.meta?.name}`);
-
+        
                 if (!state.v2) state.v2 = {};
                 const rawSelected = state.clients[activeId].v2?.selectedNodes;
                 state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
-
+        
+                // 🚀 Don't re-render if a modal is open
+                const modalOpen = document.getElementById('modal-layer')?.children?.length > 0 
+                               || document.getElementById('active-modal-box');
                 const matrixOpen = window.isMatrixActive || state.activeMatrixId || 
                                    window.location.hash.includes('analyze');
-                if (!matrixOpen) window.handleRoute();
+                if (!modalOpen && !matrixOpen) window.handleRoute();
             }
         });
     }
