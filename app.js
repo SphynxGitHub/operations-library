@@ -7010,24 +7010,12 @@ const dependencyHtml = `
                          style="background:rgba(0,0,0,0.15);border:1px solid var(--line);border-radius:6px;
                                 padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
                                 min-height:80px;">
-                        ${(() => {
-                            const datapoints = [
-                                ...(client?.projectData?.localDatapoints?.length 
-                                    ? client.projectData.localDatapoints 
-                                    : (state.master.datapoints || [])),
-                                ...OL.getResourceDatapoints()
-                            ];
-                            return (res.emailBody || '').replace(/\{[^}]+\}/g, match => {
-                                const dp = datapoints.find(d => d.key === match);
-                                if (dp) return `<span class="pill tiny accent is-clickable" 
-                                                      style="display:inline-flex;align-items:center;gap:4px;font-size:10px;
-                                                             vertical-align:middle;cursor:pointer;"
-                                                      onclick="OL.openDataDetailModal('${dp.id}')">
-                                                    <i data-lucide="tag" style="width:9px;height:9px;"></i>${dp.name}
-                                                </span>`;
-                                return `<span class="pill tiny soft" style="display:inline-flex;font-size:10px;vertical-align:middle;">${match}</span>`;
-                            }) || '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
-                        })()}
+                        ${OL._geRenderEmailPreview(res.emailBody || '', [
+                            ...(client?.projectData?.localDatapoints?.length 
+                                ? client.projectData.localDatapoints 
+                                : (state.master.datapoints || [])),
+                            ...OL.getResourceDatapoints()
+                        ], client)}
                     </div>
                     <textarea id="email-body-edit-${res.id}"
                               class="modal-textarea"
@@ -7491,6 +7479,45 @@ const dependencyHtml = `
     }
 };
 
+OL._geRenderEmailPreview = function(value, datapoints, client) {
+    if (!value) return '<span style="opacity:0.3;font-style:italic;">No body written yet. Click Edit to add content.</span>';
+    
+    const data = OL.getCurrentProjectData();
+    const allResources = data.resources || [];
+
+    // Convert plain {tags} to pills
+    let html = value.replace(/\{[^}]+\}/g, match => {
+        const dp = datapoints.find(d => d.key === match);
+        if (dp) {
+            const linkedRes = dp.linkToResource 
+                ? allResources.find(r => r.name === dp.linkToResource) : null;
+            const url = linkedRes?.externalUrl;
+            const pill = `<span class="pill tiny accent is-clickable" 
+                               style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
+                               onclick="${url ? `window.open('${url}','_blank')` : `OL.openDataDetailModal('${dp.id}')`}">
+                               <i data-lucide="tag" style="width:9px;height:9px;"></i>${dp.name}
+                           </span>`;
+            return pill;
+        }
+        return `<span class="pill tiny soft" style="display:inline-flex;font-size:10px;vertical-align:middle;">${match}</span>`;
+    });
+
+    // Convert <a data-dp-key> anchors to pills (rich text mode stored as HTML)
+    html = html.replace(/<a\s+[^>]*data-dp-key="([^"]*)"[^>]*>([^<]*)<\/a>/g, (fullMatch, dpKey, label) => {
+        const dp = datapoints.find(d => d.key === dpKey);
+        const linkedRes = dp?.linkToResource 
+            ? allResources.find(r => r.name === dp.linkToResource) : null;
+        const url = linkedRes?.externalUrl;
+        return `<span class="pill tiny accent is-clickable" 
+                      style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
+                      onclick="${url ? `window.open('${url}','_blank')` : `OL.openDataDetailModal('${dp?.id}')`}">
+                    <i data-lucide="link" style="width:9px;height:9px;"></i>${label}
+                </span>`;
+    });
+
+    return html;
+};
+
 OL._geToggleEmailBody = function(resId, mode) {
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
@@ -7528,34 +7555,68 @@ OL._geToggleEmailBody = function(resId, mode) {
 OL._geInsertDataTag = function(resId, tag) {
     window._tagInserting = true;
     
+    // 🚀 Check if this is a resource tag with a real URL
+    const client = getActiveClient();
+    const datapoints = [
+        ...(client?.projectData?.localDatapoints?.length 
+            ? client.projectData.localDatapoints 
+            : (state.master.datapoints || [])),
+        ...OL.getResourceDatapoints()
+    ];
+    const dp = datapoints.find(d => d.key === tag);
+    const data = OL.getCurrentProjectData();
+    const linkedRes = dp?.linkToResource
+        ? (data.resources || []).find(r => r.name === dp.linkToResource)
+        : null;
+    const externalUrl = linkedRes?.externalUrl;
+
+    // Build the actual insertion value
+    const insertValue = externalUrl
+        ? `<a href="${externalUrl}" target="_blank" data-dp-key="${tag}">${dp.name}</a>`
+        : tag; // plain tag for non-resource datapoints
+
     const editor = document.getElementById(`email-body-edit-${resId}`);
     const richEl = document.getElementById(`email-body-rich-${resId}`);
     
     if (richEl && richEl.style.display !== 'none') {
-        const sel = window.getSelection();
-        if (sel.rangeCount) {
-            const range = sel.getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(document.createTextNode(tag));
-            range.collapse(false);
+        if (externalUrl) {
+            // Insert as HTML node
+            const temp = document.createElement('div');
+            temp.innerHTML = insertValue;
+            const node = temp.firstChild;
+            const sel = window.getSelection();
+            if (sel.rangeCount) {
+                const range = sel.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(node);
+                range.setStartAfter(node);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            } else {
+                richEl.appendChild(node);
+            }
         } else {
-            richEl.innerHTML += tag;
+            const sel = window.getSelection();
+            if (sel.rangeCount) {
+                const range = sel.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(document.createTextNode(tag));
+                range.collapse(false);
+            } else {
+                richEl.innerHTML += tag;
+            }
         }
         OL.handleResourceSave(resId, 'emailBody', richEl.innerHTML);
-        setTimeout(function() { 
-            richEl.focus(); 
-            window._tagInserting = false;
-        }, 50);
+        setTimeout(function() { richEl.focus(); window._tagInserting = false; }, 50);
+
     } else if (editor && editor.style.display !== 'none') {
         const start = editor.selectionStart;
         const end = editor.selectionEnd;
-        editor.value = editor.value.substring(0, start) + tag + editor.value.substring(end);
-        editor.selectionStart = editor.selectionEnd = start + tag.length;
+        editor.value = editor.value.substring(0, start) + insertValue + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + insertValue.length;
         OL.handleResourceSave(resId, 'emailBody', editor.value);
-        setTimeout(function() { 
-            editor.focus(); 
-            window._tagInserting = false;
-        }, 50);
+        setTimeout(function() { editor.focus(); window._tagInserting = false; }, 50);
     } else {
         window._tagInserting = false;
     }
@@ -7585,8 +7646,8 @@ OL._geSaveEmailBody = function(resId, value) {
         ? getActiveClient().projectData.localDatapoints
         : (state.master.datapoints || []);
 
-    const previewHtml = (value || '').replace(/\{[^}]+\}/g, match => {
-        const dp = datapoints.find(d => d.key === match);
+    const previewHtml = OL._geRenderEmailPreview(value, datapoints, client);
+    const dp = datapoints.find(d => d.key === match);
         if (dp) {
             return `<span class="pill tiny accent is-clickable" 
                           style="display:inline-flex;align-items:center;gap:4px;font-size:10px;
