@@ -7476,7 +7476,10 @@ OL._geToggleEmailBody = function(resId, mode) {
     if (!preview || !editor) return;
 
     if (tagsBtn) tagsBtn.style.display = 'block';
-
+    
+    const doneBtn = document.getElementById(`email-body-done-${resId}`);
+    if (doneBtn) doneBtn.style.display = 'block';
+    
     if (mode === 'rich') {
         preview.style.display = 'none';
         editor.style.display = 'none';
@@ -7550,6 +7553,7 @@ OL._geSaveEmailBody = function(resId, value) {
     const editor  = document.getElementById(`email-body-edit-${resId}`);
     const richEl  = document.getElementById(`email-body-rich-${resId}`);
     const tagsBtn = document.getElementById(`data-tags-btn-${resId}`);
+    const doneBtn = document.getElementById(`email-body-done-${resId}`);
 
     // 🚀 Convert {tags} to clickable pills in preview
     const datapoints = getActiveClient()?.projectData?.localDatapoints?.length
@@ -7577,6 +7581,7 @@ OL._geSaveEmailBody = function(resId, value) {
     if (editor)  editor.style.display  = 'none';
     if (richEl)  richEl.style.display  = 'none';
     if (tagsBtn) tagsBtn.style.display = 'none';
+    if (doneBtn) doneBtn.style.display = 'none';
 };
 
 OL.promptEditLink = function(resId) {
