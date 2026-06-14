@@ -7535,15 +7535,13 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
     });
 
     // Convert <a data-dp-key> anchors to pills (rich text mode stored as HTML)
-    html = html.replace(/<a\s+[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>/g, (fullMatch, dpKey) => {
+    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/g, (fullMatch, url1, key1, key2, url2) => {
+        const url = url1 || url2;
+        const dpKey = key1 || key2;
         const dp = datapoints.find(d => d.key === dpKey);
-        const data = OL.getCurrentProjectData();
-        const linkedRes = dp?.linkToResource 
-            ? (data.resources || []).find(r => r.name === dp.linkToResource) : null;
-        const url = linkedRes?.externalUrl;
         return `<span class="pill tiny accent is-clickable" 
                       style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
-                      onclick="${url ? `window.open('${url}','_blank')` : dp ? `OL.openDataDetailModal('${dp.id}')` : ''}">
+                      onclick="window.open('${url}','_blank')">
                     <i data-lucide="link" style="width:9px;height:9px;"></i>${dp?.name || dpKey}
                 </span>`;
     });
