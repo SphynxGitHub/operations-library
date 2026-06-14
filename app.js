@@ -7011,9 +7011,12 @@ const dependencyHtml = `
                                 padding:12px;font-size:12px;line-height:1.6;color:var(--text-main);
                                 min-height:80px;">
                         ${(() => {
-                            const datapoints = client?.projectData?.localDatapoints?.length
-                                ? client.projectData.localDatapoints
-                                : (state.master.datapoints || []);
+                            const datapoints = [
+                                ...(client?.projectData?.localDatapoints?.length 
+                                    ? client.projectData.localDatapoints 
+                                    : (state.master.datapoints || [])),
+                                ...OL.getResourceDatapoints()
+                            ];
                             return (res.emailBody || '').replace(/\{[^}]+\}/g, match => {
                                 const dp = datapoints.find(d => d.key === match);
                                 if (dp) return `<span class="pill tiny accent is-clickable" 
@@ -7613,6 +7616,24 @@ OL.promptEditLink = function(resId) {
     const url = prompt('External link URL:', res.externalUrl || '');
     if (url === null) return;
     OL.handleResourceSave(resId, 'externalUrl', url.trim());
+};
+
+OL.getResourceDatapoints = function() {
+    const client = getActiveClient();
+    const data = OL.getCurrentProjectData();
+    const resources = (data.resources || data.localResources || []).filter(r => 
+        !r.isDeleted && 
+        !['Workflow', 'Zap', 'Email Campaign'].includes(r.type)
+    );
+    
+    return resources.map(r => ({
+        id: `res-tag-${r.id}`,
+        name: r.name,
+        key: `{${r.name.replace(/\s+/g, '')}}`,
+        category: 'Resources',
+        linkToResource: r.name,
+        _isResourceTag: true // flag so we know it's virtual
+    }));
 };
 
 OL.renderHierarchyTree = function(resId, nodes, path = "") {
