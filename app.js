@@ -7517,8 +7517,22 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
     const data = OL.getCurrentProjectData();
     const allResources = data.resources || [];
 
-    // Convert plain {tags} to pills
-    let html = value.replace(/\{[^}]+\}/g, match => {
+    let html = value;
+
+    // 1. FIRST: Convert <a data-dp-key> anchors to pills (This prevents tags inside attributes from being mangled)
+    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/g, (fullMatch, url1, key1, key2, url2) => {
+        const url = url1 || url2;
+        const dpKey = key1 || key2;
+        const dp = datapoints.find(d => d.key === dpKey);
+        return `<span class="pill tiny accent is-clickable" 
+                      style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
+                      onclick="window.open('${url}','_blank')">
+                    <i data-lucide="link" style="width:9px;height:9px;"></i>${dp?.name || dpKey}
+                </span>`;
+    });
+
+    // 2. SECOND: Convert remaining plain {tags} to pills
+    html = html.replace(/\{[^}]+\}/g, match => {
         const dp = datapoints.find(d => d.key === match);
         if (dp) {
             const linkedRes = dp.linkToResource 
@@ -7532,18 +7546,6 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
             return pill;
         }
         return `<span class="pill tiny soft" style="display:inline-flex;font-size:10px;vertical-align:middle;">${match}</span>`;
-    });
-
-    // Convert <a data-dp-key> anchors to pills (rich text mode stored as HTML)
-    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/g, (fullMatch, url1, key1, key2, url2) => {
-        const url = url1 || url2;
-        const dpKey = key1 || key2;
-        const dp = datapoints.find(d => d.key === dpKey);
-        return `<span class="pill tiny accent is-clickable" 
-                      style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
-                      onclick="window.open('${url}','_blank')">
-                    <i data-lucide="link" style="width:9px;height:9px;"></i>${dp?.name || dpKey}
-                </span>`;
     });
 
     return html;
