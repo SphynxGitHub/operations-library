@@ -7468,7 +7468,20 @@ const dependencyHtml = `
         const el = document.getElementById('modal-res-name');
         if (el) el.style.height = el.scrollHeight + 'px';
     }, 10);
-    
+
+    // 🔍 DEBUG: Watch editor for style changes
+    setTimeout(() => {
+        const editor = document.getElementById(`email-body-edit-${res.id}`);
+        if (editor) {
+            new MutationObserver((mutations) => {
+                mutations.forEach(m => {
+                    if (m.attributeName === 'style') {
+                        console.trace('Editor style changed to:', editor.style.display);
+                    }
+                });
+            }).observe(editor, { attributes: true });
+        }
+    }, 500);
     if (window.lucide) {
         window.lucide.createIcons();
     }
