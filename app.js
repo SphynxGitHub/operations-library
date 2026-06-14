@@ -7587,7 +7587,9 @@ OL._geToggleEmailBody = function(resId, mode) {
         if (richEl) richEl.style.display = 'none';
         preview.style.display = 'none';
         editor.style.display = 'block';
-        // 🚀 Blur closes editor only if tag menu is closed
+        // 🚀 Show sanitized HTML in editor
+        const res = OL.getResourceById(resId);
+        editor.value = OL._geSanitizeEmailHtml(res?.emailBody || '');
         editor.onblur = function() {
             const menu = document.getElementById(`data-tag-menu-${resId}`);
             if (menu && menu.style.display === 'block') return;
@@ -7681,9 +7683,18 @@ document.addEventListener('click', function(e) {
     }
 });
 
+OL._geSanitizeEmailHtml = function(html) {
+    // Fix unquoted attributes: href=https://... → href="https://..."
+    return html
+        .replace(/(\s(?:href|src|target|data-dp-key|class|style|id))\s*=\s*(?!"')([^\s>]+)/g, '$1="$2"')
+        // Fix self-closing tags etc
+        .replace(/="([^"]*)""/g, '="$1"'); // remove double quotes if any
+};
+
 OL._geSaveEmailBody = function(resId, value) {
     console.trace('_geSaveEmailBody called');
-    OL.handleResourceSave(resId, 'emailBody', value);
+    const sanitized = OL._geSanitizeEmailHtml(value);
+    OL.handleResourceSave(resId, 'emailBody', sanitized);
     
     const preview = document.getElementById(`email-body-preview-${resId}`);
     const editor  = document.getElementById(`email-body-edit-${resId}`);
@@ -7700,7 +7711,7 @@ OL._geSaveEmailBody = function(resId, value) {
         ...OL.getResourceDatapoints()
     ];
 
-    const previewHtml = OL._geRenderEmailPreview(value, datapoints, client);
+    const previewHtml = OL._geRenderEmailPreview(sanitized, datapoints, client);
 
     if (preview) { 
         preview.innerHTML = previewHtml;
