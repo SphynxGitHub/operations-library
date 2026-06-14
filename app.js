@@ -182,8 +182,7 @@ OL.sync = function() {
                 state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
         
                 // 🚀 Don't re-render if a modal is open
-                const modalOpen = document.getElementById('modal-layer')?.children?.length > 0 
-                               || document.getElementById('active-modal-box');
+                const modalOpen = !!document.getElementById('modal-overlay');
                 const matrixOpen = window.isMatrixActive || state.activeMatrixId || 
                                    window.location.hash.includes('analyze');
                 if (!modalOpen && !matrixOpen) window.handleRoute();
