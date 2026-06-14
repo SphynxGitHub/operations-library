@@ -6934,7 +6934,7 @@ const dependencyHtml = `
                                     <i data-lucide="tag" style="width:10px;height:10px;margin-right:4px;"></i> Data Tags ▾
                                 </button>
                                 <div id="data-tag-menu-${res.id}"
-                                    onmousedown="event.preventDefault();"
+                                     onmousedown="event.preventDefault();"
                                      style="display:none;position:absolute;right:0;top:calc(100% + 4px);
                                             background:var(--panel);border:1px solid var(--panel-border);
                                             border-radius:8px;padding:4px;z-index:51;min-width:200px;max-height:220px;
@@ -6950,17 +6950,18 @@ const dependencyHtml = `
                                             ${cat}
                                         </div>
                                         ${tags.map(dp => `
-                                        <div onmousedown="event.preventDefault();
-                                                         OL._geInsertDataTag('${res.id}', '${dp.key}');
-                                                         setTimeout(function(){ document.getElementById('data-tag-menu-${res.id}').style.display='none'; }, 50);"
-                                             style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
-                                                    display:flex;justify-content:space-between;align-items:center;"
-                                             onmouseover="this.style.background='var(--panel-soft)'"
-                                             onmouseout="this.style.background='transparent'">
-                                            <span>${dp.name}</span>
-                                            <code style="font-size:9px;opacity:0.5;background:rgba(255,255,255,0.05);
-                                                         padding:1px 5px;border-radius:3px;">${dp.key}</code>
-                                        </div>
+                                            <div onmousedown="event.preventDefault();
+                                                             OL._geInsertDataTag('${res.id}', '${dp.key}');
+                                                             setTimeout(function(){ document.getElementById('data-tag-menu-${res.id}').style.display='none'; }, 50);"
+                                                 style="padding:7px 12px;cursor:pointer;font-size:11px;border-radius:6px;
+                                                        display:flex;justify-content:space-between;align-items:center;"
+                                                 onmouseover="this.style.background='var(--panel-soft)'"
+                                                 onmouseout="this.style.background='transparent'">
+                                                <span>${dp.name}</span>
+                                                <code style="font-size:9px;opacity:0.5;background:rgba(255,255,255,0.05);
+                                                             padding:1px 5px;border-radius:3px;">${dp.key}</code>
+                                            </div>
+                                        `).join('')}
                                     `).join('')}
                                 </div>
                             </div>
