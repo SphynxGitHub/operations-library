@@ -7023,7 +7023,16 @@ const dependencyHtml = `
                               class="modal-textarea"
                               style="display:none;min-height:160px;"
                               placeholder="Write email body...">${esc(res.emailBody || '')}</textarea>
-
+                    // Add after the textarea in the email bodyContent:
+                    <button id="email-body-done-${res.id}"
+                            style="display:none;margin-top:8px;"
+                            class="btn tiny soft"
+                            onclick="const ed=document.getElementById('email-body-edit-${res.id}');
+                                     const ri=document.getElementById('email-body-rich-${res.id}');
+                                     const val=ri&&ri.style.display!=='none'?ri.innerHTML:ed.value;
+                                     OL._geSaveEmailBody('${res.id}', val);">
+                        ✓ Done Editing
+                    </button>
                 </div>
                 <!-- CONNECTED RELATIONSHIPS -->
                 <div class="card-section" style="margin-bottom:16px;">
@@ -7480,13 +7489,6 @@ OL._geToggleEmailBody = function(resId, mode) {
             richEl.innerHTML = editor.value || '';
             editor.parentNode.appendChild(richEl);
         }
-        // 🚀 Blur checks dropdown before saving
-        richEl.onblur = function() {
-            if (window._tagInserting) return;
-            const menu = document.getElementById(`data-tag-menu-${resId}`);
-            if (menu && menu.style.display === 'block') return;
-            OL._geSaveEmailBody(resId, richEl.innerHTML);
-        };
         richEl.style.display = 'block';
         richEl.focus();
     } else {
@@ -7494,13 +7496,6 @@ OL._geToggleEmailBody = function(resId, mode) {
         if (richEl) richEl.style.display = 'none';
         preview.style.display = 'none';
         editor.style.display = 'block';
-        // 🚀 Blur checks dropdown before saving
-        editor.onblur = function() {
-            if (window._tagInserting) return;
-            const menu = document.getElementById(`data-tag-menu-${resId}`);
-            if (menu && menu.style.display === 'block') return;
-            OL._geSaveEmailBody(resId, editor.value);
-        };
         editor.focus();
     }
 };
