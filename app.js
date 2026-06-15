@@ -7525,17 +7525,17 @@ OL._geRenderEmailPreview = function(value, datapoints, client) {
     let html = value;
 
     // 1. FIRST: Convert <a data-dp-key> anchors to pills (This prevents tags inside attributes from being mangled)
-    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>[\s\S]*?<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<\/a>/gi, (fullMatch, url1, key1, key2, url2) => {
+    html = html.replace(/<a\s+href="([^"]*)"[^>]*data-dp-key="([^"]*)"[^>]*>([\s\S]*?)<\/a>|<a\s+[^>]*data-dp-key="([^"]*)"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (fullMatch, url1, key1, text1, key2, url2, text2) => {
         const url = url1 || url2;
         const dpKey = (key1 || key2 || '').toLowerCase();
-        const dp = datapoints.find(d => d.key && d.key.toLowerCase() === dpKey);
+        const linkText = (text1 || text2 || '').trim();
         return `<span class="pill tiny accent is-clickable" 
                       style="display:inline-flex;align-items:center;gap:4px;font-size:10px;vertical-align:middle;cursor:pointer;"
                       onclick="window.open('${url}','_blank')">
-                    <i data-lucide="link" style="width:9px;height:9px;"></i>${dp?.name || dpKey}
+                    <i data-lucide="link" style="width:9px;height:9px;"></i>${linkText}
                 </span>`;
     });
-
+    
     // 2. SECOND: Convert remaining plain {tags} to pills
     html = html.replace(/\{[^}]+\}/g, match => {
         const dp = datapoints.find(d => d.key === match);
