@@ -110,6 +110,8 @@ OL.persist = async function() {
             if (state.clients[activeId]) {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
                 await db.collection('clients').doc(activeId).set(clientCopy);
+                window.lastLocalSave = Date.now(); // 🚀 Set AFTER save completes, not before
+                console.log("✅ Background Sync Complete. Port remains open.");
             }
             
             console.log("✅ Background Sync Complete. Port remains open.");
@@ -175,6 +177,13 @@ OL.sync = function() {
     if (activeId) {
         db.collection('clients').doc(activeId).onSnapshot((doc) => {
             if (doc.exists) {
+                // 🚀 Ignore snapshots for 5 seconds after a local save
+                const timeSinceLastSave = Date.now() - (window.lastLocalSave || 0);
+                if (timeSinceLastSave < 5000) {
+                    console.log(`⏳ Ignoring snapshot — ${timeSinceLastSave}ms since last save`);
+                    return;
+                }
+                
                 state.clients[activeId] = doc.data();
                 state.activeClientId = activeId;
                 console.log(`👤 Active Client Loaded: ${doc.data()?.meta?.name}`);
