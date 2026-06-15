@@ -90,35 +90,29 @@ let state = {
 };
 OL.state = state;
 
+// In OL.persist, move lastLocalSave to AFTER the save:
 OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
-    window.lastLocalSave = Date.now();
     window.lastSyncHash = null;
     window.saveTimeout = setTimeout(async () => {
         try {
             const activeId = state.activeClientId;
             if (!activeId) return;
-
             console.log("☁️ Background Sync Starting...");
 
-            // 🚀 STEP 1: Save Master Registry
             const masterCopy = JSON.parse(JSON.stringify(state.master));
             await db.collection('systems').doc('main_state').set(masterCopy);
 
-            // 🚀 STEP 2: Save Only the Active Client
-            // This prevents the "Message Port Closed" error by reducing payload size
             if (state.clients[activeId]) {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
                 await db.collection('clients').doc(activeId).set(clientCopy);
-                window.lastLocalSave = Date.now(); // 🚀 Set AFTER save completes, not before
-                console.log("✅ Background Sync Complete. Port remains open.");
             }
             
+            // 🚀 Set AFTER save so snapshot guard starts from actual save time
+            window.lastLocalSave = Date.now();
             console.log("✅ Background Sync Complete. Port remains open.");
-
         } catch (error) {
             console.error("💀 Persistence Error:", error);
-            // If the port closes, we don't reload; we just log it.
         }
     }, 1500);
 };
@@ -174,13 +168,13 @@ OL.sync = function() {
 
     // 2. Active client — full data, real-time
     const activeId = sessionStorage.getItem('lastActiveClientId');
-    if (activeId) {
-        db.collection('clients').doc(activeId).onSnapshot((doc) => {
+        if (activeId) {
+            db.collection('clients').doc(activeId).onSnapshot((doc) => {
             if (doc.exists) {
-                // 🚀 Ignore snapshots for 5 seconds after a local save
+                // 🚀 Ignore if save is pending OR within 10s of last save
                 const timeSinceLastSave = Date.now() - (window.lastLocalSave || 0);
-                if (timeSinceLastSave < 5000) {
-                    console.log(`⏳ Ignoring snapshot — ${timeSinceLastSave}ms since last save`);
+                if (window.saveTimeout || timeSinceLastSave < 10000) {
+                    console.log(`⏳ Ignoring client snapshot — save pending: ${!!window.saveTimeout}, ${timeSinceLastSave}ms since last save`);
                     return;
                 }
                 
@@ -192,11 +186,9 @@ OL.sync = function() {
                 const rawSelected = state.clients[activeId].v2?.selectedNodes;
                 state.v2.selectedNodes = new Set(Array.isArray(rawSelected) ? rawSelected : (rawSelected ? Object.values(rawSelected) : []));
         
-                // 🚀 Don't re-render if a modal is open
                 const modalOpen = !!document.getElementById('modal-overlay');
                 const matrixOpen = window.isMatrixActive || state.activeMatrixId || 
                                    window.location.hash.includes('analyze');
-                console.log('🔍 Snapshot fired. Modal open:', modalOpen, document.getElementById('modal-overlay'));
                 if (!modalOpen && !matrixOpen) window.handleRoute();
             }
         });
