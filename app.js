@@ -7691,10 +7691,9 @@ document.addEventListener('click', function(e) {
 });
 
 OL._geSanitizeEmailHtml = function(html) {
-    // Use DOMParser to properly parse and re-serialize the HTML
     const parser = new DOMParser();
-    const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
-    return doc.body.firstChild.innerHTML;
+    const doc = parser.parseFromString(`<body>${html}</body>`, 'text/html');
+    return doc.body.innerHTML;
 };
 
 OL._geSaveEmailBody = function(resId, value) {
