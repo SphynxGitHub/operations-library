@@ -105,9 +105,13 @@ OL.persist = async function() {
 
             if (state.clients[activeId]) {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
+                // 🚀 Remove duplicate resources array — localResources is the source of truth
+                if (clientCopy.projectData) {
+                    delete clientCopy.projectData.resources;
+                }
                 await db.collection('clients').doc(activeId).set(clientCopy);
             }
-            
+                        
             // 🚀 Set AFTER save so snapshot guard starts from actual save time
             window.lastLocalSave = Date.now();
             console.log("✅ Background Sync Complete. Port remains open.");
