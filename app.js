@@ -160,11 +160,10 @@ OL.sync = function() {
     console.log("📡 Initializing Unified Collection Sync (First & Only Time)...");
 
     // 1. Master Registry
-   db.collection('systems').doc('main_state').onSnapshot((doc) => {
+    db.collection('systems').doc('main_state').onSnapshot((doc) => {
         if (doc.exists) {
             state.master = doc.data();
             console.log("🏛️ Master Registry Synced");
-            // 🚀 Don't re-render if modal is open
             const modalOpen = !!document.getElementById('modal-overlay');
             const onMasterRoute = ['resources','apps','functions','vault','rates','resourceTypes','howto','team']
                 .some(r => window.location.hash.includes(r));
@@ -174,10 +173,9 @@ OL.sync = function() {
 
     // 2. Active client — full data, real-time
     const activeId = sessionStorage.getItem('lastActiveClientId');
-        if (activeId) {
-            db.collection('clients').doc(activeId).onSnapshot((doc) => {
+    if (activeId) {
+        db.collection('clients').doc(activeId).onSnapshot((doc) => {
             if (doc.exists) {
-                // 🚀 Ignore if save is pending OR within 10s of last save
                 const timeSinceLastSave = Date.now() - (window.lastLocalSave || 0);
                 if (window.saveTimeout || timeSinceLastSave < 10000) {
                     console.log(`⏳ Ignoring client snapshot — save pending: ${!!window.saveTimeout}, ${timeSinceLastSave}ms since last save`);
@@ -214,42 +212,34 @@ OL.sync = function() {
                 sharedMasterIds: data.sharedMasterIds,
                 _metaOnly: true
             };
-            if (window.IS_GUEST && !state.activeClientId) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const accessToken = urlParams.get('access');
-                
-                // Find the client by token
-                const guestClient = Object.values(state.clients).find(c => 
-                    c.publicToken === accessToken
-                );
-                
-                if (guestClient && guestClient._metaOnly) {
-                    const guestId = guestClient.id;
-                    state.activeClientId = guestId;
-                    sessionStorage.setItem('lastActiveClientId', guestId);
-                    
-                    // Load full data
-                    db.collection('clients').doc(guestId).onSnapshot((doc) => {
-                        if (doc.exists) {
-                            state.clients[guestId] = doc.data();
-                            state.activeClientId = guestId;
-                            console.log('👤 Guest Client Full Data Loaded');
-                            if (!document.getElementById('modal-overlay')) window.handleRoute();
-                        }
-                    });
-                }
-            }
         });
     
         console.log(`📋 Client Index Loaded: ${querySnapshot.size} clients`);
     
-        // 🚀 Don't re-render if modal is open
         const modalOpen = !!document.getElementById('modal-overlay');
-        if (!modalOpen && (window.location.hash === '#/' || window.location.hash === '')) {
-            window.handleRoute();
-        }
 
+        // 🎟️ GUEST: Find client by token and attach full listener once
         if (window.IS_GUEST) {
+            var urlParams2 = new URLSearchParams(window.location.search);
+            var accessToken2 = urlParams2.get('access');
+            var guestClient2 = Object.values(state.clients).find(c => c.publicToken === accessToken2);
+
+            if (guestClient2 && !window._guestListenerAttached) {
+                window._guestListenerAttached = true;
+                var guestId2 = guestClient2.id;
+                state.activeClientId = guestId2;
+                sessionStorage.setItem('lastActiveClientId', guestId2);
+
+                db.collection('clients').doc(guestId2).onSnapshot((doc) => {
+                    if (doc.exists) {
+                        state.clients[guestId2] = doc.data();
+                        state.activeClientId = guestId2;
+                        console.log('👤 Guest Client Full Data Loaded:', doc.data()?.meta?.name);
+                        if (!document.getElementById('modal-overlay')) window.handleRoute();
+                    }
+                });
+            }
+
             const client = getActiveClient();
             if (client) {
                 console.log("🎟️ Guest Token Validated:", client.meta.name);
@@ -257,10 +247,15 @@ OL.sync = function() {
                                    window.isMatrixActive || state.activeMatrixId;
                 if (!modalOpen && !matrixOpen) window.handleRoute();
             }
+            return;
+        }
+
+        // 👤 ADMIN: render dashboard if on root
+        if (!modalOpen && (window.location.hash === '#/' || window.location.hash === '')) {
+            window.handleRoute();
         }
     });
 };
-
 OL.loadFullClient = async function(clientId) {
     // Already have full data
     if (state.clients[clientId] && !state.clients[clientId]._metaOnly) {
