@@ -249,7 +249,7 @@ OL.sync = function() {
             window.handleRoute();
         }
 
-        if (window.IS_GUEST) 
+        if (window.IS_GUEST) {
             const client = getActiveClient();
             if (client) {
                 console.log("🎟️ Guest Token Validated:", client.meta.name);
