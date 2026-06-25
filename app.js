@@ -109,7 +109,12 @@ OL.persist = async function() {
                 if (clientCopy.projectData) {
                     delete clientCopy.projectData.resources;
                 }
-                await db.collection('clients').doc(activeId).set(clientCopy);
+                // 🛡️ NUCLEAR GUARD: Never save without projectData
+                if (!clientCopy.projectData || !clientCopy.projectData.localResources) {
+                    console.error('🛑 PERSIST ABORTED: Incomplete client object, refusing to save');
+                    return;
+                }
+                await db.collection('clients').doc(activeId).set(clientCopy, { merge: true });
             }
                         
             // 🚀 Set AFTER save so snapshot guard starts from actual save time
