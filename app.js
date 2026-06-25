@@ -214,6 +214,31 @@ OL.sync = function() {
                 sharedMasterIds: data.sharedMasterIds,
                 _metaOnly: true
             };
+            if (window.IS_GUEST && !state.activeClientId) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const accessToken = urlParams.get('access');
+                
+                // Find the client by token
+                const guestClient = Object.values(state.clients).find(c => 
+                    c.publicToken === accessToken
+                );
+                
+                if (guestClient && guestClient._metaOnly) {
+                    const guestId = guestClient.id;
+                    state.activeClientId = guestId;
+                    sessionStorage.setItem('lastActiveClientId', guestId);
+                    
+                    // Load full data
+                    db.collection('clients').doc(guestId).onSnapshot((doc) => {
+                        if (doc.exists) {
+                            state.clients[guestId] = doc.data();
+                            state.activeClientId = guestId;
+                            console.log('👤 Guest Client Full Data Loaded');
+                            if (!document.getElementById('modal-overlay')) window.handleRoute();
+                        }
+                    });
+                }
+            }
         });
     
         console.log(`📋 Client Index Loaded: ${querySnapshot.size} clients`);
@@ -223,34 +248,7 @@ OL.sync = function() {
         if (!modalOpen && (window.location.hash === '#/' || window.location.hash === '')) {
             window.handleRoute();
         }
-    
-        // Inside the db.collection('clients').onSnapshot callback, after the forEach loop:
 
-        if (window.IS_GUEST && !state.activeClientId) {
-            const urlParams = new URLSearchParams(window.location.search);
-            const accessToken = urlParams.get('access');
-            
-            // Find the client by token
-            const guestClient = Object.values(state.clients).find(c => 
-                c.publicToken === accessToken
-            );
-            
-            if (guestClient && guestClient._metaOnly) {
-                const guestId = guestClient.id;
-                state.activeClientId = guestId;
-                sessionStorage.setItem('lastActiveClientId', guestId);
-                
-                // Load full data
-                db.collection('clients').doc(guestId).onSnapshot((doc) => {
-                    if (doc.exists) {
-                        state.clients[guestId] = doc.data();
-                        state.activeClientId = guestId;
-                        console.log('👤 Guest Client Full Data Loaded');
-                        if (!document.getElementById('modal-overlay')) window.handleRoute();
-                    }
-                });
-            }
-        }
         if (window.IS_GUEST) 
             const client = getActiveClient();
             if (client) {
