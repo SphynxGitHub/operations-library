@@ -166,7 +166,9 @@ OL.sync = function() {
             console.log("🏛️ Master Registry Synced");
             // 🚀 Don't re-render if modal is open
             const modalOpen = !!document.getElementById('modal-overlay');
-            if (!state.activeClientId && !modalOpen) window.handleRoute();
+            const onMasterRoute = ['resources','apps','functions','vault','rates','resourceTypes','howto','team']
+                .some(r => window.location.hash.includes(r));
+            if (!modalOpen && (!state.activeClientId || onMasterRoute)) window.handleRoute();
         }
     });
 
