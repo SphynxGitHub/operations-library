@@ -4031,6 +4031,19 @@ window.renderChecklistModule = function (isVaultMode = false) {
     const client = getActiveClient();
     const hash = window.location.hash;
     const isVault = isVaultMode || hash.startsWith('#/vault');
+
+    // 🛡️ GUARD: Wait for full client data
+    if (!isVault && (!client || !client.projectData)) {
+        container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;">
+            <div style="text-align:center;">
+                <div style="font-size:24px;margin-bottom:10px;">⏳</div>
+                <div>Loading client data...</div>
+            </div>
+        </div>`;
+        // Retry after full data loads
+        OL.loadFullClient(client?.id).then(() => renderChecklistModule(isVaultMode));
+        return;
+    }
     
     if (!container || (!isVault && !client)) return;
     container.style.cssText = '';
