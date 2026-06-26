@@ -20828,25 +20828,17 @@ OL.createNewVarForType = function (label, typeKey) {
     renderVaultRatesPage(); 
 };
 
-OL.updateVarRate = async function (key, field, val) {
-    if (state.master.rates.variables[key]) {
-        // 1. Update the local memory variable only
-        state.master.rates.variables[key][field] = field === "value" ? parseFloat(val) || 0 : val.trim();
-        
-        // 2. Perform a "Surgical Save"
-        // Instead of saving the whole state, we just tell Firebase to update this one key
-        const updatePath = `master.rates.variables.${key}`;
-        try {
-            await db.collection('systems').doc('main_state').update({
-                [updatePath]: state.master.rates.variables[key]
-            });
-            console.log("🎯 Surgical Rate Update Successful.");
-            renderVaultRatesPage();
-        } catch (e) {
-            // Fallback to full persist if update fails
-            await OL.persist();
-        }
-    }
+OL.updateVarRate = async function(key, field, val) {
+    if (!state.master.rates.variables[key]) return;
+    
+    state.master.rates.variables[key][field] = field === 'value' ? parseFloat(val) || 0 : val.trim();
+    
+    // Use update with dot notation instead of full persist
+    var updateObj = {};
+    updateObj['rates.variables.' + key] = state.master.rates.variables[key];
+    
+    await db.collection('systems').doc('main_state').update(updateObj);
+    console.log('✅ Variable saved:', key, field, val);
 };
 
 OL.removeScopingVariable = function(varKey, typeKey) {
