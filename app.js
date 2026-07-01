@@ -6912,7 +6912,7 @@ const dependencyHtml = `
     }
     // --- 🚀 FINAL ASSEMBLY ---
     let bodyContent = "";
-    if (resType === "email") {
+    if (resType === "email" || resType === "email template") {
          bodyContent = `
                 ${appMappingHtml}
         
