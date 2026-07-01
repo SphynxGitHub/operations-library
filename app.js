@@ -5301,19 +5301,14 @@ OL.clearResourceFilters = function() {
 OL.universalCreate = async function(type, options = {}) {
     const { name: predefinedName, linkToWfId, insertIdx } = options;
     
-    // 1. Get Name
     const name = predefinedName || prompt(`Enter ${type} Name:`);
     if (!name) return null;
 
     const context = OL.getCurrentContext();
-    const data = context.data;
-    if (!data) return console.error("❌ Context Data not found");
-
-    // 2. Generate Identity
+    const client = getActiveClient();
     const timestamp = Date.now();
     const newId = context.isMaster ? `res-vlt-${timestamp}` : `local-prj-${timestamp}`;
 
-    // 3. Define Default Archetype based on Type
     const registry = state.master.resourceTypes || [];
     const typeInfo = registry.find(t => t.type === type);
     const archetype = typeInfo?.archetype || "Base";
@@ -5330,15 +5325,21 @@ OL.universalCreate = async function(type, options = {}) {
         createdDate: new Date().toISOString()
     };
 
-    // 4. Atomic Database Update
     await OL.updateAndSync(() => {
-        // A. Add to Library
-        const targetLibrary = context.isMaster ? data.resources : data.localResources;
-        targetLibrary.push(newRes);
+        // 🛡️ Always push to the correct array directly
+        if (context.isMaster) {
+            if (!state.master.resources) state.master.resources = [];
+            state.master.resources.push(newRes);
+        } else if (client) {
+            if (!client.projectData.localResources) client.projectData.localResources = [];
+            client.projectData.localResources.push(newRes);
+            // Keep the bridge in sync
+            client.projectData.resources = client.projectData.localResources;
+        }
 
-        // B. Optional: Link to a Workflow (Scenario: Inline Builder)
         if (linkToWfId) {
-            const wf = targetLibrary.find(r => String(r.id) === String(linkToWfId));
+            const wf = (context.isMaster ? state.master : client.projectData)
+                .workflows?.find(w => String(w.id) === String(linkToWfId));
             if (wf) {
                 if (!wf.steps) wf.steps = [];
                 wf.steps.splice(insertIdx ?? wf.steps.length, 0, {
@@ -5349,7 +5350,6 @@ OL.universalCreate = async function(type, options = {}) {
         }
     });
 
-    // 5. UI Orcherstration
     if (linkToWfId) {
         OL.refreshMap();
         setTimeout(() => OL.openInspector(newId, linkToWfId), 100);
@@ -5360,7 +5360,6 @@ OL.universalCreate = async function(type, options = {}) {
 
     return newId;
 };
-
 
 // 📦 2. BULK RECLASSIFY
 OL.promptBulkReclassify = function(oldType) {
