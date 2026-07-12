@@ -134,9 +134,8 @@ window.addEventListener("load", () => {
     // 2. Admin Verification
     if (window.location.search.includes('admin=pizza123')) {
         state.adminMode = true;
-        OL.state.adminMode = true;
     }
-    
+
     // 3. Recall Client
     const savedClientId = sessionStorage.getItem('lastActiveClientId');
     if (savedClientId) state.activeClientId = savedClientId;
@@ -149,20 +148,20 @@ window.addEventListener("load", () => {
     const isDashboard = currentHash === "" || currentHash === "#/";
     const isVisualizer = currentHash.includes('visualizer');
 
-    if ((state.focusedWorkflowId || state.focusedResourceId) && 
-        (isDashboard || isVisualizer) && 
-        !currentHash.includes('scoping')) { 
+    if ((state.focusedWorkflowId || state.focusedResourceId) &&
+        (isDashboard || isVisualizer) &&
+        !currentHash.includes('scoping')) {
+        console.log("♻️ Resuming Flow Map depth");
         const isVault = currentHash.includes('vault');
         location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
-    } 
-    OL.sync(); 
+    }
+    OL.sync();
 });
 
 OL.sync = function() {
-    console.log("📡 Initializing Unified Collection Sync...");
     if (window.isSyncInitialized) return;
     window.isSyncInitialized = true;
-    console.log("📡 Initializing Unified Collection Sync (First & Only Time)...");
+    console.log("📡 Initializing Unified Collection Sync...");
 
     // 1. Master Registry
     db.collection('systems').doc('main_state').onSnapshot((doc) => {
@@ -347,36 +346,6 @@ OL.getRegistryIcon = function(type) {
     return defaults[type.toLowerCase()] || "file-text";
 };
 
-window.addEventListener("load", () => {
-    // 1. Admin Verification
-    if (window.location.search.includes('admin=pizza123')) {
-        state.adminMode = true;
-        OL.state.adminMode = true;
-    }
-    
-    // 2. Recall Client
-    const savedClientId = sessionStorage.getItem('lastActiveClientId');
-    if (savedClientId) state.activeClientId = savedClientId;
-
-    // 3. 🚩 RECALL VISUALIZER DEPTH (The Correct Way)
-    state.focusedWorkflowId = sessionStorage.getItem('active_workflow_id');
-    state.focusedResourceId = sessionStorage.getItem('active_resource_id');
-
-    // 🚀 THE FIX: Only redirect if the user is on the Dashboard or explicitly on the Visualizer
-    const currentHash = location.hash;
-    const isDashboard = currentHash === "" || currentHash === "#/";
-    const isVisualizer = currentHash.includes('visualizer');
-
-    // 🚀 THE SHIELD: Only resume the map if we aren't trying to go to Scoping
-    if ((state.focusedWorkflowId || state.focusedResourceId) && 
-        (isDashboard || isVisualizer) && 
-        !currentHash.includes('scoping')) { 
-            console.log("♻️ Resuming Flow Map depth");
-            const isVault = currentHash.includes('vault');
-            location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
-    } 
-    OL.sync(); 
-});
 
 window.getActiveClient = function() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -1274,8 +1243,6 @@ OL.handlePillInteraction = function(event, appId, fnId) {
     }
 };
 
-OL.sync();
-
 //======================= CLIENT DASHBOARD SECTION =======================//
 
 // 1. CLIENT DASHBOARD & CORE MODULES
@@ -1284,8 +1251,6 @@ window.renderClientDashboard = function() {
     if (!container) return;
     container.style.cssText = '';
     document.body.classList.remove('is-visualizer');
-
-    container.style.cssText = '';
 
     const activeView = state.dashboardView || localStorage.getItem('ol_dashboard_view') || 'cards';
     state.dashboardView = activeView; // keep state in sync
@@ -6599,7 +6564,6 @@ OL.openResourceModal = function (targetId, draftObj = null) {
     const activeId = lineItem ? lineItem.id : targetId;
     const currentRound = lineItem ? (lineItem.round || 1) : 1;
     const scopeData = OL.getScopingDataForResource(res.id);
-    let scopeContextHtml = "";
     const scopeAndRoundHtml = ((lineItem || isScopingSheet) || scopeData) ? `
         <div class="card-section" style="margin-bottom:20px;background:rgba(var(--accent-rgb),0.05);
                                           border:1px solid var(--accent);padding:12px 16px;border-radius:8px;">
@@ -6801,27 +6765,6 @@ const dependencyHtml = `
 `;
 
   //------- SCOPING STATUS ---------//
-
-  if (scopeData) {
-      scopeContextHtml = `
-          <div class="card-section" style="background: rgba(var(--accent-rgb), 0.05); border: 1px solid var(--accent); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-              <div>
-                  <label class="tiny muted bold uppercase" style="font-size:9px; display:block; margin-bottom:5px;">Scoping Status</label>
-                  <select class="modal-input tiny" onchange="OL.updateLineItem('${scopeData.id}', 'status', this.value)">
-                      ${['Do Now', 'Do Later', "Don't Do", 'Done'].map(s => `<option value="${s}" ${scopeData.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-                  </select>
-              </div>
-              <div>
-                  <label class="tiny muted bold uppercase" style="font-size:9px; display:block; margin-bottom:5px;">Responsible Party</label>
-                  <select class="modal-input tiny" onchange="OL.updateLineItem('${scopeData.id}', 'responsibleParty', this.value)">
-                      <option value="Sphynx" ${scopeData.responsibleParty === 'Sphynx' ? 'selected' : ''}>Sphynx</option>
-                      <option value="Client" ${scopeData.responsibleParty === 'Client' ? 'selected' : ''}>Client</option>
-                      <option value="Joint" ${scopeData.responsibleParty === 'Joint' ? 'selected' : ''}>Joint</option>
-                  </select>
-              </div>
-          </div>
-      `;
-  }
 
   // Inside OL.openResourceModal...
   const activeTab = state.v2?.activeCommentTab || 'internal';
@@ -9052,37 +8995,6 @@ OL.importAnalysisFromVault = function () {
     }
 };
 
-OL.importAnalysisFromVault = function () {
-    const html = `
-        <div class="modal-head" style="display:flex; align-items:center; gap:12px; padding: 20px;">
-            <i data-lucide="download-cloud" style="width:20px; height:20px; color:var(--accent);"></i>
-            <div class="modal-title-text">Import Analysis Template</div>
-            <div class="spacer"></div>
-            <button class="btn small soft" onclick="OL.closeModal()">Cancel</button>
-        </div>
-        <div class="modal-body">
-            <div class="search-map-container">
-                <div style="position:relative; display:flex; align-items:center;">
-                    <i data-lucide="search" style="position:absolute; left:12px; width:14px; height:14px; opacity:0.4;"></i>
-                    <input type="text" class="modal-input" 
-                           style="padding-left:35px;"
-                           placeholder="Search templates (e.g. CRM, AI)..." 
-                           onfocus="OL.filterMasterAnalysisImport('')"
-                           oninput="OL.filterMasterAnalysisImport(this.value)" 
-                           autofocus>
-                </div>
-                <div id="master-anly-import-results" class="search-results-overlay" style="margin-top:10px;"></div>
-            </div>
-        </div>
-    `;
-    openModal(html);
-
-    // 🚀 THE REPAINT: Convert tags to SVGs
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
-};
-
 // Helper to handle the specific ID from search
 OL.executeAnalysisImportById = async function(templateId) {
     const template = state.master.analyses.find(t => String(t.id) === String(templateId));
@@ -10063,55 +9975,6 @@ OL.unifiedAddFlow = function(query, anlyId, isMaster, excludeNames=[]) {
             if (!featName) return alert("Please enter a feature name.");
             OL.finalizeFeatureAddition(anlyId, featName, catName, isMaster);
         };
-    }
-};
-
-// 💡 Update handleCategorySelection to support the 'local-ui-only' mode
-// This just fills the input field without triggering a database save
-OL.handleCategorySelection = function(catName, type, params = {}) {
-    const { anlyId, isMaster, featName } = params;
-
-    // 🎯 ROUTE 1: Feature Editor (L3 Matrix Modal)
-    if (type === 'edit-feature') {
-        const searchInput = document.getElementById("edit-feat-cat-search");
-        const hiddenInput = document.getElementById("edit-feat-cat-value");
-        if (searchInput) searchInput.value = catName;
-        if (hiddenInput) hiddenInput.value = catName;
-        document.getElementById("edit-cat-search-results").style.display = "none";
-    } 
-
-    // 🎯 ROUTE 2: Analysis Assignment (Adding a blank Category to a Matrix)
-    else if (type === 'add-to-analysis') {
-        OL.executeAddCategoryToAnalysis(anlyId, catName, isMaster);
-    }
-
-    // 🎯 ROUTE 3: Global Content Manager (Library Search)
-    else if (type === 'global-manager') {
-        const input = document.getElementById('global-feat-cat-search');
-        if (input) input.value = catName;
-        document.getElementById('global-cat-results').innerHTML = '';
-    }
-
-    // 🎯 ROUTE 4: The Unified "Add Feature" UI (Pre-filling the category field)
-        else if (type === 'local-ui-only' || type === 'assign-to-feature') {
-        // 🚀 THE FIX: Check for both potential ID names to be safe
-        const catInput = document.getElementById('feat-cat-input') || 
-                        document.getElementById('new-feat-cat-input') ||
-                        document.getElementById('cat-focus-target'); // From the Step 2 modal
-        
-        if (catInput) {
-            catInput.value = catName;
-            // If it's the standalone category modal, trigger the final save automatically
-            if (catInput.id === 'cat-focus-target') {
-                OL.finalizeFeatureAddition(params.anlyId, params.featName, catName, params.isMaster);
-                OL.closeModal();
-            }
-        }
-        
-        const res = document.getElementById('feat-cat-results') || 
-                    document.getElementById('new-feat-cat-results') || 
-                    document.getElementById('feat-cat-assign-results');
-        if (res) res.style.display = 'none';
     }
 };
 
@@ -22720,7 +22583,7 @@ function renderHTRequirements(ht) {
                     <option value="">-- Target Function --</option>
                     ${masterFunctions.map(f => `<option value="${f.id}" ${req.targetId === f.id ? 'selected' : ''}>⚙️ ${esc(f.name)}</option>`).join('')}
                 </select>
-                <button class="card-delete-btn" style="position:static;" onclick="OL.removeHTReq('${ht.id}', ${idx})">×</button>
+                <button class="card-delete-btn" style="position:static;" onclick="OL.removeHTRequirement('${ht.id}', ${idx})">×</button>
             </div>
             
             <div style="display:flex; gap:10px; align-items:center;">
