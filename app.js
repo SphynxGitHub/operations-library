@@ -11353,6 +11353,18 @@ OL._fvNormalizeStepCoords = function() {
         });
     });
 };
+
+// Returns explicit logic.out links if any targetId is set; otherwise a synthetic
+// implicit link to the next sequential step in the same resource.
+OL._fvGetEffectiveOut = function(step, res) {
+    const explicit = (step.logic?.out || []).filter(l => l.targetId);
+    if (explicit.length > 0) return explicit;
+    const steps = res.steps || [];
+    const idx = steps.indexOf(step);
+    if (idx === -1 || idx >= steps.length - 1) return [];
+    const nextStep = steps[idx + 1];
+    return [{ type: 'next', types: ['next'], targetId: `${res.id}-${nextStep.id}`, _implicit: true }];
+};
 // ── SHARED STATE ─────────────────────────────────────────
 if (!OL._fv) OL._fv = {
     layout: sessionStorage.getItem('fv_layout') || 'flowchart',
@@ -12432,7 +12444,7 @@ OL._fvComputeLayout = function(resources, stageFilter) {
 
   allSteps.forEach(({ step, res }) => {
     const fromId = `${res.id}-${step.id}`;
-    (step.logic?.out || []).forEach(out => {
+    OL._fvGetEffectiveOut(step, res).forEach(out => {
       if (!out.targetId) return;
       const lastH = String(out.targetId).lastIndexOf('-');
       if (lastH === -1) return;
@@ -13076,7 +13088,7 @@ OL._fvDrawStepConnections = function(resources) {
 
   resources.forEach(sourceRes => {
     (sourceRes.steps || []).forEach(sourceStep => {
-      (sourceStep.logic?.out || []).forEach(outRule => {
+      OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
         if (!outRule.targetId) return;
 
         const lastH = String(outRule.targetId).lastIndexOf('-');
@@ -13137,22 +13149,24 @@ OL._fvDrawStepConnections = function(resources) {
         const d = `M ${fx} ${fy} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx} ${ty}`;
 
         const isNo   = outRule.type === 'no' || outRule.rule?.toLowerCase().includes('no');
-        const isLoop = outRule.type === 'loop';
-        const color  = isLoop ? '#f5b800' : isNo ? '#d4472a' : '#3dd9c5';
+        const isLoop     = outRule.type === 'loop';
+        const isImplicit = !!outRule._implicit;
+        const color      = isImplicit ? '#3dd9c5' : isLoop ? '#f5b800' : isNo ? '#d4472a' : '#3dd9c5';
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', d);
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke', color);
-        path.setAttribute('stroke-width', '1.5');
-        path.setAttribute('stroke-opacity', '0.7');
+        path.setAttribute('stroke-width', isImplicit ? '1' : '1.5');
+        path.setAttribute('stroke-opacity', isImplicit ? '0.3' : '0.7');
         path.setAttribute('marker-end', isNo ? 'url(#fv-arr-no)' : 'url(#fv-arr)');
-        if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
+        if (isImplicit) path.setAttribute('stroke-dasharray', '4,4');
+        else if (isNo || isLoop) path.setAttribute('stroke-dasharray', '5,3');
         group.appendChild(path);
 
-        // Logic icon on line midpoint
-        const hasRule  = outRule.rule?.trim();
-        const hasDelay = outRule.type === 'delay' || parseInt(outRule.delayValue) > 0;
+        // Logic icon on line midpoint (implicit links get no icon)
+        const hasRule  = !isImplicit && outRule.rule?.trim();
+        const hasDelay = !isImplicit && (outRule.type === 'delay' || parseInt(outRule.delayValue) > 0);
         const iconChar = isLoop ? '↺' : hasDelay ? '⏱' : hasRule ? 'λ' : null;
 
         if (iconChar) {
