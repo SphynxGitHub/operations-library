@@ -8373,7 +8373,7 @@ window.renderVaultRatesPage = function () {
 
   const rates = state.master.rates || {};
   const registry = state.master.resourceTypes || [];
-  const variables = state.master.rates.variables || {};
+  const variables = rates.variables || {};
 
   container.innerHTML = `
         <div class="section-header">
@@ -19370,7 +19370,6 @@ OL.toggleSOPToResource = function(sopId, resId) {
     OL.persist();
     OL.openResourceModal(resId); // Refresh the resource modal to show the new pill
 };
-handleRoute();
 
 //======================= SCOPING AND PRICING SECTION =======================//
 
