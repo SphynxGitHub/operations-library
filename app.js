@@ -23094,25 +23094,7 @@ OL.deployRequirementsFromResource = function(resourceId) {
     OL.persist();
 };
 
-// 🚀 THE BULLETPROOF STARTER
-function bootRouter() {
-    console.log("🏁 App Ignition: Checking route...");
-    // Force a default if empty
-    if (!window.location.hash || window.location.hash === "#/") {
-        // window.location.hash = "#/client-tasks"; 
-    }
-    window.handleRoute();
-}
-
-// 🔄 Handle initial load (covers all browser timings)
-if (document.readyState === "complete" || document.readyState === "interactive") {
-    bootRouter();
-} else {
-    window.addEventListener("DOMContentLoaded", bootRouter);
-}
-
-// 🔄 Handle every click thereafter
-window.addEventListener("hashchange", window.handleRoute);
+// hashchange listener already registered near the top of the file
 
 // 🛑 GLOBAL REFRESH SHIELD
 // This stops the browser from navigating if a drop fails or is mishandled
