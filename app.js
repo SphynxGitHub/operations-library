@@ -156,6 +156,19 @@ window.addEventListener("load", () => {
         const isVault = currentHash.includes('vault');
         location.hash = isVault ? "#/vault/visualizer" : "#/visualizer";
     }
+
+    // Show a loading skeleton immediately so there's no white screen while
+    // Firebase establishes its connection and fires the first snapshot.
+    if (typeof window.buildLayout === 'function') window.buildLayout();
+    const mainEl = document.getElementById('mainContent');
+    if (mainEl) {
+        mainEl.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px;opacity:0.4;">
+                <div class="fv-spinner"></div>
+                <div style="font-size:13px;letter-spacing:0.05em;">Loading...</div>
+            </div>`;
+    }
+
     OL.sync();
 });
 
