@@ -95,31 +95,32 @@ OL.persist = async function() {
     if (window.saveTimeout) clearTimeout(window.saveTimeout);
     window.lastSyncHash = null;
     window.saveTimeout = setTimeout(async () => {
+        window.saveTimeout = null; // clear so snapshot guard resets after this fires
         try {
-            const activeId = state.activeClientId;
-            if (!activeId) return;
             console.log("☁️ Background Sync Starting...");
 
+            // Always save master regardless of active client
             const masterCopy = JSON.parse(JSON.stringify(state.master));
             await db.collection('systems').doc('main_state').set(masterCopy);
 
-            if (state.clients[activeId]) {
+            const activeId = state.activeClientId;
+            if (activeId && state.clients[activeId]) {
                 const clientCopy = JSON.parse(JSON.stringify(state.clients[activeId]));
-                // 🚀 Remove duplicate resources array — localResources is the source of truth
+                // localResources is the source of truth — remove legacy alias before save
                 if (clientCopy.projectData) {
                     delete clientCopy.projectData.resources;
                 }
-                // 🛡️ NUCLEAR GUARD: Never save without projectData
+                // Never save an incomplete client object
                 if (!clientCopy.projectData || !clientCopy.projectData.localResources) {
                     console.error('🛑 PERSIST ABORTED: Incomplete client object, refusing to save');
+                    window.lastLocalSave = Date.now(); // still reset guard so snapshots can resume
                     return;
                 }
                 await db.collection('clients').doc(activeId).set(clientCopy, { merge: true });
             }
-                        
-            // 🚀 Set AFTER save so snapshot guard starts from actual save time
+
             window.lastLocalSave = Date.now();
-            console.log("✅ Background Sync Complete. Port remains open.");
+            console.log("✅ Background Sync Complete.");
         } catch (error) {
             console.error("💀 Persistence Error:", error);
         }
