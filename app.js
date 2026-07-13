@@ -11473,8 +11473,8 @@ OL.renderVisualizer = function() {
         _searchQuery: '',
     };
     
-  // Run layout computation for steps view
-  if (OL._fv.layout === 'steps') {
+  // Run DAG layout for flowchart view only — steps view does its own positioning
+  if (OL._fv.layout !== 'steps') {
     OL._fvNormalizeStepCoords();
     OL._fvComputeLayout(resources, OL._fv.stageFilter);
   }
