@@ -14664,71 +14664,34 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
     const scrollTop  = canvasWrap?.scrollTop  || 0;
     const scrollLeft = canvasWrap?.scrollLeft || 0;
 
-    // Build step cards top to bottom
+    // Build step cards top to bottom, branches to the right
     const CARD_W  = 180;
     const CARD_H  = 100;
     const GAP_X   = 80;
     const GAP_Y   = 40;
     const PAD     = 40;
 
-    // Ensure sequential next-step links exist in memory for layout
-    OL._fvAutoLinkSteps([res]);
+    // Use _fvLayoutResource (same logic as main steps canvas) to assign row/colOffset
+    const layout = OL._fvLayoutResource(res);
 
-    // Assign positions — next steps go vertical, conditional branches go horizontal
-    const posMap  = {}; // stepId → {x, y}
-    const visited = new Set();
-
-    const assignPos = (stepId, x, y) => {
-        if (visited.has(stepId)) return;
-        visited.add(stepId);
-        posMap[stepId] = { x, y };
-        const step    = steps.find(s => String(s.id) === String(stepId));
-        if (!step) return;
-        const outRules = (step.logic?.out || []).filter(l => l.targetId);
-        const isSingleNext = outRules.length === 1 &&
-            (outRules[0].types || [outRules[0].type || 'next']).every(t => t === 'next');
-        outRules.forEach((rule, i) => {
-            const lastH   = String(rule.targetId).lastIndexOf('-');
-            const tResId  = rule.targetId.substring(0, lastH);
-            const tStepId = rule.targetId.substring(lastH + 1);
-            if (String(tResId) === String(resId)) {
-                if (isSingleNext) {
-                    // Sequential next step — go down (vertical)
-                    assignPos(tStepId, x, y + CARD_H + GAP_Y);
-                } else {
-                    // Conditional/multi-output branch — go right (horizontal)
-                    assignPos(tStepId, x + CARD_W + GAP_X, y + (i * (CARD_H + GAP_Y)));
-                }
-            }
-        });
-    };
-
-    // Find root steps (no incoming connections within this resource)
-    const hasIncoming = new Set();
-    steps.forEach(s => {
-        (s.logic?.out || []).forEach(rule => {
-            if (!rule.targetId) return;
-            const lastH   = String(rule.targetId).lastIndexOf('-');
-            const tResId  = rule.targetId.substring(0, lastH);
-            const tStepId = rule.targetId.substring(lastH + 1);
-            if (String(tResId) === String(resId)) hasIncoming.add(tStepId);
-        });
+    // Convert layout rows → y positions using actual array order for main-path steps
+    const rowY = {};
+    let y = PAD;
+    steps.forEach((step, idx) => {
+        const li = layout[step.id];
+        if (!li || li.colOffset !== 0) return; // branch — skip
+        rowY[li.row] = y;
+        y += CARD_H + GAP_Y;
     });
 
-    let startY = PAD;
-    steps.forEach(s => {
-        if (!hasIncoming.has(String(s.id)) && !visited.has(String(s.id))) {
-            assignPos(String(s.id), PAD, startY);
-            startY += CARD_H + GAP_Y;
-        }
-    });
-
-    // Any unvisited steps (disconnected) stack vertically below
-    steps.forEach(s => {
-        if (!visited.has(String(s.id))) {
-            posMap[String(s.id)] = { x: PAD, y: startY };
-            startY += CARD_H + GAP_Y;
-        }
+    // Build posMap: main-path steps in column 0, branches to the right
+    const posMap = {};
+    steps.forEach((step, idx) => {
+        const li = layout[step.id] || { colOffset: 0, row: idx };
+        posMap[String(step.id)] = {
+            x: PAD + li.colOffset * (CARD_W + GAP_X),
+            y: rowY[li.row] !== undefined ? rowY[li.row] : PAD + idx * (CARD_H + GAP_Y),
+        };
     });
 
     // Calculate canvas size
