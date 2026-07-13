@@ -11365,6 +11365,31 @@ OL._fvGetEffectiveOut = function(step, res) {
     const nextStep = steps[idx + 1];
     return [{ type: 'next', types: ['next'], targetId: `${res.id}-${nextStep.id}`, _implicit: true }];
 };
+
+// Persist sequential next-step links for any step that has no outbound link defined.
+// Safe to call on every render — skips steps that already have logic.out set.
+OL._fvAutoLinkSteps = function(resources) {
+    let changed = false;
+    (resources || []).forEach(res => {
+        (res.steps || []).forEach((step, idx) => {
+            if (!step.logic) step.logic = { in: [], out: [] };
+            if (!step.logic.out) step.logic.out = [];
+            if (!step.logic.in)  step.logic.in  = [];
+            const hasOut = step.logic.out.some(l => l.targetId);
+            if (hasOut) return;
+            const nextStep = (res.steps || [])[idx + 1];
+            if (!nextStep) return;
+            step.logic.out.push({
+                type: 'next', types: ['next'],
+                targetId: `${res.id}-${nextStep.id}`,
+                rule: '', loopLimit: '', delayValue: '', delayUnit: 'days'
+            });
+            changed = true;
+        });
+    });
+    if (changed) OL.persist();
+    return changed;
+};
 // ── SHARED STATE ─────────────────────────────────────────
 if (!OL._fv) OL._fv = {
     layout: sessionStorage.getItem('fv_layout') || 'flowchart',
@@ -12966,6 +12991,9 @@ OL._fvRenderSteps = function(resources) {
   const unstaged   = resources.filter(r => !stagedIds.has(String(r.id)) && !r.isGlobal && (r.steps||[]).length > 0);
   if (unstaged.length > 0 && !stageFilter) stageGroups.push({ stage: null, resources: unstaged });
 
+  // Auto-populate missing sequential next-step links before rendering
+  OL._fvAutoLinkSteps(resources);
+
   const CARD_W    = 180;  // matches .fv-step-card CSS width
   const COL_GAP   = 52;   // horizontal gap between resource columns within a stage
   const ZONE_PAD  = 18;   // inner padding top/bottom inside each stage zone
@@ -13173,16 +13201,20 @@ OL._fvDrawStepConnections = function(resources) {
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
         if (!outRule.targetId) return;
 
-        // Skip implicit connections between adjacent steps in the same resource —
-        // their proximity in the column already communicates the sequential flow.
-        if (outRule._implicit) {
+        // Skip plain sequential 'next' connections between adjacent steps in the
+        // same resource — column proximity already communicates this flow.
+        // Applies to both implicit synthetic links and auto-persisted ones.
+        const types = outRule.types || [outRule.type || 'next'];
+        const isSimpleNext = types.length === 1 && types[0] === 'next' &&
+                             !outRule.rule?.trim() && !outRule.delayValue;
+        if (isSimpleNext || outRule._implicit) {
           const lastH = String(outRule.targetId).lastIndexOf('-');
           if (lastH !== -1) {
             const tResId  = outRule.targetId.substring(0, lastH);
             const tStepId = outRule.targetId.substring(lastH + 1);
             if (String(tResId) === String(sourceRes.id)) {
               const tIdx = (sourceRes.steps || []).findIndex(s => String(s.id) === tStepId);
-              if (tIdx === sourceIdx + 1) return; // adjacent — skip
+              if (tIdx === sourceIdx + 1) return; // adjacent same-resource — skip
             }
           }
         }
