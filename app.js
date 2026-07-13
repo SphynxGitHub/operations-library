@@ -14671,7 +14671,7 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
     const GAP_Y   = 140;
     const PAD     = 40;
 
-    // Assign positions — straight line first, branch down for conditionals
+    // Assign positions — next steps go vertical, conditional branches go horizontal
     const posMap  = {}; // stepId → {x, y}
     const visited = new Set();
 
@@ -14682,13 +14682,20 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
         const step    = steps.find(s => String(s.id) === String(stepId));
         if (!step) return;
         const outRules = (step.logic?.out || []).filter(l => l.targetId);
+        const isSingleNext = outRules.length === 1 &&
+            (outRules[0].types || [outRules[0].type || 'next']).every(t => t === 'next');
         outRules.forEach((rule, i) => {
             const lastH   = String(rule.targetId).lastIndexOf('-');
             const tResId  = rule.targetId.substring(0, lastH);
             const tStepId = rule.targetId.substring(lastH + 1);
             if (String(tResId) === String(resId)) {
-                // Same resource — continue the chain
-                assignPos(tStepId, x + CARD_W + GAP_X, y + (i * GAP_Y));
+                if (isSingleNext) {
+                    // Sequential next step — go down (vertical)
+                    assignPos(tStepId, x, y + CARD_H + GAP_Y);
+                } else {
+                    // Conditional/multi-output branch — go right (horizontal)
+                    assignPos(tStepId, x + CARD_W + GAP_X, y + (i * GAP_Y));
+                }
             }
         });
     };
@@ -14741,23 +14748,31 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
             if (!toPos) return;
 
             const isCross = String(tResId) !== String(resId);
-            const x1 = fromPos.x + CARD_W;
-            const y1 = fromPos.y + CARD_H / 2;
-            const x2 = toPos.x;
-            const y2 = toPos.y + CARD_H / 2;
-            const cx1 = x1 + 40;
-            const cx2 = x2 - 40;
+            const isVertical = toPos.y > fromPos.y + CARD_H / 2;
+            let x1, y1, x2, y2, pathD;
+            if (isVertical) {
+                // Bottom-center to top-center (vertical next-step arrow)
+                x1 = fromPos.x + CARD_W / 2; y1 = fromPos.y + CARD_H;
+                x2 = toPos.x   + CARD_W / 2; y2 = toPos.y;
+                const mid = (y1 + y2) / 2;
+                pathD = `M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}`;
+            } else {
+                // Right-center to left-center (horizontal branch arrow)
+                x1 = fromPos.x + CARD_W; y1 = fromPos.y + CARD_H / 2;
+                x2 = toPos.x;            y2 = toPos.y   + CARD_H / 2;
+                pathD = `M${x1},${y1} C${x1 + 40},${y1} ${x2 - 40},${y2} ${x2},${y2}`;
+            }
 
             const color = isCross ? '#a78bfa' :
                 rule.type === 'condition' ? '#f5b800' :
                 rule.type === 'loop'      ? '#f97316' :
                 rule.type === 'delay'     ? '#7c3aed' : '#3dd9c5';
 
-            const dash = isCross ? '6,3' : 
+            const dash = isCross ? '6,3' :
                 rule.type === 'condition' ? '4,3' : 'none';
 
             svgArrows += `
-                <path d="M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}"
+                <path d="${pathD}"
                       fill="none" stroke="${color}" stroke-width="1.5"
                       ${dash !== 'none' ? `stroke-dasharray="${dash}"` : ''}
                       opacity="0.7"/>
@@ -14766,8 +14781,8 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
 
             // Label for conditions/delays/loops
             if (rule.type && rule.type !== 'next') {
-                const mx = (x1 + x2) / 2;
-                const my = (y1 + y2) / 2 - 8;
+                const mx = isVertical ? x1 : (x1 + x2) / 2;
+                const my = isVertical ? (y1 + y2) / 2 - 8 : (y1 + y2) / 2 - 8;
                 const label = rule.type === 'condition' ? `If: ${(rule.rule||'').substring(0,20)}` :
                               rule.type === 'delay'     ? `⏱ ${rule.delayValue||'?'} ${rule.delayUnit||'days'}` :
                               rule.type === 'loop'      ? `↺ ${rule.loopLimit||''}` : '';
