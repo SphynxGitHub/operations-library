@@ -12938,66 +12938,92 @@ OL._fvRenderSteps = function(resources) {
   const data    = OL.getCurrentProjectData();
   const stages  = data.stages || [];
   const workflows = OL.getWorkflows() || [];
-  
+
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
 
-  // Build ordered resource list exactly like list view does
+  // Build stage-ordered resource list (same order as list/flowchart views)
   const orderedResources = [];
   stages.forEach(stage => {
     const stageWorkflows = workflows.filter(w => w.stageId === stage.id);
-    
-    // Unassigned to workflow but in stage — first
     const assignedIds = new Set(stageWorkflows.flatMap(w => w.resourceIds || []).map(String));
-    const unassigned = resources.filter(r => 
-        r.stageId === stage.id && !assignedIds.has(String(r.id)) && !r.isGlobal
-    );
-    unassigned.forEach(r => orderedResources.push(r));
-
-    // Workflow-ordered
+    resources.filter(r => r.stageId === stage.id && !assignedIds.has(String(r.id)) && !r.isGlobal)
+             .forEach(r => orderedResources.push(r));
     stageWorkflows.forEach(wf => {
-        (wf.resourceIds || [])
-            .map(id => resources.find(r => String(r.id) === String(id)))
-            .filter(Boolean)
-            .forEach(r => orderedResources.push(r));
+      (wf.resourceIds || [])
+        .map(id => resources.find(r => String(r.id) === String(id)))
+        .filter(Boolean)
+        .forEach(r => orderedResources.push(r));
     });
   });
-
-  // Anything not placed yet (no stage)
   const placedIds = new Set(orderedResources.map(r => String(r.id)));
   resources.filter(r => !placedIds.has(String(r.id)) && !r.isGlobal)
            .forEach(r => orderedResources.push(r));
 
-  const CARD_W = 200;
-  const CARD_H = 120;
-  const GAP_X  = 60;
-  const GAP_Y  = 40;
-  const PAD    = 40;
+  // Only show resources that have steps
+  const activeResources = orderedResources.filter(r => (r.steps || []).length > 0);
 
-  let cardCount = 0;
+  const CARD_W   = 180;  // matches .fv-step-card width in CSS
+  const COL_GAP  = 56;   // horizontal gap between resource columns
+  const STEP_GAP = 18;   // vertical gap between steps within a column
+  const PAD_X    = 48;
+  const PAD_Y    = 64;   // top padding — leaves room for column header
 
-  orderedResources.forEach((res, resIndex) => {
-    const tc = OL._fvGetType(res.type);
+  // Assign column x position per resource. Track per-column colIndex to skip
+  // resources with no steps cleanly.
+  let colIndex = 0;
+  const resColX = {};
+  activeResources.forEach(res => {
+    resColX[String(res.id)] = PAD_X + colIndex * (CARD_W + COL_GAP);
+    colIndex++;
+  });
+
+  activeResources.forEach(res => {
+    const tc   = OL._fvGetType(res.type);
+    const colX = resColX[String(res.id)];
+
+    // ── Column header ──
+    const stageName = stages.find(s => String(s.id) === String(res.stageId))?.name || '';
+    const header = document.createElement('div');
+    header.style.cssText = `position:absolute;left:${colX}px;top:${PAD_Y - 38}px;
+      width:${CARD_W}px;display:flex;flex-direction:column;gap:2px;`;
+    header.innerHTML = `
+      ${stageName ? `<div style="font-size:8px;font-weight:700;letter-spacing:0.08em;
+                                  text-transform:uppercase;color:var(--text-muted);opacity:0.55;
+                                  padding-left:2px;">${esc(stageName)}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:5px;">
+        <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
+        <span style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
+                     letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
+                     text-overflow:ellipsis;max-width:${CARD_W - 18}px;">
+          ${esc(res.name)}
+        </span>
+      </div>`;
+    canvas.appendChild(header);
+
     (res.steps || []).forEach((step, idx) => {
-      cardCount++;
+      // Pinned steps keep their user-placed coords; all others use column layout
+      const usePin = step.pinned && step.coords && (step.coords.x || step.coords.y);
+      const x = usePin ? step.coords.x : colX;
+      const y = usePin ? step.coords.y : PAD_Y + idx * (90 + STEP_GAP);
 
-      const hasCoords = !OL._fv.resetLayout && step.coords && (step.coords.x || step.coords.y);
-      const x = hasCoords ? step.coords.x : PAD + resIndex * (CARD_W + GAP_X);
-      const y = hasCoords ? step.coords.y : PAD + idx       * (CARD_H + GAP_Y);
+      // Update coords so _fvDrawStepConnections can find anchor points
+      if (!usePin) step.coords = { x, y };
 
       const appBadge = step.appName
         ? `<span class="fv-step-badge" style="background:var(--accent-glow);color:var(--accent);">
-             ${esc(step.appName.substring(0,10))}
+             ${esc(step.appName.substring(0,12))}
            </span>`
         : '';
 
-      const assigneeBadges = (step.assignees || []).slice(0,2).map(a =>
-        `<span class="fv-step-badge" style="background:#f5f6f8;color:var(--text-dim);">
-           ${esc((a.name||'').substring(0,10))}
+      const assigneeBadges = (step.assignees || []).slice(0, 2).map(a =>
+        `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-dim);">
+           ${esc((a.name || '').substring(0, 12))}
          </span>`
       ).join('');
 
       const hasLinks = (step.links || []).length > 0;
+      const hasExplicit = (step.logic?.out || []).some(l => l.targetId);
 
       const div = document.createElement('div');
       div.className = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
@@ -13013,22 +13039,28 @@ OL._fvRenderSteps = function(resources) {
                 onclick="event.stopPropagation(); OL._fvTogglePin('${res.id}','${step.id}')">
           ${OL.getLucideSVG(step.pinned ? 'pin' : 'pin-off', 10, 'currentColor')}
         </button>
-        <button class="fv-res-tidy-btn" title="Tidy this resource"
-                onclick="event.stopPropagation(); OL._fvTidy('resource','${res.id}')">
-          ${OL.getLucideSVG('align-justify', 10, 'currentColor')}
-        </button>
         <div class="fv-step-card-accent" style="background:${tc.color};"></div>
         <div class="fv-step-card-body"
              onclick="event.stopPropagation(); OL._fvSelectStep('${res.id}','${step.id}')">
-          <div class="fv-step-res-badge" style="background:${tc.color}18;color:${tc.color};border-color:${tc.color}30;">
-            ${tc.abbr} ${esc(res.name.substring(0,16))}
-          </div>
-          <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
-          <div class="fv-step-badges">
-            ${appBadge}${assigneeBadges}
-            ${hasLinks ? `<span class="fv-step-badge" style="background:#f5f6f8;color:var(--text-muted);">
-              ${OL.getLucideSVG('paperclip', 9, 'currentColor')}
-            </span>` : ''}
+          <div style="display:flex;align-items:flex-start;gap:7px;">
+            <span style="flex-shrink:0;width:18px;height:18px;border-radius:50%;
+                         background:${tc.color}22;color:${tc.color};border:1px solid ${tc.color}44;
+                         font-size:9px;font-weight:800;display:flex;
+                         align-items:center;justify-content:center;margin-top:1px;">
+              ${idx + 1}
+            </span>
+            <div style="min-width:0;flex:1;">
+              <div class="fv-step-name">${esc(step.name || 'Unnamed Step')}</div>
+              <div class="fv-step-badges" style="margin-top:4px;">
+                ${appBadge}${assigneeBadges}
+                ${hasLinks ? `<span class="fv-step-badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted);">
+                  ${OL.getLucideSVG('paperclip', 9, 'currentColor')}
+                </span>` : ''}
+                ${hasExplicit ? `<span class="fv-step-badge" style="background:rgba(61,217,197,0.1);color:var(--accent);">
+                  ${OL.getLucideSVG('arrow-right', 8, 'currentColor')}
+                </span>` : ''}
+              </div>
+            </div>
           </div>
         </div>
         <div class="fv-port fv-port-top"    id="port-top-${res.id}-${step.id}"
@@ -13046,16 +13078,15 @@ OL._fvRenderSteps = function(resources) {
     });
   });
 
-  // Size canvas
-  const maxX = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
-    .map(el => (parseFloat(el.style.left)||0) + 200), 800);
-  const maxY = Math.max(...Array.from(canvas.querySelectorAll('.fv-step-card'))
-    .map(el => (parseFloat(el.style.top)||0) + 120), 600);
-  canvas.style.width  = (maxX + 100) + 'px';
-  canvas.style.height = (maxY + 100) + 'px';
+  // Size canvas to fit all cards
+  const cards = Array.from(canvas.querySelectorAll('.fv-step-card'));
+  const maxX = Math.max(...cards.map(el => (parseFloat(el.style.left) || 0) + CARD_W), 800);
+  const maxY = Math.max(...cards.map(el => (parseFloat(el.style.top)  || 0) + 120),   600);
+  canvas.style.width  = (maxX + PAD_X) + 'px';
+  canvas.style.height = (maxY + PAD_X) + 'px';
 
   requestAnimationFrame(() => {
-    OL._fvDrawStepConnections(orderedResources);
+    OL._fvDrawStepConnections(activeResources);
   });
 };
 
@@ -13087,9 +13118,23 @@ OL._fvDrawStepConnections = function(resources) {
   const group = document.getElementById('fv-lines');
 
   resources.forEach(sourceRes => {
-    (sourceRes.steps || []).forEach(sourceStep => {
+    (sourceRes.steps || []).forEach((sourceStep, sourceIdx) => {
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
         if (!outRule.targetId) return;
+
+        // Skip implicit connections between adjacent steps in the same resource —
+        // their proximity in the column already communicates the sequential flow.
+        if (outRule._implicit) {
+          const lastH = String(outRule.targetId).lastIndexOf('-');
+          if (lastH !== -1) {
+            const tResId  = outRule.targetId.substring(0, lastH);
+            const tStepId = outRule.targetId.substring(lastH + 1);
+            if (String(tResId) === String(sourceRes.id)) {
+              const tIdx = (sourceRes.steps || []).findIndex(s => String(s.id) === tStepId);
+              if (tIdx === sourceIdx + 1) return; // adjacent — skip
+            }
+          }
+        }
 
         const lastH = String(outRule.targetId).lastIndexOf('-');
         if (lastH === -1) return;
