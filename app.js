@@ -14664,12 +14664,15 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
     const scrollTop  = canvasWrap?.scrollTop  || 0;
     const scrollLeft = canvasWrap?.scrollLeft || 0;
 
-    // Build step cards left to right
+    // Build step cards top to bottom
     const CARD_W  = 180;
     const CARD_H  = 100;
     const GAP_X   = 80;
-    const GAP_Y   = 140;
+    const GAP_Y   = 40;
     const PAD     = 40;
+
+    // Ensure sequential next-step links exist in memory for layout
+    OL._fvAutoLinkSteps([res]);
 
     // Assign positions — next steps go vertical, conditional branches go horizontal
     const posMap  = {}; // stepId → {x, y}
@@ -14694,7 +14697,7 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
                     assignPos(tStepId, x, y + CARD_H + GAP_Y);
                 } else {
                     // Conditional/multi-output branch — go right (horizontal)
-                    assignPos(tStepId, x + CARD_W + GAP_X, y + (i * GAP_Y));
+                    assignPos(tStepId, x + CARD_W + GAP_X, y + (i * (CARD_H + GAP_Y)));
                 }
             }
         });
@@ -14713,17 +14716,18 @@ OL._fvOpenStepCanvas = function(resId, breadcrumb) {
     });
 
     let startY = PAD;
-    steps.forEach((s, i) => {
+    steps.forEach(s => {
         if (!hasIncoming.has(String(s.id)) && !visited.has(String(s.id))) {
             assignPos(String(s.id), PAD, startY);
-            startY += GAP_Y;
+            startY += CARD_H + GAP_Y;
         }
     });
 
-    // Any unvisited steps (disconnected) get placed below
-    steps.forEach((s, i) => {
+    // Any unvisited steps (disconnected) stack vertically below
+    steps.forEach(s => {
         if (!visited.has(String(s.id))) {
-            posMap[String(s.id)] = { x: PAD + i * (CARD_W + GAP_X / 2), y: startY };
+            posMap[String(s.id)] = { x: PAD, y: startY };
+            startY += CARD_H + GAP_Y;
         }
     });
 
