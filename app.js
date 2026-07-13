@@ -12938,6 +12938,7 @@ OL._fvRenderSteps = function(resources) {
   const data      = OL.getCurrentProjectData();
   const stages    = data.stages || [];
   const workflows = OL.getWorkflows() || [];
+  const STEP_GAP  = 14;  // enforced gap between cards after measurement pass
 
   if (!canvas || !svg) return;
   canvas.innerHTML = '';
@@ -12965,41 +12966,44 @@ OL._fvRenderSteps = function(resources) {
   const unstaged   = resources.filter(r => !stagedIds.has(String(r.id)) && !r.isGlobal && (r.steps||[]).length > 0);
   if (unstaged.length > 0 && !stageFilter) stageGroups.push({ stage: null, resources: unstaged });
 
-  const CARD_W   = 180;   // matches .fv-step-card CSS width
-  const STEP_H   = 112;   // card height estimate + gap (content-driven, ~90px card + 22px gap)
-  const COL_GAP  = 52;    // horizontal gap between resource columns within a stage
-  const ZONE_PAD = 18;    // inner padding top/bottom inside each stage zone
-  const ZONE_HDR = 36;    // height for stage label + resource header above first card
-  const STAGE_GAP= 64;    // vertical gap between stage zones
-  const PAD_X    = 48;
-  const PAD_Y    = 36;
+  const CARD_W    = 180;  // matches .fv-step-card CSS width
+  const COL_GAP   = 52;   // horizontal gap between resource columns within a stage
+  const ZONE_PAD  = 18;   // inner padding top/bottom inside each stage zone
+  const ZONE_HDR  = 36;   // height for resource header above first card
+  const STAGE_GAP = 64;   // vertical gap between stage zones
+  const PAD_X     = 48;
+  const PAD_Y     = 36;
+  const EST_STEP  = 100;  // rough initial estimate — corrected by measurement pass
 
   const allActiveResources = [];
+  // stageMeta tracks DOM elements needed for the measurement-pass reposition
+  const stageMeta = [];
   let currentY = PAD_Y;
 
   stageGroups.forEach(({ stage, resources: stageRes }) => {
-    const maxSteps  = Math.max(...stageRes.map(r => (r.steps||[]).length), 1);
-    const zoneH     = ZONE_PAD + ZONE_HDR + maxSteps * STEP_H + ZONE_PAD;
-    const zoneW     = stageRes.length * (CARD_W + COL_GAP) - COL_GAP + 24;
+    const maxSteps = Math.max(...stageRes.map(r => (r.steps||[]).length), 1);
+    const estZoneH = ZONE_PAD + (stage ? 18 : 0) + ZONE_HDR + maxSteps * (EST_STEP + STEP_GAP) + ZONE_PAD;
+    const zoneW    = stageRes.length * (CARD_W + COL_GAP) - COL_GAP + 24;
 
-    // Stage zone background + label
+    let bgEl = null, lblEl = null;
     if (stage) {
-      const zoneBg = document.createElement('div');
-      zoneBg.style.cssText = `position:absolute;left:${PAD_X - 14}px;top:${currentY}px;
-        width:${zoneW}px;height:${zoneH}px;border-radius:14px;
+      bgEl = document.createElement('div');
+      bgEl.style.cssText = `position:absolute;left:${PAD_X - 14}px;top:${currentY}px;
+        width:${zoneW}px;height:${estZoneH}px;border-radius:14px;
         background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.055);
         pointer-events:none;`;
-      canvas.appendChild(zoneBg);
+      canvas.appendChild(bgEl);
 
-      const stageLbl = document.createElement('div');
-      stageLbl.style.cssText = `position:absolute;left:${PAD_X}px;top:${currentY + 10}px;
+      lblEl = document.createElement('div');
+      lblEl.style.cssText = `position:absolute;left:${PAD_X}px;top:${currentY + 10}px;
         font-size:8px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;
         color:var(--text-muted);opacity:0.4;pointer-events:none;`;
-      stageLbl.textContent = stage.name;
-      canvas.appendChild(stageLbl);
+      lblEl.textContent = stage.name;
+      canvas.appendChild(lblEl);
     }
 
     const contentTop = currentY + ZONE_PAD + (stage ? 18 : 0);
+    const resMeta    = [];
 
     stageRes.forEach((res, resIdx) => {
       const tc   = OL._fvGetType(res.type);
@@ -13008,21 +13012,20 @@ OL._fvRenderSteps = function(resources) {
 
       allActiveResources.push(res);
 
-      // Resource column header
-      const hdr = document.createElement('div');
-      hdr.style.cssText = `position:absolute;left:${colX}px;top:${contentTop + 6}px;
+      const hdrEl = document.createElement('div');
+      hdrEl.style.cssText = `position:absolute;left:${colX}px;top:${contentTop + 6}px;
         width:${CARD_W}px;display:flex;align-items:center;gap:5px;`;
-      hdr.innerHTML = `
+      hdrEl.innerHTML = `
         <div style="width:7px;height:7px;border-radius:50%;background:${tc.color};flex-shrink:0;"></div>
         <span style="font-size:10px;font-weight:700;color:${tc.color};text-transform:uppercase;
                      letter-spacing:0.06em;white-space:nowrap;overflow:hidden;
                      text-overflow:ellipsis;max-width:${CARD_W - 20}px;">${esc(res.name)}</span>`;
-      canvas.appendChild(hdr);
+      canvas.appendChild(hdrEl);
 
       (res.steps || []).forEach((step, idx) => {
         const usePin = step.pinned && step.coords && (step.coords.x || step.coords.y);
         const x = usePin ? step.coords.x : colX;
-        const y = usePin ? step.coords.y : colY + idx * STEP_H;
+        const y = usePin ? step.coords.y : colY + idx * (EST_STEP + STEP_GAP);
         if (!usePin) step.coords = { x, y };
 
         const appBadge = step.appName
@@ -13035,12 +13038,12 @@ OL._fvRenderSteps = function(resources) {
         const hasExplicit = (step.logic?.out || []).some(l => l.targetId);
 
         const div = document.createElement('div');
-        div.className = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
-        div.id        = `fv-step-${res.id}-${step.id}`;
+        div.className      = `fv-step-card ${step.pinned ? 'is-pinned' : ''}`;
+        div.id             = `fv-step-${res.id}-${step.id}`;
         div.dataset.resId  = res.id;
         div.dataset.stepId = step.id;
-        div.style.left = x + 'px';
-        div.style.top  = y + 'px';
+        div.style.left     = x + 'px';
+        div.style.top      = y + 'px';
 
         div.innerHTML = `
           <button class="fv-pin-btn ${step.pinned ? 'pinned' : ''}"
@@ -13080,18 +13083,60 @@ OL._fvRenderSteps = function(resources) {
         OL._fvSetupCardDrag(div, res.id, step.id);
         canvas.appendChild(div);
       });
+
+      resMeta.push({ res, hdrEl, colX, colY });
     });
 
-    currentY += zoneH + STAGE_GAP;
+    stageMeta.push({ bgEl, lblEl, stage, resMeta, zoneW });
+    currentY += estZoneH + STAGE_GAP;
   });
 
-  // Size canvas
-  const cards = Array.from(canvas.querySelectorAll('.fv-step-card'));
-  const maxX = Math.max(...cards.map(el => (parseFloat(el.style.left)||0) + CARD_W), 800);
-  canvas.style.width  = (maxX + PAD_X) + 'px';
-  canvas.style.height = (currentY + PAD_X) + 'px';
-
+  // Give browser one frame to compute offsetHeight on each card, then reposition
+  // using actual heights so the gap between every pair of cards is exactly STEP_GAP.
   requestAnimationFrame(() => {
+    let curY = PAD_Y;
+
+    stageMeta.forEach(({ bgEl, lblEl, stage, resMeta, zoneW }) => {
+      const zoneTop    = curY;
+      const contentTop = zoneTop + ZONE_PAD + (stage ? 18 : 0);
+
+      if (lblEl) lblEl.style.top = (zoneTop + 10) + 'px';
+      if (bgEl)  bgEl.style.top  = zoneTop + 'px';
+
+      let zoneBottom = contentTop + ZONE_HDR;
+
+      resMeta.forEach(({ res, hdrEl, colX, colY: initColY }) => {
+        const actualColY = contentTop + ZONE_HDR;
+        hdrEl.style.top  = (contentTop + 6) + 'px';
+
+        let y = actualColY;
+        (res.steps || []).forEach(step => {
+          const el = document.getElementById(`fv-step-${res.id}-${step.id}`);
+          if (!el) return;
+          if (!step.pinned) {
+            el.style.top  = y + 'px';
+            step.coords.y = y;
+          }
+          // Always advance y by this card's actual rendered height + gap
+          y += el.offsetHeight + STEP_GAP;
+        });
+
+        zoneBottom = Math.max(zoneBottom, y - STEP_GAP); // last card's bottom
+      });
+
+      const actualZoneH = zoneBottom - zoneTop + ZONE_PAD;
+      if (bgEl) bgEl.style.height = actualZoneH + 'px';
+
+      curY = zoneTop + actualZoneH + STAGE_GAP;
+    });
+
+    // Resize canvas to fit measured content
+    const allCards = Array.from(canvas.querySelectorAll('.fv-step-card'));
+    const maxX = Math.max(...allCards.map(el => (parseFloat(el.style.left)||0) + CARD_W), 800);
+    const maxY = Math.max(...allCards.map(el => (parseFloat(el.style.top)||0) + el.offsetHeight + 60), 600);
+    canvas.style.width  = (maxX + PAD_X) + 'px';
+    canvas.style.height = maxY + 'px';
+
     OL._fvDrawStepConnections(allActiveResources);
   });
 };
