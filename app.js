@@ -11366,6 +11366,53 @@ OL._fvGetEffectiveOut = function(step, res) {
     return [{ type: 'next', types: ['next'], targetId: `${res.id}-${nextStep.id}`, _implicit: true }];
 };
 
+// Computes per-step layout info for a single resource.
+// Main-path steps (not branch targets): colOffset=0, sequential rows.
+// Branch targets (reached via condition/loop/delay): colOffset≥1, same row as parent.
+OL._fvLayoutResource = function(res) {
+    const steps = res.steps || [];
+
+    // Find which steps are branch targets and who their parent is
+    const branchOf = {}; // stepId → parentStepId
+    steps.forEach(step => {
+        (step.logic?.out || []).forEach(link => {
+            if (!link.targetId) return;
+            const lastH  = link.targetId.lastIndexOf('-');
+            const tResId = link.targetId.substring(0, lastH);
+            if (String(tResId) !== String(res.id)) return;
+            const tStepId = link.targetId.substring(lastH + 1);
+            const types   = link.types || [link.type || 'next'];
+            if (types.some(t => ['condition', 'loop', 'delay'].includes(t)) && !branchOf[tStepId]) {
+                branchOf[tStepId] = step.id;
+            }
+        });
+    });
+
+    const layout   = {};   // stepId → {colOffset, row, parentId}
+    const parentRow = {};  // stepId → row index (for branch alignment)
+    let mainRow = 0;
+
+    // Main-path steps in array order
+    steps.forEach(step => {
+        if (branchOf[step.id]) return;
+        layout[step.id]    = { colOffset: 0, row: mainRow, parentId: null };
+        parentRow[step.id] = mainRow;
+        mainRow++;
+    });
+
+    // Branch steps: same row as parent, colOffset > 0
+    const rowBranchCount = {};
+    steps.forEach(step => {
+        const parentId = branchOf[step.id];
+        if (!parentId) return;
+        const pRow = parentRow[parentId] ?? 0;
+        rowBranchCount[pRow] = (rowBranchCount[pRow] || 0) + 1;
+        layout[step.id] = { colOffset: rowBranchCount[pRow], row: pRow, parentId };
+    });
+
+    return layout;
+};
+
 // Persist sequential next-step links for any step that has no outbound link defined.
 // Safe to call on every render — skips steps that already have logic.out set.
 OL._fvAutoLinkSteps = function(resources) {
@@ -13033,10 +13080,25 @@ OL._fvRenderSteps = function(resources) {
     const contentTop = currentY + ZONE_PAD + (stage ? 18 : 0);
     const resMeta    = [];
 
-    stageRes.forEach((res, resIdx) => {
-      const tc   = OL._fvGetType(res.type);
-      const colX = PAD_X + resIdx * (CARD_W + COL_GAP);
-      const colY = contentTop + ZONE_HDR;
+    // Pre-compute per-resource layout and branch-aware base-X positions
+    const resLayouts = new Map();
+    const resBaseX   = new Map();
+    let cumX = PAD_X;
+    stageRes.forEach(r => {
+      const rLayout = OL._fvLayoutResource(r);
+      resLayouts.set(r, rLayout);
+      resBaseX.set(r, cumX);
+      const maxOffset = Math.max(0, ...Object.values(rLayout).map(l => l.colOffset));
+      cumX += (1 + maxOffset) * (CARD_W + COL_GAP);
+    });
+    const actualZoneW = Math.max(cumX - PAD_X - COL_GAP + 24, 60);
+    if (bgEl) bgEl.style.width = actualZoneW + 'px';
+
+    stageRes.forEach(res => {
+      const tc     = OL._fvGetType(res.type);
+      const layout = resLayouts.get(res);
+      const colX   = resBaseX.get(res);
+      const colY   = contentTop + ZONE_HDR;
 
       allActiveResources.push(res);
 
@@ -13051,9 +13113,10 @@ OL._fvRenderSteps = function(resources) {
       canvas.appendChild(hdrEl);
 
       (res.steps || []).forEach((step, idx) => {
+        const li     = layout[step.id] || { colOffset: 0, row: idx, parentId: null };
         const usePin = step.pinned && step.coords && (step.coords.x || step.coords.y);
-        const x = usePin ? step.coords.x : colX;
-        const y = usePin ? step.coords.y : colY + idx * (EST_STEP + STEP_GAP);
+        const x = usePin ? step.coords.x : colX + li.colOffset * (CARD_W + COL_GAP);
+        const y = usePin ? step.coords.y : colY + li.row * (EST_STEP + STEP_GAP);
         if (!usePin) step.coords = { x, y };
 
         const appBadge = step.appName
@@ -13112,10 +13175,10 @@ OL._fvRenderSteps = function(resources) {
         canvas.appendChild(div);
       });
 
-      resMeta.push({ res, hdrEl, colX, colY });
+      resMeta.push({ res, hdrEl, colX, colY, layout: resLayouts.get(res) });
     });
 
-    stageMeta.push({ bgEl, lblEl, stage, resMeta, zoneW });
+    stageMeta.push({ bgEl, lblEl, stage, resMeta, zoneW: actualZoneW });
     currentY += estZoneH + STAGE_GAP;
   });
 
@@ -13133,23 +13196,36 @@ OL._fvRenderSteps = function(resources) {
 
       let zoneBottom = contentTop + ZONE_HDR;
 
-      resMeta.forEach(({ res, hdrEl, colX, colY: initColY }) => {
+      resMeta.forEach(({ res, hdrEl, layout }) => {
         const actualColY = contentTop + ZONE_HDR;
         hdrEl.style.top  = (contentTop + 6) + 'px';
 
+        // Pass 1: reposition main-path steps (colOffset===0) using actual heights
+        const rowY = {}; // row index → actual y top
         let y = actualColY;
         (res.steps || []).forEach(step => {
+          const li = layout[step.id];
+          if (!li || li.colOffset !== 0) return; // branch — skip for now
           const el = document.getElementById(`fv-step-${res.id}-${step.id}`);
           if (!el) return;
-          if (!step.pinned) {
-            el.style.top  = y + 'px';
-            step.coords.y = y;
-          }
-          // Always advance y by this card's actual rendered height + gap
+          if (!step.pinned) { el.style.top = y + 'px'; step.coords.y = y; }
+          rowY[li.row] = parseFloat(el.style.top);
           y += el.offsetHeight + STEP_GAP;
         });
 
-        zoneBottom = Math.max(zoneBottom, y - STEP_GAP); // last card's bottom
+        // Pass 2: snap branch steps' y to match their parent row
+        (res.steps || []).forEach(step => {
+          const li = layout[step.id];
+          if (!li || li.colOffset === 0) return;
+          const el = document.getElementById(`fv-step-${res.id}-${step.id}`);
+          if (!el || step.pinned) return;
+          const targetY = rowY[li.row] ?? actualColY;
+          el.style.top  = targetY + 'px';
+          step.coords.y = targetY;
+          zoneBottom = Math.max(zoneBottom, targetY + el.offsetHeight);
+        });
+
+        zoneBottom = Math.max(zoneBottom, y - STEP_GAP);
       });
 
       const actualZoneH = zoneBottom - zoneTop + ZONE_PAD;
@@ -13201,23 +13277,8 @@ OL._fvDrawStepConnections = function(resources) {
       OL._fvGetEffectiveOut(sourceStep, sourceRes).forEach(outRule => {
         if (!outRule.targetId) return;
 
-        // Skip plain sequential 'next' connections between adjacent steps in the
-        // same resource — column proximity already communicates this flow.
-        // Applies to both implicit synthetic links and auto-persisted ones.
-        const types = outRule.types || [outRule.type || 'next'];
-        const isSimpleNext = types.length === 1 && types[0] === 'next' &&
-                             !outRule.rule?.trim() && !outRule.delayValue;
-        if (isSimpleNext || outRule._implicit) {
-          const lastH = String(outRule.targetId).lastIndexOf('-');
-          if (lastH !== -1) {
-            const tResId  = outRule.targetId.substring(0, lastH);
-            const tStepId = outRule.targetId.substring(lastH + 1);
-            if (String(tResId) === String(sourceRes.id)) {
-              const tIdx = (sourceRes.steps || []).findIndex(s => String(s.id) === tStepId);
-              if (tIdx === sourceIdx + 1) return; // adjacent same-resource — skip
-            }
-          }
-        }
+        // Skip implicit synthetic fallbacks — real links drawn below
+        if (outRule._implicit) return;
 
         const lastH = String(outRule.targetId).lastIndexOf('-');
         if (lastH === -1) return;
